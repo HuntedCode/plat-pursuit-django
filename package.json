@@ -4,6 +4,8 @@
   "description": "",
   "main": "index.js",
   "scripts": {
+    "format": "npx prettier --write .",
+    "format:check": "npx prettier --check .",
     "build": "npx @tailwindcss/cli -i static/css/input.css -o static/css/output.css --minify",
     "watch": "npx @tailwindcss/cli -i static/css/input.css -o static/css/output.css --minify --watch",
     "test": "echo \"Error: no test specified\" && exit 1"
@@ -19,6 +21,7 @@
     "tailwindcss": "^4.1.14"
   },
   "devDependencies": {
-    "daisyui": "^5.3.3"
+    "daisyui": "^5.3.3",
+    "prettier": "^3.6.2"
   }
 }
