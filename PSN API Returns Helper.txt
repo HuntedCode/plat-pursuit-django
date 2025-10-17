@@ -1,0 +1,169 @@
+1. user() Object:
+  Type: <class 'psnawp_api.models.user.User'>
+  Attributes: accept_friend_request, account_id, authenticator, friends_list, friendship, from_account_id, from_online_id, get_presence, get_profile_legacy, get_region, get_shareable_profile_link, is_blocked, online_id, prev_online_id, profile, remove_friend, title_stats, trophies, trophy_groups_summary, trophy_summary, trophy_titles, trophy_titles_for_title
+
+
+user.get_presence():
+{
+    "basicPresence": {
+        "availability": "availableToPlay",
+        "primaryPlatformInfo": {
+            "onlineStatus": "online",
+            "platform": "PS5"
+        },
+        "gameTitleInfoList": [
+            {
+                "npTitleId": "PPSA04476_00",
+                "titleName": "Fall Guys",
+                "format": "PS5",
+                "launchPlatform": "PS5",
+                "conceptIconUrl": "https://image.api.playstation.com/vulcan/ap/rnd/202408/0721/00dd43384a1ed60cd7453428dd5c6897b35b013d4b98965d.png"
+            }
+        ]
+    }
+}
+
+user.profile():
+{
+    "onlineId": "PlatPursuit",
+    "aboutMe": "",
+    "avatars": [
+        {
+            "size": "s",
+            "url": "http://static-resource.np.community.playstation.net/avatar_s/WWS_A/A0009_s.png"
+        },
+        {
+            "size": "xl",
+            "url": "http://static-resource.np.community.playstation.net/avatar_xl/WWS_A/A0009_XL.png"
+        },
+        {
+            "size": "l",
+            "url": "http://static-resource.np.community.playstation.net/avatar/WWS_A/A0009.png"
+        },
+        {
+            "size": "m",
+            "url": "http://static-resource.np.community.playstation.net/avatar_m/WWS_A/A0009_m.png"
+        }
+    ],
+    "languages": [
+        "en-US"
+    ],
+    "isPlus": true,
+    "isOfficiallyVerified": false,
+    "isMe": false
+}
+
+user.get_profile_legacy():
+{
+    "profile": {
+        "onlineId": "PlatPursuit",
+        "accountId": "7620963750066537585",
+        "npId": "UGxhdFB1cnN1aXRAYjMudXM=",
+        "avatarUrls": [
+            {
+                "size": "l",
+                "avatarUrl": "http://static-resource.np.community.playstation.net/avatar/WWS_A/A0009.png"
+            }
+        ],
+        "plus": 1,
+        "aboutMe": "A cool place to be!",
+        "languagesUsed": [
+            "en"
+        ],
+        "trophySummary": {
+            "level": 322,
+            "progress": 26,
+            "earnedTrophies": {
+                "platinum": 50,
+                "gold": 286,
+                "silver": 534,
+                "bronze": 1548
+            }
+        },
+        "isOfficiallyVerified": false,
+        "personalDetailSharing": "no",
+        "personalDetailSharingRequestMessageFlag": false,
+        "friendRelation": "no",
+        "requestMessageFlag": false,
+        "blocking": false,
+        "following": false
+    }
+}
+
+user.title_stats():
+    Returns TitleStats objs with attrs:
+
+    title_id: PPSA04476_00
+    name: Fall Guys
+    image_url: https://image.api.playstation.com/vulcan/ap/rnd/202408/0721/00dd43384a1ed60cd7453428dd5c6897b35b013d4b98965d.png
+    category: PlatformCategory.PS5
+    play_count: 18
+    first_played_date_time: 2025-07-23 21:36:36.730000+00:00
+    last_played_date_time: 2025-10-17 10:28:03.020000+00:00
+    play_duration: 1 day, 0:17:44
+
+user.trophy_summary():
+    Returns TrophySummary obj with attrs:
+
+    account_id: 7620963750066537585
+    trophy_level: 322
+    progress: 26 # Percentage progress towards next trophy level
+    tier: 4 # Tier this trophy level falls in
+    earned_trophies: TrophySet(bronze=1548, silver=534, gold=286, platinum=50)
+
+user.trophy_titles():
+    Returns TrophyTitle objs with attrs:
+
+    np_service_name: trophy2
+    np_communication_id: NPWR31823_00
+    trophy_set_version: 01.00
+    title_name: Killer Frequency
+    title_detail: None
+    title_icon_url: https://psnobj.prod.dl.playstation.net/psnobj/NPWR31823_00/dfa6e7ef-fd90-4b29-bc86-639f9c94fa81.png
+    title_platform: frozenset({<PlatformType.PS5: 'PS5'>})
+    has_trophy_groups: False
+    progress: 100
+    hidden_flag: False
+    earned_trophies: TrophySet(bronze=7, silver=15, gold=5, platinum=1)
+    defined_trophies: TrophySet(bronze=7, silver=15, gold=5, platinum=1)
+    last_updated_datetime: 2025-09-27 09:58:15+00:00
+    np_title_id: None
+
+user.trophies():
+    Returns Trophy objs with attrs:
+
+    trophy_set_version: 01.00
+    has_trophy_groups: True
+    trophy_id: 0
+    trophy_hidden: False
+    trophy_type: TrophyType.PLATINUM
+    trophy_name: The Bear and the Wolf
+    trophy_detail: Collect all Trophies
+    trophy_icon_url: https://psnobj.prod.dl.playstation.net/psnobj/NPWR22392_00/2e8a3bfb-6da4-4133-b2ca-2b8c5042ed09.png
+    trophy_group_id: default
+    trophy_progress_target_value: None
+    trophy_reward_name: None
+    trophy_reward_img_url: None
+
+user.trophies(): - WHEN PROGRESS IS INCLUDED!
+    Returns TrophyWithProgress objs with attrs:
+
+    trophy_set_version: 01.00
+    has_trophy_groups: True
+    trophy_id: 0
+    trophy_hidden: False
+    trophy_type: TrophyType.PLATINUM
+    trophy_name: The Bear and the Wolf
+    trophy_detail: Collect all Trophies
+    trophy_icon_url: https://psnobj.prod.dl.playstation.net/psnobj/NPWR22392_00/2e8a3bfb-6da4-4133-b2ca-2b8c5042ed09.png
+    trophy_group_id: default
+    trophy_progress_target_value: None
+    trophy_reward_name: None
+    trophy_reward_img_url: None
+    earned: True
+    progress: None
+    progress_rate: None
+    progressed_date_time: None
+    earned_date_time: 2025-05-28 15:15:10+00:00
+    trophy_rarity: TrophyRarity.VERY_RARE
+    trophy_earn_rate: 8.4
