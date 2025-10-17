@@ -7,6 +7,7 @@ A PlayStation trophy tracking community web application built with Django, Tailw
 - **Backend**: Django 5.x with PostgreSQL for relational data (users, profiles, games, trophies). Custom user model with case-insensitive usernames and required email. Models support many-to-many relationships for trophy tracking.
 - **Frontend**: Tailwind CSS v4 (standalone CLI) and DaisyUI for responsive, themeable UI. Templates configured for server-side rendering.
 - **Linters**: Black (Python) and Prettier (CSS/JS/HTML) ensure consistent code style.
+- **Admin**: Configured for `CustomUser`, `Profile`, `Game`, `Trophy`, `EarnedTrophy` with search, filters, and manual linking actions.
 - **Next Steps**: Implement PSN API integration with `psnawp`, background syncs via Celery/Redis, and registration/linking views.
 
 ## Tech Stack
@@ -96,14 +97,15 @@ A PlayStation trophy tracking community web application built with Django, Tailw
      ```
 
 5. **Access Admin**:
-   - Visit `http://127.0.0.1:8000/admin/` to manage users, profiles, and trophies.
+   - Visit `http://127.0.0.1:8000/admin/` to manage users, profiles, games, trophies, and earned trophies.
+   - Features: Search by username/PSN ID, filter by trophy type or sync tier, link profiles to users manually, view earned trophy counts.
 
 ## Development Notes
 
 ### Database Models
 
-- **CustomUser (users app)**: Extends `AbstractUser`. Requires email, unique case-insensitive username, and password. Used for authentication/registration.
-- **Profile (trophies app)**: Stores PSN data (`psn_username`, `avatar_url`). Optional `OneToOneField` to `CustomUser` (nullable for unlinked profiles). Created on any PSN lookup.
+- **CustomUser (users app)**: Extends `AbstractUser`. Requires email, unique case-insensitive username, and password. Used for authentication/registration. No automatic profile creation on signup.
+- **Profile (trophies app)**: Stores PSN data (`psn_username`, `avatar_url`). Optional `OneToOneField` to `CustomUser` (nullable for unlinked profiles). Created only on PSN lookup with validation (3-16 chars, letters/numbers/hyphens/underscores).
 - **Game**: Stores game metadata (`psn_id`, `title`, `platform`). Uses JSONB for flexible data.
 - **Trophy**: Represents trophies (`trophy_id`, `name`, `type` [Bronze/Silver/Gold/Platinum]). Links to `Game` via `ForeignKey`.
 - **EarnedTrophy**: Through model for `Profile`-`Trophy` many-to-many. Stores `earned_date` and `last_updated` for delta syncs and aggregates (e.g., earn rates).
@@ -111,9 +113,11 @@ A PlayStation trophy tracking community web application built with Django, Tailw
 **Why This Structure?**
 
 - Separates auth (`users`) from domain logic (`trophies`) for modularity.
-- Supports optional PSN linking: Profiles exist for any looked-up PSN ID, linked or not.
+- Supports optional PSN linking: Profiles are created only on PSN lookup and linked explicitly via user action (e.g., form or OAuth).
+- All PSN data is retained for community features (e.g., public profiles, global earn rates).
 - `EarnedTrophy` enables scalable tracking of trophy earns with timestamps, critical for delta-based API syncs and community stats (e.g., `Trophy.earned_by.count()` for earn rates).
 - Indexes on `username`, `psn_username`, `trophy_id` ensure fast queries for thousands+ users.
+- Validation on `psn_username` enforces PSN format for reliable API calls.
 
 ### Planned Features
 

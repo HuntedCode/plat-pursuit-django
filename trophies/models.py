@@ -1,6 +1,7 @@
 from django.db import models
 from django.utils import timezone
 from users.models import CustomUser
+from django.core.validators import RegexValidator
 
 
 # Create your models here.
@@ -16,6 +17,12 @@ class Profile(models.Model):
         max_length=16,
         unique=True,
         help_text="PSN Online ID (case-sensitive as per PSN)",
+        validators=[
+            RegexValidator(
+                regex=r"^[a-zA-Z0-9_-]{3,16}$",
+                message="PSN username must be 3-16 characters, using letters, numbers, hyphens or underscores.",
+            )
+        ],
     )
     avatar_url = models.URLField(blank=True, null=True)
     last_synced = models.DateTimeField(default=timezone.now)
@@ -29,20 +36,20 @@ class Profile(models.Model):
     class Meta:
         indexes = [models.Index(fields=["psn_username"])]
 
-        def __str__(self):
-            return self.psn_username
+    def __str__(self):
+        return self.psn_username
 
-        def link_to_user(self, user):
-            if not self.user:
-                self.user = user
-                self.is_linked = True
-                self.save()
+    def link_to_user(self, user):
+        if not self.user:
+            self.user = user
+            self.is_linked = True
+            self.save()
 
-        def unlink_user(self):
-            if self.user:
-                self.user = models.SET_NULL
-                self.is_linked = False
-                self.save()
+    def unlink_user(self):
+        if self.user:
+            self.user = models.SET_NULL
+            self.is_linked = False
+            self.save()
 
 
 class Game(models.Model):
@@ -82,7 +89,7 @@ class Trophy(models.Model):
 
     class Meta:
         unique_together = ["trophy_id", "game"]
-        indexes = [models.Index(fields=["name", "rarity"])]
+        indexes = [models.Index(fields=["name", "type"])]
 
     def __str__(self):
         return f"{self.name} ({self.game.title})"
