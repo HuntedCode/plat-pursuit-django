@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Profile, Game, Trophy, EarnedTrophy, UserGame
+from .models import Profile, Game, Trophy, EarnedTrophy, UserGame, APIAuditLog
 
 
 # Register your models here.
@@ -170,3 +170,11 @@ class EarnedTrophyAdmin(admin.ModelAdmin):
     search_fields = ("profile__psn_username", "trophy__trophy_name")
     raw_id_fields = ("profile", "trophy")
     ordering = ("-last_updated",)
+
+
+@admin.register(APIAuditLog)
+class APIAuditLogAdmin(admin.ModelAdmin):
+    list_display = ("timestamp", "endpoint", "profile", "status_code", "response_time")
+    list_filter = ("status_code", "timestamp")
+    search_fields = ("endpoint", "profile__psn_username")
+    ordering = ("-timestamp",)

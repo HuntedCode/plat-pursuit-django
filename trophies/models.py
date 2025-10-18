@@ -167,3 +167,23 @@ class EarnedTrophy(models.Model):
         indexes = [
             models.Index(fields=["last_updated"], name="earned_trophy_updated_idx")
         ]
+
+
+class APIAuditLog(models.Model):
+    timestamp = models.DateTimeField(auto_now_add=True)
+    token_id = models.CharField(max_length=64)
+    ip_used = models.CharField(max_length=45, blank=True)
+    endpoint = models.CharField(max_length=100)
+    profile = models.ForeignKey(
+        Profile, on_delete=models.SET_NULL, null=True, blank=True
+    )
+    status_code = models.IntegerField()
+    response_time = models.FloatField()
+    error_message = models.TextField(blank=True)
+    calls_remaining = models.IntegerField(default=0)
+
+    class Meta:
+        indexes = [models.Index(fields=["timestamp", "status_code"])]
+
+    def __str__(self):
+        return f"{self.endpoint} at {self.timestamp}"

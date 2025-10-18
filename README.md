@@ -31,6 +31,7 @@ A PlayStation trophy tracking community web application built with Django, Tailw
 ### Installation
 
 1. **Clone the Repository**:
+
    ```bash
    git clone git@github.com:HuntedCode/plat-pursuit-django.git
    cd PlatPursuit
@@ -112,6 +113,7 @@ A PlayStation trophy tracking community web application built with Django, Tailw
 - **EarnedTrophy (trophies app)**: Through model for `Profile`-`Trophy` many-to-many (`profile`, `trophy`, `earned`, `progress`, `progress_rate`, `progressed_date_time`, `earned_date_time`, `last_updated`). Uses `related_name='earned_trophy_entries'` to avoid clashes with `Trophy.earned_trophies`.
 
 **Why This Structure?**
+
 - Separates auth (`users`) from domain logic (`trophies`) for modularity.
 - Supports optional PSN linking: Profiles are created only on PSN lookup and linked explicitly via user action (e.g., form or OAuth).
 - All PSN data is retained for community features (e.g., public profiles, global earn rates).
