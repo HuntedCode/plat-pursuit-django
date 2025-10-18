@@ -4,10 +4,11 @@ A PlayStation trophy tracking community web application built with Django, Tailw
 
 ## Project Status
 
-- **Backend**: Django 5.x with PostgreSQL for relational data (users, profiles, games, trophies). Custom user model with case-insensitive usernames and required email. Models support many-to-many relationships for trophy tracking.
+- **Backend**: Django 5.x with PostgreSQL for relational data (users, profiles, games, trophies). Custom user model with case-insensitive usernames and required email. Models support many-to-many relationships for trophy tracking. Fixed reverse accessor clash in EarnedTrophy (changed related_name to 'earned_trophy_entries') and Profile (renamed earned_trophies to earned_trophy_summary).
 - **Frontend**: Tailwind CSS v4 (standalone CLI) and DaisyUI for responsive, themeable UI. Templates configured for server-side rendering.
 - **Linters**: Black (Python) and Prettier (CSS/JS/HTML) ensure consistent code style.
-- **Admin**: Configured for `CustomUser`, `Profile`, `Game`, `Trophy`, `EarnedTrophy` with search, filters, and manual linking actions.
+- **Admin**: Configured for all models (`CustomUser`, `Profile`, `Game`, `UserGame`, `Trophy`, `EarnedTrophy`) with search, filters, manual linking actions, and computed displays (e.g., trophy counts).
+- **Models**: Refined for psnawp data (e.g., added `account_id`, `about_me` to Profile; new `UserGame` for per-user stats; fields like `trophy_rarity`, `progress` in Trophy/EarnedTrophy).
 - **Next Steps**: Implement PSN API integration with `psnawp`, background syncs via Celery/Redis, and registration/linking views.
 
 ## Tech Stack
@@ -30,7 +31,6 @@ A PlayStation trophy tracking community web application built with Django, Tailw
 ### Installation
 
 1. **Clone the Repository**:
-
    ```bash
    git clone git@github.com:HuntedCode/plat-pursuit-django.git
    cd PlatPursuit
@@ -98,26 +98,32 @@ A PlayStation trophy tracking community web application built with Django, Tailw
 
 5. **Access Admin**:
    - Visit `http://127.0.0.1:8000/admin/` to manage users, profiles, games, trophies, and earned trophies.
-   - Features: Search by username/PSN ID, filter by trophy type or sync tier, link profiles to users manually, view earned trophy counts.
+   - Features: Search by username/PSN ID/account ID, filter by trophy type or sync tier, link profiles to users manually, view earned trophy counts and per-user game stats.
 
 ## Development Notes
 
 ### Database Models
 
 - **CustomUser (users app)**: Extends `AbstractUser`. Requires email, unique case-insensitive username, and password. Used for authentication/registration. No automatic profile creation on signup.
-- **Profile (trophies app)**: Stores PSN data (`psn_username`, `avatar_url`). Optional `OneToOneField` to `CustomUser` (nullable for unlinked profiles). Created only on PSN lookup with validation (3-16 chars, letters/numbers/hyphens/underscores).
-- **Game**: Stores game metadata (`psn_id`, `title`, `platform`). Uses JSONB for flexible data.
-- **Trophy**: Represents trophies (`trophy_id`, `name`, `type` [Bronze/Silver/Gold/Platinum]). Links to `Game` via `ForeignKey`.
-- **EarnedTrophy**: Through model for `Profile`-`Trophy` many-to-many. Stores `earned_date` and `last_updated` for delta syncs and aggregates (e.g., earn rates).
+- **Profile (trophies app)**: Stores PSN data (`psn_username`, `account_id`, `np_id`, `avatar_url`, `about_me`, `languages_used`, `is_plus`, `trophy_level`, `progress`, `tier`, `earned_trophy_summary`, `extra_data`). Optional `OneToOneField` to `CustomUser` (nullable for unlinked profiles). Created only on PSN lookup with validation (3-16 chars, letters/numbers/hyphens/underscores). Renamed `earned_trophies` to `earned_trophy_summary` (JSON summary of earned counts) to resolve ORM accessor clash with M2M `related_name`.
+- **Game (trophies app)**: Stores game metadata (`np_communication_id`, `np_service_name`, `trophy_set_version`, `title_name`, `title_detail`, `title_icon_url`, `title_platform`, `has_trophy_groups`, `defined_trophies`, `np_title_id`, `metadata` for IGDB extras like developer/summary).
+- **UserGame (trophies app)**: Through model for per-user game data (`profile`, `game`, `play_count`, `first_played_date_time`, `last_played_date_time`, `play_duration`, `progress`, `hidden_flag`, `earned_trophies`, `last_updated_datetime`).
+- **Trophy (trophies app)**: Represents trophies (`trophy_set_version`, `trophy_id`, `trophy_hidden`, `trophy_type`, `trophy_name`, `trophy_detail`, `trophy_icon_url`, `trophy_group_id`, `progress_target_value`, `reward_name`, `reward_img_url`, `trophy_rarity`, `trophy_earn_rate`, `earn_rate`). Links to `Game` via `ForeignKey`.
+- **EarnedTrophy (trophies app)**: Through model for `Profile`-`Trophy` many-to-many (`profile`, `trophy`, `earned`, `progress`, `progress_rate`, `progressed_date_time`, `earned_date_time`, `last_updated`). Uses `related_name='earned_trophy_entries'` to avoid clashes with `Trophy.earned_trophies`.
 
 **Why This Structure?**
-
 - Separates auth (`users`) from domain logic (`trophies`) for modularity.
 - Supports optional PSN linking: Profiles are created only on PSN lookup and linked explicitly via user action (e.g., form or OAuth).
 - All PSN data is retained for community features (e.g., public profiles, global earn rates).
-- `EarnedTrophy` enables scalable tracking of trophy earns with timestamps, critical for delta-based API syncs and community stats (e.g., `Trophy.earned_by.count()` for earn rates).
-- Indexes on `username`, `psn_username`, `trophy_id` ensure fast queries for thousands+ users.
+- `UserGame` and `EarnedTrophy` enable scalable per-user tracking with timestamps, critical for delta-based API syncs and stats.
+- Indexes on key fields (e.g., `psn_username`, `account_id`, `trophy_id`) ensure fast queries for thousands+ users.
 - Validation on `psn_username` enforces PSN format for reliable API calls.
+- Prepares for IGDB integration in `Game.metadata` for non-trophy details (e.g., developers, genres).
+- Resolved ORM clashes by renaming `Profile.earned_trophies` to `earned_trophy_summary` and setting `EarnedTrophy.related_name='earned_trophy_entries'`.
+
+### PSN API Integration
+
+Uses psnawp v3.0.0 for endpoints like profiles, trophy summaries, and trophies. Syncs delta-based to minimize calls, storing in models like Profile (`account_id`, `about_me`, `trophy_level`), UserGame (`play_duration`, `progress`), and Trophy/EarnedTrophy (`trophy_rarity`, `progress`). Prepares for IGDB metadata in `Game.metadata`. Model structure optimized with delta fields (e.g., `last_updated_datetime`, `earned_trophy_summary`) to reduce API calls.
 
 ### Planned Features
 

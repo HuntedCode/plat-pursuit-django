@@ -1,15 +1,39 @@
 from django.contrib import admin
-from .models import Profile, Game, Trophy, EarnedTrophy
+from .models import Profile, Game, Trophy, EarnedTrophy, UserGame
 
 
 # Register your models here.
 @admin.register(Profile)
 class ProfileAdmin(admin.ModelAdmin):
-    list_display = ("psn_username", "user", "is_linked", "last_synced", "sync_tier")
-    list_filter = ("is_linked", "sync_tier")
-    search_fields = ("psn_username", "user__username__iexact")
+    list_display = (
+        "psn_username",
+        "account_id",
+        "user",
+        "is_linked",
+        "is_plus",
+        "trophy_level",
+        "last_synced",
+        "sync_tier",
+    )
+    list_filter = ("is_linked", "is_plus", "sync_tier")
+    search_fields = ("psn_username", "account_id", "user__username__iexact", "about_me")
     raw_id_fields = ("user",)
     ordering = ("psn_username",)
+    fieldsets = (
+        (
+            "Core Info",
+            {"fields": ("psn_username", "account_id", "np_id", "user", "is_linked")},
+        ),
+        (
+            "Profile Details",
+            {"fields": ("avatar_url", "about_me", "languages_used", "is_plus")},
+        ),
+        (
+            "Trophy Summary",
+            {"fields": ("trophy_level", "progress", "tier", "earned_trophy_summary")},
+        ),
+        ("Sync Info", {"fields": ("extra_data", "last_synced", "sync_tier")}),
+    )
     actions = ["link_to_user"]
 
     def link_to_user(self, request, queryset):
@@ -25,19 +49,106 @@ class ProfileAdmin(admin.ModelAdmin):
 
 @admin.register(Game)
 class GameAdmin(admin.ModelAdmin):
-    list_display = ("title", "psn_id", "platform", "total_trophies")
-    search_fields = ("title", "psn_id")
-    list_filter = ("platform",)
-    ordering = ("title",)
+    list_display = (
+        "title_name",
+        "np_communication_id",
+        "title_platform",
+        "has_trophy_groups",
+        "total_defined_trophies",
+    )
+    list_filter = ("has_trophy_groups",)
+    search_fields = ("title_name", "np_communication_id", "np_title_id")
+    ordering = ("title_name",)
+    fieldsets = (
+        (
+            "Core Info",
+            {
+                "fields": (
+                    "np_communication_id",
+                    "np_service_name",
+                    "title_name",
+                    "title_detail",
+                )
+            },
+        ),
+        (
+            "Trophy Data",
+            {"fields": ("trophy_set_version", "has_trophy_groups", "defined_trophies")},
+        ),
+        (
+            "Metadata",
+            {"fields": ("title_icon_url", "title_platform", "np_title_id", "metadata")},
+        ),
+    )
+
+    def total_defined_trophies(self, obj):
+        return sum(obj.defined_trophies.values()) if obj.defined_trophies else 0
+
+    total_defined_trophies.short_description = "Total Trophies"
+
+
+@admin.register(UserGame)
+class UserGameAdmin(admin.ModelAdmin):
+    list_display = (
+        "profile",
+        "game",
+        "progress",
+        "play_duration",
+        "last_played_date_time",
+        "last_updated_datetime",
+    )
+    list_filter = ("hidden_flag",)
+    search_fields = ("profile__psn_username", "game__title_name")
+    raw_id_fields = ("profile", "game")
+    ordering = ("-last_updated_datetime",)
 
 
 @admin.register(Trophy)
 class TrophyAdmin(admin.ModelAdmin):
-    list_display = ("name", "game", "type", "earn_rate", "earned_by_count")
-    list_filter = ("type", "game__platform")
-    search_fields = ("name", "description")
+    list_display = (
+        "trophy_name",
+        "game",
+        "trophy_type",
+        "trophy_rarity",
+        "trophy_earn_rate",
+        "earn_rate",
+        "earned_by_count",
+    )
+    list_filter = ("trophy_type", "trophy_hidden", "game__title_platform")
+    search_fields = ("trophy_name", "trophy_detail")
     raw_id_fields = ("game",)
-    ordering = ("name",)
+    ordering = ("trophy_name",)
+    fieldsets = (
+        (
+            "Core Info",
+            {"fields": ("trophy_id", "trophy_name", "trophy_type", "trophy_detail")},
+        ),
+        (
+            "Visibility/Rewards",
+            {
+                "fields": (
+                    "trophy_hidden",
+                    "trophy_icon_url",
+                    "reward_name",
+                    "reward_img_url",
+                )
+            },
+        ),
+        (
+            "Group/Progress",
+            {
+                "fields": (
+                    "trophy_group_id",
+                    "progress_target_value",
+                    "trophy_set_version",
+                )
+            },
+        ),
+        (
+            "Rarity/Stats",
+            {"fields": ("trophy_rarity", "trophy_earn_rate", "earn_rate")},
+        ),
+    )
 
     def earned_by_count(self, obj):
         return obj.earned_by.count()
@@ -47,7 +158,15 @@ class TrophyAdmin(admin.ModelAdmin):
 
 @admin.register(EarnedTrophy)
 class EarnedTrophyAdmin(admin.ModelAdmin):
-    list_display = ("profile", "trophy", "earned_date", "last_updated")
-    list_filter = ("earned_date",)
-    search_fields = ("profile__psn_username", "trophy__name")
+    list_display = (
+        "profile",
+        "trophy",
+        "earned",
+        "progress_rate",
+        "earned_date_time",
+        "last_updated",
+    )
+    list_filter = ("earned", "earned_date_time")
+    search_fields = ("profile__psn_username", "trophy__trophy_name")
     raw_id_fields = ("profile", "trophy")
+    ordering = ("-last_updated",)
