@@ -69,15 +69,16 @@ class Game(models.Model):
     np_communication_id = models.CharField(
         max_length=50, unique=True, blank=True, null=True
     )
+    title_id = models.CharField(max_length=50, blank=True, null=True)
     np_service_name = models.CharField(max_length=50, blank=True)
     trophy_set_version = models.CharField(max_length=10, blank=True)
     title_name = models.CharField(max_length=255)
-    title_detail = models.TextField(blank=True)
+    title_detail = models.TextField(blank=True, null=True)
+    title_image = models.URLField(blank=True, null=True)
     title_icon_url = models.URLField(blank=True, null=True)
     title_platform = models.JSONField(default=list, blank=True)
     has_trophy_groups = models.BooleanField(default=False)
     defined_trophies = models.JSONField(default=dict, blank=True)
-    np_title_id = models.CharField(max_length=50, blank=True, null=True)
     metadata = models.JSONField(default=dict, blank=True)
 
     class Meta:
@@ -89,7 +90,7 @@ class Game(models.Model):
         return self.title_name
 
 
-class UserGame(models.Model):
+class ProfileGame(models.Model):
     profile = models.ForeignKey(
         Profile, on_delete=models.CASCADE, related_name="played_games"
     )
@@ -101,36 +102,30 @@ class UserGame(models.Model):
     progress = models.IntegerField(default=0)
     hidden_flag = models.BooleanField(default=False)
     earned_trophies = models.JSONField(default=dict, blank=True)
-    last_updated_datetime = models.DateTimeField(auto_now=True)
+    last_updated_datetime = models.DateTimeField(blank=True, null=True)
+    last_sync = models.DateTimeField(auto_now=True)
 
     class Meta:
         unique_together = ["profile", "game"]
         indexes = [
-            models.Index(fields=["last_updated_datetime"], name="usergame_updated_idx")
+            models.Index(
+                fields=["last_updated_datetime"], name="profilegame_updated_idx"
+            )
         ]
 
 
 class Trophy(models.Model):
     trophy_set_version = models.CharField(max_length=10, blank=True)
-    trophy_id = models.CharField(max_length=50)
-    trophy_hidden = models.BooleanField(default=False)
-    trophy_type = models.CharField(
-        max_length=20,
-        choices=[
-            ("bronze", "Bronze"),
-            ("silver", "Silver"),
-            ("gold", "Gold"),
-            ("platinum", "Platinum"),
-        ],
-    )
+    trophy_id = models.IntegerField()
+    trophy_type = models.CharField(max_length=20)
     trophy_name = models.CharField(max_length=255)
-    trophy_detail = models.TextField()
+    trophy_detail = models.TextField(blank=True, null=True)
     trophy_icon_url = models.URLField(blank=True, null=True)
     trophy_group_id = models.CharField(max_length=10, default="default")
     progress_target_value = models.CharField(max_length=50, blank=True, null=True)
     reward_name = models.CharField(max_length=255, blank=True, null=True)
     reward_img_url = models.URLField(blank=True, null=True)
-    trophy_rarity = models.CharField(max_length=20, blank=True)  # PSN global
+    trophy_rarity = models.IntegerField(blank=True, null=True, help_text='Common=3, Rare=2, Very_Rare=1, Ultra_Rare=0')  # PSN global
     trophy_earn_rate = models.FloatField(default=0.0)  # PSN global
     earn_rate = models.FloatField(default=0.0)  # PP Computed
     game = models.ForeignKey(Game, on_delete=models.CASCADE, related_name="trophies")
@@ -156,8 +151,9 @@ class EarnedTrophy(models.Model):
         Trophy, on_delete=models.CASCADE, related_name="earned_trophy_entries"
     )
     earned = models.BooleanField(default=False)
-    progress = models.IntegerField(default=0)
-    progress_rate = models.FloatField(default=0)
+    trophy_hidden = models.BooleanField(default=False)
+    progress = models.IntegerField(default=0, blank=True, null=True)
+    progress_rate = models.FloatField(default=0, blank=True, null=True)
     progressed_date_time = models.DateTimeField(blank=True, null=True)
     earned_date_time = models.DateTimeField(null=True, blank=True)
     last_updated = models.DateTimeField(auto_now=True)

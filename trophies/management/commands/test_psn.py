@@ -69,10 +69,10 @@ class Command(BaseCommand):
         :warning: Only works for PS4 games or higher.
         """
         title_stats = user.title_stats()
-        stat = next(title_stats)
-        for attr, value in vars(stat).items():
-            print(f"{attr}: {value}")
-        return
+        for stats in title_stats:
+            for attr, value in vars(stats).items():
+                print(f"{attr}: {value}")
+            print()
 
     def user_trophy_summary(self, user):
         """Gets the general trophy summary for the user as a TrophySummary obj.
@@ -95,11 +95,14 @@ class Command(BaseCommand):
 
         :raises PSNAWPForbiddenError: When the user's profile does not have proper perms.
         """
-        trophy_titles = user.trophy_titles(page_size=20)
-        print(len(list(trophy_titles)))
-        trophy_title = next(trophy_titles)
-        for attr, value in vars(trophy_title).items():
-            print(f"{attr}: {value}")
+        trophy_titles = user.trophy_titles(limit=None, offset=0, page_size=500)
+        # print(len(list(trophy_titles)))
+        # trophy_title = next(trophy_titles)
+        for trophy_title in trophy_titles:
+            # if trophy_title.title_name == 'Fall Guys':
+            for attr, value in vars(trophy_title).items():
+                print(f"{attr}: {value}")
+            print()
 
     def user_trophies(self, user, np_comm_id, platform):
         """Gets list of all trophies for the specified game (using np_communication_id).
@@ -120,10 +123,10 @@ class Command(BaseCommand):
         :raises PSNAWPNotFoundError: If user does not have trophies for specified game
         :raises PSNAWPForbiddenError: If user's profile is private
         """
-        trophies = user.trophies(np_comm_id, platform, False, "all")
-        trophy = next(trophies)
-        for attr, value in vars(trophy).items():
-            print(f"{attr}: {value}")
+        trophies = user.trophies(np_comm_id, platform, False, "all", page_size=500)
+        for trophy in trophies:
+            for attr, value in vars(trophy).items():
+                print(f"{attr}: {value}")
 
     def user_trophies_include_progress(self, user, np_comm_id, platform):
         """Gets list of all trophies for the specified game (using np_communication_id).
@@ -144,10 +147,19 @@ class Command(BaseCommand):
         :raises PSNAWPNotFoundError: If user does not have trophies for specified game
         :raises PSNAWPForbiddenError: If user's profile is private
         """
-        trophies = user.trophies(np_comm_id, platform, True, "all")
-        trophy = next(trophies)
-        for attr, value in vars(trophy).items():
-            print(f"{attr}: {value}")
+        trophies = user.trophies(
+            np_communication_id=np_comm_id,
+            platform=platform,
+            include_progress=True,
+            trophy_group_id="all",
+            limit=None,
+            offset=0,
+            page_size=500,
+        )
+        for trophy in trophies:
+            for attr, value in vars(trophy).items():
+                print(f"{attr}: {value}")
+            print()
 
     def handle(self, *args, **options):
         token = os.getenv("NPSSO_TOKEN")
@@ -178,11 +190,11 @@ class Command(BaseCommand):
             # self.user_profile_legacy(user)
             # self.user_title_stats(user)
             # self.user_trophy_summary(user)
-            self.user_trophy_titles(user)
-            np_comm_id = "NPWR22392_00"
+            # self.user_trophy_titles(user)
+            np_comm_id = "NPWR41750_00"
             platform = PlatformType.PS5
-            # self.user_trophies(user, np_comm_id, platform)
-            # self.user_trophies_include_progress(user, np_comm_id, platform)
+            self.user_trophies(user, np_comm_id, platform)
+            #self.user_trophies_include_progress(user, np_comm_id, platform)
 
             self.stdout.write(
                 self.style.SUCCESS(

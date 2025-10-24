@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Profile, Game, Trophy, EarnedTrophy, UserGame, APIAuditLog
+from .models import Profile, Game, Trophy, EarnedTrophy, ProfileGame, APIAuditLog
 
 
 # Register your models here.
@@ -52,6 +52,7 @@ class GameAdmin(admin.ModelAdmin):
     list_display = (
         "title_name",
         "np_communication_id",
+        "title_id",
         "title_platform",
         "has_trophy_groups",
         "total_defined_trophies",
@@ -67,6 +68,7 @@ class GameAdmin(admin.ModelAdmin):
                     "np_communication_id",
                     "np_service_name",
                     "title_name",
+                    "title_id",
                     "title_detail",
                 )
             },
@@ -77,7 +79,7 @@ class GameAdmin(admin.ModelAdmin):
         ),
         (
             "Metadata",
-            {"fields": ("title_icon_url", "title_platform", "np_title_id", "metadata")},
+            {"fields": ("title_icon_url", "title_platform", "metadata")},
         ),
     )
 
@@ -87,8 +89,8 @@ class GameAdmin(admin.ModelAdmin):
     total_defined_trophies.short_description = "Total Trophies"
 
 
-@admin.register(UserGame)
-class UserGameAdmin(admin.ModelAdmin):
+@admin.register(ProfileGame)
+class ProfileGameAdmin(admin.ModelAdmin):
     list_display = (
         "profile",
         "game",
@@ -114,7 +116,7 @@ class TrophyAdmin(admin.ModelAdmin):
         "earn_rate",
         "earned_by_count",
     )
-    list_filter = ("trophy_type", "trophy_hidden", "game__title_platform")
+    list_filter = ("trophy_type", "game__title_platform")
     search_fields = ("trophy_name", "trophy_detail")
     raw_id_fields = ("game",)
     ordering = ("trophy_name",)
@@ -124,10 +126,9 @@ class TrophyAdmin(admin.ModelAdmin):
             {"fields": ("trophy_id", "trophy_name", "trophy_type", "trophy_detail")},
         ),
         (
-            "Visibility/Rewards",
+            "Rewards",
             {
                 "fields": (
-                    "trophy_hidden",
                     "trophy_icon_url",
                     "reward_name",
                     "reward_img_url",
@@ -162,11 +163,12 @@ class EarnedTrophyAdmin(admin.ModelAdmin):
         "profile",
         "trophy",
         "earned",
+        "trophy_hidden",
         "progress_rate",
         "earned_date_time",
         "last_updated",
     )
-    list_filter = ("earned", "earned_date_time")
+    list_filter = ("earned", "trophy_hidden", "earned_date_time")
     search_fields = ("profile__psn_username", "trophy__trophy_name")
     raw_id_fields = ("profile", "trophy")
     ordering = ("-last_updated",)
@@ -174,7 +176,7 @@ class EarnedTrophyAdmin(admin.ModelAdmin):
 
 @admin.register(APIAuditLog)
 class APIAuditLogAdmin(admin.ModelAdmin):
-    list_display = ("timestamp", "endpoint", "profile", "status_code", "response_time")
+    list_display = ("timestamp", "endpoint", "profile", "status_code", "response_time", "calls_remaining")
     list_filter = ("status_code", "timestamp")
     search_fields = ("endpoint", "profile__psn_username")
     ordering = ("-timestamp",)
