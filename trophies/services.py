@@ -9,11 +9,8 @@ class PsnApiService:
     """Service class for PSN API data processing and model updates."""
 
     @classmethod
-    def update_profile_from_legacy(self, profile, legacy):
+    def update_profile_from_legacy(self, profile: Profile, legacy: dict) -> Profile:
         """Update Profile model from PSN legacy profile data."""
-        logger.info(
-            f"Updating profile {profile.psn_username} ({profile.account_id}) from legacy data"
-        )
         profile.account_id = legacy["profile"].get("accountId")
         profile.np_id = legacy["profile"].get("npId")
         profile.avatar_url = (
@@ -31,15 +28,11 @@ class PsnApiService:
         ]
         profile.last_synced = timezone.now()
         profile.save()
-        logger.info(
-            f"Updated profile data for {profile.psn_username} ({profile.account_id}) successfully"
-        )
         return profile
 
     @classmethod
     def create_or_update_game_from_title(self, trophy_title, title_stats=None):
         """Create or update Game model from PSN trophy title data."""
-        logger.info(f"Processing game {trophy_title.title_name} from title data")
         game, created = Game.objects.get_or_create(
             np_communication_id=trophy_title.np_communication_id,
             defaults={
@@ -84,9 +77,6 @@ class PsnApiService:
                 game.title_id = title_stats.title_id
                 game.title_image = title_stats.image_url
             game.save()
-            logger.info(f"Updated existing game {game.title_name}")
-        else:
-            logger.info(f"Created new game {game.title_name}")
         return game, created, needs_trophy_update
 
     @classmethod
@@ -94,9 +84,6 @@ class PsnApiService:
         self, profile, game, trophy_title, title_stats=None
     ):
         """Create or update ProfileGame model from PSN trophy title data."""
-        logger.info(
-            f"Processing user game {game.title_name} for profile {profile.psn_username}"
-        )
         profile_game, created = ProfileGame.objects.get_or_create(
             profile=profile,
             game=game,
@@ -130,13 +117,6 @@ class PsnApiService:
                 profile_game = self.update_game_from_title_stats(
                     profile, game, title_stats
                 )
-            logger.info(
-                f"Updated existing user game {game.title_name} for profile {profile.psn_username}"
-            )
-        else:
-            logger.info(
-                f"Created new user game for {game.title_name} for profile {profile.psn_username}"
-            )
         return profile_game, created
 
     @classmethod
@@ -160,9 +140,6 @@ class PsnApiService:
     @classmethod
     def create_or_update_trophy_from_trophy_data(self, game, trophy_data):
         """Create or update Trophy model from PSN trophy data."""
-        logger.info(
-            f"Processing trophy {trophy_data.trophy_name} for game {game.title_name}"
-        )
         trophy, created = Trophy.objects.get_or_create(
             trophy_id=trophy_data.trophy_id,
             game=game,
@@ -193,13 +170,6 @@ class PsnApiService:
             trophy.trophy_rarity = trophy_data.trophy_rarity.value
             trophy.trophy_earn_rate = trophy_data.trophy_earn_rate
             trophy.save()
-            logger.info(
-                f"Updated existing trophy {trophy.trophy_name} for game {game.title_name}"
-            )
-        else:
-            logger.info(
-                f"Created new trophy {trophy.trophy_name} for game {game.title_name}"
-            )
         return trophy, created
 
     @classmethod
@@ -207,9 +177,6 @@ class PsnApiService:
         self, profile, trophy, trophy_data
     ):
         """Create or update EarnedTrophy model from PSN trophy data."""
-        logger.info(
-            f"Processing earned trophy {trophy.trophy_name} for profile {profile.psn_username}"
-        )
         earned_trophy, created = EarnedTrophy.objects.get_or_create(
             profile=profile,
             trophy=trophy,
@@ -227,14 +194,7 @@ class PsnApiService:
             earned_trophy.trophy_hidden = trophy_data.trophy_hidden
             earned_trophy.progress = trophy_data.progress
             earned_trophy.progress_rate = trophy_data.progress_rate
-            earned_trophy.progressed_date_time = trophy_data.progress_date_time
+            earned_trophy.progressed_date_time = trophy_data.progressed_date_time
             earned_trophy.earned_date_time = trophy_data.earned_date_time
             earned_trophy.save()
-            logger.info(
-                f"Updated existing earned trophy {trophy.trophy_name} for {profile.psn_username}"
-            )
-        else:
-            logger.info(
-                f"Created new earned trophy {trophy.trophy_name} for {profile.psn_username}"
-            )
         return earned_trophy, created

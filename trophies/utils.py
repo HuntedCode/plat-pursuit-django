@@ -8,7 +8,10 @@ from dotenv import load_dotenv
 load_dotenv()
 logger = logging.getLogger("psn_api")
 redis_client = redis.Redis.from_url(
-    os.getenv("CELERY_BROKER_URL", "redis://localhost:6379/0")
+    os.getenv("CELERY_BROKER_URL", "redis://localhost:6379/0"),
+    socket_timeout=5,
+    socket_connect_timeout=5,
+    retry_on_timeout=True
 )
 
 def log_api_call(

@@ -95,7 +95,7 @@ class Command(BaseCommand):
 
         :raises PSNAWPForbiddenError: When the user's profile does not have proper perms.
         """
-        trophy_titles = user.trophy_titles(limit=None, offset=0, page_size=500)
+        trophy_titles = user.trophy_titles(limit=10, offset=5, page_size=5)
         # print(len(list(trophy_titles)))
         # trophy_title = next(trophy_titles)
         for trophy_title in trophy_titles:
@@ -190,10 +190,10 @@ class Command(BaseCommand):
             # self.user_profile_legacy(user)
             # self.user_title_stats(user)
             # self.user_trophy_summary(user)
-            # self.user_trophy_titles(user)
+            self.user_trophy_titles(user)
             np_comm_id = "NPWR41750_00"
             platform = PlatformType.PS5
-            self.user_trophies(user, np_comm_id, platform)
+            # self.user_trophies(user, np_comm_id, platform)
             #self.user_trophies_include_progress(user, np_comm_id, platform)
 
             self.stdout.write(
