@@ -18,8 +18,13 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import path
 from core.views import home
+from trophies.views import monitoring_dashboard, token_stats, token_stats_sse
 
 urlpatterns = [
     path("admin/", admin.site.urls),
     path("", home, name="home"),
+
+    path('api/token-stats/', token_stats, name='token-stats'),
+    path('api/token-stats/sse/', token_stats_sse, name='token-stats-sse'),
+    path('monitoring/', monitoring_dashboard, name='monitoring'),
 ]

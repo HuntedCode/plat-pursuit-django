@@ -1,4 +1,4 @@
-import difflib
+from collections import namedtuple
 import json
 import time
 import threading
@@ -8,13 +8,13 @@ import atexit
 import concurrent.futures
 from typing import Optional, Dict
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from psnawp_api import PSNAWP
 from psnawp_api.models.trophies.trophy_constants import PlatformType
 from requests import HTTPError
 from .models import Profile, Game
 from .services import PsnApiService
-from .utils import redis_client, log_api_call
+from .utils import redis_client, log_api_call, TITLE_ID_BLACKLIST
 
 logger = logging.getLogger("psn_api")
 
@@ -24,6 +24,8 @@ class TokenInstance:
     token: str
     client: PSNAWP
     user_cache: dict = None
+    access_expiry: datetime = None
+    refresh_expiry: datetime = None
     last_health: float = time.time()
     last_refresh: float = 0
     is_busy: bool = False
@@ -31,7 +33,24 @@ class TokenInstance:
     def __post_init__(self):
         if self.user_cache is None:
             self.user_cache = {}
+        if self.access_expiry is None or self.refresh_expiry is None:
+            self.update_expiry_times()
     
+    def update_expiry_times(self):
+        auth = self.client.authenticator
+        self.access_expiry = datetime.fromtimestamp(auth.access_token_expiration_time)
+        self.refresh_expiry = datetime.fromtimestamp(auth.refresh_token_expiration_time)
+
+    def get_access_expiry_in_seconds(self):
+        if self.access_expiry:
+            return (self.access_expiry - datetime.now()).total_seconds()
+        return -1
+    
+    def get_refresh_expiry_in_seconds(self):
+        if self.refresh_expiry:
+            return (self.refresh_expiry - datetime.now()).total_seconds()
+        return -1
+        
     def cleanup_cache(self, ttl_hours=24):
         """Remove cache entries older than ttl_hours."""
         now = datetime.now()
@@ -65,11 +84,13 @@ class TokenKeeper:
         from dotenv import load_dotenv
         load_dotenv()
         self.tokens = os.getenv("PSN_TOKENS", "").split(",")
-        self.health_interval = 300
+        self.health_interval = 60
         self.refresh_threshold = 300
+        self.token_wait_interval = 10
         self.window_seconds = int(os.getenv("WINDOW_SECONDS", 900))
         self.max_calls_per_window = int(os.getenv("MAX_CALLS_PER_WINDOW", 300))
-        self.reserved_high_prio_calls = int(self.max_calls_per_window * 0.1)
+        self.stats_interval = 5
+        self.machine_id = os.getenv("MACHINE_ID", "default")
 
         if len(self.tokens) != 3:
             raise ValueError("Exactly 3 PSN_TOKENS required")
@@ -77,19 +98,33 @@ class TokenKeeper:
         self.instances: Dict[int, TokenInstance] = {}
         self._health_thread = None
         self._pubsub_thread = None
+        self._stats_thread = None
         self._executor = concurrent.futures.ThreadPoolExecutor(max_workers=3)
         self._start_health_monitor()
         self._start_pubsub_listener()
+        self._start_stats_publisher()
         redis_client.set("token_keeper:running", "1", ex=3600)
         atexit.register(self._cleanup)
+    
+    def _publish_stats_loop(self):
+        while True:
+            time.sleep(self.stats_interval)
+            try:
+                stats = self.stats
+                stats_with_id = {"machine_id": self.machine_id, "instances": stats}
+                redis_client.publish("token_keeper_stats", json.dumps(stats_with_id))
+                redis_client.set("token_keeper_latest_stats", json.dumps(stats_with_id), ex=60)
+            except Exception as e:
+                logger.error(f"Error publishing stats: {e}")
 
     def _cleanup(self):
         """Clean up Redis stat on process exit."""
         logger.info("Cleaning up TokenKeeper Redis state")
         redis_client.delete("token_keeper:running")
-        for i in range(3):
+        for i in range(len(self.tokens)):
             redis_client.delete(f"token_keeper:instance:{i}:token")
             redis_client.delete(f"instance_lock:{i}")
+            redis_client.delete(f"token_keeper:pending_refresh:{i}")
         self._executor.shutdown(wait=True)
         logger.info("TokenKeeper Redis state cleaned")
 
@@ -105,25 +140,37 @@ class TokenKeeper:
         self._pubsub_thread.start()
         logger.info("TokenKeeper pub/sub listener started")
 
+    def _start_stats_publisher(self):
+        self._stats_thread = threading.Thread(target=self._publish_stats_loop, daemon=True)
+        self._stats_thread.start()
+        logger.info("TokenKeeper stats publisher started")
+
     def _health_loop(self):
         """Infinite loop: Check health every interval."""
         while True:
             time.sleep(self.health_interval)
+            logger.info(f"Health loop tick.")
             redis_client.set("token_keeper:running", "1", ex=3600)
             for instance_id, inst in self.instances.items():
                 self._check_and_refresh(inst)
     
     def _check_and_refresh(self, inst : TokenInstance):
-        """Refresh token if < time remaining and clean cache."""
+        """Refresh token if time remaining less than refresh threshold and clean cache."""
         try:
-            auth = inst.client.authenticator
-            if auth.access_token_expiration_in < self.refresh_threshold:
+            if inst.get_access_expiry_in_seconds() < self.refresh_threshold:
+                if inst.is_busy:
+                    redis_client.set(f"token_keeper:pending_refresh:{inst.instance_id}", "1", ex=3600)
+                    logger.debug(f"Instance {inst.instance_id} needs refresh but is busy.")
+                    return
                 start = time.time()
-                auth.fetch_access_token_from_refresh()
+                inst.client = PSNAWP(inst.token)
+                inst.client.user(online_id='PlatPursuit') # Generates refresh tokens, etc.
+                inst.user_cache = {}
+                inst.update_expiry_times()
                 inst.last_refresh = time.time()
                 self._record_call(inst.token)
                 log_api_call("keeper_refresh", inst.token, None, 200, time.time() - start)
-                logger.debug(f"Instance {inst.instance_id} refreshed proactively")
+                logger.info(f"Instance {inst.instance_id} refreshed proactively")
             inst.cleanup_cache()
         except Exception as e:
             logger.error(f"Health check failed for {inst.instance_id}: {e}")
@@ -154,14 +201,15 @@ class TokenKeeper:
                 profile = self._sync_profile_data(profile, job_type)
                 result = {'profile_id': profile.id}
             elif request == "sync_profile_games_data":
-                game_ids = self._sync_profile_games_data(profile, job_type)
-                result = {'game_ids': game_ids}
+                game_ids, title_stats = self._sync_profile_games_data(profile, job_type)
+                result = {'game_ids': game_ids, 'title_stats': title_stats}
+            elif request == "sync_trophy_titles_for_title":
+                result = self._sync_trophy_titles_for_title(profile, job_type, args[0])
             elif request == "refresh_profile_game_data":
                 game_ids = self._refresh_profile_games_data(profile, job_type, args[0])
                 result = {'game_ids': game_ids}
             elif request == "sync_profile_trophies":
-                profile = Profile.objects.get(id=args[0])
-                game = Game.objects.get(np_communication_id=args[1])
+                game = Game.objects.get(np_communication_id=args[0])
                 game_id = self._sync_profile_trophy_data(job_type, profile, game)
                 result = {'game_id': game_id}
             else:
@@ -181,30 +229,34 @@ class TokenKeeper:
 
     def _get_instance_for_job(self, job_type: str) -> Optional[TokenInstance]:
         """Selects best instance for job, respecting workload and priority."""
-        is_high_prio = job_type in ["initial_sync", "profile_refresh"]
-        instance_scores = {}
-        for inst in self.instances.values():
-            if not inst.is_busy and self._is_healthy(inst):
-                calls = self._get_calls_in_window(inst.token)
-                if not is_high_prio and calls >= (self.max_calls_per_window - self.reserved_high_prio_calls):
-                    continue
-                instance_scores[inst.instance_id] = calls
-        
-        if instance_scores:
-            best_id = min(instance_scores, key=instance_scores.get)
-            inst = self.instances[best_id]
-            inst.is_busy = True
-            return inst
+        start = time.time()
+        while time.time() - start < self.token_wait_interval:
+            is_high_prio = job_type in ["initial_sync", "profile_refresh"]
+            instance_scores = {}
+            for inst in self.instances.values():
+                if not inst.is_busy and self._is_healthy(inst):
+                    instance_scores[inst.instance_id] = self._get_calls_in_window(inst.token)
+            
+            if instance_scores:
+                best_id = min(instance_scores, key=instance_scores.get)
+                inst = self.instances[best_id]
+                inst.is_busy = True
+                return inst
+            logger.info("Waiting for token...")
+            time.sleep(0.1)
+        logger.error(f"No token available for use.")
         return None
     
     def _execute_api_call(self, instance : TokenInstance, profile : Profile, endpoint : str, **kwargs):
-        logger.info(f"API called: {endpoint} | instance: {instance.instance_id} | args: {kwargs}")
         lookup_key = profile.account_id if profile.account_id else profile.psn_username
         if lookup_key not in instance.user_cache:
+            start = time.time()
             instance.user_cache[lookup_key] = {
                 "user": (instance.client.user(account_id=profile.account_id) if profile.account_id else instance.client.user(online_id=profile.psn_username)),
                 "timestamp": datetime.now()
             }
+            self._record_call(instance.token)
+            log_api_call('init_user', instance.token, profile.id, 200, time.time() - start)
         user = instance.user_cache[lookup_key]['user']
         start_time = time.time()
 
@@ -220,16 +272,22 @@ class TokenKeeper:
                 if "include_progress" in kwargs:
                     self._record_call(instance.token)
                 data = list(user.trophies(**kwargs))
+            elif endpoint == "trophy_titles_for_title":
+                data = list(user.trophy_titles_for_title(**kwargs))
             else:
                 raise ValueError(f"Unknown endpoint: {endpoint}")
             
             log_api_call(endpoint, instance.token, profile.id if profile else None, 200, time.time() - start_time)
             instance.is_busy = False
+            if redis_client.get(f"token_keeper:pending_refresh:{instance.instance_id}"):
+                self._check_and_refresh(instance)
             return data
         except HTTPError as e:
             log_api_call(endpoint, instance.token, profile.id if profile else None, e.response.status_code, time.time() - start_time, str(e))
             instance.is_busy = False
             self._rollback_call(instance.token)
+            if redis_client.get(f"token_keeper:pending_refresh:{instance.instance_id}"):
+                self._check_and_refresh(instance)
             raise
 
     def _get_calls_in_window(self, token : str) -> int:
@@ -260,6 +318,8 @@ class TokenKeeper:
         for i, token in enumerate(self.tokens):
             start_time = time.time()
             client = PSNAWP(token)
+            self._record_call(token)
+            client.user(online_id='PlatPursuit') # Generates refresh tokens, etc.
             inst = TokenInstance(
                 instance_id=i,
                 token=token,
@@ -289,45 +349,85 @@ class TokenKeeper:
             logger.error(f"Failed profile sync for {profile.id}: {e}")
             raise
     
-    def _sync_profile_games_data(self, profile: Profile, job_type: str) -> list:
-        page_size = 200
+    def _sync_profile_games_data(self, profile: Profile, job_type: str) -> tuple[list, list]:
+        page_size = 400
         offset = 0
-        instance = self._get_instance_for_job(job_type)
+        limit = page_size
 
         trophy_titles = []
         profile_game_comm_ids = []
         is_full = True
         while is_full:
-            titles = self._execute_api_call(instance, profile, 'trophy_titles', limit=None, offset=offset, page_size=page_size)
+            titles = self._execute_api_call(self._get_instance_for_job(job_type), profile, 'trophy_titles', limit=limit, offset=offset, page_size=page_size)
             trophy_titles.extend(titles)
             is_full = len(titles) >= page_size
             offset += page_size
+            limit += page_size
 
             for title in titles:
                 profile_game_comm_ids.append(title.np_communication_id)
 
+        page_size = 200
         offset = 0
+        limit = page_size
         title_stats = []
         is_full = True
         while is_full:
-            titles = self._execute_api_call(instance, profile, 'title_stats', limit=None, offset=offset, page_size=page_size)
+            titles = self._execute_api_call(self._get_instance_for_job(job_type), profile, 'title_stats', limit=limit, offset=offset, page_size=page_size)
             title_stats.extend(titles)
             is_full = len(titles) >= page_size
             offset += page_size
+            limit += page_size
+        
+        for stats in title_stats[:]:
+            if stats.title_id in TITLE_ID_BLACKLIST:
+                title_stats.remove(stats)
 
-        self._sync_profile_games(profile, trophy_titles, title_stats)
+        remaining_title_stats, _ = self._sync_profile_games(profile, trophy_titles, title_stats)
+        remaining_title_stats_list = []
+        for stats in remaining_title_stats:
+            remaining_title_stats_list.append({
+                'title_id': stats.title_id,
+                'name': stats.name,
+                'image_url': stats.image_url,
+                'category': stats.category.name,
+                'play_count': stats.play_count if stats.play_count else 0,
+                'first_played_date_time': stats.first_played_date_time.timestamp() if stats.first_played_date_time else None,
+                'last_played_date_time': stats.last_played_date_time.timestamp() if stats.last_played_date_time else None,
+                'play_duration': stats.play_duration.total_seconds() if stats.play_duration else None,
+            })
+
         logger.info(f"Synced {len(profile_game_comm_ids)} games for profile {profile.id}")
-        return profile_game_comm_ids
+        return profile_game_comm_ids, remaining_title_stats_list
     
-    def _refresh_profile_games_data(self, profile: Profile, job_type: str, latest_sync: datetime) -> list:
-        page_size = 200
+    def _sync_trophy_titles_for_title(self, profile: Profile, job_type: str, title_stats: list):
+        title_ids = []
+        for stats in title_stats:
+            title_ids.append(stats['title_id'])
+        titles = self._execute_api_call(self._get_instance_for_job(job_type), profile, 'trophy_titles_for_title', title_ids=title_ids)
+
+        for title in titles:
+            PsnApiService.assign_title_id(title.np_communication_id, title.np_title_id)
+
+        for stats in title_stats:
+            stats['category'] = PlatformType(stats['category'])
+            stats['first_played_date_time'] = datetime.fromtimestamp(stats['first_played_date_time'], tz=timezone.utc)
+            stats['last_played_date_time'] = datetime.fromtimestamp(stats['last_played_date_time'], tz=timezone.utc)
+            stats['play_duration'] = timedelta(seconds=stats['play_duration']) if not stats['play_duration'] == None else None
+            TitleStats = namedtuple('TitleStats', ['title_id', 'name', 'image_url', 'category', 'play_count', 'first_played_date_time', 'last_played_date_time', 'play_duration'])
+            named_stats = TitleStats(**stats)
+            PsnApiService.update_profile_game_with_title_stats(profile, named_stats)
+
+    def _refresh_profile_games_data(self, profile: Profile, job_type: str, latest_sync_int: int) -> list:
+        page_size = 400
+        limit = page_size
         offset = 0
-        instance = self._get_instance_for_job(job_type)
+        latest_sync = datetime.fromtimestamp(latest_sync_int, tz=timezone.utc)
 
         trophy_titles_to_be_updated = []
         end_found = False
         while True:
-            trophy_titles = self._execute_api_call(instance, profile, 'trophy_titles', limit=None, offset=offset, page_size=page_size)
+            trophy_titles = self._execute_api_call(self._get_instance_for_job(job_type), profile, 'trophy_titles', limit=limit, offset=offset, page_size=page_size)
             for title in trophy_titles:
                 if title.last_updated_datetime >= latest_sync:
                     trophy_titles_to_be_updated.append(title)
@@ -337,12 +437,15 @@ class TokenKeeper:
             if end_found:
                 break
             offset += page_size
+            limit += page_size
 
+        page_size = 200
+        limit = page_size
         offset = 0
         title_stats_to_be_updated = []
         end_found = False
         while True:
-            title_stats = self._execute_api_call(instance, profile, 'title_stats', limit=None, offset=0, page_size=page_size)
+            title_stats = self._execute_api_call(self._get_instance_for_job(job_type), profile, 'title_stats', limit=limit, offset=offset, page_size=page_size)
             for title in title_stats:
                 if title.last_played_date_time >= latest_sync:
                     title_stats_to_be_updated.append(title)
@@ -352,13 +455,30 @@ class TokenKeeper:
             if end_found:
                 break
             offset += page_size
-        
+            limit += page_size
+
         profile_game_comm_ids = []
         for title in trophy_titles_to_be_updated:
             profile_game_comm_ids.append(title.np_communication_id)
         
         remaining_title_stats, _ = self._sync_profile_games(profile, trophy_titles_to_be_updated, title_stats_to_be_updated)
-        self._sync_profile_games_title_stats(profile, remaining_title_stats)
+        title_ids = []
+        for stats in remaining_title_stats:
+            title_ids.append(stats.title_id)
+        
+        page_size = 5
+        limit = page_size
+        offset = 0
+        while offset < len(title_ids):
+            title_ids_package = title_ids[offset:limit]
+            titles = self._execute_api_call(self._get_instance_for_job(job_type), profile, 'trophy_titles_for_title', title_ids=title_ids_package)
+            for title in titles:
+                PsnApiService.assign_title_id(title.np_communication_id, title.np_title_id)
+            offset += page_size
+            limit += page_size
+
+        for stats in remaining_title_stats:
+            PsnApiService.update_profile_game_with_title_stats(profile, stats)
         logger.info(f"Refreshed {len(profile_game_comm_ids)} games for profile {profile.id}")
         return profile_game_comm_ids
 
@@ -378,53 +498,41 @@ class TokenKeeper:
     # Job Helpers
     def _sync_profile_games(self, profile: Profile, trophy_titles: list, title_stats: list):
         games_needing_trophy_updates = []
-        for trophy_title in trophy_titles:
-            matched = False
-            for i, title_stat in enumerate(title_stats):
-                if (
-                    self._match_game_names(trophy_title.title_name, title_stat.name)
-                    and str(title_stat.category.name) in [platform.value for platform in trophy_title.title_platform]
-                ):
-                    game, created, needs_trophy_update = PsnApiService.create_or_update_game_from_title(trophy_title, title_stat)
-                    if needs_trophy_update and not created:
-                        games_needing_trophy_updates.append(game)
-                    PsnApiService.create_or_update_profile_game_from_title(profile, game, trophy_title, title_stat)
-                    title_stats.pop(i)
-                    matched = True
-                    break
-            if not matched:
-                game, created, needs_trophy_update = PsnApiService.create_or_update_game_from_title(trophy_title)
-            if needs_trophy_update and not created:
+        for title in trophy_titles:
+            game, _, needs_trophy_update = PsnApiService.create_or_update_game(title)
+            if needs_trophy_update:
                 games_needing_trophy_updates.append(game)
-            PsnApiService.create_or_update_profile_game_from_title(profile, game, trophy_title)
+            profile_game, _ = PsnApiService.create_or_update_profile_game(profile, game, title)
+        
+        for stats in title_stats[:]:
+            updated = PsnApiService.update_profile_game_with_title_stats(profile, stats)
+            if updated:
+                title_stats.remove(stats)
+                    
         return title_stats, games_needing_trophy_updates
-    
-    def _match_game_names(self, name1, name2, threshold=0.9):
-        """Fuzzy match game names with normalization."""
-        name1 = name1.lower().replace('™', '').replace('®', '').strip()
-        name2 = name2.lower().replace('™', '').replace('®', '').strip()
-        ratio = difflib.SequenceMatcher(None, name1, name2).ratio()
-        return ratio >= threshold
 
     def _sync_profile_games_title_stats(self, profile: Profile, title_stats: list):
-        """Update ProfileGame with only title_stats - no trophy data."""
+        """Update Games & ProfileGame with only title_stats - no trophy data."""
         for stat in title_stats:
-            try:
-                game = Game.objects.get(title_id=stat.title_id)
-            except Game.DoesNotExist as e:
-                logger.warning(f"Game with title id {stat.title_id} could not be found.")
-                continue
-            PsnApiService.update_game_from_title_stats(profile, game, stat)
+            games = Game.objects.filter(title_id=stat.title_id)
+            if games:
+                for game in games:
+                    PsnApiService.update_profile_game_with_title_stats(profile, game, stat)
 
     @property
     def stats(self) -> Dict:
-        return {
-            inst.instance_id: {
+        stats = {}
+        for inst in self.instances.values():
+            auth = inst.client.authenticator
+            stats[inst.instance_id] = {
                 "busy": inst.is_busy,
                 "healthy": time.time() - inst.last_health < self.health_interval,
-                "calls_in_window": self._get_calls_in_window(inst.token)
+                "calls_in_window": self._get_calls_in_window(inst.token),
+                "access_token_expiry_in": inst.get_access_expiry_in_seconds(),
+                "refresh_token_expiry_in": inst.get_refresh_expiry_in_seconds(),
+                "token_scopes": auth.token_response.get("scope", "unknown") if auth.token_response else "none",
+                "npsso_cookie": "present" if auth.npsso_cookie else "missing"
             }
-            for inst in self.instances.values()
-        }
+        return stats
 
 token_keeper = TokenKeeper()

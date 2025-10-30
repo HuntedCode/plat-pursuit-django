@@ -11,3 +11,5 @@ app = Celery("plat_pursuit")
 app.config_from_object("django.conf:settings", namespace="CELERY")
 
 app.autodiscover_tasks()
+
+app.conf.flower_basic_auth = 'admin:password'

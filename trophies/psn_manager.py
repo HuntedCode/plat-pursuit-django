@@ -16,7 +16,7 @@ class PSNManager:
 
     # Init methods
     def __init__(self):
-        self.max_jobs_per_profile = int(os.getenv("MAX_JOBS_PER_PROFILE", 20))
+        self.max_jobs_per_profile = int(os.getenv("MAX_JOBS_PER_PROFILE", 3))
 
     def assign_job(self, job_type, args, profile_id=None, priority_override=None):
         """Assign job to queue, respecting priorities."""
@@ -65,9 +65,12 @@ class PSNManager:
         """Map job type to queue."""
         if job_type in ["initial_sync", "profile_refresh"]:
             return "high_priority"
-        elif job_type == "sync_game_trophies":
+        elif job_type in ['sync_title_stats_by_title']:
             return "medium_priority"
-        return "low_priority"
+        elif job_type in ["sync_game_trophies"]:
+            return "low_priority"
+        else:
+            return "low_priority"
     
     def defer_job(self, profile_id, job_type, args, priority_override=None):
         redis_client.rpush(
@@ -81,6 +84,7 @@ class PSNManager:
         pubsub = redis_client.pubsub()
         pubsub.subscribe(f"psn_api_responses:{task_id}")
 
+        logger.info(f"Publishing request: {job_type}")
         redis_client.publish(
             "psn_api_requests",
             json.dumps({
@@ -119,6 +123,9 @@ class BasePSNTask(Task):
     def _get_queue_name(self, job_type):
         if job_type in ["initial_sync", "profile_refresh"]:
             return "high_priority"
-        elif job_type == "sync_game_trophies":
+        elif job_type in ['sync_title_stats_by_title']:
             return "medium_priority"
-        return "low_priority"
+        elif job_type in ["sync_game_trophies"]:
+            return "low_priority"
+        else:
+            return "low_priority"

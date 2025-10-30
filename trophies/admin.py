@@ -58,7 +58,7 @@ class GameAdmin(admin.ModelAdmin):
         "total_defined_trophies",
     )
     list_filter = ("has_trophy_groups",)
-    search_fields = ("title_name", "np_communication_id", "np_title_id")
+    search_fields = ("title_name", "np_communication_id", "title_id")
     ordering = ("title_name",)
     fieldsets = (
         (

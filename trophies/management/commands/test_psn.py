@@ -95,7 +95,7 @@ class Command(BaseCommand):
 
         :raises PSNAWPForbiddenError: When the user's profile does not have proper perms.
         """
-        trophy_titles = user.trophy_titles(limit=10, offset=5, page_size=5)
+        trophy_titles = user.trophy_titles(limit=None, offset=0, page_size=400)
         # print(len(list(trophy_titles)))
         # trophy_title = next(trophy_titles)
         for trophy_title in trophy_titles:
@@ -161,6 +161,13 @@ class Command(BaseCommand):
                 print(f"{attr}: {value}")
             print()
 
+    def user_trophy_titles_for_title(self, user, title_ids: list):
+        trophy_titles = user.trophy_titles_for_title(title_ids=title_ids)
+        for title in trophy_titles:
+            for attr, value in vars(title).items():
+                print(f"{attr}: {value}")
+            print()
+
     def handle(self, *args, **options):
         token = os.getenv("NPSSO_TOKEN")
         if not token or len(token) != 64:
@@ -192,9 +199,14 @@ class Command(BaseCommand):
             # self.user_trophy_summary(user)
             self.user_trophy_titles(user)
             np_comm_id = "NPWR41750_00"
+            title_ids = ["CUSA06840_00"]
+            #title_ids = []
+            #for i in range(5):
+            #    title_ids.append('CUSA07402_00')
             platform = PlatformType.PS5
             # self.user_trophies(user, np_comm_id, platform)
             #self.user_trophies_include_progress(user, np_comm_id, platform)
+            # self.user_trophy_titles_for_title(user, title_ids)
 
             self.stdout.write(
                 self.style.SUCCESS(

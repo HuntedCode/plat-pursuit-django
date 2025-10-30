@@ -60,6 +60,7 @@ INSTALLED_APPS = [
     "core",
     "users",
     "trophies",
+    'rest_framework',
 ]
 
 MIDDLEWARE = [

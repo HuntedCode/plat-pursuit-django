@@ -1,0 +1,105 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="container mx-auto p-4">
+    <h1 class="text-3xl font-bold mb-6">TokenKeeper Monitoring Dashboard</h1>
+    <div class="overflow-x-auto">
+        <table class="table w-full">
+            <thead>
+                <tr>
+                    <th>Instance</th>
+                    <th>Busy</th>
+                    <th>Healthy</th>
+                    <th>Calls in Window</th>
+                    <th>Access Token Expires In (s)</th>
+                    <th>Refresh Token Expires In (s)</th>
+                    <th>Token Scopes</th>
+                    <th>NPSSO Cookie</th>
+                </tr>
+            </thead>
+            <tbody id="stats-table">
+                <!-- Populated by JS -->
+            </tbody>
+        </table>
+    </div>
+    <div class="mt-6">
+        <canvas id="calls-chart" width="400" height="200"></canvas>
+    </div>
+</div>
+
+<script>
+    const tableBody = document.getElementById('stats-table');
+    const chartCanvas = document.getElementById('calls-chart');
+    let chart;
+
+    function updateStats(statsData) {
+        tableBody.innerHTML = '';
+        let callsData = [];
+        let labels = [];
+        if (!statsData.instances) return;
+        Object.entries(statsData.instances).forEach(([id, stat]) => {
+            const row = tableBody.insertRow();
+            row.insertCell(0).textContent = `${statsData.machine_id || 'default'}-${id}`;
+            row.insertCell(1).textContent = stat.busy ? 'Yes' : 'No';
+            row.insertCell(2).textContent = stat.healthy ? 'Yes' : 'No';
+            row.insertCell(3).textContent = stat.calls_in_window;
+            row.insertCell(4).textContent = stat.access_token_expiry_in.toFixed(2);
+            row.insertCell(5).textContent = stat.refresh_token_expiry_in.toFixed(2);
+            row.insertCell(6).textContent = stat.token_scopes;
+            row.insertCell(7).textContent = stat.npsso_cookie;
+
+            callsData.push(stat.calls_in_window);
+            labels.push(`${statsData.machine_id || 'default'}-${id}`);
+        });
+
+        if (chart) chart.destroy();
+        chart = new Chart(chartCanvas, {
+            type: 'bar',
+            data: {
+                labels: Object.keys(statsData.instances),
+                datasets: [{
+                    label: 'Calls in Window',
+                    data: callsData,
+                    backgroundColor: 'rgba(59, 130, 246, 0.5)',
+                    borderColor: 'rgba(59, 130, 246, 1)',
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                scales: {
+                    y: { beginAtZero: true }
+                }
+            }
+        });
+    }
+
+    let eventSource;
+    function connectSSE() {
+        eventSource = new EventSource('/api/token-stats/sse/');
+        eventSource.onmessage = function(event) {
+            try {
+                const stats = JSON.parse(event.data)
+                if (stats.error) {
+                    console.error('SSE error from server: ', stats.error);
+                    return;
+                }
+                updateStats(stats);
+            } catch (e) {
+                console.error('Error parsing SSE data:', e);
+            }
+        };
+        eventSource.onerror = function() {
+            console.error('SSE connection error. Retrying in 5s...');
+            eventSource.close();
+            setTimeout(connectSSE, 5000);
+        };
+    }
+    connectSSE();
+
+    // Fallback: Initial fetch to populate table
+    fetch('/api/token-stats/')
+        .then(response => response.json())
+        .then(stats => updateStats(stats))
+        .catch(error => console.error('Error fetching initial stats:', error));
+</script>
+{% endblock %}

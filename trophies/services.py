@@ -1,5 +1,6 @@
 import logging
 from django.utils import timezone
+from django.db.models import Q
 from .models import Profile, Game, ProfileGame, Trophy, EarnedTrophy
 
 logger = logging.getLogger("psn_api")
@@ -31,7 +32,7 @@ class PsnApiService:
         return profile
 
     @classmethod
-    def create_or_update_game_from_title(self, trophy_title, title_stats=None):
+    def create_or_update_game(self, trophy_title):
         """Create or update Game model from PSN trophy title data."""
         game, created = Game.objects.get_or_create(
             np_communication_id=trophy_title.np_communication_id,
@@ -51,11 +52,6 @@ class PsnApiService:
                 }
             },
         )
-        if created and title_stats:
-            game.title_id = title_stats.title_id
-            game.title_image = title_stats.image_url
-            game.save()
-
         needs_trophy_update = created
         if not created:
             if trophy_title.trophy_set_version != game.trophy_set_version:
@@ -73,16 +69,22 @@ class PsnApiService:
                 "gold": trophy_title.defined_trophies.gold,
                 "platinum": trophy_title.defined_trophies.platinum
             }
-            if title_stats:
-                game.title_id = title_stats.title_id
-                game.title_image = title_stats.image_url
             game.save()
         return game, created, needs_trophy_update
+    
+    @classmethod
+    def update_game_with_title_stats(self, title_stats):
+        games = Game.objects.filter(Q(title_id=title_stats.title_id) | (Q(title_name=title_stats.name) & Q(title_platform__contains=title_stats.category.name)))
+        if games:
+            for game in games:
+                game.title_id = title_stats.title_id
+                game.image_url = title_stats.image_url
+                game.save()
+            return games
+        return None
 
     @classmethod
-    def create_or_update_profile_game_from_title(
-        self, profile, game, trophy_title, title_stats=None
-    ):
+    def create_or_update_profile_game(self, profile, game, trophy_title):
         """Create or update ProfileGame model from PSN trophy title data."""
         profile_game, created = ProfileGame.objects.get_or_create(
             profile=profile,
@@ -99,10 +101,8 @@ class PsnApiService:
                 "last_updated_datetime": trophy_title.last_updated_datetime
             },
         )
-        if created and title_stats:
-            profile_game = self.update_game_from_title_stats(profile, game, title_stats)
 
-        if not created and ((profile_game.last_updated_datetime != trophy_title.last_updated_datetime) or (title_stats and profile_game.last_played_date_time != title_stats.last_played_date_time)):
+        if not created and (profile_game.last_updated_datetime != trophy_title.last_updated_datetime):
             profile_game.progress = trophy_title.progress
             profile_game.hidden_flag = trophy_title.hidden_flag
             profile_game.earned_trophies = {
@@ -113,29 +113,39 @@ class PsnApiService:
             }
             profile_game.last_updated_datetime = trophy_title.last_updated_datetime
             profile_game.save()
-            if title_stats:
-                profile_game = self.update_game_from_title_stats(
-                    profile, game, title_stats
-                )
         return profile_game, created
 
     @classmethod
-    def update_game_from_title_stats(self, profile: Profile, game: Game, title_stats):
+    def update_profile_game_with_title_stats(self, profile: Profile, title_stats):
         """Update ProfileGame from title_stats only - no trophy updates."""
+        games = self.update_game_with_title_stats(title_stats)
+        if games:
+            for game in games:
+                try:
+                    profile_game = ProfileGame.objects.get(profile=profile, game=game)
+                except ProfileGame.DoesNotExist:
+                    logger.warning(f"ProfileGame for profile {profile.id} and game {game.np_communication_id} does not exist - possibly hidden.")
+                    continue
+
+                profile_game.play_count = title_stats.play_count
+                profile_game.first_played_date_time = title_stats.first_played_date_time
+                profile_game.last_played_date_time = title_stats.last_played_date_time
+                profile_game.play_duration = title_stats.play_duration
+                profile_game.save()
+            return True
+        return False
+    
+    @classmethod
+    def assign_title_id(self, np_comm_id, title_id):
         try:
-            profile_game = ProfileGame.objects.get(profile=profile, game=game)
-        except ProfileGame.DoesNotExist as e:
-            logger.error(
-                f"ProfileGame for profile {profile.psn_username} ({profile.account_id}) and game {game.title_name} ({game.np_communication_id}) does not exist."
-            )
+            game = Game.objects.get(np_communication_id=np_comm_id)
+        except Game.DoesNotExist:
+            logger.error(f"Game with np_comm_id {np_comm_id} does not exist.")
             raise
 
-        profile_game.play_count = title_stats.play_count
-        profile_game.first_played_date_time = title_stats.first_played_date_time
-        profile_game.last_played_date_time = title_stats.last_played_date_time
-        profile_game.play_duration = title_stats.play_duration
-        profile_game.save()
-        return profile_game
+        game.title_id = title_id
+        game.save()
+        
 
     @classmethod
     def create_or_update_trophy_from_trophy_data(self, game, trophy_data):
