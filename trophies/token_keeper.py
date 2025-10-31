@@ -5,16 +5,16 @@ import threading
 import logging
 import os
 import atexit
-import concurrent.futures
 from typing import Optional, Dict
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from psnawp_api import PSNAWP
 from psnawp_api.models.trophies.trophy_constants import PlatformType
 from requests import HTTPError
 from .models import Profile, Game
 from .services import PsnApiService
-from .utils import redis_client, log_api_call, TITLE_ID_BLACKLIST
+from .psn_manager import PSNManager
+from .utils import redis_client, log_api_call, TITLE_ID_BLACKLIST, TITLE_STATS_SUPPORTED_PLATFORMS
 
 logger = logging.getLogger("psn_api")
 
@@ -86,9 +86,10 @@ class TokenKeeper:
         self.tokens = os.getenv("PSN_TOKENS", "").split(",")
         self.health_interval = 60
         self.refresh_threshold = 300
-        self.token_wait_interval = 10
+        self.token_wait_interval = 120
         self.window_seconds = int(os.getenv("WINDOW_SECONDS", 900))
         self.max_calls_per_window = int(os.getenv("MAX_CALLS_PER_WINDOW", 300))
+        self.max_jobs_per_profile = int(os.getenv("MAX_JOBS_PER_PROFILE", 3))
         self.stats_interval = 5
         self.machine_id = os.getenv("MACHINE_ID", "default")
 
@@ -97,12 +98,12 @@ class TokenKeeper:
         
         self.instances: Dict[int, TokenInstance] = {}
         self._health_thread = None
-        self._pubsub_thread = None
         self._stats_thread = None
-        self._executor = concurrent.futures.ThreadPoolExecutor(max_workers=3)
+        self._job_workers = []
+        self.initialize_instances()
         self._start_health_monitor()
-        self._start_pubsub_listener()
         self._start_stats_publisher()
+        self._start_job_workers()
         redis_client.set("token_keeper:running", "1", ex=3600)
         atexit.register(self._cleanup)
     
@@ -125,7 +126,6 @@ class TokenKeeper:
             redis_client.delete(f"token_keeper:instance:{i}:token")
             redis_client.delete(f"instance_lock:{i}")
             redis_client.delete(f"token_keeper:pending_refresh:{i}")
-        self._executor.shutdown(wait=True)
         logger.info("TokenKeeper Redis state cleaned")
 
     
@@ -134,25 +134,53 @@ class TokenKeeper:
         self._health_thread = threading.Thread(target=self._health_loop, daemon=True)
         self._health_thread.start()
         logger.info("TokenKeeper health monitor started")
-    
-    def _start_pubsub_listener(self):
-        self._pubsub_thread = threading.Thread(target=self._pubsub_loop, daemon=True)
-        self._pubsub_thread.start()
-        logger.info("TokenKeeper pub/sub listener started")
 
     def _start_stats_publisher(self):
         self._stats_thread = threading.Thread(target=self._publish_stats_loop, daemon=True)
         self._stats_thread.start()
         logger.info("TokenKeeper stats publisher started")
 
+    def _start_job_workers(self):
+        num_workers = 3
+        for _ in range(num_workers):
+            t = threading.Thread(target=self._job_worker_loop, daemon=True)
+            t.start()
+            self._job_workers.append(t)
+        logger.info(f"Started {num_workers} job worker threads")
+    
     def _health_loop(self):
         """Infinite loop: Check health every interval."""
         while True:
             time.sleep(self.health_interval)
-            logger.info(f"Health loop tick.")
             redis_client.set("token_keeper:running", "1", ex=3600)
             for instance_id, inst in self.instances.items():
                 self._check_and_refresh(inst)
+
+    def initialize_instances(self):
+        """Create 3 live PSNAWP clients."""
+        for i, token in enumerate(self.tokens):
+            start_time = time.time()
+            client = PSNAWP(token)
+            self._record_call(token)
+            client.user(online_id='PlatPursuit') # Generates refresh tokens, etc.
+            inst = TokenInstance(
+                instance_id=i,
+                token=token,
+                client=client,
+                user_cache={}
+            )
+            self.instances[i] = inst
+            redis_client.set(f"token_keeper:instance:{i}:token", token)
+            self._record_call(token)
+            logger.info(f"Instance {i} initialized with live client")
+            log_api_call("client_init", token, None, 200, time.time() - start_time)
+
+    def _is_healthy(self, inst : TokenInstance) -> bool:
+        """Quick health check."""
+        try:
+            return inst.client is not None
+        except:
+            return False
     
     def _check_and_refresh(self, inst : TokenInstance):
         """Refresh token if time remaining less than refresh threshold and clean cache."""
@@ -176,62 +204,60 @@ class TokenKeeper:
             logger.error(f"Health check failed for {inst.instance_id}: {e}")
             inst.last_health = 0
 
-    def _pubsub_loop(self):
-        """Inits and listens to pub/sub structure."""
-        pubsub = redis_client.pubsub()
-        pubsub.subscribe("psn_api_requests")
-        for message in pubsub.listen():
-            if message['type'] == 'message':
-                data = json.loads(message['data'])
-                self._executor.submit(self._handle_request, data)
-    
-    def _handle_request(self, data: Dict):
-        """Handles all PSN API requests, publishing via Redis."""
-        task_id = data.get('task_id')
-        job_type = data.get('job_type')
-        request = data.get('request')
-        profile_id = data.get('profile_id')
-        args = data.get('args', {})
+    # Job Assignment & Handling
 
-        profile = Profile.objects.get(id=profile_id) if profile_id else None
+    def _job_worker_loop(self):
+        while True:
+            profile_id = None
+            queue_name = None
+            try:
+                queue_b, job_json = redis_client.brpop(['high_priority_jobs', 'medium_priority_jobs', 'low_priority_jobs'])
+                queue_name = queue_b.decode()[:-5] # remove '_jobs'
+                job_data = json.loads(job_json)
+                job_type = job_data['job_type']
+                args = job_data['args']
+                profile_id = job_data['profile_id']
+                logger.info(f"Starting job - {job_type} for profile {profile_id} from queue {queue_name}.")
 
-        logger.info(f"Handling request: {request} for profile {profile_id if profile_id else 'no profile'}")
-        try:
-            if request == "sync_profile_data":
-                profile = self._sync_profile_data(profile, job_type)
-                result = {'profile_id': profile.id}
-            elif request == "sync_profile_games_data":
-                game_ids, title_stats = self._sync_profile_games_data(profile, job_type)
-                result = {'game_ids': game_ids, 'title_stats': title_stats}
-            elif request == "sync_trophy_titles_for_title":
-                result = self._sync_trophy_titles_for_title(profile, job_type, args[0])
-            elif request == "refresh_profile_game_data":
-                game_ids = self._refresh_profile_games_data(profile, job_type, args[0])
-                result = {'game_ids': game_ids}
-            elif request == "sync_profile_trophies":
-                game = Game.objects.get(np_communication_id=args[0])
-                game_id = self._sync_profile_trophy_data(job_type, profile, game)
-                result = {'game_id': game_id}
-            else:
-                raise ValueError(f"Unknown request: {request}")
-            
-            redis_client.publish(
-                f"psn_api_responses:{task_id}",
-                json.dumps({"status": "success", "result": result})
-            )
-            logger.info(f"Request {request} for profile {profile_id if profile_id else 'no profile'} handled successfully!")
-        except Exception as e:
-            logger.error(f"Request {request} for profile {profile_id if profile_id else 'no profile'} failed for task {task_id}: {e}")
-            redis_client.publish(
-                f"psn_api_responses:{task_id}",
-                json.dumps({'status': 'error', 'error': str(e)})
-            )
+                if job_type == 'sync_profile_data':
+                    self._job_sync_profile_data(profile_id)
+                elif job_type == 'sync_trophy_titles':
+                    self._job_sync_trophy_titles(profile_id)
+                elif job_type == 'sync_title_stats':
+                    self._job_sync_title_stats(profile_id, args[0], args[1], args[2], args[3])
+                elif job_type == 'sync_trophies':
+                    self._job_sync_trophies(profile_id, args[0], args[1])
+                elif job_type == 'profile_refresh':
+                    self._job_profile_refresh(profile_id)
+                else:
+                    logger.error(f"Unknown job type: {job_type}")
+                    raise
+                
+                logger.info(f"Job: {job_type} - Profile: {profile_id} completed successfully!")
+                self._complete_job(profile_id, queue_name)
+            except Exception as e:
+                logger.error(f"Error in job worker: {e}")
+            finally:
+                if profile_id and queue_name != 'high_priority':
+                    self._complete_job(profile_id, queue_name)
+
+    def _complete_job(self, profile_id, queue_name):
+        """Handle finished job, check for deferred."""
+        if queue_name != 'high_priority':
+            redis_client.decr(f"profile_jobs:{profile_id}:{queue_name}")
+            current_jobs = int(redis_client.get(f"profile_jobs:{profile_id}:{queue_name}") or 0)
+            if current_jobs <= 0:
+                redis_client.delete(f"profile_jobs:{profile_id}:{queue_name}")
+                redis_client.srem("active_profiles", profile_id)
+            job_json = redis_client.lpop(f"deferred_jobs:{profile_id}")
+            if job_json:
+                job_data = json.loads(job_json)
+                PSNManager.assign_job(job_data['type'], job_data['args'], profile_id, job_data.get('priority_override'))
 
     def _get_instance_for_job(self, job_type: str) -> Optional[TokenInstance]:
         """Selects best instance for job, respecting workload and priority."""
         start = time.time()
         while time.time() - start < self.token_wait_interval:
-            is_high_prio = job_type in ["initial_sync", "profile_refresh"]
             instance_scores = {}
             for inst in self.instances.values():
                 if not inst.is_busy and self._is_healthy(inst):
@@ -312,212 +338,194 @@ class TokenKeeper:
         instance.last_health = 0
         time.sleep(60)
         instance.last_health = time.time()
-
-    def initialize_instances(self):
-        """Create 3 live PSNAWP clients."""
-        for i, token in enumerate(self.tokens):
-            start_time = time.time()
-            client = PSNAWP(token)
-            self._record_call(token)
-            client.user(online_id='PlatPursuit') # Generates refresh tokens, etc.
-            inst = TokenInstance(
-                instance_id=i,
-                token=token,
-                client=client,
-                user_cache={}
-            )
-            self.instances[i] = inst
-            redis_client.set(f"token_keeper:instance:{i}:token", token)
-            self._record_call(token)
-            logger.info(f"Instance {i} initialized with live client")
-            log_api_call("client_init", token, None, 200, time.time() - start_time)
-
-    def _is_healthy(self, inst : TokenInstance) -> bool:
-        """Quick health check."""
-        try:
-            return inst.client is not None
-        except:
-            return False
         
     # Job Requests
-    def _sync_profile_data(self, profile: Profile, job_type: str) -> Profile:
+
+    def _job_sync_profile_data(self, profile_id: int) -> Profile:
         try:
-            legacy = self._execute_api_call(self._get_instance_for_job(job_type), profile, 'get_profile_legacy')
-            profile = PsnApiService.update_profile_from_legacy(profile, legacy)
-            return profile
-        except HTTPError as e:
-            logger.error(f"Failed profile sync for {profile.id}: {e}")
-            raise
-    
-    def _sync_profile_games_data(self, profile: Profile, job_type: str) -> tuple[list, list]:
-        page_size = 400
-        offset = 0
-        limit = page_size
+            profile = Profile.objects.get(id=profile_id)
+        except Profile.DoesNotExist:
+            logger.error(f"Profile {profile_id} does not exist.")
+        job_type = 'sync_profile_data'
+
+        legacy = self._execute_api_call(self._get_instance_for_job(job_type), profile, 'get_profile_legacy')
+        PsnApiService.update_profile_from_legacy(profile, legacy)
+
+    def _job_sync_trophy_titles(self, profile_id: int):
+        try:
+            profile = Profile.objects.get(id=profile_id)
+        except Profile.DoesNotExist:
+            logger.error(f"Profile {profile_id} does not exist.")
+        job_type = 'sync_trophy_titles'
 
         trophy_titles = []
-        profile_game_comm_ids = []
-        is_full = True
-        while is_full:
-            titles = self._execute_api_call(self._get_instance_for_job(job_type), profile, 'trophy_titles', limit=limit, offset=offset, page_size=page_size)
-            trophy_titles.extend(titles)
-            is_full = len(titles) >= page_size
-            offset += page_size
-            limit += page_size
-
-            for title in titles:
-                profile_game_comm_ids.append(title.np_communication_id)
-
-        page_size = 200
-        offset = 0
-        limit = page_size
-        title_stats = []
-        is_full = True
-        while is_full:
-            titles = self._execute_api_call(self._get_instance_for_job(job_type), profile, 'title_stats', limit=limit, offset=offset, page_size=page_size)
-            title_stats.extend(titles)
-            is_full = len(titles) >= page_size
-            offset += page_size
-            limit += page_size
-        
-        for stats in title_stats[:]:
-            if stats.title_id in TITLE_ID_BLACKLIST:
-                title_stats.remove(stats)
-
-        remaining_title_stats, _ = self._sync_profile_games(profile, trophy_titles, title_stats)
-        remaining_title_stats_list = []
-        for stats in remaining_title_stats:
-            remaining_title_stats_list.append({
-                'title_id': stats.title_id,
-                'name': stats.name,
-                'image_url': stats.image_url,
-                'category': stats.category.name,
-                'play_count': stats.play_count if stats.play_count else 0,
-                'first_played_date_time': stats.first_played_date_time.timestamp() if stats.first_played_date_time else None,
-                'last_played_date_time': stats.last_played_date_time.timestamp() if stats.last_played_date_time else None,
-                'play_duration': stats.play_duration.total_seconds() if stats.play_duration else None,
-            })
-
-        logger.info(f"Synced {len(profile_game_comm_ids)} games for profile {profile.id}")
-        return profile_game_comm_ids, remaining_title_stats_list
-    
-    def _sync_trophy_titles_for_title(self, profile: Profile, job_type: str, title_stats: list):
-        title_ids = []
-        for stats in title_stats:
-            title_ids.append(stats['title_id'])
-        titles = self._execute_api_call(self._get_instance_for_job(job_type), profile, 'trophy_titles_for_title', title_ids=title_ids)
-
-        for title in titles:
-            PsnApiService.assign_title_id(title.np_communication_id, title.np_title_id)
-
-        for stats in title_stats:
-            stats['category'] = PlatformType(stats['category'])
-            stats['first_played_date_time'] = datetime.fromtimestamp(stats['first_played_date_time'], tz=timezone.utc)
-            stats['last_played_date_time'] = datetime.fromtimestamp(stats['last_played_date_time'], tz=timezone.utc)
-            stats['play_duration'] = timedelta(seconds=stats['play_duration']) if not stats['play_duration'] == None else None
-            TitleStats = namedtuple('TitleStats', ['title_id', 'name', 'image_url', 'category', 'play_count', 'first_played_date_time', 'last_played_date_time', 'play_duration'])
-            named_stats = TitleStats(**stats)
-            PsnApiService.update_profile_game_with_title_stats(profile, named_stats)
-
-    def _refresh_profile_games_data(self, profile: Profile, job_type: str, latest_sync_int: int) -> list:
         page_size = 400
         limit = page_size
         offset = 0
-        latest_sync = datetime.fromtimestamp(latest_sync_int, tz=timezone.utc)
+        is_full = True
+
+        while is_full:
+            result = self._execute_api_call(self._get_instance_for_job(job_type), profile, 'trophy_titles', limit=limit, offset=offset, page_size=page_size)
+            is_full = len(result) == page_size
+            trophy_titles.extend(result)
+            limit += page_size
+            offset += page_size
+        
+        num_title_stats = 0
+        for title in trophy_titles:
+            game, _, _ = PsnApiService.create_or_update_game(title)
+            profile_game, _ = PsnApiService.create_or_update_profile_game(profile, game, title)
+            for platform in game.title_platform:
+                if platform in TITLE_STATS_SUPPORTED_PLATFORMS:
+                    num_title_stats += 1
+                    break
+            args = [game.np_communication_id, game.title_platform[0]]
+            PSNManager.assign_job('sync_trophies', args, profile.id)
+
+        # Assign jobs for title_stats
+        page_size = 200
+        limit = page_size
+        offset = 0
+        for i in range(num_title_stats // page_size):
+            args=[limit, offset, page_size, False]
+            PSNManager.assign_job('sync_title_stats', args, profile_id)
+            limit += page_size
+            offset += page_size
+        else:
+            args=[limit, offset, page_size, True]
+            PSNManager.assign_job('sync_title_stats', args, profile_id)
+
+    def _job_sync_title_stats(self, profile_id: int, limit: int, offset: int, page_size: int, is_last: bool=False):
+        try:
+            profile = Profile.objects.get(id=profile_id)
+        except Profile.DoesNotExist:
+            logger.error(f"Profile {profile_id} does not exist.")
+        job_type = 'sync_title_stats'
+
+        title_stats = self._execute_api_call(self._get_instance_for_job(job_type), profile, 'title_stats', limit=limit, offset=offset, page_size=page_size)
+
+        if is_last and len(title_stats) == page_size:
+            args=[limit + page_size, offset + page_size, page_size, True]
+            PSNManager.assign_job('sync_title_stats', args, profile_id)
+
+        remaining_title_stats = []
+        for stats in title_stats:
+            found = PsnApiService.update_profile_game_with_title_stats(profile, stats)
+            if not found and stats.title_id not in TITLE_ID_BLACKLIST:
+                remaining_title_stats.append(stats)
+        
+        if len(remaining_title_stats) > 0:
+            trophy_titles_for_title = []
+            page_size = min(5, len(remaining_title_stats))
+            limit = page_size
+            offset = 0
+            while offset < len(remaining_title_stats):
+                title_ids = []
+                for title in remaining_title_stats[offset:limit]:
+                    title_ids.append(title.title_id)
+                
+                logger.info(f"Calling trophy_titles_for_title... {title_ids}")
+                result = self._execute_api_call(self._get_instance_for_job(job_type), profile, 'trophy_titles_for_title', title_ids=title_ids)
+                trophy_titles_for_title.extend(result)
+                limit += page_size
+                offset += page_size
+            
+            for title in trophy_titles_for_title:
+                PsnApiService.assign_title_id(title.np_communication_id, title.np_title_id)
+            for stats in remaining_title_stats:
+                PsnApiService.update_profile_game_with_title_stats(profile, stats)
+
+    def _job_sync_trophies(self, profile_id: int, np_communication_id: str, platform: str):
+        try:
+            profile = Profile.objects.get(id=profile_id)
+            game = Game.objects.get(np_communication_id=np_communication_id, title_platform__contains=platform)
+        except Profile.DoesNotExist:
+            logger.error(f"Profile {profile_id} does not exist.")
+        except Game.DoesNotExist:
+            logger.error(f"Game {np_communication_id} does not exist.")
+        job_type = 'sync_trophies'
+
+        trophies = self._execute_api_call(self._get_instance_for_job(job_type), profile, 'trophies', np_communication_id=np_communication_id, platform=PlatformType(platform), include_progress=True, trophy_group_id='all', page_size=500)
+        for trophy_data in trophies:
+            trophy, _ = PsnApiService.create_or_update_trophy_from_trophy_data(game, trophy_data)
+            PsnApiService.create_or_update_earned_trophy_from_trophy_data(profile, trophy, trophy_data)
+    
+    def _job_profile_refresh(self, profile_id: int):
+        try:
+            profile = Profile.objects.get(id=profile_id)
+        except Profile.DoesNotExist:
+            logger.error(f"Profile {profile_id} does not exist.")
+        job_type = 'profile_refresh'
+
+        last_sync = profile.last_synced
+        PSNManager.assign_job('sync_profile_data', args=[], profile_id=profile.id)
 
         trophy_titles_to_be_updated = []
+        page_size = 400
+        limit = page_size
+        offset = 0
         end_found = False
-        while True:
-            trophy_titles = self._execute_api_call(self._get_instance_for_job(job_type), profile, 'trophy_titles', limit=limit, offset=offset, page_size=page_size)
-            for title in trophy_titles:
-                if title.last_updated_datetime >= latest_sync:
+        while not end_found:
+            titles = self._execute_api_call(self._get_instance_for_job(job_type), profile, 'trophy_titles', limit=limit, offset=offset, page_size=page_size)
+            for title in titles:
+                if title.last_updated_datetime > last_sync:
                     trophy_titles_to_be_updated.append(title)
                 else:
                     end_found = True
                     break
-            if end_found:
-                break
-            offset += page_size
             limit += page_size
+            offset += page_size
+        
+        for title in trophy_titles_to_be_updated:
+            game, _, _ = PsnApiService.create_or_update_game(title)
+            profile_game, _ = PsnApiService.create_or_update_profile_game(profile, game, title)
+            args = [game.np_communication_id, game.title_platform[0]]
+            PSNManager.assign_job('sync_trophies', args, profile.id)
 
+        
+        title_stats_to_be_updated = []
         page_size = 200
         limit = page_size
         offset = 0
-        title_stats_to_be_updated = []
         end_found = False
-        while True:
+        while not end_found:
             title_stats = self._execute_api_call(self._get_instance_for_job(job_type), profile, 'title_stats', limit=limit, offset=offset, page_size=page_size)
-            for title in title_stats:
-                if title.last_played_date_time >= latest_sync:
-                    title_stats_to_be_updated.append(title)
+            for stats in title_stats:
+                if stats.last_played_date_time > last_sync:
+                    title_stats_to_be_updated.append(stats)
                 else:
                     end_found = True
                     break
-            if end_found:
-                break
-            offset += page_size
             limit += page_size
-
-        profile_game_comm_ids = []
-        for title in trophy_titles_to_be_updated:
-            profile_game_comm_ids.append(title.np_communication_id)
+            offset += page_size
         
-        remaining_title_stats, _ = self._sync_profile_games(profile, trophy_titles_to_be_updated, title_stats_to_be_updated)
-        title_ids = []
-        for stats in remaining_title_stats:
-            title_ids.append(stats.title_id)
+        remaining_title_stats = []
+        for stats in title_stats_to_be_updated:
+            found = PsnApiService.update_profile_game_with_title_stats(profile, stats)
+            if not found and stats.title_id not in TITLE_ID_BLACKLIST:
+                remaining_title_stats.append(stats)
+            
+        if len(remaining_title_stats) > 0:
+            trophy_titles_for_title = []
+            page_size = min(5, len(remaining_title_stats))
+            limit = page_size
+            offset = 0
+            while offset < len(remaining_title_stats):
+                title_ids = []
+                for title in remaining_title_stats[offset:limit]:
+                    title_ids.append(title.title_id)
+                
+                logger.info(f"Calling trophy_titles_for_title... {title_ids}")
+                result = self._execute_api_call(self._get_instance_for_job(job_type), profile, 'trophy_titles_for_title', title_ids=title_ids)
+                trophy_titles_for_title.extend(result)
+                limit += page_size
+                offset += page_size
         
-        page_size = 5
-        limit = page_size
-        offset = 0
-        while offset < len(title_ids):
-            title_ids_package = title_ids[offset:limit]
-            titles = self._execute_api_call(self._get_instance_for_job(job_type), profile, 'trophy_titles_for_title', title_ids=title_ids_package)
-            for title in titles:
+            for title in trophy_titles_for_title:
                 PsnApiService.assign_title_id(title.np_communication_id, title.np_title_id)
-            offset += page_size
-            limit += page_size
-
-        for stats in remaining_title_stats:
-            PsnApiService.update_profile_game_with_title_stats(profile, stats)
-        logger.info(f"Refreshed {len(profile_game_comm_ids)} games for profile {profile.id}")
-        return profile_game_comm_ids
-
-
-    def _sync_profile_trophy_data(self, job_type: str, profile: Profile, game: Game):
-        """Sync Trophy & EarnedTrophy models for specified Game & Profile."""
-        try:
-            trophies_data = self._execute_api_call(self._get_instance_for_job(job_type), profile, 'trophies', np_communication_id=game.np_communication_id, platform=PlatformType(game.title_platform[0]), include_progress=True, trophy_group_id='all', page_size=500)
-            for trophy_data in trophies_data:
-                trophy, _ = PsnApiService.create_or_update_trophy_from_trophy_data(game, trophy_data)
-                PsnApiService.create_or_update_earned_trophy_from_trophy_data(profile, trophy, trophy_data)
-            logger.info(f"Synced trophies for {game.np_communication_id} for profile {profile.id}")
-            return game.np_communication_id
-        except HTTPError as e:
-            logger.error(f"Failed trophy sync for game {game.np_communication_id} for profile {profile.id}: {e}")
-
-    # Job Helpers
-    def _sync_profile_games(self, profile: Profile, trophy_titles: list, title_stats: list):
-        games_needing_trophy_updates = []
-        for title in trophy_titles:
-            game, _, needs_trophy_update = PsnApiService.create_or_update_game(title)
-            if needs_trophy_update:
-                games_needing_trophy_updates.append(game)
-            profile_game, _ = PsnApiService.create_or_update_profile_game(profile, game, title)
+            for stats in remaining_title_stats:
+                PsnApiService.update_profile_game_with_title_stats(profile, stats)
         
-        for stats in title_stats[:]:
-            updated = PsnApiService.update_profile_game_with_title_stats(profile, stats)
-            if updated:
-                title_stats.remove(stats)
-                    
-        return title_stats, games_needing_trophy_updates
-
-    def _sync_profile_games_title_stats(self, profile: Profile, title_stats: list):
-        """Update Games & ProfileGame with only title_stats - no trophy data."""
-        for stat in title_stats:
-            games = Game.objects.filter(title_id=stat.title_id)
-            if games:
-                for game in games:
-                    PsnApiService.update_profile_game_with_title_stats(profile, game, stat)
 
     @property
     def stats(self) -> Dict:

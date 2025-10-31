@@ -5,12 +5,11 @@ from .models import Profile, Game, ProfileGame, Trophy, EarnedTrophy
 
 logger = logging.getLogger("psn_api")
 
-
 class PsnApiService:
     """Service class for PSN API data processing and model updates."""
 
     @classmethod
-    def update_profile_from_legacy(self, profile: Profile, legacy: dict) -> Profile:
+    def update_profile_from_legacy(cls, profile: Profile, legacy: dict) -> Profile:
         """Update Profile model from PSN legacy profile data."""
         profile.account_id = legacy["profile"].get("accountId")
         profile.np_id = legacy["profile"].get("npId")
@@ -32,7 +31,7 @@ class PsnApiService:
         return profile
 
     @classmethod
-    def create_or_update_game(self, trophy_title):
+    def create_or_update_game(cls, trophy_title):
         """Create or update Game model from PSN trophy title data."""
         game, created = Game.objects.get_or_create(
             np_communication_id=trophy_title.np_communication_id,
@@ -73,7 +72,7 @@ class PsnApiService:
         return game, created, needs_trophy_update
     
     @classmethod
-    def update_game_with_title_stats(self, title_stats):
+    def update_game_with_title_stats(cls, title_stats):
         games = Game.objects.filter(Q(title_id=title_stats.title_id) | (Q(title_name=title_stats.name) & Q(title_platform__contains=title_stats.category.name)))
         if games:
             for game in games:
@@ -84,7 +83,7 @@ class PsnApiService:
         return None
 
     @classmethod
-    def create_or_update_profile_game(self, profile, game, trophy_title):
+    def create_or_update_profile_game(cls, profile, game, trophy_title):
         """Create or update ProfileGame model from PSN trophy title data."""
         profile_game, created = ProfileGame.objects.get_or_create(
             profile=profile,
@@ -116,15 +115,15 @@ class PsnApiService:
         return profile_game, created
 
     @classmethod
-    def update_profile_game_with_title_stats(self, profile: Profile, title_stats):
+    def update_profile_game_with_title_stats(cls, profile: Profile, title_stats):
         """Update ProfileGame from title_stats only - no trophy updates."""
-        games = self.update_game_with_title_stats(title_stats)
+        games = cls.update_game_with_title_stats(title_stats)
         if games:
             for game in games:
                 try:
                     profile_game = ProfileGame.objects.get(profile=profile, game=game)
                 except ProfileGame.DoesNotExist:
-                    logger.warning(f"ProfileGame for profile {profile.id} and game {game.np_communication_id} does not exist - possibly hidden.")
+                    logger.warning(f"ProfileGame for profile {profile.id} and game {game.np_communication_id} does not exist.")
                     continue
 
                 profile_game.play_count = title_stats.play_count
@@ -136,7 +135,7 @@ class PsnApiService:
         return False
     
     @classmethod
-    def assign_title_id(self, np_comm_id, title_id):
+    def assign_title_id(cls, np_comm_id, title_id):
         try:
             game = Game.objects.get(np_communication_id=np_comm_id)
         except Game.DoesNotExist:
@@ -148,7 +147,7 @@ class PsnApiService:
         
 
     @classmethod
-    def create_or_update_trophy_from_trophy_data(self, game, trophy_data):
+    def create_or_update_trophy_from_trophy_data(cls, game, trophy_data):
         """Create or update Trophy model from PSN trophy data."""
         trophy, created = Trophy.objects.get_or_create(
             trophy_id=trophy_data.trophy_id,
@@ -184,7 +183,7 @@ class PsnApiService:
 
     @classmethod
     def create_or_update_earned_trophy_from_trophy_data(
-        self, profile, trophy, trophy_data
+        cls, profile, trophy, trophy_data
     ):
         """Create or update EarnedTrophy model from PSN trophy data."""
         earned_trophy, created = EarnedTrophy.objects.get_or_create(
