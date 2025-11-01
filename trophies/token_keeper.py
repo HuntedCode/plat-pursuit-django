@@ -379,7 +379,7 @@ class TokenKeeper:
                 if platform in TITLE_STATS_SUPPORTED_PLATFORMS:
                     num_title_stats += 1
                     break
-            args = [game.np_communication_id, game.title_platform[0]]
+            args = [game.np_communication_id, game.title_platform[0] if not game.title_platform[0] == 'PSPC' else game.title_platform[1]]
             PSNManager.assign_job('sync_trophies', args, profile.id)
 
         # Assign jobs for title_stats
@@ -445,6 +445,7 @@ class TokenKeeper:
             logger.error(f"Game {np_communication_id} does not exist.")
         job_type = 'sync_trophies'
 
+        logger.info(f"Fetching trophies for profile {profile_id}, game {np_communication_id} on platform {platform}")
         trophies = self._execute_api_call(self._get_instance_for_job(job_type), profile, 'trophies', np_communication_id=np_communication_id, platform=PlatformType(platform), include_progress=True, trophy_group_id='all', page_size=500)
         for trophy_data in trophies:
             trophy, _ = PsnApiService.create_or_update_trophy_from_trophy_data(game, trophy_data)
@@ -479,7 +480,7 @@ class TokenKeeper:
         for title in trophy_titles_to_be_updated:
             game, _, _ = PsnApiService.create_or_update_game(title)
             profile_game, _ = PsnApiService.create_or_update_profile_game(profile, game, title)
-            args = [game.np_communication_id, game.title_platform[0]]
+            args = [game.np_communication_id, game.title_platform[0] if not game.title_platform[0] == 'PSPC' else game.title_platform[1]]
             PSNManager.assign_job('sync_trophies', args, profile.id)
 
         
