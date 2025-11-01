@@ -481,7 +481,7 @@ class TokenKeeper:
             game, _, _ = PsnApiService.create_or_update_game(title)
             profile_game, _ = PsnApiService.create_or_update_profile_game(profile, game, title)
             args = [game.np_communication_id, game.title_platform[0] if not game.title_platform[0] == 'PSPC' else game.title_platform[1]]
-            PSNManager.assign_job('sync_trophies', args, profile.id)
+            PSNManager.assign_job('sync_trophies', args, profile.id, priority_override='medium_priority')
 
         
         title_stats_to_be_updated = []
