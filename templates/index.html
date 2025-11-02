@@ -1,0 +1,24 @@
+{% extends 'base.html' %}
+{% block title %}Dashboard{% endblock %}
+{% block content %}
+    {% include 'partials/breadcrumb.html' with items=items %}
+    <div class="space-y-8">
+        <!-- Community Stats Page Header -->
+        {% include 'partials/index/community-stats.html' with items=communityStats %}
+
+        <!-- Featured Games Carousel -->
+        {% include 'partials/index/featured-games.html' with items=featuredGames %}
+
+        <!-- Lower Content -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div class="lg:col-span-2 space-y-8">
+                {% include 'partials/index/latest-platinums.html' with items=latestPlatinums %}
+                {% include 'partials/index/playing-now.html' with items=playingNow %}
+            </div>
+            <aside class="lg:col-span-1">
+                <div class="sticky top-2 mb-8">
+                </div>
+            </aside>
+        </div>
+    </div>
+{% endblock %}

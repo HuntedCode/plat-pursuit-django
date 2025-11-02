@@ -42,6 +42,7 @@ class Profile(models.Model):
         default="basic",
     )
     is_linked = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         indexes = [
@@ -80,6 +81,7 @@ class Game(models.Model):
     has_trophy_groups = models.BooleanField(default=False)
     defined_trophies = models.JSONField(default=dict, blank=True)
     metadata = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         indexes = [
@@ -108,10 +110,20 @@ class ProfileGame(models.Model):
     class Meta:
         unique_together = ["profile", "game"]
         indexes = [
-            models.Index(
-                fields=["last_updated_datetime"], name="profilegame_updated_idx"
-            )
+            models.Index(fields=["last_updated_datetime"], name="profilegame_updated_idx"),
+            models.Index(fields=["progress"], name="profilegame_progress_idx"),
         ]
+
+
+class FeaturedGame(models.Model):
+    game = models.ForeignKey(Game, on_delete=models.CASCADE)
+    priority = models.IntegerField(default=0, help_text="Higher = shown first")
+    start_date = models.DateField(null=True, blank=True)
+    end_date = models.DateField(null=True, blank=True)
+    reason = models.CharField(max_length=100, blank=True, choices=[('staff_pick', 'Staff Pick'), ('event', 'Event'), ('trending', 'Trending')])
+
+    class Meta:
+        ordering = ['-priority']
 
 
 class Trophy(models.Model):

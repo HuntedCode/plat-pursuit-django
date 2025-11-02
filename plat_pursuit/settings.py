@@ -22,19 +22,12 @@ AUTH_USER_MODEL = "users.CustomUser"
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # Celery Config
-CELERY_BROKER_URL = os.getenv("CELERY_BROKER_URL", "redis//localhost:6379/0")
+CELERY_BROKER_URL = os.getenv("CELERY_BROKER_URL", "redis://localhost:6379/0")
 CELERY_RESULT_BACKEND = os.getenv("CELERY_RESULT_BACKEND", "redis://localhost:6379/1")
 CELERY_ACCEPT_CONTENT = ["application/json"]
 CELERY_TASK_SERIALIZER = "json"
 CELERY_RESULT_SERIALIZER = "json"
 CELERY_TIMEZONE = "UTC"
-CELERY_BEAT_SCHEDULE = {}
-CELERY_TASK_ROUTES = {
-    "trophies.tasks.initial_sync": {"queue": "high_priority"},
-    "trophies.tasks.refresh_profile_preferred": {"queue": "premium_refresh"},
-    "trophies.tasks.refresh_profile_standard": {"queue": "standard_refresh"},
-    "trophies.tasks.refresh_profile_public": {"queue": "public_refresh"},
-}
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
@@ -57,6 +50,7 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    "django.contrib.humanize",
     "core",
     "users",
     "trophies",
@@ -124,6 +118,21 @@ AUTH_PASSWORD_VALIDATORS = [
         "NAME": "django.contrib.auth.password_validation.NumericPasswordValidator",
     },
 ]
+
+# Caching
+CACHES = {
+    'default': {
+        'BACKEND': 'django_redis.cache.RedisCache',
+        'LOCATION': 'redis://localhost:6379/1',
+        'OPTIONS': {
+            'CLIENT_CLASS': 'django_redis.client.DefaultClient',
+            'SERIALIZER': 'django_redis.serializers.json.JSONSerializer',
+            'COMPRESSOR': 'django_redis.compressors.zlib.ZlibCompressor',
+            'IGNORE_EXCEPTIONS': True,
+        },
+        'KEY_PREFIX': 'plat_pursuit'
+    }
+}
 
 
 # Internationalization

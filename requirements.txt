@@ -11,6 +11,7 @@ click-plugins==1.1.1.2
 click-repl==0.3.0
 colorama==0.4.6
 Django==5.2.7
+django-redis==6.0.0
 djangorestframework==3.16.1
 dotenv==0.9.9
 flower==2.0.1

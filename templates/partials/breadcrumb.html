@@ -1,0 +1,19 @@
+{% if items and items|length > 0 %}
+    <div class="breadcrumbs text-sm mb-4 place-self-end">
+        <ul>
+            {% for item in items %}
+                {% if item.url %}
+                    <li>
+                        <a href="{{ item.url }}">{{ item.text }}</a>
+                    </li>
+                {% else %}
+                    <li class="text-accent">
+                        {{ item.text }}
+                    </li>
+                {% endif %}
+            {% endfor %}
+        </ul>
+    </div>
+{% else %}
+<p>No crumbs</p>
+{% endif %}

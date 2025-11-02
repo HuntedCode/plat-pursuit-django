@@ -77,7 +77,7 @@ class PsnApiService:
         if games:
             for game in games:
                 game.title_id = title_stats.title_id
-                game.image_url = title_stats.image_url
+                game.title_image = title_stats.image_url
                 game.save()
             return games
         return None
