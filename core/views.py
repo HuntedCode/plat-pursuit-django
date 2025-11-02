@@ -6,6 +6,7 @@ from .services.stats import compute_community_stats
 from .services.featured import get_featured_games
 from .services.latest_platinums import get_latest_platinums
 from .services.playing_now import get_playing_now
+from .services.latest_rares import get_latest_psn_rares, get_latest_pp_rares
 
 class IndexView(TemplateView):
     template_name = 'index.html'
@@ -17,6 +18,10 @@ class IndexView(TemplateView):
     LATEST_PLATINUMS_TIMEOUT = 3600
     PLAYING_NOW_KEY = 'playing_now'
     PLAYING_NOW_TIMEOUT = 86400
+    PSN_RARES_KEY = 'latest_psn_rares'
+    PP_RARES_KEY = 'latest_pp_rares'
+    RARES_TIMEOUT = 3600
+
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -64,5 +69,20 @@ class IndexView(TemplateView):
             self.PLAYING_NOW_TIMEOUT * 2
         )
         context['playingNow'] = playing_now
+
+        psn_rares_key = f"{self.PSN_RARES_KEY}_{today_utc}"
+        pp_rares_key = f"{self.PP_RARES_KEY}_{today_utc}"
+        psn_rares = cache.get_or_set(
+            psn_rares_key,
+            lambda: get_latest_psn_rares(),
+            self.RARES_TIMEOUT * 2
+        )
+        pp_rares = cache.get_or_set(
+            pp_rares_key,
+            lambda: get_latest_pp_rares(),
+            self.RARES_TIMEOUT * 2
+        )
+        context['latestPsnRares'] = psn_rares
+        context['latestPpRares'] = pp_rares
 
         return context

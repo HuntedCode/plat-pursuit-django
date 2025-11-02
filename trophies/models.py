@@ -82,10 +82,12 @@ class Game(models.Model):
     defined_trophies = models.JSONField(default=dict, blank=True)
     metadata = models.JSONField(default=dict, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
+    played_count = models.PositiveIntegerField(default=0, help_text="Denormalized count of profiles that have played the game (PP-specific).")
 
     class Meta:
         indexes = [
-            models.Index(fields=["np_communication_id", "title_name"], name="game_idx")
+            models.Index(fields=["np_communication_id", "title_name"], name="game_idx"),
+            models.Index(fields=['played_count'], name='game_played_count_idx'),
         ]
 
     def __str__(self):
@@ -139,17 +141,41 @@ class Trophy(models.Model):
     reward_img_url = models.URLField(blank=True, null=True)
     trophy_rarity = models.IntegerField(blank=True, null=True, help_text='Common=3, Rare=2, Very_Rare=1, Ultra_Rare=0')  # PSN global
     trophy_earn_rate = models.FloatField(default=0.0)  # PSN global
-    earn_rate = models.FloatField(default=0.0)  # PP Computed
     game = models.ForeignKey(Game, on_delete=models.CASCADE, related_name="trophies")
     earned_by = models.ManyToManyField(
         Profile, through="EarnedTrophy", related_name="earned_trophies"
     )
+    earned_count = models.PositiveIntegerField(default=0, help_text="Denormalized count of profiles that have earned this trophy (PP-specific).")
+    earn_rate = models.FloatField(default=0.0)
 
     class Meta:
         unique_together = ["trophy_id", "game"]
         indexes = [
-            models.Index(fields=["trophy_name", "trophy_type"], name="trophy_idx")
+            models.Index(fields=["trophy_name", "trophy_type"], name="trophy_idx"),
+            models.Index(fields=["earned_count"], name="trophy_earned_count_idx"),
+            models.Index(fields=['trophy_earn_rate'], name="trophy_psn_rate_idx"),
+            models.Index(fields=['earn_rate'], name='trophy_pp_rate_idx'),
         ]
+    
+    def get_pp_rarity_tier(self):
+        """Compute Plat Pursuit specific rarity tier based on earn_rate.
+        
+        PLACEHOLDER THRESHOLDS - Refine based on discussion.
+        
+        Returns a string tier (e.g., 'Common', 'Rare') for display/filtering.
+        """
+        rate = self.earn_rate
+        # EXAMPLE THRESHOLDS - ADJUST LATER
+        if rate > 0.5:
+            return 'Common'
+        elif rate > 0.2:
+            return 'Uncommon'
+        elif rate > 0.05:
+            return 'Rare'
+        elif rate > 0.01:
+            return 'Very Rare'
+        else:
+            return 'Ultra Rare'
 
     def __str__(self):
         return f"{self.trophy_name} ({self.game.title_name})"

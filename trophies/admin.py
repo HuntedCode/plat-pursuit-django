@@ -56,6 +56,7 @@ class GameAdmin(admin.ModelAdmin):
         "title_platform",
         "has_trophy_groups",
         "total_defined_trophies",
+        "played_count",
     )
     list_filter = ("has_trophy_groups",)
     search_fields = ("title_name", "np_communication_id", "title_id")
@@ -76,7 +77,7 @@ class GameAdmin(admin.ModelAdmin):
         ),
         (
             "Trophy Data",
-            {"fields": ("trophy_set_version", "has_trophy_groups", "defined_trophies")},
+            {"fields": ("trophy_set_version", "has_trophy_groups", "defined_trophies", "played_count")},
         ),
         (
             "Metadata",
@@ -114,8 +115,8 @@ class TrophyAdmin(admin.ModelAdmin):
         "trophy_type",
         "trophy_rarity",
         "trophy_earn_rate",
+        "earned_count",
         "earn_rate",
-        "earned_by_count",
     )
     list_filter = ("trophy_type", "game__title_platform")
     search_fields = ("trophy_name", "trophy_detail")
@@ -148,7 +149,7 @@ class TrophyAdmin(admin.ModelAdmin):
         ),
         (
             "Rarity/Stats",
-            {"fields": ("trophy_rarity", "trophy_earn_rate", "earn_rate")},
+            {"fields": ("trophy_rarity", "trophy_earn_rate", "earned_count", "earn_rate")},
         ),
     )
 

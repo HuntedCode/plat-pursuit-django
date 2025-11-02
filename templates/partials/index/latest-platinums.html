@@ -14,8 +14,8 @@
                                 <img src="{{ item.image }}" alt="{{ item.trophy }} image" class="w-12 h-12 xl:w-16 xl:h-16 object-cover group-hover:scale-105" loading="lazy" />
                             </figure>
                             <div class="flex-grow space-y-1">
-                                <h3 class="card-title text-sm md:text-base xl:text-lg line-clamp-2">{{ item.trophy }}</h3>
-                                <p class="text-xs xl:text-sm text-base-content/70 mb-2 line-clamp-2">By <a href="/" class="link link-hover text-primary">{{ item.profile }}</a> in <a href="/" class="link link-hover text-accent">{{ item.game }}</a></p>
+                                <h3 class="card-title text-sm md:text-base xl:text-lg line-clamp-1">{{ item.trophy }}</h3>
+                                <p class="text-xs xl:text-sm text-base-content/70 mb-2 line-clamp-1">By <a href="/" class="link link-hover text-primary">{{ item.profile }}</a> in <a href="/" class="link link-hover text-accent">{{ item.game }}</a></p>
                                 <div>
                                     <span class="badge badge-outline badge-xs xl:badge-sm">{{ item.time|iso_naturaltime|default:"Just now" }}</span>
                                     <span class="badge badge-outline border-trophy-platinum badge-xs xl:badge-sm">{{ item.type }}</span>
