@@ -40,7 +40,7 @@ class PSNManager:
     @classmethod
     def _get_queue_for_job(self, job_type):
         """Map job type to queue."""
-        if job_type in ["sync_profile_data", "sync_trophy_titles", "profile_refresh"]:
+        if job_type in ["sync_profile_data", "sync_trophy_titles", "profile_refresh", "check_profile_health"]:
             return "high_priority"
         elif job_type in ["sync_title_stats"]:
             return "medium_priority"
@@ -66,3 +66,7 @@ class PSNManager:
     @classmethod
     def profile_refresh(cls, profile: Profile):
         cls.assign_job('profile_refresh', args=[], profile_id=profile.id)
+    
+    @classmethod
+    def check_profile_health(cls, profile: Profile):
+        cls.assign_job('check_profile_health', args=[], profile_id=profile.id)

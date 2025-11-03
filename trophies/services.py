@@ -75,7 +75,7 @@ class PsnApiService:
     
     @classmethod
     def update_game_with_title_stats(cls, title_stats):
-        games = Game.objects.filter(Q(title_id=title_stats.title_id) | (Q(title_name=title_stats.name) & Q(title_platform__contains=title_stats.category.name)))
+        games = Game.objects.filter(title_id=title_stats.title_id)
         if games:
             for game in games:
                 game.title_id = title_stats.title_id
@@ -115,9 +115,9 @@ class PsnApiService:
             profile_game.last_updated_datetime = trophy_title.last_updated_datetime
             profile_game.save()
 
-            if created:
-                game.played_count = F('played_count') + 1
-                game.save()
+        if created:
+            game.played_count = F('played_count') + 1
+            game.save()
         return profile_game, created
 
     @classmethod
@@ -224,3 +224,31 @@ class PsnApiService:
             trophy.earn_rate = trophy.earned_count / trophy.game.played_count if trophy.game.played_count > 0 else 0.0
             trophy.save()
         return earned_trophy, created
+    
+    @classmethod
+    def get_profile_trophy_summary(cls, profile: Profile):
+        return {
+            'total': EarnedTrophy.objects.filter(profile=profile, earned=True).count(),
+            'bronze': EarnedTrophy.objects.filter(profile=profile, earned=True, trophy__trophy_type='bronze').count(),
+            'silver': EarnedTrophy.objects.filter(profile=profile, earned=True, trophy__trophy_type='silver').count(),
+            'gold': EarnedTrophy.objects.filter(profile=profile, earned=True, trophy__trophy_type='gold').count(),
+            'platinum': EarnedTrophy.objects.filter(profile=profile, earned=True, trophy__trophy_type='platinum').count(),
+        }
+    
+    @classmethod
+    def get_tracked_trophies_for_game(cls, profile: Profile, np_comm_id: str):
+        try:
+            game = Game.objects.get(np_communication_id=np_comm_id)
+        except Game.DoesNotExist:
+            logger.error(f"Could not find game {np_comm_id}")
+            return
+
+        trophies = {
+            'total': EarnedTrophy.objects.filter(profile=profile, trophy__game=game, earned=True).count(),
+            'bronze': EarnedTrophy.objects.filter(profile=profile, trophy__game=game, earned=True, trophy__trophy_type='bronze').count(),
+            'silver': EarnedTrophy.objects.filter(profile=profile, trophy__game=game, earned=True, trophy__trophy_type='silver').count(),
+            'gold': EarnedTrophy.objects.filter(profile=profile, trophy__game=game, earned=True, trophy__trophy_type='gold').count(),
+            'platinum': EarnedTrophy.objects.filter(profile=profile, trophy__game=game, earned=True, trophy__trophy_type='platinum').count(),
+        }
+
+        return game, trophies
