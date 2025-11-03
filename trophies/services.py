@@ -1,6 +1,7 @@
 import logging
 from django.utils import timezone
-from django.db.models import Q
+from django.db import transaction
+from django.db.models import Q, F
 from .models import Profile, Game, ProfileGame, Trophy, EarnedTrophy
 
 logger = logging.getLogger("psn_api")
@@ -48,7 +49,8 @@ class PsnApiService:
                     "silver": trophy_title.defined_trophies.silver,
                     "gold": trophy_title.defined_trophies.gold,
                     "platinum": trophy_title.defined_trophies.platinum
-                }
+                },
+                "played_count": 0
             },
         )
         needs_trophy_update = created
@@ -56,8 +58,8 @@ class PsnApiService:
             if trophy_title.trophy_set_version != game.trophy_set_version:
                 # NEED TO UPDATE ALL TROPHIES FOR THIS GAME!
                 needs_trophy_update = True
-                game.trophy_set_version = trophy_title.trophy_set_version
                 logger.warning(f"TROPHIES NEED TO BE UPDATED FOR {game.title_name}")
+            game.trophy_set_version = trophy_title.trophy_set_version
             game.np_service_name = trophy_title.np_service_name
             game.title_detail = trophy_title.title_detail
             game.title_icon_url = trophy_title.title_icon_url
@@ -112,6 +114,10 @@ class PsnApiService:
             }
             profile_game.last_updated_datetime = trophy_title.last_updated_datetime
             profile_game.save()
+
+            if created:
+                game.played_count = F('played_count') + 1
+                game.save()
         return profile_game, created
 
     @classmethod
@@ -141,7 +147,6 @@ class PsnApiService:
         except Game.DoesNotExist:
             logger.error(f"Game with np_comm_id {np_comm_id} does not exist.")
             raise
-
         game.title_id = title_id
         game.save()
         
@@ -164,6 +169,8 @@ class PsnApiService:
                 "reward_img_url": trophy_data.trophy_reward_img_url,
                 "trophy_rarity": trophy_data.trophy_rarity.value,
                 "trophy_earn_rate": trophy_data.trophy_earn_rate,
+                "earned_count": 0,
+                "earn_rate": 0.0
             },
         )
         if not created:
@@ -198,6 +205,7 @@ class PsnApiService:
                 "earned_date_time": trophy_data.earned_date_time
             },
         )
+
         if not created:
             earned_trophy.earned = trophy_data.earned
             earned_trophy.trophy_hidden = trophy_data.trophy_hidden
@@ -206,4 +214,13 @@ class PsnApiService:
             earned_trophy.progressed_date_time = trophy_data.progressed_date_time
             earned_trophy.earned_date_time = trophy_data.earned_date_time
             earned_trophy.save()
+
+        if (created and trophy_data.earned == True) or (not created and earned_trophy.earned == False and trophy_data.earned == True):
+            logger.info(f"Earned Count Pre: {trophy.earned_count}")
+            trophy.earned_count = F('earned_count') + 1
+            logger.info(f"Earned Count Post: {trophy.earned_count}")
+            trophy.save()
+            trophy.refresh_from_db()
+            trophy.earn_rate = trophy.earned_count / trophy.game.played_count if trophy.game.played_count > 0 else 0.0
+            trophy.save()
         return earned_trophy, created

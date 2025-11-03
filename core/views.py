@@ -1,12 +1,16 @@
+import json
 from django.views.generic import TemplateView
 from django.urls import reverse_lazy
 from django.core.cache import cache
 from django.utils import timezone
+from datetime import timedelta
 from .services.stats import compute_community_stats
 from .services.featured import get_featured_games
 from .services.latest_platinums import get_latest_platinums
 from .services.playing_now import get_playing_now
 from .services.latest_rares import get_latest_psn_rares, get_latest_pp_rares
+from .services.featured_profile import get_featured_profile
+from .services.events import get_upcoming_events
 
 class IndexView(TemplateView):
     template_name = 'index.html'
@@ -21,6 +25,11 @@ class IndexView(TemplateView):
     PSN_RARES_KEY = 'latest_psn_rares'
     PP_RARES_KEY = 'latest_pp_rares'
     RARES_TIMEOUT = 3600
+    FEATURED_PROFILE_KEY = 'featured_profile'
+    FEATURED_PROFILE_TIMEOUT = 86400
+    EVENTS_KEY = 'upcoming_events'
+    EVENTS_TIMEOUT = 86400
+    EVENTS_PAGE_SIZE = 3
 
 
     def get_context_data(self, **kwargs):
@@ -70,8 +79,9 @@ class IndexView(TemplateView):
         )
         context['playingNow'] = playing_now
 
-        psn_rares_key = f"{self.PSN_RARES_KEY}_{today_utc}"
-        pp_rares_key = f"{self.PP_RARES_KEY}_{today_utc}"
+        # PSN & PP Latest Rares - cache resets hourly at the top of the hour
+        psn_rares_key = f"{self.PSN_RARES_KEY}_{today_utc}_{now_utc.hour:02d}"
+        pp_rares_key = f"{self.PP_RARES_KEY}_{today_utc}_{now_utc.hour:02d}"
         psn_rares = cache.get_or_set(
             psn_rares_key,
             lambda: get_latest_psn_rares(),
@@ -84,5 +94,25 @@ class IndexView(TemplateView):
         )
         context['latestPsnRares'] = psn_rares
         context['latestPpRares'] = pp_rares
+
+        # Featured profile - cache resets weekly
+        week_start = (now_utc - timedelta(days=now_utc.weekday())).date().isoformat()
+        featured_profile_key = f"featured_profile_{week_start}"
+        featured = cache.get_or_set(
+            featured_profile_key,
+            lambda: get_featured_profile(),
+            self.FEATURED_PROFILE_TIMEOUT * 8
+        )
+        context['featuredProfile'] = featured
+
+        # Upcoming Events - cache resets daily at midnight UTC
+        events_key = f"{self.EVENTS_KEY}_{today_utc}"
+        events = cache.get_or_set(
+            events_key,
+            get_upcoming_events,
+            self.EVENTS_TIMEOUT * 2
+        )
+        context['upcomingEvents_json'] = json.dumps(events)
+        context['eventsPageSize'] = self.EVENTS_PAGE_SIZE
 
         return context

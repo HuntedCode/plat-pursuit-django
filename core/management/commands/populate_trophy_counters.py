@@ -7,6 +7,5 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         for trophy in Trophy.objects.all():
             trophy.earned_count = trophy.earned_trophy_entries.filter(earned=True).count()
-            trophy.played_count = trophy.game.played_by.count()
-            trophy.save(update_fields=['earned_count', 'played_count'])
+            trophy.save(update_fields=['earned_count'])
         self.stdout.write(self.style.SUCCESS('Counters populated successfully.'))

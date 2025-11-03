@@ -65,6 +65,16 @@ class Profile(models.Model):
             self.is_linked = False
             self.save()
 
+class FeaturedProfile(models.Model):
+    profile = models.ForeignKey(Profile, on_delete=models.CASCADE)
+    priority = models.IntegerField(default=0, help_text='Higher = preferred for display')
+    start_date = models.DateField(null=True, blank=True, help_text="Feature from this date")
+    end_date = models.DateField(null=True, blank=True, help_text="Feature until this date")
+    reason = models.CharField(max_length=100, blank=True, choices=[('admin_pick', 'Admin Pick'), ('top_week', 'Top of Week'), ('event', 'Event')])
+
+    class Meta:
+        ordering = ['-priority']
+
 
 class Game(models.Model):
     np_communication_id = models.CharField(
@@ -202,6 +212,33 @@ class EarnedTrophy(models.Model):
             models.Index(fields=["last_updated"], name="earned_trophy_updated_idx")
         ]
 
+
+class Event(models.Model):
+    title = models.CharField(max_length=255)
+    date = models.DateField(help_text="Start date")
+    end_date = models.DateField(null=True, blank=True, help_text="End date if multi-day")
+    color = models.CharField(max_length=20, choices=[('primary', 'Primary'), ('secondary', 'Secondary'), ('accent', 'Accent')], default='primary', help_text='For badge/styling')
+    description = models.TextField(blank=True)
+    time = models.CharField(max_length=100, blank=True, help_text="e.g., 'All Day' or '12pm - 4pm EDT'")
+    slug = models.SlugField(blank=True, help_text="For event page URL")
+
+    class Meta:
+        ordering = ['date']
+        indexes = [
+            models.Index(fields=['date'], name='event_date_idx'),
+        ]
+    
+    def __str__(self):
+        return self.title
+    
+    def save(self, *args, **kwargs):
+        if self.end_date and self.end_date < self.date:
+            raise ValueError("End date must be after or on start date")
+        super().save(*args, **kwargs)
+    
+    @property
+    def is_upcoming(self):
+        return self.date >= timezone.now().date()
 
 class APIAuditLog(models.Model):
     timestamp = models.DateTimeField(auto_now_add=True)

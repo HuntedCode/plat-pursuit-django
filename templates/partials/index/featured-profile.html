@@ -1,0 +1,31 @@
+{% load humanize %}
+
+<section class="card shadow-lg w-full bg-base-200 border-2 border-base-300 mx-auto max-w-lg mb-4 transition duration-300 hover:shadow-primary hover:border-primary hover:bg-base-300 group">
+    <div class="card-body items-center text-center">
+        <span class="badge badge-primary badge-lg absolute top-2 left-2 border-2 border-base-300 shadow-sm shadow-primary place-self-end mb-2 animate-pulse">PPotW</span>
+        <div class="avatar mb-4 transition duration-300 group-hover:scale-105">
+            <div class="w-24 rounded-full ring ring-secondary ring-offset-base-100 ring-offset-2">
+                <img src="{{ item.avatar }}" alt="{{ item.name }}'s avatar" />
+            </div>
+        </div>
+        <h2 class="card-title text-base md:text-lg">Plat Pursuer of the Week:</h2>
+        <h2 class="card-title text-xl sm:text-2xl md:text-3xl lg:text-2xl xl:text-4xl font-bold text-primary line-clamp-2">{{ item.name }}</h2>
+        <p class="text-sm italic text-base-content/70 line-clamp-3">"{{ item.bio }}"</p>
+
+        <div class="stats stats-vertical md:stats-horizontal lg:stats-vertical 2xl:stats-horizontal mt-4">
+            <div class="stat">
+                <div class="stat-title">Platinums</div>
+                <div class="stat-value text-primary hover:scale-105">{{ item.platinums.total|intcomma }}</div>
+                <div class="stat-desc hover:scale-105"><span class="text-primary">(+{{ item.platinums.weekly|intcomma }})</span> This Week</div>
+            </div>
+            <div class="stat">
+                <div class="stat-title">Trophies Earned</div>
+                <div class="stat-value text-secondary hover:scale-105">{{ item.trophies.total|intcomma }}</div>
+                <div class="stat-desc hover:scale-105"><span class="text-secondary">(+{{ item.trophies.weekly|intcomma }})</span> This Week</div>
+            </div>
+        </div>
+        <div class="card-actions justify-center mt-4">
+            <a href="/" class="btn btn-secondary">View Profile</a>
+        </div>
+    </div>
+</section>

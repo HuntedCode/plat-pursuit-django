@@ -3,10 +3,6 @@ from django.utils import timezone
 from datetime import timedelta
 from trophies.models import EarnedTrophy
 
-PSN_THRESHOLD_KEY = 'latest_psn_rares_threshold'
-PP_THRESHOLD_KEY = 'latest_pp_rares_threshold'
-THRESHOLDS_TIMEOUT = 3600
-
 def get_latest_psn_rares(limit=5):
     week_ago = timezone.now() - timedelta(days=7)
     rare_trophies = EarnedTrophy.objects.filter(
@@ -14,13 +10,7 @@ def get_latest_psn_rares(limit=5):
         earned_date_time__gte=week_ago
     ).select_related('trophy', 'trophy__game', 'profile').order_by('trophy__trophy_earn_rate')[:limit]
 
-    enriched = _enrich_rares(rare_trophies, 'psn')
-
-    if enriched:
-        threshold = max(item['rate'] for item in enriched)
-        cache.set(PSN_THRESHOLD_KEY, threshold, THRESHOLDS_TIMEOUT * 2)
-
-    return enriched
+    return _enrich_rares(rare_trophies, 'psn')
 
 def get_latest_pp_rares(limit=5):
     week_ago = timezone.now() - timedelta(days=7)
@@ -29,13 +19,7 @@ def get_latest_pp_rares(limit=5):
         earned_date_time__gte=week_ago
     ).select_related('trophy', 'trophy__game', 'profile').order_by('trophy__earn_rate')[:limit]
 
-    enriched = _enrich_rares(rare_trophies, 'pp')
-
-    if enriched:
-        threshold = max(item['rate'] for item in enriched)
-        cache.set(PP_THRESHOLD_KEY, threshold, THRESHOLDS_TIMEOUT * 2)
-
-    return enriched
+    return _enrich_rares(rare_trophies, 'pp')
 
 def _enrich_rares(qs, type):
     enriched = []
@@ -46,7 +30,7 @@ def _enrich_rares(qs, type):
             'trophy': et.trophy.trophy_name,
             'type': et.trophy.trophy_type,
             'game': et.trophy.game.title_name,
-            'rate': et.trophy.trophy_earn_rate if type == 'psn' else et.trophy.earn_rate,
+            'rate': et.trophy.trophy_earn_rate if type == 'psn' else et.trophy.earn_rate * 100,
             'rarity':_get_psn_rarity(et.trophy.trophy_rarity) if type == 'psn' else et.trophy.get_pp_rarity_tier(),
             'time': et.earned_date_time,
             'slug': f"/games/{et.trophy.game.np_communication_id}/"

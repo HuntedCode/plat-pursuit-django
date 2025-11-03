@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Profile, Game, Trophy, EarnedTrophy, ProfileGame, APIAuditLog, FeaturedGame
+from .models import Profile, Game, Trophy, EarnedTrophy, ProfileGame, APIAuditLog, FeaturedGame, FeaturedProfile, Event
 
 
 # Register your models here.
@@ -188,3 +188,16 @@ class FeaturedGameAdmin(admin.ModelAdmin):
     list_display = ('game', 'priority', 'reason', 'start_date', 'end_date')
     search_fields = ('game__title_name',)
     list_filter = ('reason',)
+
+@admin.register(FeaturedProfile)
+class FeaturedProfileAdmin(admin.ModelAdmin):
+    list_display = ('profile', 'priority', 'reason', 'start_date', 'end_date')
+    search_fields = ('profile__psn_username',)
+    list_filter = ('reason',)
+
+@admin.register(Event)
+class EventAdmin(admin.ModelAdmin):
+    list_display = ('title', 'description', 'date', 'end_date', 'color')
+    search_fields = ('title', 'description')
+    list_filter = ('color', 'date')
+    date_hierarchy = 'date'

@@ -15,14 +15,10 @@
                                 <figure class="flex shrink-0 rounded-lg mr-4 border-2 border-base-300 transition duration-300 group-hover:scale-105 group-hover:border-secondary group-focus-within:border-secondary">
                                     <img src="{{ item.image }}" alt="{{ item.trophy }} image" class="w-12 h-12 xl:w-16 xl:h-16 object-cover group-hover:scale-105" loading="lazy" />
                                 </figure>
-                                <div class="flex-grow space-y-1">
+                                <div class="flex-grow space-y-0.5">
                                     <h3 class="card-title text-sm md:text-base xl:text-lg line-clamp-1">{{ item.trophy }}</h3>
-                                    <h1 class="text-xs md:text-sm italic line-clamp-1">({{ item.rate|floatformat:2 }}%) - {{ item.rarity }}</h1>
-                                    <p class="text-xs xl:text-sm text-base-content/70 mb-2 line-clamp-1">By <a href="/" class="link link-hover text-primary">{{ item.profile }}</a> in <a href="/" class="link link-hover text-accent">{{ item.game }}</a></p>
-                                    <div>
-                                        <span class="badge badge-outline badge-xs xl:badge-sm">{{ item.time|iso_naturaltime|default:"Just now" }}</span>
-                                        <span class="badge badge-outline border-trophy-{{ item.type|lower }} badge-xs xl:badge-sm">{{ item.type|capfirst }}</span>
-                                    </div>
+                                    <p class="text-xs xl:text-sm text-base-content/70 line-clamp-1">By <a href="/" class="link link-hover text-primary">{{ item.profile }}</a> in <a href="/" class="link link-hover text-accent">{{ item.game }}</a></p>
+                                    <p class="text-xs xl:text-sm text-base-content/70  italic line-clamp-1">{{ item.rate|floatformat:2 }}% - {{ item.rarity }} </h3>
                                 </div>
                             </div>
 
@@ -42,13 +38,9 @@
                                     <img src="{{ item.image }}" alt="{{ item.trophy }} image" class="w-12 h-12 xl:w-16 xl:h-16 object-cover group-hover:scale-105" loading="lazy" />
                                 </figure>
                                 <div class="flex-grow space-y-1">
-                                    <h3 class="card-title text-sm md:text-base xl:text-lg line-clamp-1">({{ item.rate|floatformat:2 }}%) - {{ item.rarity }}</h3>
-                                    <h1 class="text-xs md:text-sm italic line-clamp-1">{{ item.trophy }}</h1>
-                                    <p class="text-xs xl:text-sm text-base-content/70 mb-2 line-clamp-1">By <a href="/" class="link link-hover text-primary">{{ item.profile }}</a> in <a href="/" class="link link-hover text-accent">{{ item.game }}</a></p>
-                                    <div>
-                                        <span class="badge badge-outline badge-xs xl:badge-sm">{{ item.time|iso_naturaltime|default:"Just now" }}</span>
-                                        <span class="badge badge-outline border-trophy-{{ item.type|lower }} badge-xs xl:badge-sm">{{ item.type|capfirst }}</span>
-                                    </div>
+                                    <h3 class="card-title text-sm md:text-base xl:text-lg line-clamp-1">{{ item.trophy }}</h3>
+                                    <p class="text-xs xl:text-sm text-base-content/70 line-clamp-1">By <a href="/" class="link link-hover text-primary">{{ item.profile }}</a> in <a href="/" class="link link-hover text-accent">{{ item.game }}</a></p>
+                                    <p class="text-xs xl:text-sm text-base-content/70 italic line-clamp-1">{{ item.rate|floatformat:2 }}% - {{ item.rarity }} </h3>
                                 </div>
                             </div>
 

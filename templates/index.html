@@ -18,6 +18,8 @@
             </div>
             <aside class="lg:col-span-1">
                 <div class="sticky top-2 mb-8">
+                    {% include 'partials/index/featured-profile.html' with item=featuredProfile %}
+                    {% include 'partials/index/events-list.html' with upcomingEvents=upcomingEvents pageSize=eventsPageSize %}
                 </div>
             </aside>
         </div>

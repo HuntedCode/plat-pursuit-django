@@ -8,7 +8,8 @@
         </div>
         <div class="stat-title">Profiles Tracked</div>
         <div class="stat-value text-primary text-2xl xl:text-3xl group-hover:scale-105">{{ items.profiles.total|intcomma }}</div>
-        <div class="stat-desc">Active Pursuers{% if items.profiles.weekly > 0 %} <span class="text-primary">(+{{ items.profiles.weekly|intcomma }} this week)</span>{% endif %}</div>
+        <div class="stat-desc">Active Pursuers</div>
+        <div class="stat-desc text-primary">(+{{ items.profiles.weekly|intcomma }} this week)</div>
     </div>
     <div class="stat place-items-center group">
         <div class="stat-figure group-hover:scale-105">
@@ -16,7 +17,8 @@
         </div>
         <div class="stat-title">Trophies Tracked</div>
         <div class="stat-value text-secondary text-2xl xl:text-3xl group-hover:scale-105">{{ items.trophies.total|intcomma }}</div>
-        <div class="stat-desc">Across All Users{% if items.trophies.weekly > 0 %} <span class="text-secondary">(+{{ items.trophies.weekly|intcomma }} this week)</span>{% endif %}</div>
+        <div class="stat-desc">Across All Users</div>
+        <div class="stat-desc text-secondary">(+{{ items.trophies.weekly|intcomma }} this week)</div>
     </div>
     <div class="stat place-items-center group">
         <div class="stat-figure group-hover:scale-105">
@@ -27,7 +29,8 @@
         </div>
         <div class="stat-title">Games Tracked</div>
         <div class="stat-value text-accent text-2xl xl:text-3xl group-hover:scale-105">{{ items.games.total|intcomma }}</div>
-        <div class="stat-desc">Games Being Played{% if items.games.weekly > 0 %} <span class="text-accent">(+{{ items.games.weekly|intcomma }} this week)</span>{% endif %}</div>
+        <div class="stat-desc">Games Being Played</div>
+        <div class="stat-desc text-accent">(+{{ items.games.weekly|intcomma }} this week)</div>
     </div>
     <div class="stat place-items-center group">
         <div class="stat-figure group-hover:scale-105">
@@ -35,7 +38,8 @@
         </div>
         <div class="stat-title">Platinums Earned</div>
         <div class="stat-value text-base-content text-2xl xl:text-3xl group-hover:scale-105">{{ items.platinums.total|intcomma }}</div>
-        <div class="stat-desc">Plats Pursued{% if items.platinums.weekly > 0 %} <span class="text-base-content">(+{{ items.platinums.weekly|intcomma }} this week)</span>{% endif %}</div>
+        <div class="stat-desc">Plats Pursued</div>
+        <div class="stat-desc text-base-content">(+{{ items.platinums.weekly|intcomma }} this week)</div>
     </div>
 </section>
 
@@ -48,7 +52,8 @@
 
         <div class="stat-title">Profiles Tracked</div>
         <div class="stat-value text-primary text-xl sm:text-2xl md:text-3xl group-hover:scale-105">{{ items.profiles.total|intcomma }}</div>
-        <div class="stat-desc">Active Pursuers{% if items.profiles.weekly > 0 %} <span class="text-primary">(+{{ items.profiles.weekly|intcomma }} this week)</span>{% endif %}</div>
+        <div class="stat-desc">Active Pursuers</div>
+        <div class="stat-desc text-primary">(+{{ items.profiles.weekly|intcomma }} this week)</div>
     </div>
     <div class="stat place-items-center group">
         <div class="stat-figure group-hover:scale-105 hidden sm:block">
@@ -57,7 +62,8 @@
 
         <div class="stat-title">Trophies Tracked</div>
         <div class="stat-value text-secondary text-xl sm:text-2xl md:text-3xl group-hover:scale-105">{{ items.trophies.total|intcomma }}</div>
-        <div class="stat-desc">Across all users{% if items.trophies.weekly > 0 %} <span class="text-secondary">(+{{ items.trophies.weekly|intcomma }} this week)</span>{% endif %}</div>
+        <div class="stat-desc">Across all users</div>
+        <div class="stat-desc text-secondary">(+{{ items.trophies.weekly|intcomma }} this week)</div>
     </div>
 </section>
 <section class="stats stats-horizontal shadow-lg w-full bg-base-200 border-2 border-base-300 overflow-x-auto transition duration-300 hover:shadow-primary hover:border-primary hover:bg-base-300 lg:hidden">
@@ -70,7 +76,8 @@
         </div>
         <div class="stat-title">Games Tracked</div>
         <div class="stat-value text-accent text-xl sm:text-2xl md:text-3xl group-hover:scale-105">{{ items.games.total|intcomma }}</div>
-        <div class="stat-desc">Games Being Played{% if items.games.weekly > 0 %} <span class="text-accent">(+{{ items.games.weekly|intcomma }} this week)</span>{% endif %}</div>
+        <div class="stat-desc">Games Being Played</div>
+        <div class="stat-desc text-accent">(+{{ items.games.weekly|intcomma }} this week)</div>
     </div>
     <div class="stat place-items-center group">
         <div class="stat-figure group-hover:scale-105 hidden sm:block">
@@ -78,6 +85,7 @@
         </div>
         <div class="stat-title">Platinums Earned</div>
         <div class="stat-value text-base-content text-xl sm:text-2xl md:text-3xl group-hover:scale-105">{{ items.platinums.total|intcomma }}</div>
-        <div class="stat-desc">Plats Pursued{% if items.platinums.weekly > 0 %} <span class="text-base-content">(+{{ items.platinums.weekly|intcomma }} this week)</span>{% endif %}</div>
+        <div class="stat-desc">Plats Pursued</div>
+        <div class="stat-desc text-base-content">(+{{ items.platinums.weekly|intcomma }} this week)</div>
     </div>
 </section>

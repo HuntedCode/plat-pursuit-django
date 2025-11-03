@@ -7,7 +7,7 @@
         <div class="carousel carousel-start space-x-4 px-2 py-4 w-full snap-x snap-mandatory">
             {% for game in items %}
                 <div class="carousel-item border-2 border-base-300 rounded-box w-full md:w-[calc(50%-0.5rem)] lg:w-[calc(33.333%-0.666rem)] shrink-0 group focus-within:outline-none focus-within:border-secondary snap-start hover:border-secondary hover:shadow-secondary hover:shadow-sm" tabindex="0">
-                    <div class="relative overflow-hidden rounded-box shadow-xl w-full h-128">
+                    <div class="relative overflow-hidden rounded-box shadow-xl w-full h-100 sm:h-140 md:h-100 lg:h-80 xl:h-120">
                         <div class="aspect-video bg-cover bg-center transition-transform duration-300 group-hover:scale-105 group-focus-within:scale-105 w-full h-full" style="background-image: url('{{ game.image }}');">
                             <!-- Info Card -->
                             <div class="absolute bottom-0 left-0 right-0 bg-base-100/90 bg-opacity-50 text-base-content shadow-lg border-t-2 border-base-200 px-4 py-2 transform translate-y-full transition-transform duration-300 hover:bg-base-300/90 ease-in-out group-hover:translate-y-0 group-focus-within:translate-y-0">
