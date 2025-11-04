@@ -53,6 +53,8 @@ class GameAdmin(admin.ModelAdmin):
         "title_name",
         "np_communication_id",
         "title_id",
+        "concept_id",
+        "region",
         "title_platform",
         "has_trophy_groups",
         "total_defined_trophies",
@@ -70,6 +72,8 @@ class GameAdmin(admin.ModelAdmin):
                     "np_service_name",
                     "title_name",
                     "title_id",
+                    "concept_id",
+                    "region",
                     "title_detail",
                     "title_image",
                 )

@@ -1,8 +1,8 @@
 import logging
 from django.utils import timezone
-from django.db import transaction
 from django.db.models import Q, F
-from .models import Profile, Game, ProfileGame, Trophy, EarnedTrophy
+from functools import reduce
+from trophies.models import Profile, Game, ProfileGame, Trophy, EarnedTrophy
 
 logger = logging.getLogger("psn_api")
 
@@ -75,10 +75,9 @@ class PsnApiService:
     
     @classmethod
     def update_game_with_title_stats(cls, title_stats):
-        games = Game.objects.filter(title_id=title_stats.title_id)
+        games = Game.objects.filter(title_id__contains=title_stats.title_id)
         if games:
             for game in games:
-                game.title_id = title_stats.title_id
                 game.title_image = title_stats.image_url
                 game.save()
             return games
@@ -147,9 +146,29 @@ class PsnApiService:
         except Game.DoesNotExist:
             logger.error(f"Game with np_comm_id {np_comm_id} does not exist.")
             raise
-        game.title_id = title_id
+        game.add_title_id_concept_id(title_id)
         game.save()
-        
+        game.refresh_from_db()
+        cls.check_concept_id(game)
+
+    @classmethod
+    def check_concept_id(cls, game: Game):
+        if game.region != []:
+            return
+        for title_id in game.title_id:
+            concept_filter = Q(concept_id=game.concept_id)
+            platform_filter = Q(title_platform__contains=game.title_platform)
+            title_id_filter = Q()
+            if game.title_id:
+                title_id_filter = reduce(lambda x, y: x & y, [
+                    ~Q(title_id__contains=[single_id]) for single_id in game.title_id
+                ])
+            check_games = Game.objects.filter(concept_filter & platform_filter & title_id_filter)
+            if len(check_games) > 0:
+                games = Game.objects.filter(concept_filter, platform_filter)
+                for g in games:
+                    g.auto_assign_region()
+                break
 
     @classmethod
     def create_or_update_trophy_from_trophy_data(cls, game, trophy_data):
@@ -216,9 +235,7 @@ class PsnApiService:
             earned_trophy.save()
 
         if (created and trophy_data.earned == True) or (not created and earned_trophy.earned == False and trophy_data.earned == True):
-            logger.info(f"Earned Count Pre: {trophy.earned_count}")
             trophy.earned_count = F('earned_count') + 1
-            logger.info(f"Earned Count Post: {trophy.earned_count}")
             trophy.save()
             trophy.refresh_from_db()
             trophy.earn_rate = trophy.earned_count / trophy.game.played_count if trophy.game.played_count > 0 else 0.0

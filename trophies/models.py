@@ -2,6 +2,7 @@ from django.db import models
 from django.utils import timezone
 from users.models import CustomUser
 from django.core.validators import RegexValidator
+from trophies.services.psn_region_lookup import get_data_for_title_id
 
 
 # Create your models here.
@@ -80,7 +81,9 @@ class Game(models.Model):
     np_communication_id = models.CharField(
         max_length=50, unique=True, blank=True, null=True
     )
-    title_id = models.CharField(max_length=50, blank=True, null=True)
+    title_id = models.JSONField(default=list, blank=True)
+    concept_id = models.CharField(max_length=50, blank=True)
+    region = models.JSONField(default=list, blank=True)
     np_service_name = models.CharField(max_length=50, blank=True)
     trophy_set_version = models.CharField(max_length=10, blank=True)
     title_name = models.CharField(max_length=255)
@@ -98,10 +101,28 @@ class Game(models.Model):
         indexes = [
             models.Index(fields=["np_communication_id", "title_name"], name="game_idx"),
             models.Index(fields=['played_count'], name='game_played_count_idx'),
+            models.Index(fields=['title_name'], name='game_title_idx'),
+            models.Index(fields=['title_platform'], name='game_platform_idx'),
+            models.Index(fields=['created_at'], name='game_created_idx'),
         ]
 
     def __str__(self):
         return self.title_name
+    
+    def add_title_id_concept_id(self, new_id):
+        """Add a new title_id if not already present, then save."""
+        if new_id and new_id not in self.title_id:
+            self.title_id.append(new_id)
+            data = get_data_for_title_id(new_id)
+            self.concept_id = data['concept_id']
+            self.save(update_fields=['title_id', 'concept_id'])
+    
+    def auto_assign_region(self):
+        for id in self.title_id:
+            data = get_data_for_title_id(id)
+            if data['region'] and data['region'] not in self.region:
+                self.region.append(data['region'])
+                self.save(update_fields=['region'])
 
 
 class ProfileGame(models.Model):

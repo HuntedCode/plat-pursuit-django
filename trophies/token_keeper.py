@@ -12,7 +12,7 @@ from psnawp_api import PSNAWP
 from psnawp_api.models.trophies.trophy_constants import PlatformType
 from requests import HTTPError
 from .models import Profile, Game
-from .services import PsnApiService
+from .services.psn_api_service import PsnApiService
 from .psn_manager import PSNManager
 from .utils import redis_client, log_api_call, TITLE_ID_BLACKLIST, TITLE_STATS_SUPPORTED_PLATFORMS
 

@@ -5,6 +5,7 @@ import os
 import requests  # For potential HTTP error handling
 from psnawp_api import PSNAWP  # Core import for v3.0.0
 from psnawp_api.models.trophies.trophy_constants import PlatformType
+from trophies.services.psn_region_lookup import get_data_for_title_id
 import json
 
 load_dotenv()
@@ -197,9 +198,9 @@ class Command(BaseCommand):
             # self.user_profile_legacy(user)
             # self.user_title_stats(user)
             # self.user_trophy_summary(user)
-            self.user_trophy_titles(user)
+            # self.user_trophy_titles(user)
             np_comm_id = "NPWR41750_00"
-            title_ids = ["CUSA06840_00"]
+            title_ids = ["CUSA01433_00"]
             #title_ids = []
             #for i in range(5):
             #    title_ids.append('CUSA07402_00')
@@ -207,6 +208,8 @@ class Command(BaseCommand):
             # self.user_trophies(user, np_comm_id, platform)
             #self.user_trophies_include_progress(user, np_comm_id, platform)
             # self.user_trophy_titles_for_title(user, title_ids)
+
+            print(get_data_for_title_id(title_ids[0]))
 
             self.stdout.write(
                 self.style.SUCCESS(
