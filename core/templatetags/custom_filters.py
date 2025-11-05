@@ -19,3 +19,15 @@ def iso_naturaltime(value):
         return naturaltime(dt)
     except (ValueError, TypeError):
         return value
+
+@register.filter
+def platform_color(game):
+    platforms = game.title_platform
+    if "PS5" in platforms:
+        return 'primary'
+    elif "PS4" in platforms:
+        return 'accent'
+    elif "PS3" in platforms:
+        return 'warning'
+    else:
+        return 'secondary'

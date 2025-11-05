@@ -8,7 +8,7 @@
             </button>
             <ul tabindex="0" class="menu menu-sm dropdown-content mt-2 z-[1] p-2 shadow-lg bg-base-100 border-2 border-base-200">
                 <li><a href="/">Trophies</a></li>
-                <li><a href="/">Games</a></li>
+                <li><a href="{% url 'games_list' %}">Games</a></li>
                 <li><a href="/">Guides</a></li>
                 {% if user.is_authenticated %}
                     <li><a href="/">My PSN</a></li>
@@ -34,7 +34,7 @@
     <div class="navbar-center hidden lg:flex">
         <ul class="menu menu-horizontal px-1">
             <li><a href="/">Trophies</a></li>
-            <li><a href="/">Games</a></li>
+            <li><a href="{% url 'games_list' %}">Games</a></li>
             <li><a href="/">Guides</a></li>
             {% if user.is_authenticated %}
                 <li><a href="/">My PSN</a></li>
