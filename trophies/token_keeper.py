@@ -5,16 +5,17 @@ import threading
 import logging
 import os
 import atexit
-from typing import Optional, Dict
+from typing import Optional, Dict, Set
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from psnawp_api import PSNAWP
 from psnawp_api.models.trophies.trophy_constants import PlatformType
 from requests import HTTPError
-from .models import Profile, Game
+from pprint import pprint
+from .models import Profile, Game, TitleID, Concept
 from .services.psn_api_service import PsnApiService
 from .psn_manager import PSNManager
-from .utils import redis_client, log_api_call, TITLE_ID_BLACKLIST, TITLE_STATS_SUPPORTED_PLATFORMS
+from .utils import redis_client, log_api_call, TITLE_ID_BLACKLIST, TITLE_STATS_SUPPORTED_PLATFORMS, SEARCH_ACCOUNT_IDS
 
 logger = logging.getLogger("psn_api")
 
@@ -231,6 +232,10 @@ class TokenKeeper:
                     self._job_profile_refresh(profile_id)
                 elif job_type == 'check_profile_health':
                     self._job_check_profile_health(profile_id)
+                elif job_type == 'sync_games_only':
+                    self._job_sync_games_only(profile_id)
+                elif job_type == 'sync_title_id':
+                    self._job_sync_title_id(profile_id, args[0], args[1])
                 else:
                     logger.error(f"Unknown job type: {job_type}")
                     raise
@@ -304,6 +309,8 @@ class TokenKeeper:
                 data = list(user.trophy_titles_for_title(**kwargs))
             elif endpoint == "trophy_summary":
                 data = user.trophy_summary()
+            elif endpoint == "game_title":
+                data = instance.client.game_title(**kwargs)
             else:
                 raise ValueError(f"Unknown endpoint: {endpoint}")
             
@@ -318,7 +325,12 @@ class TokenKeeper:
             self._rollback_call(instance.token)
             if redis_client.get(f"token_keeper:pending_refresh:{instance.instance_id}"):
                 self._check_and_refresh(instance)
-            raise
+        except Exception as e:
+            log_api_call(endpoint, instance.token, profile.id if profile else None, 500, time.time() - start_time, str(e))
+            instance.is_busy = False
+            if redis_client.get(f"token_keeper:pending_refresh:{instance.instance_id}"):
+                self._check_and_refresh(instance)
+
 
     def _get_calls_in_window(self, token : str) -> int:
         """Count API calls in rolling window."""
@@ -438,7 +450,13 @@ class TokenKeeper:
                 offset += page_size
             
             for title in trophy_titles_for_title:
-                PsnApiService.assign_title_id(title.np_communication_id, title.np_title_id)
+                try:
+                    game = Game.objects.get(np_communication_id=title.np_communication_id)
+                except Game.DoesNotExist:
+                    logger.warning(f"Game with comm id {title.np_communication_id} does not exist.")
+                game.add_title_id(title.np_title_id)
+                args = [title.np_title_id, title.np_communication_id]
+                PSNManager.assign_job('sync_title_id', args=args, profile_id=profile.id)
             for stats in remaining_title_stats:
                 PsnApiService.update_profile_game_with_title_stats(profile, stats)
 
@@ -512,7 +530,7 @@ class TokenKeeper:
             found = PsnApiService.update_profile_game_with_title_stats(profile, stats)
             if not found and stats.title_id not in TITLE_ID_BLACKLIST:
                 remaining_title_stats.append(stats)
-            
+        
         if len(remaining_title_stats) > 0:
             trophy_titles_for_title = []
             page_size = min(5, len(remaining_title_stats))
@@ -530,7 +548,13 @@ class TokenKeeper:
                 offset += page_size
         
             for title in trophy_titles_for_title:
-                PsnApiService.assign_title_id(title.np_communication_id, title.np_title_id)
+                try:
+                    game = Game.objects.get(np_communication_id=title.np_communication_id)
+                except Game.DoesNotExist:
+                    logger.warning(f"Game with comm id {title.np_communication_id} does not exist.")
+                game.add_title_id(title.np_title_id)
+                args = [title.np_title_id, title.np_communication_id]
+                PSNManager.assign_job('sync_title_id', args=args, profile_id=profile.id)
             for stats in remaining_title_stats:
                 PsnApiService.update_profile_game_with_title_stats(profile, stats)
 
@@ -575,6 +599,67 @@ class TokenKeeper:
                     game = title['game']
                     args = [game.np_communication_id, game.title_platform[0] if not game.title_platform[0] == 'PSPC' else game.title_platform[1]]
                     PSNManager.assign_job('sync_trophies', args=args, profile_id=profile.id, priority_override='high_priority')
+
+    def _job_sync_games_only(self, profile_id: int):
+        try:
+            profile = Profile.objects.get(id=profile_id)
+        except Profile.DoesNotExist:
+            logger.error(f"Profile {profile_id} does not exist.")
+        job_type = 'sync_games_only'
+
+        page_size = 400
+        limit = page_size
+        offset = 0
+        is_full = True
+        while is_full:
+            trophy_titles = self._execute_api_call(self._get_instance_for_job(job_type), profile, 'trophy_titles', limit=limit, offset=offset, page_size=page_size)
+            for title in trophy_titles:
+                game, created, _ = PsnApiService.create_or_update_game(title) 
+            limit += page_size
+            offset += page_size
+            is_full = len(trophy_titles) == page_size
+        logger.info("Games sync'd successfully!")
+
+        page_size = 200
+        limit = page_size
+        offset = 0
+        is_full = True
+        while is_full:
+            title_stats = self._execute_api_call(self._get_instance_for_job(job_type), profile, 'title_stats', limit=limit, offset=offset, page_size=page_size)
+            for stat in title_stats:
+                PSNManager.sync_title_id(profile, stat.title_id, stat.image_url)
+            limit += page_size
+            offset += page_size
+            is_full = len(title_stats) == page_size
+
+    def _job_sync_title_id(self, profile_id: str, title_id_str: str, np_communication_id: str):
+        try:
+            profile = Profile.objects.get(id=profile_id)
+            title_id = TitleID.objects.get(title_id=title_id_str)
+        except TitleID.DoesNotExist:
+            logger.warning(f"Title ID {title_id_str} not in title_id table.")
+        job_type='sync_title_id'
+        
+        logger.info(f"Beginning sync for {title_id.title_id}")
+        try:
+            try:
+                game = Game.objects.get(np_communication_id=np_communication_id)
+            except Game.DoesNotExist:
+                logger.warning(f"Game {title_id.title_id} not in database.")
+            
+            game_title = self._execute_api_call(self._get_instance_for_job(job_type), profile, 'game_title', title_id=title_id.title_id, platform=PlatformType(title_id.platform), account_id=profile.account_id, np_communication_id=game.np_communication_id)
+            if game_title:
+                details = game_title.get_details()[0]
+                concept, _ = PsnApiService.create_concept_from_details(details)
+                game.add_concept(concept)
+                game.add_region(title_id.region)
+                concept.add_title_id(title_id.title_id)
+                concept.check_and_mark_regional()
+                logger.info(f"Title ID {title_id.title_id} - {concept.unified_title} sync'd successfully!")
+            else:
+                logger.warning(f"Couldn't get game_title for Title ID {title_id.title_id}")
+        except Exception as e:
+            logger.error(f"Error while syncing Title ID {title_id.title_id}: {str(e)}")
 
     @property
     def stats(self) -> Dict:

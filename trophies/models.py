@@ -2,7 +2,7 @@ from django.db import models
 from django.utils import timezone
 from users.models import CustomUser
 from django.core.validators import RegexValidator
-from trophies.services.psn_region_lookup import get_data_for_title_id
+from trophies.utils import TITLE_STATS_SUPPORTED_PLATFORMS, count_unique_game_groups
 
 
 # Create your models here.
@@ -81,9 +81,6 @@ class Game(models.Model):
     np_communication_id = models.CharField(
         max_length=50, unique=True, blank=True, null=True
     )
-    title_id = models.JSONField(default=list, blank=True)
-    concept_id = models.CharField(max_length=50, blank=True)
-    region = models.JSONField(default=list, blank=True)
     np_service_name = models.CharField(max_length=50, blank=True)
     trophy_set_version = models.CharField(max_length=10, blank=True)
     title_name = models.CharField(max_length=255)
@@ -94,8 +91,12 @@ class Game(models.Model):
     has_trophy_groups = models.BooleanField(default=False)
     defined_trophies = models.JSONField(default=dict, blank=True)
     metadata = models.JSONField(default=dict, blank=True)
+    concept = models.ForeignKey('Concept', null=True, blank=True, on_delete=models.CASCADE, related_name='games')
+    region = models.JSONField(default=list, blank=True)
+    title_ids = models.JSONField(default=list, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     played_count = models.PositiveIntegerField(default=0, help_text="Denormalized count of profiles that have played the game (PP-specific).")
+    is_regional = models.BooleanField(default=False)
 
     class Meta:
         indexes = [
@@ -106,24 +107,72 @@ class Game(models.Model):
             models.Index(fields=['created_at'], name='game_created_idx'),
         ]
 
+    def add_concept(self, concept):
+        if concept and not self.concept:
+            self.concept = concept
+            self.save(update_fields=['concept'])
+    
+    def add_region(self, region: str):
+        if region and region not in self.region:
+            self.region.append(region)
+            self.save(update_fields=['region'])
+    
+    def add_title_id(self, title_id: str):
+        if title_id and title_id not in self.title_ids:
+            self.title_ids.append(title_id)
+            self.save(update_fields=['title_ids'])
+
     def __str__(self):
         return self.title_name
-    
-    def add_title_id_concept_id(self, new_id):
-        """Add a new title_id if not already present, then save."""
-        if new_id and new_id not in self.title_id:
-            self.title_id.append(new_id)
-            data = get_data_for_title_id(new_id)
-            self.concept_id = data['concept_id']
-            self.save(update_fields=['title_id', 'concept_id'])
-    
-    def auto_assign_region(self):
-        for id in self.title_id:
-            data = get_data_for_title_id(id)
-            if data['region'] and data['region'] not in self.region:
-                self.region.append(data['region'])
-                self.save(update_fields=['region'])
 
+class Concept(models.Model):
+    concept_id = models.CharField(max_length=50, unique=True)
+    unified_title = models.CharField(max_length=255, blank=True)
+    title_ids = models.JSONField(default=list, blank=True)
+    publisher_name = models.CharField(max_length=255, blank=True)
+    genres = models.JSONField(default=list, blank=True)
+    subgenres = models.JSONField(default=list, blank=True)
+    descriptions = models.JSONField(default=dict, blank=True)
+    content_rating = models.JSONField(default=dict, blank=True)
+    media = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=['concept_id'], name='concept_id_idx'),
+            models.Index(fields=['unified_title'], name='concept_title_idx'),
+            models.Index(fields=['publisher_name'], name='content_publisher_idx'),
+        ]
+    
+    def add_title_id(self, title_id: str):
+        if title_id and title_id not in self.title_ids:
+            self.title_ids.append(title_id)
+            self.save(update_fields=['title_ids'])
+
+    def check_and_mark_regional(self):
+        """Check if this concept has multiple games for the same platform. If so, mark as regional. Run post sync."""
+        for platform in TITLE_STATS_SUPPORTED_PLATFORMS:
+                games = self.games.filter(title_platform__contains=platform)
+                if count_unique_game_groups(games) > 1:
+                    for game in games:
+                        game.is_regional = True
+                        game.save(update_fields=['is_regional'])
+
+    def __str__(self):
+        return self.unified_title or self.concept_id
+
+class TitleID(models.Model):
+    title_id = models.CharField(max_length=50, unique=True)
+    platform = models.CharField(max_length=10)
+    region = models.CharField(max_length=10, blank=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=['title_id'], name='title_id_idx'),
+            models.Index(fields=['region'], name='title_region_idx'),
+        ]
+
+    def __str__(self):
+        return self.title_id
 
 class ProfileGame(models.Model):
     profile = models.ForeignKey(

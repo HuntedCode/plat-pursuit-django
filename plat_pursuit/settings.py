@@ -40,7 +40,7 @@ DEBUG = True
 
 ALLOWED_HOSTS = []
 
-DATA_UPLOAD_MAX_NUMBER_FIELDS = 5000
+DATA_UPLOAD_MAX_NUMBER_FIELDS = 2000000
 
 # Application definition
 
@@ -56,6 +56,7 @@ INSTALLED_APPS = [
     "users",
     "trophies",
     'rest_framework',
+    'django_extensions'
 ]
 
 MIDDLEWARE = [

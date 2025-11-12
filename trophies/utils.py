@@ -5,6 +5,8 @@ import hashlib
 import requests
 import logging
 from dotenv import load_dotenv
+from typing import List, Set
+
 
 load_dotenv()
 logger = logging.getLogger("psn_api")
@@ -44,7 +46,44 @@ def match_names(name1, name2, threshold=0.9):
     ratio = difflib.SequenceMatcher(None, name1, name2).ratio()
     return ratio >= threshold
 
+def count_unique_game_groups(games_qs) -> int:
+    games = list(games_qs)
+    n = len(games)
+    if n == 0:
+        return 0
+    
+    parent = list(range(n))
+    rank = [0] * n
+
+    def find(x: int) -> int:
+        if parent[x] != x:
+            parent[x] = find(parent[x])
+        return parent[x]
+    
+    def union(x: int, y: int):
+        px, py = find(x), find(y)
+        if px == py:
+            return
+        if rank[px] < rank[py]:
+            parent[px] = py
+        elif rank[py] > rank[px]:
+            parent[py] = px
+        else:
+            parent[py] = px
+            rank[px] += 1
+    
+    title_id_sets: List[Set[str]] = [set(game.title_ids) for game in games]
+    for i in range(n):
+        for j in range(i + 1, n):
+            if title_id_sets[i] & title_id_sets[j]:
+                union(i, j)
+    
+    unique_groups = len(set(find(i) for i in range(n)))
+    return unique_groups
+
 
 # Common PS Apps - No Trophies
 TITLE_ID_BLACKLIST = ['CUSA05214_00', 'CUSA01015_00', 'CUSA00129_00', 'CUSA00131_00', 'CUSA05365_00', 'PPSA01650_00', 'PPSA02038_00', 'PPSA01614_00', 'PPSA01604_00', 'PPSA01665_00',]
 TITLE_STATS_SUPPORTED_PLATFORMS = ['PS4', 'PS5']
+
+SEARCH_ACCOUNT_IDS = ['7532533859249281768']

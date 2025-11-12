@@ -1,8 +1,10 @@
 import logging
+from datetime import datetime
 from django.utils import timezone
-from django.db.models import Q, F
-from functools import reduce
-from trophies.models import Profile, Game, ProfileGame, Trophy, EarnedTrophy
+from django.db.models import F
+from trophies.models import Profile, Game, ProfileGame, Trophy, EarnedTrophy, Concept, TitleID
+from psnawp_api.models.title_stats import TitleStats
+from psnawp_api.models.trophies import TrophyTitle
 
 logger = logging.getLogger("psn_api")
 
@@ -32,7 +34,7 @@ class PsnApiService:
         return profile
 
     @classmethod
-    def create_or_update_game(cls, trophy_title):
+    def create_or_update_game(cls, trophy_title: TrophyTitle):
         """Create or update Game model from PSN trophy title data."""
         game, created = Game.objects.get_or_create(
             np_communication_id=trophy_title.np_communication_id,
@@ -74,17 +76,55 @@ class PsnApiService:
         return game, created, needs_trophy_update
     
     @classmethod
-    def update_game_with_title_stats(cls, title_stats):
-        games = Game.objects.filter(title_id__contains=title_stats.title_id)
+    def create_concept_from_details(cls, details):
+        try:
+            descriptions_short = next((d['desc'] for d in details['descriptions'] if d['type'] == 'SHORT'), '')
+        except:
+            descriptions_short = ''
+        try:
+            descriptions_long = next((d['desc'] for d in details['descriptions'] if d['type'] == 'LONG'), '')
+        except:
+            descriptions_long = ''
+        return Concept.objects.get_or_create(
+            concept_id=details.get('id'),
+            defaults={
+                'unified_title': details.get('nameEn', ''),
+                'publisher_name': details.get('publisherName', ''),
+                'genres': details.get('genres', []),
+                'subgenres': details.get('subGenres', []),
+                'descriptions': {
+                    'short': descriptions_short,
+                    'long': descriptions_long
+                },
+                'content_rating': details.get('contentRating', {}),
+                'media': {
+                    'images': details.get('media', {}).get('images', []),
+                    'videos': details.get('media', {}).get('videos', [])
+                }
+            })
+    
+    @classmethod
+    def update_profile_game_with_title_stats(cls, profile: Profile, title_stats: TitleStats):
+        games = Game.objects.filter(title_ids__contains=title_stats.title_id)        
         if games:
             for game in games:
-                game.title_image = title_stats.image_url
-                game.save()
-            return games
-        return None
+                try:
+                    profile_game = ProfileGame.objects.get(profile=profile, game=game)
+                except ProfileGame.DoesNotExist:
+                    logger.error(f"Could not find ProfileGame entry for {profile} - {game}")
+                    return False
+                
+                profile_game.play_count = title_stats.play_count
+                profile_game.first_played_date_time = title_stats.first_played_date_time
+                profile_game.last_played_date_time = title_stats.last_played_date_time
+                profile_game.play_duration = title_stats.play_duration
+                profile_game.save(update_fields=['play_count', 'first_played_date_time', 'last_played_date_time', 'play_duration'])
+            return True
+        logger.warning(f"No games found for {title_stats.title_id}")
+        return False
 
     @classmethod
-    def create_or_update_profile_game(cls, profile, game, trophy_title):
+    def create_or_update_profile_game(cls, profile, game, trophy_title: TrophyTitle):
         """Create or update ProfileGame model from PSN trophy title data."""
         profile_game, created = ProfileGame.objects.get_or_create(
             profile=profile,
@@ -120,59 +160,11 @@ class PsnApiService:
         return profile_game, created
 
     @classmethod
-    def update_profile_game_with_title_stats(cls, profile: Profile, title_stats):
-        """Update ProfileGame from title_stats only - no trophy updates."""
-        games = cls.update_game_with_title_stats(title_stats)
-        if games:
-            for game in games:
-                try:
-                    profile_game = ProfileGame.objects.get(profile=profile, game=game)
-                except ProfileGame.DoesNotExist:
-                    logger.warning(f"ProfileGame for profile {profile.id} and game {game.np_communication_id} does not exist.")
-                    continue
-
-                profile_game.play_count = title_stats.play_count
-                profile_game.first_played_date_time = title_stats.first_played_date_time
-                profile_game.last_played_date_time = title_stats.last_played_date_time
-                profile_game.play_duration = title_stats.play_duration
-                profile_game.save()
-            return True
-        return False
-    
-    @classmethod
-    def assign_title_id(cls, np_comm_id, title_id):
-        try:
-            game = Game.objects.get(np_communication_id=np_comm_id)
-        except Game.DoesNotExist:
-            logger.error(f"Game with np_comm_id {np_comm_id} does not exist.")
-            raise
-        game.add_title_id_concept_id(title_id)
-        game.save()
-        game.refresh_from_db()
-        cls.check_concept_id(game)
-
-    @classmethod
-    def check_concept_id(cls, game: Game):
-        if game.region != []:
-            return
-        for title_id in game.title_id:
-            concept_filter = Q(concept_id=game.concept_id)
-            platform_filter = Q(title_platform__contains=game.title_platform)
-            title_id_filter = Q()
-            if game.title_id:
-                title_id_filter = reduce(lambda x, y: x & y, [
-                    ~Q(title_id__contains=[single_id]) for single_id in game.title_id
-                ])
-            check_games = Game.objects.filter(concept_filter & platform_filter & title_id_filter)
-            if len(check_games) > 0:
-                games = Game.objects.filter(concept_filter, platform_filter)
-                for g in games:
-                    g.auto_assign_region()
-                break
-
-    @classmethod
     def create_or_update_trophy_from_trophy_data(cls, game, trophy_data):
         """Create or update Trophy model from PSN trophy data."""
+        trophy_rarity = getattr(trophy_data, 'trophy_rarity', None) or None
+        trophy_earn_rate = getattr(trophy_data, 'trophy_earn_rate', 0.0) or 0.0
+
         trophy, created = Trophy.objects.get_or_create(
             trophy_id=trophy_data.trophy_id,
             game=game,
@@ -186,8 +178,8 @@ class PsnApiService:
                 "progress_target_value": trophy_data.trophy_progress_target_value,
                 "reward_name": trophy_data.trophy_reward_name,
                 "reward_img_url": trophy_data.trophy_reward_img_url,
-                "trophy_rarity": trophy_data.trophy_rarity.value,
-                "trophy_earn_rate": trophy_data.trophy_earn_rate,
+                "trophy_rarity": trophy_rarity.value if trophy_rarity else None,
+                "trophy_earn_rate": trophy_earn_rate if trophy_earn_rate else 0.0,
                 "earned_count": 0,
                 "earn_rate": 0.0
             },
@@ -202,8 +194,8 @@ class PsnApiService:
             trophy.progress_target_value = trophy_data.trophy_progress_target_value
             trophy.reward_name = trophy_data.trophy_reward_name
             trophy.reward_img_url = trophy_data.trophy_reward_img_url
-            trophy.trophy_rarity = trophy_data.trophy_rarity.value
-            trophy.trophy_earn_rate = trophy_data.trophy_earn_rate
+            trophy.trophy_rarity = trophy_data.trophy_rarity.value if trophy_data.trophy_rarity else ''
+            trophy.trophy_earn_rate = trophy_data.trophy_earn_rate if trophy_data.trophy_earn_rate else 0.0
             trophy.save()
         return trophy, created
 

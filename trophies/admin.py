@@ -1,5 +1,6 @@
-from django.contrib import admin
-from .models import Profile, Game, Trophy, EarnedTrophy, ProfileGame, APIAuditLog, FeaturedGame, FeaturedProfile, Event
+from django.contrib import admin, messages
+from django.db import transaction
+from .models import Profile, Game, Trophy, EarnedTrophy, ProfileGame, APIAuditLog, FeaturedGame, FeaturedProfile, Event, Concept, TitleID
 
 
 # Register your models here.
@@ -52,16 +53,17 @@ class GameAdmin(admin.ModelAdmin):
     list_display = (
         "title_name",
         "np_communication_id",
-        "title_id",
-        "concept_id",
-        "region",
         "title_platform",
+        "concept",
+        "region",
+        "is_regional",
+        "title_ids",
         "has_trophy_groups",
         "total_defined_trophies",
         "played_count",
     )
-    list_filter = ("has_trophy_groups",)
-    search_fields = ("title_name", "np_communication_id", "title_id")
+    list_filter = ("has_trophy_groups", "is_regional")
+    search_fields = ("title_name", "np_communication_id")
     ordering = ("title_name",)
     fieldsets = (
         (
@@ -71,9 +73,10 @@ class GameAdmin(admin.ModelAdmin):
                     "np_communication_id",
                     "np_service_name",
                     "title_name",
-                    "title_id",
-                    "concept_id",
+                    "concept",
                     "region",
+                    "is_regional",
+                    "title_ids",
                     "title_detail",
                     "title_image",
                 )
@@ -88,6 +91,17 @@ class GameAdmin(admin.ModelAdmin):
             {"fields": ("title_icon_url", "title_platform", "metadata")},
         ),
     )
+    actions = ['toggle_is_regional']
+
+    @admin.action(description="Toggle is_regional for selected games")
+    def toggle_is_regional(self, request, queryset):
+        with transaction.atomic():
+            for game in queryset:
+                game.is_regional = not game.is_regional
+                game.save(update_fields=['is_regional'])
+            
+            count = queryset.count()
+            messages.success(request, f"Toggled is_regional for {count} game(s).")
 
     def total_defined_trophies(self, obj):
         return sum(obj.defined_trophies.values()) if obj.defined_trophies else 0
@@ -205,3 +219,15 @@ class EventAdmin(admin.ModelAdmin):
     search_fields = ('title', 'description')
     list_filter = ('color', 'date')
     date_hierarchy = 'date'
+
+@admin.register(TitleID)
+class TitleIDAdmin(admin.ModelAdmin):
+    list_display = ('title_id', 'platform', 'region')
+    search_fields = ('title_id',)
+    list_filter = ('region', 'platform')
+
+@admin.register(Concept)
+class ConceptAdmin(admin.ModelAdmin):
+    list_display = ('concept_id', 'unified_title', 'publisher_name', 'genres')
+    search_fields = ('concept_id', 'unified_title', 'descriptions')
+

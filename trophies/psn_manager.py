@@ -42,7 +42,7 @@ class PSNManager:
         """Map job type to queue."""
         if job_type in ["sync_profile_data", "sync_trophy_titles", "profile_refresh", "check_profile_health"]:
             return "high_priority"
-        elif job_type in ["sync_title_stats"]:
+        elif job_type in ["sync_title_stats", "sync_title_id"]:
             return "medium_priority"
         elif job_type in ["sync_trophies"]:
             return "low_priority"
@@ -70,3 +70,11 @@ class PSNManager:
     @classmethod
     def check_profile_health(cls, profile: Profile):
         cls.assign_job('check_profile_health', args=[], profile_id=profile.id)
+    
+    @classmethod
+    def sync_games_only(cls, profile: Profile):
+        cls.assign_job('sync_games_only', args=[], profile_id=profile.id, priority_override='high_priority')
+    
+    @classmethod
+    def sync_title_id(cls, profile: Profile, title_id_str: str, image_url: str):
+        cls.assign_job('sync_title_id', args=[title_id_str, image_url], profile_id=profile.id, priority_override='high_priority')
