@@ -250,7 +250,7 @@ class TokenKeeper:
 
     def _complete_job(self, profile_id, queue_name):
         """Handle finished job, check for deferred."""
-        if queue_name != 'high_priority':
+        if queue_name == 'low_priority':
             redis_client.decr(f"profile_jobs:{profile_id}:{queue_name}")
             current_jobs = int(redis_client.get(f"profile_jobs:{profile_id}:{queue_name}") or 0)
             if current_jobs <= 0:

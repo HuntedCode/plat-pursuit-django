@@ -114,6 +114,8 @@ class PsnApiService:
                     logger.error(f"Could not find ProfileGame entry for {profile} - {game}")
                     return False
                 
+                game.title_image = title_stats.image_url
+                game.save(update_fields=['title_image'])
                 profile_game.play_count = title_stats.play_count
                 profile_game.first_played_date_time = title_stats.first_played_date_time
                 profile_game.last_played_date_time = title_stats.last_played_date_time
