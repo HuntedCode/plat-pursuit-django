@@ -72,3 +72,8 @@ class GamesListView(ListView):
         context = super().get_context_data(**kwargs)
         context['form'] = GameSearchForm(self.request.GET)
         return context
+    
+    def get_template_names(self):
+        if self.request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return ['trophies/partials/game_cards.html']
+        return super().get_template_names()

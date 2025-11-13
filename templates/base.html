@@ -15,5 +15,9 @@
       {% block content %}{% endblock %}
     </main>
     {% include 'partials/footer.html' %}
+    {% include 'partials/back_to_top.html' %}
+
+    <script src="{% static 'js/main.js' %}"></script>
+    {% block js_scripts %}{% endblock %}
   </body>
 </html>
