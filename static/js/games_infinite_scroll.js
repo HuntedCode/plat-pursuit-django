@@ -39,6 +39,12 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     };
 
+    document.querySelector('form').addEventListener('submit', () => {
+        page = 2;
+        nextPageUrl = `${baseUrl}?page=${page}&${queryParams.toString()}`;
+        grid.innerHTML = '';
+    });
+
     const observer = new IntersectionObserver(entries => {
         if (entries[0].isIntersecting) {
             loadMore();

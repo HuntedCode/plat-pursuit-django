@@ -31,3 +31,10 @@ def platform_color(game):
         return 'warning'
     else:
         return 'secondary'
+
+@register.filter
+def multiply(value, arg):
+    try:
+        return float(value) * float(arg)
+    except:
+        return ''

@@ -1,14 +1,64 @@
 {% extends 'base.html' %}
 {% load static %}
+{% load query_tags %}
 {% block title %}Games Search{% endblock %}
 
 {% block content %}
     <section class="shadow-lg w-full bg-base-200 rounded-box border-2 border-base-300 p-4">
         <h2 class="text-2xl font-bold mb-4 italic">Games</h2>
         <form method="get" class="mb-4">
-            {{ form.as_p }}
-            <button type="submit" class="btn btn-primary">Search</button>
+            <div class="form-control">
+                <label class="label" for="id_query">
+                    <span class="label-text font-bold">Search by name</span>
+                </label>
+                <input type="text" name="query" id="id_query" value="{{ request.GET.query }}" class="input" placeholder="Enter game name..." />
+            </div>
+            <div class="form-control mt-4">
+                <label class="label" for="id_platform">
+                    <span class="label-text font-bold">Platform</span>
+                </label>
+                <select name="platform" id="id_platform" class="select">
+                    {% for value, display in form.platform.field.choices %}
+                        <option value="{{ value }}" {% if request.GET.platform == value %}selected{% endif %}>{{ display }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-control mt-4">
+                <label class="label" for="id_sort">
+                    <span class="label-text font-bold">Sort By</span>
+                </label>
+                <select name="sort" id="id_sort" class="select">
+                    {% for value, display in form.sort.field.choices %}
+                        <option value="{{ value }}" {% if request.GET.sort == value %}selected{% endif %}>{{ display }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-control mt-4">
+                <label class="label cursor-pointer justify-start gap-4">
+                    <input type="checkbox" name="show_legacy" class="toggle toggle-primary" {% if request.GET.show_legacy %}checked{% endif %} />
+                    <span class="label-text">Show "Legacy" games</span>
+                </label>
+            </div>
+            <div class="form-control mt-2">
+                <label class="label cursor-pointer justify-start gap-4">
+                    <input type="checkbox" name="show_only_platinum" class="toggle toggle-primary" {% if request.GET.show_only_platinum %}checked{% endif %} />
+                    <span class="label-text">Show only games with platinum</span>
+                </label>
+            </div>
+            <button type="submit" class="btn btn-primary">Apply Filters</button>
         </form>
+        <div class="form-control mb-6">
+            <label class="label">
+                <span class="label-text font-bold">Filter by Letter</span>
+            </label>
+            <div class="flex flex-row flex-nowrap gap-1 pb-2 overflow-x-auto">
+                {% for value, display in form.fields.letter.choices %}
+                    <a href="?{% query_transform letter=value %}" class="badge badge-sm whitespace-nowrap transition-all duration-200 cursor-pointer flex-shrink-0 {% if request.GET.letter == value %}badge-primary shadow-md font-bold border-2 border-primary shadow-primary transform scale-105{% else %}badge-ghost hover:badge-primary hover:scale-105 active:scale-95{% endif %}">
+                        {{ display }}
+                    </a>
+                {% endfor %}
+            </div>
+        </div>
         <div id="games-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-2">
             {% include 'trophies/partials/game_cards.html' %}
         </div>

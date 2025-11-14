@@ -3,10 +3,11 @@ import logging
 from django.shortcuts import render
 from django.http import StreamingHttpResponse, JsonResponse
 from django.views.generic import ListView
-from django.db.models import Q, Prefetch
+from django.db.models import Q, Prefetch, OuterRef, Subquery, Value, IntegerField
+from django.db.models.functions import Coalesce
 from .models import Game, Trophy
 from .forms import GameSearchForm
-from .utils import redis_client
+from .utils import redis_client, TITLE_STATS_SUPPORTED_PLATFORMS
 
 logger = logging.getLogger('psn_api')
 
@@ -58,15 +59,49 @@ class GamesListView(ListView):
         if form.is_valid():
             query = form.cleaned_data.get('query')
             platform = form.cleaned_data.get('platform')
+            letter = form.cleaned_data.get('letter')
+            show_legacy = form.cleaned_data.get('show_legacy')
+            show_only_platinum = form.cleaned_data.get('show_only_platinum')
+            sort_val = form.cleaned_data.get('sort')
+
             if query:
                 qs = qs.filter(Q(title_name__icontains=query))
             if platform:
                 qs = qs.filter(title_platform__contains=[platform])
+            if letter:
+                if letter == '0-9':
+                    qs = qs.filter(title_name__regex=r'^[0-9]')
+                else:
+                    qs = qs.filter(title_name__istartswith=letter)
             
+            if not show_legacy:
+                supported_filter = Q()
+                for plat in TITLE_STATS_SUPPORTED_PLATFORMS:
+                    supported_filter |= Q(title_platform__contains=plat)
+                qs = qs.filter(supported_filter)
+            
+            if show_only_platinum:
+                qs = qs.filter(trophies__trophy_type='platinum').distinct()
+
+            # Sorting
+            platinums_earned = Subquery(Trophy.objects.filter(game=OuterRef('pk'), trophy_type='platinum').values('earned_count')[:1])
+            qs = qs.annotate(platinums_earned_count=Coalesce(platinums_earned, Value(0), output_field=IntegerField()))
+
+            if sort_val == 'played':
+                order = ['-played_count', 'title_name']
+            elif sort_val == 'played_inv':
+                order = ['played_count', 'title_name']
+            elif sort_val == 'plat_earned':
+                order = ['-platinums_earned_count', 'title_name']
+            elif sort_val == 'plat_earned_inv':
+                order = ['platinums_earned_count', 'title_name']
+            else:
+                order = ['title_name']
+
             qs = qs.prefetch_related(
                 Prefetch('trophies', queryset=Trophy.objects.filter(trophy_type='platinum'), to_attr='platinum_trophy')
             )
-        return qs.order_by('title_name')
+        return qs.order_by(*order)
     
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)

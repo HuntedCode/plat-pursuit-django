@@ -3,3 +3,11 @@
 <div class="hidden shadow-trophy-silver border-trophy-silver"></div>
 <div class="hidden shadow-trophy-gold border-trophy-gold"></div>
 <div class="hidden shadow-trophy-platinum border-trophy-platinum"></div>
+<div class="hidden border-primary shadow-primary hover:border-primary hover:shadow-primary"></div>
+<div class="hidden divider-primary"></div>
+<div class="hidden border-secondary shadow-secondary hover:border-secondary hover:shadow-secondary"></div>
+<div class="hidden divider-secondary"></div>
+<div class="hidden border-accent shadow-accent hover:border-accent hover:shadow-accent"></div>
+<div class="hidden divider-accent"></div>
+<div class="hidden border-2 border-warning shadow-warning hover:border-warning hover:shadow-warning"></div>
+<div class="hidden divider-warning"></div>
