@@ -20,7 +20,7 @@ class PSNManager:
     def assign_job(cls, job_type: str, args: list, profile_id: int, priority_override: str=None):
         """Assign job to queue, respecting priorities."""
         queue_name = priority_override or cls._get_queue_for_job(job_type)
-        if queue_name != "high_priority":
+        if queue_name == "low_priority":
             current_jobs = int(redis_client.get(f"profile_jobs:{profile_id}:{queue_name}") or 0)
             if current_jobs >= cls.max_jobs_per_profile:
                 logger.info(f"Trickling: Profile {profile_id} at max jobs ({current_jobs}) - deferring")

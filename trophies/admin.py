@@ -182,14 +182,15 @@ class EarnedTrophyAdmin(admin.ModelAdmin):
     list_display = (
         "profile",
         "trophy",
+        "trophy__trophy_type",
         "earned",
         "trophy_hidden",
         "progress_rate",
         "earned_date_time",
         "last_updated",
     )
-    list_filter = ("earned", "trophy_hidden", "earned_date_time")
-    search_fields = ("profile__psn_username", "trophy__trophy_name")
+    list_filter = ("earned", "trophy_hidden", "earned_date_time", "trophy__trophy_type")
+    search_fields = ("profile__psn_username", "trophy__trophy_name", "trophy__game__title_name")
     raw_id_fields = ("profile", "trophy")
     ordering = ("-last_updated",)
 

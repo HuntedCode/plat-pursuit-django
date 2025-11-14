@@ -456,7 +456,7 @@ class TokenKeeper:
                     logger.warning(f"Game with comm id {title.np_communication_id} does not exist.")
                 game.add_title_id(title.np_title_id)
                 args = [title.np_title_id, title.np_communication_id]
-                PSNManager.assign_job('sync_title_id', args=args, profile_id=profile.id)
+                PSNManager.assign_job('sync_title_id', args=args, profile_id=profile.id, priority_override='medium_priority')
             for stats in remaining_title_stats:
                 PsnApiService.update_profile_game_with_title_stats(profile, stats)
 
@@ -475,6 +475,35 @@ class TokenKeeper:
         for trophy_data in trophies:
             trophy, _ = PsnApiService.create_or_update_trophy_from_trophy_data(game, trophy_data)
             PsnApiService.create_or_update_earned_trophy_from_trophy_data(profile, trophy, trophy_data)
+    
+    def _job_sync_title_id(self, profile_id: str, title_id_str: str, np_communication_id: str):
+        try:
+            profile = Profile.objects.get(id=profile_id)
+            title_id = TitleID.objects.get(title_id=title_id_str)
+        except TitleID.DoesNotExist:
+            logger.warning(f"Title ID {title_id_str} not in title_id table.")
+        job_type='sync_title_id'
+        
+        logger.info(f"Beginning sync for {title_id.title_id}")
+        try:
+            try:
+                game = Game.objects.get(np_communication_id=np_communication_id)
+            except Game.DoesNotExist:
+                logger.warning(f"Game {title_id.title_id} not in database.")
+            
+            game_title = self._execute_api_call(self._get_instance_for_job(job_type), profile, 'game_title', title_id=title_id.title_id, platform=PlatformType(title_id.platform), account_id=profile.account_id, np_communication_id=game.np_communication_id)
+            if game_title:
+                details = game_title.get_details()[0]
+                concept, _ = PsnApiService.create_concept_from_details(details)
+                game.add_concept(concept)
+                game.add_region(title_id.region)
+                concept.add_title_id(title_id.title_id)
+                concept.check_and_mark_regional()
+                logger.info(f"Title ID {title_id.title_id} - {concept.unified_title} sync'd successfully!")
+            else:
+                logger.warning(f"Couldn't get game_title for Title ID {title_id.title_id}")
+        except Exception as e:
+            logger.error(f"Error while syncing Title ID {title_id.title_id}: {str(e)}")
     
     def _job_profile_refresh(self, profile_id: int):
         try:
@@ -631,35 +660,6 @@ class TokenKeeper:
             limit += page_size
             offset += page_size
             is_full = len(title_stats) == page_size
-
-    def _job_sync_title_id(self, profile_id: str, title_id_str: str, np_communication_id: str):
-        try:
-            profile = Profile.objects.get(id=profile_id)
-            title_id = TitleID.objects.get(title_id=title_id_str)
-        except TitleID.DoesNotExist:
-            logger.warning(f"Title ID {title_id_str} not in title_id table.")
-        job_type='sync_title_id'
-        
-        logger.info(f"Beginning sync for {title_id.title_id}")
-        try:
-            try:
-                game = Game.objects.get(np_communication_id=np_communication_id)
-            except Game.DoesNotExist:
-                logger.warning(f"Game {title_id.title_id} not in database.")
-            
-            game_title = self._execute_api_call(self._get_instance_for_job(job_type), profile, 'game_title', title_id=title_id.title_id, platform=PlatformType(title_id.platform), account_id=profile.account_id, np_communication_id=game.np_communication_id)
-            if game_title:
-                details = game_title.get_details()[0]
-                concept, _ = PsnApiService.create_concept_from_details(details)
-                game.add_concept(concept)
-                game.add_region(title_id.region)
-                concept.add_title_id(title_id.title_id)
-                concept.check_and_mark_regional()
-                logger.info(f"Title ID {title_id.title_id} - {concept.unified_title} sync'd successfully!")
-            else:
-                logger.warning(f"Couldn't get game_title for Title ID {title_id.title_id}")
-        except Exception as e:
-            logger.error(f"Error while syncing Title ID {title_id.title_id}: {str(e)}")
 
     @property
     def stats(self) -> Dict:
