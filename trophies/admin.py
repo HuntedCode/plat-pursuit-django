@@ -1,5 +1,7 @@
 from django.contrib import admin, messages
+from django.contrib.admin import SimpleListFilter
 from django.db import transaction
+from django.db.models import Q
 from .models import Profile, Game, Trophy, EarnedTrophy, ProfileGame, APIAuditLog, FeaturedGame, FeaturedProfile, Event, Concept, TitleID
 
 
@@ -48,6 +50,31 @@ class ProfileAdmin(admin.ModelAdmin):
     link_to_user.short_description = "Link selected profiles to current user"
 
 
+class RegionListFilter(SimpleListFilter):
+    title = 'Region'
+    parameter_name = 'region'
+
+    def lookups(self, request, model_admin):
+        return (
+            ('NA', 'North America'),
+            ('EU', 'Europe'),
+            ('JP', 'Japan'),
+            ('AS', 'Asia'),
+        )
+    
+    def queryset(self, request, queryset):
+        values = self.value()
+        if not values:
+            return queryset
+        
+        regions = values.split(',') if ',' in values else [values]
+
+        region_filter = Q()
+        for region in regions:
+            region_filter |= Q(region__contains=region)
+
+        return queryset.filter(region_filter)
+
 @admin.register(Game)
 class GameAdmin(admin.ModelAdmin):
     list_display = (
@@ -62,7 +89,7 @@ class GameAdmin(admin.ModelAdmin):
         "total_defined_trophies",
         "played_count",
     )
-    list_filter = ("has_trophy_groups", "is_regional")
+    list_filter = ("has_trophy_groups", "is_regional", RegionListFilter)
     search_fields = ("title_name", "np_communication_id")
     ordering = ("title_name",)
     fieldsets = (

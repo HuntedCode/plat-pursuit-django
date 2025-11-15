@@ -13,4 +13,4 @@ def query_transform(context, **kwargs):
             query.pop(key, None)
         else:
             query[key] = str(new_value)
-    return urlencode(query)
+    return query.urlencode()

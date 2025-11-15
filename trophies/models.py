@@ -2,7 +2,7 @@ from django.db import models
 from django.utils import timezone
 from users.models import CustomUser
 from django.core.validators import RegexValidator
-from trophies.utils import TITLE_STATS_SUPPORTED_PLATFORMS, count_unique_game_groups
+from trophies.utils import count_unique_game_groups, TITLE_STATS_SUPPORTED_PLATFORMS, NA_REGION_CODES, EU_REGION_CODES, JP_REGION_CODES, AS_REGION_CODES
 
 
 # Create your models here.
@@ -114,6 +114,16 @@ class Game(models.Model):
     
     def add_region(self, region: str):
         if region and region not in self.region:
+            if region in NA_REGION_CODES:
+                region = 'NA'
+            elif region in EU_REGION_CODES:
+                region = 'EU'
+            elif region in JP_REGION_CODES:
+                region = 'JP'
+            elif region in AS_REGION_CODES:
+                region = 'AS'
+            else:
+                return
             self.region.append(region)
             self.save(update_fields=['region'])
     

@@ -14,14 +14,30 @@
                 <input type="text" name="query" id="id_query" value="{{ request.GET.query }}" class="input" placeholder="Enter game name..." />
             </div>
             <div class="form-control mt-4">
-                <label class="label" for="id_platform">
-                    <span class="label-text font-bold">Platform</span>
+                <label class="label">
+                    <span class="label-text font-bold">Platforms</span>
                 </label>
-                <select name="platform" id="id_platform" class="select">
+                <div class="flex flex-wrap gap-4">
                     {% for value, display in form.platform.field.choices %}
-                        <option value="{{ value }}" {% if request.GET.platform == value %}selected{% endif %}>{{ display }}</option>
+                        <label class="cursor-pointer label justify-start gap-2">
+                            <input type="checkbox" name="platform" value="{{ value }}" class="checkbox checkbox-primary" {% if value in selected_platforms %}checked{% endif %} />
+                            <span class="label-text">{{ display }}</span>
+                        </label>
                     {% endfor %}
-                </select>
+                </div>
+            </div>
+            <div class="form-control mt-4">
+                <label class="label">
+                    <span class="label-text font-bold">Regions</span>
+                </label>
+                <div class="flex flex-wrap gap-4">
+                    {% for value, display in form.regions.field.choices %}
+                        <label class="cursor-pointer label justify-start gap-2">
+                            <input type="checkbox" name="regions" value="{{ value }}" class="checkbox checkbox-primary" {% if value in selected_regions or not selected_regions %}checked{% endif %} />
+                            <span class="label-text">{{ display }}</span>
+                        </label>
+                    {% endfor %}
+                </div>
             </div>
             <div class="form-control mt-4">
                 <label class="label" for="id_sort">
@@ -33,18 +49,14 @@
                     {% endfor %}
                 </select>
             </div>
-            <div class="form-control mt-4">
-                <label class="label cursor-pointer justify-start gap-4">
-                    <input type="checkbox" name="show_legacy" class="toggle toggle-primary" {% if request.GET.show_legacy %}checked{% endif %} />
-                    <span class="label-text">Show "Legacy" games</span>
-                </label>
-            </div>
             <div class="form-control mt-2">
                 <label class="label cursor-pointer justify-start gap-4">
                     <input type="checkbox" name="show_only_platinum" class="toggle toggle-primary" {% if request.GET.show_only_platinum %}checked{% endif %} />
                     <span class="label-text">Show only games with platinum</span>
                 </label>
             </div>
+            <input type="hidden" name="view" value="{{ request.GET.view }}" />
+            <input type="hidden" name="letter" value="{{ request.GET.letter }}" />
             <button type="submit" class="btn btn-primary">Apply Filters</button>
         </form>
         <div class="form-control mb-6">
@@ -59,9 +71,20 @@
                 {% endfor %}
             </div>
         </div>
-        <div id="games-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-2">
-            {% include 'trophies/partials/game_cards.html' %}
+        <div class="flex justify-end mb-4">
+            <button id="view-toggle" class="btn btn-outline btn-primary">
+                {% if view_type == 'list' %}Switch to Grid View{% else %}Switch to List View{% endif %}
+            </button>
         </div>
+        {% if view_type == 'list' %}
+            <div id="games-grid" class="space-y-2">
+                {% include 'trophies/partials/game_list_items.html' %}
+            </div>
+        {% else %}
+            <div id="games-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-2">
+                {% include 'trophies/partials/game_cards.html' %}
+            </div>
+        {% endif %}
         <div id="loading" class="hidden mt-4 text-center">
             <span class="loading loading-spinner loading-lg"></span>
         </div>
@@ -71,4 +94,15 @@
 
 {% block js_scripts %}
     <script src="{% static 'js\games_infinite_scroll.js' %}"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const toggleButton = document.getElementById('view-toggle');
+            toggleButton.addEventListener('click', function() {
+                const currentView = '{{ view_type }}' == 'list' ? 'grid' : 'list';
+                const queryParams = new URLSearchParams(window.location.search);
+                queryParams.set('view', currentView);
+                window.location.search = queryParams.toString();
+            });
+        });
+    </script>
 {% endblock %}
