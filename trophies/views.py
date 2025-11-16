@@ -121,6 +121,7 @@ class GamesListView(ListView):
         context['selected_platforms'] = self.request.GET.getlist('platform')
         context['selected_regions'] = self.request.GET.getlist('regions')
         context['view_type'] = self.request.GET.get('view', 'grid')
+        context['show_only_platinum'] = self.request.GET.get('show_only_platinum', '')
         return context
     
     def get_template_names(self):
