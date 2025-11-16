@@ -33,6 +33,17 @@ def platform_color(game):
         return 'secondary'
 
 @register.filter
+def platform_color_str(platform_str):
+    if platform_str == "PS5":
+        return 'primary'
+    elif platform_str == "PS4":
+        return 'accent'
+    elif platform_str == "PS3":
+        return 'warning'
+    else:
+        return 'secondary'
+
+@register.filter
 def multiply(value, arg):
     try:
         return float(value) * float(arg)

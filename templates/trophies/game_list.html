@@ -4,68 +4,68 @@
 {% block title %}Games Search{% endblock %}
 
 {% block content %}
-    <div>
-        <form id="filter-form" method="get" class="mb-4">
-            <div class="flex flex-row w-full justify-between">
-                <div class="form-control fieldset w-1/3">
-                    <legend class="fieldset-legend text-xl italic">Sort By</legend>
-                    <select name="sort" id="id_sort" class="select select-primary w-7/8 justify-self-center">
-                        {% for value, display in form.sort.field.choices %}
-                            <option value="{{ value }}" {% if request.GET.sort == value %}selected{% endif %}>{{ display }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div class="form-control fieldset w-1/3">
-                    <legend class="fieldset-legend text-xl italic">Platforms</legend>
-                    <div class="flex flex-wrap justify-self-center justify-between bg-base-100 border-2 border-primary rounded-box w-7/8 p-2">
+    <form id="filter-form" method="get" class="mb-4">
+        <div class="flex flex-col lg:flex-row w-full justify-between">
+            <div class="form-control fieldset w-full lg:w-1/3">
+                <legend class="fieldset-legend text-lg lg:text-xl italic">Sort By</legend>
+                <select name="sort" id="id_sort" class="select select-primary w-7/8 justify-self-center">
+                    {% for value, display in form.sort.field.choices %}
+                        <option value="{{ value }}" {% if request.GET.sort == value %}selected{% endif %}>{{ display }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex flex-row justify-center items-center w-full">
+                <div class="form-control fieldset w-full lg:w-1/2">
+                    <legend class="fieldset-legend text-lg lg:text-xl italic">Platforms</legend>
+                    <div class="flex flex-col xl:flex-row gap-2 xl:gap-0  flex-wrap justify-self-center justify-between bg-base-100 border-2 border-primary rounded-box w-7/8 p-2">
                         {% for value, display in form.platform.field.choices %}
                             <label class="cursor-pointer label justify-start gap-2">
                                 <input type="checkbox" name="platform" value="{{ value }}" class="checkbox checkbox-primary" {% if value in selected_platforms %}checked{% endif %} />
-                                <span class="label-text text-base">{{ display }}</span>
+                                <span class="text-sm xl:text-base">{{ display }}</span>
                             </label>
                         {% endfor %}
                     </div>
                 </div>
-                <div class="form-control fieldset w-1/3">
-                    <legend class="fieldset-legend text-xl italic">Regions</legend>
-                    <div class="flex flex-wrap justify-self-center justify-between bg-base-100 border-2 border-primary rounded-box w-7/8 p-2">
+                <div class="form-control fieldset w-full lg:w-1/2">
+                    <legend class="fieldset-legend text-lg lg:text-xl italic">Regions</legend>
+                    <div class="flex flex-col xl:flex-row gap-2 xl:gap-0 flex-wrap justify-self-center justify-between bg-base-100 border-2 border-primary rounded-box w-7/8 p-2">
                         {% for value, display in form.regions.field.choices %}
                             <label class="cursor-pointer label justify-start gap-2">
                                 <input type="checkbox" name="regions" value="{{ value }}" class="checkbox checkbox-primary" {% if value in selected_regions or not selected_regions %}checked{% endif %} />
-                                <span class="text-base">{{ display }}</span>
+                                <span class="text-sm xl:text-base">{{ display }}</span>
                             </label>
                         {% endfor %}
                     </div>
                 </div>
             </div>
+        </div>
 
-            <div class="flex justify-center">
-                <div class="form-control fieldset w-75/100">
-                    <legend class="fieldset-legend text-xl italic">Search By Name</legend>
-                    <div class="flex flex-row justify-self-center gap-4 w-15/16">
-                        <input type="text" name="query" id="id_query" value="{{ request.GET.query }}" class="input input-lg input-primary w-23/24 justify-self-center" placeholder="Enter game name..." />
-                        <button id="submit-btn" type="submit" class="btn btn-lg border-3 shadow-md" disabled>Feel The Power...</button>
-                    </div>
+        <div class="flex justify-center">
+            <div class="form-control fieldset w-full lg:w-75/100">
+                <legend class="fieldset-legend text-lg lg:text-xl italic">Search By Name</legend>
+                <div class="flex flex-col md:flex-row justify-self-center gap-4 w-full md:w-15/16">
+                    <input type="text" name="query" id="id_query" value="{{ request.GET.query }}" class="input input-md md:input-lg input-primary w-23/24 justify-self-center" placeholder="Enter game name..." />
+                    <button id="submit-btn" type="submit" class="btn btn-md md:btn-lg border-3 shadow-md" disabled>Feel The Power...</button>
                 </div>
             </div>
+        </div>
 
-            <input type="hidden" name="view" value="{{ request.GET.view }}" />
-            <input type="hidden" name="letter" value="{{ request.GET.letter }}" />
-        </form>
-    </div>
+        <input type="hidden" name="view" value="{{ request.GET.view }}" />
+        <input type="hidden" name="letter" value="{{ request.GET.letter }}" />
+    </form>
     <div class="divider divider-vertical"></div>
     <div class="form-control fieldset w-full mb-6">
-        <legend class="fieldset-legend text-xl italic">Filter By Letter</legend>
+        <legend class="fieldset-legend text-lg lg:text-xl italic">Filter By Letter</legend>
         <div class="flex flex-row flex-wrap w-full justify-center gap-2 p-1 overflow-x-auto">
             {% for value, display in form.fields.letter.choices %}
-                <a href="?{% query_transform letter=value %}" class="btn btn-md btn-square transition-all duration-200 cursor-pointer flex-shrink-0 {% if request.GET.letter == value %}btn-primary font-bold transform scale-105{% else %}hover:btn-primary{% endif %}">
+                <a href="?{% query_transform letter=value %}" class="btn btn-sm 2xl:btn-md btn-square transition-all duration-200 cursor-pointer flex-shrink-0 {% if request.GET.letter == value %}btn-primary font-bold transform scale-105{% else %}hover:btn-primary{% endif %}">
                     {{ display }}
                 </a>
             {% endfor %}
         </div>
     </div>
     <div class="flex flex-row justify-between">
-        <h1 class="text-4xl text-base-content text-start italic self-end mb-4">Games By 
+        <h1 class="text-md sm:text-lg md:text-2xl lg:text-3xl xl:text-4xl text-base-content text-start italic self-end mb-4">Games By 
             {% with sort_val=request.GET.sort %}
                 {% if sort_val %}
                     {% for value, display in form.sort.field.choices %}
@@ -78,9 +78,9 @@
                 {% endif %}
             {% endwith %}
         </h1>
-        <div class="flex flex-row gap-2 self-end mb-4">
+        <div class="flex flex-row gap-2 self-end mb-4 pr-4">
             <div class="tooltip" data-tip="{% if show_only_platinum == 'on' %}Show All Games{% else %}Show Only Platinums{% endif %}">
-                <button id="platinum-toggle" type="button" class="btn btn-square bg-base-100">
+                <button id="platinum-toggle" type="button" class="btn btn-square btn-sm lg:btn-lg bg-base-100">
                     {% if show_only_platinum == 'on' %}
                         <svg class="justify-self-center self-center" height="20" width="20" version="1.1" id="_x32_" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 512 512" xml:space="preserve" fill="var(--color-trophy-platinum)"><g id="SVGRepo_bgCarrier" stroke-width="0"></g><g id="SVGRepo_tracerCarrier" stroke-linecap="round" stroke-linejoin="round"></g><g id="SVGRepo_iconCarrier"><g> <path class="st0" d="M102.49,0c0,27.414,0,104.166,0,137.062c0,112.391,99.33,156.25,153.51,156.25 c54.18,0,153.51-43.859,153.51-156.25c0-32.896,0-109.648,0-137.062H102.49z M256.289,50.551l-68.164,29.768v98.474l-0.049,19.53 c-0.526-0.112-47.274-10.112-47.274-78.391c0-28.17,0-69.6,0-69.6h60.385L256.289,50.551z"></path> <polygon class="st0" points="315.473,400.717 291.681,367.482 279.791,318.506 256,322.004 232.209,318.506 220.314,367.482 205.347,388.394 196.527,400.476 196.699,400.476 196.527,400.717 "></polygon> <polygon class="st0" points="366.93,432.24 366.93,432 145.07,432 145.07,511.598 145.07,511.76 145.07,511.76 145.07,512 366.93,512 366.93,432.402 366.93,432.24 "></polygon> <path class="st0" d="M511.638,96.668c-0.033-1.268-0.068-2.336-0.068-3.174V45.1h-73.889v38.736h35.152v9.658 c0,1.127,0.037,2.557,0.086,4.258c0.389,13.976,1.303,46.707-21.545,70.203c-5.121,5.266-11.221,9.787-18.219,13.613 c-3.883,17.635-10.109,33.564-18.104,47.814c26.561-6.406,48.026-17.898,64.096-34.422 C513.402,159.734,512.121,113.918,511.638,96.668z"></path> <path class="st0" d="M60.625,167.955c-22.848-23.496-21.934-56.227-21.541-70.203c0.047-1.701,0.082-3.131,0.082-4.258v-9.658 h34.842h0.07l0,0h0.24V45.1H0.43v48.394c0,0.838-0.032,1.906-0.068,3.174c-0.482,17.25-1.76,63.066,32.494,98.293 c16.068,16.524,37.531,28.014,64.092,34.422c-7.996-14.25-14.22-30.182-18.103-47.816C71.846,177.74,65.746,173.221,60.625,167.955 z"></path> </g> </g></svg>
                     {% else %}
@@ -89,7 +89,7 @@
                 </button>
             </div>
             <div class="tooltip" data-tip="{% if view_type == 'list' %}Switch To Grid View{% else %}Switch To List View{% endif %}">
-                <button id="view-toggle" type="button" class="btn btn-square bg-base-100">
+                <button id="view-toggle" type="button" class="btn btn-square btn-sm lg:btn-lg bg-base-100">
                     {% if view_type == 'list' %}
                         <svg xmlns="http://www.w3.org/2000/svg" class="justify-self-center self-center" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--color-base-content)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
                     {% else %}
