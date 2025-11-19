@@ -60,6 +60,9 @@ class ProfileSearchForm(forms.Form):
             ('alpha', 'Alphabetical'),
             ('trophies', 'Total Trophies'),
             ('plats', 'Total Plats'),
+            ('games', 'Most Games Played'),
+            ('completes', 'Most 100% Completions'),
+            ('avg_progress', 'Highest Avg. Progress'),
         ],
         required=False,
         label='Sort By'

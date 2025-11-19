@@ -34,6 +34,25 @@
 
                 <div class="divider divider-vertical my-0"></div>
 
+                <div class="flex flex-row gap-2 items-center">
+                    <div class="flex flex-col gap-1 items-center">
+                        <h3 class="text-xs text-base-content/70 hover:scale-105 italic">Games:</h3>
+                        <h3 class="text-sm text-warning font-bold hover:scale-105">{{ profile.total_games }}</h3>
+                    </div>
+                    <div class="divider divider-horizontal mx-0"></div>
+                    <div class="flex flex-col gap-1 items-center">
+                        <h3 class="text-xs text-base-content/70 hover:scale-105 italic">100%'s:</h3>
+                        <h3 class="text-sm text-success font-bold hover:scale-105">{{ profile.total_completes }}</h3>
+                    </div>
+                    <div class="divider divider-horizontal mx-0"></div>
+                    <div class="flex flex-col gap-1 items-center">
+                        <h3 class="text-xs text-base-content/70 hover:scale-105 italic">Avg. %</h3>
+                        <h3 class="text-sm text-base-content font-bold hover:scale-105">{{ profile.avg_progress|floatformat:0 }}%</h3>
+                    </div>
+                </div>
+
+                <div class="divider divider-vertical my-0"></div>
+
                 {% with profile.recent_platinum.0.trophy as recent %}
                     {% if recent %}
                         <div class="flex flex-col items-start gap-2 w-full">

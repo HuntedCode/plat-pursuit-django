@@ -3,10 +3,10 @@ import logging
 from django.shortcuts import render
 from django.http import StreamingHttpResponse, JsonResponse, HttpResponseRedirect
 from django.views.generic import ListView, View
-from django.db.models import Q, F, Prefetch, OuterRef, Subquery, Value, IntegerField, FloatField, Count
+from django.db.models import Q, F, Prefetch, OuterRef, Subquery, Value, IntegerField, FloatField, Count, Avg
 from django.db.models.functions import Coalesce
 from django.urls import reverse_lazy
-from .models import Game, Trophy, Profile, EarnedTrophy
+from .models import Game, Trophy, Profile, EarnedTrophy, ProfileGame
 from .forms import GameSearchForm, TrophySearchForm, ProfileSearchForm
 from .utils import redis_client
 
@@ -256,13 +256,20 @@ class ProfilesListView(ListView):
             
             earned_qs = EarnedTrophy.objects.filter(profile=OuterRef('pk'), earned=True)
             plat_qs = earned_qs.filter(trophy__trophy_type='platinum')
+            game_qs = ProfileGame.objects.filter(profile=OuterRef('pk'))
+            complete_qs = game_qs.filter(progress=100)
             if filter_shovelware:
                 earned_qs = earned_qs.exclude(trophy__game__is_shovelware=True)
                 plat_qs = plat_qs.exclude(trophy__game__is_shovelware=True)
+                game_qs = game_qs.exclude(game__is_shovelware=True)
+                complete_qs = complete_qs.exclude(game__is_shovelware=True)
             
             qs = qs.annotate(
                 total_trophies=Coalesce(Subquery(earned_qs.values('profile').annotate(count=Count('id')).values('count')[:1]), 0),
                 total_plats=Coalesce(Subquery(plat_qs.values('profile').annotate(count=Count('id')).values('count')[:1]), 0),
+                total_games=Coalesce(Subquery(game_qs.values('profile').annotate(count=Count('id')).values('count')[:1]), 0),
+                total_completes=Coalesce(Subquery(complete_qs.values('profile').annotate(count=Count('id')).values('count')[:1]), 0),
+                avg_progress=Coalesce(Subquery(game_qs.values('profile').annotate(avg=Avg('progress')).values('avg')[:1]), 0.0),
             )
 
             recent_plat_qs = EarnedTrophy.objects.filter(earned=True, trophy__trophy_type='platinum')
@@ -275,6 +282,12 @@ class ProfilesListView(ListView):
                 order = ['-total_trophies', 'psn_username']
             elif sort_val == 'plats':
                 order = ['-total_plats', 'psn_username']
+            elif sort_val == 'games':
+                order = ['-total_games', 'psn_username']
+            elif sort_val == 'completes':
+                order = ['-total_completes', 'psn_username']
+            elif sort_val == 'avg_progress':
+                order = ['-avg_progress', 'psn_username']
 
         return qs.order_by(*order)
     
