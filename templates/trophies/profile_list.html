@@ -1,0 +1,68 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load query_tags %}
+{% block title %}Games Search{% endblock %}
+
+{% block content %}
+    {% include 'partials/breadcrumb.html' with items=breadcrumb %}
+    
+    <form id="filter-form" method="get" class="mb-4">
+        <div class="flex flex-col lg:flex-row w-full justify-between">
+            <div class="form-control fieldset w-full lg:w-1/3">
+                <legend class="fieldset-legend text-lg lg:text-xl italic">Sort By</legend>
+                <select name="sort" id="id_sort" class="select select-primary w-7/8 justify-self-center">
+                    {% for value, display in form.sort.field.choices %}
+                        <option value="{{ value }}" {% if request.GET.sort == value %}selected{% endif %}>{{ display }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+        <div class="flex justify-center">
+            <div class="form-control fieldset w-full lg:w-75/100">
+                <legend class="fieldset-legend text-lg lg:text-xl italic">Search By Name</legend>
+                <div class="flex flex-col md:flex-row justify-self-center gap-4 w-full md:w-15/16">
+                    <input type="text" name="query" id="id_query" value="{{ request.GET.query }}" class="input input-md md:input-lg input-primary w-23/24 justify-self-center" placeholder="Enter game name..." />
+                    <button id="submit-btn" type="submit" class="btn btn-md md:btn-lg border-3 shadow-md" disabled>Feel The Power...</button>
+                </div>
+            </div>
+        </div>
+    </form>
+    <div class="divider divider-vertical"></div>
+    <div class="form-control fieldset w-full mb-6">
+        <legend class="fieldset-legend text-lg lg:text-xl italic">Filter By Letter</legend>
+        <div class="flex flex-row flex-wrap w-full justify-center gap-2 p-1 overflow-x-auto">
+            {% for value, display in form.fields.letter.choices %}
+                <a href="?{% query_transform letter=value %}" class="btn btn-sm 2xl:btn-md btn-square transition-all duration-200 cursor-pointer flex-shrink-0 {% if request.GET.letter == value %}btn-primary font-bold transform scale-105{% else %}hover:btn-primary{% endif %}">
+                    {{ display }}
+                </a>
+            {% endfor %}
+        </div>
+    </div>
+    <div class="flex flex-row justify-between">
+        <h1 class="text-md sm:text-lg md:text-2xl lg:text-3xl xl:text-4xl text-base-content text-start italic self-end mb-4">Games By 
+            {% with sort_val=request.GET.sort %}
+                {% if sort_val %}
+                    {% for value, display in form.sort.field.choices %}
+                        {% if value == sort_val %}
+                            {{ display }}
+                        {% endif %}
+                    {% endfor %}
+                {% else %}
+                    Alphabetical
+                {% endif %}
+            {% endwith %}
+        </h1>
+    </div>
+    <div id="items-grid" class="space-y-2">
+        {% include 'trophies/partials/profile_cards.html' %}
+    </div>
+    <div id="loading" class="hidden mt-4 text-center">
+        <span class="loading loading-spinner loading-lg"></span>
+    </div>
+    <div id="sentinel" class="h-1"></div>
+{% endblock %}
+
+{% block js_scripts %}
+    <script src="{% static 'js\infinite_scroll.js' %}"></script>
+    <script src="{% static 'js\submit_shimmer.js' %}"></script>
+{% endblock %}
