@@ -206,7 +206,7 @@ class Command(BaseCommand):
             #for i in range(5):
             #    title_ids.append('CUSA07402_00')
             platform = PlatformType.PS3
-            self.user_trophies(user, np_comm_id, platform)
+            # self.user_trophies(user, np_comm_id, platform)
             #self.user_trophies_include_progress(user, np_comm_id, platform)
             # self.user_trophy_titles_for_title(user, title_ids)
 
@@ -214,6 +214,8 @@ class Command(BaseCommand):
             #print(game_title.np_communication_id)
             #pprint(game_title.get_details())
             #pprint(game_title.trophies())
+
+            print(user.get_region())
 
             self.stdout.write(
                 self.style.SUCCESS(

@@ -72,6 +72,10 @@ class PSNManager:
         cls.assign_job('check_profile_health', args=[], profile_id=profile.id)
     
     @classmethod
+    def sync_profile_data(cls, profile: Profile):
+        cls.assign_job('sync_profile_data', args=[], profile_id=profile.id)
+    
+    @classmethod
     def sync_games_only(cls, profile: Profile):
         cls.assign_job('sync_games_only', args=[], profile_id=profile.id, priority_override='high_priority')
     

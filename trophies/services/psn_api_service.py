@@ -32,6 +32,15 @@ class PsnApiService:
         profile.last_synced = timezone.now()
         profile.save()
         return profile
+    
+    @classmethod 
+    def update_profile_region(cls, profile: Profile, region_data) -> Profile:
+        """Update profile with region data from PSN."""
+        profile.country = region_data.name if region_data.name else ''
+        profile.country_code = region_data.alpha_2 if region_data.alpha_2 else ''
+        profile.flag = region_data.flag if region_data.flag else ''
+        profile.save(update_fields=['country', 'country_code', 'flag'])
+        return profile
 
     @classmethod
     def create_or_update_game(cls, trophy_title: TrophyTitle):

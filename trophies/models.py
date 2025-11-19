@@ -35,6 +35,9 @@ class Profile(models.Model):
     progress = models.IntegerField(default=0)
     tier = models.IntegerField(default=0)
     earned_trophy_summary = models.JSONField(default=dict, blank=True)
+    country = models.CharField(max_length=250, blank=True, null=True)
+    country_code = models.CharField(max_length=5, blank=True, null=True)
+    flag = models.CharField(max_length=5, blank=True, null=True)
     extra_data = models.JSONField(default=dict, blank=True)
     last_synced = models.DateTimeField(default=timezone.now)
     sync_tier = models.CharField(

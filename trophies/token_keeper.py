@@ -297,6 +297,8 @@ class TokenKeeper:
             self._record_call(instance.token)
             if endpoint == "get_profile_legacy":
                 data = user.get_profile_legacy()
+            elif endpoint == "get_region":
+                data = user.get_region()
             elif endpoint == "trophy_titles":
                 data = list(user.trophy_titles(**kwargs))
             elif endpoint == "title_stats":
@@ -366,6 +368,8 @@ class TokenKeeper:
 
         legacy = self._execute_api_call(self._get_instance_for_job(job_type), profile, 'get_profile_legacy')
         PsnApiService.update_profile_from_legacy(profile, legacy)
+        region = self._execute_api_call(self._get_instance_for_job(job_type), profile, 'get_region')
+        PsnApiService.update_profile_region(profile, region)
 
     def _job_sync_trophy_titles(self, profile_id: int):
         try:
