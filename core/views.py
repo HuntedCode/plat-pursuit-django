@@ -1,11 +1,9 @@
 import json
-from django.views.generic import TemplateView, DetailView
+from django.views.generic import TemplateView
 from django.urls import reverse_lazy
 from django.core.cache import cache
 from django.utils import timezone
-from django.utils.text import slugify
 from datetime import timedelta
-from trophies.models import Profile
 from .services.stats import compute_community_stats
 from .services.featured import get_featured_games
 from .services.latest_platinums import get_latest_platinums
@@ -40,7 +38,7 @@ class IndexView(TemplateView):
         now_utc = timezone.now()
 
         # Breadcrumb
-        context['items'] = [
+        context['breadcrumb'] = [
             {'text': 'Home', 'url': reverse_lazy('home')},
             {'text': 'Dashboard'},
         ]

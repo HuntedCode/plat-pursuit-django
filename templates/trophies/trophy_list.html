@@ -4,6 +4,8 @@
 {% block title %}Trophies Search{% endblock %}
 
 {% block content %}
+    {% include 'partials/breadcrumb.html' with items=breadcrumb %}
+    
     <form id="filter-form" method="get">
         <div class="flex flex-col lg:flex-row w-full justify-between">
             <div class="form-control fieldset w-full lg:w-1/3">

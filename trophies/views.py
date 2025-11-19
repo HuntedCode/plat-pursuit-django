@@ -5,6 +5,7 @@ from django.http import StreamingHttpResponse, JsonResponse
 from django.views.generic import ListView
 from django.db.models import Q, Prefetch, OuterRef, Subquery, Value, IntegerField, FloatField
 from django.db.models.functions import Coalesce
+from django.urls import reverse_lazy
 from .models import Game, Trophy
 from .forms import GameSearchForm, TrophySearchForm
 from .utils import redis_client
@@ -120,6 +121,12 @@ class GamesListView(ListView):
     
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
+        # Breadcrumb
+        context['breadcrumb'] = [
+            {'text': 'Home', 'url': reverse_lazy('home')},
+            {'text': 'Games'},
+        ]
+
         context['form'] = GameSearchForm(self.request.GET)
         context['selected_platforms'] = self.request.GET.getlist('platform')
         context['selected_regions'] = self.request.GET.getlist('regions')
@@ -207,6 +214,12 @@ class TrophiesListView(ListView):
     
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
+        # Breadcrumb
+        context['breadcrumb'] = [
+            {'text': 'Home', 'url': reverse_lazy('home')},
+            {'text': 'Trophies'},
+        ]
+
         context['form'] = TrophySearchForm(self.request.GET)
         context['selected_platforms'] = self.request.GET.getlist('platform')
         context['selected_types'] = self.request.GET.getlist('type')

@@ -1,7 +1,7 @@
 {% extends 'base.html' %}
 {% block title %}Dashboard{% endblock %}
 {% block content %}
-    {% include 'partials/breadcrumb.html' with items=items %}
+    {% include 'partials/breadcrumb.html' with items=breadcrumb %}
     <div class="space-y-8">
         <!-- Community Stats Page Header -->
         {% include 'partials/index/community-stats.html' with items=communityStats %}
