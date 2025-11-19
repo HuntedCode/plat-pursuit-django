@@ -134,7 +134,7 @@ class Game(models.Model):
             self.save(update_fields=['title_ids'])
     
     def update_is_shovelware(self, platinum_earn_rate: str):
-        self.is_shovelware = platinum_earn_rate >= SHOVELWARE_THRESHOLD
+        self.is_shovelware = float(platinum_earn_rate) >= SHOVELWARE_THRESHOLD
         self.save(update_fields=['is_shovelware'])
 
 
