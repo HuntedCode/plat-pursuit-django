@@ -192,20 +192,21 @@ class Command(BaseCommand):
                 )
             )
 
+            # print(user.friendship())
             # Displays Key/Value combos for each endpoint. Comment out what you don't want to use.
             # self.user_get_presence(user) # user.get_presence()
             # self.user_profile(user)
             # self.user_profile_legacy(user)
-            self.user_title_stats(user)
+            # self.user_title_stats(user)
             # self.user_trophy_summary(user)
             # self.user_trophy_titles(user)
-            np_comm_id = "NPWR41750_00"
-            title_ids = ["PPSA14431_00"]
+            np_comm_id = "NPWR00440_00"
+            # title_ids = ["NPWR43893_00"]
             #title_ids = []
             #for i in range(5):
             #    title_ids.append('CUSA07402_00')
-            platform = PlatformType.PS5
-            # self.user_trophies(user, np_comm_id, platform)
+            platform = PlatformType.PS3
+            self.user_trophies(user, np_comm_id, platform)
             #self.user_trophies_include_progress(user, np_comm_id, platform)
             # self.user_trophy_titles_for_title(user, title_ids)
 

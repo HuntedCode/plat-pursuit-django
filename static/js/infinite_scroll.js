@@ -1,5 +1,5 @@
 document.addEventListener('DOMContentLoaded', function() {
-    const grid = document.getElementById('games-grid');
+    const grid = document.getElementById('items-grid');
     const loading = document.getElementById('loading');
     const sentinel = document.getElementById('sentinel');
     if (!grid || !loading || !sentinel) return;
@@ -32,7 +32,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 nextPageUrl = `${baseUrl}?page=${page}&${queryParams.toString()}`;
             }
         } catch (error) {
-            console.error('Error loading more games:', error);
+            console.error('Error loading more items:', error);
         } finally {
             isLoading = false;
             loading.classList.add('hidden');

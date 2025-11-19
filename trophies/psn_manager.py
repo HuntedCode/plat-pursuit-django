@@ -5,7 +5,7 @@ import json
 import uuid
 from dotenv import load_dotenv
 from celery import current_app, Task
-from .models import Profile
+from .models import Profile, Game
 from .utils import redis_client
 
 load_dotenv()
@@ -78,3 +78,8 @@ class PSNManager:
     @classmethod
     def sync_title_id(cls, profile: Profile, title_id_str: str, image_url: str):
         cls.assign_job('sync_title_id', args=[title_id_str, image_url], profile_id=profile.id, priority_override='high_priority')
+
+    @classmethod
+    def sync_profile_game_trophies(cls, profile: Profile, game: Game):
+        args = [game.np_communication_id, game.title_platform[0] if not game.title_platform[0] == 'PSPC' else game.title_platform[1]]
+        PSNManager.assign_job('sync_trophies', args, profile.id, priority_override='medium_priority')

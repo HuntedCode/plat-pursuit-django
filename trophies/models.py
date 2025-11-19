@@ -2,7 +2,7 @@ from django.db import models
 from django.utils import timezone
 from users.models import CustomUser
 from django.core.validators import RegexValidator
-from trophies.utils import count_unique_game_groups, TITLE_STATS_SUPPORTED_PLATFORMS, NA_REGION_CODES, EU_REGION_CODES, JP_REGION_CODES, AS_REGION_CODES
+from trophies.utils import count_unique_game_groups, TITLE_STATS_SUPPORTED_PLATFORMS, NA_REGION_CODES, EU_REGION_CODES, JP_REGION_CODES, AS_REGION_CODES, SHOVELWARE_THRESHOLD
 
 
 # Create your models here.
@@ -97,6 +97,7 @@ class Game(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     played_count = models.PositiveIntegerField(default=0, help_text="Denormalized count of profiles that have played the game (PP-specific).")
     is_regional = models.BooleanField(default=False)
+    is_shovelware = models.BooleanField(default=False)
 
     class Meta:
         indexes = [
@@ -131,6 +132,11 @@ class Game(models.Model):
         if title_id and title_id not in self.title_ids:
             self.title_ids.append(title_id)
             self.save(update_fields=['title_ids'])
+    
+    def update_is_shovelware(self, platinum_earn_rate: str):
+        self.is_shovelware = platinum_earn_rate >= SHOVELWARE_THRESHOLD
+        self.save(update_fields=['is_shovelware'])
+
 
     def __str__(self):
         return self.title_name
@@ -266,6 +272,20 @@ class Trophy(models.Model):
             return 'Very Rare'
         else:
             return 'Ultra Rare'
+
+    def get_most_recent_earner(self):
+        recent_entry = self.earned_trophy_entries.filter(earned=True).order_by('-earned_date_time').first()
+        if recent_entry:
+            return recent_entry.profile.psn_username
+        return None
+
+    def increment_earned_count(self):
+        earned_count = self.earned_count
+        earned_count = earned_count + 1
+        earn_rate = earned_count / self.game.played_count if self.game.played_count > 0 else 0.0
+        self.earned_count = earned_count
+        self.earn_rate = earn_rate
+        self.save(update_fields=['earned_count', 'earn_rate'])
 
     def __str__(self):
         return f"{self.trophy_name} ({self.game.title_name})"

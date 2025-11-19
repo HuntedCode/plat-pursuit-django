@@ -6,7 +6,7 @@ from django.views.generic import ListView
 from django.db.models import Q, Prefetch, OuterRef, Subquery, Value, IntegerField, FloatField
 from django.db.models.functions import Coalesce
 from .models import Game, Trophy
-from .forms import GameSearchForm
+from .forms import GameSearchForm, TrophySearchForm
 from .utils import redis_client
 
 logger = logging.getLogger('psn_api')
@@ -71,6 +71,7 @@ class GamesListView(ListView):
             regions = form.cleaned_data.get('regions')
             letter = form.cleaned_data.get('letter')
             show_only_platinum = form.cleaned_data.get('show_only_platinum')
+            filter_shovelware = form.cleaned_data.get('filter_shovelware')
             sort_val = form.cleaned_data.get('sort')
 
             if query:
@@ -96,6 +97,8 @@ class GamesListView(ListView):
             
             if show_only_platinum:
                 qs = qs.filter(trophies__trophy_type='platinum').distinct()
+            if filter_shovelware:
+                qs = qs.filter(is_shovelware=False)
 
             if sort_val == 'played':
                 order = ['-played_count', 'title_name']
@@ -122,6 +125,7 @@ class GamesListView(ListView):
         context['selected_regions'] = self.request.GET.getlist('regions')
         context['view_type'] = self.request.GET.get('view', 'grid')
         context['show_only_platinum'] = self.request.GET.get('show_only_platinum', '')
+        context['filter_shovelware'] = self.request.GET.get('filter_shovelware', '')
         return context
     
     def get_template_names(self):
@@ -131,4 +135,88 @@ class GamesListView(ListView):
                 return ['trophies/partials/game_list_items.html']
             else:
                 return ['trophies/partials/game_cards.html']
+        return super().get_template_names()
+    
+class TrophiesListView(ListView):
+    model = Trophy
+    template_name = 'trophies/trophy_list.html'
+    paginate_by = 50
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        form = TrophySearchForm(self.request.GET)
+        order = ['trophy_name']
+
+        if form.is_valid():
+            query = form.cleaned_data.get('query')
+            platforms = form.cleaned_data.get('platform')
+            types = form.cleaned_data.get('type')
+            regions = form.cleaned_data.get('region')
+            psn_rarity = form.cleaned_data.get('psn_rarity')
+            show_only_platinum = form.cleaned_data.get('show_only_platinum')
+            filter_shovelware = form.cleaned_data.get('filter_shovelware')
+
+            sort_val = form.cleaned_data.get('sort')
+
+            if query:
+                qs = qs.filter(Q(trophy_name__icontains=query))
+            if platforms:
+                platform_filter = Q()
+                for plat in platforms:
+                    platform_filter |= Q(game__title_platform__contains=plat)
+                qs = qs.filter(platform_filter)
+            if types:
+                types_filter = Q()
+                for type in types:
+                    types_filter |= Q(trophy_type=type)
+                qs = qs.filter(types_filter)
+            if regions:
+                region_filter = Q()
+                for r in regions:
+                    if r == 'global':
+                        region_filter |= Q(game__is_regional=False)
+                    else:
+                        region_filter |= Q(game__is_regional=True, game__region__contains=r)
+                qs = qs.filter(region_filter)
+            if psn_rarity:
+                psn_rarity_filter = Q()
+                for rarity in psn_rarity:
+                    psn_rarity_filter |= Q(trophy_rarity=rarity)
+                qs = qs.filter(psn_rarity_filter)
+
+            if show_only_platinum:
+                qs = qs.filter(game__trophies__trophy_type='platinum').distinct()
+            if filter_shovelware:
+                qs = qs.filter(game__is_shovelware=False)
+
+
+            if sort_val == 'earned':
+                order = ['-earned_count', 'trophy_name']
+            elif sort_val == 'earned_inv':
+                order = ['earned_count', 'trophy_name']
+            elif sort_val == 'rate':
+                order = ['-earn_rate', 'trophy_name']
+            elif sort_val == 'rate_inv':
+                order = ['earn_rate', 'trophy_name']
+            elif sort_val == 'psn_rate':
+                order = ['-trophy_earn_rate', 'trophy_name']
+            elif sort_val == 'psn_rate_inv':
+                order = ['trophy_earn_rate', 'trophy_name']
+
+        return qs.order_by(*order)
+    
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['form'] = TrophySearchForm(self.request.GET)
+        context['selected_platforms'] = self.request.GET.getlist('platform')
+        context['selected_types'] = self.request.GET.getlist('type')
+        context['selected_regions'] = self.request.GET.getlist('region')
+        context['selected_psn_rarity'] = self.request.GET.getlist('psn_rarity')
+        context['show_only_platinum'] = self.request.GET.get('show_only_platinum', '')
+        context['filter_shovelware'] = self.request.GET.get('filter_shovelware', '')
+        return context
+    
+    def get_template_names(self):
+        if self.request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return ['trophies/partials/trophy_list_items.html']
         return super().get_template_names()

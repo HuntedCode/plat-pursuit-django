@@ -44,8 +44,31 @@ def platform_color_str(platform_str):
         return 'secondary'
 
 @register.filter
+def trophy_color(trophy):
+    type = trophy.trophy_type
+    if type == 'bronze':
+        return 'trophy-bronze'
+    elif type == 'silver':
+        return 'trophy-silver'
+    elif type == 'gold':
+        return 'trophy-gold'
+    elif type == 'platinum':
+        return 'trophy-platinum'
+
+@register.filter
 def multiply(value, arg):
     try:
         return float(value) * float(arg)
     except:
         return ''
+
+@register.filter
+def psn_rarity(rarity_int):
+    if rarity_int == 0:
+        return 'Ultra Rare'
+    elif rarity_int == 1:
+        return 'Rare'
+    elif rarity_int == 2:
+        return 'Uncommon'
+    elif rarity_int == 3:
+        return 'Common'

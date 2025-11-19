@@ -85,11 +85,11 @@ class GameAdmin(admin.ModelAdmin):
         "region",
         "is_regional",
         "title_ids",
-        "has_trophy_groups",
         "total_defined_trophies",
         "played_count",
+        "is_shovelware",
     )
-    list_filter = ("has_trophy_groups", "is_regional", RegionListFilter)
+    list_filter = ("has_trophy_groups", "is_regional", RegionListFilter, 'is_shovelware')
     search_fields = ("title_name", "np_communication_id")
     ordering = ("title_name",)
     fieldsets = (
@@ -106,6 +106,7 @@ class GameAdmin(admin.ModelAdmin):
                     "title_ids",
                     "title_detail",
                     "title_image",
+                    "is_shovelware",
                 )
             },
         ),
@@ -141,6 +142,7 @@ class ProfileGameAdmin(admin.ModelAdmin):
     list_display = (
         "profile",
         "game",
+        "game__played_count",
         "progress",
         "play_duration",
         "last_played_date_time",
@@ -170,7 +172,7 @@ class TrophyAdmin(admin.ModelAdmin):
     fieldsets = (
         (
             "Core Info",
-            {"fields": ("trophy_id", "trophy_name", "trophy_type", "trophy_detail")},
+            {"fields": ("trophy_id", "trophy_name", "trophy_type", "game", "trophy_detail")},
         ),
         (
             "Rewards",
@@ -211,8 +213,7 @@ class EarnedTrophyAdmin(admin.ModelAdmin):
         "trophy",
         "trophy__trophy_type",
         "earned",
-        "trophy_hidden",
-        "progress_rate",
+        "trophy__earned_count",
         "earned_date_time",
         "last_updated",
     )

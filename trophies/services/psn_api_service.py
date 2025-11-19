@@ -37,11 +37,11 @@ class PsnApiService:
     def create_or_update_game(cls, trophy_title: TrophyTitle):
         """Create or update Game model from PSN trophy title data."""
         game, created = Game.objects.get_or_create(
-            np_communication_id=trophy_title.np_communication_id,
+            np_communication_id=trophy_title.np_communication_id.strip(),
             defaults={
                 "np_service_name": trophy_title.np_service_name,
                 "trophy_set_version": trophy_title.trophy_set_version,
-                "title_name": trophy_title.title_name,
+                "title_name": trophy_title.title_name.strip(),
                 "title_detail": trophy_title.title_detail,
                 "title_icon_url": trophy_title.title_icon_url,
                 "title_platform": [platform.value for platform in trophy_title.title_platform],
@@ -162,7 +162,7 @@ class PsnApiService:
         return profile_game, created
 
     @classmethod
-    def create_or_update_trophy_from_trophy_data(cls, game, trophy_data):
+    def create_or_update_trophy_from_trophy_data(cls, game: Game, trophy_data):
         """Create or update Trophy model from PSN trophy data."""
         trophy_rarity = getattr(trophy_data, 'trophy_rarity', None) or None
         trophy_earn_rate = getattr(trophy_data, 'trophy_earn_rate', 0.0) or 0.0
@@ -173,7 +173,7 @@ class PsnApiService:
             defaults={
                 "trophy_set_version": trophy_data.trophy_set_version,
                 "trophy_type": trophy_data.trophy_type.value,
-                "trophy_name": trophy_data.trophy_name,
+                "trophy_name": trophy_data.trophy_name.strip(),
                 "trophy_detail": trophy_data.trophy_detail,
                 "trophy_icon_url": trophy_data.trophy_icon_url,
                 "trophy_group_id": trophy_data.trophy_group_id,
@@ -189,7 +189,7 @@ class PsnApiService:
         if not created:
             trophy.trophy_set_version = trophy_data.trophy_set_version
             trophy.trophy_type = trophy_data.trophy_type.value
-            trophy.trophy_name = trophy_data.trophy_name
+            trophy.trophy_name = trophy_data.trophy_name.strip()
             trophy.trophy_detail = trophy_data.trophy_detail
             trophy.trophy_icon_url = trophy_data.trophy_icon_url
             trophy.trophy_group_id = trophy_data.trophy_group_id
@@ -199,6 +199,9 @@ class PsnApiService:
             trophy.trophy_rarity = trophy_data.trophy_rarity.value if trophy_data.trophy_rarity else ''
             trophy.trophy_earn_rate = trophy_data.trophy_earn_rate if trophy_data.trophy_earn_rate else 0.0
             trophy.save()
+        
+        if trophy.trophy_type == 'platinum':
+            game.update_is_shovelware(trophy.trophy_earn_rate)
         return trophy, created
 
     @classmethod
@@ -219,6 +222,12 @@ class PsnApiService:
             },
         )
 
+        logger.info(f"Syncing trophy - {trophy.trophy_name} for {profile.psn_username} - Created: {created} | Current Earned: {earned_trophy.earned} | Data Earned: {trophy_data.earned}")
+
+        if (created and trophy_data.earned == True) or ((not created) and earned_trophy.earned == False and trophy_data.earned == True):
+            logger.info(f"Incrementing trophy {trophy.trophy_name} earned count.")
+            trophy.increment_earned_count()
+
         if not created:
             earned_trophy.earned = trophy_data.earned
             earned_trophy.trophy_hidden = trophy_data.trophy_hidden
@@ -228,12 +237,6 @@ class PsnApiService:
             earned_trophy.earned_date_time = trophy_data.earned_date_time
             earned_trophy.save()
 
-        if (created and trophy_data.earned == True) or (not created and earned_trophy.earned == False and trophy_data.earned == True):
-            trophy.earned_count = F('earned_count') + 1
-            trophy.save()
-            trophy.refresh_from_db()
-            trophy.earn_rate = trophy.earned_count / trophy.game.played_count if trophy.game.played_count > 0 else 0.0
-            trophy.save()
         return earned_trophy, created
     
     @classmethod

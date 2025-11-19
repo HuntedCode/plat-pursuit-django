@@ -18,12 +18,13 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import path
 from core.views import IndexView
-from trophies.views import GamesListView, monitoring_dashboard, token_stats, token_stats_sse
+from trophies.views import GamesListView, TrophiesListView, monitoring_dashboard, token_stats, token_stats_sse
 
 urlpatterns = [
     path("admin/", admin.site.urls),
     path("", IndexView.as_view(), name="home"),
     path('games/', GamesListView.as_view(), name='games_list'),
+    path('trophies/', TrophiesListView.as_view(), name='trophies_list'),
 
     path('api/token-stats/', token_stats, name='token-stats'),
     path('api/token-stats/sse/', token_stats_sse, name='token-stats-sse'),
