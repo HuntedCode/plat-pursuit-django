@@ -1,13 +1,13 @@
 import json
 import logging
 from django.shortcuts import render
-from django.http import StreamingHttpResponse, JsonResponse
-from django.views.generic import ListView
-from django.db.models import Q, Prefetch, OuterRef, Subquery, Value, IntegerField, FloatField
+from django.http import StreamingHttpResponse, JsonResponse, HttpResponseRedirect
+from django.views.generic import ListView, View
+from django.db.models import Q, F, Prefetch, OuterRef, Subquery, Value, IntegerField, FloatField, Count
 from django.db.models.functions import Coalesce
 from django.urls import reverse_lazy
-from .models import Game, Trophy
-from .forms import GameSearchForm, TrophySearchForm
+from .models import Game, Trophy, Profile, EarnedTrophy
+from .forms import GameSearchForm, TrophySearchForm, ProfileSearchForm
 from .utils import redis_client
 
 logger = logging.getLogger('psn_api')
@@ -162,7 +162,6 @@ class TrophiesListView(ListView):
             psn_rarity = form.cleaned_data.get('psn_rarity')
             show_only_platinum = form.cleaned_data.get('show_only_platinum')
             filter_shovelware = form.cleaned_data.get('filter_shovelware')
-
             sort_val = form.cleaned_data.get('sort')
 
             if query:
@@ -233,3 +232,79 @@ class TrophiesListView(ListView):
         if self.request.headers.get('X-Requested-With') == 'XMLHttpRequest':
             return ['trophies/partials/trophy_list_items.html']
         return super().get_template_names()
+    
+class ProfilesListView(ListView):
+    model = Profile
+    template_name = 'trophies/profile_list.html'
+    paginate_by = 50
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        form = ProfileSearchForm(self.request.GET)
+        order = ['psn_username']
+
+        if form.is_valid():
+            query = form.cleaned_data.get('query')
+            country = form.cleaned_data.get('country')
+            filter_shovelware = form.cleaned_data.get('filter_shovelware')
+            sort_val = form.cleaned_data.get('sort')
+
+            if query:
+                qs = qs.filter(Q(psn_username__icontains=query))
+            if country:
+                qs = qs.filter(country_code=country)
+            
+            earned_qs = EarnedTrophy.objects.filter(profile=OuterRef('pk'), earned=True)
+            plat_qs = earned_qs.filter(trophy__trophy_type='platinum')
+            if filter_shovelware:
+                earned_qs = earned_qs.exclude(trophy__game__is_shovelware=True)
+                plat_qs = plat_qs.exclude(trophy__game__is_shovelware=True)
+            
+            qs = qs.annotate(
+                total_trophies=Coalesce(Subquery(earned_qs.values('profile').annotate(count=Count('id')).values('count')[:1]), 0),
+                total_plats=Coalesce(Subquery(plat_qs.values('profile').annotate(count=Count('id')).values('count')[:1]), 0),
+            )
+
+            recent_plat_qs = EarnedTrophy.objects.filter(earned=True, trophy__trophy_type='platinum')
+            if filter_shovelware:
+                recent_plat_qs = recent_plat_qs.exclude(trophy__game__is_shovelware=True)
+            recent_plat_qs = recent_plat_qs.order_by(F('earned_date_time').desc(nulls_last=True))
+            qs = qs.prefetch_related(Prefetch('earned_trophy_entries', queryset=recent_plat_qs, to_attr='recent_platinum'))
+
+            if sort_val == 'trophies':
+                order = ['-total_trophies', 'psn_username']
+            elif sort_val == 'plats':
+                order = ['-total_plats', 'psn_username']
+
+        return qs.order_by(*order)
+    
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        # Breadcrumb
+        context['breadcrumb'] = [
+            {'text': 'Home', 'url': reverse_lazy('home')},
+            {'text': 'Profiles'},
+        ]
+
+        context['form'] = ProfileSearchForm(self.request.GET)
+        context['filter_shovelware'] = self.request.GET.get('filter_shovelware', '')
+        return context
+    
+    def get_template_names(self):
+        if self.request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return ['trophies/partials/profile_cards.html']
+        return super().get_template_names()
+    
+class SearchView(View):
+    def get(self, request, *args, **kwargs):
+        search_type = request.GET.get('type')
+        query = request.GET.get('query', '')
+
+        if search_type == 'game':
+            return HttpResponseRedirect(reverse_lazy('games_list') + f"?query={query}")
+        elif search_type == 'trophy':
+            return HttpResponseRedirect(reverse_lazy('trophies_list') + f"?query={query}")
+        elif search_type == 'user':
+            return HttpResponseRedirect(reverse_lazy('profiles_list') + f"?query={query}")
+        else:
+            return HttpResponseRedirect(reverse_lazy('home'))

@@ -1,4 +1,8 @@
+import logging
 from django import forms
+from trophies.models import Profile
+
+logger = logging.getLogger('psn_api')
 
 class GameSearchForm(forms.Form):
     query = forms.CharField(required=False, label='Search by name')
@@ -46,3 +50,26 @@ class TrophySearchForm(forms.Form):
         required=False,
         label='Sort By'
     )
+
+class ProfileSearchForm(forms.Form):
+    query = forms.CharField(required=False, label='Search by name')
+    country = forms.ChoiceField(choices=[('', 'All Countries')], required=False, label='Country')
+    filter_shovelware = forms.BooleanField(required=False, label='Filter out shovelware')
+    sort = forms.ChoiceField(
+        choices=[
+            ('alpha', 'Alphabetical'),
+            ('trophies', 'Total Trophies'),
+            ('plats', 'Total Plats'),
+        ],
+        required=False,
+        label='Sort By'
+    )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        try:
+            countries = Profile.objects.exclude(country__isnull=True).exclude(country='').values_list('country', 'country_code').distinct().order_by('country')
+            self.fields['country'].choices = [('', 'All Countries')] + [(code, country) for country, code in countries]
+        except Exception as e:
+            logger.error(f"Error populating country choices: {str(e)}")
+            self.fields['country'].choices = [('', 'All Countries')]

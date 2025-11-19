@@ -1,0 +1,59 @@
+{% load custom_filters %}
+{% load humanize %}
+{% for profile in object_list %}
+    <div class="card bg-base-100 border-4 border-base-300 shadow-xl shadow-neutral cursor-pointer transition-all duration-300 hover:scale-105 hover:border-primary hover:shadow-primary hover:z-10 group">
+        <div class="relative card-body m-0 px-3 py-3">
+            <div class="absolute top-2 right-4 text-lg text-base-content font-bold hover:scale-105">{{ profile.flag }}</div>
+            <div class="flex flex-col items-center">
+                <div class="avatar mb-4 transition duration-300 group-hover:scale-105">
+                    <div class="w-24 bg-primary/50 rounded-full ring ring-secondary ring-offset-base-100 ring-offset-2">
+                        <img src="{{ profile.avatar_url }}" alt="{{ profile.psn_username }}'s avatar" class="hover:scale-105" />
+                    </div>
+                </div>
+                <h3 class="text-lg text-base-content font-bold h-10 line-clamp-1 hover:scale-105">{{ profile.psn_username }}</h3>
+                <p class="text-xs text-base-content/70 text-center line-clamp-2 min-h-[2rem] hover:scale-105">{{ profile.about_me }}</p>
+
+                <div class="divider divider-vertical my-0"></div>
+
+                <div class="flex flex-row gap-2 items-center">
+                    <div class="flex flex-col gap-1 items-center">
+                        <h3 class="text-xs text-base-content/70 hover:scale-105 italic">Level:</h3>
+                        <h3 class="text-sm text-accent font-bold hover:scale-105">{{ profile.trophy_level }}</h3>
+                    </div>
+                    <div class="divider divider-horizontal mx-0"></div>
+                    <div class="flex flex-col gap-1 items-center">
+                        <h3 class="text-xs text-base-content/70 hover:scale-105 italic">Trophies:</h3>
+                        <h3 class="text-sm text-secondary font-bold hover:scale-105">{{ profile.total_trophies|intcomma }}</h3>
+                    </div>
+                    <div class="divider divider-horizontal mx-0"></div>
+                    <div class="flex flex-col gap-1 items-center">
+                        <h3 class="text-xs text-base-content/70 hover:scale-105 italic">Plats:</h3>
+                        <h3 class="text-sm text-primary font-bold hover:scale-105">{{ profile.total_plats|intcomma }}</h3>
+                    </div>
+                </div>
+
+                <div class="divider divider-vertical my-0"></div>
+
+                {% with profile.recent_platinum.0.trophy as recent %}
+                    {% if recent %}
+                        <div class="flex flex-col items-start gap-2 w-full">
+                            <h3 class="text-sm text-base-content italic self-center text-center hover:scale-105">Latest Platinum:</h3>
+                            <div class="flex flex-row self-start items-center w-full gap-2">
+                                <figure class="border-2 border-{{ recent|trophy_color }} rounded-box shrink-0 transition-colors duration-300 hover:scale-105">
+                                    <img src="{{ recent.trophy_icon_url }}" alt="{{ recent.trophy_name }}" class="h-10 w-10 object-fill shrink-0" loading="lazy" />
+                                </figure>
+                                <div class="flex flex-col gap-0">
+                                    <h3 class="text-xs text-base-content text-start line-clamp-1 hover:scale-105">{{ recent.trophy_name }}</h3>
+                                    <h3 class="text-xs text-accent text-start italic line-clamp-1 pr-1 hover:scale-105">{{ recent.game.title_name }}</h3>
+                                    <h3 class="text-xs text-base-content/70 text-start italic line-clamp-1 pr-1 hover:scale-105">{{ profile.recent_platinum.0.earned_date_time }}</h3>
+                                </div>
+                            </div>
+                        </div>
+                    {% endif %}
+                {% endwith %}
+            </div>
+        </div>
+    </div>
+{% empty %}
+    <p>No profiles found. Try expanding your search or syncing a new one!</p>
+{% endfor %}
