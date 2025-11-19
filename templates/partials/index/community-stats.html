@@ -1,7 +1,7 @@
 {% load humanize %}
 
 <!-- Horizontal Stats (lg & above) -->
-<section class="stats stats-horizontal shadow-lg w-full bg-base-200 border-2 border-base-300 overflow-x-auto transition duration-300 hover:shadow-primary hover:border-primary hover:bg-base-300 hidden lg:flex">
+<section class="stats stats-horizontal shadow-lg shadow-neutral w-full bg-base-200 border-2 border-base-300 overflow-x-auto transition duration-300 hover:shadow-primary hover:border-primary hover:bg-base-300 hidden lg:flex">
     <div class="stat place-items-center group">
         <div class="stat-figure group-hover:scale-105">
             <svg xmlns="http://www.w3.org/2000/svg" width="45" height="45" viewBox="0 0 24 24" fill="none" stroke="var(--color-primary)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
@@ -9,7 +9,7 @@
         <div class="stat-title">Profiles Tracked</div>
         <div class="stat-value text-primary text-2xl xl:text-3xl group-hover:scale-105">{{ items.profiles.total|intcomma }}</div>
         <div class="stat-desc">Active Pursuers</div>
-        <div class="stat-desc text-primary">(+{{ items.profiles.weekly|intcomma }} this week)</div>
+        <div class="stat-desc text-primary hover:scale-105">(+{{ items.profiles.weekly|intcomma }} this week)</div>
     </div>
     <div class="stat place-items-center group">
         <div class="stat-figure group-hover:scale-105">
@@ -18,7 +18,7 @@
         <div class="stat-title">Trophies Tracked</div>
         <div class="stat-value text-secondary text-2xl xl:text-3xl group-hover:scale-105">{{ items.trophies.total|intcomma }}</div>
         <div class="stat-desc">Across All Users</div>
-        <div class="stat-desc text-secondary">(+{{ items.trophies.weekly|intcomma }} this week)</div>
+        <div class="stat-desc text-secondary hover:scale-105">(+{{ items.trophies.weekly|intcomma }} this week)</div>
     </div>
     <div class="stat place-items-center group">
         <div class="stat-figure group-hover:scale-105">
@@ -30,7 +30,7 @@
         <div class="stat-title">Games Tracked</div>
         <div class="stat-value text-accent text-2xl xl:text-3xl group-hover:scale-105">{{ items.games.total|intcomma }}</div>
         <div class="stat-desc">Games Being Played</div>
-        <div class="stat-desc text-accent">(+{{ items.games.weekly|intcomma }} this week)</div>
+        <div class="stat-desc text-accent hover:scale-105">(+{{ items.games.weekly|intcomma }} this week)</div>
     </div>
     <div class="stat place-items-center group">
         <div class="stat-figure group-hover:scale-105">
@@ -39,12 +39,12 @@
         <div class="stat-title">Platinums Earned</div>
         <div class="stat-value text-base-content text-2xl xl:text-3xl group-hover:scale-105">{{ items.platinums.total|intcomma }}</div>
         <div class="stat-desc">Plats Pursued</div>
-        <div class="stat-desc text-base-content">(+{{ items.platinums.weekly|intcomma }} this week)</div>
+        <div class="stat-desc text-base-content hover:scale-105">(+{{ items.platinums.weekly|intcomma }} this week)</div>
     </div>
 </section>
 
 <!-- 2x2 Grid of Horizontal Stats (md & smaller) -->
-<section class="stats stats-horizontal shadow-lg w-full bg-base-200 border-2 border-base-300 overflow-x-auto transition duration-300 hover:shadow-primary hover:border-primary hover:bg-base-300 lg:hidden">
+<section class="stats stats-horizontal shadow-lg shadow-neutral w-full bg-base-200 border-2 border-base-300 overflow-x-auto transition duration-300 hover:shadow-primary hover:border-primary hover:bg-base-300 lg:hidden">
     <div class="stat place-items-center group">
         <div class="stat-figure group-hover:scale-105 hidden sm:block">
             <svg xmlns="http://www.w3.org/2000/svg" width="45" height="45" viewBox="0 0 24 24" fill="none" stroke="var(--color-primary)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
@@ -53,7 +53,7 @@
         <div class="stat-title">Profiles Tracked</div>
         <div class="stat-value text-primary text-xl sm:text-2xl md:text-3xl group-hover:scale-105">{{ items.profiles.total|intcomma }}</div>
         <div class="stat-desc">Active Pursuers</div>
-        <div class="stat-desc text-primary">(+{{ items.profiles.weekly|intcomma }} this week)</div>
+        <div class="stat-desc text-primary hover:scale-105">(+{{ items.profiles.weekly|intcomma }} this week)</div>
     </div>
     <div class="stat place-items-center group">
         <div class="stat-figure group-hover:scale-105 hidden sm:block">
@@ -63,7 +63,7 @@
         <div class="stat-title">Trophies Tracked</div>
         <div class="stat-value text-secondary text-xl sm:text-2xl md:text-3xl group-hover:scale-105">{{ items.trophies.total|intcomma }}</div>
         <div class="stat-desc">Across all profiles</div>
-        <div class="stat-desc text-secondary">(+{{ items.trophies.weekly|intcomma }} this week)</div>
+        <div class="stat-desc text-secondary hover:scale-105">(+{{ items.trophies.weekly|intcomma }} this week)</div>
     </div>
 </section>
 <section class="stats stats-horizontal shadow-lg w-full bg-base-200 border-2 border-base-300 overflow-x-auto transition duration-300 hover:shadow-primary hover:border-primary hover:bg-base-300 lg:hidden">
@@ -77,7 +77,7 @@
         <div class="stat-title">Games Tracked</div>
         <div class="stat-value text-accent text-xl sm:text-2xl md:text-3xl group-hover:scale-105">{{ items.games.total|intcomma }}</div>
         <div class="stat-desc">Games Being Played</div>
-        <div class="stat-desc text-accent">(+{{ items.games.weekly|intcomma }} this week)</div>
+        <div class="stat-desc text-accent hover:scale-105">(+{{ items.games.weekly|intcomma }} this week)</div>
     </div>
     <div class="stat place-items-center group">
         <div class="stat-figure group-hover:scale-105 hidden sm:block">
@@ -86,6 +86,6 @@
         <div class="stat-title">Platinums Earned</div>
         <div class="stat-value text-base-content text-xl sm:text-2xl md:text-3xl group-hover:scale-105">{{ items.platinums.total|intcomma }}</div>
         <div class="stat-desc">Plats Pursued</div>
-        <div class="stat-desc text-base-content">(+{{ items.platinums.weekly|intcomma }} this week)</div>
+        <div class="stat-desc text-base-content hover:scale-105">(+{{ items.platinums.weekly|intcomma }} this week)</div>
     </div>
 </section>

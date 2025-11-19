@@ -1,11 +1,12 @@
 from django.core.cache import cache
+from django.db.models import F
 from trophies.models import EarnedTrophy
 
 def get_latest_platinums(limit=10):
     recent_platinums = EarnedTrophy.objects.filter(
         earned=True,
         trophy__trophy_type='platinum'
-    ).select_related('profile', 'trophy', 'trophy__game').order_by('-earned_date_time')[:limit]
+    ).select_related('profile', 'trophy', 'trophy__game').order_by(F('earned_date_time').desc(nulls_last=True))[:limit]
 
     recent_platinums_list = list(recent_platinums)
 
