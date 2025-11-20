@@ -72,3 +72,7 @@ def psn_rarity(rarity_int):
         return 'Uncommon'
     elif rarity_int == 3:
         return 'Common'
+
+@register.filter
+def trophy_id_key(dict_obj, key):
+    return dict_obj.get(key)

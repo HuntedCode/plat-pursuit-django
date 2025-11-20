@@ -2,7 +2,7 @@ import json
 import logging
 from django.shortcuts import render
 from django.http import StreamingHttpResponse, JsonResponse, HttpResponseRedirect
-from django.views.generic import ListView, View
+from django.views.generic import ListView, View, DetailView
 from django.db.models import Q, F, Prefetch, OuterRef, Subquery, Value, IntegerField, FloatField, Count, Avg
 from django.db.models.functions import Coalesce
 from django.urls import reverse_lazy
@@ -139,9 +139,9 @@ class GamesListView(ListView):
         if self.request.headers.get('X-Requested-With') == 'XMLHttpRequest':
             view_type = self.request.GET.get('view', 'grid')
             if view_type == 'list':
-                return ['trophies/partials/game_list_items.html']
+                return ['trophies/partials/game_list/game_list_items.html']
             else:
-                return ['trophies/partials/game_cards.html']
+                return ['trophies/partials/game_list/game_cards.html']
         return super().get_template_names()
     
 class TrophiesListView(ListView):
@@ -230,7 +230,7 @@ class TrophiesListView(ListView):
     
     def get_template_names(self):
         if self.request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-            return ['trophies/partials/trophy_list_items.html']
+            return ['trophies/partials/trophy_list/trophy_list_items.html']
         return super().get_template_names()
     
 class ProfilesListView(ListView):
@@ -305,7 +305,7 @@ class ProfilesListView(ListView):
     
     def get_template_names(self):
         if self.request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-            return ['trophies/partials/profile_cards.html']
+            return ['trophies/partials/profile_list/profile_cards.html']
         return super().get_template_names()
     
 class SearchView(View):
@@ -321,3 +321,42 @@ class SearchView(View):
             return HttpResponseRedirect(reverse_lazy('profiles_list') + f"?query={query}")
         else:
             return HttpResponseRedirect(reverse_lazy('home'))
+
+class GameDetailView(DetailView):
+    model = Game
+    template_name = 'trophies/game_detail.html'
+    slug_field = 'np_communication_id'
+    slug_url_kwarg = 'np_communication_id'
+    context_object_name = 'game'
+
+    def get_queryset(self):
+        return super().get_queryset().prefetch_related(
+            Prefetch('trophies', queryset=Trophy.objects.all().order_by('trophy_id'), to_attr='full_trophies')
+        )
+    
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        game = self.object
+        user = self.request.user
+
+        user_progress = None
+        user_earned = {}
+        if user.is_authenticated and hasattr(user, 'profile') and user.profile and user.profile.is_linked:
+            profile = user.profile
+            try:
+                profile_game = ProfileGame.objects.get(profile=profile, game=game)
+                user_progress = {
+                    'progress': profile_game.progress,
+                    'play_count': profile_game.play_count,
+                    'play_duration': profile_game.play_duration,
+                    'last_played': profile_game.last_played_date_time
+                }
+
+                earned_qs = EarnedTrophy.objects.filter(profile=profile, trophy__game=game)
+                user_earned = {e.trophy.trophy_id: e for e in earned_qs}
+            except ProfileGame.DoesNotExist:
+                pass
+        
+        context['user_progress'] = user_progress
+        context['user_earned'] = user_earned
+        return context

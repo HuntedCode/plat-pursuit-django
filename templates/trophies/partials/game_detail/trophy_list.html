@@ -1,0 +1,27 @@
+{% load custom_filters %}
+<div class="space-y-4">
+    {% for trophy in trophies %}
+        <div class="card bg-base-100 border-2 border-base-300 p-4 flex flex-row items-center gap-4">
+            <img src="{{ trophy.trophy_icon_url }}" alt="{{ trophy.trophy_name }}" class="w-16 h-16" />
+            <div class="flex-grow">
+                <h3 class="font-bold">{{ trophy.trophy_name }}</h3>
+                <p>{{ trophy.trophy_detail }}</p>
+                <p>Type: {{ trophy.trophy_type|capfirst }}</p>
+                <p>Rarity: {{ trophy.get_pp_rarity_tier }}</p>
+            </div>
+            {% if user_earned and trophy.id in user_earned %}
+                {% with earned=user_earned|trophy_id_key:trophy.id %}
+                    <div class="text-right">
+                        <p>Earned: {% if earned.earned %}Yes{% else %}No{% endif %}</p>
+                        {% if earned.earned_date_time %}
+                            <p>Date: {{ earned.earned_date_time|date:"SHORT_DATE_FORMAT" }}</p>
+                        {% endif %}
+                        {% if trophy.progress_target_value %}
+                            <p>Progress: {{ earned.progress }} / {{ trophy.progress_target_value }}</p>
+                        {% endif %}
+                    </div>
+                {% endwith %}
+            {% endif %}
+        </div>
+    {% endfor %}
+</div>

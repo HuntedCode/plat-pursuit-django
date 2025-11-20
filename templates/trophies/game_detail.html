@@ -1,0 +1,30 @@
+{% extends 'base.html' %}
+{% block title %}{{ game.title_name }}{% endblock %}
+
+{% block content %}
+    <section class="shadow-lg w-full bg-base-200 rounded-box border-2 border-base-300 p-4">
+        <h1 class="text-3xl font-bold mb-4">{{ game.title_name }}</h1>
+        <img src="{{ game.title_image }}" alt="{{ game.title_name }}" class="w-full max-h-64 object-cover mb-4" />
+
+        {% if game.concept %}
+            <div class="mb-4">
+                <h2 class="text-2xl font-bold">Concept Info</h2>
+                <p>Unified Title: {{ game.concept.unified_title }}</p>
+                <p>Publisher: {{ game.concept.publisher_name }}</p>
+                <p>Genres: {{ game.concept.genres|join:", " }}</p>
+            </div>
+        {% endif %}
+
+        {% if user_progress %}
+            <div class="mb-4">
+                <h2 class="text-2xl font-bold">Your Progress</h2>
+                <p>Progress: {{ user_progress.progress }}%</p>
+                <p>Play Count: {{ user_progress.play_count }}</p>
+                <p>Play Duration: {{ user_progress.play_duration }}</p>
+            </div>
+        {% endif %}
+
+        <h2 class="text-2xl font-bold mb-4">Trophies</h2>
+        {% include 'trophies/partials/game_detail/trophy_list.html' with trophies=game.full_trophies user_earned=user_earned %}
+    </section>
+{% endblock %}
