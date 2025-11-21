@@ -25,6 +25,7 @@ urlpatterns = [
     path("", IndexView.as_view(), name="home"),
     path('games/', GamesListView.as_view(), name='games_list'),
     path('games/<str:np_communication_id>/', GameDetailView.as_view(), name='game_detail'),
+    path('games/<str:np_communication_id>/<str:profile_username>/', GameDetailView.as_view(), name='game_detail_with_profile'),
     path('trophies/', TrophiesListView.as_view(), name='trophies_list'),
     path('profiles/', ProfilesListView.as_view(), name='profiles_list'),
     path('search/', SearchView.as_view(), name='search'),

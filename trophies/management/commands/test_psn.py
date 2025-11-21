@@ -168,6 +168,11 @@ class Command(BaseCommand):
             for attr, value in vars(title).items():
                 print(f"{attr}: {value}")
             print()
+    
+    def user_trophy_groups_summary(self, user, np_communication_id: str, platform):
+        trophy_group_summary = user.trophy_groups_summary(np_communication_id, platform)
+        for attr, value in vars(trophy_group_summary).items():
+            print(f"{attr}: {value}")
 
     def handle(self, *args, **options):
         token = os.getenv("NPSSO_TOKEN")
@@ -200,22 +205,23 @@ class Command(BaseCommand):
             # self.user_title_stats(user)
             # self.user_trophy_summary(user)
             # self.user_trophy_titles(user)
-            np_comm_id = "NPWR00440_00"
+            np_comm_id = "NPWR40455_00"
             # title_ids = ["NPWR43893_00"]
             #title_ids = []
             #for i in range(5):
             #    title_ids.append('CUSA07402_00')
-            platform = PlatformType.PS3
+            platform = PlatformType.PS5
             # self.user_trophies(user, np_comm_id, platform)
             #self.user_trophies_include_progress(user, np_comm_id, platform)
             # self.user_trophy_titles_for_title(user, title_ids)
+            self.user_trophy_groups_summary(user, np_comm_id, platform)
 
-            #game_title = psnawp.game_title('CUSA48744_00', PlatformType('PS4'), account_id="7532533859249281768")
+            #game_title = psnawp.game_title('CUSA03980_00', PlatformType('PS4'), account_id="3911413582343850310")
             #print(game_title.np_communication_id)
             #pprint(game_title.get_details())
             #pprint(game_title.trophies())
 
-            print(user.get_region())
+            #print(user.get_region())
 
             self.stdout.write(
                 self.style.SUCCESS(

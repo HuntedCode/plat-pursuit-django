@@ -261,5 +261,5 @@ class TitleIDAdmin(admin.ModelAdmin):
 @admin.register(Concept)
 class ConceptAdmin(admin.ModelAdmin):
     list_display = ('concept_id', 'unified_title', 'publisher_name', 'genres')
-    search_fields = ('concept_id', 'unified_title', 'descriptions')
+    search_fields = ('concept_id', 'unified_title')
 

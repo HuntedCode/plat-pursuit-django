@@ -2,6 +2,9 @@ from django.db import models
 from django.utils import timezone
 from users.models import CustomUser
 from django.core.validators import RegexValidator
+from django.db.models.signals import post_save
+from django.dispatch import receiver
+from django.core.cache import cache
 from trophies.utils import count_unique_game_groups, TITLE_STATS_SUPPORTED_PLATFORMS, NA_REGION_CODES, EU_REGION_CODES, JP_REGION_CODES, AS_REGION_CODES, SHOVELWARE_THRESHOLD
 
 
@@ -180,6 +183,11 @@ class Concept(models.Model):
                         game.is_regional = True
                         game.save(update_fields=['is_regional'])
 
+    def update_media(self, media):
+        if media:
+            self.media = media
+            self.save(update_fields=['media'])
+
     def __str__(self):
         return self.unified_title or self.concept_id
 
@@ -296,6 +304,12 @@ class Trophy(models.Model):
 
     def __str__(self):
         return f"{self.trophy_name} ({self.game.title_name})"
+    
+@receiver(post_save, sender=Trophy)
+def invalidate_trophy_cache(sender, instance, created, **kwargs):
+    if created:
+        game_id = instance.game.np_communication_id
+        cache.delete(f"game:trophies:{game_id}")
 
 
 class EarnedTrophy(models.Model):

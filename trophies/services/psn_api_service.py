@@ -85,7 +85,7 @@ class PsnApiService:
         return game, created, needs_trophy_update
     
     @classmethod
-    def create_concept_from_details(cls, details):
+    def create_concept_from_details(cls, details, update_flag=False):
         try:
             descriptions_short = next((d['desc'] for d in details['descriptions'] if d['type'] == 'SHORT'), '')
         except:
@@ -94,6 +94,19 @@ class PsnApiService:
             descriptions_long = next((d['desc'] for d in details['descriptions'] if d['type'] == 'LONG'), '')
         except:
             descriptions_long = ''
+        
+        try:
+            media = {
+                'images': details.get('defaultProduct', {}).get('media', {}).get('images', []),
+                'videos': details.get('defaultProduct', {}).get('media', {}).get('videos', [])
+            }
+            if not media['images']:
+                media = {
+                    'images': details.get('media', {}).get('images', []),
+                    'videos': details.get('media', {}).get('videos', [])
+                }
+        except:
+            media = {}
         return Concept.objects.get_or_create(
             concept_id=details.get('id'),
             defaults={
@@ -106,10 +119,7 @@ class PsnApiService:
                     'long': descriptions_long
                 },
                 'content_rating': details.get('contentRating', {}),
-                'media': {
-                    'images': details.get('media', {}).get('images', []),
-                    'videos': details.get('media', {}).get('videos', [])
-                }
+                'media': media
             })
     
     @classmethod
@@ -231,10 +241,7 @@ class PsnApiService:
             },
         )
 
-        logger.info(f"Syncing trophy - {trophy.trophy_name} for {profile.psn_username} - Created: {created} | Current Earned: {earned_trophy.earned} | Data Earned: {trophy_data.earned}")
-
         if (created and trophy_data.earned == True) or ((not created) and earned_trophy.earned == False and trophy_data.earned == True):
-            logger.info(f"Incrementing trophy {trophy.trophy_name} earned count.")
             trophy.increment_earned_count()
 
         if not created:

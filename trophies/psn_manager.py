@@ -78,12 +78,13 @@ class PSNManager:
     @classmethod
     def sync_games_only(cls, profile: Profile):
         cls.assign_job('sync_games_only', args=[], profile_id=profile.id, priority_override='high_priority')
-    
-    @classmethod
-    def sync_title_id(cls, profile: Profile, title_id_str: str, image_url: str):
-        cls.assign_job('sync_title_id', args=[title_id_str, image_url], profile_id=profile.id, priority_override='high_priority')
 
     @classmethod
     def sync_profile_game_trophies(cls, profile: Profile, game: Game):
         args = [game.np_communication_id, game.title_platform[0] if not game.title_platform[0] == 'PSPC' else game.title_platform[1]]
         PSNManager.assign_job('sync_trophies', args, profile.id, priority_override='medium_priority')
+    
+    @classmethod
+    def sync_title_id(cls, profile: Profile, title_id_str: str, np_communication_id: str):
+        args = [title_id_str, np_communication_id]
+        PSNManager.assign_job('sync_title_id', args, profile.id, priority_override='high_priority')

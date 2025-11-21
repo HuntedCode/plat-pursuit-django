@@ -1,7 +1,7 @@
 {% load custom_filters %}
 {% for game in object_list %}
 {% with game.platinum_trophy|first as plat %}
-    <div class="card bg-base-100 border-4 border-base-300 shadow-md shadow-neutral cursor-pointer transition-all duration-300 hover:scale-105 hover:border-{{ game|platform_color }} hover:shadow-{{ game|platform_color }} hover:shadow-lg hover:z-10 group">
+    <a href="{% url 'game_detail' game.np_communication_id %}" class="card bg-base-100 border-4 border-base-300 shadow-md shadow-neutral cursor-pointer transition-all duration-300 hover:scale-105 hover:border-{{ game|platform_color }} hover:shadow-{{ game|platform_color }} hover:shadow-lg hover:z-10 group">
         <div class="card-body m-0 px-3 py-3">
             <div class="grid grid-cols-1 lg:grid-cols-3 items-center gap-4">
                 <div class="flex flex-row items-center justify-start gap-2 col-span-1">
@@ -85,7 +85,7 @@
                 </div>
             </div>
         </div>
-    </div>
+    </a>
 {% endwith %}
 {% empty %}
     <p>No games found. Try expanding your search!</p>

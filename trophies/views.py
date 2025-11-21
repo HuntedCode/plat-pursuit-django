@@ -1,16 +1,21 @@
 import json
 import logging
+import math
+from datetime import timedelta, date
+from django.core.cache import cache
+from django.contrib import messages
 from django.shortcuts import render
 from django.http import StreamingHttpResponse, JsonResponse, HttpResponseRedirect
 from django.views.generic import ListView, View, DetailView
 from django.db.models import Q, F, Prefetch, OuterRef, Subquery, Value, IntegerField, FloatField, Count, Avg
 from django.db.models.functions import Coalesce
 from django.urls import reverse_lazy
+from django.utils import timezone
 from .models import Game, Trophy, Profile, EarnedTrophy, ProfileGame
 from .forms import GameSearchForm, TrophySearchForm, ProfileSearchForm
 from .utils import redis_client
 
-logger = logging.getLogger('psn_api')
+logger = logging.getLogger("psn_api")
 
 # Create your views here.
 def monitoring_dashboard(request):
@@ -330,33 +335,177 @@ class GameDetailView(DetailView):
     context_object_name = 'game'
 
     def get_queryset(self):
-        return super().get_queryset().prefetch_related(
-            Prefetch('trophies', queryset=Trophy.objects.all().order_by('trophy_id'), to_attr='full_trophies')
-        )
+        return super().get_queryset()
     
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
+        logger.info(kwargs)
         game = self.object
         user = self.request.user
+        profile_username = self.kwargs.get('profile_username')
+        today = date.today().isoformat()
+        images_cache_key = f"game:imageurls:{game.np_communication_id}"
+        images_timeout = 604800
+        stats_cache_key = f"game:stats:{game.np_communication_id}:{today}"
+        stats_timeout = 86400
+        trophy_cache_key = f"game:trophies:{game.np_communication_id}"
+        trophy_timeout = 604800
 
-        user_progress = None
-        user_earned = {}
-        if user.is_authenticated and hasattr(user, 'profile') and user.profile and user.profile.is_linked:
-            profile = user.profile
+        if profile_username:
             try:
-                profile_game = ProfileGame.objects.get(profile=profile, game=game)
-                user_progress = {
+                target_profile = Profile.objects.get(psn_username__iexact=profile_username)
+            except Profile.DoesNotExist:
+                messages.error(self.request, "Profile not found.")
+        elif user.is_authenticated and hasattr(user, 'profile') and user.profile and user.profile.is_linked:
+            target_profile = user.profile
+
+        logger.info(f"Target Profile: {target_profile} | Profile Username: {profile_username}")
+
+        profile_progress = None
+        profile_trophy_totals = {}
+        profile_earned = {}
+        timeline = []
+        if target_profile:
+            try:
+                profile_game = ProfileGame.objects.get(profile=target_profile, game=game)
+                profile_progress = {
                     'progress': profile_game.progress,
                     'play_count': profile_game.play_count,
                     'play_duration': profile_game.play_duration,
                     'last_played': profile_game.last_played_date_time
                 }
 
-                earned_qs = EarnedTrophy.objects.filter(profile=profile, trophy__game=game)
-                user_earned = {e.trophy.trophy_id: e for e in earned_qs}
+                earned_qs = EarnedTrophy.objects.filter(profile=target_profile, trophy__game=game).order_by('trophy__trophy_id')
+                profile_earned = {
+                    e.trophy.trophy_id: {
+                        'earned': e.earned,
+                        'progress': e.progress,
+                        'progress_rate': e.progress_rate,
+                        'progressed_date_time': e.progressed_date_time,
+                        'earned_date_time': e.earned_date_time
+                    } for e in earned_qs
+                }
+
+                ordered_earned_qs = earned_qs.filter(earned=True).order_by(F('earned_date_time').asc(nulls_last=True))
+
+                profile_trophy_totals = {
+                    'bronze': ordered_earned_qs.filter(trophy__trophy_type='bronze').count() or 0,
+                    'silver': ordered_earned_qs.filter(trophy__trophy_type='silver').count() or 0,
+                    'gold': ordered_earned_qs.filter(trophy__trophy_type='gold').count() or 0,
+                    'platinum': ordered_earned_qs.filter(trophy__trophy_type='platinum').count() or 0,
+                }
+
+                earned_list = list(ordered_earned_qs)
+                total_trophies = len(earned_qs)
+                if len(earned_list) > 0:
+                    milestones = [0, 0.25, 0.5, 0.75, 1.0]
+                    timeline = []
+                    for pct in milestones:
+                        idx = math.ceil((total_trophies - 1) * pct)
+                        if idx <= len(earned_list):
+                            entry = earned_list[idx]
+                            timeline.append({
+                                'trophy_name': entry.trophy.trophy_name,
+                                'earned_date_time': entry.earned_date_time
+                            })
             except ProfileGame.DoesNotExist:
                 pass
         
-        context['user_progress'] = user_progress
-        context['user_earned'] = user_earned
+        try:
+            cached_images = cache.get(images_cache_key)
+            if cached_images:
+                image_urls = json.loads(cached_images)
+            else:
+                bg_url = None
+                screenshot_urls = []
+                content_rating_url = None
+                if game.concept: 
+                    if game.concept.media and 'images' in game.concept.media:
+                        for img in game.concept.media['images']:
+                            if img.get('type') == 'BACKGROUND_LAYER_ART':
+                                bg_url = img.get('url')
+                                break
+                            elif img.get('type') == 'GAMEHUB_COVER_ART':
+                                bg_url = img.get('url')
+                        
+                        for img in game.concept.media['images']:
+                            if img.get('type') == 'SCREENSHOT':
+                                screenshot_urls.append(img.get('url'))
+                        
+                        if len(screenshot_urls) < 1:
+                            for img in game.concept.media['images']:
+                                img_type = img.get('type')
+                                if img_type == 'GAMEHUB_COVER_ART' or img_type == 'LOGO' or img_type == 'MASTER':
+                                    screenshot_urls.append(img.get('url'))
+
+                    if game.concept.content_rating:
+                        content_rating_url = game.concept.content_rating.get('url')
+                    
+                    image_urls = {
+                        'bg_url': bg_url,
+                        'screenshot_urls': screenshot_urls,
+                        'content_rating_url': content_rating_url
+                    }
+                    cache.set(images_cache_key, json.dumps(image_urls), timeout=images_timeout)
+                else:
+                    image_urls = {}
+        except Exception as e:
+            logger.error(f"Game stats cache failed for {game.np_communication_id}: {e}")
+            image_urls = {}
+
+        try:
+            cached_stats = cache.get(stats_cache_key)
+            if cached_stats:
+                stats = json.loads(cached_stats)
+            else:
+                stats = {
+                    'total_players': game.played_count,
+                    'monthly_players': ProfileGame.objects.filter(
+                        game=game,
+                        last_played_date_time__gte=timezone.now() - timedelta(days=30)
+                    ).count(),
+                    'plats_earned': EarnedTrophy.objects.filter(
+                        trophy__game=game,
+                        trophy__trophy_type='platinum',
+                        earned=True
+                    ).count(),
+                    'total_earns': EarnedTrophy.objects.filter(
+                        trophy__game=game,
+                        earned=True
+                    ).count(),
+                    'completes': ProfileGame.objects.filter(
+                        game=game,
+                        progress=100
+                    ).count(),
+                    'avg_progress': ProfileGame.objects.filter(game=game).aggregate(avg=Avg('progress'))['avg'] or 0.0
+                }
+                cache.set(stats_cache_key, json.dumps(stats), timeout=stats_timeout)
+        except Exception as e:
+            logger.error(f"Game stats cache failed for {game.np_communication_id}: {e}")
+            stats = {}
+        
+        try:
+            cached_trophies = cache.get(trophy_cache_key)
+            if cached_trophies:
+                full_trophies = json.loads(cached_trophies)
+            else:
+                trophies_qs = Trophy.objects.filter(game=game).order_by('trophy_id')
+                full_trophies = list(trophies_qs.values(
+                    'trophy_id', 'trophy_type', 'trophy_name', 'trophy_detail',
+                    'trophy_icon_url', 'trophy_group_id', 'trophy_rarity', 'trophy_earn_rate',
+                    'earned_count', 'earn_rate'
+                ))
+                cache.set(trophy_cache_key, json.dumps(full_trophies), timeout=trophy_timeout)
+        except Exception as e:
+            logger.error(f"Game trophies cache failed for {game.np_communication_id}: {e}")
+            full_trophies = []
+
+        context['profile'] = target_profile
+        context['profile_progress'] = profile_progress
+        context['profile_earned'] = profile_earned
+        context['profile_trophy_totals'] = profile_trophy_totals
+        context['game_stats'] = stats
+        context['full_trophies'] = full_trophies
+        context['image_urls'] = image_urls
+        context['timeline'] = timeline
         return context
