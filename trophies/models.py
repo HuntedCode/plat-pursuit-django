@@ -147,6 +147,9 @@ class Game(models.Model):
         self.is_shovelware = float(platinum_earn_rate) >= SHOVELWARE_THRESHOLD
         self.save(update_fields=['is_shovelware'])
 
+    def get_total_defined_trophies(self):
+        return self.defined_trophies['bronze'] + self.defined_trophies['silver'] + self.defined_trophies['gold'] + self.defined_trophies['platinum']
+
 
     def __str__(self):
         return self.title_name
@@ -311,6 +314,24 @@ def invalidate_trophy_cache(sender, instance, created, **kwargs):
         game_id = instance.game.np_communication_id
         cache.delete(f"game:trophies:{game_id}")
 
+
+class TrophyGroup(models.Model):
+    game = models.ForeignKey(Game, on_delete=models.CASCADE, related_name='trophy_groups')
+    trophy_group_id = models.CharField(max_length=10)
+    trophy_group_name = models.CharField(max_length=255, blank=True)
+    trophy_group_detail = models.TextField(blank=True, null=True)
+    trophy_group_icon_url = models.URLField(blank=True, null=True)
+    defined_trophies = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        unique_together = ['game', 'trophy_group_id']
+        indexes = [
+            models.Index(fields=['trophy_group_id'], name='trophy_group_id_idx'),
+        ]
+        ordering = ['trophy_group_id']
+    
+    def __str__(self):
+        return f"{self.trophy_group_name or self.trophy_group_id} ({self.game.title_name})"
 
 class EarnedTrophy(models.Model):
     profile = models.ForeignKey(

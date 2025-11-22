@@ -42,7 +42,7 @@ class PSNManager:
         """Map job type to queue."""
         if job_type in ["sync_profile_data", "sync_trophy_titles", "profile_refresh", "check_profile_health"]:
             return "high_priority"
-        elif job_type in ["sync_title_stats", "sync_title_id"]:
+        elif job_type in ["sync_title_stats", "sync_title_id", "sync_trophy_groups"]:
             return "medium_priority"
         elif job_type in ["sync_trophies"]:
             return "low_priority"

@@ -2,9 +2,9 @@ import logging
 from datetime import datetime
 from django.utils import timezone
 from django.db.models import F
-from trophies.models import Profile, Game, ProfileGame, Trophy, EarnedTrophy, Concept, TitleID
+from trophies.models import Profile, Game, ProfileGame, Trophy, EarnedTrophy, Concept, TrophyGroup
 from psnawp_api.models.title_stats import TitleStats
-from psnawp_api.models.trophies import TrophyTitle
+from psnawp_api.models.trophies import TrophyTitle, TrophyGroupSummary
 
 logger = logging.getLogger("psn_api")
 
@@ -83,6 +83,36 @@ class PsnApiService:
             }
             game.save()
         return game, created, needs_trophy_update
+    
+    @classmethod
+    def create_or_update_trophy_groups_from_summary(cls, game: Game, summary: TrophyGroupSummary):
+        trophy_group, created = TrophyGroup.objects.get_or_create(
+            game=game, trophy_group_id=summary.trophy_group_id,
+            defaults={
+                'trophy_group_name': summary.trophy_group_name,
+                'trophy_group_detail': summary.trophy_group_detail,
+                'trophy_group_icon_url': summary.trophy_group_icon_url,
+                'defined_trophies': {
+                    'bronze': summary.defined_trophies.bronze,
+                    'silver': summary.defined_trophies.silver,
+                    'gold': summary.defined_trophies.gold,
+                    'platinum': summary.defined_trophies.platinum
+                }
+            }
+        )
+
+        if not created:
+            trophy_group.trophy_group_name = summary.trophy_group_name
+            trophy_group.trophy_group_detail = summary.trophy_group_detail
+            trophy_group.trophy_group_icon_url = summary.trophy_group_icon_url
+            trophy_group.defined_trophies = {
+                'bronze': summary.defined_trophies.bronze,
+                'silver': summary.defined_trophies.silver,
+                'gold': summary.defined_trophies.gold,
+                'platinum': summary.defined_trophies.platinum
+            }
+            trophy_group.save()
+        return trophy_group, created
     
     @classmethod
     def create_concept_from_details(cls, details, update_flag=False):

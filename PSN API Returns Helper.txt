@@ -167,3 +167,17 @@ user.trophies(): - WHEN PROGRESS IS INCLUDED!
     earned_date_time: 2025-05-28 15:15:10+00:00
     trophy_rarity: TrophyRarity.VERY_RARE
     trophy_earn_rate: 8.4
+
+user.trophy_groups_summary():
+
+    trophy_set_version: 01.00
+    trophy_title_name: Sea of Thieves
+    trophy_title_detail: None
+    trophy_title_icon_url: https://psnobj.prod.dl.playstation.net/psnobj/NPWR40455_00/b925290d-ba56-4240-8715-55457d78e612.png
+    trophy_title_platform: {<PlatformType.PS5: 'PS5'>}
+    defined_trophies: TrophySet(bronze=276, silver=6, gold=1, platinum=1)
+    trophy_groups: [TrophyGroupSummary(trophy_group_id='default', trophy_group_name='Sea of Thieves', trophy_group_detail=None, trophy_group_icon_url='https://psnobj.prod.dl.playstation.net/psnobj/NPWR40455_00/b925290d-ba56-4240-8715-55457d78e612.png', defined_trophies=TrophySet(bronze=51, silver=6, gold=1, platinum=1)), TrophyGroupSummary(trophy_group_id='001', trophy_group_name='2024 Launch Edition', trophy_group_detail=None, trophy_group_icon_url='https://psnobj.prod.dl.playstation.net/psnobj/NPWR40455_00/41aea843-3d90-4c9f-a633-dfa5fb0971c7.png', defined_trophies=TrophySet(bronze=195, silver=0, gold=0, platinum=0)), TrophyGroupSummary(trophy_group_id='002', trophy_group_name='Season 13', trophy_group_detail=None, trophy_group_icon_url='https://psnobj.prod.dl.playstation.net/psnobj/NPWR40455_00/41aea843-3d90-4c9f-a633-dfa5fb0971c7.png', defined_trophies=TrophySet(bronze=9, silver=0, gold=0, platinum=0)), TrophyGroupSummary(trophy_group_id='003', trophy_group_name='Season 14', trophy_group_detail=None, trophy_group_icon_url='https://psnobj.prod.dl.playstation.net/psnobj/NPWR40455_00/41aea843-3d90-4c9f-a633-dfa5fb0971c7.png', defined_trophies=TrophySet(bronze=8, silver=0, gold=0, platinum=0)), TrophyGroupSummary(trophy_group_id='004', trophy_group_name='Season 15', trophy_group_detail=None, trophy_group_icon_url='https://psnobj.prod.dl.playstation.net/psnobj/NPWR40455_00/41aea843-3d90-4c9f-a633-dfa5fb0971c7.png', defined_trophies=TrophySet(bronze=3, silver=0, gold=0, platinum=0)), TrophyGroupSummary(trophy_group_id='005', trophy_group_name='Season 16', trophy_group_detail=None, trophy_group_icon_url='https://psnobj.prod.dl.playstation.net/psnobj/NPWR40455_00/41aea843-3d90-4c9f-a633-dfa5fb0971c7.png', defined_trophies=TrophySet(bronze=6, silver=0, gold=0, platinum=0)), TrophyGroupSummary(trophy_group_id='006', trophy_group_name='Season 17', trophy_group_detail=None, trophy_group_icon_url='https://psnobj.prod.dl.playstation.net/psnobj/NPWR40455_00/41aea843-3d90-4c9f-a633-dfa5fb0971c7.png', defined_trophies=TrophySet(bronze=4, silver=0, gold=0, platinum=0))]
+    hidden_flag: None
+    progress: None
+    earned_trophies: TrophySet(bronze=0, silver=0, gold=0, platinum=0)
+    last_updated_datetime: None

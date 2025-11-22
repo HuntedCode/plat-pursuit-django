@@ -224,6 +224,8 @@ class TokenKeeper:
                     self._job_sync_profile_data(profile_id)
                 elif job_type == 'sync_trophy_titles':
                     self._job_sync_trophy_titles(profile_id)
+                elif job_type == 'sync_trophy_groups':
+                    self._job_sync_trophy_groups(profile_id, args[0], args[1])
                 elif job_type == 'sync_title_stats':
                     self._job_sync_title_stats(profile_id, args[0], args[1], args[2], args[3], args[4])
                 elif job_type == 'sync_trophies':
@@ -307,6 +309,8 @@ class TokenKeeper:
                 if "include_progress" in kwargs:
                     self._record_call(instance.token)
                 data = list(user.trophies(**kwargs))
+            elif endpoint == "trophy_groups_summary":
+                data = user.trophy_groups_summary(**kwargs)
             elif endpoint == "trophy_titles_for_title":
                 data = list(user.trophy_titles_for_title(**kwargs))
             elif endpoint == "trophy_summary":
@@ -393,13 +397,16 @@ class TokenKeeper:
         
         num_title_stats = 0
         for title in trophy_titles:
-            game, _, _ = PsnApiService.create_or_update_game(title)
+            game, created, _ = PsnApiService.create_or_update_game(title)
             profile_game, _ = PsnApiService.create_or_update_profile_game(profile, game, title)
             for platform in game.title_platform:
                 if platform in TITLE_STATS_SUPPORTED_PLATFORMS:
                     num_title_stats += 1
                     break
+            title_defined_trophies_total = title.defined_trophies.bronze + title.defined_trophies.silver + title.defined_trophies.gold + title.defined_trophies.platinum
             args = [game.np_communication_id, game.title_platform[0] if not game.title_platform[0] == 'PSPC' else game.title_platform[1]]
+            if created or game.get_total_defined_trophies() != title_defined_trophies_total:
+                PSNManager.assign_job('sync_trophy_groups', args, profile.id)
             PSNManager.assign_job('sync_trophies', args, profile.id)
 
         # Check profile health after processing all titles
@@ -417,6 +424,21 @@ class TokenKeeper:
         else:
             args=[limit, offset, page_size, True, force_title_stats]
             PSNManager.assign_job('sync_title_stats', args, profile_id)
+    
+    def _job_sync_trophy_groups(self, profile_id: int, np_communication_id: str, platform: str):
+        try:
+            profile = Profile.objects.get(id=profile_id)
+            game = Game.objects.get(np_communication_id=np_communication_id)
+        except Profile.DoesNotExist:
+            logger.error(f"Profile {profile_id} does not exist.")
+        except Game.DoesNotExist:
+            logger.error(f"Game {np_communication_id} does not exist.")
+        job_type='sync_trophy_groups'
+        
+        trophy_groups_summary = self._execute_api_call(self._get_instance_for_job(job_type), profile, 'trophy_groups_summary', np_communication_id=np_communication_id, platform=PlatformType(platform))
+        for group in trophy_groups_summary.trophy_groups:
+            trophy_group, created = PsnApiService.create_or_update_trophy_groups_from_summary(game, group)
+        logger.info(f"Trophy group summaries for {game.title_name} synced successfully!")
 
     def _job_sync_title_stats(self, profile_id: int, limit: int, offset: int, page_size: int, is_last: bool=False, force_all: bool=False):
         logger.info(f"Syncing title stats | Force All: {force_all}")
@@ -503,16 +525,8 @@ class TokenKeeper:
                 details = game_title.get_details()[0]
                 concept, created = PsnApiService.create_concept_from_details(details)
                 if not created:
-                    media = {
-                        'images': details.get('defaultProduct', {}).get('media', {}).get('images', []),
-                        'videos': details.get('defaultProduct', {}).get('media', {}).get('videos', [])
-                    }
-                    if not media['images']:
-                        media = {
-                            'images': details.get('media', {}).get('images', []),
-                            'videos': details.get('media', {}).get('videos', [])
-                        }
-                    concept.update_media(media)
+                    media_list = self._extract_media(details)
+                    concept.update_media(media_list)
                 game.add_concept(concept)
                 game.add_region(title_id.region)
                 concept.add_title_id(title_id.title_id)
@@ -522,6 +536,37 @@ class TokenKeeper:
                 logger.warning(f"Couldn't get game_title for Title ID {title_id.title_id}")
         except Exception as e:
             logger.error(f"Error while syncing Title ID {title_id.title_id}: {str(e)}")
+    
+    def _extract_media(self, details: dict) -> list[dict]:
+        """Extract and combine unique media (images/videos) from JSON, deduped by URL per type."""
+        all_media = []
+        seen = {}
+
+        def add_item(item):
+            item_type = item.get('type')
+            url = item.get('url')
+            if item_type and url:
+                if item_type not in seen:
+                    seen[item_type] = set()
+                if url not in seen[item_type]:
+                    seen[item_type].add(url)
+                    all_media.append(item)
+
+        default_media = details.get('defaultProduct', {}).get('media', {})
+        for img in default_media.get('images', []):
+            add_item(img)
+        for vid in default_media.get('videos', []):
+            add_item(vid)
+
+        root_media = details.get('media', {})
+        for img in root_media.get('images', []):
+            add_item(img)
+        for vid in root_media.get('videos', []):
+            add_item(vid)
+
+        all_media.sort(key=lambda x: (x.get('type', ''), x.get('url', '')))
+
+        return all_media
     
     def _job_profile_refresh(self, profile_id: int):
         try:
@@ -550,9 +595,12 @@ class TokenKeeper:
             offset += page_size
         
         for title in trophy_titles_to_be_updated:
-            game, _, _ = PsnApiService.create_or_update_game(title)
+            game, created, _ = PsnApiService.create_or_update_game(title)
             profile_game, _ = PsnApiService.create_or_update_profile_game(profile, game, title)
+            title_defined_trophies_total = title.defined_trophies.bronze + title.defined_trophies.silver + title.defined_trophies.gold + title.defined_trophies.platinum
             args = [game.np_communication_id, game.title_platform[0] if not game.title_platform[0] == 'PSPC' else game.title_platform[1]]
+            if created or game.get_total_defined_trophies() != title_defined_trophies_total:
+                PSNManager.assign_job('sync_trophy_groups', args, profile.id)
             PSNManager.assign_job('sync_trophies', args, profile.id, priority_override='medium_priority')
 
         
@@ -669,12 +717,16 @@ class TokenKeeper:
         
         num_title_stats = 0
         for title in trophy_titles:
-            game, _, _ = PsnApiService.create_or_update_game(title)
+            game, created, _ = PsnApiService.create_or_update_game(title)
             profile_game, _ = PsnApiService.create_or_update_profile_game(profile, game, title)
             for platform in game.title_platform:
                 if platform in TITLE_STATS_SUPPORTED_PLATFORMS:
                     num_title_stats += 1
                     break
+            title_defined_trophies_total = title.defined_trophies.bronze + title.defined_trophies.silver + title.defined_trophies.gold + title.defined_trophies.platinum
+            args = [game.np_communication_id, game.title_platform[0] if not game.title_platform[0] == 'PSPC' else game.title_platform[1]]
+            if True or game.get_total_defined_trophies() != title_defined_trophies_total:
+                PSNManager.assign_job('sync_trophy_groups', args, profile.id)
 
         # Assign jobs for title_stats
         page_size = 200
