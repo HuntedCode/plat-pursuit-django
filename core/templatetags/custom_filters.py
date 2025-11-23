@@ -74,5 +74,5 @@ def psn_rarity(rarity_int):
         return 'Common'
 
 @register.filter
-def trophy_id_key(dict_obj, key):
+def dict_get(dict_obj, key):
     return dict_obj.get(key)

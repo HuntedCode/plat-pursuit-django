@@ -16,6 +16,7 @@ Including another URLconf
 """
 
 from django.contrib import admin
+from django.contrib.auth.views import LogoutView
 from django.urls import path
 from core.views import IndexView
 from trophies.views import GamesListView, TrophiesListView, ProfilesListView, SearchView, GameDetailView, monitoring_dashboard, token_stats, token_stats_sse
@@ -29,6 +30,8 @@ urlpatterns = [
     path('trophies/', TrophiesListView.as_view(), name='trophies_list'),
     path('profiles/', ProfilesListView.as_view(), name='profiles_list'),
     path('search/', SearchView.as_view(), name='search'),
+
+    path('logout/', LogoutView.as_view(next_page='home'), name='logout'),
 
     path('api/token-stats/', token_stats, name='token-stats'),
     path('api/token-stats/sse/', token_stats_sse, name='token-stats-sse'),

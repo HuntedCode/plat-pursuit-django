@@ -10,7 +10,7 @@
                 <p>Rarity: {{ trophy.get_pp_rarity_tier }}</p>
             </div>
             {% if user_earned and trophy.id in user_earned %}
-                {% with earned=user_earned|trophy_id_key:trophy.id %}
+                {% with earned=user_earned|dict_get:trophy.id %}
                     <div class="text-right">
                         <p>Earned: {% if earned.earned %}Yes{% else %}No{% endif %}</p>
                         {% if earned.earned_date_time %}

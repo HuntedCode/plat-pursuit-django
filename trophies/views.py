@@ -11,7 +11,7 @@ from django.db.models import Q, F, Prefetch, OuterRef, Subquery, Value, IntegerF
 from django.db.models.functions import Coalesce
 from django.urls import reverse_lazy
 from django.utils import timezone
-from .models import Game, Trophy, Profile, EarnedTrophy, ProfileGame
+from .models import Game, Trophy, Profile, EarnedTrophy, ProfileGame, TrophyGroup
 from .forms import GameSearchForm, TrophySearchForm, ProfileSearchForm
 from .utils import redis_client
 
@@ -350,6 +350,8 @@ class GameDetailView(DetailView):
         stats_timeout = 86400
         trophy_cache_key = f"game:trophies:{game.np_communication_id}"
         trophy_timeout = 604800
+        trophy_groups_cache_key = f"game:trophygroups:{game.np_communication_id}"
+        trophy_groups_timeout = 604800
 
         if profile_username:
             try:
@@ -358,13 +360,15 @@ class GameDetailView(DetailView):
                 messages.error(self.request, "Profile not found.")
         elif user.is_authenticated and hasattr(user, 'profile') and user.profile and user.profile.is_linked:
             target_profile = user.profile
+        else:
+            target_profile = None
 
         logger.info(f"Target Profile: {target_profile} | Profile Username: {profile_username}")
 
         profile_progress = None
         profile_trophy_totals = {}
         profile_earned = {}
-        timeline = []
+        milestones = [{'label': 'First Trophy'}, {'label': '50% Trophy'}, {'label': 'Platinum Trophy'}, {'label': '100% Trophy'}]
         if target_profile:
             try:
                 profile_game = ProfileGame.objects.get(profile=target_profile, game=game)
@@ -395,19 +399,63 @@ class GameDetailView(DetailView):
                     'platinum': ordered_earned_qs.filter(trophy__trophy_type='platinum').count() or 0,
                 }
 
+                milestones = []
                 earned_list = list(ordered_earned_qs)
                 total_trophies = len(earned_qs)
                 if len(earned_list) > 0:
-                    milestones = [0, 0.25, 0.5, 0.75, 1.0]
-                    timeline = []
-                    for pct in milestones:
-                        idx = math.ceil((total_trophies - 1) * pct)
-                        if idx <= len(earned_list):
-                            entry = earned_list[idx]
-                            timeline.append({
-                                'trophy_name': entry.trophy.trophy_name,
-                                'earned_date_time': entry.earned_date_time
-                            })
+                    first = earned_list[0]
+                    milestones.append({
+                        'label': 'First Trophy',
+                        'trophy_name': first.trophy.trophy_name,
+                        'trophy_icon_url': first.trophy.trophy_icon_url,
+                        'earned_date_time': first.earned_date_time,
+                        'trophy_earn_rate': first.trophy.trophy_earn_rate,
+                        'trophy_rarity': first.trophy.trophy_rarity
+                    })
+                else:
+                    milestones.append({'label': 'First Trophy'})
+                
+                mid_idx = math.ceil((total_trophies - 1) * 0.5)
+                if len(earned_list) >= mid_idx:
+                    mid = earned_list[mid_idx]
+                    milestones.append({
+                        'label': '50% Trophy',
+                        'trophy_name': mid.trophy.trophy_name,
+                        'trophy_icon_url': mid.trophy.trophy_icon_url,
+                        'earned_date_time': mid.earned_date_time,
+                        'trophy_earn_rate': mid.trophy.trophy_earn_rate,
+                        'trophy_rarity': mid.trophy.trophy_rarity
+                    })
+                else:
+                    milestones.append({'label': '50% Trophy'})
+
+                plat_entry = None
+                if len(earned_list) > 0:
+                    plat_entry = next((e for e in reversed(earned_list) if e.trophy.trophy_type == 'platinum'), None)
+                if plat_entry:
+                    milestones.append({
+                        'label': 'Platinum Trophy',
+                        'trophy_name': plat_entry.trophy.trophy_name,
+                        'trophy_icon_url': plat_entry.trophy.trophy_icon_url,
+                        'earned_date_time': plat_entry.earned_date_time,
+                        'trophy_earn_rate': plat_entry.trophy.trophy_earn_rate,
+                        'trophy_rarity': plat_entry.trophy.trophy_rarity
+                    })
+                else:
+                    milestones.append({'label': 'Platinum Trophy'})
+
+                if profile_progress['progress'] == 100:
+                    complete = earned_list[-1]
+                    milestones.append({
+                        'label': '100% Trophy',
+                        'trophy_name': complete.trophy.trophy_name,
+                        'trophy_icon_url': complete.trophy.trophy_icon_url,
+                        'earned_date_time': complete.earned_date_time,
+                        'trophy_earn_rate': complete.trophy.trophy_earn_rate,
+                        'trophy_rarity': complete.trophy.trophy_rarity
+                    })
+                else:
+                    milestones.append({'label': '100% Trophy'})
             except ProfileGame.DoesNotExist:
                 pass
         
@@ -420,20 +468,24 @@ class GameDetailView(DetailView):
                 screenshot_urls = []
                 content_rating_url = None
                 if game.concept: 
-                    if game.concept.media and 'images' in game.concept.media:
-                        for img in game.concept.media['images']:
-                            if img.get('type') == 'BACKGROUND_LAYER_ART':
+                    if game.concept.media:
+                        for img in game.concept.media:
+                            if img.get('type') == 'GAMEHUB_COVER_ART':
                                 bg_url = img.get('url')
                                 break
-                            elif img.get('type') == 'GAMEHUB_COVER_ART':
+                            elif img.get('type') == 'BACKGROUND_LAYER_ART':
                                 bg_url = img.get('url')
-                        
-                        for img in game.concept.media['images']:
+                        if not bg_url:
+                            for img in game.concept.media:
+                                if img.get('type') == 'SCREENSHOT':
+                                    bg_url = img.get('url')
+
+                        for img in game.concept.media:
                             if img.get('type') == 'SCREENSHOT':
                                 screenshot_urls.append(img.get('url'))
                         
                         if len(screenshot_urls) < 1:
-                            for img in game.concept.media['images']:
+                            for img in game.concept.media:
                                 img_type = img.get('type')
                                 if img_type == 'GAMEHUB_COVER_ART' or img_type == 'LOGO' or img_type == 'MASTER':
                                     screenshot_urls.append(img.get('url'))
@@ -500,12 +552,40 @@ class GameDetailView(DetailView):
             logger.error(f"Game trophies cache failed for {game.np_communication_id}: {e}")
             full_trophies = []
 
+        try:
+            cached_trophy_groups = cache.get(trophy_groups_cache_key)
+            if cached_trophy_groups:
+                trophy_groups = json.loads(cached_trophy_groups)
+            else:
+                trophy_groups_qs = TrophyGroup.objects.filter(game=game)
+                trophy_groups = {
+                    g.trophy_group_id: {
+                        'trophy_group_name': g.trophy_group_name,
+                        'trophy_group_icon_url': g.trophy_group_icon_url,
+                        'defined_trophes': g.defined_trophies,
+                    } for g in trophy_groups_qs
+                }
+                cache.set(trophy_groups_cache_key, json.dumps(trophy_groups), timeout=trophy_groups_timeout)
+        except Exception as e:
+            logger.error(f"Trophy groups cache failed for {game.np_communication_id}: {e}")
+            trophy_groups = {}
+        
+        grouped_trophies = {}
+        for trophy in full_trophies:
+            group_id = trophy.get('trophy_group_id', 'default')
+            if group_id not in grouped_trophies:
+                grouped_trophies[group_id] = []
+            grouped_trophies[group_id].append(trophy)
+        
+        sorted_groups = sorted(grouped_trophies.keys(), key=lambda x: (x != 'default', x))
+
         context['profile'] = target_profile
         context['profile_progress'] = profile_progress
         context['profile_earned'] = profile_earned
         context['profile_trophy_totals'] = profile_trophy_totals
         context['game_stats'] = stats
-        context['full_trophies'] = full_trophies
+        context['grouped_trophies'] = {gid: grouped_trophies[gid] for gid in sorted_groups}
+        context['trophy_groups'] = trophy_groups
         context['image_urls'] = image_urls
-        context['timeline'] = timeline
+        context['milestones'] = milestones
         return context

@@ -97,14 +97,23 @@
         {% if user.is_authenticated %}
             <div class="dropdown dropdown-end">
                 <div tabindex="0" role="button" class="btn btn-ghost btn-circle avatar">
-                    <div class="w-15 rounded-full ring ring-secondary ring-offset-base-100 ring-offset-2">
-                        <img alt="Profile Picture" src="{{ user.avatar|default:'https://placehold.co/40' }}" />
+                    <div class="w-15 bg-primary/50 rounded-full ring ring-secondary ring-offset-base-100 ring-offset-2">
+                        {% if user.profile %}
+                            <img alt="Profile Picture" src="{{ user.profile.avatar_url }}" />
+                        {% else %}
+                            <svg class="mx-auto my-1" xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="oklch(97.807% 0.029 256.847)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+                        {% endif %}
                     </div>
                 </div>
                 <ul tabindex="0" class="menu menu-sm dropdown-content mt-2 z-[1] p-2 shadow-lg bg-base-100 border-2 border-base-200 w-32">
                     <li><a href="/profile/{{ user.username }}">Profile</a></li>
                     <li><a href="/">Settings</a></li>
-                    <li><a href="/">Logout</a></li>
+                    <li>
+                        <form method="post" action="{% url 'logout' %}">
+                            {% csrf_token %}
+                            <button type="submit" class="w-full text-left">Logout</button>
+                        </form>
+                    </li>
                 </ul>
             </div>
         {% else %}
