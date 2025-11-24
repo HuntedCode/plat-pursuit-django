@@ -598,6 +598,11 @@ class GameDetailView(DetailView):
         
         sorted_groups = sorted(grouped_trophies.keys(), key=lambda x: (x != 'default', x))
 
+        context['breadcrumb'] = [
+            {'text': 'Home', 'url': reverse_lazy('home')},
+            {'text': 'Games', 'url': reverse_lazy('games_list')},
+            {'text': f"{game.title_name}"}
+        ]
         context['profile'] = target_profile
         context['profile_progress'] = profile_progress
         context['profile_earned'] = profile_earned
