@@ -56,6 +56,18 @@ def trophy_color(trophy):
         return 'trophy-platinum'
 
 @register.filter
+def trophy_color_dict(trophy):
+    type = trophy['trophy_type']
+    if type == 'bronze':
+        return 'trophy-bronze'
+    elif type == 'silver':
+        return 'trophy-silver'
+    elif type == 'gold':
+        return 'trophy-gold'
+    elif type == 'platinum':
+        return 'trophy-platinum'
+
+@register.filter
 def multiply(value, arg):
     try:
         return float(value) * float(arg)

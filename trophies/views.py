@@ -368,6 +368,7 @@ class GameDetailView(DetailView):
         profile_progress = None
         profile_trophy_totals = {}
         profile_earned = {}
+        profile_group_totals = {}
         milestones = [{'label': 'First Trophy'}, {'label': '50% Trophy'}, {'label': 'Platinum Trophy'}, {'label': '100% Trophy'}]
         if target_profile:
             try:
@@ -398,6 +399,13 @@ class GameDetailView(DetailView):
                     'gold': ordered_earned_qs.filter(trophy__trophy_type='gold').count() or 0,
                     'platinum': ordered_earned_qs.filter(trophy__trophy_type='platinum').count() or 0,
                 }
+                
+                for e in ordered_earned_qs:
+                    group_id = e.trophy.trophy_group_id or 'default'
+                    trophy_type = e.trophy.trophy_type
+                    if group_id not in profile_group_totals:
+                        profile_group_totals[group_id] = {'bronze': 0, 'silver': 0, 'gold': 0, 'platinum': 0}
+                    profile_group_totals[group_id][trophy_type] += 1
 
                 milestones = []
                 earned_list = list(ordered_earned_qs)
@@ -542,11 +550,22 @@ class GameDetailView(DetailView):
                 full_trophies = json.loads(cached_trophies)
             else:
                 trophies_qs = Trophy.objects.filter(game=game).order_by('trophy_id')
-                full_trophies = list(trophies_qs.values(
-                    'trophy_id', 'trophy_type', 'trophy_name', 'trophy_detail',
-                    'trophy_icon_url', 'trophy_group_id', 'trophy_rarity', 'trophy_earn_rate',
-                    'earned_count', 'earn_rate'
-                ))
+                full_trophies = [
+                    {
+                        'trophy_id': t.trophy_id,
+                        'trophy_type': t.trophy_type,
+                        'trophy_name': t.trophy_name,
+                        'trophy_detail': t.trophy_detail,
+                        'trophy_icon_url': t.trophy_icon_url,
+                        'trophy_group_id': t.trophy_group_id,
+                        'progress_target_value': t.progress_target_value,
+                        'trophy_rarity': t.trophy_rarity,
+                        'trophy_earn_rate': t.trophy_earn_rate,
+                        'earned_count': t.earned_count,
+                        'earn_rate': t.earn_rate,
+                        'pp_rarity': t.get_pp_rarity_tier()
+                    } for t in trophies_qs
+                ]
                 cache.set(trophy_cache_key, json.dumps(full_trophies), timeout=trophy_timeout)
         except Exception as e:
             logger.error(f"Game trophies cache failed for {game.np_communication_id}: {e}")
@@ -562,7 +581,7 @@ class GameDetailView(DetailView):
                     g.trophy_group_id: {
                         'trophy_group_name': g.trophy_group_name,
                         'trophy_group_icon_url': g.trophy_group_icon_url,
-                        'defined_trophes': g.defined_trophies,
+                        'defined_trophies': g.defined_trophies,
                     } for g in trophy_groups_qs
                 }
                 cache.set(trophy_groups_cache_key, json.dumps(trophy_groups), timeout=trophy_groups_timeout)
@@ -583,6 +602,7 @@ class GameDetailView(DetailView):
         context['profile_progress'] = profile_progress
         context['profile_earned'] = profile_earned
         context['profile_trophy_totals'] = profile_trophy_totals
+        context['profile_group_totals'] = profile_group_totals
         context['game_stats'] = stats
         context['grouped_trophies'] = {gid: grouped_trophies[gid] for gid in sorted_groups}
         context['trophy_groups'] = trophy_groups

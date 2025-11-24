@@ -216,6 +216,7 @@ class EarnedTrophyAdmin(admin.ModelAdmin):
         "trophy",
         "trophy__trophy_type",
         "earned",
+        'progress',
         "trophy__earned_count",
         "earned_date_time",
         "last_updated",
