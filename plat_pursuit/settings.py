@@ -56,6 +56,7 @@ INSTALLED_APPS = [
     "users",
     "trophies",
     'rest_framework',
+    'rest_framework.authtoken',
     'django_extensions'
 ]
 
@@ -101,6 +102,13 @@ DATABASES = {
         "HOST": os.getenv("DB_HOST", "localhost"),
         "PORT": os.getenv("DB_PORT", "5433"),
     }
+}
+
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': ['rest_framework.authentication.TokenAuthentication',],
+    'DEFAULT_PERMISSION_CLASSES': ['rest_framework.permissions.IsAuthenticated',],
+    'DEFAULT_THROTTLE_CLASSES': ['rest_framework.throttling.UserRateThrottle',],
+    'DEFAULT_THROTTLE_RATES': {'user': '60/min',},
 }
 
 # Password validation

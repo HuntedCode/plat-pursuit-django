@@ -68,13 +68,14 @@ class Profile(models.Model):
 
     def unlink_user(self):
         if self.user:
-            self.user = models.SET_NULL
+            self.user = None
             self.is_linked = False
             self.save(update_fields=['user', 'is_linked'])
 
     def get_total_trophies_from_summary(self):
         if self.earned_trophy_summary:
-            return self.earned_trophy_summary['bronze'] + self.earned_trophy_summary['silver'] + self.earned_trophy_summary['gold'] + self.earned_trophy_summary['platinum']
+            return self.earned_trophy_summary.get('bronze', 0) + self.earned_trophy_summary.get('silver', 0) + self.earned_trophy_summary.get('gold', 0) + self.earned_trophy_summary.get('platinum', 0)
+
 
 class FeaturedProfile(models.Model):
     profile = models.ForeignKey(Profile, on_delete=models.CASCADE)
