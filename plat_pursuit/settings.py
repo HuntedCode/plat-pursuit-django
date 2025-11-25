@@ -57,6 +57,7 @@ INSTALLED_APPS = [
     "trophies",
     'rest_framework',
     'rest_framework.authtoken',
+    'api',
     'django_extensions'
 ]
 
@@ -109,6 +110,8 @@ REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': ['rest_framework.permissions.IsAuthenticated',],
     'DEFAULT_THROTTLE_CLASSES': ['rest_framework.throttling.UserRateThrottle',],
     'DEFAULT_THROTTLE_RATES': {'user': '60/min',},
+    'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
+    'PAGE_SIZE': 10,
 }
 
 # Password validation

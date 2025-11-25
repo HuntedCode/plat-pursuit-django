@@ -28,6 +28,12 @@ class Profile(models.Model):
             )
         ],
     )
+    display_psn_username = models.CharField(
+        max_length=16,
+        blank=True,
+        null=True,
+        help_text="PSN username with original capitalization (populated from PSN API)"
+    )
     account_id = models.CharField(max_length=20, unique=True, blank=True, null=True)
     np_id = models.CharField(max_length=50, blank=True, null=True)
     avatar_url = models.URLField(blank=True, null=True)
@@ -50,15 +56,23 @@ class Profile(models.Model):
     )
     is_linked = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
+    discord_id = models.BigIntegerField(unique=True, blank=True, null=True, help_text='Unique Discord user ID. Set on bot linking.')
+    discord_linked_at = models.DateTimeField(blank=True, null=True, help_text='Timestamp when Discord was linked via bot.')
 
     class Meta:
         indexes = [
             models.Index(fields=["psn_username"], name="psn_username_idx"),
             models.Index(fields=["account_id"], name="account_id_idx"),
+            models.Index(fields=['discord_id'], name='discord_id_idx'),
         ]
 
     def __str__(self):
         return self.psn_username
+    
+    def save(self, *args, **kwargs):
+        if self.psn_username:
+            self.psn_username = self.psn_username.lower()
+        super().save(*args, **kwargs)
 
     def link_to_user(self, user):
         if not self.user:
@@ -75,6 +89,18 @@ class Profile(models.Model):
     def get_total_trophies_from_summary(self):
         if self.earned_trophy_summary:
             return self.earned_trophy_summary.get('bronze', 0) + self.earned_trophy_summary.get('silver', 0) + self.earned_trophy_summary.get('gold', 0) + self.earned_trophy_summary.get('platinum', 0)
+        
+    def link_discord(self, discord_id: int):
+        if self.discord_id:
+            raise ValueError("Discord already linked to this profile.")
+        self.discord_id = discord_id
+        self.discord_linked_at = timezone.now()
+        self.save(update_fields=['discord_id', 'discord_linked_at'])
+    
+    def unlink_discord(self):
+        self.discord_id = None
+        self.discord_linked_at = None
+        self.save(update_fields=['discord_id', 'discord_linked_at'])
 
 
 class FeaturedProfile(models.Model):

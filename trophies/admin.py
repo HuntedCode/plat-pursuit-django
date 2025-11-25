@@ -12,6 +12,7 @@ class ProfileAdmin(admin.ModelAdmin):
         "psn_username",
         "account_id",
         "user",
+        "discord_id",
         "is_linked",
         'country',
         'country_code',
@@ -28,7 +29,7 @@ class ProfileAdmin(admin.ModelAdmin):
     fieldsets = (
         (
             "Core Info",
-            {"fields": ("psn_username", "account_id", "np_id", "user", "is_linked")},
+            {"fields": ("psn_username", "display_psn_username", "account_id", "np_id", "user", "is_linked", "discord_id", "discord_linked_at")},
         ),
         (
             "Profile Details",

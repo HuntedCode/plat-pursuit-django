@@ -17,7 +17,7 @@ Including another URLconf
 
 from django.contrib import admin
 from django.contrib.auth.views import LogoutView
-from django.urls import path
+from django.urls import path, include
 from core.views import IndexView
 from trophies.views import GamesListView, TrophiesListView, ProfilesListView, SearchView, GameDetailView, monitoring_dashboard, token_stats, token_stats_sse
 
@@ -36,4 +36,6 @@ urlpatterns = [
     path('api/token-stats/', token_stats, name='token-stats'),
     path('api/token-stats/sse/', token_stats_sse, name='token-stats-sse'),
     path('monitoring/', monitoring_dashboard, name='monitoring'),
+
+    path('api/v1/', include('api.urls')),
 ]

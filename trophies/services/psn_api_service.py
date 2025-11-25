@@ -14,6 +14,7 @@ class PsnApiService:
     @classmethod
     def update_profile_from_legacy(cls, profile: Profile, legacy: dict) -> Profile:
         """Update Profile model from PSN legacy profile data."""
+        profile.display_psn_username = legacy["profile"].get("onlineId")
         profile.account_id = legacy["profile"].get("accountId")
         profile.np_id = legacy["profile"].get("npId")
         profile.avatar_url = (
