@@ -8,6 +8,7 @@ from typing import Optional, Dict
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from psnawp_api import PSNAWP
+from psnawp_api.core.psnawp_exceptions import PSNAWPForbiddenError
 from psnawp_api.models.trophies.trophy_constants import PlatformType
 from requests import HTTPError
 from .models import Profile, Game, TitleID
@@ -322,7 +323,18 @@ class TokenKeeper:
             instance.is_busy = False
             if redis_client.get(f"token_keeper:pending_refresh:{instance.instance_id}"):
                 self._check_and_refresh(instance)
+            if endpoint not in ['get_profile_legacy', 'get_region']:
+                profile.set_history_public_flag(True)
             return data
+        except PSNAWPForbiddenError as e:
+            if profile:
+                profile.set_history_public_flag(False)
+                logger.warning(f"Privacy error for profile {profile.id}.")
+            log_api_call(endpoint, instance.token, profile.id if profile else None, 500, time.time() - start_time, str(e))
+            instance.is_busy = False
+            self._rollback_call(instance.token)
+            if redis_client.get(f"token_keeper:pending_refresh:{instance.instance_id}"):
+                self._check_and_refresh(instance)
         except HTTPError as e:
             log_api_call(endpoint, instance.token, profile.id if profile else None, e.response.status_code, time.time() - start_time, str(e))
             instance.is_busy = False

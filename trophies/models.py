@@ -60,6 +60,7 @@ class Profile(models.Model):
         default="basic",
     )
     is_linked = models.BooleanField(default=False)
+    psn_history_public = models.BooleanField(default=True, help_text="Flag indicating if PSN gaming history is public. (Access error: 2240526)")
     created_at = models.DateTimeField(auto_now_add=True)
     discord_id = models.BigIntegerField(unique=True, blank=True, null=True, help_text='Unique Discord user ID. Set on bot linking.')
     discord_linked_at = models.DateTimeField(blank=True, null=True, help_text='Timestamp when Discord was linked via bot.')
@@ -138,6 +139,10 @@ class Profile(models.Model):
         self.discord_linked_at = None
         self.is_verified = False
         self.save(update_fields=['discord_id', 'discord_linked_at', 'is_verified'])
+    
+    def set_history_public_flag(self, value: bool):
+        self.psn_history_public = value
+        self.save(update_fields=['psn_history_public'])
 
 
 class FeaturedProfile(models.Model):

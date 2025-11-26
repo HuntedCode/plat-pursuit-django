@@ -204,7 +204,7 @@ class Command(BaseCommand):
             self.user_profile_legacy(user)
             # self.user_title_stats(user)
             # self.user_trophy_summary(user)
-            # self.user_trophy_titles(user)
+            self.user_trophy_titles(user)
             np_comm_id = "NPWR40455_00"
             # title_ids = ["NPWR43893_00"]
             #title_ids = []

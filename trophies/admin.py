@@ -16,6 +16,7 @@ class ProfileAdmin(admin.ModelAdmin):
         "verification_code",
         "is_linked",
         "is_verified",
+        "psn_history_public",
         'country_code',
         "is_plus",
         "last_synced",
