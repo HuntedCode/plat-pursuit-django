@@ -130,9 +130,23 @@ class RefreshView(APIView):
         try:
             profile = Profile.objects.get(discord_id=discord_id)
             time_since_last_sync = profile.get_time_since_last_sync()
-            if time_since_last_sync > timedelta(hours=1):
+            if time_since_last_sync > timedelta(hours=1) or not profile.psn_history_public:
                 PSNManager.profile_refresh(profile)
-                return Response({'linked': True, 'success': True, 'psn_username': profile.display_psn_username})
+
+                start_time = timezone.now()
+                timeout_seconds = 30
+                poll_interval_seconds = 1
+
+                while (timezone.now() - start_time).total_seconds() < timeout_seconds:
+                    profile.refresh_from_db()
+                    if profile.last_synced > start_time:
+                        if profile.psn_history_public:
+                            return Response({'linked': True, 'success': True, 'psn_username': profile.display_psn_username})
+                        else:
+                            logger.warning(f"Permission error for profile {profile.id}.")
+                            return Response({'linked': True, 'success': False, 'message': "Permissions error. Please make sure the PSN setting 'Gaming History' is set to 'Anyone' and try again."})
+                    time.sleep(poll_interval_seconds)
+
             else:
                 total_seconds = (timedelta(hours=1) - time_since_last_sync).total_seconds()
                 minutes = math.ceil(total_seconds / 60)

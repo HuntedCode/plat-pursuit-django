@@ -29,7 +29,7 @@ class ProfileAdmin(admin.ModelAdmin):
     fieldsets = (
         (
             "Core Info",
-            {"fields": ("psn_username", "display_psn_username", "account_id", "np_id", "user", "is_linked", "discord_id", "discord_linked_at", "is_verified", "verification_code")},
+            {"fields": ("psn_username", "display_psn_username", "account_id", "np_id", "user", "is_linked", "psn_history_public", "discord_id", "discord_linked_at", "is_verified", "verification_code")},
         ),
         (
             "Profile Details",

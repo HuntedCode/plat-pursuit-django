@@ -12,7 +12,7 @@ class PsnApiService:
     """Service class for PSN API data processing and model updates."""
 
     @classmethod
-    def update_profile_from_legacy(cls, profile: Profile, legacy: dict) -> Profile:
+    def update_profile_from_legacy(cls, profile: Profile, legacy: dict, is_public: bool) -> Profile:
         """Update Profile model from PSN legacy profile data."""
         profile.display_psn_username = legacy["profile"].get("onlineId")
         profile.account_id = legacy["profile"].get("accountId")
@@ -25,11 +25,15 @@ class PsnApiService:
         profile.is_plus = legacy["profile"].get("plus", 0) == 1
         profile.about_me = legacy["profile"].get("aboutMe", "")
         profile.languages_used = legacy["profile"].get("languagesUsed", [])
-        profile.trophy_level = legacy["profile"]["trophySummary"].get("level", 0)
-        profile.progress = legacy["profile"]["trophySummary"].get("progress", 0)
-        profile.earned_trophy_summary = legacy["profile"]["trophySummary"][
-            "earnedTrophies"
-        ]
+
+        if is_public:
+            profile.trophy_level = legacy["profile"]["trophySummary"].get("level", 0)
+            profile.progress = legacy["profile"]["trophySummary"].get("progress", 0)
+            profile.earned_trophy_summary = legacy["profile"]["trophySummary"][
+                "earnedTrophies"
+            ]
+        
+        profile.psn_history_public = is_public
         profile.last_synced = timezone.now()
         profile.save()
         return profile

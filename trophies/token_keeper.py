@@ -381,7 +381,8 @@ class TokenKeeper:
         job_type = 'sync_profile_data'
 
         legacy = self._execute_api_call(self._get_instance_for_job(job_type), profile, 'get_profile_legacy')
-        PsnApiService.update_profile_from_legacy(profile, legacy)
+        is_public = not legacy['profile']['trophySummary']['level'] == 0
+        PsnApiService.update_profile_from_legacy(profile, legacy, is_public)
         region = self._execute_api_call(self._get_instance_for_job(job_type), profile, 'get_region')
         PsnApiService.update_profile_region(profile, region)
 
