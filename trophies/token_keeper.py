@@ -1,21 +1,19 @@
-from collections import namedtuple
 import json
 import time
 import threading
 import logging
 import os
 import atexit
-from typing import Optional, Dict, Set
+from typing import Optional, Dict
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from psnawp_api import PSNAWP
 from psnawp_api.models.trophies.trophy_constants import PlatformType
 from requests import HTTPError
-from pprint import pprint
-from .models import Profile, Game, TitleID, Concept
+from .models import Profile, Game, TitleID
 from .services.psn_api_service import PsnApiService
 from .psn_manager import PSNManager
-from .utils import redis_client, log_api_call, TITLE_ID_BLACKLIST, TITLE_STATS_SUPPORTED_PLATFORMS, PREFERRED_MEDIA_PLATFORMS
+from .utils import redis_client, log_api_call, TITLE_ID_BLACKLIST, TITLE_STATS_SUPPORTED_PLATFORMS
 
 logger = logging.getLogger("psn_api")
 

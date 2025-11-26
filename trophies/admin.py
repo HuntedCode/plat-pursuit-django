@@ -13,12 +13,11 @@ class ProfileAdmin(admin.ModelAdmin):
         "account_id",
         "user",
         "discord_id",
+        "verification_code",
         "is_linked",
-        'country',
+        "is_verified",
         'country_code',
-        'flag',
         "is_plus",
-        "trophy_level",
         "last_synced",
         "sync_tier",
     )
@@ -29,7 +28,7 @@ class ProfileAdmin(admin.ModelAdmin):
     fieldsets = (
         (
             "Core Info",
-            {"fields": ("psn_username", "display_psn_username", "account_id", "np_id", "user", "is_linked", "discord_id", "discord_linked_at")},
+            {"fields": ("psn_username", "display_psn_username", "account_id", "np_id", "user", "is_linked", "discord_id", "discord_linked_at", "is_verified", "verification_code")},
         ),
         (
             "Profile Details",

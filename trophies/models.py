@@ -5,7 +5,9 @@ from django.core.validators import RegexValidator
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 from django.core.cache import cache
+from datetime import timedelta
 from trophies.utils import count_unique_game_groups, TITLE_STATS_SUPPORTED_PLATFORMS, NA_REGION_CODES, EU_REGION_CODES, JP_REGION_CODES, AS_REGION_CODES, SHOVELWARE_THRESHOLD
+import secrets
 
 
 # Create your models here.
@@ -34,6 +36,9 @@ class Profile(models.Model):
         null=True,
         help_text="PSN username with original capitalization (populated from PSN API)"
     )
+    verification_code = models.CharField(max_length=32, blank=True, null=True, help_text="Temporary code for PSN About Me verification.")
+    verification_expires_at = models.DateTimeField(blank=True, null=True, help_text="Expiration timestamp for verification code.")
+    is_verified = models.BooleanField(default=False, help_text="True if PSN ownership verified via code.")
     account_id = models.CharField(max_length=20, unique=True, blank=True, null=True)
     np_id = models.CharField(max_length=50, blank=True, null=True)
     avatar_url = models.URLField(blank=True, null=True)
@@ -85,6 +90,37 @@ class Profile(models.Model):
             self.user = None
             self.is_linked = False
             self.save(update_fields=['user', 'is_linked'])
+    
+    def get_time_since_last_sync(self) -> timedelta:
+        if self.last_synced:
+            return timezone.now() - self.last_synced
+        return 0
+    
+    def generate_verification_code(self):
+        """Generate and set a secure, time-limited code."""
+        self.verification_code = secrets.token_hex(4).upper()
+        self.verification_expires_at = timezone.now() + timedelta(hours=1)
+        self.save(update_fields=['verification_code', 'verification_expires_at'])
+    
+    def verify_code(self, fetched_about_me: str) -> bool:
+        """Check if code is in About Me and unexpired."""
+        if not self.verification_code or not self.verification_expires_at:
+            return False
+        if timezone.now() > self.verification_expires_at:
+            self.clear_verification_code()
+            return False
+        if self.verification_code in fetched_about_me:
+            self.is_verified = True
+            self.save(update_fields=['is_verified'])
+            self.clear_verification_code()
+            return True
+        return False
+    
+    def clear_verification_code(self):
+        """Reset code fields for security/reuse."""
+        self.verification_code = None
+        self.verification_expires_at = None
+        self.save(update_fields=['verification_code', 'verification_expires_at'])
 
     def get_total_trophies_from_summary(self):
         if self.earned_trophy_summary:
@@ -100,7 +136,8 @@ class Profile(models.Model):
     def unlink_discord(self):
         self.discord_id = None
         self.discord_linked_at = None
-        self.save(update_fields=['discord_id', 'discord_linked_at'])
+        self.is_verified = False
+        self.save(update_fields=['discord_id', 'discord_linked_at', 'is_verified'])
 
 
 class FeaturedProfile(models.Model):

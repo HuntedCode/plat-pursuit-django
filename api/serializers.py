@@ -1,9 +1,26 @@
 from rest_framework import serializers
-from users.models import CustomUser
 from trophies.models import Profile
 from django.utils.translation import gettext_lazy as _
 
-class RegisterSerializer(serializers.Serializer):
+class GenerateCodeSerializer(serializers.Serializer):
+    psn_username = serializers.CharField(max_length=16, required=True)
+    discord_id = serializers.IntegerField(required=False, min_value=0)
+
+    def validate_psn_username(self, value):
+        from django.core.validators import RegexValidator
+        validator = RegexValidator(
+            regex=r"^[a-zA-Z0-9_-]{3,16}$",
+            message="PSN username must be 3-16 characters, using letters, numbers, hyphens or underscores."
+        )
+        validator(value)
+        return value.lower()
+    
+    def validate(self, data):
+        if 'discord_id' in data and Profile.objects.filter(discord_id=data['discord_id']).exists():
+            raise serializers.ValidationError("This Discord is already linked to a PSN account. Use /verify or contact an admin.")
+        return data
+
+class VerifySerializer(serializers.Serializer):
     discord_id = serializers.IntegerField(required=True, min_value=0)
     psn_username = serializers.CharField(max_length=16, required=True)
 
