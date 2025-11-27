@@ -1,5 +1,7 @@
 import logging
-from datetime import datetime
+import os
+import requests
+from datetime import timedelta
 from django.utils import timezone
 from django.db.models import F
 from trophies.models import Profile, Game, ProfileGame, Trophy, EarnedTrophy, Concept, TrophyGroup
@@ -7,6 +9,10 @@ from psnawp_api.models.title_stats import TitleStats
 from psnawp_api.models.trophies import TrophyTitle, TrophyGroupSummary
 
 logger = logging.getLogger("psn_api")
+
+DISCORD_PLATINUM_WEBHOOK_URL = os.getenv('DISCORD_PLATINUM_WEBHOOK_URL')
+PLATINUM_EMOJI_ID = os.getenv('PLATINUM_EMOJI_ID')
+PLAT_PURSUIT_EMOJI_ID = os.getenv('PLAT_PURSUIT_EMOJI_ID')
 
 class PsnApiService:
     """Service class for PSN API data processing and model updates."""
@@ -276,8 +282,12 @@ class PsnApiService:
             },
         )
 
+        notify = False
         if (created and trophy_data.earned == True) or ((not created) and earned_trophy.earned == False and trophy_data.earned == True):
             trophy.increment_earned_count()
+            threshold = timezone.now() - timedelta(days=24)
+            notify = earned_trophy.trophy.trophy_type == 'platinum' and trophy_data.earned_date_time >= threshold
+
 
         if not created:
             earned_trophy.earned = trophy_data.earned
@@ -288,8 +298,32 @@ class PsnApiService:
             earned_trophy.earned_date_time = trophy_data.earned_date_time
             earned_trophy.save()
 
+        if notify:
+            earned_trophy.refresh_from_db()
+            cls._notify_new_platinum(profile, earned_trophy)
+
         return earned_trophy, created
     
+    @classmethod
+    def _notify_new_platinum(self, profile: Profile, earned_trophy: EarnedTrophy):
+        """Send Discord webhook embed for new platinum."""
+        try:
+            platinum_emoji = f"<:Platinum_Trophy:{PLATINUM_EMOJI_ID}>" if PLATINUM_EMOJI_ID else "🏆"
+            plat_pursuit_emoji = f"<:PlatPursuit:{PLAT_PURSUIT_EMOJI_ID}>" if PLAT_PURSUIT_EMOJI_ID else "🏆"
+            embed_data = {
+                'title': f"🎉 New Platinum for {profile.display_psn_username}!",
+                'description': f"{plat_pursuit_emoji} <@{profile.discord_id}> has earned a shiny new platinum!\n{platinum_emoji} *{earned_trophy.trophy.trophy_name}* in **{earned_trophy.trophy.game.title_name}**\n🌟 {earned_trophy.trophy.trophy_earn_rate}% (PSN)",
+                'color': 0x003791,
+                'thumbnail': {'url': earned_trophy.trophy.trophy_icon_url},
+                'footer': {'text': f"*Powered by Plat Pursuit | Earned: {earned_trophy.earned_date_time}*"}
+            }
+            payload = {'embeds': [embed_data]}
+            response = requests.post(DISCORD_PLATINUM_WEBHOOK_URL, json=payload)
+            response.raise_for_status()
+            logger.info(f"Sent notification of new platinum for {profile.psn_username}")
+        except requests.RequestException as e:
+            logger.error(f"Webhook notification failed: {e}")
+
     @classmethod
     def get_profile_trophy_summary(cls, profile: Profile):
         return {
