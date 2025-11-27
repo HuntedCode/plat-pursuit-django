@@ -157,7 +157,7 @@ class RefreshView(APIView):
             logger.error(f"Refresh error: {e}")
             return Response({'error': 'Internal error.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-class TrophiesView(APIView):
+class SummaryView(APIView):
     permission_classes = [IsAuthenticated]
     
     def get(self, request):
@@ -167,7 +167,7 @@ class TrophiesView(APIView):
             return Response({'error': 'discord_id required.'}, status=status.HTTP_400_BAD_REQUEST)
         
         try:
-            profile = Profile.objects.get(discord_id=int(discord_id.strip()))
+            profile = Profile.objects.get(discord_id=discord_id)
             serializer = ProfileSerializer(profile)
             return Response({'linked': True, 'profile': serializer.data})
         except Profile.DoesNotExist:

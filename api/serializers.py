@@ -1,5 +1,6 @@
 from rest_framework import serializers
 from trophies.models import Profile
+from django.db.models import F
 from django.utils.translation import gettext_lazy as _
 
 class GenerateCodeSerializer(serializers.Serializer):
@@ -40,11 +41,38 @@ class VerifySerializer(serializers.Serializer):
 
 class ProfileSerializer(serializers.ModelSerializer):
     total_trophies = serializers.IntegerField(source='get_total_trophies_from_summary', read_only=True)
+    total_games = serializers.SerializerMethodField()
+    rarest_trophies = serializers.SerializerMethodField()
+    recent_platinums = serializers.SerializerMethodField()
 
     class Meta:
         model = Profile
         fields = [
-            'display_psn_username', 'avatar_url', 'is_plus', 'trophy_level', 'progress', 'tier',
-            'earned_trophy_summary', 'total_trophies', 'last_synced', 'country', 'flag'
+            'display_psn_username', 'account_id', 'avatar_url', 'is_plus', 'trophy_level', 'progress',
+            'earned_trophy_summary', 'last_synced', 'country', 'flag', 'is_verified', 'psn_history_public',
+            'total_trophies', 'total_games', 'rarest_trophies', 'recent_platinums'
         ]
         read_only_fields = fields
+    
+    def get_total_games(self, obj):
+        return obj.played_games.count()
+    
+    def get_rarest_trophies(self, obj):
+        rarest = obj.earned_trophy_entries.filter(earned=True).select_related('trophy').order_by('trophy__trophy_earn_rate')[:3]
+        return [
+            {
+                'name': et.trophy.trophy_name,
+                'earn_rate': et.trophy.trophy_earn_rate,
+                'game': et.trophy.game.title_name,
+            } for et in rarest
+        ]
+    
+    def get_recent_platinums(self, obj):
+        platinums = obj.earned_trophy_entries.filter(earned=True, trophy__trophy_type='platinum').select_related('trophy').order_by(F('earned_date_time').desc(nulls_last=True))[:3]
+        return [
+            {
+                'name': et.trophy.trophy_name,
+                'earned_date': et.earned_date_time.strftime('%Y-%m-%d %H:%M'),
+                'game': et.trophy.game.title_name,
+            } for et in platinums
+        ]
