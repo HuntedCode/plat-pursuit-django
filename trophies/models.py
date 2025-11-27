@@ -194,7 +194,7 @@ class Game(models.Model):
             self.save(update_fields=['concept'])
     
     def add_region(self, region: str):
-        if region and region not in self.region:
+        if region:
             if region in NA_REGION_CODES:
                 region = 'NA'
             elif region in EU_REGION_CODES:
@@ -205,8 +205,9 @@ class Game(models.Model):
                 region = 'AS'
             else:
                 return
-            self.region.append(region)
-            self.save(update_fields=['region'])
+            if region not in self.region:
+                self.region.append(region)
+                self.save(update_fields=['region'])
     
     def add_title_id(self, title_id: str):
         if title_id and title_id not in self.title_ids:
