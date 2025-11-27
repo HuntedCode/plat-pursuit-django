@@ -124,13 +124,15 @@ class RefreshView(APIView):
 
     def post(self, request):
         discord_id = request.data.get('discord_id')
+        admin_override = request.data.get('admin_override', False)
+
         if not discord_id:
             return Response({'error': 'discord_id required.'}, status=status.HTTP_400_BAD_REQUEST)
         
         try:
             profile = Profile.objects.get(discord_id=discord_id)
             time_since_last_sync = profile.get_time_since_last_sync()
-            if time_since_last_sync > timedelta(hours=1) or not profile.psn_history_public:
+            if admin_override or (time_since_last_sync > timedelta(hours=1) or not profile.psn_history_public):
                 PSNManager.profile_refresh(profile)
 
                 start_time = timezone.now()
