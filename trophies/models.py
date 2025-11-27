@@ -70,6 +70,7 @@ class Profile(models.Model):
             models.Index(fields=["psn_username"], name="psn_username_idx"),
             models.Index(fields=["account_id"], name="account_id_idx"),
             models.Index(fields=['discord_id'], name='discord_id_idx'),
+            models.Index(fields=['is_verified', 'last_synced'], name='verified_synced_idx'),
         ]
 
     def __str__(self):

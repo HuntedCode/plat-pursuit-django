@@ -2,7 +2,6 @@ amqp==5.3.1
 asgiref==3.10.0
 billiard==4.2.2
 black==25.9.0
-celery==5.5.3
 certifi==2025.10.5
 charset-normalizer==3.4.4
 click==8.3.0
@@ -31,7 +30,7 @@ psycopg-binary==3.2.10
 pycountry==24.6.1
 pyrate-limiter==3.9.0
 python-dateutil==2.9.0.post0
-python-dotenv==1.1.1
+python-dotenv==1.2.1
 pytokens==0.2.0
 pytz==2025.2
 redis==6.4.0

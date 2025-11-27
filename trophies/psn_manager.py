@@ -1,10 +1,7 @@
 import os
-import time
 import logging
 import json
-import uuid
 from dotenv import load_dotenv
-from celery import current_app, Task
 from .models import Profile, Game
 from .utils import redis_client
 
