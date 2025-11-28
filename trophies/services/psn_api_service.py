@@ -285,7 +285,7 @@ class PsnApiService:
         notify = False
         if (created and trophy_data.earned == True) or ((not created) and earned_trophy.earned == False and trophy_data.earned == True):
             trophy.increment_earned_count()
-            threshold = timezone.now() - timedelta(days=24)
+            threshold = timezone.now() - timedelta(days=2)
             notify = earned_trophy.trophy.trophy_type == 'platinum' and trophy_data.earned_date_time >= threshold
 
 
