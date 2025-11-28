@@ -2,8 +2,10 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
-from .serializers import GenerateCodeSerializer, VerifySerializer, ProfileSerializer
+from .serializers import GenerateCodeSerializer, VerifySerializer, ProfileSerializer, TrophyCaseSerializer
 from trophies.models import Profile
+from django.core.paginator import Paginator
+from django.db.models import F
 from django.utils import timezone
 from datetime import timedelta
 from trophies.psn_manager import PSNManager
@@ -176,4 +178,34 @@ class SummaryView(APIView):
             return Response({'linked': False, 'message': 'No linked PSN profile found.'})
         except Exception as e:
             logger.error(f"Trophies fetch error: {e}")
+            return Response({'error': 'Internal error.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+class TrophyCaseView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        discord_id = request.query_params.get('discord_id')
+        page = int(request.query_params.get('page', 1))
+        per_page = int(request.query_params.get('per_page', 10))
+        if not discord_id:
+            return Response({'error', 'discord_id required.'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            profile = Profile.objects.get(discord_id=discord_id)
+            platinums = profile.earned_trophy_entries.filter(earned=True, trophy__trophy_type='platinum').order_by(F('earned_date_time').desc(nulls_last=True))
+            total_plats = platinums.count()
+            paginator = Paginator(platinums, per_page)
+            paginated_platinums = paginator.page(page)
+            serializer = TrophyCaseSerializer(paginated_platinums, many=True)
+            return Response({
+                'linked': True,
+                'platinums': serializer.data,
+                'total_pages': paginator.num_pages,
+                'current_page': page,
+                'total_plats': total_plats
+            })
+        except Profile.DoesNotExist:
+            return Response({'linked': False, 'message': 'No linked profile found.'})
+        except Exception as e:
+            logger.error(f"Trophy case error: {e}")
             return Response({'error': 'Internal error.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

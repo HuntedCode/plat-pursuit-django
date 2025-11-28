@@ -1,5 +1,5 @@
 from django.urls import path
-from .views import SummaryView, GenerateCodeView, VerifyView, UnlinkView, CheckLinkedView, RefreshView
+from .views import SummaryView, GenerateCodeView, VerifyView, UnlinkView, CheckLinkedView, RefreshView, TrophyCaseView
 
 app_name = 'api'
 
@@ -10,4 +10,5 @@ urlpatterns = [
     path('unlink/', UnlinkView.as_view(), name='unlink'),
     path('refresh/', RefreshView.as_view(), name='refresh'),
     path('summary/', SummaryView.as_view(), name='summary'),
+    path('trophy-case/', TrophyCaseView.as_view(), name='trophy-case'),
 ]

@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from trophies.models import Profile
+from trophies.models import Profile, EarnedTrophy
 from django.db.models import F
 from django.utils.translation import gettext_lazy as _
 
@@ -18,7 +18,7 @@ class GenerateCodeSerializer(serializers.Serializer):
     
     def validate(self, data):
         if 'discord_id' in data and Profile.objects.filter(discord_id=data['discord_id']).exists():
-            raise serializers.ValidationError("This Discord is already linked to a PSN account. Use /verify or contact an admin.")
+            raise serializers.ValidationError("This Discord account is already linked to a PSN account.")
         return data
 
 class VerifySerializer(serializers.Serializer):
@@ -76,3 +76,10 @@ class ProfileSerializer(serializers.ModelSerializer):
                 'game': et.trophy.game.title_name,
             } for et in platinums
         ]
+
+class TrophyCaseSerializer(serializers.ModelSerializer):
+    icon_url = serializers.CharField(source='trophy.trophy_icon_url')
+
+    class Meta:
+        model = EarnedTrophy
+        fields = ['icon_url',]
