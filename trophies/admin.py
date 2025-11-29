@@ -9,6 +9,7 @@ from .models import Profile, Game, Trophy, EarnedTrophy, ProfileGame, APIAuditLo
 @admin.register(Profile)
 class ProfileAdmin(admin.ModelAdmin):
     list_display = (
+        "id",
         "psn_username",
         "account_id",
         "user",

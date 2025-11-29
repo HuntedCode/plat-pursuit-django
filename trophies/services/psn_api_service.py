@@ -266,7 +266,7 @@ class PsnApiService:
 
     @classmethod
     def create_or_update_earned_trophy_from_trophy_data(
-        cls, profile, trophy, trophy_data
+        cls, profile: Profile, trophy: Trophy, trophy_data
     ):
         """Create or update EarnedTrophy model from PSN trophy data."""
         earned_trophy, created = EarnedTrophy.objects.get_or_create(
@@ -286,7 +286,7 @@ class PsnApiService:
         if (created and trophy_data.earned == True) or ((not created) and earned_trophy.earned == False and trophy_data.earned == True):
             trophy.increment_earned_count()
             threshold = timezone.now() - timedelta(days=2)
-            notify = earned_trophy.trophy.trophy_type == 'platinum' and trophy_data.earned_date_time >= threshold
+            notify = profile.is_verified and earned_trophy.trophy.trophy_type == 'platinum' and trophy_data.earned_date_time >= threshold
 
 
         if not created:
