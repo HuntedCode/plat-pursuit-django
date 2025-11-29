@@ -17,7 +17,7 @@
                                 </figure>
                                 <div class="flex-grow space-y-0.5">
                                     <h3 class="card-title text-sm md:text-base xl:text-lg line-clamp-1 hover:scale-105">{{ item.trophy }}</h3>
-                                    <p class="text-xs xl:text-sm text-base-content/70 line-clamp-1 hover:scale-105">By <a href="/" class="link link-hover text-primary">{{ item.profile }}</a> in <a href="/" class="link link-hover text-accent">{{ item.game }}</a></p>
+                                    <p class="text-xs xl:text-sm text-base-content/70 mb-2 inline line-clamp-1 hover:scale-105">By <div class="tooltip inline" data-tip="{{ item.profile_flag }} | Plats: {{ item.profile_plats }} | First Sync: {{ item.profile_created_at }}"><a href="{% url 'profile_detail' item.profile_name %}" class="link link-hover inline text-primary">{{ item.profile_name }}</a></div> in <span class="text-accent">{{ item.game }}</span></p>
                                     <p class="text-xs xl:text-sm text-base-content/70  italic line-clamp-1 hover:scale-105">{{ item.rate|floatformat:2 }}% - {{ item.rarity }} </h3>
                                 </div>
                             </div>
@@ -39,7 +39,7 @@
                                 </figure>
                                 <div class="flex-grow space-y-1">
                                     <h3 class="card-title text-sm md:text-base xl:text-lg line-clamp-1 hover:scale-105">{{ item.trophy }}</h3>
-                                    <p class="text-xs xl:text-sm text-base-content/70 line-clamp-1 hover:scale-105">By <a href="/" class="link link-hover text-primary">{{ item.profile }}</a> in <a href="/" class="link link-hover text-accent">{{ item.game }}</a></p>
+                                    <p class="text-xs xl:text-sm text-base-content/70 mb-2 inline line-clamp-1 hover:scale-105">By <div class="tooltip inline" data-tip="{{ item.profile_flag }} | Plats: {{ item.profile_plats }} | First Sync: {{ item.profile_created_at }}"><a href="{% url 'profile_detail' item.profile_name %}" class="link link-hover inline text-primary">{{ item.profile_name }}</a></div> in <span class="text-accent">{{ item.game }}</span></p>
                                     <p class="text-xs xl:text-sm text-base-content/70 italic line-clamp-1 hover:scale-105">{{ item.rate|floatformat:2 }}% - {{ item.rarity }} </h3>
                                 </div>
                             </div>

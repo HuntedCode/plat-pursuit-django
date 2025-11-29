@@ -4,10 +4,10 @@ import math
 from datetime import timedelta, date
 from django.core.cache import cache
 from django.contrib import messages
-from django.shortcuts import render
+from django.shortcuts import render, get_object_or_404
 from django.http import StreamingHttpResponse, JsonResponse, HttpResponseRedirect
 from django.views.generic import ListView, View, DetailView
-from django.db.models import Q, F, Prefetch, OuterRef, Subquery, Value, IntegerField, FloatField, Count, Avg
+from django.db.models import Q, F, Prefetch, OuterRef, Subquery, Value, IntegerField, FloatField, Count, Avg, Min
 from django.db.models.functions import Coalesce
 from django.urls import reverse_lazy
 from django.utils import timezone
@@ -339,10 +339,9 @@ class GameDetailView(DetailView):
     
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        logger.info(kwargs)
-        game = self.object
+        game: Game = self.object
         user = self.request.user
-        profile_username = self.kwargs.get('profile_username')
+        psn_username = self.kwargs.get('psn_username')
         today = date.today().isoformat()
         images_cache_key = f"game:imageurls:{game.np_communication_id}"
         images_timeout = 604800
@@ -353,9 +352,9 @@ class GameDetailView(DetailView):
         trophy_groups_cache_key = f"game:trophygroups:{game.np_communication_id}"
         trophy_groups_timeout = 604800
 
-        if profile_username:
+        if psn_username:
             try:
-                target_profile = Profile.objects.get(psn_username__iexact=profile_username)
+                target_profile = Profile.objects.get(psn_username__iexact=psn_username)
             except Profile.DoesNotExist:
                 messages.error(self.request, "Profile not found.")
         elif user.is_authenticated and hasattr(user, 'profile') and user.profile and user.profile.is_linked:
@@ -363,7 +362,7 @@ class GameDetailView(DetailView):
         else:
             target_profile = None
 
-        logger.info(f"Target Profile: {target_profile} | Profile Username: {profile_username}")
+        logger.info(f"Target Profile: {target_profile} | Profile Username: {psn_username}")
 
         profile_progress = None
         profile_trophy_totals = {}
@@ -613,4 +612,56 @@ class GameDetailView(DetailView):
         context['trophy_groups'] = trophy_groups
         context['image_urls'] = image_urls
         context['milestones'] = milestones
+        return context
+    
+class ProfileDetailView(DetailView):
+    model = Profile
+    template_name = 'trophies/profile_detail.html'
+    slug_field = 'psn_username'
+    slug_url_kwarg = 'psn_username'
+    context_object_name = 'profile'
+
+    def get_object(self, queryset=None):
+        psn_username = self.kwargs[self.slug_url_kwarg].lower()
+        queryset = queryset or self.get_queryset()
+        return get_object_or_404(queryset, **{self.slug_field: psn_username})
+    
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        profile: Profile = self.object
+        user = self.request.user
+
+        header_stats = {}
+
+        header_stats['total_games'] = profile.played_games.count()
+
+        earned_trophies_qs = profile.earned_trophy_entries.all()
+        header_stats['total_earned_trophies'] = earned_trophies_qs.filter(earned=True).count()
+        header_stats['total_unearned_trophies'] = earned_trophies_qs.filter(earned=False).count()
+
+        profile_games_qs = profile.played_games.all()
+        header_stats['total_completions'] = profile_games_qs.filter(progress=100).count()
+        header_stats['average_completion'] = profile_games_qs.aggregate(avg_progress=Avg('progress'))['avg_progress'] or 0
+
+        recent_platinum = profile.earned_trophy_entries.filter(earned=True, trophy__trophy_type='platinum').select_related('trophy', 'trophy__game').order_by(F('earned_date_time').desc(nulls_last=True)).first()
+        header_stats['recent_platinum'] = {
+            'trophy': recent_platinum.trophy,
+            'game': recent_platinum.trophy.game,
+            'earned_date': recent_platinum.earned_date_time,
+        } if recent_platinum else None
+
+        rarest_platinum = profile.earned_trophy_entries.filter(earned=True, trophy__trophy_type='platinum').select_related('trophy', 'trophy__game').order_by('trophy__trophy_earn_rate').first()
+        header_stats['rarest_platinum'] = {
+            'trophy': rarest_platinum.trophy,
+            'game': rarest_platinum.trophy.game,
+            'earned_date': rarest_platinum.earned_date_time,
+        } if rarest_platinum else None
+        
+        context['breadcrumb'] = [
+            {'text': 'Home', 'url': reverse_lazy('home')},
+            {'text': 'Profiles', 'url': reverse_lazy('profiles_list')},
+            {'text': f"{profile.display_psn_username}"}
+        ]
+        context['header_stats'] = header_stats        
+
         return context

@@ -19,16 +19,17 @@ from django.contrib import admin
 from django.contrib.auth.views import LogoutView
 from django.urls import path, include
 from core.views import IndexView
-from trophies.views import GamesListView, TrophiesListView, ProfilesListView, SearchView, GameDetailView, monitoring_dashboard, token_stats, token_stats_sse
+from trophies.views import GamesListView, TrophiesListView, ProfilesListView, SearchView, GameDetailView, ProfileDetailView, monitoring_dashboard, token_stats, token_stats_sse
 
 urlpatterns = [
     path("admin/", admin.site.urls),
     path("", IndexView.as_view(), name="home"),
     path('games/', GamesListView.as_view(), name='games_list'),
     path('games/<str:np_communication_id>/', GameDetailView.as_view(), name='game_detail'),
-    path('games/<str:np_communication_id>/<str:profile_username>/', GameDetailView.as_view(), name='game_detail_with_profile'),
+    path('games/<str:np_communication_id>/<str:psn_username>/', GameDetailView.as_view(), name='game_detail_with_profile'),
     path('trophies/', TrophiesListView.as_view(), name='trophies_list'),
     path('profiles/', ProfilesListView.as_view(), name='profiles_list'),
+    path('profiles/<str:psn_username>/', ProfileDetailView.as_view(), name='profile_detail'),
     path('search/', SearchView.as_view(), name='search'),
 
     path('logout/', LogoutView.as_view(next_page='home'), name='logout'),
