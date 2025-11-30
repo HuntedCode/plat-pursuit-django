@@ -51,13 +51,23 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     };
 
+    const scrollKey = 'profileScrollPos';
     form = document.getElementById(`${currentTab}-form`);
     if (form) {
         form.addEventListener('submit', () => {
+            localStorage.setItem(scrollKey, window.scrollY);
             page = 2;
             nextPageUrl = `${baseUrl}?page=${page}&${queryParams.toString()}`;
-            grid.innerHTML = '';
         });
+    }
+
+    const savedScroll = localStorage.getItem(scrollKey);
+    if (savedScroll) {
+        window.scrollTo({
+            top: parseInt(savedScroll),
+            behavior: 'smooth'
+        });
+        localStorage.removeItem(scrollKey);
     }
 
     const observer = new IntersectionObserver(entries => {

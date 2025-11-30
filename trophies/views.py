@@ -3,17 +3,17 @@ import logging
 import math
 from datetime import timedelta, date
 from django.core.cache import cache
-from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
+from django.core.paginator import Paginator
 from django.contrib import messages
 from django.shortcuts import render, get_object_or_404
 from django.http import StreamingHttpResponse, JsonResponse, HttpResponseRedirect
 from django.views.generic import ListView, View, DetailView
-from django.db.models import Q, F, Prefetch, OuterRef, Subquery, Value, IntegerField, FloatField, Count, Avg, Max
-from django.db.models.functions import Coalesce
+from django.db.models import Q, F, Prefetch, OuterRef, Subquery, Value, IntegerField, FloatField, Count, Avg, Max, Exists, ExpressionWrapper
+from django.db.models.functions import Coalesce, Cast
 from django.urls import reverse_lazy
 from django.utils import timezone
 from .models import Game, Trophy, Profile, EarnedTrophy, ProfileGame, TrophyGroup
-from .forms import GameSearchForm, TrophySearchForm, ProfileSearchForm
+from .forms import GameSearchForm, TrophySearchForm, ProfileSearchForm, ProfileGamesForm, ProfileTrophiesForm
 from .utils import redis_client
 
 logger = logging.getLogger("psn_api")
@@ -666,33 +666,102 @@ class ProfileDetailView(DetailView):
         page_number = self.request.GET.get('page', 1)
 
         if tab == 'games':
-            recent_trophy_subquery = Subquery(
-                EarnedTrophy.objects.filter(profile=profile, trophy__game=OuterRef('game'), earned=True).values('trophy__game').annotate(max_date=Max('earned_date_time')).values('max_date')[:1]
-            )
-            games_qs = profile.played_games.all().select_related('game').annotate(most_recent_trophy_date=Coalesce(recent_trophy_subquery, None)).order_by('-last_updated_datetime')
-            games_paginator = Paginator(games_qs, per_page)
-            if int(page_number) > games_paginator.num_pages:
-                game_page_obj = []
-            else:
-                game_page_obj = games_paginator.get_page(page_number)
-            context['profile_games'] = game_page_obj
-            context['trophy_log'] = []
+            form = ProfileGamesForm(self.request.GET)
+            if form.is_valid():
+                query = form.cleaned_data.get('query')
+                platforms = form.cleaned_data.get('platform')
+                plat_status = form.cleaned_data.get('plat_status')
+                sort_val = form.cleaned_data.get('sort')
+
+                recent_trophy_subquery = Subquery(
+                    EarnedTrophy.objects.filter(profile=profile, trophy__game=OuterRef('game'), earned=True).values('trophy__game').annotate(max_date=Max('earned_date_time')).values('max_date')[:1]
+                )
+                earned_count_subquery = Subquery(
+                    EarnedTrophy.objects.filter(profile=profile, trophy__game=OuterRef('game'), earned=True).values('trophy__game').annotate(count=Count('id')).values('count')[:1]
+                )
+                unearned_count_subquery = Subquery(
+                    EarnedTrophy.objects.filter(profile=profile, trophy__game=OuterRef('game'), earned=False).values('trophy__game').annotate(count=Count('id')).values('count')[:1]
+                )
+                games_qs = profile.played_games.all().select_related('game').annotate(
+                    most_recent_trophy_date=Coalesce(recent_trophy_subquery, None),
+                    earned_trophies_count=Coalesce(earned_count_subquery, Value(0, output_field=IntegerField())),
+                    unearned_trophies_count=Coalesce(unearned_count_subquery, Value(0, output_field=IntegerField())),
+                    total_trophies=F('earned_trophies_count') + F('unearned_trophies_count'),
+                )
+
+                plat_earned_subquery = Exists(
+                    EarnedTrophy.objects.filter(profile=profile, trophy__game=OuterRef('game'), trophy__trophy_type='platinum', earned=True)
+                )
+
+                if query:
+                    games_qs = games_qs.filter(Q(game__title_name__icontains=query))
+                if platforms:
+                    platform_filter = Q()
+                    for plat in platforms:
+                        platform_filter |= Q(game__title_platform__contains=plat)
+                    games_qs = games_qs.filter(platform_filter)
+                    context['selected_platforms'] = platforms       
+                if plat_status:
+                    if plat_status == 'plats':
+                        games_qs = games_qs.filter(plat_earned_subquery)
+                    elif plat_status == 'no_plats':
+                        games_qs = games_qs.exclude(plat_earned_subquery)
+                    elif plat_status == '100s':
+                        games_qs = games_qs.filter(progress=100)
+                    elif plat_status == 'no_100s':
+                        games_qs = games_qs.exclude(progress=100)
+                    elif plat_status == 'plats_100s':
+                        games_qs = games_qs.filter(Q(plat_earned_subquery) | Q(progress=100))
+                    elif plat_status == 'no_plats_100s':
+                        games_qs = games_qs.exclude(Q(plat_earned_subquery) | Q(progress=100))
+                    elif plat_status == 'plats_no_100s':
+                        games_qs = games_qs.filter(plat_earned_subquery)
+                        games_qs = games_qs.exclude(progress=100)
+
+                order = ['-last_updated_datetime']
+                if sort_val == 'oldest':
+                    order = ['last_updated_datetime']
+                elif sort_val == 'alpha':
+                    order = ['game__title_name',]
+                elif sort_val == 'completion':
+                    order = ['-progress', 'game__title_name']
+                elif sort_val == 'completion_inv':
+                    order = ['progress', 'game__title_name']
+                elif sort_val == 'trophies':
+                    order = ['-total_trophies', 'game__title_name']
+                elif sort_val == 'earned':
+                    order = ['-earned_trophies_count', 'game__title_name']
+                elif sort_val == 'unearned':
+                    order = ['-unearned_trophies_count', 'game__title_name']
+
+                games_qs = games_qs.order_by(*order)
+
+                games_paginator = Paginator(games_qs, per_page)
+                if int(page_number) > games_paginator.num_pages:
+                    game_page_obj = []
+                else:
+                    game_page_obj = games_paginator.get_page(page_number)
+                context['profile_games'] = game_page_obj
+                context['trophy_log'] = []
         
         if tab == 'trophies':
-            trophies_qs = profile.earned_trophy_entries.filter(earned=True,).select_related('trophy', 'trophy__game').order_by(F('earned_date_time').desc(nulls_last=True))
-            trophy_paginator = Paginator(trophies_qs, per_page)
-            if int(page_number) > trophy_paginator.num_pages:
-                trophy_page_obj = []
-            else:
-                trophy_page_obj = trophy_paginator.get_page(page_number)
-            context['trophy_log'] = trophy_page_obj
-            context['profile_games'] = []
+            form = ProfileTrophiesForm(self.request.GET)
+            if form.is_valid():
+                trophies_qs = profile.earned_trophy_entries.filter(earned=True,).select_related('trophy', 'trophy__game').order_by(F('earned_date_time').desc(nulls_last=True))
+                trophy_paginator = Paginator(trophies_qs, per_page)
+                if int(page_number) > trophy_paginator.num_pages:
+                    trophy_page_obj = []
+                else:
+                    trophy_page_obj = trophy_paginator.get_page(page_number)
+                context['trophy_log'] = trophy_page_obj
+                context['profile_games'] = []
   
         context['breadcrumb'] = [
             {'text': 'Home', 'url': reverse_lazy('home')},
             {'text': 'Profiles', 'url': reverse_lazy('profiles_list')},
             {'text': f"{profile.display_psn_username}"}
         ]
+        context['form'] = form
         context['header_stats'] = header_stats
         context['current_tab'] = tab
 

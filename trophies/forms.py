@@ -76,3 +76,38 @@ class ProfileSearchForm(forms.Form):
         except Exception as e:
             logger.error(f"Error populating country choices: {str(e)}")
             self.fields['country'].choices = [('', 'All Countries')]
+
+class ProfileGamesForm(forms.Form):
+    query = forms.CharField(required=False, label='Search by name')
+    platform = forms.MultipleChoiceField(choices=[('PS5', 'PS5'), ('PS4', 'PS4'), ('PS3', 'PS3'), ('PSVITA', 'PSVita'), ('PSVR', 'PSVR')], required=False, label='Platforms')
+    plat_status = forms.ChoiceField(
+        choices=[
+            ('all', 'Show All'),
+            ('plats', 'Show Only Plats'),
+            ('no_plats', 'Show Only Non Plats'),
+            ('100s', 'Show Only 100%'),
+            ('no_100s', 'Show Only Non 100%'),
+            ('plats_100s', 'Show Only Plats & 100%'),
+            ('no_plats_100s', 'Show Only Non Plats Nor 100%'),
+            ('plats_no_100s', 'Show Only Plats & Non 100%'),
+        ],
+        required=False,
+        label='Plat Status'
+    )
+    sort = forms.ChoiceField(
+        choices=[
+            ('recent', 'Recently Played'),
+            ('oldest', 'Oldest Played'),
+            ('alpha', 'Alphabetical'),
+            ('completion', 'Highest Completion %'),
+            ('completion_inv', 'Lowest Completion %'),
+            ('trophies', 'Total Trophies'),
+            ('earned', 'Earned Trophies'),
+            ('unearned', 'Unearned Trophies'),
+        ],
+        required=False,
+        label='Sort By'
+    )
+
+class ProfileTrophiesForm(forms.Form):
+    pass
