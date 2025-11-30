@@ -1,8 +1,12 @@
 document.addEventListener('DOMContentLoaded', function() {
-    const grid = document.getElementById('items-grid');
+    const radioButtons = document.querySelectorAll('input[name="profile-tabs"]')
     const loading = document.getElementById('loading');
     const sentinel = document.getElementById('sentinel');
-    if (!grid || !loading || !sentinel) return;
+    if (!radioButtons || !loading || !sentinel) return;
+
+    const currentTab = new URLSearchParams(window.location.search).get('tab') || 'games';
+    const grid = document.getElementById(`${currentTab}-grid`);
+    if (!grid) return;
 
     let page = 2;
     const baseUrl = window.location.pathname;
@@ -10,6 +14,14 @@ document.addEventListener('DOMContentLoaded', function() {
     queryParams.delete('page');
     let nextPageUrl  = `${baseUrl}?page=${page}&${queryParams.toString()}`;
     let isLoading = false;
+
+    radioButtons.forEach(radio => {
+        radio.addEventListener('change', () => {
+            const selectedTab = radio.value;
+            const newUrl = `${baseUrl}?tab=${selectedTab}`;
+            window.location.href = newUrl;
+        });
+    });
 
     const loadMore = async () => {
         if (!nextPageUrl || isLoading) return;
@@ -24,7 +36,6 @@ document.addEventListener('DOMContentLoaded', function() {
             const parser = new DOMParser();
             const doc = parser.parseFromString(html, 'text/html');
             const newCards = doc.querySelectorAll('.card');
-            console.log("New cards:", newCards)
             if (newCards.length === 0) {
                 nextPageUrl = null;
             } else {
@@ -40,11 +51,14 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     };
 
-    document.querySelector('form').addEventListener('submit', () => {
-        page = 2;
-        nextPageUrl = `${baseUrl}?page=${page}&${queryParams.toString()}`;
-        grid.innerHTML = '';
-    });
+    form = document.getElementById(`${currentTab}-form`);
+    if (form) {
+        form.addEventListener('submit', () => {
+            page = 2;
+            nextPageUrl = `${baseUrl}?page=${page}&${queryParams.toString()}`;
+            grid.innerHTML = '';
+        });
+    }
 
     const observer = new IntersectionObserver(entries => {
         if (entries[0].isIntersecting) {

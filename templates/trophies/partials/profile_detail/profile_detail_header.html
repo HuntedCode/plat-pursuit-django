@@ -138,8 +138,8 @@
                         </div>                
                         <p class="text-xs text-base-content pr-1 italic">*Trophy totals are based on PSN aggregates. Hidden trophies are counted.</p>
                     </div>
-                    <div class="card border-4 border-base-300 shadow-md shadow-neutral hover:border-secondary hover:shadow-secondary hover:scale-105">
-                        <div class="card-body p-4 h-fit">
+                    <div class="border-4 border-base-300 shadow-md shadow-neutral hover:border-secondary hover:shadow-secondary hover:scale-105">
+                        <div class="p-4">
                             <h3 class="text-lg text-base-content hover:scale-105">Trophy Level: <span class="text-primary font-bold">{{ profile.trophy_level }}</span></h3>
                             <progress class="progress {% if profile.progress < 33 %}progress-error{% elif profile.progress < 66 %}progress-warning{% else %}progress-success{% endif %} w-full hover:scale-105" value="{{ profile.progress }}" max="100"></progress>
                             <h4 class="text-sm text-center italic hover:scale-105">{{ profile.progress }}% to next level.</h4>
