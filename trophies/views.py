@@ -662,7 +662,10 @@ class ProfileDetailView(DetailView):
             'earned_date': rarest_platinum.earned_date_time,
         } if rarest_platinum else None
 
-        # Games List
+        # Trophy Case Selections
+        trophy_case = list(UserTrophySelection.objects.filter(profile=profile).order_by('-earned_trophy__earned_date_time'))
+
+        # Games/Trophies List
         per_page = 50
         page_number = self.request.GET.get('page', 1)
 
@@ -780,6 +783,8 @@ class ProfileDetailView(DetailView):
         ]
         context['form'] = form
         context['header_stats'] = header_stats
+        context['trophy_case'] = trophy_case
+        context['trophy_case_count'] = len(trophy_case)
         context['current_tab'] = tab
 
         return context

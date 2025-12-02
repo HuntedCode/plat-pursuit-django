@@ -156,5 +156,33 @@
                 </div>
             </div>
         </div>
+        {% if trophy_case_count > 0 %}
+        <div class="divider divider-vertical mb-0 pb-0"></div>
+        <h3 class="text-2xl sm:text-3xl text-base-content text-center italic mb-2 hover:scale-105"><span class="text-trophy-platinum">Platinum</span> Trophy Case</h3>
+            <div class="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-5 xl:grid-cols-10 gap-2 justify-self-center">
+            {% for item in trophy_case %}
+            {% with item.earned_trophy.trophy as trophy %}
+                <div class="card bg-base-100 border-2 border-base-300 shadow-md shadow-neutral hover:scale-105 hover:border-primary hover:shadow-primary">
+                    <div class="card-body p-2">
+                        <div class="hover-3d">
+                            <figure class="w-full border-4 border-base-300 shadow-md shadow-ne">
+                                <img src="{{ trophy.trophy_icon_url }}" />
+                            </figure>
+                            <div></div>
+                            <div></div>
+                            <div></div>
+                            <div></div>
+                            <div></div>
+                            <div></div>
+                            <div></div>
+                            <div></div>
+                        </div>
+                        <h4 class="text-xs text-base-content text-center font-semibold pr-1 italic line-clamp-2">{{ trophy.game.title_name }}</h4>
+                    </div>
+                </div>
+            {% endwith%}
+            {% endfor %}
+            </div>
+        {% endif %}
     </div>
 </section>
