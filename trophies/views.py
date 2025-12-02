@@ -5,14 +5,15 @@ from datetime import timedelta, date
 from django.core.cache import cache
 from django.core.paginator import Paginator
 from django.contrib import messages
+from django.contrib.auth.mixins import LoginRequiredMixin
 from django.shortcuts import render, get_object_or_404
 from django.http import StreamingHttpResponse, JsonResponse, HttpResponseRedirect
 from django.views.generic import ListView, View, DetailView
-from django.db.models import Q, F, Prefetch, OuterRef, Subquery, Value, IntegerField, FloatField, Count, Avg, Max, Exists, ExpressionWrapper
-from django.db.models.functions import Coalesce, Cast
-from django.urls import reverse_lazy
+from django.db.models import Q, F, Prefetch, OuterRef, Subquery, Value, IntegerField, FloatField, Count, Avg, Max, Exists
+from django.db.models.functions import Coalesce
+from django.urls import reverse_lazy, reverse
 from django.utils import timezone
-from .models import Game, Trophy, Profile, EarnedTrophy, ProfileGame, TrophyGroup
+from .models import Game, Trophy, Profile, EarnedTrophy, ProfileGame, TrophyGroup, UserTrophySelection
 from .forms import GameSearchForm, TrophySearchForm, ProfileSearchForm, ProfileGamesForm, ProfileTrophiesForm
 from .utils import redis_client
 
@@ -791,3 +792,63 @@ class ProfileDetailView(DetailView):
             elif tab == 'trophies':
                return ['trophies/partials/profile_detail/trophy_list_items.html'] 
         return super().get_template_names()
+    
+class TrophyCaseView(ListView):
+    model = EarnedTrophy
+    template_name = 'trophies/trophy_case.html'
+    context_object_name = 'platinums'
+    paginate_by = 50
+
+    def get_queryset(self):
+        profile = get_object_or_404(Profile, psn_username=self.kwargs['psn_username'].lower())
+        return EarnedTrophy.objects.filter(profile=profile, earned=True, trophy__trophy_type='platinum').select_related('trophy', 'trophy__game').order_by(F('earned_date_time').desc(nulls_last=True))
+    
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        profile = Profile.objects.get(psn_username=self.kwargs['psn_username'].lower())
+        selected_ids = list(profile.trophy_selections.values_list('earned_trophy_id', flat=True))
+        
+        context['breadcrumb'] = [
+            {'text': 'Home', 'url': reverse_lazy('home')},
+            {'text': 'Profiles', 'url': reverse_lazy('profiles_list')},
+            {'text': f"{profile.display_psn_username}", 'url': reverse_lazy('profile_detail', kwargs={'psn_username': profile.psn_username})},
+            {'text': 'Trophy Case'}
+        ]
+        context['profile'] = profile
+        context['selected_ids'] = selected_ids
+        context['selected_count'] = len(selected_ids)
+        context['toggle_selection_url'] = reverse('toggle-selection')
+        return context
+    
+    def get_template_names(self):
+        if self.request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return ['trophies/partials/trophy_case/trophy_case_items.html']
+        return super().get_template_names()
+
+class ToggleSelectionView(LoginRequiredMixin, View):
+    def post(self, request):
+        earned_trophy_id = request.POST.get('earned_trophy_id')
+        if not earned_trophy_id:
+            return JsonResponse({'success': False, 'error': 'earned_trophy_id required.'}, status=400)
+        try:
+            earned_trophy_id = int(earned_trophy_id)
+            profile = request.user.profile
+            earned_trophy = EarnedTrophy.objects.get(id=earned_trophy_id)
+
+            if earned_trophy.profile != profile:
+                return JsonResponse({'success': False, 'error': 'Unauthorized: Not your trophy'}, status=403)
+            
+            selection, created = UserTrophySelection.objects.get_or_create(profile=profile, earned_trophy_id=earned_trophy_id)
+            if not created:
+                selection.delete()
+                action = 'removed'
+            else:
+                action = 'added'
+            return JsonResponse({'success': True, 'action': action})
+        except EarnedTrophy.DoesNotExist:
+            return JsonResponse({'success': False, 'error': 'Invalid earned_trophy_id'}, status=400)
+        except Profile.DoesNotExist:
+            return JsonResponse({'success': False, 'error': 'No profile found'}, status=400)
+        except Exception as e:
+            logger.error(f"Selection toggle error: {e}")
+            return JsonResponse({'success': False, 'error': 'Internal error'}, status=500)

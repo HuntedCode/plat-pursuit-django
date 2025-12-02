@@ -109,7 +109,12 @@ def format_date(value, arg=None):
     current_tz = timezone.get_current_timezone()
     localized_value = value.astimezone(current_tz)
 
-    format_string = '%b. %d, %Y, %I:%M %p' if arg != 'short' else '%Y-%m-%d'
+    format_string = '%b. %d, %Y, %I:%M %p'
+    if arg == 'short':
+        format_string = '%Y-%m-%d'
+    elif arg == 'format_short':
+        format_string = '%b. %d, %Y'
+        
     formatted = value.strftime(format_string)
 
     if arg == 'with_tz':

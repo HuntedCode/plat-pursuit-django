@@ -24,7 +24,6 @@ document.addEventListener('DOMContentLoaded', function() {
             const parser = new DOMParser();
             const doc = parser.parseFromString(html, 'text/html');
             const newCards = doc.querySelectorAll('.card');
-            console.log("New cards:", newCards)
             if (newCards.length === 0) {
                 nextPageUrl = null;
             } else {

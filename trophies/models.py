@@ -432,6 +432,17 @@ class EarnedTrophy(models.Model):
             models.Index(fields=["last_updated"], name="earned_trophy_updated_idx")
         ]
 
+class UserTrophySelection(models.Model):
+    profile = models.ForeignKey(Profile, on_delete=models.CASCADE, related_name='trophy_selections')
+    earned_trophy = models.ForeignKey(EarnedTrophy, on_delete=models.CASCADE, related_name='selections')
+
+    class Meta:
+        unique_together = ['profile', 'earned_trophy']
+    
+    def save(self, *args, **kwargs):
+        if self.profile.trophy_selections.count() >= 10 and not self.pk:
+            raise ValueError("Maximum 10 selections allowed.")
+        super().save(*args, **kwargs)
 
 class Event(models.Model):
     title = models.CharField(max_length=255)

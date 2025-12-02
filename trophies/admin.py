@@ -2,7 +2,7 @@ from django.contrib import admin, messages
 from django.contrib.admin import SimpleListFilter
 from django.db import transaction
 from django.db.models import Q
-from .models import Profile, Game, Trophy, EarnedTrophy, ProfileGame, APIAuditLog, FeaturedGame, FeaturedProfile, Event, Concept, TitleID, TrophyGroup
+from .models import Profile, Game, Trophy, EarnedTrophy, ProfileGame, APIAuditLog, FeaturedGame, FeaturedProfile, Event, Concept, TitleID, TrophyGroup, UserTrophySelection
 
 
 # Register your models here.
@@ -270,3 +270,8 @@ class ConceptAdmin(admin.ModelAdmin):
 class TrophyGroupAdmin(admin.ModelAdmin):
     list_display = ('game', 'trophy_group_id', 'trophy_group_name')
     search_fields = ('game__title_name', 'trophy_group_name')
+
+@admin.register(UserTrophySelection)
+class UserTrophySelectionAdmin(admin.ModelAdmin):
+    list_display = ('profile', 'earned_trophy__trophy__trophy_name', 'earned_trophy__trophy__game__title_name')
+    search_fields = ('profile__psn_username',)
