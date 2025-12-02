@@ -27,6 +27,8 @@
             Trophy Log
         </a>    
         <div class="tab-content bg-base-100 border-2 border-base-300 shadow-md shadow-neutral p-6">
+            {% include 'trophies/partials/profile_detail/trophy_log_filters.html' %}
+            <div class="divider divider-vertical"></div>
             <div id="trophies-grid" class="flex flex-col gap-4">
                 {% include 'trophies/partials/profile_detail/trophy_list_items.html' %}
             </div>

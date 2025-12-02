@@ -744,10 +744,26 @@ class ProfileDetailView(DetailView):
                 context['profile_games'] = game_page_obj
                 context['trophy_log'] = []
         
-        if tab == 'trophies':
+        elif tab == 'trophies':
             form = ProfileTrophiesForm(self.request.GET)
             if form.is_valid():
+                query = form.cleaned_data.get('query')
+                platforms = form.cleaned_data.get('platform')
+                type = form.cleaned_data.get('type')
+
                 trophies_qs = profile.earned_trophy_entries.filter(earned=True,).select_related('trophy', 'trophy__game').order_by(F('earned_date_time').desc(nulls_last=True))
+
+                if query:
+                    trophies_qs = trophies_qs.filter(Q(trophy__trophy_name__icontains=query) | Q(trophy__game__title_name__icontains=query))
+                if platforms:
+                    platform_filter = Q()
+                    for plat in platforms:
+                        platform_filter |= Q(trophy__game__title_platform__contains=plat)
+                    trophies_qs = trophies_qs.filter(platform_filter)
+                    context['selected_platforms'] = platforms
+                if type:
+                    trophies_qs = trophies_qs.filter(trophy__trophy_type=type)
+
                 trophy_paginator = Paginator(trophies_qs, per_page)
                 if int(page_number) > trophy_paginator.num_pages:
                     trophy_page_obj = []

@@ -1,10 +1,10 @@
-<form id="games-form" method="get" class="mb-4">
+<form id="trophies-form" method="get" class="mb-4">
     <div class="flex flex-col lg:flex-row w-full justify-between">
         <div class="form-control fieldset w-full lg:w-1/3">
-            <legend class="fieldset-legend text-lg lg:text-xl italic">Sort By</legend>
-            <select name="sort" id="id_sort" class="select select-primary w-7/8 justify-self-center">
-                {% for value, display in form.sort.field.choices %}
-                    <option value="{{ value }}" {% if request.GET.sort == value %}selected{% endif %}>{{ display }}</option>
+            <legend class="fieldset-legend text-lg lg:text-xl italic">Type</legend>
+            <select name="type" id="id_type" class="select select-primary w-7/8 justify-self-center">
+                {% for value, display in form.type.field.choices %}
+                    <option value="{{ value }}" {% if request.GET.type == value %}selected{% endif %}>{{ display }}</option>
                 {% endfor %}
             </select>
         </div>
@@ -20,25 +20,16 @@
                 {% endfor %}
             </div>
         </div>
-
-        <div class="form-control fieldset w-full lg:w-1/3">
-            <legend class="fieldset-legend text-lg lg:text-xl italic">Platinum Status</legend>
-            <select name="plat_status" id="id_plat_status" class="select select-primary w-7/8 justify-self-center">
-                {% for value, display in form.plat_status.field.choices %}
-                    <option value="{{ value }}" {% if request.GET.plat_status == value %}selected{% endif %}>{{ display }}</option>
-                {% endfor %}
-            </select>
-        </div>
     </div>
 
     <div class="flex justify-center">
         <div class="form-control fieldset w-full lg:w-75/100">
             <legend class="fieldset-legend text-lg lg:text-xl italic">Search By Name</legend>
             <div class="flex flex-col md:flex-row justify-self-center gap-4 w-full md:w-15/16">
-                <input type="text" name="query" id="id_query" value="{{ request.GET.query }}" class="input input-md md:input-lg input-primary w-23/24 justify-self-center" placeholder="Enter game name..." />
-                <button id="submit-btn" type="submit" class="btn btn-md md:btn-lg border-3 shadow-md">Filter Games</button>
+                <input type="text" name="query" id="id_query" value="{{ request.GET.query }}" class="input input-md md:input-lg input-primary w-23/24 justify-self-center" placeholder="Enter trophy or game name..." />
+                <button id="submit-btn" type="submit" class="btn btn-md md:btn-lg border-3 shadow-md">Filter Trophies</button>
             </div>
         </div>
     </div>
-    <input type="hidden" name="tab" value="games">
+    <input type="hidden" name="tab" value="trophies">
 </form>

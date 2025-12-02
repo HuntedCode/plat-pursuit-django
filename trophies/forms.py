@@ -110,4 +110,6 @@ class ProfileGamesForm(forms.Form):
     )
 
 class ProfileTrophiesForm(forms.Form):
-    pass
+    query = forms.CharField(required=False, label='Search by name')
+    platform = forms.MultipleChoiceField(choices=[('PS5', 'PS5'), ('PS4', 'PS4'), ('PS3', 'PS3'), ('PSVITA', 'PSVita'), ('PSVR', 'PSVR')], required=False, label='Platforms')
+    type = forms.ChoiceField(choices=[('', 'All'),('bronze', 'Bronze'), ('silver', 'Silver'), ('gold', 'Gold'), ('platinum', 'Platinum')], required=False, label='Type')
