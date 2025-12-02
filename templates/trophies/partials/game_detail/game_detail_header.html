@@ -40,7 +40,7 @@
             {% else %}
                 {% if profile %}
                     <div class="justify-self-center w-full">
-                        <h2 class="text-lg lg:text-xl 2xl:text-2xl text-base-content text-center font-bold line-clamp-2 pr-2 italic hover:scale-105">{{ profile.psn_username }}'s Progress</h2>
+                        <h2 class="text-lg lg:text-xl 2xl:text-2xl text-base-content text-center font-bold line-clamp-2 pr-2 italic hover:scale-105">{{ profile.display_psn_username }}'s Progress</h2>
                         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
                             <div class="card shadow-md shadow-neutral bg-base-100 border-4 border-base-300 p-4 hover:scale-105 hover:border-trophy-bronze hover:shadow-trophy-bronze">
                                 <div class="card-body w-full p-0">
@@ -239,7 +239,7 @@
                     <div class="divider divider-vertical"></div>
 
                     <div class="justify-self-center w-full">
-                        <h2 class="text-sm xl:text-3xl text-base-content text-center font-bold line-clamp-2 pr-2 italic hover:scale-105">{{ profile.psn_username }}'s Progress Stats</h2>
+                        <h2 class="text-sm xl:text-3xl text-base-content text-center font-bold line-clamp-2 pr-2 italic hover:scale-105">{{ profile.display_psn_username }}'s Progress Stats</h2>
                         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-4">
                             <div class="card shadow-md shadow-neutral bg-base-100 border-4 border-base-300 p-4 hover:scale-105 hover:border-trophy-bronze hover:shadow-trophy-bronze">
                                 <div class="card-body w-full p-0">
@@ -369,7 +369,7 @@
                         </div>
                     </div>
                     <div class="flex flex-row items-end gap-2">
-                        <div class="text-2xl sm:text-3xl text-base-content font-bold mt-4 line-clamp-2 hover:scale-105">{{ profile.psn_username }}</div>
+                        <div class="text-2xl sm:text-3xl text-base-content font-bold mt-4 line-clamp-2 hover:scale-105">{{ profile.display_psn_username }}</div>
                         {% if profile.is_plus %}
                             <img src="{% static 'images/plus.png' %}" class="w-7 h-7 mb-2 hover:scale-105" />
                         {% endif %}

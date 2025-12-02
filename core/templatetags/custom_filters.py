@@ -88,3 +88,32 @@ def psn_rarity(rarity_int):
 @register.filter
 def dict_get(dict_obj, key):
     return dict_obj.get(key)
+
+@register.filter
+def format_date(value, arg=None):
+    if value is None:
+        return ''
+    
+    if isinstance(value, str):
+        try:
+            value = datetime.strptime(value, '%b. %d, %Y, %I:%M %p')
+        except ValueError:
+            try:
+                value = datetime.strptime(value, '%Y-%m-%d %H:%M:%S')
+            except ValueError:
+                return value
+    
+    if not isinstance(value, (datetime, timezone.datetime)):
+        return value
+    
+    current_tz = timezone.get_current_timezone()
+    localized_value = value.astimezone(current_tz)
+
+    format_string = '%b. %d, %Y, %I:%M %p' if arg != 'short' else '%Y-%m-%d'
+    formatted = value.strftime(format_string)
+
+    if arg == 'with_tz':
+        tz_abbrev = localized_value.tzinfo.tzname(localized_value)
+        formatted += f" ({tz_abbrev})"
+
+    return formatted

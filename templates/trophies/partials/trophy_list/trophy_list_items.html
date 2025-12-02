@@ -1,6 +1,6 @@
 {% load custom_filters humanize %}
 {% for trophy in object_list %}
-    <div class="card bg-base-100 border-4 border-base-300 shadow-md shadow-neutral cursor-pointer transition-all duration-300 hover:scale-105 hover:border-{{ trophy|trophy_color }} hover:shadow-{{ trophy|trophy_color }} hover:shadow-lg hover:z-10 group">
+    <a href="{% url 'game_detail' trophy.game.np_communication_id %}" class="card bg-base-100 border-4 border-base-300 shadow-md shadow-neutral cursor-pointer transition-all duration-300 hover:scale-105 hover:border-{{ trophy|trophy_color }} hover:shadow-{{ trophy|trophy_color }} hover:shadow-lg hover:z-10 group">
         <div class="card-body m-0 px-3 py-3">
             <div class="flex flex-col lg:flex-row justify-between items-center gap-2 lg:gap-4 mx-auto lg:mx-0">
                 <div class="flex flex-col lg:flex-row items-center justify-center lg:justify-start gap-2 w-full lg:w-auto">
@@ -88,14 +88,14 @@
                         <div class="divider divider-vertical my-0"></div>
                         <div class="flex flex-col md:flex-row justify-self-start justify-around">
                             {% if trophy.get_most_recent_earner %}
-                                <h3 class="text-sm sm:text-base text-base-content/70 text-right italic hover:scale-105">Last Earned By: <span class="text-primary">{{ trophy.get_most_recent_earner }}</span></h3>
+                                <h3 class="text-sm sm:text-base text-base-content/70 text-right italic hover:scale-105">Last Earned By: <span class="text-primary">{{ trophy.get_most_recent_earner }}</span> <span class="text-accent">({{ trophy.get_most_recent_earned_date|format_date:"short" }})</span></h3>
                             {% endif %}
                         </div>
                     </div>
                 </div>
             </div>
         </div>
-    </div>
+    </a>
 {% empty %}
     <p>No trophies found. Try expanding your search!</p>
 {% endfor %}

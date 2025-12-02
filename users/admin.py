@@ -12,13 +12,14 @@ class CustomUserAdmin(UserAdmin):
         "is_linked_to_profile",
         "date_joined",
         "is_active",
+        "user_timezone",
     )
-    list_filter = ("is_active", "is_staff", "date_joined")
+    list_filter = ("is_active", "is_staff", "date_joined", "user_timezone")
     search_fields = ("username__iexact", "email__iexact")
     ordering = ("username",)
     fieldsets = (
         (None, {"fields": ("username", "password")}),
-        ("Personal Info", {"fields": ("email", "first_name", "last_name")}),
+        ("Personal Info", {"fields": ("email", "first_name", "last_name", "user_timezone")}),
         (
             "Permissions",
             {

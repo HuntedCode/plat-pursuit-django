@@ -1,6 +1,7 @@
 from django.db import models
 from django.contrib.auth.models import AbstractUser
 from django.utils.translation import gettext_lazy as _
+import pytz
 
 
 # Create your models here.
@@ -16,6 +17,7 @@ class CustomUser(AbstractUser):
         validators=[AbstractUser.username_validator],
         error_messages={"unique": _("A user with that username already exists.")},
     )
+    user_timezone = models.CharField(max_length=63, choices=[(tz, tz) for tz in pytz.common_timezones], default='UTC', help_text="User's preferred timezone. UTC default.")
 
     USERNAME_FIELD = "username"
     REQUIRED_FIELDS = ["email"]

@@ -18,7 +18,7 @@
                                 <h1 class="text-base md:text-lg lg:text-xl xl:text-2xl text-base-content pr-1 line-clamp-2 hover:scale-105">{{ trophy.trophy_name }}</h1>
                                 <h3 class="text-xs md:text-sm lg:text-base text-base-content/70 pr-1 italic line-clamp-2 hover:scale-105">{{ trophy.trophy_detail }}</h3>
                                 {% if earned.earned %}
-                                    <h4 class="text-xs lg:text-sm text-base-content/70 italic line-clamp-1 hover:scale-105">Earned: {{ earned.earned_date_time }}</h4>
+                                    <h4 class="text-xs lg:text-sm text-base-content/70 italic line-clamp-1 hover:scale-105">Earned: {{ earned.earned_date_time|format_date:"with_tz" }}</h4>
                                 {% endif %}
                             </div>
                         </div>

@@ -3,6 +3,7 @@ from django.utils import timezone
 from users.models import CustomUser
 from django.core.validators import RegexValidator
 from django.db.models.signals import post_save
+from django.db.models import F
 from django.dispatch import receiver
 from django.core.cache import cache
 from datetime import timedelta
@@ -363,9 +364,15 @@ class Trophy(models.Model):
             return 'Ultra Rare'
 
     def get_most_recent_earner(self):
-        recent_entry = self.earned_trophy_entries.filter(earned=True).order_by('-earned_date_time').first()
+        recent_entry = self.earned_trophy_entries.filter(earned=True).order_by(F('earned_date_time').desc(nulls_last=True)).first()
         if recent_entry:
             return recent_entry.profile.psn_username
+        return None
+    
+    def get_most_recent_earned_date(self):
+        recent_entry = self.earned_trophy_entries.filter(earned=True).order_by(F('earned_date_time').desc(nulls_last=True)).first()
+        if recent_entry:
+            return recent_entry.earned_date_time
         return None
 
     def increment_earned_count(self):
