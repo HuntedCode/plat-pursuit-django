@@ -69,7 +69,11 @@
                             <h1 class="text-2xl text-base-content text-center italic hover:scale-105">Latest Platinum</h1>
                             <a href="{% url 'game_detail' game.np_communication_id %}" class="flex flex-row items-center w-full shadow-md shadow-neutral border-4 border-base-300 p-1 mb-2 cursor-pointer hover:border-primary hover:shadow-primary hover:scale-105">
                                 <figure class="w-28 h-28 border-4 border-primary rounded-box mr-4">
-                                    <img src="{{ game.title_image }}" class="w-full object-cover object-center hover:scale-105" />
+                                    {% if game.title_image %}
+                                        <img src="{{ game.title_image }}" class="w-full object-cover object-center hover:scale-105" />
+                                    {% else %}
+                                        <img src="{{ game.title_icon_url }}" class="w-full object-cover object-center hover:scale-105" />
+                                    {% endif %}
                                 </figure>
                                 <div class="flex flex-col">
                                     <h1 class="text-xl text-base-content line-clamp-2 pr-1 hover:scale-105">{{ trophy.trophy_name }}</h1>
@@ -87,7 +91,11 @@
                             <h1 class="text-2xl text-base-content text-center italic hover:scale-105">Rarest Platinum</h1>
                             <a href="{% url 'game_detail' game.np_communication_id %}" class="flex flex-row items-center w-full shadow-md shadow-neutral border-4 border-base-300 p-1 mb-2 cursor-pointer hover:border-accent hover:shadow-accent hover:scale-105">
                                 <figure class="w-28 h-28 border-4 border-accent rounded-box mr-4">
-                                    <img src="{{ game.title_image }}" class="w-full object-cover object-center hover:scale-105" />
+                                    {% if game.title_image %}
+                                        <img src="{{ game.title_image }}" class="w-full object-cover object-center hover:scale-105" />
+                                    {% else %}
+                                        <img src="{{ game.title_icon_url }}" class="w-full object-cover object-center hover:scale-105" />
+                                    {% endif %}
                                 </figure>
                                 <div class="flex flex-col">
                                     <h1 class="text-xl text-base-content line-clamp-2 pr-1 hover:scale-105">{{ trophy.trophy_name }}</h1>
