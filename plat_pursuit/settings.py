@@ -51,6 +51,8 @@ INSTALLED_APPS = [
     'rest_framework.authtoken',
     'api',
     'django_extensions',
+    'guides',
+    'django_ckeditor_5',
 ]
 
 MIDDLEWARE = [
@@ -61,6 +63,7 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'plat_pursuit.middleware.TimezoneMiddleware',
 ]
 
@@ -106,6 +109,30 @@ REST_FRAMEWORK = {
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': 10,
 }
+
+CKEDITOR_5_CONFIGS = {
+    'default': {
+        'toolbar': [
+            'heading', '|', 
+            'bold', 'italic', 'link', 'bulletedList', 'numberedList', 'blockQuote', '|',
+            'imageUpload', 'insertTable', 'mediaEmbed', 'codeBlock', '|',
+            'undo', 'redo'
+        ],
+        'image': {
+            'toolbar': ['imageTextAlternative', '|', 'linkImage'],
+            'upload': {'types': ['png', 'jpeg', 'gif']}
+        },
+        'table': {
+            'contentToolbar': ['tableColumn', 'tableRow', 'mergeTableCells']
+        },
+        'height': 400,
+        'width': 'auto',
+    }
+}
+CKEDITOR_IMAGE_BACKEND = 'pillow'
+
+MEDIA_URL = '/media/'
+MEDIA_ROOT = BASE_DIR / 'media'
 
 # Password validation
 # https://docs.djangoproject.com/en/5.2/ref/settings/#auth-password-validators
@@ -159,6 +186,7 @@ USE_TZ = True
 STATIC_URL = "/static/"
 STATICFILES_DIRS = [BASE_DIR / "static"]
 STATIC_ROOT = BASE_DIR / "staticfiles"
+STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field

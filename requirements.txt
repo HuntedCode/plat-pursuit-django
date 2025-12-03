@@ -10,7 +10,9 @@ click-plugins==1.1.1.2
 click-repl==0.3.0
 colorama==0.4.6
 Django==5.2.7
+django-ckeditor-5==0.2.18
 django-extensions==4.1
+django-js-asset==3.1.2
 django-redis==6.0.0
 djangorestframework==3.16.1
 dotenv==0.9.9
@@ -21,6 +23,7 @@ kombu==5.5.4
 mypy_extensions==1.1.0
 packaging==25.0
 pathspec==0.12.1
+pillow==12.0.0
 platformdirs==4.5.0
 prometheus_client==0.23.1
 prompt_toolkit==3.0.52
@@ -45,3 +48,4 @@ tzdata==2025.2
 urllib3==2.5.0
 vine==5.1.0
 wcwidth==0.2.14
+whitenoise==6.11.0
