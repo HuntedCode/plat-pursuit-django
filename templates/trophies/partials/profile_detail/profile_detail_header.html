@@ -59,6 +59,7 @@
                     <h1 class="text-2xl lg:text-lg 2xl:text-2xl text-accent text-center italic hover:scale-105">{{ profile.flag }}</h1>
                 </div>
                 <h3 class="text-lg lg:text-sm 2xl:text-lg text-base-content/70 text-center pr-1 line-clamp-2 italic hover:scale-105">{{ profile.about_me }}</h3>
+                <a href="{% url 'trophy_case' profile.psn_username %}" class="btn btn-primary btn-lg">View Trophy Case</a>
             </div>
             <div class="divider divider-vertical lg:divider-horizontal"></div>
             <div class="flex flex-col justify-center items-center w-full lg:w-3/4">
@@ -165,7 +166,7 @@
                 <div class="card bg-base-100 border-2 border-base-300 shadow-md shadow-neutral hover:scale-105 hover:border-primary hover:shadow-primary">
                     <div class="card-body p-2">
                         <div class="hover-3d">
-                            <figure class="w-full border-4 border-base-300 shadow-md shadow-ne">
+                            <figure class="w-full border-4 border-base-300 shadow-md shadow-neutral">
                                 <img src="{{ trophy.trophy_icon_url }}" />
                             </figure>
                             <div></div>
