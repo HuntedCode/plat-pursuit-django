@@ -17,8 +17,11 @@ class Command(BaseCommand):
             title_id_str = row.get('titleId')
             platform = 'PS4'
             region = row.get('region')
+            created_count = 0
             if title_id_str and region:
                 title_id, created = TitleID.objects.get_or_create(title_id=title_id_str, defaults={'platform': platform, 'region': region})
+                if created:
+                    created_count += 1
         
         response = requests.get(PS5_TSV_FILE, timeout=10)
         response.raise_for_status()
@@ -30,3 +33,7 @@ class Command(BaseCommand):
             region = row.get('region')
             if title_id_str and region:
                 title_id, created = TitleID.objects.get_or_create(title_id=title_id_str, defaults={'platform': platform, 'region': region})
+                if created:
+                    created_count += 1
+        
+        print(f"Title IDs update complete. {created_count} IDs added.")
