@@ -388,7 +388,7 @@
                             {% if trophy.trophy_name %}
                                 <div class="flex flex-col gap-0 w-full">
                                     <h1 class="text-base sm:text-lg md:text-xl text-base-content text-center font-bold mr-1 italic hover:scale-105">{{ trophy.label }}</h1>        
-                                    <div class="flex flex-col items-center gap-1 p-2 w-full">
+                                    <a href="#{{ trophy.trophy_id }}" class="flex flex-col items-center gap-1 p-2 w-full cursor-pointer">
                                         <figure class="relative max-w-50 shadow-md shadow-neutral border-4 border-base-300 hover:border-primary hover:shadow-primary group">
                                             <img src="{{ trophy.trophy_icon_url }}" class="w-full object-fill transition-all duration-300 group-hover:scale-105" />
                                             <div class="absolute bottom-0 left-0 right-0 bg-base-100/90 bg-opacity-50 text-base-content shadow-lg border-t-2 border-base-200 px-4 py-2 transform translate-y-full transition-transform duration-300 ease-in-out group-hover:translate-y-0 group-focus-within:translate-y-0">
@@ -397,7 +397,7 @@
                                                 <h1 class="text-xs text-base-content/70 pr-1 italic line-clamp-2">{{ trophy.earned_date_time }}</h1>
                                             </div>
                                         </figure>
-                                    </div>
+                                    </a>
                                 </div>
                             {% else %}
                                 <div class="flex flex-col gap-0 w-full">

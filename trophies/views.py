@@ -416,6 +416,7 @@ class GameDetailView(DetailView):
                     milestones.append({
                         'label': 'First Trophy',
                         'trophy_name': first.trophy.trophy_name,
+                        'trophy_id': first.trophy.trophy_id,
                         'trophy_icon_url': first.trophy.trophy_icon_url,
                         'earned_date_time': first.earned_date_time,
                         'trophy_earn_rate': first.trophy.trophy_earn_rate,
@@ -430,6 +431,7 @@ class GameDetailView(DetailView):
                     milestones.append({
                         'label': '50% Trophy',
                         'trophy_name': mid.trophy.trophy_name,
+                        'trophy_id': mid.trophy.trophy_id,
                         'trophy_icon_url': mid.trophy.trophy_icon_url,
                         'earned_date_time': mid.earned_date_time,
                         'trophy_earn_rate': mid.trophy.trophy_earn_rate,
@@ -445,6 +447,7 @@ class GameDetailView(DetailView):
                     milestones.append({
                         'label': 'Platinum Trophy',
                         'trophy_name': plat_entry.trophy.trophy_name,
+                        'trophy_id': plat_entry.trophy.trophy_id,
                         'trophy_icon_url': plat_entry.trophy.trophy_icon_url,
                         'earned_date_time': plat_entry.earned_date_time,
                         'trophy_earn_rate': plat_entry.trophy.trophy_earn_rate,
@@ -458,6 +461,7 @@ class GameDetailView(DetailView):
                     milestones.append({
                         'label': '100% Trophy',
                         'trophy_name': complete.trophy.trophy_name,
+                        'trophy_id': complete.trophy.trophy_id,
                         'trophy_icon_url': complete.trophy.trophy_icon_url,
                         'earned_date_time': complete.earned_date_time,
                         'trophy_earn_rate': complete.trophy.trophy_earn_rate,

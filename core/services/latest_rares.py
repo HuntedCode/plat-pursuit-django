@@ -36,7 +36,7 @@ def _enrich_rares(qs, type):
             'rate': et.trophy.trophy_earn_rate if type == 'psn' else et.trophy.earn_rate * 100,
             'rarity':_get_psn_rarity(et.trophy.trophy_rarity) if type == 'psn' else et.trophy.get_pp_rarity_tier(),
             'time': et.earned_date_time,
-            'slug': f"/games/{et.trophy.game.np_communication_id}/"
+            'slug': f"/games/{et.trophy.game.np_communication_id}/#{et.trophy.trophy_id}"
         })
     return enriched
 
