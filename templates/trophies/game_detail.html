@@ -8,11 +8,21 @@
         {% include 'trophies/partials/game_detail/game_detail_header.html' %}
     </section>
 
-    {% if game.concept.guide_slug %}
-        <section class="shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 w-full xl:w-2/3 p-0 lg:p-4 mt-8 ">
-            {% include 'trophies/partials/game_detail/guide_embed.html' %}
-        </section>
-    {% endif %}
+    <div class="flex flex-col xl:flex-row gap-4 mt-8 items-start">
+        {% if game.concept.guide_slug %}
+            <section class="shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 w-full xl:w-1/3 p-0 lg:p-4 ">
+                {% include 'trophies/partials/game_detail/community_ratings.html' %}
+            </section>
+
+            <section class="shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 w-full xl:w-2/3 p-0 lg:p-4 xl:sticky xl:top-2">
+                {% include 'trophies/partials/game_detail/guide_embed.html' %}
+            </section>
+        {% else %}
+            <section class="flex flex-col lg:flex-row shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 w-auto p-4 mx-auto gap-4 items-center lg:items-start">
+                {% include 'trophies/partials/game_detail/community_ratings.html' %}
+            </section>
+        {% endif %}
+    </div>
 
     {% for group_id, trophies in grouped_trophies.items %}
         {% with trophy_groups|dict_get:group_id as group %}

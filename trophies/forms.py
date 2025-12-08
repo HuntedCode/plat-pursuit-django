@@ -1,6 +1,6 @@
 import logging
 from django import forms
-from trophies.models import Profile
+from trophies.models import Profile, UserConceptRating
 
 logger = logging.getLogger('psn_api')
 
@@ -113,3 +113,20 @@ class ProfileTrophiesForm(forms.Form):
     query = forms.CharField(required=False, label='Search by name')
     platform = forms.MultipleChoiceField(choices=[('PS5', 'PS5'), ('PS4', 'PS4'), ('PS3', 'PS3'), ('PSVITA', 'PSVita'), ('PSVR', 'PSVR')], required=False, label='Platforms')
     type = forms.ChoiceField(choices=[('', 'All'),('bronze', 'Bronze'), ('silver', 'Silver'), ('gold', 'Gold'), ('platinum', 'Platinum')], required=False, label='Type')
+
+class UserConceptRatingForm(forms.ModelForm):
+    class Meta:
+        model = UserConceptRating
+        fields = ['difficulty', 'hours_to_platinum', 'fun_ranking', 'overall_rating']
+        widgets = {
+            'difficulty': forms.NumberInput(attrs={'type': 'range', 'min': 1, 'max': 10, 'class': 'range range-primary'}),
+            'hours_to_platinum': forms.NumberInput(attrs={'type': 'number', 'min': 0, 'class': 'input'}),
+            'fun_ranking': forms.NumberInput(attrs={'type': 'range', 'min': 1, 'max': 10, 'class': 'range range-secondary'}),
+            'overall_rating': forms.NumberInput(attrs={'type': 'range', 'min': 0.5, 'max': 5.0, 'step': 0.5, 'class': 'range range-accent'}),
+        }
+        labels = {
+            'difficulty': 'Platinum Difficulty',
+            'hours_to_platinum': 'Hours To Platinum',
+            'fun_ranking': 'Platinum "Fun" Ranking',
+            'overall_rating': 'Overall Game Rating',
+        }

@@ -6,6 +6,7 @@ import requests
 import logging
 from dotenv import load_dotenv
 from typing import List, Set
+from scipy import stats
 
 
 load_dotenv()
@@ -80,6 +81,12 @@ def count_unique_game_groups(games_qs) -> int:
     
     unique_groups = len(set(find(i) for i in range(n)))
     return unique_groups
+
+def calculate_trimmed_mean(data, trim_percent=0.1):
+    """Calculate trimmed mean to handle outliers."""
+    if not data:
+        return None
+    return stats.trim_mean(data, trim_percent)
 
 
 # Common PS Apps - No Trophies

@@ -2,7 +2,7 @@ from django.contrib import admin, messages
 from django.contrib.admin import SimpleListFilter
 from django.db import transaction
 from django.db.models import Q
-from .models import Profile, Game, Trophy, EarnedTrophy, ProfileGame, APIAuditLog, FeaturedGame, FeaturedProfile, Event, Concept, TitleID, TrophyGroup, UserTrophySelection
+from .models import Profile, Game, Trophy, EarnedTrophy, ProfileGame, APIAuditLog, FeaturedGame, FeaturedProfile, Event, Concept, TitleID, TrophyGroup, UserTrophySelection, UserConceptRating
 
 
 # Register your models here.
@@ -263,7 +263,7 @@ class TitleIDAdmin(admin.ModelAdmin):
 
 @admin.register(Concept)
 class ConceptAdmin(admin.ModelAdmin):
-    list_display = ('concept_id', 'unified_title', 'publisher_name', 'genres')
+    list_display = ('id', 'concept_id', 'unified_title', 'publisher_name', 'genres')
     search_fields = ('concept_id', 'unified_title')
 
 @admin.register(TrophyGroup)
@@ -275,3 +275,9 @@ class TrophyGroupAdmin(admin.ModelAdmin):
 class UserTrophySelectionAdmin(admin.ModelAdmin):
     list_display = ('profile', 'earned_trophy__trophy__trophy_name', 'earned_trophy__trophy__game__title_name')
     search_fields = ('profile__psn_username',)
+
+@admin.register(UserConceptRating)
+class UserConceptRatingAdmin(admin.ModelAdmin):
+    list_display = ('profile', 'concept', 'difficulty', 'hours_to_platinum', 'fun_ranking', 'overall_rating', 'created_at', 'updated_at')
+    list_filter = ('created_at', 'updated_at')
+    search_fields = ('profile__psn_username', 'concept__unified_title')

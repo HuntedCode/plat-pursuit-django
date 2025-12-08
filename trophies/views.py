@@ -14,7 +14,7 @@ from django.db.models.functions import Coalesce
 from django.urls import reverse_lazy, reverse
 from django.utils import timezone
 from .models import Game, Trophy, Profile, EarnedTrophy, ProfileGame, TrophyGroup, UserTrophySelection
-from .forms import GameSearchForm, TrophySearchForm, ProfileSearchForm, ProfileGamesForm, ProfileTrophiesForm
+from .forms import GameSearchForm, TrophySearchForm, ProfileSearchForm, ProfileGamesForm, ProfileTrophiesForm, UserConceptRatingForm
 from .utils import redis_client
 
 logger = logging.getLogger("psn_api")
@@ -599,6 +599,25 @@ class GameDetailView(DetailView):
         
         sorted_groups = sorted(grouped_trophies.keys(), key=lambda x: (x != 'default', x))
 
+        if game.concept:
+            averages_cache_key = f"concept:averages:{game.concept.concept_id}:{today}"
+            cached_averages = cache.get(averages_cache_key)
+            if cached_averages:
+                averages = json.loads(cached_averages)
+            else:
+                averages = game.concept.get_community_averages()
+                if averages:
+                    cache.set(averages_cache_key, json.dumps(averages), timeout=stats_timeout)
+            context['community_averages'] = averages
+        
+        profile = user.profile if user.is_authenticated and hasattr(user, 'profile') and user.profile and user.profile.is_linked else None
+        if profile and game.concept:
+            has_platinum = game.concept.has_user_earned_platinum(profile)
+            context['has_platinum'] = has_platinum
+            if has_platinum:
+                user_rating = game.concept.user_ratings.filter(profile=profile).first()
+                context['form'] = UserConceptRatingForm(instance=user_rating)
+
         context['breadcrumb'] = [
             {'text': 'Home', 'url': reverse_lazy('home')},
             {'text': 'Games', 'url': reverse_lazy('games_list')},
@@ -615,6 +634,32 @@ class GameDetailView(DetailView):
         context['image_urls'] = image_urls
         context['milestones'] = milestones
         return context
+    
+    def post(self, request, *args, **kwargs):
+        self.object = self.get_object()
+        game = self.object
+        concept = game.concept
+        if not concept:
+            return HttpResponseRedirect(request.path)
+        
+        user = request.user
+        profile = user.profile if user.is_authenticated and hasattr(user, 'profile') and user.profile and user.profile.is_linked else None
+        if profile and concept.has_user_earned_platinum(profile):
+            rating = concept.user_ratings.filter(profile=profile).first()
+            form = UserConceptRatingForm(request.POST, instance=rating)
+            if form.is_valid():
+                rating = form.save(commit=False)
+                rating.profile = profile
+                rating.concept = concept
+                rating.save()
+                today = date.today().isoformat()
+                averages_cache_key = f"concept:averages:{concept.concept_id}:{today}"
+                cache.delete(averages_cache_key)
+                messages.success(request, 'Your rating has been submitted!')
+            else:
+                messages.error(request, "Invalid form submission.")
+
+        return HttpResponseRedirect(request.path)
     
 class ProfileDetailView(DetailView):
     model = Profile

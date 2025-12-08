@@ -1,13 +1,13 @@
 from django.db import models
 from django.utils import timezone
 from users.models import CustomUser
-from django.core.validators import RegexValidator
+from django.core.validators import RegexValidator, MinValueValidator, MaxValueValidator
 from django.db.models.signals import post_save
-from django.db.models import F
+from django.db.models import F, Avg, Count
 from django.dispatch import receiver
 from django.core.cache import cache
 from datetime import timedelta
-from trophies.utils import count_unique_game_groups, TITLE_STATS_SUPPORTED_PLATFORMS, NA_REGION_CODES, EU_REGION_CODES, JP_REGION_CODES, AS_REGION_CODES, SHOVELWARE_THRESHOLD
+from trophies.utils import count_unique_game_groups, calculate_trimmed_mean, TITLE_STATS_SUPPORTED_PLATFORMS, NA_REGION_CODES, EU_REGION_CODES, JP_REGION_CODES, AS_REGION_CODES, SHOVELWARE_THRESHOLD
 import secrets
 
 
@@ -236,6 +236,7 @@ class Concept(models.Model):
     descriptions = models.JSONField(default=dict, blank=True)
     content_rating = models.JSONField(default=dict, blank=True)
     media = models.JSONField(default=dict, blank=True)
+    guide_slug = models.CharField(max_length=50, blank=True, null=True)
 
     class Meta:
         indexes = [
@@ -262,6 +263,27 @@ class Concept(models.Model):
         if media:
             self.media = media
             self.save(update_fields=['media'])
+    
+    def has_user_earned_platinum(self, profile):
+        platinum_trophies = Trophy.objects.filter(game__concept=self, trophy_type='platinum')
+        return EarnedTrophy.objects.filter(profile=profile, trophy__in=platinum_trophies, earned=True).exists()
+
+    def get_community_averages(self):
+        ratings = self.user_ratings.all()
+        if not ratings.exists():
+            return None
+        
+        aggregates = ratings.aggregate(
+            avg_difficulty=Avg('difficulty'),
+            avg_fun=Avg('fun_ranking'),
+            avg_rating=Avg('overall_rating'),
+            count=Count('id')
+        )
+
+        hours_list = list(ratings.values_list('hours_to_platinum', flat=True))
+        aggregates['avg_hours'] = calculate_trimmed_mean(hours_list, trim_percent=0.1) if hours_list else None
+
+        return aggregates
 
     def __str__(self):
         return self.unified_title or self.concept_id
@@ -279,6 +301,27 @@ class TitleID(models.Model):
 
     def __str__(self):
         return self.title_id
+
+class UserConceptRating(models.Model):
+    profile = models.ForeignKey(Profile, on_delete=models.CASCADE, related_name='concept_ratings')
+    concept = models.ForeignKey(Concept, on_delete=models.CASCADE, related_name='user_ratings')
+    difficulty = models.IntegerField(validators=[MinValueValidator(1), MaxValueValidator(10)], help_text='Platinum Difficulty rating (1-10)')
+    hours_to_platinum = models.PositiveIntegerField(help_text='Estimated hours to achieve platinum.')
+    fun_ranking = models.IntegerField(validators=[MinValueValidator(1), MaxValueValidator(10)], help_text='Fun ranking for the platinum (1-10)')
+    overall_rating = models.FloatField(validators=[MinValueValidator(0.5), MaxValueValidator(5.0)], help_text="Overall game rating (1-5 stars)")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ['profile', 'concept']
+        indexes = [
+            models.Index(fields=['concept'], name='user_rating_concept_idx'),
+            models.Index(fields=['profile', 'concept'], name='user_rating_unique_idx'),
+        ]
+        ordering = ['-updated_at']
+    
+    def __str__(self):
+        return f"{self.profile.display_psn_username}'s rating for {self.concept.unified_title}"
 
 class ProfileGame(models.Model):
     profile = models.ForeignKey(
