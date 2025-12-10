@@ -1,4 +1,5 @@
 from django.db.models import Count, Q
+from django.urls import reverse_lazy
 from django.utils import timezone
 from datetime import timedelta
 from trophies.models import FeaturedProfile, Profile, EarnedTrophy
@@ -24,7 +25,7 @@ def get_featured_profile():
         return {}
     
     return {
-        'name': profile.psn_username,
+        'name': profile.display_psn_username,
         'avatar': profile.avatar_url,
         'platinums': {
             'total': EarnedTrophy.objects.filter(profile=profile, earned=True, trophy__trophy_type='platinum').count(),
@@ -34,5 +35,6 @@ def get_featured_profile():
             'total': EarnedTrophy.objects.filter(profile=profile, earned=True).count(),
             'weekly': EarnedTrophy.objects.filter(profile=profile, earned=True, earned_date_time__gte=week_ago).count()
         },
-        'bio': profile.about_me
+        'bio': profile.about_me,
+        'slug': reverse_lazy('profile_detail', kwargs={'psn_username': profile.psn_username})
     }
