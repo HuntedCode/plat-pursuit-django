@@ -2,10 +2,7 @@ from django.db import models
 from django.utils import timezone
 from users.models import CustomUser
 from django.core.validators import RegexValidator, MinValueValidator, MaxValueValidator
-from django.db.models.signals import post_save
 from django.db.models import F, Avg, Count
-from django.dispatch import receiver
-from django.core.cache import cache
 from datetime import timedelta
 from trophies.utils import count_unique_game_groups, calculate_trimmed_mean, TITLE_STATS_SUPPORTED_PLATFORMS, NA_REGION_CODES, EU_REGION_CODES, JP_REGION_CODES, AS_REGION_CODES, SHOVELWARE_THRESHOLD
 import secrets
@@ -61,7 +58,7 @@ class Profile(models.Model):
         default="basic",
     )
     is_linked = models.BooleanField(default=False)
-    psn_history_public = models.BooleanField(default=True, help_text="Flag indicating if PSN gaming history is public. (Access error: 2240526)")
+    psn_history_public = models.BooleanField(default=True, help_text="Flag indicating if PSN gaming history is public.")
     created_at = models.DateTimeField(auto_now_add=True)
     discord_id = models.BigIntegerField(unique=True, blank=True, null=True, help_text='Unique Discord user ID. Set on bot linking.')
     discord_linked_at = models.DateTimeField(blank=True, null=True, help_text='Timestamp when Discord was linked via bot.')
@@ -179,6 +176,7 @@ class Game(models.Model):
     played_count = models.PositiveIntegerField(default=0, help_text="Denormalized count of profiles that have played the game (PP-specific).")
     is_regional = models.BooleanField(default=False)
     is_shovelware = models.BooleanField(default=False)
+    is_obtainable= models.BooleanField(default=True)
 
     class Meta:
         indexes = [
@@ -187,6 +185,7 @@ class Game(models.Model):
             models.Index(fields=['title_name'], name='game_title_idx'),
             models.Index(fields=['title_platform'], name='game_platform_idx'),
             models.Index(fields=['created_at'], name='game_created_idx'),
+            models.Index(fields=['is_obtainable', 'title_platform'], name='game_obtainable_platform_idx'),
         ]
 
     def add_concept(self, concept):
@@ -428,13 +427,6 @@ class Trophy(models.Model):
 
     def __str__(self):
         return f"{self.trophy_name} ({self.game.title_name})"
-    
-@receiver(post_save, sender=Trophy)
-def invalidate_trophy_cache(sender, instance, created, **kwargs):
-    if created:
-        game_id = instance.game.np_communication_id
-        cache.delete(f"game:trophies:{game_id}")
-
 
 class TrophyGroup(models.Model):
     game = models.ForeignKey(Game, on_delete=models.CASCADE, related_name='trophy_groups')
@@ -513,6 +505,81 @@ class Event(models.Model):
     @property
     def is_upcoming(self):
         return self.date >= timezone.now().date()
+
+class Badge(models.Model):
+    TIER_CHOICES = [
+        (1, 'Tier 1 (Platinum, Modern)'),
+        (2, 'Tier 2 (100%, Modern)'),
+        (3, 'Tier 3 (Platinum, All Platforms)'),
+        (4, 'Tier 4 (100%, All Platforms)'),
+    ]
+    BADGE_TYPES = [
+        ('series', 'Series (Concept-based)'),
+        ('misc', 'Miscellaneous'),
+    ]
+
+    name = models.CharField(max_length=255)
+    series_slug = models.SlugField(max_length=100, blank=True, null=True, help_text='Groups tiers of the same series')
+    description = models.TextField(blank=True)
+    icon = models.ImageField(upload_to='badges/', blank=True, null=True)
+    base_badge = models.ForeignKey('self', on_delete=models.SET_NULL, null=True, blank=True, related_name='derived_badges', help_text='Reference a base (Tier 1) badge to inherit its icon')
+    display_title = models.CharField(max_length=100, blank=True)
+    discord_role_id = models.BigIntegerField(null=True, blank=True, help_text="Discord role ID to auto assign upon earning the badge (optional).")
+    tier = models.IntegerField(choices=TIER_CHOICES, default=1)
+    badge_type = models.CharField(max_length=10, choices=BADGE_TYPES, default='series')
+    requires_all = models.BooleanField(default=True, help_text="If True, user must complete all qualifying Concepts. If false, only the min_required.")
+    min_required = models.PositiveIntegerField(default=0, help_text="For large series (e.g. 10 out of 30)")
+    requirements = models.JSONField(default=dict, blank=True, help_text="For misc badges")
+    concepts = models.ManyToManyField(Concept, related_name='badges', blank=True, help_text="Required Concepts for series badges")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['tier', 'name']
+        indexes = [
+            models.Index(fields=['series_slug', 'tier'], name='badge_series_tier_idx'),
+            models.Index(fields=['badge_type'], name='badge_type_idx'),
+        ]
+    
+    @property
+    def effective_icon_url(self):
+        if self.icon:
+            return self.icon.url
+        elif self.base_badge and self.base_badge.icon:
+            return self.base_badge.icon.url
+        return None
+
+    def __str__(self):
+        return f"{self.name} (Tier {self.tier})"
+    
+class UserBadge(models.Model):
+    profile = models.ForeignKey(Profile, on_delete=models.CASCADE, related_name='badges')
+    badge = models.ForeignKey(Badge, on_delete=models.CASCADE, related_name='earned_by')
+    earned_at = models.DateTimeField(auto_now_add=True)
+    is_displayed = models.BooleanField(default=False, help_text="User's selected display badge.")
+
+    class Meta:
+        unique_together = ['profile', 'badge']
+        indexes = [
+            models.Index(fields=['profile', 'is_displayed'], name='userbadge_display_idx')
+        ]
+
+    def __str__(self):
+        return f"{self.profile.psn_username} - {self.badge.name}"
+
+class UserBadgeProgress(models.Model):
+    profile = models.ForeignKey(Profile, on_delete=models.CASCADE, related_name='badge_progress')
+    badge = models.ForeignKey(Badge, on_delete=models.CASCADE, related_name='progress_for')
+    completed_concepts = models.PositiveIntegerField(default=0)
+    required_concepts = models.PositiveIntegerField(default=0)
+    progress_value = models.PositiveIntegerField(default=0)
+    required_value = models.PositiveIntegerField(default=0)
+    last_checked = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ['profile', 'badge']
+        indexes = [
+            models.Index(fields=['profile', 'badge'], name='userbadgeprogress_idx'),
+        ]
 
 class APIAuditLog(models.Model):
     timestamp = models.DateTimeField(auto_now_add=True)

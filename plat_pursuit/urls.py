@@ -21,7 +21,7 @@ from django.contrib import admin
 from django.contrib.auth.views import LogoutView
 from django.urls import path, include
 from core.views import IndexView
-from trophies.views import GamesListView, TrophiesListView, ProfilesListView, SearchView, GameDetailView, ProfileDetailView, TrophyCaseView, ToggleSelectionView, monitoring_dashboard, token_stats, token_stats_sse
+from trophies.views import GamesListView, TrophiesListView, ProfilesListView, SearchView, GameDetailView, ProfileDetailView, TrophyCaseView, ToggleSelectionView, monitoring_dashboard, token_stats, token_stats_sse , BadgeTestView
 
 urlpatterns = [
     path("admin/", admin.site.urls),
@@ -32,6 +32,8 @@ urlpatterns = [
     path('trophies/', TrophiesListView.as_view(), name='trophies_list'),
     path('profiles/', ProfilesListView.as_view(), name='profiles_list'),
     path('profiles/<str:psn_username>/', ProfileDetailView.as_view(), name='profile_detail'),
+
+    path('badge-test/', BadgeTestView.as_view(), name='badge_test'),
 
     path('profiles/<str:psn_username>/trophy-case/', TrophyCaseView.as_view(), name='trophy_case'),
     path('toggle-selection/', ToggleSelectionView.as_view(), name='toggle-selection'),

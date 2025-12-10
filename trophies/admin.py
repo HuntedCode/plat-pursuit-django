@@ -2,15 +2,15 @@ from django.contrib import admin, messages
 from django.contrib.admin import SimpleListFilter
 from django.db import transaction
 from django.db.models import Q
-from .models import Profile, Game, Trophy, EarnedTrophy, ProfileGame, APIAuditLog, FeaturedGame, FeaturedProfile, Event, Concept, TitleID, TrophyGroup, UserTrophySelection, UserConceptRating
+from .models import Profile, Game, Trophy, EarnedTrophy, ProfileGame, APIAuditLog, FeaturedGame, FeaturedProfile, Event, Concept, TitleID, TrophyGroup, UserTrophySelection, UserConceptRating, Badge, UserBadge, UserBadgeProgress
 
 
 # Register your models here.
 @admin.register(Profile)
 class ProfileAdmin(admin.ModelAdmin):
     list_display = (
-        "id",
         "psn_username",
+        "id",
         "account_id",
         "user",
         "discord_id",
@@ -90,11 +90,12 @@ class GameAdmin(admin.ModelAdmin):
         "region",
         "is_regional",
         "title_ids",
+        "is_obtainable",
         "total_defined_trophies",
         "played_count",
         "is_shovelware",
     )
-    list_filter = ("has_trophy_groups", "is_regional", RegionListFilter, 'is_shovelware')
+    list_filter = ("has_trophy_groups", "is_regional", RegionListFilter, 'is_shovelware', 'is_obtainable')
     search_fields = ("title_name", "np_communication_id")
     ordering = ("title_name",)
     fieldsets = (
@@ -281,3 +282,27 @@ class UserConceptRatingAdmin(admin.ModelAdmin):
     list_display = ('profile', 'concept', 'difficulty', 'hours_to_platinum', 'fun_ranking', 'overall_rating', 'created_at', 'updated_at')
     list_filter = ('created_at', 'updated_at')
     search_fields = ('profile__psn_username', 'concept__unified_title')
+
+@admin.register(Badge)
+class BadgeAdmin(admin.ModelAdmin):
+    list_display = ['name', 'tier', 'badge_type', 'series_slug', 'requires_all', 'min_required']
+    list_filter = ['tier', 'badge_type']
+    search_fields = ['name', 'series_slug']
+    filter_horizontal = ['concepts',]
+    fields = ['name', 'series_slug', 'description', 'icon', 'base_badge', 'tier', 'badge_type', 'display_title', 'discord_role_id', 'requires_all', 'min_required', 'requirements', 'concepts']
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        if db_field.name == 'base_badge':
+            kwargs['queryset'] = Badge.objects.filter(tier=1)
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
+@admin.register(UserBadge)
+class UserBadgeAdmin(admin.ModelAdmin):
+    list_display = ['profile', 'badge', 'earned_at', 'is_displayed']
+    list_filter = ['is_displayed', 'earned_at']
+    search_fields = ['profile__psn_username']
+
+@admin.register(UserBadgeProgress)
+class UserBadgeProgressAdmin(admin.ModelAdmin):
+    list_display = ['profile', 'badge', 'completed_concepts', 'required_concepts', 'progress_value', 'required_value', 'last_checked']
+    search_fields = ['profile__psn_username']

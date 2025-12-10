@@ -17,6 +17,11 @@ from dotenv import load_dotenv
 load_dotenv()
 
 AUTH_USER_MODEL = "users.CustomUser"
+SITE_URL = 'https://platpursuit.com'
+
+# Discord Bot Integration
+BOT_API_URL = os.getenv('BOT_API_URL', 'http://127.0.0.1:5000')
+BOT_API_KEY = os.getenv('BOT_API_KEY')
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -46,7 +51,7 @@ INSTALLED_APPS = [
     "django.contrib.humanize",
     "core",
     "users",
-    "trophies",
+    "trophies.apps.TrophiesConfig",
     'rest_framework',
     'rest_framework.authtoken',
     'api',
@@ -159,6 +164,8 @@ USE_TZ = True
 STATIC_URL = "/static/"
 STATICFILES_DIRS = [BASE_DIR / "static"]
 STATIC_ROOT = BASE_DIR / "staticfiles"
+MEDIA_URL = "/media/"
+MEDIA_ROOT = BASE_DIR / "media"
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field

@@ -1,18 +1,14 @@
 import logging
-import os
 import requests
 from datetime import timedelta
 from django.utils import timezone
 from django.db.models import F
 from trophies.models import Profile, Game, ProfileGame, Trophy, EarnedTrophy, Concept, TrophyGroup
+from trophies.utils import DISCORD_PLATINUM_WEBHOOK_URL, PLAT_PURSUIT_EMOJI_ID, PLATINUM_EMOJI_ID
 from psnawp_api.models.title_stats import TitleStats
 from psnawp_api.models.trophies import TrophyTitle, TrophyGroupSummary
 
 logger = logging.getLogger("psn_api")
-
-DISCORD_PLATINUM_WEBHOOK_URL = os.getenv('DISCORD_PLATINUM_WEBHOOK_URL')
-PLATINUM_EMOJI_ID = os.getenv('PLATINUM_EMOJI_ID')
-PLAT_PURSUIT_EMOJI_ID = os.getenv('PLAT_PURSUIT_EMOJI_ID')
 
 class PsnApiService:
     """Service class for PSN API data processing and model updates."""
@@ -72,7 +68,10 @@ class PsnApiService:
                     "gold": trophy_title.defined_trophies.gold,
                     "platinum": trophy_title.defined_trophies.platinum
                 },
-                "played_count": 0
+                "played_count": 0,
+                "is_regional": False,
+                "is_shovelware": False,
+                "is_obtainable": True,
             },
         )
         needs_trophy_update = created
@@ -286,7 +285,7 @@ class PsnApiService:
         if (created and trophy_data.earned == True) or ((not created) and earned_trophy.earned == False and trophy_data.earned == True):
             trophy.increment_earned_count()
             threshold = timezone.now() - timedelta(days=2)
-            notify = profile.is_verified and earned_trophy.trophy.trophy_type == 'platinum' and trophy_data.earned_date_time >= threshold
+            notify = profile.discord_id and earned_trophy.trophy.trophy_type == 'platinum' and trophy_data.earned_date_time >= threshold
 
 
         if not created:
@@ -315,7 +314,7 @@ class PsnApiService:
                 'description': f"{plat_pursuit_emoji} <@{profile.discord_id}> has earned a shiny new platinum!\n{platinum_emoji} *{earned_trophy.trophy.trophy_name}* in **{earned_trophy.trophy.game.title_name}**\n🌟 {earned_trophy.trophy.trophy_earn_rate}% (PSN)",
                 'color': 0x003791,
                 'thumbnail': {'url': earned_trophy.trophy.trophy_icon_url},
-                'footer': {'text': f"*Powered by Plat Pursuit | Earned: {earned_trophy.earned_date_time}*"}
+                'footer': {'text': f"Powered by Plat Pursuit | Earned: {earned_trophy.earned_date_time.strftime('%Y-%m-%d')}"}
             }
             payload = {'embeds': [embed_data]}
             response = requests.post(DISCORD_PLATINUM_WEBHOOK_URL, json=payload)

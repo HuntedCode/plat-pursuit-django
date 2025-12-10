@@ -906,3 +906,16 @@ class ToggleSelectionView(LoginRequiredMixin, View):
         except Exception as e:
             logger.error(f"Selection toggle error: {e}")
             return JsonResponse({'success': False, 'error': 'Internal error'}, status=500)
+
+# Temporary test view (remove after testing)
+from django.views.generic import ListView
+from .models import Badge
+
+class BadgeTestView(ListView):
+    model = Badge
+    template_name = 'trophies/partials/badge_test.html'  # Or full template if needed
+    context_object_name = 'badges'
+
+    def get_queryset(self):
+        # Filter to a specific series for side-by-side; adjust as needed
+        return Badge.objects.filter(series_slug='test-series').order_by('id')
