@@ -68,6 +68,18 @@ def trophy_color_dict(trophy):
         return 'trophy-platinum'
 
 @register.filter
+def badge_color(badge):
+    tier = badge.tier
+    if tier == 1:
+        return 'warning'
+    elif tier == 2:
+        return 'secondary'
+    elif tier == 3:
+        return 'error'
+    elif tier == 4:
+        return 'primary'
+
+@register.filter
 def multiply(value, arg):
     try:
         return float(value) * float(arg)

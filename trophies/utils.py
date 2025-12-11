@@ -173,8 +173,6 @@ def process_badge(profile, badge):
     needed = required if badge.requires_all else max(badge.min_required, 1)
     if achieved >= needed and needed > 0 and not UserBadge.objects.filter(profile=profile, badge=badge).exists():
         UserBadge.objects.create(profile=profile, badge=badge)
-        if profile.discord_id:
-            notify_new_badge(profile, badge)
         return True
     return False
 

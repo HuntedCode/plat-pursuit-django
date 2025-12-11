@@ -1,6 +1,7 @@
 import json
 import logging
 import math
+from collections import defaultdict
 from datetime import timedelta, date
 from django.core.cache import cache
 from django.core.paginator import Paginator
@@ -13,8 +14,8 @@ from django.db.models import Q, F, Prefetch, OuterRef, Subquery, Value, IntegerF
 from django.db.models.functions import Coalesce
 from django.urls import reverse_lazy, reverse
 from django.utils import timezone
-from .models import Game, Trophy, Profile, EarnedTrophy, ProfileGame, TrophyGroup, UserTrophySelection
-from .forms import GameSearchForm, TrophySearchForm, ProfileSearchForm, ProfileGamesForm, ProfileTrophiesForm, UserConceptRatingForm
+from .models import Game, Trophy, Profile, EarnedTrophy, ProfileGame, TrophyGroup, UserTrophySelection, Badge, UserBadge, UserBadgeProgress
+from .forms import GameSearchForm, TrophySearchForm, ProfileSearchForm, ProfileGamesForm, ProfileTrophiesForm, UserConceptRatingForm, BadgeSearchForm
 from .utils import redis_client
 
 logger = logging.getLogger("psn_api")
@@ -907,15 +908,125 @@ class ToggleSelectionView(LoginRequiredMixin, View):
             logger.error(f"Selection toggle error: {e}")
             return JsonResponse({'success': False, 'error': 'Internal error'}, status=500)
 
-# Temporary test view (remove after testing)
-from django.views.generic import ListView
-from .models import Badge
-
-class BadgeTestView(ListView):
+class BadgeListView(ListView):
     model = Badge
-    template_name = 'trophies/partials/badge_test.html'  # Or full template if needed
-    context_object_name = 'badges'
+    template_name = 'trophies/badge_list.html'
+    context_object_name = 'display_badges'
 
     def get_queryset(self):
-        # Filter to a specific series for side-by-side; adjust as needed
-        return Badge.objects.filter(series_slug='test-series').order_by('id')
+        qs = super().get_queryset().prefetch_related('concepts')
+        form = BadgeSearchForm(self.request.GET)
+        order = ['series_slug']
+
+        if form.is_valid():
+            series_slug = form.cleaned_data.get('series_slug')
+
+            if series_slug:
+                qs = qs.filter(series_slug__icontains=series_slug)
+
+        return qs.order_by(*order)
+    
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        badges = context['object_list']
+
+        grouped_badges = defaultdict(list)
+        for badge in badges:
+            grouped_badges[badge.series_slug].append(badge)
+        
+        display_data = []
+        user = self.request.user
+        if user.is_authenticated and hasattr(user, 'profile'):
+            profile = user.profile
+            user_earned = UserBadge.objects.filter(profile=profile).values('badge__series_slug').annotate(max_tier=Max('badge__tier'))
+            earned_dict = {e['badge__series_slug']: e['max_tier'] for e in user_earned}
+
+            all_badges_ids = [b.id for group in grouped_badges.values() for b in group]
+            progress_qs = UserBadgeProgress.objects.filter(profile=profile, badge__id__in=all_badges_ids)
+            progress_dict = {p.badge_id: p for p in progress_qs}
+
+            for slug, group in grouped_badges.items():
+                sorted_group = sorted(group, key=lambda b: b.tier)
+                if not sorted_group:
+                    continue
+
+                tier1_badge = next((b for b in sorted_group if b.tier == 1), None)
+                tier1_earned_count = tier1_badge.earned_count if tier1_badge else 0
+
+                if slug in earned_dict:
+                    highest_tier = earned_dict[slug]
+                    next_badge = next((b for b in sorted_group if b.tier > highest_tier), None)
+                    if next_badge:
+                        display_badge = next_badge
+                        is_maxed = False
+                    else:
+                        display_badge = sorted_group[-1]
+                        is_maxed = True
+                else:
+                    display_badge = next((b for b in sorted_group if b.tier == 1), sorted_group[0])
+                    is_maxed = False
+                    
+                if display_badge:
+                    progress = progress_dict.get(display_badge.id)
+                    if progress and badge.badge_type == 'series':
+                        if is_maxed:
+                            progress_percentage = 100
+                        else:
+                            progress_percentage = (progress.completed_concepts / progress.required_concepts * 100) if progress.required_concepts > 0 else 0
+                    else:
+                        progress_percentage = 0
+
+                    display_data.append({
+                        'badge': display_badge,
+                        'tier1_earned_count': tier1_earned_count,
+                        'completed_concepts': progress.completed_concepts if progress else 0,
+                        'required_concepts': progress.required_concepts if progress else 0,
+                        'progress_percentage': round(progress_percentage, 1),
+                    })
+        else:
+            for slug, group in grouped_badges.items():
+                sorted_group = sorted(group, key=lambda b: b.tier)
+                tier1 = next((b for b in sorted_group if b.tier == 1), None)
+                if tier1:
+                    display_data.append({
+                        'badge': tier1,
+                        'tier1_earned_count': tier1_earned_count,
+                        'completed_concepts': 0,
+                        'required_concepts': 0,
+                        'progress_percentage': 0,
+                    })
+        
+
+        sort_val = self.request.GET.get('sort', 'tier')
+        if sort_val == 'name':
+            display_data.sort(key=lambda d: d['badge'].name)
+        elif sort_val == 'tier':
+            display_data.sort(key=lambda d: (d['badge'].tier, d['badge'].name))
+        elif sort_val == 'tier_desc':
+            display_data.sort(key=lambda d: (-d['badge'].tier, d['badge'].name))
+        elif sort_val == 'earned':
+            display_data.sort(key=lambda d: (-d['tier1_earned_count'], d['badge'].name))
+        elif sort_val == 'earned_inv':
+            display_data.sort(key=lambda d: (d['tier1_earned_count'], d['badge'].name))
+        else:
+            display_data.sort(key=lambda d: d['badge'].series_slug)
+
+        context['display_data'] = display_data
+        context['breadcrumb'] = [
+            {'text': 'Home', 'url': reverse_lazy('home')},
+            {'text': 'Badges'},
+        ]
+
+        context['form'] = BadgeSearchForm(self.request.GET)
+        context['selected_tiers'] = self.request.GET.getlist('tier')
+        context['view_type'] = self.request.GET.get('view', 'grid')
+        return context
+    
+    def get_template_names(self):
+        if self.request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            view_type = self.request.GET.get('view', 'grid')
+            if view_type == 'list':
+                return ['trophies/partials/badge_list/badge_list_items.html']
+            else:
+                return ['trophies/partials/badge_list/badge_cards.html']
+        return super().get_template_names()

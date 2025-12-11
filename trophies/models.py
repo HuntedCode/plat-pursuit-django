@@ -524,6 +524,7 @@ class Badge(models.Model):
     icon = models.ImageField(upload_to='badges/', blank=True, null=True)
     base_badge = models.ForeignKey('self', on_delete=models.SET_NULL, null=True, blank=True, related_name='derived_badges', help_text='Reference a base (Tier 1) badge to inherit its icon')
     display_title = models.CharField(max_length=100, blank=True)
+    display_series = models.CharField(max_length=100, blank=True)
     discord_role_id = models.BigIntegerField(null=True, blank=True, help_text="Discord role ID to auto assign upon earning the badge (optional).")
     tier = models.IntegerField(choices=TIER_CHOICES, default=1)
     badge_type = models.CharField(max_length=10, choices=BADGE_TYPES, default='series')
@@ -532,12 +533,14 @@ class Badge(models.Model):
     requirements = models.JSONField(default=dict, blank=True, help_text="For misc badges")
     concepts = models.ManyToManyField(Concept, related_name='badges', blank=True, help_text="Required Concepts for series badges")
     created_at = models.DateTimeField(auto_now_add=True)
+    earned_count = models.PositiveIntegerField(default=0, help_text="Count of users who have earned this badge tier")
 
     class Meta:
         ordering = ['tier', 'name']
         indexes = [
             models.Index(fields=['series_slug', 'tier'], name='badge_series_tier_idx'),
             models.Index(fields=['badge_type'], name='badge_type_idx'),
+            models.Index(fields=['earned_count'], name='badge_earned_count_idx'),
         ]
     
     @property

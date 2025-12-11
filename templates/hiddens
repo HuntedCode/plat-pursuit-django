@@ -3,11 +3,13 @@
 <div class="hidden shadow-trophy-silver border-trophy-silver hover:shadow-trophy-silver hover:border-trophy-silver group-hover:border-trophy-silver group-hover:shadow-trophy-silver"></div>
 <div class="hidden shadow-trophy-gold border-trophy-gold hover:shadow-trophy-gold hover:border-trophy-gold group-hover:border-trophy-gold group-hover:shadow-trophy-gold"></div>
 <div class="hidden shadow-trophy-platinum border-trophy-platinum hover:shadow-trophy-platinum hover:border-trophy-platinum group-hover:border-trophy-platinum group-hover:shadow-trophy-platinum"></div>
-<div class="hidden border-primary shadow-primary hover:border-primary hover:shadow-primary"></div>
+<div class="hidden bg-primary group-hover:bg-primary border-primary shadow-primary hover:border-primary hover:shadow-primary group-hover:border-primary"></div>
 <div class="hidden divider-primary"></div>
-<div class="hidden border-secondary shadow-secondary hover:border-secondary hover:shadow-secondary"></div>
+<div class="hidden bg-secondary group-hover:bg-secondary border-secondary shadow-secondary hover:border-secondary hover:shadow-secondary group-hover:border-secondary"></div>
 <div class="hidden divider-secondary"></div>
-<div class="hidden border-accent shadow-accent hover:border-accent hover:shadow-accent"></div>
+<div class="hidden bg-accent group-hover:bg-accent border-accent shadow-accent hover:border-accent hover:shadow-accent group-hover:border-accent"></div>
 <div class="hidden divider-accent"></div>
-<div class="hidden border-2 border-warning shadow-warning hover:border-warning hover:shadow-warning"></div>
+<div class="hidden bg-warning group-hover:bg-warning border-2 border-warning shadow-warning hover:border-warning hover:shadow-warning group-hover:border-warning"></div>
 <div class="hidden divider-warning"></div>
+<div class="hidden bg-error group-hover:bg-error border-2 border-error shadow-error hover:border-error hover:shadow-error group-hover:border-error"></div>
+<div class="hidden divider-error"></div>

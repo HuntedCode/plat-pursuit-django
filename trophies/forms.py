@@ -1,6 +1,6 @@
 import logging
 from django import forms
-from trophies.models import Profile, UserConceptRating
+from trophies.models import Profile, UserConceptRating, Badge
 
 logger = logging.getLogger('psn_api')
 
@@ -130,3 +130,18 @@ class UserConceptRatingForm(forms.ModelForm):
             'fun_ranking': 'Platinum "Fun" Ranking',
             'overall_rating': 'Overall Game Rating',
         }
+
+class BadgeSearchForm(forms.Form):
+    series_slug = forms.CharField(required=False, label='Search by Series')
+    sort = forms.ChoiceField(
+        choices=[
+            ('series', 'Series'),
+            ('name', 'Alphabetical'),
+            ('tier', 'Tier Ascending'),
+            ('tier_desc', 'Tier Descending'),
+            ('earned', 'Most Earned (Tier 1)'),
+            ('earned_inv', 'Least Earned (Tier 1)'),
+        ],
+        required=False,
+        label='Sort By'
+    )

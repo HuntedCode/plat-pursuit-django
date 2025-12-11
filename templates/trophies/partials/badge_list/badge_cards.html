@@ -1,0 +1,49 @@
+{% load custom_filters %}
+{% for item in display_data %}
+{% with item.badge as badge %}
+    <a href="/" class="card bg-base-100 border-4 border-base-300 shadow-xl shadow-neutral cursor-pointer transition-all duration-300 hover:scale-105 hover:border-{{ badge|badge_color }} hover:shadow-{{ badge|badge_color }} hover:z-10 group">
+        <div class="card-body m-0 px-3 py-3 gap-0">
+            {% if badge.display_title %}
+                <h3 class="text-lg font-bold line-clamp-1 italic pr-1 hover:scale-105">{{ badge.display_title }}</h3>
+            {% else %}
+                <h3 class="text-lg font-bold line-clamp-1 italic pr-1 hover:scale-105">{{ badge.base_badge.display_title }}</h3>
+            {% endif %}
+            <div class="flex flex-row justify-between items-end mb-1">
+                <h5 class="text-base text-{{ badge|badge_color }} font-bold hover:scale-105">Tier {{ badge.tier }}</h5>
+                <h5 class="text-xs text-base-content/70 font-semibold italic pr-1 hover:scale-105">Total Earned (Tier 1): {{ item.tier1_earned_count }}</h5>
+            </div>
+            <figure class="border-4 border-base-300 rounded-box transition-all duration-300 group-hover:bg-{{ badge|badge_color }}">
+                {% if badge.icon %}
+                    <img src="{{ badge.icon.url }}" alt="{{ badge.name }}" class="w-full object-cover" loading="lazy" />
+                {% else %}
+                    <img src="{{ badge.base_badge.icon.url }}" alt="{{ badge.name }}" class="w-full object-cover" loading="lazy" />
+                {% endif %}
+            </figure>
+            {% if badge.display_series %}
+                <h2 class="text-lg text-base-content font-semibold text-center italic line-clamp-1 pr-1 hover:scale-105">{{ badge.display_series }}</h2>
+            {% else %}
+                <h2 class="text-lg text-base-content font-semibold text-center italic line-clamp-1 pr-1 hover:scale-105">{{ badge.base_badge.display_series }}</h2>
+            {% endif %}
+
+            {% if badge.description %}
+                <h6 class="text-xs text-base-content/70 font-semibold text-center italic line-clamp-1 pr-1 hover:scale-105">{{ badge.description }}</h6>
+            {% else %}
+                <h6 class="text-xs text-base-content/70 font-semibold text-center italic line-clamp-1 pr-1 hover:scale-105">{{ badge.base_badge.description }}</h6>
+            {% endif %}
+
+            {% if user.is_authenticated and user.profile %}
+                <div class="divider divider-vertical m-0 p-0"></div>
+                <h4 class="text-base font-base-content font-semibold text-center mb-1 hover:scale-105">Your Progress</h4>
+                {% with item.progress_percentage as percent %}
+                    <div class="flex flex-col gap-0 items-center self-center w-3/4">
+                        <progress class="progress {% if percent < 33.0 %}progress-error{% elif percent < 66.0 %}progress-warning{% elif percent < 100.0 %}progress-success{% else %}progress-primary{% endif %} w-full hover:scale-105" value="{{ percent }}" max="100"></progress>
+                        <p class="text-base text-base-content hover:scale-105">{{ item.completed_concepts }} / {{ item.required_concepts }} ({{ percent }}%)</p>
+                    </div>
+                {% endwith %}
+            {% endif %}
+        </div>
+    </a>
+{% endwith %}
+{% empty %}
+    <p>No badges found. Try expanding your search!</p>
+{% endfor %}
