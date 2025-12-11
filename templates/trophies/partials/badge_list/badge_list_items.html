@@ -6,30 +6,12 @@
             <div class="flex flex-row justify-between">
                 <div class="flex flex-row gap-4">
                     <figure class="border-4 border-base-300 rounded-box w-22 h-22 transition-all duration-300 group-hover:bg-{{ badge|badge_color }}">
-                        {% if badge.icon %}
-                            <img src="{{ badge.icon.url }}" alt="{{ badge.name }}" class="w-full object-cover" loading="lazy" />
-                        {% else %}
-                            <img src="{{ badge.base_badge.icon.url }}" alt="{{ badge.name }}" class="w-full object-cover" loading="lazy" />
-                        {% endif %}
+                        <img src="{{ badge.effective_icon_url }}" alt="{{ badge.name }}" class="w-full object-cover" loading="lazy" />
                     </figure>
                     <div class="flex flex-col">
-                        {% if badge.display_title %}
-                            <h3 class="text-lg font-bold line-clamp-1 italic pr-1 hover:scale-105">{{ badge.display_title }} - <span class="text-{{ badge|badge_color }}">Tier {{ badge.tier }}</span></h3>
-                        {% else %}
-                            <h3 class="text-lg font-bold line-clamp-1 italic pr-1 hover:scale-105">{{ badge.base_badge.display_title }} - <span class="text-{{ badge|badge_color }}">Tier {{ badge.tier }}</h3>
-                        {% endif %}
-                        
-                        {% if badge.display_series %}
-                            <h2 class="text-base text-base-content text-start line-clamp-1 pr-1 hover:scale-105">{{ badge.display_series }}</h2>
-                        {% else %}
-                            <h2 class="text-base text-base-content text-start line-clamp-1 pr-1 hover:scale-105">{{ badge.base_badge.display_series }}</h2>
-                        {% endif %}
-
-                        {% if badge.description %}
-                            <h6 class="text-xs text-base-content/70 text-start italic line-clamp-1 pr-1 hover:scale-105">{{ badge.description }}</h6>
-                        {% else %}
-                            <h6 class="text-xs text-base-content/70 text-start italic line-clamp-1 pr-1 hover:scale-105">{{ badge.base_badge.description }}</h6>
-                        {% endif %}
+                        <h3 class="text-lg font-bold line-clamp-1 italic pr-1 hover:scale-105">{{ badge.effective_display_title }} - <span class="text-{{ badge|badge_color }}">Tier {{ badge.tier }}</span></h3>
+                        <h2 class="text-base text-base-content text-start line-clamp-1 pr-1 hover:scale-105">{{ badge.effective_display_series }}</h2>
+                        <h6 class="text-xs text-base-content/70 text-start italic line-clamp-1 pr-1 hover:scale-105">{{ badge.effective_description }}</h6>
                         <h5 class="text-xs text-base-content/70 font-semibold italic pr-1 hover:scale-105">Total Earned (Tier 1): {{ item.tier1_earned_count }}</h5>                 
                     </div>
                 </div>

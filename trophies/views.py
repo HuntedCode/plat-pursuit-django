@@ -916,15 +916,12 @@ class BadgeListView(ListView):
     def get_queryset(self):
         qs = super().get_queryset().prefetch_related('concepts')
         form = BadgeSearchForm(self.request.GET)
-        order = ['series_slug']
 
         if form.is_valid():
             series_slug = form.cleaned_data.get('series_slug')
-
             if series_slug:
                 qs = qs.filter(series_slug__icontains=series_slug)
-
-        return qs.order_by(*order)
+        return qs
     
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -999,17 +996,17 @@ class BadgeListView(ListView):
 
         sort_val = self.request.GET.get('sort', 'tier')
         if sort_val == 'name':
-            display_data.sort(key=lambda d: d['badge'].name)
+            display_data.sort(key=lambda d: d['badge'].effective_display_title)
         elif sort_val == 'tier':
-            display_data.sort(key=lambda d: (d['badge'].tier, d['badge'].name))
+            display_data.sort(key=lambda d: (d['badge'].tier, d['badge'].effective_display_title))
         elif sort_val == 'tier_desc':
-            display_data.sort(key=lambda d: (-d['badge'].tier, d['badge'].name))
+            display_data.sort(key=lambda d: (-d['badge'].tier, d['badge'].effective_display_title))
         elif sort_val == 'earned':
-            display_data.sort(key=lambda d: (-d['tier1_earned_count'], d['badge'].name))
+            display_data.sort(key=lambda d: (-d['tier1_earned_count'], d['badge'].effective_display_title))
         elif sort_val == 'earned_inv':
-            display_data.sort(key=lambda d: (d['tier1_earned_count'], d['badge'].name))
+            display_data.sort(key=lambda d: (d['tier1_earned_count'], d['badge'].effective_display_title))
         else:
-            display_data.sort(key=lambda d: d['badge'].series_slug)
+            display_data.sort(key=lambda d: d['badge'].effective_display_series)
 
         context['display_data'] = display_data
         context['breadcrumb'] = [

@@ -551,6 +551,30 @@ class Badge(models.Model):
             return self.base_badge.icon.url
         return None
 
+    @property
+    def effective_display_series(self):
+        if self.display_series:
+            return self.display_series
+        elif self.base_badge and self.base_badge.display_series:
+            return self.base_badge.display_series
+        return None
+    
+    @property
+    def effective_display_title(self):
+        if self.display_title:
+            return self.display_title
+        elif self.base_badge and self.base_badge.display_title:
+            return self.base_badge.display_title
+        return None
+    
+    @property
+    def effective_description(self):
+        if self.description:
+            return self.description
+        elif self.base_badge and self.base_badge.description:
+            return self.base_badge.description
+        return None
+    
     def __str__(self):
         return f"{self.name} (Tier {self.tier})"
     
