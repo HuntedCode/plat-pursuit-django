@@ -534,19 +534,21 @@ class TokenKeeper:
             game_title = self._execute_api_call(self._get_instance_for_job(job_type), profile, 'game_title', title_id=title_id.title_id, platform=PlatformType(title_id.platform), account_id=profile.account_id, np_communication_id=game.np_communication_id)
             if game_title:
                 details = game_title.get_details()[0]
-                concept, created = PsnApiService.create_concept_from_details(details)
-                if not created:
+                error_code = details.get('errorCode', None)
+                if error_code is None:
                     release_date = details.get('defaultProduct', {}).get('releaseDate', None)
                     if release_date is None:
                         release_date = details.get('releaseDate', {}).get('date', '')
-                    media_list = self._extract_media(details)
+                    concept, _ = PsnApiService.create_concept_from_details(details)
                     concept.update_release_date(release_date)
-                    concept.update_media(media_list)
-                game.add_concept(concept)
-                game.add_region(title_id.region)
-                concept.add_title_id(title_id.title_id)
-                concept.check_and_mark_regional()
-                logger.info(f"Title ID {title_id.title_id} - {concept.unified_title} sync'd successfully!")
+                    game.add_concept(concept)
+                    game.add_region(title_id.region)
+                    concept.add_title_id(title_id.title_id)
+                    concept.check_and_mark_regional()
+                    logger.info(f"Title ID {title_id.title_id} - {concept.unified_title} sync'd successfully!")
+                else:
+                    logger.warning(f"Concept for {title_id.title_id} returned an error code.")
+                    logger.info(f"Title ID {title_id.title_id} sync'd successfully!")
             else:
                 logger.warning(f"Couldn't get game_title for Title ID {title_id.title_id}")
         except Exception as e:

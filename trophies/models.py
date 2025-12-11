@@ -169,7 +169,7 @@ class Game(models.Model):
     has_trophy_groups = models.BooleanField(default=False)
     defined_trophies = models.JSONField(default=dict, blank=True)
     metadata = models.JSONField(default=dict, blank=True)
-    concept = models.ForeignKey('Concept', null=True, blank=True, on_delete=models.CASCADE, related_name='games')
+    concept = models.ForeignKey('Concept', null=True, blank=True, on_delete=models.SET_NULL, related_name='games')
     region = models.JSONField(default=list, blank=True)
     title_ids = models.JSONField(default=list, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)

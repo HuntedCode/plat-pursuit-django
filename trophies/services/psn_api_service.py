@@ -1,6 +1,7 @@
 import logging
 import requests
 from datetime import timedelta
+from dateutil import parser as date_parser
 from django.utils import timezone
 from django.db.models import F
 from trophies.models import Profile, Game, ProfileGame, Trophy, EarnedTrophy, Concept, TrophyGroup
@@ -147,18 +148,10 @@ class PsnApiService:
                 }
         except:
             media = {}
-
-        try:
-            release_date = details.get('defaultProduct', {}).get('releaseDate', None)
-            if release_date is None:
-                release_date = details.get('releaseDate', {}).get('date', '')
-        except:
-            release_date = ''
-        return Concept.objects.get_or_create(
+        concept, created = Concept.objects.get_or_create(
             concept_id=details.get('id'),
             defaults={
                 'unified_title': details.get('nameEn', ''),
-                'release_date': release_date,
                 'publisher_name': details.get('publisherName', ''),
                 'genres': details.get('genres', []),
                 'subgenres': details.get('subGenres', []),
@@ -169,6 +162,20 @@ class PsnApiService:
                 'content_rating': details.get('contentRating', {}),
                 'media': media
             })
+        
+        if not created:
+            concept.unified_title = details.get('nameEn', '')
+            concept.publisher_name = details.get('publisherName', '')
+            concept.genres = details.get('genres', []),
+            concept.subgenres = details.get('subGenres', [])
+            concept.descriptions = {
+                'short': descriptions_short,
+                'long': descriptions_long
+            }
+            concept.content_rating = details.get('contentRating', {}),
+            concept.media = media
+            concept.save()
+        return concept, created
     
     @classmethod
     def update_profile_game_with_title_stats(cls, profile: Profile, title_stats: TitleStats):
@@ -181,8 +188,9 @@ class PsnApiService:
                     logger.error(f"Could not find ProfileGame entry for {profile} - {game}")
                     return False
                 
+                game.title_name = title_stats.name
                 game.title_image = title_stats.image_url
-                game.save(update_fields=['title_image'])
+                game.save(update_fields=['title_name', 'title_image'])
                 profile_game.play_count = title_stats.play_count
                 profile_game.first_played_date_time = title_stats.first_played_date_time
                 profile_game.last_played_date_time = title_stats.last_played_date_time
