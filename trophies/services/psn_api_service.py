@@ -147,10 +147,18 @@ class PsnApiService:
                 }
         except:
             media = {}
+
+        try:
+            release_date = details.get('defaultProduct', {}).get('releaseDate', None)
+            if release_date is None:
+                release_date = details.get('releaseDate', {}).get('date', '')
+        except:
+            release_date = ''
         return Concept.objects.get_or_create(
             concept_id=details.get('id'),
             defaults={
                 'unified_title': details.get('nameEn', ''),
+                'release_date': release_date,
                 'publisher_name': details.get('publisherName', ''),
                 'genres': details.get('genres', []),
                 'subgenres': details.get('subGenres', []),

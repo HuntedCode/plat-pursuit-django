@@ -230,6 +230,7 @@ class Concept(models.Model):
     unified_title = models.CharField(max_length=255, blank=True)
     title_ids = models.JSONField(default=list, blank=True)
     publisher_name = models.CharField(max_length=255, blank=True)
+    release_date = models.DateTimeField(null=True, blank=True)
     genres = models.JSONField(default=list, blank=True)
     subgenres = models.JSONField(default=list, blank=True)
     descriptions = models.JSONField(default=dict, blank=True)
@@ -242,6 +243,7 @@ class Concept(models.Model):
             models.Index(fields=['concept_id'], name='concept_id_idx'),
             models.Index(fields=['unified_title'], name='concept_title_idx'),
             models.Index(fields=['publisher_name'], name='content_publisher_idx'),
+            models.Index(fields=['release_date'], name='concept_release_date_idx'),
         ]
     
     def add_title_id(self, title_id: str):
@@ -262,6 +264,11 @@ class Concept(models.Model):
         if media:
             self.media = media
             self.save(update_fields=['media'])
+    
+    def update_release_date(self, date):
+        if date:
+            self.release_date = date
+            self.save(update_fields=['release_date'])
     
     def has_user_earned_platinum(self, profile):
         platinum_trophies = Trophy.objects.filter(game__concept=self, trophy_type='platinum')

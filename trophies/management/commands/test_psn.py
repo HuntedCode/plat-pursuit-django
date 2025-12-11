@@ -204,7 +204,7 @@ class Command(BaseCommand):
             # self.user_profile_legacy(user)
             # self.user_title_stats(user)
             # self.user_trophy_summary(user)
-            self.user_trophy_titles(user)
+            # self.user_trophy_titles(user)
             np_comm_id = "NPWR40455_00"
             # title_ids = ["NPWR43893_00"]
             #title_ids = []
@@ -216,9 +216,9 @@ class Command(BaseCommand):
             # self.user_trophy_titles_for_title(user, title_ids)
             #self.user_trophy_groups_summary(user, np_comm_id, platform)
 
-            #game_title = psnawp.game_title('PPSA03016_00', PlatformType('PS5'), account_id=user.account_id)
+            game_title = psnawp.game_title('CUSA25073_00', PlatformType('PS4'), account_id=user.account_id)
             #print(game_title.np_communication_id)
-            #pprint(game_title.get_details())
+            pprint(game_title.get_details())
             #pprint(game_title.trophies())
 
             #print(user.get_region())

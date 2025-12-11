@@ -2,25 +2,37 @@
 <div class="grid grid-cols-1 xl:grid-cols-3 gap-4">
     <div class="card shadow-lg shadow-neutral bg-base-100 border-4 border-base-300 w-full xl:col-span-1 transition-all duration-300 hover:border-primary hover:shadow-primary">
         <div class="card-body flex flex-col lg:flex-row xl:flex-col items-center justify-between gap-4">
-            <div class="hover-3d max-w-3/4">
-                <figure class="relative h-fit shadow-md shadow-neutral border-4 border-base-300 rounded-box">
-                    {% if game.title_image %}
-                        <img src="{{ game.title_image }}" alt="{{ game.title_name }}" class="w-full object-fill" />
-                    {% else %}
-                        <img src="{{ game.title_icon_url }}" alt="{{ game.title_name }}" class="w-full object-fill" />
-                    {% endif %}
-                    <figure class="absolute left-1 bottom-1 w-6 sm:w-10 xl:w-8 2xl:w-10">
-                        <img src="{{ image_urls.content_rating_url }}" class="w-full object-fill" />
+            <div class="flex flex-col gap-2 items-center">
+                <div class="hover-3d max-w-3/4">
+                    <figure class="relative h-fit shadow-md shadow-neutral border-4 border-base-300 rounded-box">
+                        {% if game.title_image %}
+                            <img src="{{ game.title_image }}" alt="{{ game.title_name }}" class="w-full object-fill" />
+                        {% else %}
+                            <img src="{{ game.title_icon_url }}" alt="{{ game.title_name }}" class="w-full object-fill" />
+                        {% endif %}
+                        <figure class="absolute left-1 bottom-1 w-6 sm:w-10 xl:w-8 2xl:w-10">
+                            <img src="{{ image_urls.content_rating_url }}" class="w-full object-fill" />
+                        </figure>
                     </figure>
-                </figure>
-                <div></div>
-                <div></div>
-                <div></div>
-                <div></div>
-                <div></div>
-                <div></div>
-                <div></div>
-                <div></div>
+                    <div></div>
+                    <div></div>
+                    <div></div>
+                    <div></div>
+                    <div></div>
+                    <div></div>
+                    <div></div>
+                    <div></div>
+                </div>
+                {% if game.concept %}
+                    <div class="flex flex-col justify-center items-center gap-2 w-3/4">
+                        {% if game.concept.publisher_name %}
+                            <h4 class="text-xs text-base-content line-clamp-1 pr-1 hover:scale-105">Publisher: <span class="italic">{{ game.concept.publisher_name }}</span></h4>
+                        {% endif %}
+                        {% if game.concept.release_date %}
+                            <h4 class="text-xs text-base-content line-clamp-1 pr-1 hover:scale-105">Release Date: <span class="italic">{{ game.concept.release_date|date }}</span></h4>
+                        {% endif %}
+                    </div>
+                {% endif %}
             </div>
             {% if game.concept %}
                 <div class="max-w-full lg:max-w-1/2 xl:max-w-full flex flex-col items-center">

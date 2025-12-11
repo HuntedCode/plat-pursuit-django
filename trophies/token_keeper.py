@@ -536,7 +536,11 @@ class TokenKeeper:
                 details = game_title.get_details()[0]
                 concept, created = PsnApiService.create_concept_from_details(details)
                 if not created:
+                    release_date = details.get('defaultProduct', {}).get('releaseDate', None)
+                    if release_date is None:
+                        release_date = details.get('releaseDate', {}).get('date', '')
                     media_list = self._extract_media(details)
+                    concept.update_release_date(release_date)
                     concept.update_media(media_list)
                 game.add_concept(concept)
                 game.add_region(title_id.region)
@@ -736,7 +740,7 @@ class TokenKeeper:
                     break
             title_defined_trophies_total = title.defined_trophies.bronze + title.defined_trophies.silver + title.defined_trophies.gold + title.defined_trophies.platinum
             args = [game.np_communication_id, game.title_platform[0] if not game.title_platform[0] == 'PSPC' else game.title_platform[1]]
-            if True or game.get_total_defined_trophies() != title_defined_trophies_total:
+            if game.get_total_defined_trophies() != title_defined_trophies_total:
                 PSNManager.assign_job('sync_trophy_groups', args, profile.id)
 
         # Assign jobs for title_stats

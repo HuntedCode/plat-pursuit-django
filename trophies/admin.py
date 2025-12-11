@@ -264,7 +264,7 @@ class TitleIDAdmin(admin.ModelAdmin):
 
 @admin.register(Concept)
 class ConceptAdmin(admin.ModelAdmin):
-    list_display = ('id', 'concept_id', 'unified_title', 'publisher_name', 'genres')
+    list_display = ('id', 'concept_id', 'unified_title', 'release_date', 'publisher_name', 'genres')
     search_fields = ('concept_id', 'unified_title')
 
 @admin.register(TrophyGroup)
