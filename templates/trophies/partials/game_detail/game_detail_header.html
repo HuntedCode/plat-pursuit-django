@@ -31,6 +31,9 @@
                         {% if game.concept.release_date %}
                             <h4 class="text-xs text-base-content line-clamp-1 pr-1 hover:scale-105">Release Date: <span class="italic">{{ game.concept.release_date|date }}</span></h4>
                         {% endif %}
+                        {% for badge in badges %}
+                            <h4 class="text-xs text-base-content line-clamp-1 pr-1 hover:scale-105">Series: <a href="{% if profile %}{% url 'badge_detail_with_profile' badge.series_slug profile.psn_username %}{% else %}{% url 'badge_detail' badge.series_slug %}{% endif %}" class="link italic">{{ badge.display_series }}</a></h4>
+                        {% endfor %}
                     </div>
                 {% endif %}
             </div>

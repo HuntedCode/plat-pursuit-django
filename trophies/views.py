@@ -604,6 +604,10 @@ class GameDetailView(DetailView):
                 if averages:
                     cache.set(averages_cache_key, json.dumps(averages), timeout=stats_timeout)
             context['community_averages'] = averages
+
+            badges = Badge.objects.filter(concepts=game.concept, tier=1).order_by('display_series')
+            context['badges'] = badges
+
         
         profile = user.profile if user.is_authenticated and hasattr(user, 'profile') and user.profile and user.profile.is_linked else None
         if profile and game.concept:
