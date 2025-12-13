@@ -236,6 +236,7 @@ class Concept(models.Model):
     descriptions = models.JSONField(default=dict, blank=True)
     content_rating = models.JSONField(default=dict, blank=True)
     media = models.JSONField(default=dict, blank=True)
+    bg_url = models.URLField(null=True, blank=True)
     concept_icon_url = models.URLField(null=True, blank=True)
     guide_slug = models.CharField(max_length=50, blank=True, null=True)
 
