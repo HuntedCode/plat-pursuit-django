@@ -262,11 +262,12 @@ class Concept(models.Model):
                         game.is_regional = True
                         game.save(update_fields=['is_regional'])
 
-    def update_media(self, media, icon_url):
+    def update_media(self, media, icon_url, bg_url):
         if media:
             self.media = media
             self.concept_icon_url = icon_url
-            self.save(update_fields=['media', 'concept_icon_url'])
+            self.bg_url = bg_url
+            self.save(update_fields=['media', 'concept_icon_url', 'bg_url'])
     
     def update_release_date(self, date):
         if date:

@@ -485,17 +485,6 @@ class GameDetailView(DetailView):
                 if game.concept: 
                     if game.concept.media:
                         for img in game.concept.media:
-                            if img.get('type') == 'GAMEHUB_COVER_ART':
-                                bg_url = img.get('url')
-                                break
-                            elif img.get('type') == 'BACKGROUND_LAYER_ART':
-                                bg_url = img.get('url')
-                        if not bg_url:
-                            for img in game.concept.media:
-                                if img.get('type') == 'SCREENSHOT':
-                                    bg_url = img.get('url')
-
-                        for img in game.concept.media:
                             if img.get('type') == 'SCREENSHOT':
                                 screenshot_urls.append(img.get('url'))
                         
@@ -509,7 +498,7 @@ class GameDetailView(DetailView):
                         content_rating_url = game.concept.content_rating.get('url')
                     
                     image_urls = {
-                        'bg_url': bg_url,
+                        'bg_url': game.concept.bg_url,
                         'screenshot_urls': screenshot_urls,
                         'content_rating_url': content_rating_url
                     }
@@ -1147,22 +1136,7 @@ class BadgeDetailView(DetailView):
 
         if len(grouped_games) > 0:
             recent_concept = grouped_games[0]['concept']
-            for img in recent_concept.media:
-                if img.get('type') == 'GAMEHUB_COVER_ART':
-                    bg_url = img.get('url')
-                    break
-                elif img.get('type') == 'BACKGROUND_LAYER_ART':
-                    bg_url = img.get('url')
-            if not bg_url:
-                for img in recent_concept.media:
-                    if img.get('type') == 'SCREENSHOT':
-                        bg_url = img.get('url')
-            
-            for img in recent_concept.media:
-                if img.get('type') == 'MASTER':
-                    recent_concept_icon_url = img.get('url')
-
-            context['image_urls'] = {'bg_url': bg_url, 'recent_concept_icon_url': recent_concept_icon_url}
+            context['image_urls'] = {'bg_url': recent_concept.bg_url, 'recent_concept_icon_url': recent_concept.concept_icon_url}
             context['recent_concept_name'] = recent_concept.unified_title
 
         context['breadcrumb'] = [
