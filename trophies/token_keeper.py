@@ -536,11 +536,14 @@ class TokenKeeper:
                 details = game_title.get_details()[0]
                 error_code = details.get('errorCode', None)
                 if error_code is None:
+                    concept, _ = PsnApiService.create_concept_from_details(details)
+                    
                     release_date = details.get('defaultProduct', {}).get('releaseDate', None)
                     if release_date is None:
                         release_date = details.get('releaseDate', {}).get('date', '')
-                    concept, _ = PsnApiService.create_concept_from_details(details)
+                    media_list = self._extract_media(details)
                     concept.update_release_date(release_date)
+                    concept.update_media(media_list)
                     game.add_concept(concept)
                     game.add_region(title_id.region)
                     concept.add_title_id(title_id.title_id)

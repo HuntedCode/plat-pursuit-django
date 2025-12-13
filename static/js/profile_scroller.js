@@ -1,12 +1,10 @@
 document.addEventListener('DOMContentLoaded', function() {
     const radioButtons = document.querySelectorAll('input[name="profile-tabs"]')
-    const loading = document.getElementById('loading');
-    const sentinel = document.getElementById('sentinel');
-    if (!radioButtons || !loading || !sentinel) return;
-
     const currentTab = new URLSearchParams(window.location.search).get('tab') || 'games';
+    const sentinel = document.getElementById(`${currentTab}-sentinel`);
+    const loading = document.getElementById(`${currentTab}-loading`);
     const grid = document.getElementById(`${currentTab}-grid`);
-    if (!grid) return;
+    if (!radioButtons || !loading || !sentinel || !grid) return;
 
     let page = 2;
     const baseUrl = window.location.pathname;

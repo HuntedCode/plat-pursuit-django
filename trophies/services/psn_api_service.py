@@ -135,20 +135,8 @@ class PsnApiService:
             descriptions_long = next((d['desc'] for d in details['descriptions'] if d['type'] == 'LONG'), '')
         except:
             descriptions_long = ''
-        
-        try:
-            media = {
-                'images': details.get('defaultProduct', {}).get('media', {}).get('images', []),
-                'videos': details.get('defaultProduct', {}).get('media', {}).get('videos', [])
-            }
-            if not media['images']:
-                media = {
-                    'images': details.get('media', {}).get('images', []),
-                    'videos': details.get('media', {}).get('videos', [])
-                }
-        except:
-            media = {}
-        concept, created = Concept.objects.get_or_create(
+
+        return Concept.objects.get_or_create(
             concept_id=details.get('id'),
             defaults={
                 'unified_title': details.get('nameEn', ''),
@@ -160,22 +148,7 @@ class PsnApiService:
                     'long': descriptions_long
                 },
                 'content_rating': details.get('contentRating', {}),
-                'media': media
             })
-        
-        if not created:
-            concept.unified_title = details.get('nameEn', '')
-            concept.publisher_name = details.get('publisherName', '')
-            concept.genres = details.get('genres', []),
-            concept.subgenres = details.get('subGenres', [])
-            concept.descriptions = {
-                'short': descriptions_short,
-                'long': descriptions_long
-            }
-            concept.content_rating = details.get('contentRating', {}),
-            concept.media = media
-            concept.save()
-        return concept, created
     
     @classmethod
     def update_profile_game_with_title_stats(cls, profile: Profile, title_stats: TitleStats):

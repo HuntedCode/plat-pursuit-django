@@ -1,0 +1,66 @@
+{% load custom_filters static %}
+{% with target_profile as profile %}
+<div class="flex flex-col xl:flex-row gap-4">
+    <a href="{% url 'profile_detail' profile.psn_username %}" class="card shadow-lg shadow-neutral bg-base-100 border-4 border-base-300 w-full xl:w-9/30 transition-all duration-300 cursor-pointer hover:border-accent hover:shadow-accent">                    
+        <div class="relative card-body flex flex-col gap-1 items-center justify-between">
+            <div class="avatar hover:scale-105">
+                <div class="w-30 sm:w-35 md:w-40 lg:w-45 rounded-full ring-4 ring-primary ring-offset-4 ring-offset-base-100">
+                    <img class="bg-secondary/50" src="{{ profile.avatar_url }}" />
+                </div>
+            </div>
+            <div class="flex flex-col items-center">
+                <div class="flex flex-row items-end gap-2">
+                    <div class="text-xl sm:text-2xl text-base-content font-bold mt-4 line-clamp-2 hover:scale-105">{{ profile.display_psn_username }}</div>
+                    {% if profile.is_plus %}
+                        <img src="{% static 'images/plus.png' %}" class="w-7 h-7 mb-2 hover:scale-105" />
+                    {% endif %}
+                </div>
+                <div class="text-sm sm:text-base text-base-content/70 italic pr-1 line-clamp-2 hover:scale-105">{{ profile.about_me }}</div>
+            </div>
+            <div class="absolute top-2 right-4 text-xl md:text-2xl lg:text-3xl text-base-content font-bold text-center hover:scale-105">{{ profile.country_code }}</div>
+        </div>
+    </a>
+    <div class="card bg-base-100 border-4 border-base-300 shadow-lg shadow-neutral w-full xl:w-12/30 transition-all duration-300 hover:border-{{ badge|badge_color }} hover:shadow-{{ badge|badge_color }}">
+        <div class="card-body flex flex-col items-center justify-between gap-0">
+            <div class="hover-3d mb-3 group">
+                <figure class="border-4 border-base-300 rounded-box w-32 sm:w-37 md:w-42 lg:w-48 transition-all duration-300 group-hover:border-{{ badge|badge_color }} group-hover:scale-105">
+                    <img src="{{ badge.effective_icon_url }}" alt="{{ badge.name }}" class="w-full object-cover" loading="lazy" />
+                </figure>
+                <div></div>
+                <div></div>
+                <div></div>
+                <div></div>
+                <div></div>
+                <div></div>
+                <div></div>
+                <div></div>
+            </div>
+            <div class="flex flex-col items-center">
+                <h3 class="text-xl sm:text-2xl font-bold line-clamp-1 italic pr-1 hover:scale-105">{{ badge.effective_display_title }} - <span class="text-{{ badge|badge_color }}">Tier {{ badge.tier }}</span></h3>
+                <h2 class="text-lg text-base-content/70 text-center italic line-clamp-1 pr-1 hover:scale-105">{{ badge.effective_display_series }}</h2>
+            </div>
+        </div>
+    </div>
+    <div class="card shadow-lg shadow-neutral bg-base-100 border-4 border-base-300 w-full xl:w-9/30 transition-all duration-300 hover:border-success hover:shadow-success">
+        <div class="card-body flex flex-col items-center justify-between gap-0">
+            <div class="hover-3d mb-3 group">
+                <figure class="border-4 border-base-300 rounded-box w-32 sm:w-37 md:w-42 lg:w-48 transition-all duration-300 group-hover:border-success group-hover:scale-105">
+                    <img src="{{ image_urls.recent_concept_icon_url }}" class="w-full object-cover" />
+                </figure>
+                <div></div>
+                <div></div>
+                <div></div>
+                <div></div>
+                <div></div>
+                <div></div>
+                <div></div>
+                <div></div>
+            </div>
+            <div class="flex flex-col items-center">
+                <h3 class="text-xl sm:text-2xl font-bold line-clamp-1 italic pr-1 mb-0.5 hover:scale-105">Most Recent Game</h3>
+                <h2 class="text-base text-base-content/70 text-center italic line-clamp-1 pr-1 hover:scale-105">{{ recent_concept_name }}</h2>
+            </div>
+        </div>
+    </div>
+</div>
+{% endwith %}

@@ -8,15 +8,15 @@ from django.core.paginator import Paginator
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.shortcuts import render, get_object_or_404
-from django.http import StreamingHttpResponse, JsonResponse, HttpResponseRedirect
+from django.http import Http404, StreamingHttpResponse, JsonResponse, HttpResponseRedirect
 from django.views.generic import ListView, View, DetailView
 from django.db.models import Q, F, Prefetch, OuterRef, Subquery, Value, IntegerField, FloatField, Count, Avg, Max, Exists
 from django.db.models.functions import Coalesce
 from django.urls import reverse_lazy, reverse
 from django.utils import timezone
-from .models import Game, Trophy, Profile, EarnedTrophy, ProfileGame, TrophyGroup, UserTrophySelection, Badge, UserBadge, UserBadgeProgress
-from .forms import GameSearchForm, TrophySearchForm, ProfileSearchForm, ProfileGamesForm, ProfileTrophiesForm, UserConceptRatingForm, BadgeSearchForm
-from .utils import redis_client
+from .models import Game, Trophy, Profile, EarnedTrophy, ProfileGame, TrophyGroup, UserTrophySelection, Badge, UserBadge, UserBadgeProgress, Concept
+from .forms import GameSearchForm, TrophySearchForm, ProfileSearchForm, ProfileGamesForm, ProfileTrophiesForm, ProfileBadgesForm, UserConceptRatingForm, BadgeSearchForm
+from .utils import redis_client, MODERN_PLATFORMS
 
 logger = logging.getLogger("psn_api")
 
@@ -516,7 +516,7 @@ class GameDetailView(DetailView):
                 else:
                     image_urls = {}
         except Exception as e:
-            logger.error(f"Game stats cache failed for {game.np_communication_id}: {e}")
+            logger.error(f"Game images cache failed for {game.np_communication_id}: {e}")
             image_urls = {}
 
         try:
@@ -825,6 +825,50 @@ class ProfileDetailView(DetailView):
                     trophy_page_obj = trophy_paginator.get_page(page_number)
                 context['trophy_log'] = trophy_page_obj
                 context['profile_games'] = []
+        
+        elif tab == 'badges':
+            form = ProfileBadgesForm(self.request.GET)
+            if form.is_valid():
+                sort_val = form.cleaned_data.get('sort')
+
+                earned_badges_qs = UserBadge.objects.filter(profile=profile).select_related('badge').values('badge__series_slug').annotate(max_tier=Max('badge__tier')).distinct()
+
+                grouped_earned = []
+                for entry in earned_badges_qs:
+                    series_slug = entry['badge__series_slug']
+                    max_tier = entry['max_tier']
+                    highest_badge = Badge.objects.filter(series_slug=series_slug, tier=max_tier).first()
+                    if highest_badge:
+                        next_tier = max_tier + 1
+                        next_badge = Badge.objects.filter(series_slug=series_slug, tier=next_tier).first()
+                        is_maxed = next_badge is None
+                        if is_maxed:
+                            next_badge = highest_badge
+                            
+                        progress_entry = UserBadgeProgress.objects.filter(profile=profile, badge=next_badge).first()
+                        if progress_entry and progress_entry.required_concepts > 0:
+                            progress_percentage = (progress_entry.completed_concepts / progress_entry.required_concepts) * 100
+                        else:
+                            progress_percentage = 0
+                        if is_maxed:
+                            progress_percentage = 100
+                        
+                        grouped_earned.append({
+                            'highest_badge': highest_badge,
+                            'progress': progress_entry,
+                            'percentage': progress_percentage,
+                        })
+                
+                if sort_val == 'name':
+                    grouped_earned.sort(key=lambda d: d['highest_badge'].effective_display_title)
+                elif sort_val == 'tier':
+                    grouped_earned.sort(key=lambda d: (d['max_tier'], d['highest_badge'].effective_display_title))
+                elif sort_val == 'tier_desc':
+                    grouped_earned.sort(key=lambda d: (-d['max_tier'], d['highest_badge'].effective_display_title))
+                else:
+                    grouped_earned.sort(key=lambda d: d['highest_badge'].effective_display_series)
+
+                context['grouped_earned_badges'] = grouped_earned
   
         context['breadcrumb'] = [
             {'text': 'Home', 'url': reverse_lazy('home')},
@@ -1027,3 +1071,107 @@ class BadgeListView(ListView):
             else:
                 return ['trophies/partials/badge_list/badge_cards.html']
         return super().get_template_names()
+
+class BadgeDetailView(DetailView):
+    model = Badge
+    template_name = 'trophies/badge_detail.html'
+    slug_field = 'series_slug'
+    slug_url_kwarg = 'series_slug'
+    context_object_name = 'series_badges'
+
+    def get_object(self, queryset=None):
+        series_slug = self.kwargs[self.slug_url_kwarg]
+        return Badge.objects.filter(series_slug=series_slug).order_by('tier')
+    
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        series_badges = context['object']
+
+        if not series_badges.exists():
+            raise Http404("Series not found")
+
+        psn_username = self.kwargs.get('psn_username')
+        if psn_username:
+            target_profile = get_object_or_404(Profile, psn_username__iexact=psn_username)
+        elif self.request.user.is_authenticated and hasattr(self.request.user, 'profile'):
+            target_profile = self.request.user.profile
+        else:
+            target_profile = None
+        
+        context['target_profile'] = target_profile
+
+        if target_profile:
+            highest_tier_earned = UserBadge.objects.filter(profile=target_profile, badge__series_slug=self.kwargs['series_slug']).aggregate(max_tier=Max('badge__tier'))['max_tier'] or 0
+            badge = series_badges.filter(tier=highest_tier_earned).first()
+            if not badge:
+                badge = series_badges.order_by('tier').first()
+                context['is_maxed'] = True
+            else:
+                context['is_maxed'] = False
+
+            context['badge'] = badge
+
+            progress = UserBadgeProgress.objects.filter(profile=target_profile, badge=badge).first()
+            context['progress'] = progress
+            context['progress_percent'] = progress.completed_concepts / progress.required_concepts * 100 if progress and progress.required_concepts > 0 else 0
+        else:
+            context['badge'] = series_badges.filter(tier=1).first()
+
+        highest_tier_badge = series_badges.order_by('-tier').first()
+        if highest_tier_badge:
+            if highest_tier_badge.concepts.count() > 0:
+                concepts = highest_tier_badge.concepts.all().order_by('-release_date')
+            else:
+                concepts = highest_tier_badge.base_badge.concepts.all().order_by('-release_date') if highest_tier_badge.base_badge and highest_tier_badge.base_badge.concepts.count() > 0 else Concept.objects.none()
+        else:
+            concepts = Concept.objects.none()
+
+        grouped_games = []
+        for concept in concepts:
+            games = concept.games.all().order_by('title_name')
+            game_data = []
+            for game in games:
+                is_modern = any(plat in MODERN_PLATFORMS for plat in game.title_platform) and game.is_obtainable
+                profile_game = ProfileGame.objects.filter(profile=target_profile, game=game).first() if target_profile else None
+                game_data.append({
+                    'game': game,
+                    'is_modern': is_modern,
+                    'profile_game': profile_game,
+                })
+            for img in concept.media:
+                if img.get('type') == 'MASTER':
+                    concept_icon_url = img.get('url')
+            grouped_games.append({
+                'concept': concept,
+                'concept_icon_url': concept_icon_url,
+                'games': game_data,
+            })
+        context['grouped_games'] = grouped_games
+
+        if len(grouped_games) > 0:
+            recent_concept = grouped_games[0]['concept']
+            for img in recent_concept.media:
+                if img.get('type') == 'GAMEHUB_COVER_ART':
+                    bg_url = img.get('url')
+                    break
+                elif img.get('type') == 'BACKGROUND_LAYER_ART':
+                    bg_url = img.get('url')
+            if not bg_url:
+                for img in recent_concept.media:
+                    if img.get('type') == 'SCREENSHOT':
+                        bg_url = img.get('url')
+            
+            for img in recent_concept.media:
+                if img.get('type') == 'MASTER':
+                    recent_concept_icon_url = img.get('url')
+
+            context['image_urls'] = {'bg_url': bg_url, 'recent_concept_icon_url': recent_concept_icon_url}
+            context['recent_concept_name'] = recent_concept.unified_title
+
+        context['breadcrumb'] = [
+            {'text': 'Home', 'url': reverse_lazy('home')},
+            {'text': 'Badges', 'url': reverse_lazy('badges_list')},
+            {'text': badge.effective_display_series if badge else 'Badge Series'},
+        ]
+
+        return context

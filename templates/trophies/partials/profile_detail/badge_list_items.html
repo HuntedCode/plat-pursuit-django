@@ -1,0 +1,32 @@
+{% load custom_filters %}
+{% if grouped_earned_badges %}
+    {% for group in grouped_earned_badges %}
+    {% with group.highest_badge as badge %}
+        <a href="{% url 'badge_detail_with_profile' badge.series_slug profile.psn_username %}" class="card bg-base-100 border-4 border-base-300 shadow-md shadow-neutral cursor-pointer hover:border-{{ badge|badge_color }} hover:shadow-{{ badge|badge_color }} hover:scale-105 group">
+            <div class="card-body">
+                <div class="hover-3d">
+                    <figure class="border-4 border-base-300 rounded-box w-full group-hover:bg-{{ badge|badge_color }}">
+                        <img src="{{ badge.effective_icon_url }}" />
+                    </figure>
+                    <div></div>
+                    <div></div>
+                    <div></div>
+                    <div></div>
+                    <div></div>
+                    <div></div>
+                    <div></div>
+                    <div></div>
+                </div>
+                <div class="flex flex-col items-center gap-0">
+                    <h1 class="text-lg text-base-content text-center font-semibold line-clamp-1 hover:scale-105">{{ badge.effective_display_title }}</h1>
+                    <h1 class="text-base text-base-content/70 text-center font-semibold pr-1 italic line-clamp-1 hover:scale-105 mb-1">{{ badge.effective_display_series }}</h1>
+                    <progress class="progress {% if group.percentage < 33.0 %}progress-error{% elif group.percentage < 66.0 %}progress-warning{% elif group.percentage < 100.0 %}progress-success{% else %}progress-primary{% endif %}" value="{{ group.percentage }}" max="100"></progress>
+                    <h1 class="text-base text-base-content text-center hover:scale-105">{{ group.progress.completed_concepts|default:0 }} / {{ group.progress.required_concepts|default:0 }} ({{ group.percentage|floatformat:2 }}%)</h1>
+                </div>
+            </div>
+        </a>
+    {% endwith %}
+    {% endfor %}
+{% else %}
+    <p class="text-base text-center text-base-content col-span-4">No badges earned yet! Keep playing to earn your first one!</p>
+{% endif %}

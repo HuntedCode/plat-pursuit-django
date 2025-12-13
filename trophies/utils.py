@@ -104,7 +104,10 @@ def get_badge_metrics(profile, badge):
             qualifying_games_qs = Game.objects.filter(platform_filter, is_obtainable=True, defined_trophies__platinum__gt=0).prefetch_related('concept')
         else:
             qualifying_games_qs = Game.objects.filter(platform_filter, defined_trophies__platinum__gt=0).prefetch_related('concept')
-        filtered_concepts_qs = badge.concepts.filter(Exists(qualifying_games_qs.filter(concept=OuterRef('pk')))).distinct()
+        if badge.concepts.count() > 0:
+            filtered_concepts_qs = badge.concepts.filter(Exists(qualifying_games_qs.filter(concept=OuterRef('pk')))).distinct()
+        elif badge.base_badge and badge.base_badge.concepts.count() > 0:
+            filtered_concepts_qs = badge.base_badge.concepts.filter(Exists(qualifying_games_qs.filter(concept=OuterRef('pk')))).distinct()
 
         required = filtered_concepts_qs.count()
         if required == 0:
