@@ -2,7 +2,7 @@ from django.contrib import admin, messages
 from django.contrib.admin import SimpleListFilter
 from django.db import transaction
 from django.db.models import Q
-from .models import Profile, Game, Trophy, EarnedTrophy, ProfileGame, APIAuditLog, FeaturedGame, FeaturedProfile, Event, Concept, TitleID, TrophyGroup, UserTrophySelection, UserConceptRating, Badge, UserBadge, UserBadgeProgress
+from .models import Profile, Game, Trophy, EarnedTrophy, ProfileGame, APIAuditLog, FeaturedGame, FeaturedProfile, Event, Concept, TitleID, TrophyGroup, UserTrophySelection, UserConceptRating, Badge, UserBadge, UserBadgeProgress, FeaturedGuide
 
 
 # Register your models here.
@@ -306,3 +306,14 @@ class UserBadgeAdmin(admin.ModelAdmin):
 class UserBadgeProgressAdmin(admin.ModelAdmin):
     list_display = ['profile', 'badge', 'completed_concepts', 'required_concepts', 'progress_value', 'required_value', 'last_checked']
     search_fields = ['profile__psn_username']
+    
+@admin.register(FeaturedGuide)
+class FeaturedGuideAdmin(admin.ModelAdmin):
+    list_display = ['concept', 'start_date', 'end_date', 'priority']
+    list_filter = ['start_date', 'end_date']
+    search_fields = ['concept__unified_title']
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        if db_field.name == 'concept':
+            kwargs['queryset'] = Concept.objects.exclude(Q(guide_slug__isnull=True) | Q(guide_slug=''))
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)

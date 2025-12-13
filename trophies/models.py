@@ -236,6 +236,7 @@ class Concept(models.Model):
     descriptions = models.JSONField(default=dict, blank=True)
     content_rating = models.JSONField(default=dict, blank=True)
     media = models.JSONField(default=dict, blank=True)
+    concept_icon_url = models.URLField(null=True, blank=True)
     guide_slug = models.CharField(max_length=50, blank=True, null=True)
 
     class Meta:
@@ -260,10 +261,11 @@ class Concept(models.Model):
                         game.is_regional = True
                         game.save(update_fields=['is_regional'])
 
-    def update_media(self, media):
+    def update_media(self, media, icon_url):
         if media:
             self.media = media
-            self.save(update_fields=['media'])
+            self.concept_icon_url = icon_url
+            self.save(update_fields=['media', 'concept_icon_url'])
     
     def update_release_date(self, date):
         if date:
@@ -362,6 +364,20 @@ class FeaturedGame(models.Model):
     class Meta:
         ordering = ['-priority']
 
+class FeaturedGuide(models.Model):
+    concept = models.ForeignKey('Concept', on_delete=models.CASCADE, related_name='featured_entries')
+    start_date = models.DateField(null=True, blank=True, help_text='Start of feature period')
+    end_date = models.DateField(null=True, blank=True, help_text='End of featured period')
+    priority = models.PositiveIntegerField(default=1, help_text='Higher = preferred if multiple overlap')
+
+    class Meta:
+        ordering = ['-priority', '-start_date']
+        indexes = [
+            models.Index(fields=['start_date', 'end_date'], name='featured_date_idx'),
+        ]
+    
+    def __str__(self):
+        return f"Featured: {self.concept.unified_title} ({self.start_date} to {self.end_date})"
 
 class Trophy(models.Model):
     trophy_set_version = models.CharField(max_length=10, blank=True)

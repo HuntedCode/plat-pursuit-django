@@ -157,3 +157,15 @@ class BadgeSearchForm(forms.Form):
         required=False,
         label='Sort By'
     )
+
+class GuideSearchForm(forms.Form):
+    query = forms.CharField(required=False, label='Search by title')
+    sort = forms.ChoiceField(
+        choices=[
+            ('title', 'Alphabetical'),
+            ('release_asc', 'Release Date Ascending'),
+            ('release_desc', 'Release Date Descending'),
+        ],
+        required=False,
+        label='Sort By'
+    )

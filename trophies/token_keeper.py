@@ -541,9 +541,9 @@ class TokenKeeper:
                     release_date = details.get('defaultProduct', {}).get('releaseDate', None)
                     if release_date is None:
                         release_date = details.get('releaseDate', {}).get('date', '')
-                    media_list = self._extract_media(details)
+                    media_data = self._extract_media(details)
                     concept.update_release_date(release_date)
-                    concept.update_media(media_list)
+                    concept.update_media(media_data['all_media'], media_data['icon_url'])
                     game.add_concept(concept)
                     game.add_region(title_id.region)
                     concept.add_title_id(title_id.title_id)
@@ -586,7 +586,17 @@ class TokenKeeper:
 
         all_media.sort(key=lambda x: (x.get('type', ''), x.get('url', '')))
 
-        return all_media
+        icon_url = ''
+        for img in all_media:
+            if img.get('type') == 'MASTER':
+                icon_url = img.get('url')
+
+        media_data = {
+            'all_media': all_media,
+            'icon_url': icon_url,
+        }
+
+        return media_data
     
     def _job_profile_refresh(self, profile_id: int):
         try:

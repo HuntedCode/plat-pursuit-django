@@ -14,8 +14,9 @@ from django.db.models import Q, F, Prefetch, OuterRef, Subquery, Value, IntegerF
 from django.db.models.functions import Coalesce
 from django.urls import reverse_lazy, reverse
 from django.utils import timezone
-from .models import Game, Trophy, Profile, EarnedTrophy, ProfileGame, TrophyGroup, UserTrophySelection, Badge, UserBadge, UserBadgeProgress, Concept
-from .forms import GameSearchForm, TrophySearchForm, ProfileSearchForm, ProfileGamesForm, ProfileTrophiesForm, ProfileBadgesForm, UserConceptRatingForm, BadgeSearchForm
+from random import choice
+from .models import Game, Trophy, Profile, EarnedTrophy, ProfileGame, TrophyGroup, UserTrophySelection, Badge, UserBadge, UserBadgeProgress, Concept, FeaturedGuide
+from .forms import GameSearchForm, TrophySearchForm, ProfileSearchForm, ProfileGamesForm, ProfileTrophiesForm, ProfileBadgesForm, UserConceptRatingForm, BadgeSearchForm, GuideSearchForm
 from .utils import redis_client, MODERN_PLATFORMS
 
 logger = logging.getLogger("psn_api")
@@ -1138,12 +1139,8 @@ class BadgeDetailView(DetailView):
                     'is_modern': is_modern,
                     'profile_game': profile_game,
                 })
-            for img in concept.media:
-                if img.get('type') == 'MASTER':
-                    concept_icon_url = img.get('url')
             grouped_games.append({
                 'concept': concept,
-                'concept_icon_url': concept_icon_url,
                 'games': game_data,
             })
         context['grouped_games'] = grouped_games
@@ -1175,3 +1172,68 @@ class BadgeDetailView(DetailView):
         ]
 
         return context
+
+class GuideListView(ListView):
+    model = Concept
+    template_name = 'trophies/guide_list.html'
+    context_object_name = 'guides'
+    paginate_by = 20
+
+    def get_queryset(self):
+        qs = Concept.objects.exclude(Q(guide_slug__isnull=True) | Q(guide_slug=''))
+        form = GuideSearchForm(self.request.GET)
+        order = ['unified_title']
+
+        if form.is_valid():
+            query = form.cleaned_data.get('query')
+            sort_val = form.cleaned_data.get('sort')
+            
+            if query:
+                qs = qs.filter(Q(unified_title__icontains=query))
+            
+            if sort_val == 'release_date':
+                order = ['release_date', 'unified_title']
+            elif sort_val == '-release_date':
+                order = ['-release_date', 'unified_title']
+            
+        return qs.order_by(*order)
+    
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        today_utc = timezone.now().date().isoformat()
+        cache_key = f"featured_guide:{today_utc}"
+
+        cached_value = cache.get(cache_key)
+        if cached_value is None:
+            featured_qs = FeaturedGuide.objects.filter(
+                Q(start_date__lte=timezone.now()) & (Q(end_date__gte=timezone.now()) | Q(end_date__isnull=True))
+            ).order_by('-priority').first()
+            if featured_qs:
+                featured_concept = featured_qs.concept
+            else:
+                guides = Concept.objects.exclude(Q(guide_slug__isnull=True) | Q(guide_slug=''))
+                if guides.exists():
+                    featured_concept = choice(guides)
+                else:
+                    featured_concept = None
+            
+            if featured_concept:
+                cache.set(cache_key, featured_concept.id, timeout=86400)
+            else:
+                cache.set(cache_key, -1, timeout=86400)
+        else:    
+            if cached_value == -1:
+                featured_concept = None
+            else:
+                featured_concept = Concept.objects.get(id=cached_value)
+        
+        context['breadcrumb'] = [
+            {'text': 'Home', 'url': reverse_lazy('home')},
+            {'text': 'PPTV'}
+        ]
+
+        context['featured_concept'] = featured_concept
+        context['form'] = GuideSearchForm(self.request.GET)
+
+        return context
+

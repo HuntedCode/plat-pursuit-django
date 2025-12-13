@@ -2,11 +2,11 @@
 
 <section class="card w-full bg-base-200 shadow-lg shadow-neutral transition duration-300 hover:shadow-accent hover:border-accent hover:bg-base-300 mb-8">
     <div class="card-body">
-        <h2 class="card-title text-2xl sm:text-3xl lg:text-4xl font-bold place-self-center italic">Latest Rares</h2>
+        <h2 class="card-title text-2xl sm:text-3xl lg:text-4xl font-bold place-self-center italic hover:scale-105">Latest Rares</h2>
         <div class="divider mt-0"></div>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div class="grid-span-1 grid grid-cols-1 gap-4">
-                <h3 class="text-base lg:text-lg font-bold place-self-center italic">PSN Rares</h3>
+                <h3 class="text-base lg:text-lg font-bold place-self-center italic hover:scale-105">PSN Rares</h3>
                 {% for item in psnRares %}
                     <div class="card bg-base-100 shadow-lg shadow-neutral border-2 border-base-300 transition duration-300 hover:shadow-md hover:border-secondary hover:shadow-secondary hover:scale-105 cursor-pointer group" onclick="document.location='{{ item.slug }}'">
                         <div class="card-body flex flex-row items-center justify-between p-4 overflow-x-hidden group">
@@ -28,7 +28,7 @@
             </div>
 
             <div class="grid-span-1 grid grid-cols-1 gap-4">
-                <h3 class="text-base lg:text-lg font-bold place-self-center italic">Plat Pursuit Rares</h3>
+                <h3 class="text-base lg:text-lg font-bold place-self-center italic hover:scale-105">Plat Pursuit Rares</h3>
                 {% for item in ppRares %}
                     <div class="card bg-base-100 shadow-lg shadow-neutral border-2 border-base-300 transition duration-300 hover:shadow-md hover:border-primary hover:shadow-primary hover:scale-105 cursor-pointer group" onclick="document.location='{{ item.slug }}'">
                         <div class="card-body flex flex-row items-center justify-between p-4 overflow-x-hidden group">

@@ -11,6 +11,8 @@ from .services.playing_now import get_playing_now
 from .services.latest_rares import get_latest_psn_rares, get_latest_pp_rares
 from .services.featured_profile import get_featured_profile
 from .services.events import get_upcoming_events
+from .services.featured_guide import get_featured_guide
+from trophies.models import Concept
 
 class IndexView(TemplateView):
     template_name = 'index.html'
@@ -18,6 +20,8 @@ class IndexView(TemplateView):
     STATS_CACHE_TIMEOUT = 3600
     FEATURED_GAMES_KEY = 'featured_games'
     FEATURED_GAMES_TIMEOUT = 86400
+    FEATURED_GUIDE_KEY = 'featured_guide'
+    FEATURED_GUIDE_TIMEOUT = 86400
     LATEST_PLATINUMS_KEY = 'latest_platinums'
     LATEST_PLATINUMS_TIMEOUT = 3600
     PLAYING_NOW_KEY = 'playing_now'
@@ -60,6 +64,15 @@ class IndexView(TemplateView):
             self.FEATURED_GAMES_TIMEOUT * 2
         )
         context['featuredGames'] = featured
+
+        featured_guide_key = f"{self.FEATURED_GUIDE_KEY}_{today_utc}"
+        featured_guide_id = cache.get_or_set(
+            featured_guide_key,
+            get_featured_guide,
+            self.FEATURED_GUIDE_TIMEOUT
+        )
+        featured_concept = Concept.objects.get(id=featured_guide_id)
+        context['featured_concept'] = featured_concept
 
         # Latest platinums - cache resets hourly at top of the hour UTC
         latest_plats_key = f"{self.LATEST_PLATINUMS_KEY}_{today_utc}_{now_utc.hour:02d}"
