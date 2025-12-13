@@ -1151,7 +1151,7 @@ class GuideListView(ListView):
     model = Concept
     template_name = 'trophies/guide_list.html'
     context_object_name = 'guides'
-    paginate_by = 20
+    paginate_by = 6
 
     def get_queryset(self):
         qs = Concept.objects.exclude(Q(guide_slug__isnull=True) | Q(guide_slug=''))
@@ -1165,9 +1165,9 @@ class GuideListView(ListView):
             if query:
                 qs = qs.filter(Q(unified_title__icontains=query))
             
-            if sort_val == 'release_date':
+            if sort_val == 'release_asc':
                 order = ['release_date', 'unified_title']
-            elif sort_val == '-release_date':
+            elif sort_val == 'release_desc':
                 order = ['-release_date', 'unified_title']
             
         return qs.order_by(*order)
@@ -1210,4 +1210,9 @@ class GuideListView(ListView):
         context['form'] = GuideSearchForm(self.request.GET)
 
         return context
+
+    def get_template_names(self):
+        if self.request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return ['trophies/partials/guide_list/guide_list_items.html']
+        return super().get_template_names()
 

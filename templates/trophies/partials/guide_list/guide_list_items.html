@@ -1,0 +1,23 @@
+{% for concept in guides %}
+    <div class="card bg-base-100 border-4 border-base-300 shadow-lg shadow-neutral w-full transition-all duration-300 hover:border-primary hover:shadow-primary group">
+        <div class="card-body">
+            <div class="flex flex-col gap-4">
+                <div class="flex flex-row items-center gap-4">
+                    <figure class="w-25 h-25 border-4 border-base-300 shadow-md shadow-neutral rounded-box group-hover:border-primary group-hover:shadow-primary hover:scale-105">
+                        <img src="{{ concept.concept_icon_url }}" class="w-full object-cover group-hover:scale-105" />
+                    </figure>
+                    <div class="flex flex-col">
+                        <h1 class="text-2xl text-base-content text-center md:text-start font-semibold hover:scale-105">{{ concept.unified_title }}</h1>
+                        <h3 class="text-lg text-base-content text-center md:text-start font-semibold hover:scale-105">{{ concept.publisher_name }}</h3>
+                        <h3 class="text-lg text-base-content/70 text-center md:text-start font-semibold pr-1 italic hover:scale-105">Release Date: {{ concept.release_date|date }}</h3>
+                    </div>
+                </div>
+                <div class="aspect-video w-full border-4 border-base-300 rounded-box">
+                    <iframe class="w-full h-full" src="https://www.youtube.com/embed/{{ concept.guide_slug }}" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
+                </div>
+            </div>
+        </div>
+    </div>
+{% empty %}
+    No guides! Try broading your search terms!
+{% endfor %}
