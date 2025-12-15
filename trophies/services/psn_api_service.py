@@ -38,7 +38,7 @@ class PsnApiService:
         
         profile.psn_history_public = is_public
         profile.last_synced = timezone.now()
-        profile.save()
+        profile.save(update_fields=['display_psn_username', 'account_id', 'np_id', 'avatar_url', 'is_plus', 'about_me', 'languages_used', 'trophy_level', 'progress', 'earned_trophy_summary', 'psn_history_public', 'last_synced'])
         return profile
     
     @classmethod 

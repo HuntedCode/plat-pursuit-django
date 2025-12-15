@@ -14,10 +14,13 @@ from django.db.models import Q, F, Prefetch, OuterRef, Subquery, Value, IntegerF
 from django.db.models.functions import Coalesce
 from django.urls import reverse_lazy, reverse
 from django.utils import timezone
+from django.utils.decorators import method_decorator
+from django_ratelimit.decorators import ratelimit
 from random import choice
+from trophies.psn_manager import PSNManager
 from .models import Game, Trophy, Profile, EarnedTrophy, ProfileGame, TrophyGroup, UserTrophySelection, Badge, UserBadge, UserBadgeProgress, Concept, FeaturedGuide
 from .forms import GameSearchForm, TrophySearchForm, ProfileSearchForm, ProfileGamesForm, ProfileTrophiesForm, ProfileBadgesForm, UserConceptRatingForm, BadgeSearchForm, GuideSearchForm
-from .utils import redis_client, MODERN_PLATFORMS
+from .utils import redis_client, MODERN_PLATFORMS, get_next_sync
 
 logger = logging.getLogger("psn_api")
 
@@ -1220,3 +1223,86 @@ class GuideListView(ListView):
             return ['trophies/partials/guide_list/guide_list_items.html']
         return super().get_template_names()
 
+class ProfileSyncStatusView(LoginRequiredMixin, View):
+    @method_decorator(ratelimit(key='user', rate='60/m', method='GET'))
+    def get(self, request):
+        profile = request.user.profile
+        next_sync = get_next_sync(profile)
+        if next_sync > timezone.now():
+            seconds_to_next_sync = (next_sync - timezone.now()).total_seconds()
+        else:
+            seconds_to_next_sync = 0
+
+        data = {
+            'sync_status': profile.sync_status,
+            'sync_progress': profile.sync_progress_value,
+            'sync_target': profile.sync_progress_target,
+            'sync_percentage': profile.sync_progress_value / profile.sync_progress_target * 100 if profile.sync_progress_target > 0 else 0,
+            'seconds_to_next_sync': seconds_to_next_sync,
+        }
+        return JsonResponse(data)
+
+class TriggerSyncView(LoginRequiredMixin, View):
+    def post(self, request):
+        profile = request.user.profile
+        if not profile:
+            return JsonResponse({'error': 'No linked profile'}, status=400)
+        
+        next_sync = get_next_sync(profile)
+        if next_sync > timezone.now():
+            seconds_left = (next_sync - timezone.now()).total_seconds()
+            return JsonResponse({'error': f'Cooldown active: {seconds_left} seconds left'}, status=429)
+        
+        PSNManager.profile_refresh(profile)
+        return JsonResponse({'success': True, 'message': 'Sync started'})
+
+class SearchSyncProfileView(View):
+    def post(self, request):
+        psn_username = request.POST.get('psn_username')
+        if not psn_username:
+            return JsonResponse({'error': 'Username required'}, status=400)
+        
+        is_new = False
+        try:
+            profile = Profile.objects.get(psn_username__iexact=psn_username)
+        except Profile.DoesNotExist:
+            profile = Profile.objects.create(
+                psn_username=psn_username.lower()
+            )
+            is_new = True
+        
+        if is_new:
+            PSNManager.initial_sync(profile)
+        else:
+            next_sync = get_next_sync(profile)
+            if timezone.now() > next_sync:
+                PSNManager.profile_refresh(profile)
+        return JsonResponse({
+            'success': True,
+            'message': f"{'Added and syncing' if is_new else 'Syncing'} {psn_username}",
+            'psn_username': profile.psn_username,
+        })
+
+class AddSyncStatusView(View):
+    def get(self, request):
+        psn_username = request.GET.get('psn_username')
+        if not psn_username:
+            return JsonResponse({'error': 'Username required'}, status=400)
+        
+        try:
+            profile = Profile.objects.get(psn_username__iexact=psn_username)
+        except Profile.DoesNotExist:
+            data = {
+                'sync_status': 'error',
+                'account_id': '',
+            }
+            return JsonResponse(data)
+        
+        data = {
+            'sync_status': profile.sync_status,
+            'account_id': profile.account_id,
+            'psn_username': profile.psn_username,
+            'slug': f"/profiles/{profile.psn_username}",
+        }
+        return JsonResponse(data)
+        

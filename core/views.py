@@ -13,8 +13,9 @@ from .services.featured_profile import get_featured_profile
 from .services.events import get_upcoming_events
 from .services.featured_guide import get_featured_guide
 from trophies.models import Concept
+from trophies.mixins import ProfileHotbarMixin
 
-class IndexView(TemplateView):
+class IndexView(ProfileHotbarMixin, TemplateView):
     template_name = 'index.html'
     STATS_CACHE_KEY = 'community_stats'
     STATS_CACHE_TIMEOUT = 3600

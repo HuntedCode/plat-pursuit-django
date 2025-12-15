@@ -1,6 +1,7 @@
 import os
 import logging
 import json
+import time
 from dotenv import load_dotenv
 from .models import Profile, Game
 from .utils import redis_client
@@ -57,12 +58,22 @@ class PSNManager:
     # Public Tasks
     @classmethod
     def initial_sync(cls, profile: Profile):
-        cls.assign_job('sync_profile_data', args=[], profile_id=profile.id)
-        cls.assign_job('sync_trophy_titles', args=[], profile_id=profile.id)
+        if not profile.sync_status == 'syncing':
+            profile.reset_sync_progress()
+            profile.set_sync_status('syncing')
+            cls.assign_job('sync_profile_data', args=[], profile_id=profile.id)
+            cls.assign_job('sync_trophy_titles', args=[], profile_id=profile.id)
     
     @classmethod
     def profile_refresh(cls, profile: Profile):
-        cls.assign_job('profile_refresh', args=[], profile_id=profile.id)
+        if not profile.sync_status == 'syncing':
+            profile.reset_sync_progress()
+            profile.set_sync_status('syncing')
+            cls.assign_job('profile_refresh', args=[], profile_id=profile.id)
+    
+    @classmethod
+    def sync_complete(cls, profile: Profile, priority: str):
+        cls.assign_job('sync_complete', args=[], profile_id=profile.id, priority_override=priority)
     
     @classmethod
     def check_profile_health(cls, profile: Profile):
@@ -85,3 +96,7 @@ class PSNManager:
     def sync_title_id(cls, profile: Profile, title_id_str: str, np_communication_id: str):
         args = [title_id_str, np_communication_id]
         PSNManager.assign_job('sync_title_id', args, profile.id, priority_override='high_priority')
+    
+    @classmethod
+    def handle_privacy_error(cls, profile: Profile):
+        cls.assign_job('handle_privacy_error', args=[], profile_id=profile.id, priority_override='high_priority')

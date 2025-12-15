@@ -13,6 +13,9 @@
   <body class="bg-base-100 text-base-content min-h-screen flex flex-col" {% if image_urls.bg_url %}style="background-image: url('{{ image_urls.bg_url }}'); background-size: cover; background-position: center; background-attachment: fixed;"{% endif %}>
     {% include 'partials/navbar.html' %}
     <main class="container mx-auto px-4 py-4 flex-grow">
+      {% if hotbar.active %}
+        {% include 'partials/hotbar.html' %}
+      {% endif %}
       {% block content %}{% endblock %}
     </main>
     {% include 'partials/footer.html' %}

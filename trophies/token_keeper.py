@@ -237,6 +237,10 @@ class TokenKeeper:
                     self._job_sync_games_only(profile_id)
                 elif job_type == 'sync_title_id':
                     self._job_sync_title_id(profile_id, args[0], args[1])
+                elif job_type == 'sync_complete':
+                    self._job_sync_complete(profile_id)
+                elif job_type == 'handle_privacy_error':
+                    self._job_handle_privacy_error(profile_id)
                 else:
                     logger.error(f"Unknown job type: {job_type}")
                     raise
@@ -282,19 +286,19 @@ class TokenKeeper:
         return None
     
     def _execute_api_call(self, instance : TokenInstance, profile : Profile, endpoint : str, **kwargs):
-        lookup_key = profile.account_id if profile.account_id else profile.psn_username
-        if lookup_key not in instance.user_cache:
-            start = time.time()
-            instance.user_cache[lookup_key] = {
-                "user": (instance.client.user(account_id=profile.account_id) if profile.account_id else instance.client.user(online_id=profile.psn_username)),
-                "timestamp": datetime.now()
-            }
-            self._record_call(instance.token)
-            log_api_call('init_user', instance.token, profile.id, 200, time.time() - start)
-        user = instance.user_cache[lookup_key]['user']
         start_time = time.time()
-
         try:
+            lookup_key = profile.account_id if profile.account_id else profile.psn_username
+            if lookup_key not in instance.user_cache:
+                start = time.time()
+                instance.user_cache[lookup_key] = {
+                    "user": (instance.client.user(account_id=profile.account_id) if profile.account_id else instance.client.user(online_id=profile.psn_username)),
+                    "timestamp": datetime.now()
+                }
+                self._record_call(instance.token)
+                log_api_call('init_user', instance.token, profile.id, 200, time.time() - start)
+            user = instance.user_cache[lookup_key]['user']
+
             self._record_call(instance.token)
             if endpoint == "get_profile_legacy":
                 data = user.get_profile_legacy()
@@ -320,7 +324,6 @@ class TokenKeeper:
                 raise ValueError(f"Unknown endpoint: {endpoint}")
             
             log_api_call(endpoint, instance.token, profile.id if profile else None, 200, time.time() - start_time)
-            instance.is_busy = False
             if redis_client.get(f"token_keeper:pending_refresh:{instance.instance_id}"):
                 self._check_and_refresh(instance)
             if endpoint not in ['get_profile_legacy', 'get_region']:
@@ -329,23 +332,26 @@ class TokenKeeper:
         except PSNAWPForbiddenError as e:
             if profile:
                 profile.set_history_public_flag(False)
+                PSNManager.handle_privacy_error(profile)
                 logger.warning(f"Privacy error for profile {profile.id}.")
             log_api_call(endpoint, instance.token, profile.id if profile else None, 500, time.time() - start_time, str(e))
-            instance.is_busy = False
             self._rollback_call(instance.token)
             if redis_client.get(f"token_keeper:pending_refresh:{instance.instance_id}"):
                 self._check_and_refresh(instance)
+            raise
         except HTTPError as e:
             log_api_call(endpoint, instance.token, profile.id if profile else None, e.response.status_code, time.time() - start_time, str(e))
-            instance.is_busy = False
             self._rollback_call(instance.token)
             if redis_client.get(f"token_keeper:pending_refresh:{instance.instance_id}"):
                 self._check_and_refresh(instance)
+            raise
         except Exception as e:
             log_api_call(endpoint, instance.token, profile.id if profile else None, 500, time.time() - start_time, str(e))
-            instance.is_busy = False
             if redis_client.get(f"token_keeper:pending_refresh:{instance.instance_id}"):
                 self._check_and_refresh(instance)
+            raise
+        finally:
+            instance.is_busy = False
 
 
     def _get_calls_in_window(self, token : str) -> int:
@@ -373,6 +379,29 @@ class TokenKeeper:
         
     # Job Requests
 
+    def _job_sync_complete(self, profile_id: int):
+        try:
+            profile = Profile.objects.get(id=profile_id)
+        except Profile.DoesNotExist:
+            logger.error(f"Profile {profile_id} does not exist.")
+        job_type = 'sync_complete'
+
+        profile.set_sync_status('synced')
+        logger.info(f"{profile.display_psn_username} account has finished syncing!")
+    
+    def _job_handle_privacy_error(self, profile_id: int):
+        try:
+            profile = Profile.objects.get(id=profile_id)
+        except Profile.DoesNotExist:
+            logger.error(f"Profile {profile_id} does not exist.")
+        job_type = 'handle_privacy_error'
+
+        time.sleep(1)
+
+        if not profile.psn_history_public:
+            profile.set_sync_status('error')
+        logger.info('Privacy error handled.')
+
     def _job_sync_profile_data(self, profile_id: int) -> Profile:
         try:
             profile = Profile.objects.get(id=profile_id)
@@ -380,10 +409,20 @@ class TokenKeeper:
             logger.error(f"Profile {profile_id} does not exist.")
         job_type = 'sync_profile_data'
 
-        legacy = self._execute_api_call(self._get_instance_for_job(job_type), profile, 'get_profile_legacy')
+        time.sleep(5)
+
+        try:
+            legacy = self._execute_api_call(self._get_instance_for_job(job_type), profile, 'get_profile_legacy')
+        except Exception as e:
+            profile.set_sync_status('error')
+            raise
         is_public = not legacy['profile']['trophySummary']['level'] == 0
         PsnApiService.update_profile_from_legacy(profile, legacy, is_public)
-        region = self._execute_api_call(self._get_instance_for_job(job_type), profile, 'get_region')
+        try:
+            region = self._execute_api_call(self._get_instance_for_job(job_type), profile, 'get_region')
+        except Exception as e:
+            profile.set_sync_status('error')
+            raise    
         PsnApiService.update_profile_region(profile, region)
 
     def _job_sync_trophy_titles(self, profile_id: int, force_title_stats:bool=False):
@@ -392,6 +431,7 @@ class TokenKeeper:
         except Profile.DoesNotExist:
             logger.error(f"Profile {profile_id} does not exist.")
         job_type = 'sync_trophy_titles'
+        job_counter = 0
 
         trophy_titles = []
         page_size = 400
@@ -418,7 +458,11 @@ class TokenKeeper:
             args = [game.np_communication_id, game.title_platform[0] if not game.title_platform[0] == 'PSPC' else game.title_platform[1]]
             if created or game.get_total_defined_trophies() != title_defined_trophies_total:
                 PSNManager.assign_job('sync_trophy_groups', args, profile.id)
+                job_counter += 1
             PSNManager.assign_job('sync_trophies', args, profile.id)
+            job_counter +=1
+        
+        profile.add_to_sync_target(job_counter)
 
         # Check profile health after processing all titles
         PSNManager.assign_job('check_profile_health', args=[], profile_id=profile.id, priority_override='low_priority')
@@ -449,6 +493,7 @@ class TokenKeeper:
         trophy_groups_summary = self._execute_api_call(self._get_instance_for_job(job_type), profile, 'trophy_groups_summary', np_communication_id=np_communication_id, platform=PlatformType(platform))
         for group in trophy_groups_summary.trophy_groups:
             trophy_group, created = PsnApiService.create_or_update_trophy_groups_from_summary(game, group)
+        profile.increment_sync_progress()
         logger.info(f"Trophy group summaries for {game.title_name} synced successfully!")
 
     def _job_sync_title_stats(self, profile_id: int, limit: int, offset: int, page_size: int, is_last: bool=False, force_all: bool=False):
@@ -458,6 +503,7 @@ class TokenKeeper:
         except Profile.DoesNotExist:
             logger.error(f"Profile {profile_id} does not exist.")
         job_type = 'sync_title_stats'
+        job_counter = 0
 
         title_stats = self._execute_api_call(self._get_instance_for_job(job_type), profile, 'title_stats', limit=limit, offset=offset, page_size=page_size)
 
@@ -469,8 +515,6 @@ class TokenKeeper:
         for stats in title_stats:
             found = PsnApiService.update_profile_game_with_title_stats(profile, stats)
             if force_all or (not found and stats.title_id not in TITLE_ID_BLACKLIST):
-                if (stats.title_id == 'CUSA03980_00'):
-                    logger.info("ADDING BIOSHOCK TO REMAINING!")
                 remaining_title_stats.append(stats)
         
         if len(remaining_title_stats) > 0:
@@ -497,8 +541,12 @@ class TokenKeeper:
                 game.add_title_id(title.np_title_id)
                 args = [title.np_title_id, title.np_communication_id]
                 PSNManager.assign_job('sync_title_id', args=args, profile_id=profile.id, priority_override='medium_priority')
+                job_counter += 1
             for stats in remaining_title_stats:
                 PsnApiService.update_profile_game_with_title_stats(profile, stats)
+            
+            profile.add_to_sync_target(job_counter)
+            PSNManager.sync_complete(profile, 'low_priority')
 
     def _job_sync_trophies(self, profile_id: int, np_communication_id: str, platform: str):
         try:
@@ -515,6 +563,7 @@ class TokenKeeper:
         for trophy_data in trophies:
             trophy, _ = PsnApiService.create_or_update_trophy_from_trophy_data(game, trophy_data)
             PsnApiService.create_or_update_earned_trophy_from_trophy_data(profile, trophy, trophy_data)
+        profile.increment_sync_progress()
     
     def _job_sync_title_id(self, profile_id: str, title_id_str: str, np_communication_id: str):
         try:
@@ -548,13 +597,17 @@ class TokenKeeper:
                     game.add_region(title_id.region)
                     concept.add_title_id(title_id.title_id)
                     concept.check_and_mark_regional()
+                    profile.increment_sync_progress()
                     logger.info(f"Title ID {title_id.title_id} - {concept.unified_title} sync'd successfully!")
                 else:
+                    profile.increment_sync_progress()
                     logger.warning(f"Concept for {title_id.title_id} returned an error code.")
                     logger.info(f"Title ID {title_id.title_id} sync'd successfully!")
             else:
+                profile.increment_sync_progress()
                 logger.warning(f"Couldn't get game_title for Title ID {title_id.title_id}")
         except Exception as e:
+            profile.increment_sync_progress()
             logger.error(f"Error while syncing Title ID {title_id.title_id}: {str(e)}")
     
     def _extract_media(self, details: dict) -> list[dict]:
@@ -611,6 +664,7 @@ class TokenKeeper:
         except Profile.DoesNotExist:
             logger.error(f"Profile {profile_id} does not exist.")
         job_type = 'profile_refresh'
+        job_counter = 0
 
         last_sync = profile.last_synced
         PSNManager.assign_job('sync_profile_data', args=[], profile_id=profile.id)
@@ -619,9 +673,11 @@ class TokenKeeper:
         page_size = 400
         limit = page_size
         offset = 0
+        is_full = True
         end_found = False
-        while not end_found:
+        while not end_found and is_full:
             titles = self._execute_api_call(self._get_instance_for_job(job_type), profile, 'trophy_titles', limit=limit, offset=offset, page_size=page_size)
+            is_full = len(titles) == page_size
             for title in titles:
                 if title.last_updated_datetime > last_sync:
                     trophy_titles_to_be_updated.append(title)
@@ -638,16 +694,22 @@ class TokenKeeper:
             args = [game.np_communication_id, game.title_platform[0] if not game.title_platform[0] == 'PSPC' else game.title_platform[1]]
             if created or game.get_total_defined_trophies() != title_defined_trophies_total:
                 PSNManager.assign_job('sync_trophy_groups', args, profile.id)
+                job_counter += 1
             PSNManager.assign_job('sync_trophies', args, profile.id, priority_override='medium_priority')
-
+            job_counter += 1
+        
+        profile.add_to_sync_target(job_counter)
+        job_counter = 0
         
         title_stats_to_be_updated = []
         page_size = 200
         limit = page_size
         offset = 0
+        is_full = True
         end_found = False
-        while not end_found:
+        while not end_found and is_full:
             title_stats = self._execute_api_call(self._get_instance_for_job(job_type), profile, 'title_stats', limit=limit, offset=offset, page_size=page_size)
+            is_full = len(title_stats) == page_size
             for stats in title_stats:
                 if stats.last_played_date_time > last_sync:
                     title_stats_to_be_updated.append(stats)
@@ -687,8 +749,12 @@ class TokenKeeper:
                 game.add_title_id(title.np_title_id)
                 args = [title.np_title_id, title.np_communication_id]
                 PSNManager.assign_job('sync_title_id', args=args, profile_id=profile.id)
+                job_counter += 1
             for stats in remaining_title_stats:
                 PsnApiService.update_profile_game_with_title_stats(profile, stats)
+            
+            profile.add_to_sync_target(job_counter)
+        PSNManager.sync_complete(profile, 'medium_priority')
 
     def _job_check_profile_health(self, profile_id: int):
         try:

@@ -21,7 +21,7 @@ from django.contrib import admin
 from django.contrib.auth.views import LogoutView
 from django.urls import path, include
 from core.views import IndexView
-from trophies.views import GamesListView, TrophiesListView, ProfilesListView, SearchView, GameDetailView, ProfileDetailView, TrophyCaseView, ToggleSelectionView, BadgeListView, BadgeDetailView, GuideListView, monitoring_dashboard, token_stats, token_stats_sse
+from trophies.views import GamesListView, TrophiesListView, ProfilesListView, SearchView, GameDetailView, ProfileDetailView, TrophyCaseView, ToggleSelectionView, BadgeListView, BadgeDetailView, GuideListView, ProfileSyncStatusView, TriggerSyncView, SearchSyncProfileView, AddSyncStatusView, monitoring_dashboard, token_stats, token_stats_sse
 
 urlpatterns = [
     path("admin/", admin.site.urls),
@@ -43,6 +43,10 @@ urlpatterns = [
     path('search/', SearchView.as_view(), name='search'),
     path('logout/', LogoutView.as_view(next_page='home'), name='logout'),
 
+    path('api/trigger-sync/', TriggerSyncView.as_view(), name='trigger_sync'),
+    path('api/profile-sync-status/', ProfileSyncStatusView.as_view(), name='profile_sync_status'),
+    path('api/search-sync-profile/', SearchSyncProfileView.as_view(), name='search_sync_profile'),
+    path('api/add-sync-status/', AddSyncStatusView.as_view(), name='add_sync_status'),
     path('api/token-stats/', token_stats, name='token-stats'),
     path('api/token-stats/sse/', token_stats_sse, name='token-stats-sse'),
     path('monitoring/', monitoring_dashboard, name='monitoring'),

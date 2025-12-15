@@ -25,7 +25,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     left: step,
                     behavior: 'smooth'
                 });
-                console.log('step:', step);
             };
 
             let intervalId = setInterval(autoScroll, 5000);

@@ -3,6 +3,7 @@ from django.utils import timezone
 from users.models import CustomUser
 from django.core.validators import RegexValidator, MinValueValidator, MaxValueValidator
 from django.db.models import F, Avg, Count
+from django.db.transaction import atomic
 from datetime import timedelta
 from trophies.utils import count_unique_game_groups, calculate_trimmed_mean, TITLE_STATS_SUPPORTED_PLATFORMS, NA_REGION_CODES, EU_REGION_CODES, JP_REGION_CODES, AS_REGION_CODES, SHOVELWARE_THRESHOLD
 import secrets
@@ -57,6 +58,14 @@ class Profile(models.Model):
         choices=[("basic", "Basic"), ("preferred", "Preferred")],
         default="basic",
     )
+    sync_status = models.CharField(
+        max_length=20,
+        choices=[('synced', 'Synced'), ('syncing', 'Syncing'), ('error', 'Error')],
+        default='synced',
+        help_text='Current sync state of the profile'
+    )
+    sync_progress_value = models.IntegerField(default=0, help_text='Current sync progress value')
+    sync_progress_target = models.IntegerField(default=0, help_text='Current sync progress target')
     is_linked = models.BooleanField(default=False)
     psn_history_public = models.BooleanField(default=True, help_text="Flag indicating if PSN gaming history is public.")
     created_at = models.DateTimeField(auto_now_add=True)
@@ -69,6 +78,7 @@ class Profile(models.Model):
             models.Index(fields=["account_id"], name="account_id_idx"),
             models.Index(fields=['discord_id'], name='discord_id_idx'),
             models.Index(fields=['is_verified', 'last_synced'], name='verified_synced_idx'),
+            models.Index(fields=['sync_status'], name='progile_sync_status_idx'),
         ]
 
     def __str__(self):
@@ -142,6 +152,32 @@ class Profile(models.Model):
     def set_history_public_flag(self, value: bool):
         self.psn_history_public = value
         self.save(update_fields=['psn_history_public'])
+
+    def set_sync_status(self, value: str):
+        if value in ['syncing', 'synced', 'error']:
+            self.sync_status = value
+            self.save(update_fields=['sync_status'])
+            self.refresh_from_db(fields=['sync_status'])
+    
+    def add_to_sync_target(self, value: int):
+        print('called...')
+        if value:
+            print(f"Adding {value} to target for {self.display_psn_username}")
+            self.sync_progress_target = F('sync_progress_target') + value
+            self.save(update_fields=['sync_progress_target'])
+            self.refresh_from_db(fields=['sync_progress_target'])
+            print(f"New target: {self.sync_progress_target}")
+    
+    def increment_sync_progress(self):
+        self.sync_progress_value = F('sync_progress_value') + 1
+        self.save(update_fields=['sync_progress_value'])
+        self.refresh_from_db(fields=['sync_progress_value'])
+
+    def reset_sync_progress(self):
+        self.sync_progress_target = 0
+        self.sync_progress_value = 0
+        self.save(update_fields=['sync_progress_target', 'sync_progress_value'])
+        self.refresh_from_db(fields=['sync_progress_target', 'sync_progress_value'])
 
 
 class FeaturedProfile(models.Model):
@@ -443,12 +479,13 @@ class Trophy(models.Model):
         return None
 
     def increment_earned_count(self):
-        earned_count = self.earned_count
+        earned_count = F('earned_count')
         earned_count = earned_count + 1
         earn_rate = earned_count / self.game.played_count if self.game.played_count > 0 else 0.0
         self.earned_count = earned_count
         self.earn_rate = earn_rate
         self.save(update_fields=['earned_count', 'earn_rate'])
+        self.refresh_from_db(fields=['earned_count', 'earn_rate'])
 
     def __str__(self):
         return f"{self.trophy_name} ({self.game.title_name})"

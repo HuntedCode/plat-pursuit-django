@@ -6,6 +6,8 @@ import requests
 import logging
 from django.db.models import Exists, OuterRef, Q
 from django.conf import settings
+from django.utils import timezone
+from datetime import timedelta
 from dotenv import load_dotenv
 from typing import List, Set
 from scipy import stats
@@ -232,6 +234,11 @@ def notify_bot_badge_earned(profile, badge):
         logger.info(f"Bot notified: Assigned role {badge.discord_role_id} to {profile.discord_id} for badge {badge.name}")
     except requests.RequestException as e:
         logger.error(f"Bot notification failed for badge {badge.name} (user {profile.psn_username}): {e}")
+
+def get_next_sync(profile) -> int:
+    # Update logic later
+    next_sync = profile.last_synced + timedelta(hours=1)
+    return next_sync
 
 # Common PS Apps - No Trophies
 MODERN_PLATFORMS = ['PS4', 'PS5']

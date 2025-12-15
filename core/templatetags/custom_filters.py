@@ -134,3 +134,15 @@ def format_date(value, arg=None):
         formatted += f" ({tz_abbrev})"
 
     return formatted
+
+@register.filter
+def sync_status_display(value):
+    if value is None:
+        return ''
+    
+    if value == 'synced':
+        return 'Synced!'
+    elif value == 'syncing':
+        return 'Syncing...'
+    else:
+        return 'Error'

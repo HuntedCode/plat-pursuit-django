@@ -21,6 +21,9 @@ class ProfileAdmin(admin.ModelAdmin):
         'country_code',
         "is_plus",
         "last_synced",
+        "sync_status",
+        "sync_progress_value",
+        "sync_progress_target",
         "sync_tier",
     )
     list_filter = ("is_linked", "is_plus", "sync_tier")
@@ -40,7 +43,7 @@ class ProfileAdmin(admin.ModelAdmin):
             "Trophy Summary",
             {"fields": ("trophy_level", "progress", "tier", "earned_trophy_summary")},
         ),
-        ("Sync Info", {"fields": ("extra_data", "last_synced", "sync_tier")}),
+        ("Sync Info", {"fields": ("extra_data", "last_synced", "sync_status", "sync_progress_value", "sync_progress_target", "sync_tier")}),
     )
     actions = ["link_to_user"]
 
