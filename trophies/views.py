@@ -18,6 +18,7 @@ from django.utils.decorators import method_decorator
 from django_ratelimit.decorators import ratelimit
 from random import choice
 from trophies.psn_manager import PSNManager
+from trophies.mixins import ProfileHotbarMixin
 from .models import Game, Trophy, Profile, EarnedTrophy, ProfileGame, TrophyGroup, UserTrophySelection, Badge, UserBadge, UserBadgeProgress, Concept, FeaturedGuide
 from .forms import GameSearchForm, TrophySearchForm, ProfileSearchForm, ProfileGamesForm, ProfileTrophiesForm, ProfileBadgesForm, UserConceptRatingForm, BadgeSearchForm, GuideSearchForm
 from .utils import redis_client, MODERN_PLATFORMS, get_next_sync
@@ -61,7 +62,7 @@ def token_stats(request):
         logger.error(f"Error fetching token stats: {e}")
         return JsonResponse({'error': str(e)}, status=500)
     
-class GamesListView(ListView):
+class GamesListView(ProfileHotbarMixin, ListView):
     model = Game
     template_name = 'trophies/game_list.html'
     paginate_by = 50
@@ -156,7 +157,7 @@ class GamesListView(ListView):
                 return ['trophies/partials/game_list/game_cards.html']
         return super().get_template_names()
     
-class TrophiesListView(ListView):
+class TrophiesListView(ProfileHotbarMixin, ListView):
     model = Trophy
     template_name = 'trophies/trophy_list.html'
     paginate_by = 50
@@ -245,7 +246,7 @@ class TrophiesListView(ListView):
             return ['trophies/partials/trophy_list/trophy_list_items.html']
         return super().get_template_names()
     
-class ProfilesListView(ListView):
+class ProfilesListView(ProfileHotbarMixin, ListView):
     model = Profile
     template_name = 'trophies/profile_list.html'
     paginate_by = 50
@@ -334,7 +335,7 @@ class SearchView(View):
         else:
             return HttpResponseRedirect(reverse_lazy('home'))
 
-class GameDetailView(DetailView):
+class GameDetailView(ProfileHotbarMixin, DetailView):
     model = Game
     template_name = 'trophies/game_detail.html'
     slug_field = 'np_communication_id'
@@ -663,7 +664,7 @@ class GameDetailView(DetailView):
 
         return HttpResponseRedirect(request.path)
     
-class ProfileDetailView(DetailView):
+class ProfileDetailView(ProfileHotbarMixin, DetailView):
     model = Profile
     template_name = 'trophies/profile_detail.html'
     slug_field = 'psn_username'
@@ -889,7 +890,7 @@ class ProfileDetailView(DetailView):
                return ['trophies/partials/profile_detail/trophy_list_items.html'] 
         return super().get_template_names()
     
-class TrophyCaseView(ListView):
+class TrophyCaseView(ProfileHotbarMixin, ListView):
     model = EarnedTrophy
     template_name = 'trophies/trophy_case.html'
     context_object_name = 'platinums'
@@ -921,7 +922,7 @@ class TrophyCaseView(ListView):
             return ['trophies/partials/trophy_case/trophy_case_items.html']
         return super().get_template_names()
 
-class ToggleSelectionView(LoginRequiredMixin, View):
+class ToggleSelectionView(LoginRequiredMixin, ProfileHotbarMixin, View):
     def post(self, request):
         earned_trophy_id = request.POST.get('earned_trophy_id')
         if not earned_trophy_id:
@@ -949,7 +950,7 @@ class ToggleSelectionView(LoginRequiredMixin, View):
             logger.error(f"Selection toggle error: {e}")
             return JsonResponse({'success': False, 'error': 'Internal error'}, status=500)
 
-class BadgeListView(ListView):
+class BadgeListView(ProfileHotbarMixin, ListView):
     model = Badge
     template_name = 'trophies/badge_list.html'
     context_object_name = 'display_badges'
@@ -1069,7 +1070,7 @@ class BadgeListView(ListView):
                 return ['trophies/partials/badge_list/badge_cards.html']
         return super().get_template_names()
 
-class BadgeDetailView(DetailView):
+class BadgeDetailView(ProfileHotbarMixin, DetailView):
     model = Badge
     template_name = 'trophies/badge_detail.html'
     slug_field = 'series_slug'
@@ -1154,7 +1155,7 @@ class BadgeDetailView(DetailView):
 
         return context
 
-class GuideListView(ListView):
+class GuideListView(ProfileHotbarMixin, ListView):
     model = Concept
     template_name = 'trophies/guide_list.html'
     context_object_name = 'guides'
@@ -1222,6 +1223,8 @@ class GuideListView(ListView):
         if self.request.headers.get('X-Requested-With') == 'XMLHttpRequest':
             return ['trophies/partials/guide_list/guide_list_items.html']
         return super().get_template_names()
+
+# Hotbar Views
 
 class ProfileSyncStatusView(LoginRequiredMixin, View):
     @method_decorator(ratelimit(key='user', rate='60/m', method='GET'))

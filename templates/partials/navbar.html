@@ -11,9 +11,6 @@
                 <li><a href="{% url 'games_list' %}">Games</a></li>
                 <li><a href="{% url 'profiles_list' %}">Profiles</a></li>
                 <li><a href="{% url 'badges_list' %}">Badges</a></li>
-                {% if user.is_authenticated %}
-                    <li><a href="{% url 'profile_detail' user.profile.psn_username %}">My PSN</a></li>
-                {% endif %}
                 <li>
                     <a>Community</a>
                     <ul class="p-2">
@@ -44,13 +41,10 @@
             <li><a href="{% url 'games_list' %}">Games</a></li>
             <li><a href="{% url 'profiles_list' %}">Profiles</a></li>
             <li><a href="{% url 'badges_list' %}">Badges</a></li>
-            {% if user.is_authenticated %}
-                <li><a href="{% url 'profile_detail' user.profile.psn_username %}">My PSN</a></li>
-            {% endif %}
             <li>
                 <details>
                     <summary><a>Community</a></summary>
-                    <ul class="p-2 z-[1] border-2 border-base-200">
+                    <ul class="p-2 z-60 border-2 border-base-200">
                         <li><a href="/">Leaderboards</a></li>
                         <li><a href="/">Events</a></li>
                         <li><a href="https://discord.gg/platpursuit" target="_blank" rel="noopener noreferrer">Discord</a></li>
