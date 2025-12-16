@@ -24,16 +24,25 @@
         {% endif %}
     </div>
 
-    {% for group_id, trophies in grouped_trophies.items %}
-        {% with trophy_groups|dict_get:group_id as group %}
-            {% with profile_group_totals|dict_get:group_id as profile_group_total %}
-                <section class="shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 w-full p-0 lg:p-4 mt-8">
-                    {% include 'trophies/partials/game_detail/trophy_group_card.html' %}
-                    {% include 'trophies/partials/game_detail/trophy_list.html' %}
-                </section>
+    {% if trophies_syncing %}
+        <section class="shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 w-full p-0 lg:p-4 mt-8">
+            <div class="alert alert-info mb-4">
+            <span class="loading loading-spinner"></span>
+            Trophies are syncing—check back in a few moments for full details!
+        </div>
+        </section>
+    {% else %}
+        {% for group_id, trophies in grouped_trophies.items %}
+            {% with trophy_groups|dict_get:group_id as group %}
+                {% with profile_group_totals|dict_get:group_id as profile_group_total %}
+                    <section class="shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 w-full p-0 lg:p-4 mt-8">
+                        {% include 'trophies/partials/game_detail/trophy_group_card.html' %}
+                        {% include 'trophies/partials/game_detail/trophy_list.html' %}
+                    </section>
+                {% endwith %}
             {% endwith %}
-        {% endwith %}
-    {% endfor %}
+        {% endfor %}
+    {% endif %}
 {% endblock %}
 
 {% block js_scripts %}

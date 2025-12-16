@@ -377,6 +377,9 @@ class GameDetailView(ProfileHotbarMixin, DetailView):
         profile_earned = {}
         profile_group_totals = {}
         milestones = [{'label': 'First Trophy'}, {'label': '50% Trophy'}, {'label': 'Platinum Trophy'}, {'label': '100% Trophy'}]
+
+        has_trophies = Trophy.objects.filter(game=game).exists()
+
         if target_profile:
             try:
                 profile_game = ProfileGame.objects.get(profile=target_profile, game=game)
@@ -387,94 +390,95 @@ class GameDetailView(ProfileHotbarMixin, DetailView):
                     'last_played': profile_game.last_played_date_time
                 }
 
-                earned_qs = EarnedTrophy.objects.filter(profile=target_profile, trophy__game=game).order_by('trophy__trophy_id')
-                profile_earned = {
-                    e.trophy.trophy_id: {
-                        'earned': e.earned,
-                        'progress': e.progress,
-                        'progress_rate': e.progress_rate,
-                        'progressed_date_time': e.progressed_date_time,
-                        'earned_date_time': e.earned_date_time
-                    } for e in earned_qs
-                }
+                if has_trophies:
+                    earned_qs = EarnedTrophy.objects.filter(profile=target_profile, trophy__game=game).order_by('trophy__trophy_id')
+                    profile_earned = {
+                        e.trophy.trophy_id: {
+                            'earned': e.earned,
+                            'progress': e.progress,
+                            'progress_rate': e.progress_rate,
+                            'progressed_date_time': e.progressed_date_time,
+                            'earned_date_time': e.earned_date_time
+                        } for e in earned_qs
+                    }
 
-                ordered_earned_qs = earned_qs.filter(earned=True).order_by(F('earned_date_time').asc(nulls_last=True))
+                    ordered_earned_qs = earned_qs.filter(earned=True).order_by(F('earned_date_time').asc(nulls_last=True))
 
-                profile_trophy_totals = {
-                    'bronze': ordered_earned_qs.filter(trophy__trophy_type='bronze').count() or 0,
-                    'silver': ordered_earned_qs.filter(trophy__trophy_type='silver').count() or 0,
-                    'gold': ordered_earned_qs.filter(trophy__trophy_type='gold').count() or 0,
-                    'platinum': ordered_earned_qs.filter(trophy__trophy_type='platinum').count() or 0,
-                }
-                
-                for e in ordered_earned_qs:
-                    group_id = e.trophy.trophy_group_id or 'default'
-                    trophy_type = e.trophy.trophy_type
-                    if group_id not in profile_group_totals:
-                        profile_group_totals[group_id] = {'bronze': 0, 'silver': 0, 'gold': 0, 'platinum': 0}
-                    profile_group_totals[group_id][trophy_type] += 1
+                    profile_trophy_totals = {
+                        'bronze': ordered_earned_qs.filter(trophy__trophy_type='bronze').count() or 0,
+                        'silver': ordered_earned_qs.filter(trophy__trophy_type='silver').count() or 0,
+                        'gold': ordered_earned_qs.filter(trophy__trophy_type='gold').count() or 0,
+                        'platinum': ordered_earned_qs.filter(trophy__trophy_type='platinum').count() or 0,
+                    }
+                    
+                    for e in ordered_earned_qs:
+                        group_id = e.trophy.trophy_group_id or 'default'
+                        trophy_type = e.trophy.trophy_type
+                        if group_id not in profile_group_totals:
+                            profile_group_totals[group_id] = {'bronze': 0, 'silver': 0, 'gold': 0, 'platinum': 0}
+                        profile_group_totals[group_id][trophy_type] += 1
 
-                milestones = []
-                earned_list = list(ordered_earned_qs)
-                total_trophies = len(earned_qs)
-                if len(earned_list) > 0:
-                    first = earned_list[0]
-                    milestones.append({
-                        'label': 'First Trophy',
-                        'trophy_name': first.trophy.trophy_name,
-                        'trophy_id': first.trophy.trophy_id,
-                        'trophy_icon_url': first.trophy.trophy_icon_url,
-                        'earned_date_time': first.earned_date_time,
-                        'trophy_earn_rate': first.trophy.trophy_earn_rate,
-                        'trophy_rarity': first.trophy.trophy_rarity
-                    })
-                else:
-                    milestones.append({'label': 'First Trophy'})
-                
-                mid_idx = math.ceil((total_trophies - 1) * 0.5)
-                if len(earned_list) >= mid_idx:
-                    mid = earned_list[mid_idx]
-                    milestones.append({
-                        'label': '50% Trophy',
-                        'trophy_name': mid.trophy.trophy_name,
-                        'trophy_id': mid.trophy.trophy_id,
-                        'trophy_icon_url': mid.trophy.trophy_icon_url,
-                        'earned_date_time': mid.earned_date_time,
-                        'trophy_earn_rate': mid.trophy.trophy_earn_rate,
-                        'trophy_rarity': mid.trophy.trophy_rarity
-                    })
-                else:
-                    milestones.append({'label': '50% Trophy'})
+                    milestones = []
+                    earned_list = list(ordered_earned_qs)
+                    total_trophies = len(earned_qs)
+                    if len(earned_list) > 0:
+                        first = earned_list[0]
+                        milestones.append({
+                            'label': 'First Trophy',
+                            'trophy_name': first.trophy.trophy_name,
+                            'trophy_id': first.trophy.trophy_id,
+                            'trophy_icon_url': first.trophy.trophy_icon_url,
+                            'earned_date_time': first.earned_date_time,
+                            'trophy_earn_rate': first.trophy.trophy_earn_rate,
+                            'trophy_rarity': first.trophy.trophy_rarity
+                        })
+                    else:
+                        milestones.append({'label': 'First Trophy'})
+                    
+                    mid_idx = math.ceil((total_trophies - 1) * 0.5)
+                    if len(earned_list) >= mid_idx:
+                        mid = earned_list[mid_idx]
+                        milestones.append({
+                            'label': '50% Trophy',
+                            'trophy_name': mid.trophy.trophy_name,
+                            'trophy_id': mid.trophy.trophy_id,
+                            'trophy_icon_url': mid.trophy.trophy_icon_url,
+                            'earned_date_time': mid.earned_date_time,
+                            'trophy_earn_rate': mid.trophy.trophy_earn_rate,
+                            'trophy_rarity': mid.trophy.trophy_rarity
+                        })
+                    else:
+                        milestones.append({'label': '50% Trophy'})
 
-                plat_entry = None
-                if len(earned_list) > 0:
-                    plat_entry = next((e for e in reversed(earned_list) if e.trophy.trophy_type == 'platinum'), None)
-                if plat_entry:
-                    milestones.append({
-                        'label': 'Platinum Trophy',
-                        'trophy_name': plat_entry.trophy.trophy_name,
-                        'trophy_id': plat_entry.trophy.trophy_id,
-                        'trophy_icon_url': plat_entry.trophy.trophy_icon_url,
-                        'earned_date_time': plat_entry.earned_date_time,
-                        'trophy_earn_rate': plat_entry.trophy.trophy_earn_rate,
-                        'trophy_rarity': plat_entry.trophy.trophy_rarity
-                    })
-                else:
-                    milestones.append({'label': 'Platinum Trophy'})
+                    plat_entry = None
+                    if len(earned_list) > 0:
+                        plat_entry = next((e for e in reversed(earned_list) if e.trophy.trophy_type == 'platinum'), None)
+                    if plat_entry:
+                        milestones.append({
+                            'label': 'Platinum Trophy',
+                            'trophy_name': plat_entry.trophy.trophy_name,
+                            'trophy_id': plat_entry.trophy.trophy_id,
+                            'trophy_icon_url': plat_entry.trophy.trophy_icon_url,
+                            'earned_date_time': plat_entry.earned_date_time,
+                            'trophy_earn_rate': plat_entry.trophy.trophy_earn_rate,
+                            'trophy_rarity': plat_entry.trophy.trophy_rarity
+                        })
+                    else:
+                        milestones.append({'label': 'Platinum Trophy'})
 
-                if profile_progress['progress'] == 100:
-                    complete = earned_list[-1]
-                    milestones.append({
-                        'label': '100% Trophy',
-                        'trophy_name': complete.trophy.trophy_name,
-                        'trophy_id': complete.trophy.trophy_id,
-                        'trophy_icon_url': complete.trophy.trophy_icon_url,
-                        'earned_date_time': complete.earned_date_time,
-                        'trophy_earn_rate': complete.trophy.trophy_earn_rate,
-                        'trophy_rarity': complete.trophy.trophy_rarity
-                    })
-                else:
-                    milestones.append({'label': '100% Trophy'})
+                    if profile_progress['progress'] == 100:
+                        complete = earned_list[-1]
+                        milestones.append({
+                            'label': '100% Trophy',
+                            'trophy_name': complete.trophy.trophy_name,
+                            'trophy_id': complete.trophy.trophy_id,
+                            'trophy_icon_url': complete.trophy.trophy_icon_url,
+                            'earned_date_time': complete.earned_date_time,
+                            'trophy_earn_rate': complete.trophy.trophy_earn_rate,
+                            'trophy_rarity': complete.trophy.trophy_rarity
+                        })
+                    else:
+                        milestones.append({'label': '100% Trophy'})
             except ProfileGame.DoesNotExist:
                 pass
         
@@ -544,59 +548,65 @@ class GameDetailView(ProfileHotbarMixin, DetailView):
             logger.error(f"Game stats cache failed for {game.np_communication_id}: {e}")
             stats = {}
         
-        try:
-            cached_trophies = cache.get(trophy_cache_key)
-            if cached_trophies:
-                full_trophies = json.loads(cached_trophies)
-            else:
-                trophies_qs = Trophy.objects.filter(game=game).order_by('trophy_id')
-                full_trophies = [
-                    {
-                        'trophy_id': t.trophy_id,
-                        'trophy_type': t.trophy_type,
-                        'trophy_name': t.trophy_name,
-                        'trophy_detail': t.trophy_detail,
-                        'trophy_icon_url': t.trophy_icon_url,
-                        'trophy_group_id': t.trophy_group_id,
-                        'progress_target_value': t.progress_target_value,
-                        'trophy_rarity': t.trophy_rarity,
-                        'trophy_earn_rate': t.trophy_earn_rate,
-                        'earned_count': t.earned_count,
-                        'earn_rate': t.earn_rate,
-                        'pp_rarity': t.get_pp_rarity_tier()
-                    } for t in trophies_qs
-                ]
-                cache.set(trophy_cache_key, json.dumps(full_trophies), timeout=trophy_timeout)
-        except Exception as e:
-            logger.error(f"Game trophies cache failed for {game.np_communication_id}: {e}")
-            full_trophies = []
-
-        try:
-            cached_trophy_groups = cache.get(trophy_groups_cache_key)
-            if cached_trophy_groups:
-                trophy_groups = json.loads(cached_trophy_groups)
-            else:
-                trophy_groups_qs = TrophyGroup.objects.filter(game=game)
-                trophy_groups = {
-                    g.trophy_group_id: {
-                        'trophy_group_name': g.trophy_group_name,
-                        'trophy_group_icon_url': g.trophy_group_icon_url,
-                        'defined_trophies': g.defined_trophies,
-                    } for g in trophy_groups_qs
-                }
-                cache.set(trophy_groups_cache_key, json.dumps(trophy_groups), timeout=trophy_groups_timeout)
-        except Exception as e:
-            logger.error(f"Trophy groups cache failed for {game.np_communication_id}: {e}")
-            trophy_groups = {}
-        
+        full_trophies = []
+        trophy_groups = []
         grouped_trophies = {}
-        for trophy in full_trophies:
-            group_id = trophy.get('trophy_group_id', 'default')
-            if group_id not in grouped_trophies:
-                grouped_trophies[group_id] = []
-            grouped_trophies[group_id].append(trophy)
-        
-        sorted_groups = sorted(grouped_trophies.keys(), key=lambda x: (x != 'default', x))
+        if has_trophies:
+            try:
+                cached_trophies = cache.get(trophy_cache_key)
+                if cached_trophies:
+                    full_trophies = json.loads(cached_trophies)
+                else:
+                    trophies_qs = Trophy.objects.filter(game=game).order_by('trophy_id')
+                    full_trophies = [
+                        {
+                            'trophy_id': t.trophy_id,
+                            'trophy_type': t.trophy_type,
+                            'trophy_name': t.trophy_name,
+                            'trophy_detail': t.trophy_detail,
+                            'trophy_icon_url': t.trophy_icon_url,
+                            'trophy_group_id': t.trophy_group_id,
+                            'progress_target_value': t.progress_target_value,
+                            'trophy_rarity': t.trophy_rarity,
+                            'trophy_earn_rate': t.trophy_earn_rate,
+                            'earned_count': t.earned_count,
+                            'earn_rate': t.earn_rate,
+                            'pp_rarity': t.get_pp_rarity_tier()
+                        } for t in trophies_qs
+                    ]
+                    cache.set(trophy_cache_key, json.dumps(full_trophies), timeout=trophy_timeout)
+            except Exception as e:
+                logger.error(f"Game trophies cache failed for {game.np_communication_id}: {e}")
+                full_trophies = []
+
+            try:
+                cached_trophy_groups = cache.get(trophy_groups_cache_key)
+                if cached_trophy_groups:
+                    trophy_groups = json.loads(cached_trophy_groups)
+                else:
+                    trophy_groups_qs = TrophyGroup.objects.filter(game=game)
+                    trophy_groups = {
+                        g.trophy_group_id: {
+                            'trophy_group_name': g.trophy_group_name,
+                            'trophy_group_icon_url': g.trophy_group_icon_url,
+                            'defined_trophies': g.defined_trophies,
+                        } for g in trophy_groups_qs
+                    }
+                    cache.set(trophy_groups_cache_key, json.dumps(trophy_groups), timeout=trophy_groups_timeout)
+            except Exception as e:
+                logger.error(f"Trophy groups cache failed for {game.np_communication_id}: {e}")
+                trophy_groups = {}
+            
+            grouped_trophies = {}
+            for trophy in full_trophies:
+                group_id = trophy.get('trophy_group_id', 'default')
+                if group_id not in grouped_trophies:
+                    grouped_trophies[group_id] = []
+                grouped_trophies[group_id].append(trophy)
+            
+            sorted_groups = sorted(grouped_trophies.keys(), key=lambda x: (x != 'default', x))
+        else:
+            context['trophies_syncing'] = True
 
         if game.concept:
             averages_cache_key = f"concept:averages:{game.concept.concept_id}:{today}"
@@ -632,7 +642,7 @@ class GameDetailView(ProfileHotbarMixin, DetailView):
         context['profile_trophy_totals'] = profile_trophy_totals
         context['profile_group_totals'] = profile_group_totals
         context['game_stats'] = stats
-        context['grouped_trophies'] = {gid: grouped_trophies[gid] for gid in sorted_groups}
+        context['grouped_trophies'] = {gid: grouped_trophies[gid] for gid in sorted_groups} if has_trophies else {}
         context['trophy_groups'] = trophy_groups
         context['image_urls'] = image_urls
         context['milestones'] = milestones

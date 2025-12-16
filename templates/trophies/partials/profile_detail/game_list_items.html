@@ -38,8 +38,13 @@
                                 </div>
                             {% endif %}
                         </div>
-                        <h3 class="text-sm lg:hidden text-base-content/70 pr-1 italic hover:scale-105">Latest: {{ pgame.most_recent_trophy_date }}</h3>
-                        <h3 class="hidden lg:block text-base text-base-content/70 pr-1 italic hover:scale-105">Latest Trophy Earned: {{ pgame.most_recent_trophy_date|format_date:"with_tz" }}</h3>
+                        {% if not profile.sync_status == 'syncing' %}
+                            <h3 class="text-sm lg:hidden text-base-content/70 pr-1 italic hover:scale-105">Latest: {{ pgame.most_recent_trophy_date }}</h3>
+                            <h3 class="hidden lg:block text-base text-base-content/70 pr-1 italic hover:scale-105">Latest Trophy Earned: {{ pgame.most_recent_trophy_date|format_date:"with_tz" }}</h3>
+                        {% else %}
+                            <h3 class="text-sm lg:hidden text-base-content/70 pr-1 italic hover:scale-105">Latest: <span class="loading loading-infinity loading-md"></span></h3>
+                            <h3 class="hidden lg:block text-base text-base-content/70 pr-1 italic hover:scale-105">Latest Trophy Earned: <span class="loading loading-infinity loading-md"></span></h3>
+                        {% endif %}
                     </div>
                 </div>
                 

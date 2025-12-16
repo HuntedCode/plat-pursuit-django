@@ -409,8 +409,6 @@ class TokenKeeper:
             logger.error(f"Profile {profile_id} does not exist.")
         job_type = 'sync_profile_data'
 
-        time.sleep(5)
-
         try:
             legacy = self._execute_api_call(self._get_instance_for_job(job_type), profile, 'get_profile_legacy')
         except Exception as e:

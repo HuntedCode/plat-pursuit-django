@@ -23,12 +23,20 @@
                     <div class="divider divider-horizontal mx-0"></div>
                     <div class="flex flex-col gap-1 items-center">
                         <h3 class="text-xs text-base-content/70 hover:scale-105 italic">Trophies:</h3>
-                        <h3 class="text-sm text-secondary font-bold hover:scale-105">{{ profile.total_trophies|intcomma }}</h3>
+                        {% if not profile.sync_status == 'syncing' %}
+                            <h3 class="text-sm text-secondary font-bold hover:scale-105">{{ profile.total_trophies|intcomma }}</h3>
+                        {% else %}
+                            <span class="loading loading-infinity loading-md"></span>
+                        {% endif %}
                     </div>
                     <div class="divider divider-horizontal mx-0"></div>
                     <div class="flex flex-col gap-1 items-center">
                         <h3 class="text-xs text-base-content/70 hover:scale-105 italic">Plats:</h3>
-                        <h3 class="text-sm text-primary font-bold hover:scale-105">{{ profile.total_plats|intcomma }}</h3>
+                        {% if not profile.sync_status == 'syncing' %}
+                            <h3 class="text-sm text-primary font-bold hover:scale-105">{{ profile.total_plats|intcomma }}</h3>
+                        {% else %}
+                            <span class="loading loading-infinity loading-md"></span>
+                        {% endif %}
                     </div>
                 </div>
 
@@ -57,16 +65,20 @@
                     {% if recent %}
                         <div class="flex flex-col items-start gap-2 w-full">
                             <h3 class="text-sm text-base-content italic self-center text-center hover:scale-105">Latest Platinum:</h3>
-                            <div class="flex flex-row self-start items-center w-full gap-2">
-                                <figure class="border-2 border-{{ recent|trophy_color }} rounded-box shrink-0 transition-colors duration-300 hover:scale-105">
-                                    <img src="{{ recent.trophy_icon_url }}" alt="{{ recent.trophy_name }}" class="h-10 w-10 object-fill shrink-0" loading="lazy" />
-                                </figure>
-                                <div class="flex flex-col gap-0">
-                                    <h3 class="text-xs text-base-content text-start line-clamp-1 hover:scale-105">{{ recent.trophy_name }}</h3>
-                                    <h3 class="text-xs text-accent text-start italic line-clamp-1 pr-1 hover:scale-105">{{ recent.game.title_name }}</h3>
-                                    <h3 class="text-xs text-base-content/70 text-start italic line-clamp-1 pr-1 hover:scale-105">{{ profile.recent_platinum.0.earned_date_time|format_date:"with_tz" }}</h3>
+                            {% if not profile.sync_status == 'syncing' %}
+                                <div class="flex flex-row self-start items-center w-full gap-2">
+                                    <figure class="border-2 border-{{ recent|trophy_color }} rounded-box shrink-0 transition-colors duration-300 hover:scale-105">
+                                        <img src="{{ recent.trophy_icon_url }}" alt="{{ recent.trophy_name }}" class="h-10 w-10 object-fill shrink-0" loading="lazy" />
+                                    </figure>
+                                    <div class="flex flex-col gap-0">
+                                        <h3 class="text-xs text-base-content text-start line-clamp-1 hover:scale-105">{{ recent.trophy_name }}</h3>
+                                        <h3 class="text-xs text-accent text-start italic line-clamp-1 pr-1 hover:scale-105">{{ recent.game.title_name }}</h3>
+                                        <h3 class="text-xs text-base-content/70 text-start italic line-clamp-1 pr-1 hover:scale-105">{{ profile.recent_platinum.0.earned_date_time|format_date:"with_tz" }}</h3>
+                                    </div>
                                 </div>
-                            </div>
+                            {% else %}
+                                <span class="loading loading-infinity loading-xl self-center"></span>
+                            {% endif %}
                         </div>
                     {% endif %}
                 {% endwith %}

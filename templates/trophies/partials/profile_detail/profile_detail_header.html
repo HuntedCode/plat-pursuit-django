@@ -31,14 +31,23 @@
                     <svg class="w-14 h-14 group-hover:scale-105" version="1.1" id="_x32_" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 512 512" xml:space="preserve" fill="var(--color-primary)"><g id="SVGRepo_bgCarrier" stroke-width="0"></g><g id="SVGRepo_tracerCarrier" stroke-linecap="round" stroke-linejoin="round"></g><g id="SVGRepo_iconCarrier"><g> <path class="st0" d="M102.49,0c0,27.414,0,104.166,0,137.062c0,112.391,99.33,156.25,153.51,156.25 c54.18,0,153.51-43.859,153.51-156.25c0-32.896,0-109.648,0-137.062H102.49z M256.289,50.551l-68.164,29.768v98.474l-0.049,19.53 c-0.526-0.112-47.274-10.112-47.274-78.391c0-28.17,0-69.6,0-69.6h60.385L256.289,50.551z"></path> <polygon class="st0" points="315.473,400.717 291.681,367.482 279.791,318.506 256,322.004 232.209,318.506 220.314,367.482 205.347,388.394 196.527,400.476 196.699,400.476 196.527,400.717 "></polygon> <polygon class="st0" points="366.93,432.24 366.93,432 145.07,432 145.07,511.598 145.07,511.76 145.07,511.76 145.07,512 366.93,512 366.93,432.402 366.93,432.24 "></polygon> <path class="st0" d="M511.638,96.668c-0.033-1.268-0.068-2.336-0.068-3.174V45.1h-73.889v38.736h35.152v9.658 c0,1.127,0.037,2.557,0.086,4.258c0.389,13.976,1.303,46.707-21.545,70.203c-5.121,5.266-11.221,9.787-18.219,13.613 c-3.883,17.635-10.109,33.564-18.104,47.814c26.561-6.406,48.026-17.898,64.096-34.422 C513.402,159.734,512.121,113.918,511.638,96.668z"></path> <path class="st0" d="M60.625,167.955c-22.848-23.496-21.934-56.227-21.541-70.203c0.047-1.701,0.082-3.131,0.082-4.258v-9.658 h34.842h0.07l0,0h0.24V45.1H0.43v48.394c0,0.838-0.032,1.906-0.068,3.174c-0.482,17.25-1.76,63.066,32.494,98.293 c16.068,16.524,37.531,28.014,64.092,34.422c-7.996-14.25-14.22-30.182-18.103-47.816C71.846,177.74,65.746,173.221,60.625,167.955 z"></path> </g> </g></svg>
                 </div>
                 <div class="stat-title text-base font-bold text-primary italic group-hover:scale-105">Total Trophies</div>
-                <div class="stat-value text-2xl text-base-content group-hover:scale-105">{{ header_stats.total_earned_trophies|intcomma }}</div>
+                {% if not profile.sync_status == 'syncing' %}
+                    <div class="stat-value text-2xl text-base-content group-hover:scale-105">{{ header_stats.total_earned_trophies|intcomma }}</div>
+                {% else %}
+                    <span class="loading loading-infinity loading-xl"></span>
+                {% endif %}
             </div>
             <div class="stat group">
                 <div class="stat-figure">
                     <svg class="w-14 h-14 group-hover:scale-105" version="1.1" id="_x32_" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 512 512" xml:space="preserve" fill="var(--color-error)"><g id="SVGRepo_bgCarrier" stroke-width="0"></g><g id="SVGRepo_tracerCarrier" stroke-linecap="round" stroke-linejoin="round"></g><g id="SVGRepo_iconCarrier"><g> <path class="st0" d="M102.49,0c0,27.414,0,104.166,0,137.062c0,112.391,99.33,156.25,153.51,156.25 c54.18,0,153.51-43.859,153.51-156.25c0-32.896,0-109.648,0-137.062H102.49z M256.289,50.551l-68.164,29.768v98.474l-0.049,19.53 c-0.526-0.112-47.274-10.112-47.274-78.391c0-28.17,0-69.6,0-69.6h60.385L256.289,50.551z"></path> <polygon class="st0" points="315.473,400.717 291.681,367.482 279.791,318.506 256,322.004 232.209,318.506 220.314,367.482 205.347,388.394 196.527,400.476 196.699,400.476 196.527,400.717 "></polygon> <polygon class="st0" points="366.93,432.24 366.93,432 145.07,432 145.07,511.598 145.07,511.76 145.07,511.76 145.07,512 366.93,512 366.93,432.402 366.93,432.24 "></polygon> <path class="st0" d="M511.638,96.668c-0.033-1.268-0.068-2.336-0.068-3.174V45.1h-73.889v38.736h35.152v9.658 c0,1.127,0.037,2.557,0.086,4.258c0.389,13.976,1.303,46.707-21.545,70.203c-5.121,5.266-11.221,9.787-18.219,13.613 c-3.883,17.635-10.109,33.564-18.104,47.814c26.561-6.406,48.026-17.898,64.096-34.422 C513.402,159.734,512.121,113.918,511.638,96.668z"></path> <path class="st0" d="M60.625,167.955c-22.848-23.496-21.934-56.227-21.541-70.203c0.047-1.701,0.082-3.131,0.082-4.258v-9.658 h34.842h0.07l0,0h0.24V45.1H0.43v48.394c0,0.838-0.032,1.906-0.068,3.174c-0.482,17.25-1.76,63.066,32.494,98.293 c16.068,16.524,37.531,28.014,64.092,34.422c-7.996-14.25-14.22-30.182-18.103-47.816C71.846,177.74,65.746,173.221,60.625,167.955 z"></path> </g> </g></svg>
                 </div>
                 <div class="stat-title text-base font-bold text-error italic group-hover:scale-105">Unearned Trophies</div>
-                <div class="stat-value text-2xl text-base-content group-hover:scale-105">{{ header_stats.total_unearned_trophies|intcomma }}</div>
+                {% if not profile.sync_status == 'syncing' %}
+                    <div class="stat-value text-2xl text-base-content group-hover:scale-105">{{ header_stats.total_unearned_trophies|intcomma }}</div>
+                {% else %}
+                    <span class="loading loading-infinity loading-xl"></span>
+                {% endif %}
+            </div>
             </div>
         </div>
 
@@ -58,7 +67,7 @@
                     <h1 class="text-2xl lg:text-lg 2xl:text-2xl text-base-content text-center pr-1 mr-1 italic hover:scale-105">{{ profile.display_psn_username }}</h1>
                     <h1 class="text-2xl lg:text-lg 2xl:text-2xl text-accent text-center italic hover:scale-105">{{ profile.flag }}</h1>
                 </div>
-                <h3 class="text-lg lg:text-sm 2xl:text-lg text-base-content/70 text-center pr-1 line-clamp-2 italic hover:scale-105">{{ profile.about_me }}</h3>
+                <h3 class="text-sm lg:text-xs 2xl:text-sm text-base-content/70 text-center pr-1 line-clamp-2 italic hover:scale-105">{{ profile.about_me }}</h3>
                 <a href="{% url 'trophy_case' profile.psn_username %}" class="btn btn-primary btn-lg">View Trophy Case</a>
             </div>
             <div class="divider divider-vertical lg:divider-horizontal"></div>
@@ -68,21 +77,25 @@
                     {% with header_stats.recent_platinum.trophy as trophy %}
                         <div class="flex flex-col w-full">
                             <h1 class="text-2xl text-base-content text-center italic hover:scale-105">Latest Platinum</h1>
-                            <a href="{% url 'game_detail' game.np_communication_id %}" class="flex flex-row items-center w-full shadow-md shadow-neutral border-4 border-base-300 p-1 mb-2 cursor-pointer hover:border-primary hover:shadow-primary hover:scale-105">
-                                <figure class="w-28 h-28 border-4 border-primary rounded-box mr-4">
-                                    {% if game.title_image %}
-                                        <img src="{{ game.title_image }}" class="w-full object-cover object-center hover:scale-105" />
-                                    {% else %}
-                                        <img src="{{ game.title_icon_url }}" class="w-full object-cover object-center hover:scale-105" />
-                                    {% endif %}
-                                </figure>
-                                <div class="flex flex-col">
-                                    <h1 class="text-xl text-base-content line-clamp-2 pr-1 hover:scale-105">{{ trophy.trophy_name }}</h1>
-                                    <h3 class="text-base text-secondary line-clamp-1 pr-1 italic hover:scale-105">{{ game.title_name }}</h3>
-                                    <h3 class="text-sm text-base-content/70 line-clamp-1 pr-1 italic hover:scale-105">Earned: {{ header_stats.recent_platinum.earned_date }}</h3>
-                                    <h3 class="text-sm text-base-content line-clamp-1 pr-1 hover:scale-105">Rarity (PSN): {{ trophy.trophy_earn_rate }}% <span class="text-accent italic">({{ trophy.trophy_rarity|psn_rarity }})</span></h3>
-                                </div>
-                            </a>
+                            {% if not profile.sync_status == 'syncing' %}
+                                <a href="{% url 'game_detail' game.np_communication_id %}" class="flex flex-row items-center w-full shadow-md shadow-neutral border-4 border-base-300 p-1 mb-2 cursor-pointer hover:border-primary hover:shadow-primary hover:scale-105">
+                                    <figure class="w-28 h-28 border-4 border-primary rounded-box mr-4">
+                                        {% if game.title_image %}
+                                            <img src="{{ game.title_image }}" class="w-full object-cover object-center hover:scale-105" />
+                                        {% else %}
+                                            <img src="{{ game.title_icon_url }}" class="w-full object-cover object-center hover:scale-105" />
+                                        {% endif %}
+                                    </figure>
+                                    <div class="flex flex-col">
+                                        <h1 class="text-xl text-base-content line-clamp-2 pr-1 hover:scale-105">{{ trophy.trophy_name }}</h1>
+                                        <h3 class="text-base text-secondary line-clamp-1 pr-1 italic hover:scale-105">{{ game.title_name }}</h3>
+                                        <h3 class="text-sm text-base-content/70 line-clamp-1 pr-1 italic hover:scale-105">Earned: {{ header_stats.recent_platinum.earned_date }}</h3>
+                                        <h3 class="text-sm text-base-content line-clamp-1 pr-1 hover:scale-105">Rarity (PSN): {{ trophy.trophy_earn_rate }}% <span class="text-accent italic">({{ trophy.trophy_rarity|psn_rarity }})</span></h3>
+                                    </div>
+                                </a>
+                            {% else %}
+                                <span class="loading loading-infinity loading-xl scale-200 self-center pt-33 my-auto"></span>
+                            {% endif %}
                         </div>
                     {% endwith %}
                     {% endwith %}
@@ -90,21 +103,25 @@
                     {% with header_stats.rarest_platinum.trophy as trophy %}
                         <div class="flex flex-col w-full">
                             <h1 class="text-2xl text-base-content text-center italic hover:scale-105">Rarest Platinum</h1>
-                            <a href="{% url 'game_detail' game.np_communication_id %}" class="flex flex-row items-center w-full shadow-md shadow-neutral border-4 border-base-300 p-1 mb-2 cursor-pointer hover:border-accent hover:shadow-accent hover:scale-105">
-                                <figure class="w-28 h-28 border-4 border-accent rounded-box mr-4">
-                                    {% if game.title_image %}
-                                        <img src="{{ game.title_image }}" class="w-full object-cover object-center hover:scale-105" />
-                                    {% else %}
-                                        <img src="{{ game.title_icon_url }}" class="w-full object-cover object-center hover:scale-105" />
-                                    {% endif %}
-                                </figure>
-                                <div class="flex flex-col">
-                                    <h1 class="text-xl text-base-content line-clamp-2 pr-1 hover:scale-105">{{ trophy.trophy_name }}</h1>
-                                    <h3 class="text-base text-secondary line-clamp-1 pr-1 italic hover:scale-105">{{ game.title_name }}</h3>
-                                    <h3 class="text-sm text-base-content/70 line-clamp-1 pr-1 italic hover:scale-105">Earned: {{ header_stats.rarest_platinum.earned_date }}</h3>
-                                    <h3 class="text-sm text-base-content line-clamp-1 pr-1 hover:scale-105">Rarity (PSN): {{ trophy.trophy_earn_rate }}% <span class="text-accent italic">({{ trophy.trophy_rarity|psn_rarity }})</span></h3>
-                                </div>
-                            </a>
+                            {% if not profile.sync_status == 'syncing' %}
+                                <a href="{% url 'game_detail' game.np_communication_id %}" class="flex flex-row items-center w-full shadow-md shadow-neutral border-4 border-base-300 p-1 mb-2 cursor-pointer hover:border-accent hover:shadow-accent hover:scale-105">
+                                    <figure class="w-28 h-28 border-4 border-accent rounded-box mr-4">
+                                        {% if game.title_image %}
+                                            <img src="{{ game.title_image }}" class="w-full object-cover object-center hover:scale-105" />
+                                        {% else %}
+                                            <img src="{{ game.title_icon_url }}" class="w-full object-cover object-center hover:scale-105" />
+                                        {% endif %}
+                                    </figure>
+                                    <div class="flex flex-col">
+                                        <h1 class="text-xl text-base-content line-clamp-2 pr-1 hover:scale-105">{{ trophy.trophy_name }}</h1>
+                                        <h3 class="text-base text-secondary line-clamp-1 pr-1 italic hover:scale-105">{{ game.title_name }}</h3>
+                                        <h3 class="text-sm text-base-content/70 line-clamp-1 pr-1 italic hover:scale-105">Earned: {{ header_stats.rarest_platinum.earned_date }}</h3>
+                                        <h3 class="text-sm text-base-content line-clamp-1 pr-1 hover:scale-105">Rarity (PSN): {{ trophy.trophy_earn_rate }}% <span class="text-accent italic">({{ trophy.trophy_rarity|psn_rarity }})</span></h3>
+                                    </div>
+                                </a>
+                            {% else %}
+                                <span class="loading loading-infinity loading-xl scale-200 self-center pt-33 my-auto"></span>
+                            {% endif %}
                         </div>
                     {% endwith %}
                     {% endwith %}
@@ -158,32 +175,32 @@
             </div>
         </div>
         {% if trophy_case_count > 0 %}
-        <div class="divider divider-vertical mb-0 pb-0"></div>
-        <h3 class="text-2xl sm:text-3xl text-base-content text-center italic mb-2 hover:scale-105"><span class="text-trophy-platinum">Platinum</span> Trophy Case</h3>
-            <div class="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-5 xl:grid-cols-10 gap-2 justify-self-center">
-            {% for item in trophy_case %}
-            {% with item.earned_trophy.trophy as trophy %}
-                <a href="{% url 'game_detail_with_profile' trophy.game.np_communication_id profile.psn_username %}" class="card bg-base-100 border-2 border-base-300 shadow-md shadow-neutral hover:scale-105 hover:border-primary hover:shadow-primary cursor-pointer">
-                    <div class="card-body p-2">
-                        <div class="hover-3d">
-                            <figure class="w-full border-4 border-base-300 shadow-md shadow-neutral">
-                                <img src="{{ trophy.trophy_icon_url }}" />
-                            </figure>
-                            <div></div>
-                            <div></div>
-                            <div></div>
-                            <div></div>
-                            <div></div>
-                            <div></div>
-                            <div></div>
-                            <div></div>
-                        </div>
-                        <h4 class="text-xs text-base-content text-center font-semibold pr-1 italic line-clamp-2">{{ trophy.game.title_name }}</h4>
-                    </div>
-                </a>
-            {% endwith%}
-            {% endfor %}
-            </div>
+            <div class="divider divider-vertical mb-0 pb-0"></div>
+            <h3 class="text-2xl sm:text-3xl text-base-content text-center italic mb-2 hover:scale-105"><span class="text-trophy-platinum">Platinum</span> Trophy Case</h3>
+                <div class="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-5 xl:grid-cols-10 gap-2 justify-self-center">
+                    {% for item in trophy_case %}
+                    {% with item.earned_trophy.trophy as trophy %}
+                        <a href="{% url 'game_detail_with_profile' trophy.game.np_communication_id profile.psn_username %}" class="card bg-base-100 border-2 border-base-300 shadow-md shadow-neutral hover:scale-105 hover:border-primary hover:shadow-primary cursor-pointer">
+                            <div class="card-body p-2">
+                                <div class="hover-3d">
+                                    <figure class="w-full border-4 border-base-300 shadow-md shadow-neutral">
+                                        <img src="{{ trophy.trophy_icon_url }}" />
+                                    </figure>
+                                    <div></div>
+                                    <div></div>
+                                    <div></div>
+                                    <div></div>
+                                    <div></div>
+                                    <div></div>
+                                    <div></div>
+                                    <div></div>
+                                </div>
+                                <h4 class="text-xs text-base-content text-center font-semibold pr-1 italic line-clamp-2">{{ trophy.game.title_name }}</h4>
+                            </div>
+                        </a>
+                    {% endwith%}
+                    {% endfor %}
+                </div>
         {% endif %}
     </div>
 </section>
