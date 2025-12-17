@@ -1,0 +1,29 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block content %}
+<div class="flex-grow flex items-center justify-center bg-base-100 py-12">
+    <div class="container mx-auto p-4 my-auto max-w-lg">
+        <div class="card bg-base-200 border-4 border-base-300 shadow-lg shadow-neutral">
+            <div class="card-body px-4">
+                <div class="flex flex-col justify-center items-center mb-6">
+                    <figure class="w-25">
+                        <img src="{% static 'images/logo.png' %}" class="w-full" />
+                    </figure>
+                    <p class="text-3xl text-base-content font-bold pr-1">Platinum Pursuit</p>
+                    <p class="text-xs text-warning font-semibold italic pr-1">No Trophy Can Hide From Us</p>
+                </div>
+                <div class="bg-base-100 border-4 border-base-300 shadow-lg shadow-neutral rounded-box w-full mx-auto p-6 transition-all duration-300 hover:border-primary hover:shadow-primary">
+                    <h2 class="text-2xl text-center font-semibold mb-4 italic">Email Confirmed</h2>
+                    <div class="alert alert-success border-4 border-base-300 rounded-box font-semibold w-3/4 mx-auto mt-1 mb-4">
+                        Your email address has been successfully confirmed!
+                    </div>
+                    <div class="flex justify-center">
+                        <a href="{% url 'account_login' %}" class="btn btn-primary">Sign In</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

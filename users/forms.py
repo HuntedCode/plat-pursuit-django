@@ -1,12 +1,12 @@
 from django import forms
-from django.contrib.auth.forms import UserCreationForm
+from allauth.account.forms import SignupForm
 from .models import CustomUser
 
 
-class CustomUserCreationForm(UserCreationForm):
+class CustomUserCreationForm(SignupForm):
     class Meta:
         model = CustomUser
-        fields = ("email", "password", "password2")
+        fields = ("email", "password1", "password2")
 
     def clean_email(self):
         email = self.cleaned_data['email'].lower()

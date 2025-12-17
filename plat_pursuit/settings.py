@@ -50,15 +50,15 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     "django.contrib.humanize",
     'django.contrib.sites',
-    'allauth',
-    'allauth.account',
-    "core",
     "users",
+    "core",
     "trophies.apps.TrophiesConfig",
     'rest_framework',
     'rest_framework.authtoken',
     'api',
     'django_extensions',
+    'allauth',
+    'allauth.account',
 ]
 
 AUTHENTICATION_BACKENDS = [
@@ -83,8 +83,10 @@ ACCOUNT_LOGIN_METHODS = {'email'}
 ACCOUNT_SIGNUP_FIELDS = ['email*', 'email2*', 'password1*', 'password2*']
 ACCOUNT_UNIQUE_EMAIL = True
 ACCOUNT_EMAIL_VERIFICATION = 'mandatory'
+ACCOUNT_CONFIRM_EMAIL_ON_GET = True
 ACCOUNT_LOGIN_ON_EMAIL_CONFIRMATION = True
-ACCOUNT_ADAPTER = 'allauth.account.adapter.DefaultAccountAdapter'
+ACCOUNT_EMAIL_CONFIRMATION_AUTO_LOGIN = True
+ACCOUNT_ADAPTER = 'users.adapters.CustomAccountAdapter'
 ACCOUNT_FORMS = {'signup': 'users.forms.CustomUserCreationForm'}
 
 if DEBUG:
