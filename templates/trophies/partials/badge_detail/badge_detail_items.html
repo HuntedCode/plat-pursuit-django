@@ -1,6 +1,6 @@
 {% load custom_filters %}
 
-    <a href="{% url 'game_detail_with_profile' game.np_communication_id profile.psn_username %}" class="card bg-base-100 border-4 border-base-300 shadow-md shadow-neutral cursor-pointer transition-all duration-300 hover:border-{{ game|platform_color }} hover:shadow-{{ game|platform_color }} group">
+    <a href="{% if profile %}{% url 'game_detail_with_profile' game.np_communication_id profile.psn_username %}{% else %}{% url 'game_detail' game.np_communication_id %}{% endif %}" class="card bg-base-100 border-4 border-base-300 shadow-md shadow-neutral cursor-pointer transition-all duration-300 hover:border-{{ game|platform_color }} hover:shadow-{{ game|platform_color }} group">
         <div class="{% if pgame.progress == 100 %}bg-success/15{% elif pgame.earned_trophies.platinum == 1 %}bg-warning/20{% else %}bg-base-100{% endif %}">
             <div class="card-body m-0 px-3 py-3 {% if pgame.progress == 100 %}border-4 border-success{% elif pgame.earned_trophies.platinum == 1 %}border-4 border-warning{% endif %}">
                 <div class="flex flex-col lg:flex-row lg:justify-between items-center gap-4 w-full">

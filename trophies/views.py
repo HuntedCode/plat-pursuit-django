@@ -1037,6 +1037,7 @@ class BadgeListView(ProfileHotbarMixin, ListView):
                 sorted_group = sorted(group, key=lambda b: b.tier)
                 tier1 = next((b for b in sorted_group if b.tier == 1), None)
                 if tier1:
+                    tier1_earned_count = tier1.earned_count
                     display_data.append({
                         'badge': tier1,
                         'tier1_earned_count': tier1_earned_count,
@@ -1107,6 +1108,8 @@ class BadgeDetailView(ProfileHotbarMixin, DetailView):
             target_profile = None
         
         context['target_profile'] = target_profile
+
+        badge = None
 
         if target_profile:
             highest_tier_earned = UserBadge.objects.filter(profile=target_profile, badge__series_slug=self.kwargs['series_slug']).aggregate(max_tier=Max('badge__tier'))['max_tier'] or 0
