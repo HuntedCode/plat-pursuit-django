@@ -4,14 +4,12 @@ from .models import CustomUser
 
 
 class CustomUserCreationForm(UserCreationForm):
-    email = forms.EmailField(required=True)
-
     class Meta:
         model = CustomUser
-        fields = ("username", "email", "password", "password2")
+        fields = ("email", "password", "password2")
 
-    def clean_username(self):
-        username = self.cleaned_data["username"].lower()
-        if CustomUser.objects.filter(username=username).exists():
-            raise forms.ValidationError("This username is already in use.")
-        return username
+    def clean_email(self):
+        email = self.cleaned_data['email'].lower()
+        if CustomUser.objects.filter(email=email).exists():
+            raise forms.ValidationError("This email is already in use.")
+        return email

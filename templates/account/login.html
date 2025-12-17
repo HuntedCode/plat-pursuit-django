@@ -1,0 +1,60 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block content %}
+<div class="flex-grow flex items-center justify-center bg-base-100 py-12">
+    <div class="container mx-auto p-4 my-auto max-w-lg">
+        <div class="card bg-base-200 border-4 border-base-300 shadow-lg shadow-neutral">
+            <div class="card-body px-4">
+                <div class="flex flex-col justify-center items-center mb-6">
+                    <figure class="w-25">
+                        <img src="{% static 'images/logo.png' %}" class="w-full" />
+                    </figure>
+                    <p class="text-3xl text-base-content font-bold pr-1">Platinum Pursuit</p>
+                    <p class="text-xs text-warning font-semibold italic pr-1">No Trophy Can Hide From Us</p>
+                </div>
+                <div class="bg-base-100 border-4 border-base-300 shadow-lg shadow-neutral rounded-box w-full mx-auto p-6 transition-all duration-300 hover:border-primary hover:shadow-primary">
+                    <h2 class="text-2xl text-center font-semibold mb-4 italic">Sign In</h2>
+                    {% if form.errors %}
+                    <div class="alert alert-error mb-4">
+                        {{ form.non_field_errors }}
+                    </div>
+                    {% endif %}
+                    <form method="post" class="form-control gap-4">
+                        {% csrf_token %}
+                        <div class="flex flex-col gap-1 mb-4">
+                            <h3 class="text-lg text-base-content font-semibold text-start">Email</h3>
+                            <label class="input mx-auto">
+                                <span class="label">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--color-base-content)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>
+                                </span>
+                                <input type="email" name="login" placeholder="cool.guy@platpursuit.com" required>
+                            </label>
+                        </div>
+                        <div class="flex flex-col gap-1 mb-4">
+                            <h3 class="text-lg text-base-content font-semibold text-start">Password</h3>
+                            <label class="input mx-auto">
+                                <span class="label">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--color-base-content)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 9.9-1"></path></svg>
+                                </span>
+                                <input type="password" name="password" required>
+                            </label>
+                        </div>
+                        <div class="flex flex-row justify-between w-7/8 mx-auto px-2">
+                            <label class="label cursor-pointer">
+                                <span class="text-sm text-base-content/70 font-semibold">Remember Me</span>
+                                <input type="checkbox" name="remember" class="checkbox checkbox-primary">
+                            </label>
+                            <button type="submit" class="btn btn-sm btn-primary">Sign In</button>
+                        </div>
+                    </form>
+                    <div class="flex flex-col gap-1 mt-4">
+                        <p class="text-sm text-base-content text-end italic">Don't have an account? <a href="{% url 'account_signup' %}" class="link link-accent font-bold">Sign Up</a></p>
+                        <p class="text-sm text-base-content text-end italic">Forgot password? <a href="{% url 'account_reset_password' %}" class="link link-accent font-bold">Reset</a></p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

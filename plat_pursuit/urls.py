@@ -51,6 +51,7 @@ urlpatterns = [
     path('api/token-stats/sse/', token_stats_sse, name='token-stats-sse'),
     path('monitoring/', monitoring_dashboard, name='monitoring'),
 
+    path('accounts/', include('allauth.urls')),
     path('api/v1/', include('api.urls')),
 ]
 
