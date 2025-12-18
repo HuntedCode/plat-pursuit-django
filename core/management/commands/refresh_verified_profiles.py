@@ -8,11 +8,11 @@ import logging
 logger = logging.getLogger('psn_api')
 
 class Command(BaseCommand):
-    help = 'Refresh verified profiles not updated in 24+ hours'
+    help = 'Refresh verified profiles not updated in 12+ hours'
 
     def handle(self, *args, **options):
-        threshold = timezone.now() - timedelta(hours=24)
-        verified_profiles = Profile.objects.filter(is_verified=True, last_synced__lt=threshold)
+        threshold = timezone.now() - timedelta(hours=12)
+        verified_profiles = Profile.objects.filter(is_discord_verified=True, last_synced__lt=threshold)
 
         count = verified_profiles.count()
         if count == 0:
