@@ -16,7 +16,7 @@ from scipy import stats
 load_dotenv()
 logger = logging.getLogger("psn_api")
 redis_client = redis.Redis.from_url(
-    os.getenv("CELERY_BROKER_URL", "redis://localhost:6379/0"),
+    os.getenv("REDIS_URL", "redis://localhost:6379/0"),
     socket_timeout=None,
     socket_keepalive=True
 )

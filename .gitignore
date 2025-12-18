@@ -11,3 +11,4 @@ logs/
 /staticfiles/
 /media/
 .VSCodeCounter/
+docker-compose.yml

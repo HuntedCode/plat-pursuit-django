@@ -72,8 +72,11 @@ class IndexView(ProfileHotbarMixin, TemplateView):
             get_featured_guide,
             self.FEATURED_GUIDE_TIMEOUT
         )
-        featured_concept = Concept.objects.get(id=featured_guide_id)
-        context['featured_concept'] = featured_concept
+        try:
+            featured_concept = Concept.objects.get(id=featured_guide_id)
+            context['featured_concept'] = featured_concept
+        except Concept.DoesNotExist:
+            pass
 
         # Latest platinums - cache resets hourly at top of the hour UTC
         latest_plats_key = f"{self.LATEST_PLATINUMS_KEY}_{today_utc}_{now_utc.hour:02d}"

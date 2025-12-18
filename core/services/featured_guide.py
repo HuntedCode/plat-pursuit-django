@@ -5,6 +5,7 @@ from django.utils import timezone
 from trophies.models import FeaturedGuide, Concept
 
 def get_featured_guide():
+    featured_concept = None
     featured_qs = FeaturedGuide.objects.filter(
         Q(start_date__lte=timezone.now()) & (Q(end_date__gte=timezone.now()) | Q(end_date__isnull=True))
     ).order_by('-priority').first()
@@ -16,4 +17,4 @@ def get_featured_guide():
             featured_concept = choice(guides)
         else:
             featured_concept = None
-    return featured_concept.id
+    return featured_concept.id if featured_concept is not None else 0
