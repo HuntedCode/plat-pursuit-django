@@ -122,7 +122,7 @@
                             <li><a href="{% url 'link_psn' %}">Link PSN</a></li>
                         </div>
                     {% endif %}
-                    <li><a href="/">Settings</a></li>
+                    <li><a href="{% url 'settings' %}">Settings</a></li>
                     <li>
                         <form method="post" action="{% url 'logout' %}">
                             {% csrf_token %}

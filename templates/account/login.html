@@ -13,6 +13,13 @@
                     <p class="text-3xl text-base-content font-bold pr-1">Platinum Pursuit</p>
                     <p class="text-xs text-warning font-semibold italic pr-1">No Trophy Can Hide From Us</p>
                 </div>
+                {% if messages %}
+                    {% for message in messages %}
+                        <div class="alert {% if message.tags == 'error' %}alert-error{% elif message.tags == 'success' %}alert-success{% else %}alert-info{% endif %} font-bold mb-4">
+                            {{ message }}
+                        </div>
+                    {% endfor %}
+                {% endif %}
                 <div class="bg-base-100 border-4 border-base-300 shadow-lg shadow-neutral rounded-box w-full mx-auto p-6 transition-all duration-300 hover:border-primary hover:shadow-primary">
                     <h2 class="text-2xl text-center font-semibold mb-4 italic">Sign In</h2>
                     {% if form.non_field_errors %}

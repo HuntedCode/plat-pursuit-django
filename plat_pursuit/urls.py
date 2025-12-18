@@ -57,6 +57,7 @@ urlpatterns = [
     path('accounts/link-psn/', LinkPSNView.as_view(), name='link_psn'),
     path('accounts/confirm-email/<str:key>/', CustomConfirmEmailView.as_view(), name='account_confirm_email'),
 
+    path('users/', include('users.urls')),
     path('accounts/', include('allauth.urls')),
     path('api/v1/', include('api.urls')),
 ]
