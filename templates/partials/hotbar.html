@@ -4,12 +4,12 @@
         <div class="container mx-auto flex flex-col lg:flex-row justify-center lg:justify-between items-center gap-2 lg:gap-4 lg:px-6">
             <div class="flex flex-row items-center gap-4">
                 {% if hotbar.profile %}
-                    <div class="avatar">
-                        <div class="w-8 rounded-full ring-2 ring-primary">
+                    <a href="{% url 'profile_detail' hotbar.profile.psn_username %}" class="avatar">
+                        <div class="w-8 rounded-full ring-2 ring-primary cursor-pointer">
                             <img src="{{ hotbar.profile.avatar_url|default:'/static/default-avatar.png' }}" alt="Profile Avatar" />
                         </div>
-                    </div>
-                    <div class="flex flex-row items-center gap-3">
+                    </a>
+                    <a href="{% url 'profile_detail' hotbar.profile.psn_username %}" class="flex flex-row items-center gap-3 cursor-pointer">
                         <span id="sync-user" class="text-xs sm:text-base font-bold">{{ hotbar.profile.display_psn_username }}</span>
                         <span id="sync-badge" class="badge badge-xs lg:badge-md {% if hotbar.sync_status == 'synced' %}badge-success{% elif hotbar.sync_status == 'syncing' %}badge-warning{% else %}badge-error{% endif %} font-bold border-2 border-base-300 shadow-md shadow-neutral ml-2 hover:scale-105">{{ hotbar.sync_status|sync_status_display }}</span>
                         <div id="sync-progress-div" class="flex flex-row items-center gap-1 {% if not hotbar.sync_status == 'syncing' %}hidden{% endif %}">
@@ -17,7 +17,7 @@
                             <progress id="sync-progress-bar" class="progress progress-primary w-32" value="0" max="100"></progress>
                             <span class="loading loading-infinity loading-md"></span>
                         </div>
-                    </div>
+                    </a>
                     <button id="sync-now-btn" class="btn btn-primary btn-xs lg:btn-sm border-2 border-base-300 shadow-md shadow-neutral {% if hotbar.sync_status == 'syncing' %} hidden{% endif %}" data-sync-status="{{ hotbar.sync_status }}" data-seconds="{{ hotbar.seconds_to_next_sync }}" {% if hotbar.seconds_to_next_sync > 0 %}disabled{% endif %}></button>
                 {% else %}
                     <p class="text-sm">Link your PSN profile to see status.</p>
