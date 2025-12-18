@@ -21,7 +21,7 @@ from django.contrib import admin
 from django.contrib.auth.views import LogoutView
 from django.urls import path, include
 from core.views import IndexView
-from trophies.views import GamesListView, TrophiesListView, ProfilesListView, SearchView, GameDetailView, ProfileDetailView, TrophyCaseView, ToggleSelectionView, BadgeListView, BadgeDetailView, GuideListView, ProfileSyncStatusView, TriggerSyncView, SearchSyncProfileView, AddSyncStatusView, monitoring_dashboard, token_stats, token_stats_sse
+from trophies.views import GamesListView, TrophiesListView, ProfilesListView, SearchView, GameDetailView, ProfileDetailView, TrophyCaseView, ToggleSelectionView, BadgeListView, BadgeDetailView, GuideListView, ProfileSyncStatusView, TriggerSyncView, SearchSyncProfileView, AddSyncStatusView, LinkPSNView, ProfileVerifyView, monitoring_dashboard, token_stats, token_stats_sse
 from users.views import CustomConfirmEmailView
 
 urlpatterns = [
@@ -44,6 +44,8 @@ urlpatterns = [
     path('search/', SearchView.as_view(), name='search'),
     path('logout/', LogoutView.as_view(next_page='home'), name='logout'),
 
+
+    path('api/profile-verify/', ProfileVerifyView.as_view(), name='profile_verify'),
     path('api/trigger-sync/', TriggerSyncView.as_view(), name='trigger_sync'),
     path('api/profile-sync-status/', ProfileSyncStatusView.as_view(), name='profile_sync_status'),
     path('api/search-sync-profile/', SearchSyncProfileView.as_view(), name='search_sync_profile'),
@@ -52,6 +54,7 @@ urlpatterns = [
     path('api/token-stats/sse/', token_stats_sse, name='token-stats-sse'),
     path('monitoring/', monitoring_dashboard, name='monitoring'),
 
+    path('accounts/link-psn/', LinkPSNView.as_view(), name='link_psn'),
     path('accounts/confirm-email/<str:key>/', CustomConfirmEmailView.as_view(), name='account_confirm_email'),
 
     path('accounts/', include('allauth.urls')),

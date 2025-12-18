@@ -92,6 +92,12 @@ def calculate_trimmed_mean(data, trim_percent=0.1):
         return None
     return stats.trim_mean(data, trim_percent)
 
+def check_profile_badges(profile):
+    from trophies.models import Profile, Badge
+    badges_qs = Badge.objects.filter(badge_type='series').prefetch_related('concepts')
+    for badge in badges_qs:
+        process_badge(profile, badge)
+
 def get_badge_metrics(profile, badge):
     """Computes the number of qualifying Concepts achieved by the user and required value for a series badge. Returns 0 for misc badges or invalid configs."""
     from trophies.models import Game, EarnedTrophy, ProfileGame
@@ -110,8 +116,10 @@ def get_badge_metrics(profile, badge):
             filtered_concepts_qs = badge.concepts.filter(Exists(qualifying_games_qs.filter(concept=OuterRef('pk')))).distinct()
         elif badge.base_badge and badge.base_badge.concepts.count() > 0:
             filtered_concepts_qs = badge.base_badge.concepts.filter(Exists(qualifying_games_qs.filter(concept=OuterRef('pk')))).distinct()
+        else:
+            filtered_concepts_qs = None
 
-        required = filtered_concepts_qs.count()
+        required = filtered_concepts_qs.count() if filtered_concepts_qs is not None else 0
         if required == 0:
             return {'achieved': 0, 'required': 0}
         
@@ -178,7 +186,11 @@ def process_badge(profile, badge):
     needed = required if badge.requires_all else max(badge.min_required, 1)
     if achieved >= needed and needed > 0 and not UserBadge.objects.filter(profile=profile, badge=badge).exists():
         UserBadge.objects.create(profile=profile, badge=badge)
+        logger.info(f"Added badge {badge.effective_display_title} | tier: {badge.tier} for {profile.display_psn_username}")
         return True
+    elif achieved < needed and UserBadge.objects.filter(profile=profile, badge=badge).exists():
+        UserBadge.objects.delete(profile=profile, badge=badge)
+        logger.info(f"DELETE badge {badge.effective_display_title} | tier: {badge.tier} from {profile.display_psn_username}")
     return False
 
 def notify_new_badge(profile, badge):

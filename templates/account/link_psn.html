@@ -1,0 +1,140 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block content %}
+<div class="container mx-auto p-4 max-w-lg">
+    <div class="card bg-base-100 border-4 border-base-300 shadow-lg shadow-neutral transition-all duration-300 hover:border-secondary hover:shadow-secondary">
+        <div class="card-body">
+            <figure class="w-20 h-20 mx-auto">
+                <img src="{% static 'images/logo.png' %}" class="w-full" />
+            </figure>
+            <h1 class="text-2xl text-base-content text-center font-semibold pr-1 italic mb-4">Link Your PSN Account</h1>
+            <p class="text-base text-base-content text-center mb-6">Link your PSN profile to your Platinum Pursuit account!</p>
+            <div class="border-4 border-base-300 shadow-md shadow-neutral rounded-box px-2 py-2 shimmer">
+                <h3 class="text-3xl text-warning text-center font-semibold mb-4">IMPORTANT:</h3>
+                <p class="text-base text-base-content text-center italic">Please make sure you set the following permission:</p>
+                <h1 class="text-success text-2xl text-center font-bold">"Gaming History" -> "Anyone"</h1>
+            </div>
+            <p class="text-xs text-base-content/70 text-center italic mb-6">Failure to do this will result in us being unable to sync your account!</p>
+            {% if messages %}
+                {% for message in messages %}
+                    <div class="alert {% if message.tags == 'error' %}alert-error{% elif message.tags == 'success' %}alert-success{% else %}alert-info{% endif %} font-bold mb-4">
+                        {{ message }}
+                    </div>
+                {% endfor %}
+            {% endif %}
+
+            {% if step == 1 %}
+                <!-- Step 1: Enter Username -->
+                 <div class="space-y-4 w-full">
+                    <form method="post" class="flex flex-col">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="submit_username">
+                        <label for="id_psn_username" class="text-base text-base-content font-semibold mb-1">PSN Username:</label>
+                        <input id="id_psn_username" type="text" name="psn_username" class="input input-primary self-center w-7/8 mb-4" placeholder="Your PSN Username" maxlength="16" required />
+                        <button type="submit" class="btn btn-primary w-full">Submit PSN Username</button>
+                    </form>
+                 </div>
+            {% elif step == 2 %}
+                <!-- Step 2: Verification Instructions -->
+                <div class="alert alert-info text-center font-bold mb-4 mx-auto">Got it! Follow the steps below to verify your account!</div>
+                    <ul class="list list-disc pl-5 space-y-2">
+                        <li>Go to your PSN profile on the PlayStation app or website.</li>
+                        <li>Edit your <span class="font-bold italic">'About Me'</span> section and add this exact code:</li>
+                        <div id="copy-tooltip" class="tooltip my-4" data-tip="Click To Copy">
+                            <div id="copy-div" class="border-4 border-base-300 shadow-md shadow-neutral rounded-box w-fit p-4 mx-auto cursor-pointer hover:scale-105">
+                                <h1 id="verification-code" class="text-6xl font-bold text-warning/70 text-center">{{ verification_code }}</h1>
+                            </div>
+                        </div>
+                        <li><span class="font-bold italic">Save your changes</span> on PSN.</li>
+                        <li>Come back here and click 'Verify Now' below. We'll check automatically.</li>
+                    </ul>
+                    <p class="mt-2 font-bold text-center italic mb-4">Tip: If you encounter issues, ensure your PSN profile is public or check for typos.</p>
+                <form method="post" class="space-y-4">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="verify">
+                    <input type="hidden" name="psn_username" value="{{ form.psn_username.value }}">
+                    <button type="submit" class="btn btn-primary w-full">Verify Now</button>
+                </form>
+                <a href="{% url 'link_psn' %}" class="btn btn-ghost w-full mt-2">Start Over</a>
+                <script>
+                    document.addEventListener('DOMContentLoaded', () => {
+                        const copyDiv = document.getElementById('copy-div');
+                        const codeElement = document.getElementById('verification-code');
+                        const copyTooltip = document.getElementById('copy-tooltip');
+                        
+                        copyDiv.addEventListener('click', () => {
+                            const code = codeElement.innerText;
+                            navigator.clipboard.writeText(code).then(() => {
+                                copyTooltip.dataset.tip = "Copied!"
+                            }).catch(err => {
+                                console.error('Failed to copy:', err);
+                            });
+                        });
+                    });
+                </script>
+            {% elif step == 3 %}
+                <div id="progress-container" class="mt-4">
+                    <progress id="poll-progress" class="progress progress-primary w-full" value="0" max="30"></progress>
+                    <p class="text-center mt-2">Checking PSN... (up to 30 seconds)</p>
+                </div>
+                <script>
+                    document.addEventListener('DOMContentLoaded', () => {
+                        let pollInterval;
+                        const maxTime = 30;  // seconds
+                        let elapsed = 0;
+                        const profileId = {{ profile.id }};
+                        const startTime = "{{ start_time }}";  // Assuming ISO format from context
+                        const statusUrl = "{% url 'profile_verify' %}?profile_id=" + profileId + "&start_time=" + encodeURIComponent(startTime);
+
+                        function pollStatus() {
+                            console.log("Polling..")
+                            fetch(statusUrl)
+                                .then(response => {
+                                    if (!response.ok) {
+                                        throw new Error('HTTP error ' + response.status);
+                                    }
+                                    return response.json();
+                                })
+                                .then(data => {
+                                    if (data.error) {
+                                        clearInterval(pollInterval);
+                                        alert(data.error);  // e.g., Sync error message
+                                        window.location.href = "{% url 'link_psn' %}";
+                                    } else if (data.synced) {
+                                        clearInterval(pollInterval);
+                                        if (data.verified) {
+                                            alert("Verification successful! Redirecting...");
+                                            window.location.href = "{% url 'profile_detail' profile.psn_username %}";
+                                        } else {
+                                            alert("Verification failed. The code was not found in your 'About Me' section or has expired. Please try again.");
+                                            window.location.href = "{% url 'link_psn' %}";
+                                        }
+                                    }
+                                    // If not synced, continue polling
+                                })
+                                .catch(error => {
+                                    clearInterval(pollInterval);
+                                    alert("Error checking status: " + error.message);
+                                    window.location.href = "{% url 'link_psn' %}";
+                                });
+
+                            elapsed += 1;
+                            document.getElementById('poll-progress').value = elapsed;
+
+                            if (elapsed >= maxTime) {
+                                clearInterval(pollInterval);
+                                alert("Verification timed out. Please try again.");
+                                window.location.href = "{% url 'link_psn' %}";
+                            }
+                        }
+
+                        pollInterval = setInterval(pollStatus, 1000);  // Poll every 1s
+                        pollStatus();  // Initial immediate check
+                    });
+                </script>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

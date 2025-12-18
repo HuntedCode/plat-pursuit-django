@@ -37,7 +37,7 @@ class Profile(models.Model):
     )
     verification_code = models.CharField(max_length=32, blank=True, null=True, help_text="Temporary code for PSN About Me verification.")
     verification_expires_at = models.DateTimeField(blank=True, null=True, help_text="Expiration timestamp for verification code.")
-    is_verified = models.BooleanField(default=False, help_text="True if PSN ownership verified via code.")
+    is_discord_verified = models.BooleanField(default=False, help_text="True if Discord ownership verified via code.")
     account_id = models.CharField(max_length=20, unique=True, blank=True, null=True)
     np_id = models.CharField(max_length=50, blank=True, null=True)
     avatar_url = models.URLField(blank=True, null=True)
@@ -77,7 +77,7 @@ class Profile(models.Model):
             models.Index(fields=["psn_username"], name="psn_username_idx"),
             models.Index(fields=["account_id"], name="account_id_idx"),
             models.Index(fields=['discord_id'], name='discord_id_idx'),
-            models.Index(fields=['is_verified', 'last_synced'], name='verified_synced_idx'),
+            models.Index(fields=['is_discord_verified', 'last_synced'], name='verified_synced_idx'),
             models.Index(fields=['sync_status'], name='progile_sync_status_idx'),
         ]
 
@@ -108,7 +108,7 @@ class Profile(models.Model):
     
     def generate_verification_code(self):
         """Generate and set a secure, time-limited code."""
-        self.verification_code = secrets.token_hex(4).upper()
+        self.verification_code = secrets.token_hex(3).upper()
         self.verification_expires_at = timezone.now() + timedelta(hours=1)
         self.save(update_fields=['verification_code', 'verification_expires_at'])
     
@@ -120,8 +120,6 @@ class Profile(models.Model):
             self.clear_verification_code()
             return False
         if self.verification_code in fetched_about_me:
-            self.is_verified = True
-            self.save(update_fields=['is_verified'])
             self.clear_verification_code()
             return True
         return False
@@ -141,13 +139,14 @@ class Profile(models.Model):
             raise ValueError("Discord already linked to this profile.")
         self.discord_id = discord_id
         self.discord_linked_at = timezone.now()
-        self.save(update_fields=['discord_id', 'discord_linked_at'])
+        self.is_discord_verified = True
+        self.save(update_fields=['discord_id', 'discord_linked_at', 'is_discord_verified'])
     
     def unlink_discord(self):
         self.discord_id = None
         self.discord_linked_at = None
-        self.is_verified = False
-        self.save(update_fields=['discord_id', 'discord_linked_at', 'is_verified'])
+        self.is_discord_verified = False
+        self.save(update_fields=['discord_id', 'discord_linked_at', 'is_discord_verified'])
     
     def set_history_public_flag(self, value: bool):
         self.psn_history_public = value

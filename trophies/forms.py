@@ -169,3 +169,11 @@ class GuideSearchForm(forms.Form):
         required=False,
         label='Sort By'
     )
+
+class LinkPSNForm(forms.Form):
+    psn_username = forms.CharField(
+        max_length=16,
+        validators=Profile._meta.get_field('psn_username').validators,
+        help_text="Enter your exact PSN Online ID (3-16 characters, letters, numbers, hypens or underscores).",
+        widget=forms.TextInput(attrs={'class': 'input w-full', 'placeholder': 'Your PSN Username'}),
+    )

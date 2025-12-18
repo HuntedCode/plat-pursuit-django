@@ -112,7 +112,7 @@
                         <li><a href="{% url 'profile_detail' user.profile.psn_username %}">Profile</a></li>
                         <li><a href="{% url 'trophy_case' user.profile.psn_username %}">Trophy Case</a></li>
                     {% else %}
-                        <li><a href="">Link PSN</a></li>
+                        <li><a href="{% url 'link_psn' %}">Link PSN</a></li>
                     {% endif %}
                     <li><a href="/">Settings</a></li>
                     <li>

@@ -7,7 +7,7 @@ from django.core.cache import cache
 from django.core.paginator import Paginator
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.shortcuts import render, get_object_or_404
+from django.shortcuts import redirect, render, get_object_or_404
 from django.http import Http404, StreamingHttpResponse, JsonResponse, HttpResponseRedirect
 from django.views.generic import ListView, View, DetailView
 from django.db.models import Q, F, Prefetch, OuterRef, Subquery, Value, IntegerField, FloatField, Count, Avg, Max, Exists
@@ -20,7 +20,7 @@ from random import choice
 from trophies.psn_manager import PSNManager
 from trophies.mixins import ProfileHotbarMixin
 from .models import Game, Trophy, Profile, EarnedTrophy, ProfileGame, TrophyGroup, UserTrophySelection, Badge, UserBadge, UserBadgeProgress, Concept, FeaturedGuide
-from .forms import GameSearchForm, TrophySearchForm, ProfileSearchForm, ProfileGamesForm, ProfileTrophiesForm, ProfileBadgesForm, UserConceptRatingForm, BadgeSearchForm, GuideSearchForm
+from .forms import GameSearchForm, TrophySearchForm, ProfileSearchForm, ProfileGamesForm, ProfileTrophiesForm, ProfileBadgesForm, UserConceptRatingForm, BadgeSearchForm, GuideSearchForm, LinkPSNForm
 from .utils import redis_client, MODERN_PLATFORMS, get_next_sync
 
 logger = logging.getLogger("psn_api")
@@ -1236,6 +1236,122 @@ class GuideListView(ProfileHotbarMixin, ListView):
         if self.request.headers.get('X-Requested-With') == 'XMLHttpRequest':
             return ['trophies/partials/guide_list/guide_list_items.html']
         return super().get_template_names()
+
+# Profile Linking Views
+
+class LinkPSNView(LoginRequiredMixin, View):
+    template_name = 'account/link_psn.html'
+    login_url = reverse_lazy('login')
+    form_class = LinkPSNForm
+
+    def get(self, request):
+        if hasattr(request.user, 'profile') and request.user.profile.is_linked:
+            messages.info(request, 'This PSN account is already linked to a web account.')
+            return redirect('link_psn')
+        
+        form = self.form_class()
+        context = {'form': form, 'step': 1}
+        return render(request, self.template_name, context)
+    
+    def post(self, request):
+        action = request.POST.get('action')
+
+        if action == 'submit_username':
+            form = self.form_class(request.POST)
+            if form.is_valid():
+                psn_username = form.cleaned_data['psn_username'].lower()
+
+                try:
+                    profile, created = Profile.objects.get_or_create(psn_username=psn_username)
+                    if profile.user and profile.user != request.user:
+                        raise ValueError('This PSN account is already linked to another user.')
+
+                    if created:
+                        PSNManager.initial_sync(profile)
+                    elif profile.get_time_since_last_sync() > timedelta(hours=1):
+                        PSNManager.profile_refresh(profile)
+                    
+                    if not profile.verification_code or profile.verification_expires_at < timezone.now():
+                        profile.generate_verification_code()
+                    
+                    context = {
+                        'form': form,
+                        'step': 2,
+                        'verification_code': profile.verification_code,
+                        'profile': profile,
+                    }
+                    return render(request, self.template_name, context)
+                except ValueError as e:
+                    messages.error(request, str(e))
+                except Exception as e:
+                    messages.error(request, 'An error occured during sync. Please try again later.')
+            return render(request, self.template_name, {'form': form, 'step': 1})
+        elif action == 'verify':
+            form = self.form_class(request.POST)
+            if form.is_valid():
+                psn_username = form.cleaned_data['psn_username'].lower()
+                try:
+                    start_time = timezone.now().timestamp()
+                    profile = Profile.objects.get(psn_username=psn_username.lower())
+                    if profile.get_time_since_last_sync() > timedelta(hours=1):
+                        PSNManager.profile_refresh(profile)
+                    else:
+                        PSNManager.sync_profile_data(profile)
+
+                    messages.info(request, "Verification in progress...")
+                    context = {
+                        'form': self.form_class(initial={'psn_username': psn_username}),
+                        'step': 3,
+                        'verification_code': profile.verification_code,
+                        'profile': profile,
+                        'start_time': str(start_time),
+                    }
+                    return render(request, self.template_name, context)
+                except Profile.DoesNotExist:
+                    messages.error(request, "Profile not found. Please start over.")
+                    return redirect('link_psn')
+                except Exception as e:
+                    messages.error(request, f"An error occurred during verification. Please try again.")
+                    return render(request, self.template_name, {'form': self.form_class(initial={'psn_username': psn_username}), 'step': 2})
+            
+        return redirect('link_psn')
+
+class ProfileVerifyView(LoginRequiredMixin, View):
+    @method_decorator(ratelimit(key='user', rate='60/m', method='GET'))
+    def get(self, request):
+        user = request.user
+        profile_id = request.GET.get('profile_id')
+        start_time = request.GET.get('start_time')
+        if not profile_id:
+            return JsonResponse({'error': 'Profile id required'}, status=400)
+        if not start_time:
+            return JsonResponse({'error': 'start_time required'}, status=400)
+        
+        try:
+            start_time_float = float(start_time)
+        except ValueError:
+            return JsonResponse({'error': 'Invalid start_time format'}, status=400)
+
+        try:
+            profile = Profile.objects.get(id=profile_id)
+        except Profile.DoesNotExist:
+            return JsonResponse({'error': 'Profile not found'}, status=404)
+            
+        if profile.sync_status == 'error':
+            return JsonResponse({'error': 'Sync error. Make sure your "Gaming History" permission is set to "Anybody"'}, status=400)
+        
+        verified = False
+        synced = False
+        if profile.last_synced.timestamp() > start_time_float:
+            synced = True
+            verified = profile.verify_code(profile.about_me)
+            if verified:
+                profile.link_to_user(user)
+
+        return JsonResponse({
+            'synced': synced,
+            'verified': verified,
+        })
 
 # Hotbar Views
 

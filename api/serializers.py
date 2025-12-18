@@ -49,7 +49,7 @@ class ProfileSerializer(serializers.ModelSerializer):
         model = Profile
         fields = [
             'display_psn_username', 'account_id', 'avatar_url', 'is_plus', 'trophy_level', 'progress',
-            'earned_trophy_summary', 'last_synced', 'country', 'flag', 'is_verified', 'psn_history_public',
+            'earned_trophy_summary', 'last_synced', 'country', 'flag', 'is_discord_verified', 'psn_history_public',
             'total_trophies', 'total_games', 'rarest_trophies', 'recent_platinums'
         ]
         read_only_fields = fields

@@ -97,28 +97,6 @@
       overflow: hidden;
       animation: shimmer 3s infinite linear;
   }
-  .shimmer::before {
-      content: '';
-      position: absolute;
-      top: -50%;
-      left: -50%;
-      width: 200%;
-      height: 200%;
-      background: linear-gradient(90deg,
-          var(--color-trophy-bronze) 0%,
-          var(--color-trophy-silver) 25%,
-          var(--color-trophy-gold) 50%,
-          var(--color-trophy-platinum) 75%,
-          var(--color-trophy-bronze) 100%
-      );
-      opacity: 0.5; /* Subtle glow */
-      animation: rotate-colors 6s infinite linear; /* Slower for smooth cycle */
-      z-index: -1; /* Behind text */
-  }
-  @keyframes rotate-colors {
-      0% { transform: translateX(0); }
-      100% { transform: translateX(-50%); } /* Cycles gradient */
-  }
   @keyframes shimmer {
       0% { 
         box-shadow: 0 0 10px var(--color-primary);

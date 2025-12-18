@@ -14,7 +14,7 @@ from requests import HTTPError
 from .models import Profile, Game, TitleID
 from .services.psn_api_service import PsnApiService
 from .psn_manager import PSNManager
-from .utils import redis_client, log_api_call, TITLE_ID_BLACKLIST, TITLE_STATS_SUPPORTED_PLATFORMS
+from .utils import redis_client, log_api_call, TITLE_ID_BLACKLIST, TITLE_STATS_SUPPORTED_PLATFORMS, check_profile_badges
 
 logger = logging.getLogger("psn_api")
 
@@ -241,6 +241,8 @@ class TokenKeeper:
                     self._job_sync_complete(profile_id)
                 elif job_type == 'handle_privacy_error':
                     self._job_handle_privacy_error(profile_id)
+                elif job_type == 'check_profile_badges':
+                    self._job_check_profile_badges(profile_id)
                 else:
                     logger.error(f"Unknown job type: {job_type}")
                     raise
@@ -389,6 +391,16 @@ class TokenKeeper:
         profile.set_sync_status('synced')
         logger.info(f"{profile.display_psn_username} account has finished syncing!")
     
+    def _job_check_profile_badges(self, profile_id: int):
+        try:
+            profile = Profile.objects.get(id=profile_id)
+        except Profile.DoesNotExist:
+            logger.error(f"Profile {profile_id} does not exist.")
+        job_type = 'check_profile_badges'
+
+        check_profile_badges(profile)
+        logger.info(f"Badges checked for {profile.display_psn_username} successfully!")
+    
     def _job_handle_privacy_error(self, profile_id: int):
         try:
             profile = Profile.objects.get(id=profile_id)
@@ -501,7 +513,7 @@ class TokenKeeper:
         except Profile.DoesNotExist:
             logger.error(f"Profile {profile_id} does not exist.")
         job_type = 'sync_title_stats'
-        job_counter = 0
+        job_counter = 1 # Default 1 job for badge checking at the end
 
         title_stats = self._execute_api_call(self._get_instance_for_job(job_type), profile, 'title_stats', limit=limit, offset=offset, page_size=page_size)
 
@@ -544,6 +556,7 @@ class TokenKeeper:
                 PsnApiService.update_profile_game_with_title_stats(profile, stats)
             
             profile.add_to_sync_target(job_counter)
+            PSNManager.check_profile_badges(profile, 'low_priority')
             PSNManager.sync_complete(profile, 'low_priority')
 
     def _job_sync_trophies(self, profile_id: int, np_communication_id: str, platform: str):
@@ -662,7 +675,7 @@ class TokenKeeper:
         except Profile.DoesNotExist:
             logger.error(f"Profile {profile_id} does not exist.")
         job_type = 'profile_refresh'
-        job_counter = 0
+        job_counter = 1 # Default 1 job for badge checking at the end
 
         last_sync = profile.last_synced
         PSNManager.assign_job('sync_profile_data', args=[], profile_id=profile.id)
@@ -752,6 +765,7 @@ class TokenKeeper:
                 PsnApiService.update_profile_game_with_title_stats(profile, stats)
             
             profile.add_to_sync_target(job_counter)
+        PSNManager.check_profile_badges(profile, 'medium_priority')
         PSNManager.sync_complete(profile, 'medium_priority')
 
     def _job_check_profile_health(self, profile_id: int):

@@ -16,7 +16,7 @@ class ProfileAdmin(admin.ModelAdmin):
         "discord_id",
         "verification_code",
         "is_linked",
-        "is_verified",
+        "is_discord_verified",
         "psn_history_public",
         'country_code',
         "is_plus",
@@ -33,7 +33,7 @@ class ProfileAdmin(admin.ModelAdmin):
     fieldsets = (
         (
             "Core Info",
-            {"fields": ("psn_username", "display_psn_username", "account_id", "np_id", "user", "is_linked", "psn_history_public", "discord_id", "discord_linked_at", "is_verified", "verification_code")},
+            {"fields": ("psn_username", "display_psn_username", "account_id", "np_id", "user", "is_linked", "psn_history_public", "discord_id", "discord_linked_at", "is_discord_verified", "verification_code")},
         ),
         (
             "Profile Details",
