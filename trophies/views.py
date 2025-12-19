@@ -26,63 +26,6 @@ from .forms import GameSearchForm, TrophySearchForm, ProfileSearchForm, ProfileG
 from .utils import redis_client, MODERN_PLATFORMS, get_next_sync
 
 logger = logging.getLogger("psn_api")
-
-# Create your views here.
-@method_decorator(staff_member_required, name='dispatch')
-class MonitoringDashboardView(LoginRequiredMixin, TemplateView):
-    template_name = 'monitoring.html'
-    login_url = '/accounts/login'
-    redirect_field_name = 'next'
-
-def token_stats_sse(request):
-    def event_stream():
-        pubsub = redis_client.pubsub()
-        pubsub.psubscribe("token_keeper_stats:*")
-        last_heartbeat = time.time()
-        try:
-            for message in pubsub.listen():
-                if message['type'] == 'pmessage':
-                    try:
-                        stats = json.loads(message['data'])
-                        redis_client.set(f"token_keeper_latest_stats:{stats['machine_id']}", json.dumps(stats), ex=60)
-                        aggregated = get_aggregated_stats()
-                        yield f"data: {json.dumps(aggregated)}\n\n"
-                    except json.JSONDecodeError as e:
-                        logger.error(f"Error decoding SSE stats: {e}")
-                        yield f"data: {{'error': 'Invalid stats data'}}\n\n"
-                if time.time() - last_heartbeat > 15:
-                    yield ": heartbeat\n\n"
-                    last_heartbeat = time.time()
-        except Exception as e:
-            logger.error(f"Error in SSE stream: {e}")
-            yield f"data: {{'error': '{str(e)}'}}\n\n"
-        finally:
-            pubsub.unsubscribe()
-    
-    response = StreamingHttpResponse(event_stream(), content_type='text/event-stream')
-    response['Cache-Control'] = 'no-cache'
-    return response
-
-def get_aggregated_stats():
-    aggregated = {}
-    keys = redis_client.keys("token_keeper_latest_stats:*")
-    for key in keys:
-        stats_json = redis_client.get(key)
-        if stats_json:
-            try:
-                stats = json.loads(stats_json)
-                aggregated[stats['machine_id']] = stats['instances']
-            except json.JSONDecodeError:
-                logger.error(f"Error decoding stats from {key}")
-    return aggregated
-
-def token_stats(request):
-    try:
-        aggregated = get_aggregated_stats()
-        return JsonResponse({'machines': aggregated})
-    except Exception as e:
-        logger.error(f"Error fetching token stats: {e}")
-        return JsonResponse({'error': str(e)}, status=500)
     
 class GamesListView(ProfileHotbarMixin, ListView):
     model = Game
@@ -377,8 +320,6 @@ class GameDetailView(ProfileHotbarMixin, DetailView):
         images_timeout = 604800
         stats_cache_key = f"game:stats:{game.np_communication_id}:{today}"
         stats_timeout = 86400
-        trophy_cache_key = f"game:trophies:{game.np_communication_id}"
-        trophy_timeout = 604800
         trophy_groups_cache_key = f"game:trophygroups:{game.np_communication_id}"
         trophy_groups_timeout = 604800
 
@@ -575,30 +516,25 @@ class GameDetailView(ProfileHotbarMixin, DetailView):
         grouped_trophies = {}
         if has_trophies:
             try:
-                cached_trophies = cache.get(trophy_cache_key)
-                if cached_trophies:
-                    full_trophies = json.loads(cached_trophies)
-                else:
-                    trophies_qs = Trophy.objects.filter(game=game).order_by('trophy_id')
-                    full_trophies = [
-                        {
-                            'trophy_id': t.trophy_id,
-                            'trophy_type': t.trophy_type,
-                            'trophy_name': t.trophy_name,
-                            'trophy_detail': t.trophy_detail,
-                            'trophy_icon_url': t.trophy_icon_url,
-                            'trophy_group_id': t.trophy_group_id,
-                            'progress_target_value': t.progress_target_value,
-                            'trophy_rarity': t.trophy_rarity,
-                            'trophy_earn_rate': t.trophy_earn_rate,
-                            'earned_count': t.earned_count,
-                            'earn_rate': t.earn_rate,
-                            'pp_rarity': t.get_pp_rarity_tier()
-                        } for t in trophies_qs
-                    ]
-                    cache.set(trophy_cache_key, json.dumps(full_trophies), timeout=trophy_timeout)
+                trophies_qs = Trophy.objects.filter(game=game).order_by('trophy_id')
+                full_trophies = [
+                    {
+                        'trophy_id': t.trophy_id,
+                        'trophy_type': t.trophy_type,
+                        'trophy_name': t.trophy_name,
+                        'trophy_detail': t.trophy_detail,
+                        'trophy_icon_url': t.trophy_icon_url,
+                        'trophy_group_id': t.trophy_group_id,
+                        'progress_target_value': t.progress_target_value,
+                        'trophy_rarity': t.trophy_rarity,
+                        'trophy_earn_rate': t.trophy_earn_rate,
+                        'earned_count': t.earned_count,
+                        'earn_rate': t.earn_rate,
+                        'pp_rarity': t.get_pp_rarity_tier()
+                    } for t in trophies_qs
+                ]
             except Exception as e:
-                logger.error(f"Game trophies cache failed for {game.np_communication_id}: {e}")
+                logger.error(f"Game trophies query failed for {game.np_communication_id}: {e}")
                 full_trophies = []
 
             try:
@@ -1251,6 +1187,7 @@ class GuideListView(ProfileHotbarMixin, ListView):
 
         context['featured_concept'] = featured_concept
         context['form'] = GuideSearchForm(self.request.GET)
+        context['is_paginated'] = self.object_list.count() > self.paginate_by
 
         return context
 

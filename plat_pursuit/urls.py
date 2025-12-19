@@ -22,7 +22,7 @@ from django.contrib.auth.views import LogoutView
 from django.urls import path, include
 from django.views.generic import TemplateView
 from core.views import IndexView
-from trophies.views import GamesListView, TrophiesListView, ProfilesListView, SearchView, GameDetailView, ProfileDetailView, TrophyCaseView, ToggleSelectionView, BadgeListView, BadgeDetailView, GuideListView, ProfileSyncStatusView, TriggerSyncView, SearchSyncProfileView, AddSyncStatusView, LinkPSNView, ProfileVerifyView, MonitoringDashboardView, token_stats, token_stats_sse
+from trophies.views import GamesListView, TrophiesListView, ProfilesListView, SearchView, GameDetailView, ProfileDetailView, TrophyCaseView, ToggleSelectionView, BadgeListView, BadgeDetailView, GuideListView, ProfileSyncStatusView, TriggerSyncView, SearchSyncProfileView, AddSyncStatusView, LinkPSNView, ProfileVerifyView
 from users.views import CustomConfirmEmailView
 
 urlpatterns = [
@@ -51,9 +51,6 @@ urlpatterns = [
     path('api/profile-sync-status/', ProfileSyncStatusView.as_view(), name='profile_sync_status'),
     path('api/search-sync-profile/', SearchSyncProfileView.as_view(), name='search_sync_profile'),
     path('api/add-sync-status/', AddSyncStatusView.as_view(), name='add_sync_status'),
-    path('api/token-stats/', token_stats, name='token-stats'),
-    path('api/token-stats/sse/', token_stats_sse, name='token-stats-sse'),
-    path('monitoring/', MonitoringDashboardView.as_view(), name='monitoring'),
 
     path('accounts/link-psn/', LinkPSNView.as_view(), name='link_psn'),
     path('accounts/confirm-email/<str:key>/', CustomConfirmEmailView.as_view(), name='account_confirm_email'),

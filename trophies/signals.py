@@ -4,12 +4,6 @@ from django.core.cache import cache
 from trophies.models import EarnedTrophy, ProfileGame, Badge, Trophy, UserBadge
 from trophies.utils import process_badge, notify_new_badge
 
-@receiver(post_save, sender=Trophy, dispatch_uid='invalidate_cache_on_trophy_save')
-def invalidate_trophy_cache(sender, instance, created, **kwargs):
-    if created:
-        game_id = instance.game.np_communication_id
-        cache.delete(f"game:trophies:{game_id}")
-
 @receiver(post_save, sender=EarnedTrophy, dispatch_uid='badge_check_on_trophy_save')
 def check_badges_on_trophy_save(sender, instance, created, **kwargs):
     if not instance.earned:

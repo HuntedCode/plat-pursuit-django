@@ -48,13 +48,25 @@
     <div id="items-grid" class="grid grid-cols-1 lg:grid-cols-2 gap-4">
             {% include 'trophies/partials/guide_list/guide_list_items.html' %}
     </div>
-    <div id="loading" class="hidden mt-4 text-center">
-        <span class="loading loading-spinner loading-lg"></span>
-    </div>
-    <div id="sentinel" class="h-1"></div>
+    <!-- Pagination (DaisyUI styled) -->
+    {% if is_paginated %}
+        <div class="flex justify-center mt-6">
+            <div class="btn-group">
+                {% if page_obj.has_previous %}
+                    <a href="?page=1{% if request.GET.query %}&query={{ request.GET.query }}{% endif %}{% if request.GET.sort %}&sort={{ request.GET.sort }}{% endif %}" class="btn btn-outline">&laquo; First</a>
+                    <a href="?page={{ page_obj.previous_page_number }}{% if request.GET.query %}&query={{ request.GET.query }}{% endif %}{% if request.GET.sort %}&sort={{ request.GET.sort }}{% endif %}" class="btn btn-outline">Previous</a>
+                {% endif %}
+                
+                <span class="btn btn-active">Page {{ page_obj.number }} of {{ paginator.num_pages }}</span>
+                
+                {% if page_obj.has_next %}
+                    <a href="?page={{ page_obj.next_page_number }}{% if request.GET.query %}&query={{ request.GET.query }}{% endif %}{% if request.GET.sort %}&sort={{ request.GET.sort }}{% endif %}" class="btn btn-outline">Next</a>
+                    <a href="?page={{ paginator.num_pages }}{% if request.GET.query %}&query={{ request.GET.query }}{% endif %}{% if request.GET.sort %}&sort={{ request.GET.sort }}{% endif %}" class="btn btn-outline">Last &raquo;</a>
+                {% endif %}
+            </div>
+        </div>
+    {% endif %}
 {% endblock %}
 {% block js_scripts %}
     <script src="{% static 'js\submit_shimmer.js' %}"></script>
-    <script src="{% static 'js\list_page_filters.js' %}"></script>
-    <script src="{% static 'js\guide_scroller.js' %}"></script>
 {% endblock %}

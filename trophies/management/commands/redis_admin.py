@@ -58,6 +58,7 @@ class Command(BaseCommand):
             f"{prefix}community_stats_*",
             f"{prefix}featured_games_*",
             f"{prefix}featured_guide_*",
+            f"{prefix}featured_guide:*",
             f"{prefix}latest_platinums_*",
             f"{prefix}playing_now_*",
             f"{prefix}latest_psn_rares_*",
