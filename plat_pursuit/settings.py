@@ -241,13 +241,3 @@ LOGGING = {
         },
     },
 }
-
-if DEBUG:
-    LOGGING["handlers"]["file"] = {
-        "class": "logging.FileHandler",
-        "level": "INFO",
-        "formatter": "verbose",
-        "filename": os.path.join(BASE_DIR, "logs", "plat_pursuit.log"),
-    }
-    LOGGING["loggers"]["psn_api"]["handlers"].append("file")
-    LOGGING["loggers"]["django"]["handlers"].append("file")
