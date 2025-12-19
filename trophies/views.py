@@ -3,6 +3,7 @@ import logging
 import math
 from collections import defaultdict
 from datetime import timedelta, date
+import time
 from django.core.cache import cache
 from django.core.paginator import Paginator
 from django.contrib import messages
@@ -36,7 +37,8 @@ class MonitoringDashboardView(LoginRequiredMixin, TemplateView):
 def token_stats_sse(request):
     def event_stream():
         pubsub = redis_client.pubsub()
-        pubsub.subscribe("token_keeper_stats:*")
+        pubsub.psubscribe("token_keeper_stats:*")
+        last_heartbeat = time.time()
         try:
             for message in pubsub.listen():
                 if message['type'] == 'pmessage':
@@ -48,6 +50,9 @@ def token_stats_sse(request):
                     except json.JSONDecodeError as e:
                         logger.error(f"Error decoding SSE stats: {e}")
                         yield f"data: {{'error': 'Invalid stats data'}}\n\n"
+                if time.time() - last_heartbeat > 15:
+                    yield ": heartbeat\n\n"
+                    last_heartbeat = time.time()
         except Exception as e:
             logger.error(f"Error in SSE stream: {e}")
             yield f"data: {{'error': '{str(e)}'}}\n\n"
