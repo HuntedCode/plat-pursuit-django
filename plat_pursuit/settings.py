@@ -34,7 +34,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = "django-insecure-d3c6zx8x-j-h93!jnj5le)pol4=g+^^bx-f-10hlfrs3i&$w5x"
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.getenv('DEBUG', False)
+DEBUG = False
 
 ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
 ALLOWED_HOSTS = [host.strip() for host in ALLOWED_HOSTS if host.strip()]
@@ -101,10 +101,12 @@ ACCOUNT_SIGNUP_FIELDS = ['email*', 'email2*', 'password1*', 'password2*']
 ACCOUNT_UNIQUE_EMAIL = True
 ACCOUNT_EMAIL_VERIFICATION = 'mandatory'
 ACCOUNT_PASSWORD_MIN_LENGTH = 8
-ACCOUNT_RATE_LIMITS = {'reset_password': '5/m'}
+ACCOUNT_RATE_LIMITS = {'reset_password': '5/m', 'confirm_email': '5/m'}
 ACCOUNT_CONFIRM_EMAIL_ON_GET = True
 ACCOUNT_LOGIN_ON_EMAIL_CONFIRMATION = True
 ACCOUNT_EMAIL_CONFIRMATION_AUTO_LOGIN = True
+ACCOUNT_EMAIL_CONFIRMATION_EXPIRE_DAYS = 3
+ACCOUNT_EMAIL_SUBJECT_PREFIX = '[Plat Pursuit] '
 ACCOUNT_LOGOUT_REDIRECT_URL = '/accounts/login'
 ACCOUNT_ADAPTER = 'users.adapters.CustomAccountAdapter'
 ACCOUNT_FORMS = {'signup': 'users.forms.CustomUserCreationForm'}
