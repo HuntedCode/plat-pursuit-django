@@ -20,6 +20,7 @@ from django.conf.urls.static import static
 from django.contrib import admin
 from django.contrib.auth.views import LogoutView
 from django.urls import path, include
+from django.views.generic import TemplateView
 from core.views import IndexView
 from trophies.views import GamesListView, TrophiesListView, ProfilesListView, SearchView, GameDetailView, ProfileDetailView, TrophyCaseView, ToggleSelectionView, BadgeListView, BadgeDetailView, GuideListView, ProfileSyncStatusView, TriggerSyncView, SearchSyncProfileView, AddSyncStatusView, LinkPSNView, ProfileVerifyView, monitoring_dashboard, token_stats, token_stats_sse
 from users.views import CustomConfirmEmailView
@@ -64,3 +65,5 @@ urlpatterns = [
 
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+
+handler404 = TemplateView.as_view(template_name='404.html')

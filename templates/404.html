@@ -1,0 +1,19 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block content %}
+<div class="container mx-auto p-4 max-w-2xl flex items-center justify-center mt-12">
+    <div class="card bg-base-100 border-4 border-base-300 shadow-lg shadow-neutral text-center">
+        <div class="card-body">
+            <figure class="mb-4">
+                <img src="{% static 'images/logo.png' %}" alt="404 Illustration" class="w-24 mx-auto" />
+            </figure>
+            <h2 class="card-title text-4xl mb-2">404 - Page Not Found</h2>
+            <p class="text-lg mb-4">Oops! The trophy you're hunting isn't here. Maybe it's hidden in another level?</p>
+            <div class="space-y-4">
+                <a href="{% url 'home' %}" class="btn btn-primary w-full">Back to Home</a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
