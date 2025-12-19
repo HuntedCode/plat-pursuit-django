@@ -22,7 +22,7 @@ from django.contrib.auth.views import LogoutView
 from django.urls import path, include
 from django.views.generic import TemplateView
 from core.views import IndexView
-from trophies.views import GamesListView, TrophiesListView, ProfilesListView, SearchView, GameDetailView, ProfileDetailView, TrophyCaseView, ToggleSelectionView, BadgeListView, BadgeDetailView, GuideListView, ProfileSyncStatusView, TriggerSyncView, SearchSyncProfileView, AddSyncStatusView, LinkPSNView, ProfileVerifyView, monitoring_dashboard, token_stats, token_stats_sse
+from trophies.views import GamesListView, TrophiesListView, ProfilesListView, SearchView, GameDetailView, ProfileDetailView, TrophyCaseView, ToggleSelectionView, BadgeListView, BadgeDetailView, GuideListView, ProfileSyncStatusView, TriggerSyncView, SearchSyncProfileView, AddSyncStatusView, LinkPSNView, ProfileVerifyView, MonitoringDashboardView, token_stats, token_stats_sse
 from users.views import CustomConfirmEmailView
 
 urlpatterns = [
@@ -53,7 +53,7 @@ urlpatterns = [
     path('api/add-sync-status/', AddSyncStatusView.as_view(), name='add_sync_status'),
     path('api/token-stats/', token_stats, name='token-stats'),
     path('api/token-stats/sse/', token_stats_sse, name='token-stats-sse'),
-    path('monitoring/', monitoring_dashboard, name='monitoring'),
+    path('monitoring/', MonitoringDashboardView.as_view(), name='monitoring'),
 
     path('accounts/link-psn/', LinkPSNView.as_view(), name='link_psn'),
     path('accounts/confirm-email/<str:key>/', CustomConfirmEmailView.as_view(), name='account_confirm_email'),

@@ -7,9 +7,10 @@ from django.core.cache import cache
 from django.core.paginator import Paginator
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.contrib.admin.views.decorators import staff_member_required
 from django.shortcuts import redirect, render, get_object_or_404
 from django.http import Http404, StreamingHttpResponse, JsonResponse, HttpResponseRedirect
-from django.views.generic import ListView, View, DetailView
+from django.views.generic import ListView, View, DetailView, TemplateView
 from django.db.models import Q, F, Prefetch, OuterRef, Subquery, Value, IntegerField, FloatField, Count, Avg, Max, Exists
 from django.db.models.functions import Coalesce
 from django.urls import reverse_lazy, reverse
@@ -26,20 +27,24 @@ from .utils import redis_client, MODERN_PLATFORMS, get_next_sync
 logger = logging.getLogger("psn_api")
 
 # Create your views here.
-def monitoring_dashboard(request):
-    return render(request, 'monitoring.html')
+@method_decorator(staff_member_required, name='dispatch')
+class MonitoringDashboardView(LoginRequiredMixin, TemplateView):
+    template_name = 'monitoring.html'
+    login_url = '/accounts/login'
+    redirect_field_name = 'next'
 
 def token_stats_sse(request):
     def event_stream():
         pubsub = redis_client.pubsub()
-        pubsub.subscribe("token_keeper_stats")
+        pubsub.subscribe("token_keeper_stats:*")
         try:
             for message in pubsub.listen():
-                if message['type'] == 'message':
+                if message['type'] == 'pmessage':
                     try:
                         stats = json.loads(message['data'])
-                        redis_client.set("token_keeper_latest_stats", json.dumps(stats), ex=60)
-                        yield f"data: {json.dumps(stats)}\n\n"
+                        redis_client.set(f"token_keeper_latest_stats:{stats['machine_id']}", json.dumps(stats), ex=60)
+                        aggregated = get_aggregated_stats()
+                        yield f"data: {json.dumps(aggregated)}\n\n"
                     except json.JSONDecodeError as e:
                         logger.error(f"Error decoding SSE stats: {e}")
                         yield f"data: {{'error': 'Invalid stats data'}}\n\n"
@@ -53,11 +58,23 @@ def token_stats_sse(request):
     response['Cache-Control'] = 'no-cache'
     return response
 
+def get_aggregated_stats():
+    aggregated = {}
+    keys = redis_client.keys("token_keeper_latest_stats:*")
+    for key in keys:
+        stats_json = redis_client.get(key)
+        if stats_json:
+            try:
+                stats = json.loads(stats_json)
+                aggregated[stats['machine_id']] = stats['instances']
+            except json.JSONDecodeError:
+                logger.error(f"Error decoding stats from {key}")
+    return aggregated
+
 def token_stats(request):
     try:
-        stats_json = redis_client.get("token_keeper_latest_stats")
-        stats = json.loads(stats_json) if stats_json else {}
-        return JsonResponse(stats)
+        aggregated = get_aggregated_stats()
+        return JsonResponse({'machines': aggregated})
     except Exception as e:
         logger.error(f"Error fetching token stats: {e}")
         return JsonResponse({'error': str(e)}, status=500)

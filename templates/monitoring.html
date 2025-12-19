@@ -9,6 +9,7 @@
         <table class="table w-full">
             <thead>
                 <tr>
+                    <th>Machine</th>
                     <th>Instance</th>
                     <th>Busy</th>
                     <th>Healthy</th>
@@ -38,27 +39,30 @@
         tableBody.innerHTML = '';
         let callsData = [];
         let labels = [];
-        if (!statsData.instances) return;
-        Object.entries(statsData.instances).forEach(([id, stat]) => {
-            const row = tableBody.insertRow();
-            row.insertCell(0).textContent = `${statsData.machine_id || 'default'}-${id}`;
-            row.insertCell(1).textContent = stat.busy ? 'Yes' : 'No';
-            row.insertCell(2).textContent = stat.healthy ? 'Yes' : 'No';
-            row.insertCell(3).textContent = stat.calls_in_window;
-            row.insertCell(4).textContent = stat.access_token_expiry_in.toFixed(2);
-            row.insertCell(5).textContent = stat.refresh_token_expiry_in.toFixed(2);
-            row.insertCell(6).textContent = stat.token_scopes;
-            row.insertCell(7).textContent = stat.npsso_cookie;
+        if (!statsData.machines) return;
+        Object.entries(statsData.machines).forEach(([machineId, instances]) => {
+            Object.entries(instances).forEach(([id, stat]) => {
+                const row = tableBody.insertRow();
+                row.insertCell(0).textContent = machineId;
+                row.insertCell(1).textContent = id;
+                row.insertCell(2).textContent = stat.busy ? 'Yes' : 'No';
+                row.insertCell(3).textContent = stat.healthy ? 'Yes' : 'No';
+                row.insertCell(4).textContent = stat.calls_in_window;
+                row.insertCell(5).textContent = stat.access_token_expiry_in.toFixed(2);
+                row.insertCell(6).textContent = stat.refresh_token_expiry_in.toFixed(2);
+                row.insertCell(7).textContent = stat.token_scopes;
+                row.insertCell(8).textContent = stat.npsso_cookie;
 
-            callsData.push(stat.calls_in_window);
-            labels.push(`${statsData.machine_id || 'default'}-${id}`);
+                callsData.push(stat.calls_in_window);
+                labels.push(`${machineId}-${id}`);
+            });
         });
 
         if (chart) chart.destroy();
         chart = new Chart(chartCanvas, {
             type: 'bar',
             data: {
-                labels: Object.keys(statsData.instances),
+                labels: labels,
                 datasets: [{
                     label: 'Calls in Window',
                     data: callsData,
