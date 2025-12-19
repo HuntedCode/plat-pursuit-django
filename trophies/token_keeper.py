@@ -7,6 +7,7 @@ import atexit
 from typing import Optional, Dict
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from django.utils import timezone
 from psnawp_api import PSNAWP
 from psnawp_api.core.psnawp_exceptions import PSNAWPForbiddenError
 from psnawp_api.models.trophies.trophy_constants import PlatformType
@@ -766,6 +767,8 @@ class TokenKeeper:
                 PsnApiService.update_profile_game_with_title_stats(profile, stats)
             
             profile.add_to_sync_target(job_counter)
+        if timezone.now() - timedelta(days=1) > profile.last_profile_health_check:
+            PSNManager.check_profile_health(profile)
         PSNManager.check_profile_badges(profile, 'medium_priority')
         PSNManager.sync_complete(profile, 'medium_priority')
 
