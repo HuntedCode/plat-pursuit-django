@@ -288,7 +288,11 @@
         }
 
         const hiddenCookie = getCookie(cookieName);
-        if (hiddenCookie === 'false') {
+        if (hiddenCookie === 'true') {
+            hotbarContainer.classList.add('-translate-y-[250%]');
+            toggleIcon.classList.remove('rotate-180');
+            toggleBtn.classList.add('-translate-y-[300%]');
+        } else {
             hotbarContainer.style.display = false;
             hotbarContainer.classList.remove('-translate-y-[250%]');
             toggleIcon.classList.add('rotate-180');
@@ -296,10 +300,9 @@
             setTimeout(() => {
                 hotbarContainer.style.display = true;
             }, 500);
-        } else {
-            hotbarContainer.classList.add('-translate-y-[250%]');
-            toggleIcon.classList.remove('rotate-180');
-            toggleBtn.classList.add('-translate-y-[300%]');
+            if (hiddenCookie === null) {
+                setCookie(cookieName, 'false', cookieDuration);
+            }
         }
 
         toggleBtn.addEventListener('click', toggleHotbar);
