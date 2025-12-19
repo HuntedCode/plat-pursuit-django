@@ -116,7 +116,7 @@ ACCOUNT_FORMS = {'signup': 'users.forms.CustomUserCreationForm'}
 if DEBUG:
     EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
 else:
-    EMAIL_BACKEND = 'sendgrid_backend.SendGridBackend'
+    EMAIL_BACKEND = 'sendgrid_backend.SendgridBackend'
     SENDGRID_API_KEY = os.getenv('SENDGRID_API_KEY')
     SENDGRID_SANDBOX_MODE_IN_DEBUG = False
     EMAIL_HOST_USER = 'apikey'
