@@ -72,12 +72,8 @@ class TokenKeeper:
         if cls._instance is None:
             with cls._lock:
                 if cls._instance is None:
-                    if redis_client.get("token_keeper:running"):
-                        logger.info("TokenKeeper already running in another process")
-                        cls._instance = None
-                    else:
-                        cls._instance = super().__new__(cls)
-                        cls._instance._init()
+                    cls._instance = super().__new__(cls)
+                    cls._instance._init()
         return cls._instance
 
     def _init(self):
@@ -100,11 +96,15 @@ class TokenKeeper:
         self._health_thread = None
         self._stats_thread = None
         self._job_workers = []
+        running_key = f"token_keeper:running:{self.machine_id}"
+        if redis_client.get(running_key):
+            logger.info(f"TokenKeeper already running for machine {self.machine_id}")
+            return None
         self.initialize_instances()
         self._start_health_monitor()
         self._start_stats_publisher()
         self._start_job_workers()
-        redis_client.set("token_keeper:running", "1", ex=3600)
+        redis_client.set(running_key, "1", ex=3600)
         atexit.register(self._cleanup)
     
     def _publish_stats_loop(self):
@@ -114,18 +114,19 @@ class TokenKeeper:
                 stats = self.stats
                 stats_with_id = {"machine_id": self.machine_id, "instances": stats}
                 redis_client.publish("token_keeper_stats", json.dumps(stats_with_id))
-                redis_client.set("token_keeper_latest_stats", json.dumps(stats_with_id), ex=60)
+                redis_client.set(f"token_keeper_latest_stats:{self.machine_id}", json.dumps(stats_with_id), ex=60)
             except Exception as e:
                 logger.error(f"Error publishing stats: {e}")
 
     def _cleanup(self):
         """Clean up Redis stat on process exit."""
         logger.info("Cleaning up TokenKeeper Redis state")
-        redis_client.delete("token_keeper:running")
+        running_key = f"token_keeper:running:{self.machine_id}"
+        redis_client.delete(running_key)
         for i in range(len(self.tokens)):
-            redis_client.delete(f"token_keeper:instance:{i}:token")
-            redis_client.delete(f"instance_lock:{i}")
-            redis_client.delete(f"token_keeper:pending_refresh:{i}")
+            redis_client.delete(f"token_keeper:instance:{self.machine_id}:{i}:token")
+            redis_client.delete(f"instance_lock:{self.machine_id}:{i}")
+            redis_client.delete(f"token_keeper:pending_refresh:{self.machine_id}:{i}")
         logger.info("TokenKeeper Redis state cleaned")
 
     
@@ -152,7 +153,7 @@ class TokenKeeper:
         """Infinite loop: Check health every interval."""
         while True:
             time.sleep(self.health_interval)
-            redis_client.set("token_keeper:running", "1", ex=3600)
+            redis_client.set(f"token_keeper:running:{self.machine_id}", "1", ex=3600)
             for instance_id, inst in self.instances.items():
                 self._check_and_refresh(inst)
 
@@ -170,7 +171,7 @@ class TokenKeeper:
                 user_cache={}
             )
             self.instances[i] = inst
-            redis_client.set(f"token_keeper:instance:{i}:token", token)
+            redis_client.set(f"token_keeper:instance:{self.machine_id}:{i}:token", token)
             self._record_call(token)
             logger.info(f"Instance {i} initialized with live client")
             log_api_call("client_init", token, None, 200, time.time() - start_time)
@@ -187,7 +188,7 @@ class TokenKeeper:
         try:
             if inst.get_access_expiry_in_seconds() < self.refresh_threshold:
                 if inst.is_busy:
-                    redis_client.set(f"token_keeper:pending_refresh:{inst.instance_id}", "1", ex=3600)
+                    redis_client.set(f"token_keeper:pending_refresh:{self.machine_id}:{inst.instance_id}", "1", ex=3600)
                     logger.debug(f"Instance {inst.instance_id} needs refresh but is busy.")
                     return
                 start = time.time()
@@ -326,7 +327,7 @@ class TokenKeeper:
                 raise ValueError(f"Unknown endpoint: {endpoint}")
             
             log_api_call(endpoint, instance.token, profile.id if profile else None, 200, time.time() - start_time)
-            if redis_client.get(f"token_keeper:pending_refresh:{instance.instance_id}"):
+            if redis_client.get(f"token_keeper:pending_refresh:{self.machine_id}:{instance.instance_id}"):
                 self._check_and_refresh(instance)
             if endpoint not in ['get_profile_legacy', 'get_region']:
                 profile.set_history_public_flag(True)
@@ -338,18 +339,18 @@ class TokenKeeper:
                 logger.warning(f"Privacy error for profile {profile.id}.")
             log_api_call(endpoint, instance.token, profile.id if profile else None, 500, time.time() - start_time, str(e))
             self._rollback_call(instance.token)
-            if redis_client.get(f"token_keeper:pending_refresh:{instance.instance_id}"):
+            if redis_client.get(f"token_keeper:pending_refresh:{self.machine_id}:{instance.instance_id}"):
                 self._check_and_refresh(instance)
             raise
         except HTTPError as e:
             log_api_call(endpoint, instance.token, profile.id if profile else None, e.response.status_code, time.time() - start_time, str(e))
             self._rollback_call(instance.token)
-            if redis_client.get(f"token_keeper:pending_refresh:{instance.instance_id}"):
+            if redis_client.get(f"token_keeper:pending_refresh:{self.machine_id}:{instance.instance_id}"):
                 self._check_and_refresh(instance)
             raise
         except Exception as e:
             log_api_call(endpoint, instance.token, profile.id if profile else None, 500, time.time() - start_time, str(e))
-            if redis_client.get(f"token_keeper:pending_refresh:{instance.instance_id}"):
+            if redis_client.get(f"token_keeper:pending_refresh:{self.machine_id}:{instance.instance_id}"):
                 self._check_and_refresh(instance)
             raise
         finally:
@@ -359,18 +360,18 @@ class TokenKeeper:
     def _get_calls_in_window(self, token : str) -> int:
         """Count API calls in rolling window."""
         now = time.time()
-        redis_client.zremrangebyscore(f"token:{token}:timestamps", 0, now - self.window_seconds)
+        redis_client.zremrangebyscore(f"token:{token}:{self.machine_id}:timestamps", 0, now - self.window_seconds)
         return redis_client.zcard(f"token:{token}:timestamps")
     
     def _record_call(self, token : str):
         """Record API call timestamp."""
         now = time.time()
-        redis_client.zadd(f"token:{token}:timestamps", {str(now): now})
+        redis_client.zadd(f"token:{token}:{self.machine_id}:timestamps", {str(now): now})
 
     def _rollback_call(self, token : str):
         """Rollback API call counter."""
         now = time.time()
-        redis_client.zremrangebyscore(f"token:{token}:timestamps", now - 1, now)
+        redis_client.zremrangebyscore(f"token:{token}:{self.machine_id}:timestamps", now - 1, now)
     
     def _handle_rate_limit(self, instance : TokenInstance):
         """Handle token rate limiting (429 error)."""
