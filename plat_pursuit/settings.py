@@ -108,6 +108,7 @@ ACCOUNT_LOGIN_ON_EMAIL_CONFIRMATION = True
 ACCOUNT_EMAIL_CONFIRMATION_AUTO_LOGIN = True
 ACCOUNT_EMAIL_CONFIRMATION_EXPIRE_DAYS = 3
 ACCOUNT_EMAIL_SUBJECT_PREFIX = '[Plat Pursuit] '
+DEFAULT_FROM_EMAIL = 'noreply@platpursuit.com'
 ACCOUNT_LOGOUT_REDIRECT_URL = '/accounts/login'
 ACCOUNT_ADAPTER = 'users.adapters.CustomAccountAdapter'
 ACCOUNT_FORMS = {'signup': 'users.forms.CustomUserCreationForm'}
@@ -115,7 +116,10 @@ ACCOUNT_FORMS = {'signup': 'users.forms.CustomUserCreationForm'}
 if DEBUG:
     EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
 else:
-    EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+    EMAIL_BACKEND = 'sgbackend.SendGridBackend'
+    SENDGRID_API_KEY = os.getenv('SENDGRID_API_KEY')
+    SENDGRID_SANDBOX_MODE_IN_DEBUG = False
+    EMAIL_HOST_USER = 'apikey'
 
 LOGIN_REDIRECT_URL = 'home'
 SITE_ID = 1
