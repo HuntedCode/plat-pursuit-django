@@ -361,7 +361,7 @@ class TokenKeeper:
         """Count API calls in rolling window."""
         now = time.time()
         redis_client.zremrangebyscore(f"token:{token}:{self.machine_id}:timestamps", 0, now - self.window_seconds)
-        return redis_client.zcard(f"token:{token}:timestamps")
+        return redis_client.zcard(f"token:{token}:{self.machine_id}:timestamps")
     
     def _record_call(self, token : str):
         """Record API call timestamp."""
