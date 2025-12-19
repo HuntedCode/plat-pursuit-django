@@ -13,18 +13,18 @@ class ProfileAdmin(admin.ModelAdmin):
         "id",
         "account_id",
         "user",
-        "discord_id",
-        "verification_code",
-        "is_linked",
-        "is_discord_verified",
-        "psn_history_public",
-        'country_code',
-        "is_plus",
         "last_synced",
         "sync_status",
         "sync_progress_value",
         "sync_progress_target",
         "sync_tier",
+        "is_linked",
+        "discord_id",
+        "verification_code",
+        "is_discord_verified",
+        "psn_history_public",
+        'country_code',
+        "is_plus",
     )
     list_filter = ("is_linked", "is_plus", "sync_tier")
     search_fields = ("psn_username", "account_id", "user__username__iexact", "about_me")
@@ -43,7 +43,7 @@ class ProfileAdmin(admin.ModelAdmin):
             "Trophy Summary",
             {"fields": ("trophy_level", "progress", "tier", "earned_trophy_summary")},
         ),
-        ("Sync Info", {"fields": ("extra_data", "last_synced", "sync_status", "sync_progress_value", "sync_progress_target", "sync_tier")}),
+        ("Sync Info", {"fields": ("extra_data", "last_synced", "last_profile_health_check", "sync_status", "sync_progress_value", "sync_progress_target", "sync_tier")}),
     )
     actions = ["link_to_user"]
 
