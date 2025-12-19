@@ -113,7 +113,7 @@ class TokenKeeper:
             try:
                 stats = self.stats
                 stats_with_id = {"machine_id": self.machine_id, "instances": stats}
-                redis_client.publish("token_keeper_stats", json.dumps(stats_with_id))
+                redis_client.publish(f"token_keeper_stats:{self.machine_id}", json.dumps(stats_with_id))
                 redis_client.set(f"token_keeper_latest_stats:{self.machine_id}", json.dumps(stats_with_id), ex=60)
             except Exception as e:
                 logger.error(f"Error publishing stats: {e}")
