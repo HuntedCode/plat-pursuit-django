@@ -236,12 +236,12 @@ LOGGING = {
     },
     "loggers": {
         "psn_api": {
-            "handlers": ["console", "file"],
+            "handlers": ["console"] if not DEBUG else ["console", "file"],  # Use stdout in prod; add file in dev
             "level": "INFO",
             "propagate": False,
         },
         "django": {
-            "handlers": ["console", "file"],
+            "handlers": ["console"] if not DEBUG else ["console", "file"],
             "level": "INFO",
             "propagate": False,
         },
