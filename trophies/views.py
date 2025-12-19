@@ -1456,7 +1456,7 @@ class AddSyncStatusView(View):
             'sync_status': profile.sync_status,
             'account_id': profile.account_id,
             'psn_username': profile.psn_username,
-            'slug': f"/profiles/{profile.psn_username}",
+            'slug': f"/profiles/{profile.psn_username}/",
         }
         return JsonResponse(data)
         
