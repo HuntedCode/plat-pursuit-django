@@ -227,23 +227,27 @@ LOGGING = {
             "formatter": "verbose",
             "stream": "ext://sys.stdout",
         },
-        "file": {
-            "class": "logging.FileHandler",
-            "level": "INFO",
-            "formatter": "verbose",
-            "filename": os.path.join(BASE_DIR, "logs", "plat_pursuit.log"),
-        },
     },
     "loggers": {
         "psn_api": {
-            "handlers": ["console"] if not DEBUG else ["console", "file"],  # Use stdout in prod; add file in dev
+            "handlers": ["console"],
             "level": "INFO",
             "propagate": False,
         },
         "django": {
-            "handlers": ["console"] if not DEBUG else ["console", "file"],
+            "handlers": ["console"],
             "level": "INFO",
             "propagate": False,
         },
     },
 }
+
+if DEBUG:
+    LOGGING["handlers"]["file"] = {
+        "class": "logging.FileHandler",
+        "level": "INFO",
+        "formatter": "verbose",
+        "filename": os.path.join(BASE_DIR, "logs", "plat_pursuit.log"),
+    }
+    LOGGING["loggers"]["psn_api"]["handlers"].append("file")
+    LOGGING["loggers"]["django"]["handlers"].append("file")
