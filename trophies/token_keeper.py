@@ -12,6 +12,8 @@ from psnawp_api import PSNAWP
 from psnawp_api.core.psnawp_exceptions import PSNAWPForbiddenError
 from psnawp_api.models.trophies.trophy_constants import PlatformType
 from requests import HTTPError
+from requests.exceptions import ConnectionError, Timeout
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 from .models import Profile, Game, TitleID
 from .services.psn_api_service import PsnApiService
 from .psn_manager import PSNManager
@@ -288,7 +290,12 @@ class TokenKeeper:
             time.sleep(0.1)
         logger.error(f"No token available for use.")
         return None
-    
+    @retry(
+        retry=retry_if_exception_type((ConnectionError, Timeout)),
+        stop=stop_after_attempt(10),
+        wait=wait_exponential(multiplier=1, min=4, max=30),
+        reraise=True
+    )
     def _execute_api_call(self, instance : TokenInstance, profile : Profile, endpoint : str, **kwargs):
         start_time = time.time()
         try:
@@ -768,7 +775,7 @@ class TokenKeeper:
             
             profile.add_to_sync_target(job_counter)
         if timezone.now() - timedelta(days=1) > profile.last_profile_health_check:
-            PSNManager.check_profile_health(profile)
+            PSNManager.assign_job('check_profile_health', args=[], profile_id=profile.id, priority_override='low_priority')
         PSNManager.check_profile_badges(profile, 'medium_priority')
         PSNManager.sync_complete(profile, 'medium_priority')
 
