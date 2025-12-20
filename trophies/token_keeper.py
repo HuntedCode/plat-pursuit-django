@@ -608,6 +608,7 @@ class TokenKeeper:
         for trophy_data in trophies:
             trophy, _ = PsnApiService.create_or_update_trophy_from_trophy_data(game, trophy_data)
             PsnApiService.create_or_update_earned_trophy_from_trophy_data(profile, trophy, trophy_data)
+        PsnApiService.update_profilegame_stats(profile, game)
         profile.increment_sync_progress()
     
     def _job_sync_title_id(self, profile_id: str, title_id_str: str, np_communication_id: str):

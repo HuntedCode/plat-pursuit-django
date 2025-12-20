@@ -338,3 +338,21 @@ class PsnApiService:
         }
 
         return game, trophies
+    
+    @classmethod
+    def update_profilegame_stats(cls, profile:Profile, game: Game):
+        from django.db.models import Max
+        try:
+            pg = ProfileGame.objects.get(profile=profile, game=game)
+        except ProfileGame.DoesNotExist:
+            logger.warning(f"Couldn't get ProfileGame to update stats. {profile.psn_username} | {game.title_name}")
+        
+        earned_qs = EarnedTrophy.objects.filter(profile=pg.profile, trophy__game=pg.game)
+        pg.earned_trophies_count = earned_qs.filter(earned=True).count()
+        pg.unearned_trophies_count = earned_qs.filter(earned=False).count()
+        pg.has_plat = earned_qs.filter(trophy__trophy_type='platinum', earned=True).exists()
+        recent_date = earned_qs.filter(earned=True).aggregate(
+            max_date=Max('earned_date_time')
+        )['max_date']
+        pg.most_recent_trophy_date = recent_date if recent_date else None
+        pg.save(update_fields=['earned_trophies_count', 'unearned_trophies_count', 'has_plat', 'most_recent_trophy_date'])
