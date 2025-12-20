@@ -2,7 +2,8 @@ from django.db import models
 from django.utils import timezone
 from users.models import CustomUser
 from django.core.validators import RegexValidator, MinValueValidator, MaxValueValidator
-from django.db.models import F, Avg, Count
+from django.db.models import F, Avg, Count, FloatField, Case, When
+from django.db.models.functions import Cast
 from django.db.transaction import atomic
 from datetime import timedelta
 from trophies.utils import count_unique_game_groups, calculate_trimmed_mean, TITLE_STATS_SUPPORTED_PLATFORMS, NA_REGION_CODES, EU_REGION_CODES, JP_REGION_CODES, AS_REGION_CODES, SHOVELWARE_THRESHOLD
@@ -477,15 +478,6 @@ class Trophy(models.Model):
         if recent_entry:
             return recent_entry.earned_date_time
         return None
-
-    def increment_earned_count(self):
-        earned_count = F('earned_count')
-        earned_count = earned_count + 1
-        earn_rate = earned_count / self.game.played_count if self.game.played_count > 0 else 0.0
-        self.earned_count = earned_count
-        self.earn_rate = earn_rate
-        self.save(update_fields=['earned_count', 'earn_rate'])
-        self.refresh_from_db(fields=['earned_count', 'earn_rate'])
 
     def __str__(self):
         return f"{self.trophy_name} ({self.game.title_name})"
