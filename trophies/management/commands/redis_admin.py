@@ -20,6 +20,11 @@ class Command(BaseCommand):
             action='store_true',
             help='Flush keys/caches related to the index page.'
         )
+        group.add_argument(
+            '--flush-game-page',
+            type=str,
+            help='Flush keys/caches related to specific game page (np_communication_id required)'
+        )
 
     def handle(self, *args, **options):
         if not settings.DEBUG:
@@ -29,6 +34,8 @@ class Command(BaseCommand):
             self._handle_flushall()
         elif options['flush_index']:
             self._handle_flush_index()
+        elif options['flush_game_page']:
+            self._handle_flush_game_page(options['flush_game_page'])
         
     def _confirm_action(self, action_desc):
         confirm = input(f"Are you sure you want to {action_desc}? (y/n):").strip().lower()
@@ -79,3 +86,29 @@ class Command(BaseCommand):
         except Exception as e:
             logger.error(f"Error during index flush: {e}")
             self.stdout.write(self.style.ERROR(f"Error: {e}"))
+    
+    def _handle_flush_game_page(self, np_communication_id: str):
+        if not self._confirm_action("flush index page caches"):
+            self.stdout.write(self.style.ERROR("Operation cancelled."))
+            return
+        
+        cache_config = settings.CACHES['default']
+        prefix = f"{cache_config['KEY_PREFIX']}:1:"
+
+        index_keys = [
+            f"{prefix}game:imageurls:{np_communication_id}",
+            f"{prefix}game:stats:{np_communication_id}",
+            f"{prefix}game:trophygroups:{np_communication_id}",
+        ]
+        
+        try:
+            deleted_count = 0
+            for key in index_keys:
+                redis_client.delete(key)
+                deleted_count += 1
+            logger.info(f"Flushed {deleted_count} index-related keys.")
+            self.stdout.write(self.style.SUCCESS(f"Flushed {deleted_count} keys for game {np_communication_id} page."))
+        except Exception as e:
+            logger.error(f"Error during index flush: {e}")
+            self.stdout.write(self.style.ERROR(f"Error: {e}"))
+
