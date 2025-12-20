@@ -47,6 +47,7 @@
 {% endif %}
 
 {% if rating_form %}
+{% with rating_form as form %}
     <div class="card bg-base-100 border-4 border-base-300 shadow-lg shadow-neutral rounded-box m-2">
         <div class="card-body py-2 px-4">
             <h3 class="text-base sm:text-lg md:text-xl lg:text-2xl text-center text-base-content italic mt-1 hover:scale-105">Share Your Plat Exerience</h3>
@@ -137,6 +138,7 @@
             </form>
         </div>
     </div>
+{% endwith %}
 {% elif user.is_authenticated %}
     {% if has_platinum == False %}
     <p class="alert alert-warning">Earn the platinum in this game to share your ratings!</p>
