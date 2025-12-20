@@ -716,7 +716,7 @@ class TokenKeeper:
             profile_game, _ = PsnApiService.create_or_update_profile_game(profile, game, title)
             title_defined_trophies_total = title.defined_trophies.bronze + title.defined_trophies.silver + title.defined_trophies.gold + title.defined_trophies.platinum
             args = [game.np_communication_id, game.title_platform[0] if not game.title_platform[0] == 'PSPC' else game.title_platform[1]]
-            if created or game.get_total_defined_trophies() != title_defined_trophies_total:
+            if created or game.get_total_defined_trophies() != title_defined_trophies_total or not TrophyGroup.objects.filter(game=game).exists():
                 PSNManager.assign_job('sync_trophy_groups', args, profile.id)
                 job_counter += 1
             PSNManager.assign_job('sync_trophies', args, profile.id, priority_override='medium_priority')
