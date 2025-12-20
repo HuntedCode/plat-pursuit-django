@@ -4,6 +4,11 @@
     <a href="{% url 'profile_detail' profile.psn_username %}" class="card bg-base-100 border-4 border-base-300 shadow-xl shadow-neutral cursor-pointer transition-all duration-300 hover:scale-105 hover:border-primary hover:shadow-primary hover:z-10 group">
         <div class="relative card-body m-0 px-3 py-3">
             <div class="absolute top-2 right-4 text-lg text-base-content font-bold hover:scale-105">{{ profile.flag }}</div>
+            {% if not profile.psn_history_public %}
+                <div class="tooltip absolute top-2 left-4 hover:scale-105" data-tip="Game Data Privated">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="mx-auto" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="var(--color-error)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2"></polygon><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+                </div>
+            {% endif %}
             <div class="flex flex-col items-center">
                 <div class="avatar mb-4 transition duration-300 group-hover:scale-105">
                     <div class="w-24 rounded-full ring-3 ring-primary">
@@ -18,13 +23,23 @@
                 <div class="flex flex-row gap-2 items-center">
                     <div class="flex flex-col gap-1 items-center">
                         <h3 class="text-xs text-base-content/70 hover:scale-105 italic">Level:</h3>
-                        <h3 class="text-sm text-accent font-bold hover:scale-105">{{ profile.trophy_level }}</h3>
+                        {% if not profile.psn_history_public %}
+                            <div class="tooltip" data-tip="Game Data Privated">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="mx-auto" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--color-error)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2"></polygon><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+                            </div>
+                        {% else %}
+                            <h3 class="text-sm text-accent font-bold hover:scale-105">{{ profile.trophy_level }}</h3>
+                        {% endif %}
                     </div>
                     <div class="divider divider-horizontal mx-0"></div>
                     <div class="flex flex-col gap-1 items-center">
                         <h3 class="text-xs text-base-content/70 hover:scale-105 italic">Trophies:</h3>
-                        {% if not profile.sync_status == 'syncing' %}
+                        {% if not profile.sync_status == 'syncing' and profile.psn_history_public %}
                             <h3 class="text-sm text-secondary font-bold hover:scale-105">{{ profile.total_trophies|intcomma }}</h3>
+                        {% elif not profile.psn_history_public %}
+                            <div class="tooltip" data-tip="Game Data Privated">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="mx-auto" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--color-error)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2"></polygon><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+                            </div>
                         {% else %}
                             <span class="loading loading-infinity loading-md"></span>
                         {% endif %}
@@ -32,8 +47,12 @@
                     <div class="divider divider-horizontal mx-0"></div>
                     <div class="flex flex-col gap-1 items-center">
                         <h3 class="text-xs text-base-content/70 hover:scale-105 italic">Plats:</h3>
-                        {% if not profile.sync_status == 'syncing' %}
+                        {% if not profile.sync_status == 'syncing' and profile.psn_history_public %}
                             <h3 class="text-sm text-primary font-bold hover:scale-105">{{ profile.total_plats|intcomma }}</h3>
+                        {% elif not profile.psn_history_public %}
+                            <div class="tooltip" data-tip="Game Data Privated">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="mx-auto" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--color-error)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2"></polygon><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+                            </div>
                         {% else %}
                             <span class="loading loading-infinity loading-md"></span>
                         {% endif %}
@@ -45,17 +64,35 @@
                 <div class="flex flex-row gap-2 items-center">
                     <div class="flex flex-col gap-1 items-center">
                         <h3 class="text-xs text-base-content/70 hover:scale-105 italic">Games:</h3>
-                        <h3 class="text-sm text-warning font-bold hover:scale-105">{{ profile.total_games }}</h3>
+                        {% if not profile.psn_history_public %}
+                            <div class="tooltip" data-tip="Game Data Privated">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="mx-auto" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--color-error)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2"></polygon><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+                            </div>
+                        {% else %}
+                            <h3 class="text-sm text-warning font-bold hover:scale-105">{{ profile.total_games }}</h3>
+                        {% endif %}
                     </div>
                     <div class="divider divider-horizontal mx-0"></div>
                     <div class="flex flex-col gap-1 items-center">
                         <h3 class="text-xs text-base-content/70 hover:scale-105 italic">100%'s:</h3>
-                        <h3 class="text-sm text-success font-bold hover:scale-105">{{ profile.total_completes }}</h3>
+                        {% if not profile.psn_history_public %}
+                            <div class="tooltip" data-tip="Game Data Privated">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="mx-auto" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--color-error)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2"></polygon><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+                            </div>
+                        {% else %}
+                            <h3 class="text-sm text-success font-bold hover:scale-105">{{ profile.total_completes }}</h3>
+                        {% endif %}
                     </div>
                     <div class="divider divider-horizontal mx-0"></div>
                     <div class="flex flex-col gap-1 items-center">
                         <h3 class="text-xs text-base-content/70 hover:scale-105 italic">Avg. %</h3>
-                        <h3 class="text-sm text-base-content font-bold hover:scale-105">{{ profile.avg_progress|floatformat:0 }}%</h3>
+                        {% if not profile.psn_history_public %}
+                            <div class="tooltip" data-tip="Game Data Privated">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="mx-auto" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--color-error)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2"></polygon><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+                            </div>
+                        {% else %}
+                            <h3 class="text-sm text-base-content font-bold hover:scale-105">{{ profile.avg_progress|floatformat:0 }}%</h3>
+                        {% endif %}
                     </div>
                 </div>
 

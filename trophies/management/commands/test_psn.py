@@ -201,8 +201,8 @@ class Command(BaseCommand):
             # Displays Key/Value combos for each endpoint. Comment out what you don't want to use.
             # self.user_get_presence(user) # user.get_presence()
             # self.user_profile(user)
-            # self.user_profile_legacy(user)
-            # self.user_title_stats(user)
+            self.user_profile_legacy(user)
+            self.user_title_stats(user)
             # self.user_trophy_summary(user)
             # self.user_trophy_titles(user)
             np_comm_id = "NPWR40455_00"
@@ -219,7 +219,7 @@ class Command(BaseCommand):
             game_title = psnawp.game_title('PPSA21593_00', PlatformType('PS5'), account_id=user.account_id)
             #print(game_title)
             #print(game_title.np_communication_id)
-            pprint(game_title.get_details())
+            #pprint(game_title.get_details())
             #pprint(game_title.trophies())
 
             #print(user.get_region())

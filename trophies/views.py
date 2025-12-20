@@ -221,6 +221,8 @@ class ProfilesListView(ProfileHotbarMixin, ListView):
         form = ProfileSearchForm(self.request.GET)
         order = ['psn_username']
 
+        #qs = qs.exclude(psn_history_public=False)
+
         if form.is_valid():
             query = form.cleaned_data.get('query')
             country = form.cleaned_data.get('country')
