@@ -54,7 +54,6 @@ class TrophySearchForm(forms.Form):
 class ProfileSearchForm(forms.Form):
     query = forms.CharField(required=False, label='Search by name')
     country = forms.ChoiceField(choices=[('', 'All Countries')], required=False, label='Country')
-    filter_shovelware = forms.BooleanField(required=False, label='Filter out shovelware')
     sort = forms.ChoiceField(
         choices=[
             ('alpha', 'Alphabetical'),

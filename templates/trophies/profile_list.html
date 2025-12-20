@@ -67,23 +67,6 @@
                 {% endif %}
             {% endwith %}
         </h1>
-        <div class="flex flex-row gap-2 self-end mb-4 pr-4">
-            <div class="tooltip" data-tip="{% if filter_shovelware == 'on' %}Show Shovelware{% else %}Hide Shovelware{% endif %}">
-                <button id="shovelware-toggle" type="button" class="btn btn-square btn-sm lg:btn-lg bg-base-100" data-filter-shovelware="{{ filter_shovelware|default:'' }}">
-                    {% if filter_shovelware %}
-                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
-                            <path fill="var(--color-base-content)" d="m10.06 15.35 7.03-7.03c.98.42 2.16.23 2.95-.57l1.41-1.41c.29-.29.29-.77 0-1.06l-2.74-2.74a.754.754 0 0 0-1.06 0l-1.41 1.41c-.8.8-.98 1.97-.57 2.95l-7.03 7.03-1.77-1.77-3.54 3.54c-1.37 1.37-1.37 3.58 0 4.95s3.58 1.37 4.95 0l3.54-3.54-1.77-1.77Zm7.25-10.34.88-.88 1.68 1.68-.88.88c-.46.46-1.22.46-1.68 0s-.46-1.22 0-1.68M6.88 19.24c-.58.58-1.54.58-2.12 0s-.58-1.54 0-2.12L6.88 15 9 17.12z"/>
-                            <circle cx="12" cy="12" r="11" stroke="var(--color-error)" stroke-width="2" fill="none"/>
-                            <line x1="20" y1="20" x2="4" y2="4" stroke="var(--color-error)" stroke-width="2"/>
-                        </svg>
-                    {% else %}
-                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="var(--color-base-content)" viewBox="0 0 24 24">
-                            <path d="m10.06 15.35 7.03-7.03c.98.42 2.16.23 2.95-.57l1.41-1.41c.29-.29.29-.77 0-1.06l-2.74-2.74a.754.754 0 0 0-1.06 0l-1.41 1.41c-.8.8-.98 1.97-.57 2.95l-7.03 7.03-1.77-1.77-3.54 3.54c-1.37 1.37-1.37 3.58 0 4.95s3.58 1.37 4.95 0l3.54-3.54-1.77-1.77Zm7.25-10.34.88-.88 1.68 1.68-.88.88c-.46.46-1.22.46-1.68 0s-.46-1.22 0-1.68M6.88 19.24c-.58.58-1.54.58-2.12 0s-.58-1.54 0-2.12L6.88 15 9 17.12z"/>
-                        </svg>
-                    {% endif %}
-                </button>
-            </div>
-        </div>
     </div>
     <div id="items-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-2">
         {% include 'trophies/partials/profile_list/profile_cards.html' %}
