@@ -209,6 +209,8 @@ class TokenKeeper:
             logger.error(f"Health check failed for {inst.instance_id}: {e}")
             inst.last_error = f"{datetime.now().isoformat()} Refresh error: {str(e)}"
             inst.last_health = 0
+        else:
+            inst.last_health = time.time()
 
     # Job Assignment & Handling
 
