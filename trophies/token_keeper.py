@@ -4,6 +4,7 @@ import threading
 import logging
 import os
 import atexit
+import requests
 from typing import Optional, Dict
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -33,6 +34,7 @@ class TokenInstance:
     last_refresh: float = 0
     is_busy: bool = False
     last_error: str = None
+    outbound_ip: str = None
 
     def __post_init__(self):
         if self.user_cache is None:
@@ -174,6 +176,13 @@ class TokenKeeper:
                 client=client,
                 user_cache={}
             )
+            try:
+                ip_response = requests.get('https://api.ipify.org', timeout=2)
+                inst.outbound_ip = ip_response.text
+                logger.info(f"Instance {inst.instance_id} using IP: {inst.outbound_ip}")
+            except Exception as e:
+                logger.warning(f"Failed to fetch IP for instance {inst.instance_id}: {e}")
+                inst.outbound_ip = 'Unknown'
             self.instances[i] = inst
             redis_client.set(f"token_keeper:instance:{self.machine_id}:{i}:token", token)
             self._record_call(token)
@@ -204,6 +213,13 @@ class TokenKeeper:
                 self._record_call(inst.token)
                 log_api_call("keeper_refresh", inst.token, None, 200, time.time() - start)
                 logger.info(f"Instance {inst.instance_id} refreshed proactively")
+                try:
+                    ip_response = requests.get('https://api.ipify.org', timeout=2)
+                    inst.outbound_ip = ip_response.text
+                    logger.info(f"Instance {inst.instance_id} using IP: {inst.outbound_ip}")
+                except Exception as e:
+                    logger.warning(f"Failed to fetch IP for instance {inst.instance_id}: {e}")
+                    inst.outbound_ip = 'Unknown'
             inst.cleanup_cache()
         except Exception as e:
             logger.error(f"Health check failed for {inst.instance_id}: {e}")
@@ -892,7 +908,8 @@ class TokenKeeper:
                 "npsso_cookie": "present" if auth.npsso_cookie else "missing",
                 "uptime_seconds": time.time() - inst.last_health if inst.last_health > 0 else 0,
                 "last_error": inst.last_error,
-                "pending_refresh": bool(redis_client.get(f"token_keeper:pending_refresh:{self.machine_id}:{inst.instance_id}"))
+                "pending_refresh": bool(redis_client.get(f"token_keeper:pending_refresh:{self.machine_id}:{inst.instance_id}")),
+                "outbound_ip": inst.outbound_ip,
             }
         return stats
 

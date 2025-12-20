@@ -18,6 +18,7 @@
                             <tr>
                                 <th>Machine ID</th>
                                 <th>Instance ID</th>
+                                <th>Outbound IP</th>
                                 <th>Busy</th>
                                 <th>Healthy</th>
                                 <th>Calls in Window</th>
@@ -36,6 +37,7 @@
                                     <tr>
                                         <td>{{ machine_id }}</td>
                                         <td>{{ inst_id }}</td>
+                                        <td>{{ stat.outbound_ip }}</td>
                                         <td>{% if stat.busy %}Yes{% else %}No{% endif %}</td>
                                         <td>{% if stat.healthy %}Yes{% else %}No{% endif %}</td>
                                         <td>{{ stat.calls_in_window }}</td>
