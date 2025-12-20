@@ -1401,4 +1401,47 @@ class AddSyncStatusView(View):
             'slug': f"/profiles/{profile.psn_username}/",
         }
         return JsonResponse(data)
-        
+
+# Monitoring Views
+
+@method_decorator(staff_member_required, name='dispatch')
+class TokenMonitoringView(TemplateView):
+    template_name = 'trophies/token_monitoring.html'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        try:
+            aggregated_stats = self.get_aggregated_stats()
+            context['machines'] = aggregated_stats
+            context['queue_stats'] = self.get_queue_stats()
+        except Exception as e:
+            logger.error(f"Error fetching aggregated stats for monitoring: {e}")
+            context['machines'] = {}
+            context['queue_stats'] = {}
+            context['error'] = "Unable to load stats. Check logs for details."
+        return context
+    
+    def get_aggregated_stats(self):
+        aggregated = {}
+        keys = redis_client.keys("token_keeper_latest_stats:*")
+        for key in keys:
+            stats_json = redis_client.get(key)
+            if stats_json:
+                try:
+                    stats = json.loads(stats_json)
+                    aggregated[stats['machine_id']] = stats['instances']
+                except json.JSONDecodeError:
+                    logger.error(f"Invalid JSON in Redis key {key}")
+        return aggregated
+    
+    def get_queue_stats(self):
+        queues = ['high_priority_jobs', 'medium_priority_jobs', 'low_priority_jobs']
+        stats = {}
+        for queue in queues:
+            try:
+                length = redis_client.llen(queue)
+                stats[queue] = length
+            except Exception as e:
+                logger.error(f"Error fetching length for queue {queue}: {e}")
+                stats[queue] = 'Error'
+        return stats

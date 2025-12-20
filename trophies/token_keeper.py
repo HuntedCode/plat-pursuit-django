@@ -32,6 +32,7 @@ class TokenInstance:
     last_health: float = time.time()
     last_refresh: float = 0
     is_busy: bool = False
+    last_error: str = None
 
     def __post_init__(self):
         if self.user_cache is None:
@@ -206,6 +207,7 @@ class TokenKeeper:
             inst.cleanup_cache()
         except Exception as e:
             logger.error(f"Health check failed for {inst.instance_id}: {e}")
+            inst.last_error = f"{datetime.now().isoformat()} Refresh error: {str(e)}"
             inst.last_health = 0
 
     # Job Assignment & Handling
@@ -359,6 +361,7 @@ class TokenKeeper:
             raise
         except Exception as e:
             log_api_call(endpoint, instance.token, profile.id if profile else None, 500, time.time() - start_time, str(e))
+            instance.last_error = f"{datetime.now().isoformat} Error: {str(e)}"
             if redis_client.get(f"token_keeper:pending_refresh:{self.machine_id}:{instance.instance_id}"):
                 self._check_and_refresh(instance)
             raise
@@ -884,7 +887,10 @@ class TokenKeeper:
                 "access_token_expiry_in": inst.get_access_expiry_in_seconds(),
                 "refresh_token_expiry_in": inst.get_refresh_expiry_in_seconds(),
                 "token_scopes": auth.token_response.get("scope", "unknown") if auth.token_response else "none",
-                "npsso_cookie": "present" if auth.npsso_cookie else "missing"
+                "npsso_cookie": "present" if auth.npsso_cookie else "missing",
+                "uptime_seconds": time.time() - inst.last_health if inst.last_health > 0 else 0,
+                "last_error": inst.last_error,
+                "pending_refresh": bool(redis_client.get(f"token_keeper:pending_refresh:{self.machine_id}:{inst.instance_id}"))
             }
         return stats
 
