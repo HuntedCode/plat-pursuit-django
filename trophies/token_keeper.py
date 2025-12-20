@@ -379,7 +379,7 @@ class TokenKeeper:
             raise
         except Exception as e:
             log_api_call(endpoint, instance.token, profile.id if profile else None, 500, time.time() - start_time, str(e))
-            instance.last_error = f"{datetime.now().isoformat} Error: {str(e)}"
+            instance.last_error = f"{datetime.now().isoformat()} Error: {str(e)}"
             if redis_client.get(f"token_keeper:pending_refresh:{self.machine_id}:{instance.instance_id}"):
                 self._check_and_refresh(instance)
             raise

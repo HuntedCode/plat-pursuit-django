@@ -86,7 +86,13 @@ class Profile(models.Model):
             models.Index(fields=["account_id"], name="account_id_idx"),
             models.Index(fields=['discord_id'], name='discord_id_idx'),
             models.Index(fields=['is_discord_verified', 'last_synced'], name='verified_synced_idx'),
-            models.Index(fields=['sync_status'], name='progile_sync_status_idx'),
+            models.Index(fields=['sync_status'], name='profile_sync_status_idx'),
+            models.Index(fields=['total_trophies'], name='profile_total_trophies_idx'),
+            models.Index(fields=['total_unearned'], name='profile_total_unearned_idx'),
+            models.Index(fields=['total_plats'], name='profile_total_plats_idx'),
+            models.Index(fields=['total_games'], name='profile_total_games_idx'),
+            models.Index(fields=['total_completes'], name='profile_total_completes_idx'),
+            models.Index(fields=['avg_progress'], name='profile_avg_progress_idx'),
         ]
 
     def __str__(self):
@@ -394,13 +400,25 @@ class ProfileGame(models.Model):
     earned_trophies = models.JSONField(default=dict, blank=True)
     last_updated_datetime = models.DateTimeField(blank=True, null=True)
     last_sync = models.DateTimeField(auto_now=True)
+    most_recent_trophy_date = models.DateTimeField(null=True, blank=True, help_text="Date of most recent trophy earned.")
+    earned_trophies_count = models.PositiveIntegerField(default=0, help_text="Number of earned trophies.")
+    unearned_trophies_count = models.PositiveIntegerField(default=0, help_text="Number of unearned trophies.")
+    has_plat = models.BooleanField(default=False, help_text="Whether the plat has been earned.")
 
     class Meta:
         unique_together = ["profile", "game"]
         indexes = [
             models.Index(fields=["last_updated_datetime"], name="profilegame_updated_idx"),
             models.Index(fields=["progress"], name="profilegame_progress_idx"),
+            models.Index(fields=['most_recent_trophy_date'], name='pg_recent_trophy_idx'),
+            models.Index(fields=['earned_trophies_count'], name='pg_earned_count_idx'),
+            models.Index(fields=['unearned_trophies_count'], name='pg_unearned_count_idx'),
+            models.Index(fields=['has_plat'], name='pg_has_plat_idx'),
         ]
+    
+    @property
+    def total_trophies(self):
+        return self.earned_trophies_count + self.unearned_trophies_count
 
 
 class FeaturedGame(models.Model):

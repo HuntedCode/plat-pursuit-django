@@ -12,7 +12,7 @@ from django.contrib.admin.views.decorators import staff_member_required
 from django.shortcuts import redirect, render, get_object_or_404
 from django.http import Http404, StreamingHttpResponse, JsonResponse, HttpResponseRedirect
 from django.views.generic import ListView, View, DetailView, TemplateView
-from django.db.models import Q, F, Prefetch, OuterRef, Subquery, Value, IntegerField, FloatField, Count, Avg, Max, Exists
+from django.db.models import Q, F, Prefetch, OuterRef, Subquery, Value, IntegerField, FloatField, Count, Avg, Max, Exists, Min
 from django.db.models.functions import Coalesce
 from django.urls import reverse_lazy, reverse
 from django.utils import timezone
@@ -654,41 +654,52 @@ class ProfileDetailView(ProfileHotbarMixin, DetailView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         profile: Profile = self.object
-        user = self.request.user
-
         tab = self.request.GET.get('tab', 'games')
+        per_page = 50
+        page_number = self.request.GET.get('page', 1)
+
+        earned_trophies_prefetch = Prefetch(
+            'earned_trophy_entries',
+            queryset=EarnedTrophy.objects.filter(earned=True).select_related('trophy', 'trophy__game'),
+            to_attr='earned_trophies'
+        )
+        profile = Profile.objects.prefetch_related(earned_trophies_prefetch).get(id=profile.id)
 
         # Header
         header_stats = {}
 
         header_stats['total_games'] = profile.total_games
-
         header_stats['total_earned_trophies'] = profile.total_trophies
         header_stats['total_unearned_trophies'] = profile.total_unearned
-
         header_stats['total_completions'] = profile.total_completes
         header_stats['average_completion'] = profile.avg_progress
 
-        recent_platinum = profile.earned_trophy_entries.filter(earned=True, trophy__trophy_type='platinum').select_related('trophy', 'trophy__game').order_by(F('earned_date_time').desc(nulls_last=True)).first()
-        header_stats['recent_platinum'] = {
-            'trophy': recent_platinum.trophy,
-            'game': recent_platinum.trophy.game,
-            'earned_date': recent_platinum.earned_date_time,
-        } if recent_platinum else None
+        recent_platinum = profile.earned_trophy_entries.aggregate(
+            recent_date=Max('earned_date_time'),
+            rarest_rate=Min('trophy__trophy_earn_rate', filter=Q(trophy__trophy_type='platinum'))
+        )
+        if recent_platinum['recent_date']:
+            recent_entry = profile.earned_trophy_entries.filter(earned_date_time=recent_platinum['recent_date']).first()
+            header_stats['recent_platinum'] = {
+                'trophy': recent_entry.trophy,
+                'game': recent_entry.trophy.game,
+                'earned_date': recent_entry.earned_date_time,
+            } if recent_entry else None
+        else:
+            header_stats['recent_platinum'] = None
 
-        rarest_platinum = profile.earned_trophy_entries.filter(earned=True, trophy__trophy_type='platinum').select_related('trophy', 'trophy__game').order_by('trophy__trophy_earn_rate').first()
-        header_stats['rarest_platinum'] = {
-            'trophy': rarest_platinum.trophy,
-            'game': rarest_platinum.trophy.game,
-            'earned_date': rarest_platinum.earned_date_time,
-        } if rarest_platinum else None
+        if recent_platinum['rarest_rate'] is not None:
+            rarest_entry = profile.earned_trophy_entries.filter(trophy__trophy_earn_rate=recent_platinum['rarest_rate'], trophy__trophy_type='platinum').first()
+            header_stats['rarest_platinum'] = {
+                'trophy': rarest_entry.trophy,
+                'game': rarest_entry.trophy.game,
+                'earned_date': rarest_entry.earned_date_time,
+            } if rarest_entry else None
+        else:
+            header_stats['rarest_platinum'] = None
 
         # Trophy Case Selections
         trophy_case = list(UserTrophySelection.objects.filter(profile=profile).order_by('-earned_trophy__earned_date_time'))
-
-        # Games/Trophies List
-        per_page = 50
-        page_number = self.request.GET.get('page', 1)
 
         if tab == 'games':
             form = ProfileGamesForm(self.request.GET)
@@ -698,25 +709,13 @@ class ProfileDetailView(ProfileHotbarMixin, DetailView):
                 plat_status = form.cleaned_data.get('plat_status')
                 sort_val = form.cleaned_data.get('sort')
 
-                recent_trophy_subquery = Subquery(
-                    EarnedTrophy.objects.filter(profile=profile, trophy__game=OuterRef('game'), earned=True).values('trophy__game').annotate(max_date=Max('earned_date_time')).values('max_date')[:1]
-                )
-                earned_count_subquery = Subquery(
-                    EarnedTrophy.objects.filter(profile=profile, trophy__game=OuterRef('game'), earned=True).values('trophy__game').annotate(count=Count('id')).values('count')[:1]
-                )
-                unearned_count_subquery = Subquery(
-                    EarnedTrophy.objects.filter(profile=profile, trophy__game=OuterRef('game'), earned=False).values('trophy__game').annotate(count=Count('id')).values('count')[:1]
-                )
+                print("Calculating...")
+
                 games_qs = profile.played_games.all().select_related('game').annotate(
-                    most_recent_trophy_date=Coalesce(recent_trophy_subquery, None),
-                    earned_trophies_count=Coalesce(earned_count_subquery, Value(0, output_field=IntegerField())),
-                    unearned_trophies_count=Coalesce(unearned_count_subquery, Value(0, output_field=IntegerField())),
-                    total_trophies=F('earned_trophies_count') + F('unearned_trophies_count'),
+                    annotated_total_trophies=F('earned_trophies_count') + F('unearned_trophies_count')  # Computed from denorm
                 )
 
-                plat_earned_subquery = Exists(
-                    EarnedTrophy.objects.filter(profile=profile, trophy__game=OuterRef('game'), trophy__trophy_type='platinum', earned=True)
-                )
+                print("Finished...")
 
                 if query:
                     games_qs = games_qs.filter(Q(game__title_name__icontains=query))
@@ -725,22 +724,18 @@ class ProfileDetailView(ProfileHotbarMixin, DetailView):
                     for plat in platforms:
                         platform_filter |= Q(game__title_platform__contains=plat)
                     games_qs = games_qs.filter(platform_filter)
-                    context['selected_platforms'] = platforms       
+                    context['selected_platforms'] = platforms
+
                 if plat_status:
-                    if plat_status == 'plats':
-                        games_qs = games_qs.filter(plat_earned_subquery)
-                    elif plat_status == 'no_plats':
-                        games_qs = games_qs.exclude(plat_earned_subquery)
-                    elif plat_status == '100s':
+                    if plat_status in ['plats', 'plats_100s', 'plats_no_100s']:
+                        games_qs = games_qs.filter(has_plat=True)
+                    elif plat_status in ['no_plats', 'no_plats_100s']:
+                        games_qs = games_qs.filter(has_plat=False)
+                    if plat_status in ['100s', 'plats_100s', 'no_plats_100s']:
                         games_qs = games_qs.filter(progress=100)
-                    elif plat_status == 'no_100s':
+                    elif plat_status in ['no_100s']:
                         games_qs = games_qs.exclude(progress=100)
-                    elif plat_status == 'plats_100s':
-                        games_qs = games_qs.filter(Q(plat_earned_subquery) | Q(progress=100))
-                    elif plat_status == 'no_plats_100s':
-                        games_qs = games_qs.exclude(Q(plat_earned_subquery) | Q(progress=100))
-                    elif plat_status == 'plats_no_100s':
-                        games_qs = games_qs.filter(plat_earned_subquery)
+                    if plat_status == 'plats_no_100s':
                         games_qs = games_qs.exclude(progress=100)
 
                 order = ['-last_updated_datetime']
@@ -753,13 +748,15 @@ class ProfileDetailView(ProfileHotbarMixin, DetailView):
                 elif sort_val == 'completion_inv':
                     order = ['progress', 'game__title_name']
                 elif sort_val == 'trophies':
-                    order = ['-total_trophies', 'game__title_name']
+                    order = ['-annotated_total_trophies', 'game__title_name']
                 elif sort_val == 'earned':
                     order = ['-earned_trophies_count', 'game__title_name']
                 elif sort_val == 'unearned':
                     order = ['-unearned_trophies_count', 'game__title_name']
 
                 games_qs = games_qs.order_by(*order)
+
+                print("Sorting finished...")
 
                 games_paginator = Paginator(games_qs, per_page)
                 if int(page_number) > games_paginator.num_pages:
@@ -768,6 +765,8 @@ class ProfileDetailView(ProfileHotbarMixin, DetailView):
                     game_page_obj = games_paginator.get_page(page_number)
                 context['profile_games'] = game_page_obj
                 context['trophy_log'] = []
+
+                print("games tab done...")
         
         elif tab == 'trophies':
             form = ProfileTrophiesForm(self.request.GET)
@@ -852,6 +851,7 @@ class ProfileDetailView(ProfileHotbarMixin, DetailView):
         context['trophy_case_count'] = len(trophy_case)
         context['current_tab'] = tab
 
+        print("Returning context...")
         return context
     
     def get_template_names(self):
@@ -1414,10 +1414,12 @@ class TokenMonitoringView(TemplateView):
             aggregated_stats = self.get_aggregated_stats()
             context['machines'] = aggregated_stats
             context['queue_stats'] = self.get_queue_stats()
+            context['profile_queue_stats'] = self.get_profile_queue_stats()
         except Exception as e:
             logger.error(f"Error fetching aggregated stats for monitoring: {e}")
             context['machines'] = {}
             context['queue_stats'] = {}
+            context['profile_queue_stats'] = {}
             context['error'] = "Unable to load stats. Check logs for details."
         return context
     
@@ -1444,4 +1446,19 @@ class TokenMonitoringView(TemplateView):
             except Exception as e:
                 logger.error(f"Error fetching length for queue {queue}: {e}")
                 stats[queue] = 'Error'
+        return stats
+    
+    def get_profile_queue_stats(self):
+        stats = {}
+        queues = ['high_priority', 'medium_priority', 'low_priority']
+        for queue in queues:
+            keys = redis_client.keys(f"profile_jobs:*:{queue}")
+            for key in keys:
+                profile_id = key.decode().split(':')[1]
+                count = int(redis_client.get(key) or 0)
+                if profile_id not in stats:
+                    stats[profile_id] = {}
+                stats[profile_id][queue] = count
+        for profile_id in stats:
+            stats[profile_id]['total'] = sum(stats[profile_id].values())
         return stats
