@@ -2,7 +2,7 @@ import json
 import logging
 import math
 from collections import defaultdict
-from datetime import timedelta, date
+from datetime import datetime, timedelta, date
 import time
 from django.core.cache import cache
 from django.core.paginator import Paginator
@@ -22,7 +22,7 @@ from random import choice
 from trophies.psn_manager import PSNManager
 from trophies.mixins import ProfileHotbarMixin
 from .models import Game, Trophy, Profile, EarnedTrophy, ProfileGame, TrophyGroup, UserTrophySelection, Badge, UserBadge, UserBadgeProgress, Concept, FeaturedGuide
-from .forms import GameSearchForm, TrophySearchForm, ProfileSearchForm, ProfileGamesForm, ProfileTrophiesForm, ProfileBadgesForm, UserConceptRatingForm, BadgeSearchForm, GuideSearchForm, LinkPSNForm
+from .forms import GameSearchForm, TrophySearchForm, ProfileSearchForm, ProfileGamesForm, ProfileTrophiesForm, ProfileBadgesForm, UserConceptRatingForm, BadgeSearchForm, GuideSearchForm, LinkPSNForm, GameDetailForm
 from .utils import redis_client, MODERN_PLATFORMS, get_next_sync
 
 logger = logging.getLogger("psn_api")
@@ -514,6 +514,10 @@ class GameDetailView(ProfileHotbarMixin, DetailView):
         full_trophies = []
         trophy_groups = []
         grouped_trophies = {}
+
+        form = GameDetailForm(self.request.GET)
+        context['form'] = form
+        
         if has_trophies:
             try:
                 trophies_qs = Trophy.objects.filter(game=game).order_by('trophy_id')
@@ -536,6 +540,29 @@ class GameDetailView(ProfileHotbarMixin, DetailView):
             except Exception as e:
                 logger.error(f"Game trophies query failed for {game.np_communication_id}: {e}")
                 full_trophies = []
+            
+            if form.is_valid():
+                earned_key = form.cleaned_data['earned']
+                if profile_earned:
+                    if earned_key == 'unearned':
+                        full_trophies = [t for t in full_trophies if not profile_earned.get(t['trophy_id'], {}).get('earned', False)]
+                    elif earned_key == 'earned':
+                        full_trophies = [t for t in full_trophies if profile_earned.get(t['trophy_id'], {}).get('earned', False)]
+
+                sort_key = form.cleaned_data['sort']
+                if sort_key == 'earned_date':
+                    full_trophies.sort(
+                        key=lambda t: (
+                            profile_earned.get(t['trophy_id'], {}).get('earned_date_time') is None,
+                            profile_earned.get(t['trophy_id'], {}).get('earned_date_time') or timezone.make_aware(datetime.min)
+                        )
+                    )
+                elif sort_key == 'psn_rarity':
+                    full_trophies.sort(key=lambda t: t['trophy_earn_rate'], reverse=False)
+                elif sort_key == 'pp_rarity':
+                    full_trophies.sort(key=lambda t: t['earn_rate'], reverse=False)
+                elif sort_key == 'alpha':
+                    full_trophies.sort(key=lambda t: t['trophy_name'].lower())
 
             try:
                 cached_trophy_groups = cache.get(trophy_groups_cache_key)
@@ -587,7 +614,7 @@ class GameDetailView(ProfileHotbarMixin, DetailView):
             context['has_platinum'] = has_platinum
             if has_platinum:
                 user_rating = game.concept.user_ratings.filter(profile=profile).first()
-                context['form'] = UserConceptRatingForm(instance=user_rating)
+                context['rating_form'] = UserConceptRatingForm(instance=user_rating)
 
         context['breadcrumb'] = [
             {'text': 'Home', 'url': reverse_lazy('home')},

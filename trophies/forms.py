@@ -177,3 +177,25 @@ class LinkPSNForm(forms.Form):
         help_text="Enter your exact PSN Online ID (3-16 characters, letters, numbers, hypens or underscores).",
         widget=forms.TextInput(attrs={'class': 'input w-full', 'placeholder': 'Your PSN Username'}),
     )
+
+class GameDetailForm(forms.Form):
+    earned = forms.ChoiceField(
+        choices=[
+            ('default', 'Show All'),
+            ('unearned', 'Show Only Unearned'),
+            ('earned', 'Show Only Earned'),
+        ],
+        required=False,
+        label="Show only unearned trophies.",
+    )
+    sort = forms.ChoiceField(
+        choices=[
+            ('default', 'PSN Default'),
+            ('earned_date', 'Date'),
+            ('psn_rarity', 'PSN Rarity'),
+            ('pp_rarity', 'PP Rarity'),
+            ('alpha', 'Alphabetical'),
+        ],
+        required=False,
+        label='Sort By',
+    )

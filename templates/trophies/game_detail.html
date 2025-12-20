@@ -32,6 +32,33 @@
         </div>
         </section>
     {% else %}
+        <section class="shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 w-full p-0 lg:p-4 mt-8 mx-auto">
+            <div class="card bg-base-100 border-4 border-base-300 shadow-md shadow-neutral">
+                <div class="card-body px-4 py-2">
+                    <form id="filter-form" method="get" class="mb-4">
+                        <div class="flex flex-col lg:flex-row w-7/8 justify-between mx-auto">
+                            <div class="form-control fieldset w-full lg:w-1/2">
+                                <legend class="fieldset-legend text-lg lg:text-xl italic">Sort By</legend>
+                                <select name="sort" id="id_sort" class="select select-primary w-7/8 justify-self-center">
+                                    {% for value, display in form.sort.field.choices %}
+                                        <option value="{{ value }}" {% if request.GET.sort == value %}selected{% endif %}>{{ display }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="form-control fieldset w-full lg:w-1/2">
+                                <legend class="fieldset-legend text-lg lg:text-xl italic">Earned Status</legend>
+                                <select name="earned" id="id_earned" class="select select-primary w-7/8 justify-self-center">
+                                    {% for value, display in form.earned.field.choices %}
+                                        <option value="{{ value }}" {% if request.GET.earned == value %}selected{% endif %}>{{ display }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <button id="submit-btn" type="submit" class="btn btn-md md:btn-lg border-3 shadow-md place-self-end mt-4 lg:mt-0" disabled>Feel The Power...</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </section>
         {% for group_id, trophies in grouped_trophies.items %}
             {% with trophy_groups|dict_get:group_id as group %}
                 {% with profile_group_totals|dict_get:group_id as profile_group_total %}
@@ -67,5 +94,34 @@
                 });
             });
         });
+
+        const scrollKey = 'profileScrollPos';
+        form = document.getElementById('filter-form');
+        unearnedToggle = document.getElementById('unearned-toggle')
+        if (form) {
+            form.addEventListener('submit', () => {
+                localStorage.setItem(scrollKey, window.scrollY);
+                page = 2;
+                nextPageUrl = `${baseUrl}?page=${page}&${queryParams.toString()}`;
+            });
+        }
+
+        if (unearnedToggle) {
+            unearnedToggle.addEventListener('submit', () => {
+                localStorage.setItem(scrollKey, window.scrollY);
+                page = 2;
+                nextPageUrl = `${baseUrl}?page=${page}&${queryParams.toString()}`;
+            });
+        }
+
+        const savedScroll = localStorage.getItem(scrollKey);
+        if (savedScroll) {
+            window.scrollTo({
+                top: parseInt(savedScroll),
+                behavior: 'smooth'
+            });
+            localStorage.removeItem(scrollKey);
+        }
     </script>
+    <script src="{% static 'js\submit_shimmer.js' %}"></script>
 {% endblock %}
