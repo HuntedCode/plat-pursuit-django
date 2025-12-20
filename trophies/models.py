@@ -73,6 +73,12 @@ class Profile(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     discord_id = models.BigIntegerField(unique=True, blank=True, null=True, help_text='Unique Discord user ID. Set on bot linking.')
     discord_linked_at = models.DateTimeField(blank=True, null=True, help_text='Timestamp when Discord was linked via bot.')
+    total_trophies = models.PositiveIntegerField(default=0)
+    total_unearned = models.PositiveIntegerField(default=0)
+    total_plats = models.PositiveIntegerField(default=0)
+    total_games = models.PositiveIntegerField(default=0)
+    total_completes = models.PositiveIntegerField(default=0)
+    avg_progress = models.FloatField(default=0.0)
 
     class Meta:
         indexes = [
@@ -135,7 +141,11 @@ class Profile(models.Model):
     def get_total_trophies_from_summary(self):
         if self.earned_trophy_summary:
             return self.earned_trophy_summary.get('bronze', 0) + self.earned_trophy_summary.get('silver', 0) + self.earned_trophy_summary.get('gold', 0) + self.earned_trophy_summary.get('platinum', 0)
-        
+
+    def get_average_progress(self):
+        avg = self.played_games.aggregate(avg_progress=Avg('progress'))['avg_progress']
+        return avg if avg is not None else 0.0
+
     def link_discord(self, discord_id: int):
         if self.discord_id:
             raise ValueError("Discord already linked to this profile.")

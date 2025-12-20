@@ -224,7 +224,6 @@ class ProfilesListView(ProfileHotbarMixin, ListView):
         if form.is_valid():
             query = form.cleaned_data.get('query')
             country = form.cleaned_data.get('country')
-            filter_shovelware = form.cleaned_data.get('filter_shovelware')
             sort_val = form.cleaned_data.get('sort')
 
             if query:
@@ -232,28 +231,7 @@ class ProfilesListView(ProfileHotbarMixin, ListView):
             if country:
                 qs = qs.filter(country_code=country)
             
-            earned_qs = EarnedTrophy.objects.filter(profile=OuterRef('pk'), earned=True)
-            plat_qs = earned_qs.filter(trophy__trophy_type='platinum')
-            game_qs = ProfileGame.objects.filter(profile=OuterRef('pk'))
-            complete_qs = game_qs.filter(progress=100)
-            if filter_shovelware:
-                earned_qs = earned_qs.exclude(trophy__game__is_shovelware=True)
-                plat_qs = plat_qs.exclude(trophy__game__is_shovelware=True)
-                game_qs = game_qs.exclude(game__is_shovelware=True)
-                complete_qs = complete_qs.exclude(game__is_shovelware=True)
-            
-            qs = qs.annotate(
-                total_trophies=Coalesce(Subquery(earned_qs.values('profile').annotate(count=Count('id')).values('count')[:1]), 0),
-                total_plats=Coalesce(Subquery(plat_qs.values('profile').annotate(count=Count('id')).values('count')[:1]), 0),
-                total_games=Coalesce(Subquery(game_qs.values('profile').annotate(count=Count('id')).values('count')[:1]), 0),
-                total_completes=Coalesce(Subquery(complete_qs.values('profile').annotate(count=Count('id')).values('count')[:1]), 0),
-                avg_progress=Coalesce(Subquery(game_qs.values('profile').annotate(avg=Avg('progress')).values('avg')[:1]), 0.0),
-            )
-
-            recent_plat_qs = EarnedTrophy.objects.filter(earned=True, trophy__trophy_type='platinum')
-            if filter_shovelware:
-                recent_plat_qs = recent_plat_qs.exclude(trophy__game__is_shovelware=True)
-            recent_plat_qs = recent_plat_qs.order_by(F('earned_date_time').desc(nulls_last=True))
+            recent_plat_qs = EarnedTrophy.objects.filter(earned=True, trophy__trophy_type='platinum').order_by(F('earned_date_time').desc(nulls_last=True))[:1]
             qs = qs.prefetch_related(Prefetch('earned_trophy_entries', queryset=recent_plat_qs, to_attr='recent_platinum'))
 
             if sort_val == 'trophies':
@@ -681,15 +659,13 @@ class ProfileDetailView(ProfileHotbarMixin, DetailView):
         # Header
         header_stats = {}
 
-        header_stats['total_games'] = profile.played_games.count()
+        header_stats['total_games'] = profile.total_games
 
-        earned_trophies_qs = profile.earned_trophy_entries.all()
-        header_stats['total_earned_trophies'] = earned_trophies_qs.filter(earned=True).count()
-        header_stats['total_unearned_trophies'] = earned_trophies_qs.filter(earned=False).count()
+        header_stats['total_earned_trophies'] = profile.total_trophies
+        header_stats['total_unearned_trophies'] = profile.total_unearned
 
-        profile_games_qs = profile.played_games.all()
-        header_stats['total_completions'] = profile_games_qs.filter(progress=100).count()
-        header_stats['average_completion'] = profile_games_qs.aggregate(avg_progress=Avg('progress'))['avg_progress'] or 0
+        header_stats['total_completions'] = profile.total_completes
+        header_stats['average_completion'] = profile.avg_progress
 
         recent_platinum = profile.earned_trophy_entries.filter(earned=True, trophy__trophy_type='platinum').select_related('trophy', 'trophy__game').order_by(F('earned_date_time').desc(nulls_last=True)).first()
         header_stats['recent_platinum'] = {

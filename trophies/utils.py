@@ -252,6 +252,20 @@ def get_next_sync(profile) -> int:
     next_sync = profile.last_synced + timedelta(hours=1)
     return next_sync
 
+def update_profile_games(profile):
+    from trophies.models import ProfileGame
+    profile.total_games = ProfileGame.objects.filter(profile=profile).count()
+    profile.total_completes = ProfileGame.objects.filter(profile=profile, progress=100).count()
+    profile.avg_progress = profile.get_average_progress()
+    profile.save(update_fields=['total_games', 'total_completes', 'avg_progress'])
+
+def update_profile_trophy_counts(profile):
+    from trophies.models import EarnedTrophy
+    profile.total_trophies = EarnedTrophy.objects.filter(profile=profile, earned=True).count()
+    profile.total_unearned = EarnedTrophy.objects.filter(profile=profile, earned=False).count()
+    profile.total_plats = EarnedTrophy.objects.filter(profile=profile, earned=True, trophy__trophy_type='platinum').count()
+    profile.save(update_fields=['total_trophies', 'total_unearned', 'total_plats'])
+
 # Common PS Apps - No Trophies
 MODERN_PLATFORMS = ['PS4', 'PS5']
 ALL_PLATFORMS = MODERN_PLATFORMS + ['PS3', 'PSVITA', 'PSVR']

@@ -14,10 +14,10 @@ from psnawp_api.models.trophies.trophy_constants import PlatformType
 from requests import HTTPError
 from requests.exceptions import ConnectionError, Timeout
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
-from .models import Profile, Game, TitleID
+from .models import Profile, Game, TitleID, TrophyGroup
 from .services.psn_api_service import PsnApiService
 from .psn_manager import PSNManager
-from .utils import redis_client, log_api_call, TITLE_ID_BLACKLIST, TITLE_STATS_SUPPORTED_PLATFORMS, check_profile_badges
+from .utils import redis_client, log_api_call, TITLE_ID_BLACKLIST, TITLE_STATS_SUPPORTED_PLATFORMS, check_profile_badges, update_profile_games, update_profile_trophy_counts
 
 logger = logging.getLogger("psn_api")
 
@@ -290,6 +290,7 @@ class TokenKeeper:
             time.sleep(0.1)
         logger.error(f"No token available for use.")
         return None
+    
     @retry(
         retry=retry_if_exception_type((ConnectionError, Timeout)),
         stop=stop_after_attempt(10),
@@ -397,6 +398,8 @@ class TokenKeeper:
             logger.error(f"Profile {profile_id} does not exist.")
         job_type = 'sync_complete'
 
+        time.sleep(10)
+        update_profile_trophy_counts(profile)
         profile.set_sync_status('synced')
         logger.info(f"{profile.display_psn_username} account has finished syncing!")
     
@@ -475,13 +478,14 @@ class TokenKeeper:
                     break
             title_defined_trophies_total = title.defined_trophies.bronze + title.defined_trophies.silver + title.defined_trophies.gold + title.defined_trophies.platinum
             args = [game.np_communication_id, game.title_platform[0] if not game.title_platform[0] == 'PSPC' else game.title_platform[1]]
-            if created or game.get_total_defined_trophies() != title_defined_trophies_total:
+            if created or game.get_total_defined_trophies() != title_defined_trophies_total or not TrophyGroup.objects.filter(game=game).exists():
                 PSNManager.assign_job('sync_trophy_groups', args, profile.id)
                 job_counter += 1
             PSNManager.assign_job('sync_trophies', args, profile.id)
             job_counter +=1
         
         profile.add_to_sync_target(job_counter)
+        update_profile_games(profile)
 
         # Check profile health after processing all titles
         PSNManager.assign_job('check_profile_health', args=[], profile_id=profile.id, priority_override='low_priority')
@@ -719,6 +723,7 @@ class TokenKeeper:
             job_counter += 1
         
         profile.add_to_sync_target(job_counter)
+        update_profile_games(profile)
         job_counter = 0
         
         title_stats_to_be_updated = []
