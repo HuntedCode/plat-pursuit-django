@@ -61,10 +61,9 @@ class ProxiedPSNAWP(BasePSNAWP):
         if rate_limit is None:
             rate_limit = Rate(1, Duration.SECOND * 3)
 
-        _header = default_headers | headers if headers is not None else default_headers
         self.authenticator = ProxiedAuthenticator(
             npsso_cookie=npsso_cookie,
-            common_headers=_header,
+            common_headers=default_headers,
             rate_limit=rate_limit,
             proxy_url=proxy_url
         )
