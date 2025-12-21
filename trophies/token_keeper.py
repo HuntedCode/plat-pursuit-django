@@ -326,6 +326,8 @@ class TokenKeeper:
                     self._job_sync_trophies(profile_id, args[0], args[1])
                 elif job_type == 'profile_refresh':
                     self._job_profile_refresh(profile_id)
+                elif job_type == 'sync_profilegame_stats':
+                    self._sync_profilegame_stats(profile_id, args[0])
                 elif job_type == 'check_profile_health':
                     self._job_check_profile_health(profile_id)
                 elif job_type == 'sync_games_only':
@@ -563,10 +565,12 @@ class TokenKeeper:
             limit += page_size
             offset += page_size
         
+        touched_profilegame_ids = []
         num_title_stats = 0
         for title in trophy_titles:
             game, created, _ = PsnApiService.create_or_update_game(title)
             profile_game, _ = PsnApiService.create_or_update_profile_game(profile, game, title)
+            touched_profilegame_ids.append(profile_game.id)
             for platform in game.title_platform:
                 if platform in TITLE_STATS_SUPPORTED_PLATFORMS:
                     num_title_stats += 1
@@ -583,6 +587,7 @@ class TokenKeeper:
         update_profile_games(profile)
 
         # Check profile health after processing all titles
+        PSNManager.assign_job('sync_profilegame_stats', args=[touched_profilegame_ids], profile_id=profile.id, priority_override='low_priority')
         PSNManager.assign_job('check_profile_health', args=[], profile_id=profile.id, priority_override='low_priority')
 
         # Assign jobs for title_stats
@@ -682,7 +687,6 @@ class TokenKeeper:
         for trophy_data in trophies:
             trophy, _ = PsnApiService.create_or_update_trophy_from_trophy_data(game, trophy_data)
             PsnApiService.create_or_update_earned_trophy_from_trophy_data(profile, trophy, trophy_data)
-        PsnApiService.update_profilegame_stats(profile, game)
         profile.increment_sync_progress()
     
     def _job_sync_title_id(self, profile_id: str, title_id_str: str, np_communication_id: str):
@@ -807,9 +811,11 @@ class TokenKeeper:
             limit += page_size
             offset += page_size
         
+        touched_profilegame_ids = []
         for title in trophy_titles_to_be_updated:
             game, created, _ = PsnApiService.create_or_update_game(title)
             profile_game, _ = PsnApiService.create_or_update_profile_game(profile, game, title)
+            touched_profilegame_ids.append(profile_game.id)
             title_defined_trophies_total = title.defined_trophies.bronze + title.defined_trophies.silver + title.defined_trophies.gold + title.defined_trophies.platinum
             args = [game.np_communication_id, game.title_platform[0] if not game.title_platform[0] == 'PSPC' else game.title_platform[1]]
             if created or game.get_total_defined_trophies() != title_defined_trophies_total or not TrophyGroup.objects.filter(game=game).exists():
@@ -876,9 +882,16 @@ class TokenKeeper:
             
             profile.add_to_sync_target(job_counter)
         if timezone.now() - timedelta(days=1) > profile.last_profile_health_check:
-            PSNManager.assign_job('check_profile_health', args=[], profile_id=profile.id, priority_override='low_priority')
+            PSNManager.assign_job('check_profile_health', args=[], profile_id=profile.id, priority_override='medium_priority')
+        PSNManager.assign_job('sync_profilegame_stats', args=[touched_profilegame_ids], profile_id=profile.id, priority_override='medium_priority')
         PSNManager.check_profile_badges(profile, 'medium_priority')
         PSNManager.sync_complete(profile, 'medium_priority')
+
+    def _sync_profilegame_stats(self, profile_id: int, touched_profilegame_ids: list[int]):
+        job_type = 'sync_profilegame_stats'
+
+        PsnApiService.update_profilegame_stats(touched_profilegame_ids)
+        logger.info(f"ProfileGame Stats updated for {profile_id} successfully! | {len(touched_profilegame_ids)} profilegames updated")
 
     def _job_check_profile_health(self, profile_id: int):
         try:
