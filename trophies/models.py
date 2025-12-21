@@ -2,9 +2,7 @@ from django.db import models
 from django.utils import timezone
 from users.models import CustomUser
 from django.core.validators import RegexValidator, MinValueValidator, MaxValueValidator
-from django.db.models import F, Avg, Count, FloatField, Case, When
-from django.db.models.functions import Cast
-from django.db.transaction import atomic
+from django.db.models import F, Avg, Count
 from datetime import timedelta
 from trophies.utils import count_unique_game_groups, calculate_trimmed_mean, TITLE_STATS_SUPPORTED_PLATFORMS, NA_REGION_CODES, EU_REGION_CODES, JP_REGION_CODES, AS_REGION_CODES, SHOVELWARE_THRESHOLD
 import secrets
@@ -82,7 +80,7 @@ class Profile(models.Model):
 
     class Meta:
         indexes = [
-            models.Index(fields=["psn_username"], name="psn_username_idx"),
+models.Index(fields=["psn_username"], name="psn_username_idx"),
             models.Index(fields=["account_id"], name="account_id_idx"),
             models.Index(fields=['discord_id'], name='discord_id_idx'),
             models.Index(fields=['is_discord_verified', 'last_synced'], name='verified_synced_idx'),
@@ -93,6 +91,11 @@ class Profile(models.Model):
             models.Index(fields=['total_games'], name='profile_total_games_idx'),
             models.Index(fields=['total_completes'], name='profile_total_completes_idx'),
             models.Index(fields=['avg_progress'], name='profile_avg_progress_idx'),
+            models.Index(fields=['last_synced'], name='profile_last_synced_idx'),
+            models.Index(fields=['created_at'], name='profile_created_at_idx'),
+            models.Index(fields=['country_code'], name='profile_country_code_idx'),
+            models.Index(fields=['is_linked', 'sync_tier'], name='profile_linked_tier_idx'),
+            models.Index(fields=['is_discord_verified', 'discord_linked_at'], name='profile_discord_idx'),
         ]
 
     def __str__(self):
@@ -239,6 +242,8 @@ class Game(models.Model):
             models.Index(fields=['title_platform'], name='game_platform_idx'),
             models.Index(fields=['created_at'], name='game_created_idx'),
             models.Index(fields=['is_obtainable', 'title_platform'], name='game_obtainable_platform_idx'),
+            models.Index(fields=['is_shovelware'], name='game_shovelware_idx'),
+            models.Index(fields=['is_regional'], name='game_regional_idx'),
         ]
 
     def add_concept(self, concept):
@@ -273,7 +278,6 @@ class Game(models.Model):
 
     def get_total_defined_trophies(self):
         return self.defined_trophies['bronze'] + self.defined_trophies['silver'] + self.defined_trophies['gold'] + self.defined_trophies['platinum']
-
 
     def __str__(self):
         return self.title_name
@@ -546,7 +550,8 @@ class EarnedTrophy(models.Model):
     class Meta:
         unique_together = ["profile", "trophy"]
         indexes = [
-            models.Index(fields=["last_updated"], name="earned_trophy_updated_idx")
+            models.Index(fields=["last_updated"], name="earned_trophy_updated_idx"),
+            models.Index(fields=['earned_date_time'], name="earned_trophy_earned_time_idx"),
         ]
 
 class UserTrophySelection(models.Model):
