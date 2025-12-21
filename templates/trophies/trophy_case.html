@@ -6,7 +6,7 @@
     {% include 'partials/breadcrumb.html' with items=breadcrumb %}
     <h1 class="text-base sm:text-lg md:text-xl lg:text-2xl xl:text-3xl text-base-content text-center line-clamp-1"><span class="font-bold italic">{{ profile.display_psn_username }}'s</span> <span class="text-trophy-platinum font-bold">Platinum</span> Trophy Case!</h1>
     <div class="divider divider-vertical"></div>
-    <div id="items-grid" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
+    <div id="items-grid" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4" data-paginate="{{ paginate }}">
         {% include 'trophies/partials/trophy_case/trophy_case_items.html' %}
     </div>
     {% if request.user == profile.user %}

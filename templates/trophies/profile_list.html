@@ -68,7 +68,7 @@
             {% endwith %}
         </h1>
     </div>
-    <div id="items-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-2">
+    <div id="items-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-2" data-paginate="{{ paginate }}">
         {% include 'trophies/partials/profile_list/profile_cards.html' %}
     </div>
     <div id="loading" class="hidden mt-4 text-center">

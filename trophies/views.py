@@ -30,7 +30,7 @@ logger = logging.getLogger("psn_api")
 class GamesListView(ProfileHotbarMixin, ListView):
     model = Game
     template_name = 'trophies/game_list.html'
-    paginate_by = 50
+    paginate_by = 30
 
     def get_queryset(self):
         qs = super().get_queryset()
@@ -105,7 +105,9 @@ class GamesListView(ProfileHotbarMixin, ListView):
             {'text': 'Games'},
         ]
 
+        print(self.paginate_by)
         context['form'] = GameSearchForm(self.request.GET)
+        context['paginate'] = self.paginate_by
         context['selected_platforms'] = self.request.GET.getlist('platform')
         context['selected_regions'] = self.request.GET.getlist('regions')
         context['view_type'] = self.request.GET.get('view', 'grid')
@@ -125,7 +127,7 @@ class GamesListView(ProfileHotbarMixin, ListView):
 class TrophiesListView(ProfileHotbarMixin, ListView):
     model = Trophy
     template_name = 'trophies/trophy_list.html'
-    paginate_by = 50
+    paginate_by = 30
 
     def get_queryset(self):
         qs = super().get_queryset()
@@ -198,6 +200,7 @@ class TrophiesListView(ProfileHotbarMixin, ListView):
         ]
 
         context['form'] = TrophySearchForm(self.request.GET)
+        context['paginate'] = self.paginate_by
         context['selected_platforms'] = self.request.GET.getlist('platform')
         context['selected_types'] = self.request.GET.getlist('type')
         context['selected_regions'] = self.request.GET.getlist('region')
@@ -214,7 +217,7 @@ class TrophiesListView(ProfileHotbarMixin, ListView):
 class ProfilesListView(ProfileHotbarMixin, ListView):
     model = Profile
     template_name = 'trophies/profile_list.html'
-    paginate_by = 50
+    paginate_by = 20
 
     def get_queryset(self):
         qs = super().get_queryset()
@@ -258,6 +261,7 @@ class ProfilesListView(ProfileHotbarMixin, ListView):
         ]
 
         context['form'] = ProfileSearchForm(self.request.GET)
+        context['paginate_by'] = self.paginate_by
         context['filter_shovelware'] = self.request.GET.get('filter_shovelware', '')
         return context
     
@@ -709,13 +713,9 @@ class ProfileDetailView(ProfileHotbarMixin, DetailView):
                 plat_status = form.cleaned_data.get('plat_status')
                 sort_val = form.cleaned_data.get('sort')
 
-                print("Calculating...")
-
                 games_qs = profile.played_games.all().select_related('game').annotate(
                     annotated_total_trophies=F('earned_trophies_count') + F('unearned_trophies_count')  # Computed from denorm
                 )
-
-                print("Finished...")
 
                 if query:
                     games_qs = games_qs.filter(Q(game__title_name__icontains=query))
@@ -756,8 +756,6 @@ class ProfileDetailView(ProfileHotbarMixin, DetailView):
 
                 games_qs = games_qs.order_by(*order)
 
-                print("Sorting finished...")
-
                 games_paginator = Paginator(games_qs, per_page)
                 if int(page_number) > games_paginator.num_pages:
                     game_page_obj = []
@@ -765,8 +763,6 @@ class ProfileDetailView(ProfileHotbarMixin, DetailView):
                     game_page_obj = games_paginator.get_page(page_number)
                 context['profile_games'] = game_page_obj
                 context['trophy_log'] = []
-
-                print("games tab done...")
         
         elif tab == 'trophies':
             form = ProfileTrophiesForm(self.request.GET)
@@ -851,7 +847,6 @@ class ProfileDetailView(ProfileHotbarMixin, DetailView):
         context['trophy_case_count'] = len(trophy_case)
         context['current_tab'] = tab
 
-        print("Returning context...")
         return context
     
     def get_template_names(self):
@@ -867,7 +862,7 @@ class TrophyCaseView(ProfileHotbarMixin, ListView):
     model = EarnedTrophy
     template_name = 'trophies/trophy_case.html'
     context_object_name = 'platinums'
-    paginate_by = 50
+    paginate_by = 30
 
     def get_queryset(self):
         profile = get_object_or_404(Profile, psn_username=self.kwargs['psn_username'].lower())
@@ -884,6 +879,7 @@ class TrophyCaseView(ProfileHotbarMixin, ListView):
             {'text': f"{profile.display_psn_username}", 'url': reverse_lazy('profile_detail', kwargs={'psn_username': profile.psn_username})},
             {'text': 'Trophy Case'}
         ]
+        context['paginate'] = self.paginate_by
         context['profile'] = profile
         context['selected_ids'] = selected_ids
         context['selected_count'] = len(selected_ids)

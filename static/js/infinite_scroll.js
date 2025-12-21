@@ -4,6 +4,9 @@ document.addEventListener('DOMContentLoaded', function() {
     const sentinel = document.getElementById('sentinel');
     if (!grid || !loading || !sentinel) return;
 
+    paginateBy = grid.dataset.paginate;
+    console.log(paginateBy);
+
     let page = 2;
     const baseUrl = window.location.pathname;
     const queryParams = new URLSearchParams(window.location.search);
@@ -20,6 +23,14 @@ document.addEventListener('DOMContentLoaded', function() {
             const response = await fetch(nextPageUrl, {
                 headers: {'X-Requested-With': 'XMLHttpRequest' }
             });
+            if (!response.ok) {
+                if (response.status === 404) {
+                    nextPageUrl = null;
+                } else {
+                    console.error(`Error: ${response.status} - ${response.statusText}`);
+                }
+                return;
+            }
             const html = await response.text();
             const parser = new DOMParser();
             const doc = parser.parseFromString(html, 'text/html');
@@ -33,6 +44,7 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         } catch (error) {
             console.error('Error loading more items:', error);
+            nextPageUrl = null;
         } finally {
             isLoading = false;
             loading.classList.add('hidden');
@@ -51,7 +63,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }, { threshold: 1.0 });
 
-    if (grid.children.length >= 50) {
+    if (grid.children.length >= paginateBy) {
         observer.observe(sentinel);
     }
 });

@@ -119,11 +119,11 @@
         </div>
     </div>
     {% if view_type == 'list' %}
-        <div id="items-grid" class="space-y-2">
+        <div id="items-grid" class="space-y-2" data-paginate="{{ paginate }}">
             {% include 'trophies/partials/game_list/game_list_items.html' %}
         </div>
     {% else %}
-        <div id="items-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-2">
+        <div id="items-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-2" data-paginate="{{ paginate }}">
             {% include 'trophies/partials/game_list/game_cards.html' %}
         </div>
     {% endif %}
