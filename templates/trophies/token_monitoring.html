@@ -12,51 +12,62 @@
                     {{ error }}
                 </div>
             {% elif machines %}
-                <div class="overflow-x-auto">
-                    <table class="table w-full table-zebra">
-                        <thead>
-                            <tr>
-                                <th>Machine ID</th>
-                                <th>Instance ID</th>
-                                <th>Outbound IP</th>
-                                <th>Busy</th>
-                                <th>Healthy</th>
-                                <th>Calls in Window</th>
-                                <th>Access Expiry (s)</th>
-                                <th>Refresh Expiry (s)</th>
-                                <th>Token Scopes</th>
-                                <th>NPSSO Cookie</th>
-                                <th>Last Error</th>
-                                <th>Uptime (s)</th>
-                                <th>Pending Refresh</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for machine_id, instances in machines.items %}
-                                {% for inst_id, stat in instances.items %}
-                                    <tr>
-                                        <td>{{ machine_id }}</td>
-                                        <td>{{ inst_id }}</td>
-                                        <td>{{ stat.outbound_ip }}</td>
-                                        <td>{% if stat.busy %}Yes{% else %}No{% endif %}</td>
-                                        <td>{% if stat.healthy %}Yes{% else %}No{% endif %}</td>
-                                        <td>{{ stat.calls_in_window }}</td>
-                                        <td>{{ stat.access_token_expiry_in|floatformat:0 }}</td>
-                                        <td>{{ stat.refresh_token_expiry_in|floatformat:0 }}</td>
-                                        <td>{{ stat.token_scopes }}</td>
-                                        <td>{{ stat.npsso_cookie }}</td>
-                                        <td>{{ stat.last_error|default:"None" }}</td>
-                                        <td>{{ stat.uptime_seconds|floatformat:0 }}</td>
-                                        <td>{% if stat.pending_refresh %}Yes{% else %}No{% endif %}</td>
-                                    </tr>
+                <div class="space-y-4">
+                    {% for machine_id, groups in machines.items %}
+                        <div class="collapse collapse-arrow bg-base-200">
+                            <input type="checkbox" checked /> 
+                            <div class="collapse-title text-lg font-medium">Machine: {{ machine_id }} ({{ groups|length }} Groups)</div>
+                            <div class="collapse-content">
+                                {% for group_id, group_data in groups.items %}
+                                    <div class="mt-4">
+                                        <h4 class="text-md font-semibold mb-2">Group: {{ group_id }}</h4>
+                                        <div class="overflow-x-auto">
+                                            <table class="table w-full table-zebra">
+                                                <thead>
+                                                    <tr>
+                                                        <th>Instance ID</th>
+                                                        <th>Outbound IP</th>
+                                                        <th>Busy</th>
+                                                        <th>Healthy</th>
+                                                        <th>Calls in Window</th>
+                                                        <th>Access Expiry (s)</th>
+                                                        <th>Refresh Expiry (s)</th>
+                                                        <th>Token Scopes</th>
+                                                        <th>NPSSO Cookie</th>
+                                                        <th>Last Error</th>
+                                                        <th>Uptime (s)</th>
+                                                        <th>Pending Refresh</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {% for inst_id, stat in group_data.instances.items %}
+                                                        <tr>
+                                                            <td>{{ inst_id }}</td>
+                                                            <td>{{ stat.outbound_ip }}</td>
+                                                            <td>{% if stat.busy %}Yes{% else %}No{% endif %}</td>
+                                                            <td>{% if stat.healthy %}Yes{% else %}No{% endif %}</td>
+                                                            <td>{{ stat.calls_in_window }}</td>
+                                                            <td>{{ stat.access_token_expiry_in|floatformat:0 }}</td>
+                                                            <td>{{ stat.refresh_token_expiry_in|floatformat:0 }}</td>
+                                                            <td>{{ stat.token_scopes }}</td>
+                                                            <td>{{ stat.npsso_cookie }}</td>
+                                                            <td>{{ stat.last_error|default:"None" }}</td>
+                                                            <td>{{ stat.uptime_seconds|floatformat:0 }}</td>
+                                                            <td>{% if stat.pending_refresh %}Yes{% else %}No{% endif %}</td>
+                                                        </tr>
+                                                    {% endfor %}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
                                 {% endfor %}
-                            {% endfor %}
-                        </tbody>
-                    </table>
+                            </div>
+                        </div>
+                    {% endfor %}
                 </div>
             {% else %}
-                <div class="alert alert-info mb-4">
-                    No stats available yet. Ensure TokenKeeper instances are running and publishing data to Redis.
+                <div class="alert alert-info">
+                    No stats available.
                 </div>
             {% endif %}
             <div class="mt-8">

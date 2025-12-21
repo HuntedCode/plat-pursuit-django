@@ -674,7 +674,7 @@ class ProfileDetailView(ProfileHotbarMixin, DetailView):
             header_stats['recent_platinum'] = None
 
         if recent_platinum['rarest_rate'] is not None:
-            rarest_entry = profile.earned_trophy_entries.filter(trophy__trophy_earn_rate=recent_platinum['rarest_rate'], trophy__trophy_type='platinum').first()
+            rarest_entry = profile.earned_trophy_entries.filter(trophy__trophy_earn_rate=recent_platinum['rarest_rate'], trophy__trophy_type='platinum', earned=True).first()
             header_stats['rarest_platinum'] = {
                 'trophy': rarest_entry.trophy,
                 'game': rarest_entry.trophy.game,
@@ -1391,7 +1391,13 @@ class TokenMonitoringView(TemplateView):
             if stats_json:
                 try:
                     stats = json.loads(stats_json)
-                    aggregated[stats['machine_id']] = stats['instances']
+                    machine_id = stats['machine_id']
+                    group_id = stats.get('group_id', 'default')
+                    if machine_id not in aggregated:
+                        aggregated[machine_id] = {}
+                    if group_id not in aggregated[machine_id]:
+                        aggregated[machine_id][group_id] = {}
+                    aggregated[machine_id][group_id]['instances'] = stats['instances']
                 except json.JSONDecodeError:
                     logger.error(f"Invalid JSON in Redis key {key}")
         return aggregated

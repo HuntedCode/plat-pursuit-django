@@ -1,15 +1,19 @@
 import json
+from random import choice
 import time
 import threading
 import logging
 import os
 import atexit
+from pyrate_limiter import Duration, Rate
 import requests
 from typing import Optional, Dict
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from django.utils import timezone
-from psnawp_api import PSNAWP
+from psnawp_api import PSNAWP as BasePSNAWP
+from psnawp_api.core.request_builder import RequestBuilder as BaseRequestBuilder
+from psnawp_api.core.authenticator import Authenticator as BaseAuthenticator
 from psnawp_api.core.psnawp_exceptions import PSNAWPForbiddenError
 from psnawp_api.models.trophies.trophy_constants import PlatformType
 from requests import HTTPError
@@ -22,11 +26,54 @@ from .utils import redis_client, log_api_call, TITLE_ID_BLACKLIST, TITLE_STATS_S
 
 logger = logging.getLogger("psn_api")
 
+class ProxiedRequestBuilder(BaseRequestBuilder):
+    def __init__(self, common_headers, rate_limit, proxy_url=None):
+        super().__init__(common_headers, rate_limit)
+        if proxy_url:
+            self.session.proxies = {'http': proxy_url, 'https': proxy_url}
+
+class ProxiedAuthenticator(BaseAuthenticator):
+    def __init__(self, npsso_cookie, common_headers, rate_limit, proxy_url=None):
+        super().__init__(npsso_cookie, common_headers, rate_limit)
+        self.request_builder = ProxiedRequestBuilder(common_headers, rate_limit, proxy_url=proxy_url)
+
+class ProxiedPSNAWP(BasePSNAWP):
+    def __init__(self, npsso_cookie, headers=None, rate_limit=None, proxy_url=None):
+        random_ua = [
+            "Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/55.0.6598.1817 Mobile Safari/537.36",
+            "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Mobile Safari/537.36",
+            "Mozilla/5.0 (Linux; Android 5.0; SM-G900P Build/LRX21T) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/39.0.5707.1741 Mobile Safari/537.36",
+            "Mozilla/5.0 (Android 14; Mobile; rv:137.0) Gecko/137.0 Firefox/137.0",
+            "Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 "
+            "(KHTML, like Gecko) Chrome/55.0.9318.1385 Mobile Safari/537.36"
+            "Mozilla/5.0 (iPhone; CPU iPhone OS 18_3_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/135.0.7049.83 Mobile/15E148 Safari/604.1",
+            "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Mobile/15E148 Safari/604.1",
+            "Mozilla/5.0 (iPhone; CPU iPhone OS 11_0 like Mac OS X) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/44.0.2469.1901 Mobile Safari/537.36",
+            "Mozilla/5.0 (iPhone; CPU iPhone OS 18_3_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.3.1 Mobile/15E148 Safari/604.1",
+            "Mozilla/5.0 (iPhone; CPU iPhone OS 18_3_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.3.1 Mobile/15E148 Safari/604.1",
+        ]
+        default_headers = {
+            "User-Agent": choice(random_ua),
+            "Accept-Language": "en-US,en;q=0.9",
+            "Country": "US",
+        }
+
+        if rate_limit is None:
+            rate_limit = Rate(1, Duration.SECOND * 3)
+
+        _header = default_headers | headers if headers is not None else default_headers
+        self.authenticator = ProxiedAuthenticator(
+            npsso_cookie=npsso_cookie,
+            common_headers=_header,
+            rate_limit=rate_limit,
+            proxy_url=proxy_url
+        )
+
 @dataclass
 class TokenInstance:
     instance_id: int
     token: str
-    client: PSNAWP
+    client: ProxiedPSNAWP
     user_cache: dict = None
     access_expiry: datetime = None
     refresh_expiry: datetime = None
@@ -35,6 +82,7 @@ class TokenInstance:
     is_busy: bool = False
     last_error: str = None
     outbound_ip: str = None
+    proxy_url: str = None
 
     def __post_init__(self):
         if self.user_cache is None:
@@ -94,11 +142,19 @@ class TokenKeeper:
         self.max_jobs_per_profile = int(os.getenv("MAX_JOBS_PER_PROFILE", 3))
         self.stats_interval = 5
         self.machine_id = os.getenv("MACHINE_ID", "default")
+        token_groups_str = os.getenv('TOKEN_GROUPS', os.getenv('PSN_TOKENS', ''))
+        proxy_ips_str = os.getenv('PROXY_IPS', '')
+        self.token_groups = [group.split(',') for group in token_groups_str.split('|') if group]
+        self.proxy_ips = [proxy if proxy else None for proxy in proxy_ips_str.split("|") if proxy_ips_str]
 
-        if len(self.tokens) != 3:
-            raise ValueError("Exactly 3 PSN_TOKENS required")
+        if not self.token_groups or any(len(group) != 3 for group in self.token_groups):
+            raise ValueError("TOKEN GROUPS must be pipe-separated groups of exactly 3 comma-separated tokens each")
         
-        self.instances: Dict[int, TokenInstance] = {}
+        if len(self.proxy_ips) > 0 and len(self.proxy_ips) != len(self.token_groups):
+            logger.warning("PROXY_IPS count doesn't match TOKEN_GROUPS - using available proxies")
+
+        self.group_instances = {}
+        
         self._health_thread = None
         self._stats_thread = None
         self._job_workers = []
@@ -106,7 +162,7 @@ class TokenKeeper:
         if redis_client.get(running_key):
             logger.info(f"TokenKeeper already running for machine {self.machine_id}")
             return None
-        self.initialize_instances()
+        self.initialize_groups()
         self._start_health_monitor()
         self._start_stats_publisher()
         self._start_job_workers()
@@ -129,10 +185,11 @@ class TokenKeeper:
         logger.info("Cleaning up TokenKeeper Redis state")
         running_key = f"token_keeper:running:{self.machine_id}"
         redis_client.delete(running_key)
-        for i in range(len(self.tokens)):
-            redis_client.delete(f"token_keeper:instance:{self.machine_id}:{i}:token")
-            redis_client.delete(f"instance_lock:{self.machine_id}:{i}")
-            redis_client.delete(f"token_keeper:pending_refresh:{self.machine_id}:{i}")
+        for group_id, group in self.group_instances.items():
+            for i in range(len(group['instances'])):
+                redis_client.delete(f"token_keeper:instance:{self.machine_id}:{group_id}:{i}:token")
+                redis_client.delete(f"instance_lock:{self.machine_id}:{group_id}:{i}")
+                redis_client.delete(f"token_keeper:pending_refresh:{self.machine_id}:{group_id}:{i}")
         logger.info("TokenKeeper Redis state cleaned")
 
     
@@ -148,46 +205,53 @@ class TokenKeeper:
         logger.info("TokenKeeper stats publisher started")
 
     def _start_job_workers(self):
-        num_workers = 3
-        for _ in range(num_workers):
+        num_workers_per_group = 3
+        total_workers = num_workers_per_group * len(self.token_groups)
+        for _ in range(total_workers):
             t = threading.Thread(target=self._job_worker_loop, daemon=True)
             t.start()
             self._job_workers.append(t)
-        logger.info(f"Started {num_workers} job worker threads")
+        logger.info(f"Started {total_workers} job worker threads")
     
     def _health_loop(self):
         """Infinite loop: Check health every interval."""
         while True:
             time.sleep(self.health_interval)
             redis_client.set(f"token_keeper:running:{self.machine_id}", "1", ex=3600)
-            for instance_id, inst in self.instances.items():
-                self._check_and_refresh(inst)
+            for group_id, group in self.group_instances.items():
+                for instance_id, inst in group['instances'].items():
+                    self._check_and_refresh(inst)
 
-    def initialize_instances(self):
-        """Create 3 live PSNAWP clients."""
-        for i, token in enumerate(self.tokens):
-            start_time = time.time()
-            client = PSNAWP(token)
-            self._record_call(token)
-            client.user(online_id='PlatPursuit') # Generates refresh tokens, etc.
-            inst = TokenInstance(
-                instance_id=i,
-                token=token,
-                client=client,
-                user_cache={}
-            )
-            try:
-                ip_response = requests.get('https://api.ipify.org', timeout=2)
-                inst.outbound_ip = ip_response.text
-                logger.info(f"Instance {inst.instance_id} using IP: {inst.outbound_ip}")
-            except Exception as e:
-                logger.warning(f"Failed to fetch IP for instance {inst.instance_id}: {e}")
-                inst.outbound_ip = 'Unknown'
-            self.instances[i] = inst
-            redis_client.set(f"token_keeper:instance:{self.machine_id}:{i}:token", token)
-            self._record_call(token)
-            logger.info(f"Instance {i} initialized with live client")
-            log_api_call("client_init", token, None, 200, time.time() - start_time)
+    def initialize_groups(self):
+        """Create groups of 3 live PSNAWP clients."""
+        for group_id, tokens in enumerate(self.token_groups):
+            proxy = self.proxy_ips[group_id] if group_id < len(self.proxy_ips) else None
+            instances = {}
+            for i, token in enumerate(tokens):
+                start_time = time.time()
+                client = ProxiedPSNAWP(token, proxy_url=proxy)
+                self._record_call(token)
+                client.user(online_id='PlatPursuit') # Generates refresh tokens, etc.
+                inst = TokenInstance(
+                    instance_id=i,
+                    token=token,
+                    client=client,
+                    user_cache={},
+                    proxy_url=proxy
+                )
+                try:
+                    ip_response = requests.get('https://api.ipify.org', timeout=2)
+                    inst.outbound_ip = ip_response.text
+                    logger.info(f"Group {group_id} Instance {inst.instance_id} using IP: {inst.outbound_ip}")
+                except Exception as e:
+                    logger.warning(f"Failed to fetch IP for group {group_id} instance {inst.instance_id}: {e}")
+                    inst.outbound_ip = 'Unknown'
+                instances[i] = inst
+                redis_client.set(f"token_keeper:instance:{self.machine_id}:{group_id}:{i}:token", token)
+                self._record_call(token)
+                logger.info(f"Group {group_id} Instance {i} initialized with live client")
+                log_api_call("client_init", token, None, 200, time.time() - start_time)
+            self.group_instances[group_id] = {'instances': instances, 'proxy': proxy}
 
     def _is_healthy(self, inst : TokenInstance) -> bool:
         """Quick health check."""
@@ -198,14 +262,15 @@ class TokenKeeper:
     
     def _check_and_refresh(self, inst : TokenInstance):
         """Refresh token if time remaining less than refresh threshold and clean cache."""
+        group_id = next((gid for gid, g in self.group_instances.items() if inst in g['instances'].values()), None)
         try:
             if inst.get_access_expiry_in_seconds() < self.refresh_threshold:
                 if inst.is_busy:
-                    redis_client.set(f"token_keeper:pending_refresh:{self.machine_id}:{inst.instance_id}", "1", ex=3600)
-                    logger.debug(f"Instance {inst.instance_id} needs refresh but is busy.")
+                    redis_client.set(f"token_keeper:pending_refresh:{self.machine_id}:{group_id}:{inst.instance_id}", "1", ex=3600)
+                    logger.debug(f"Group {group_id} Instance {inst.instance_id} needs refresh but is busy.")
                     return
                 start = time.time()
-                inst.client = PSNAWP(inst.token)
+                inst.client = ProxiedPSNAWP(inst.token, inst.proxy_url)
                 inst.client.user(online_id='PlatPursuit') # Generates refresh tokens, etc.
                 inst.user_cache = {}
                 inst.update_expiry_times()
@@ -297,13 +362,16 @@ class TokenKeeper:
         start = time.time()
         while time.time() - start < self.token_wait_interval:
             instance_scores = {}
-            for inst in self.instances.values():
-                if not inst.is_busy and self._is_healthy(inst):
-                    instance_scores[inst.instance_id] = self._get_calls_in_window(inst.token)
+            for group_id, group in self.group_instances.items():
+                for inst_id, inst in group['instances'].items():
+                    if not inst.is_busy and self._is_healthy(inst):
+                        key = (group_id, inst_id)
+                        instance_scores[key] = self._get_calls_in_window(inst.token)
             
             if instance_scores:
-                best_id = min(instance_scores, key=instance_scores.get)
-                inst = self.instances[best_id]
+                best_key = min(instance_scores, key=instance_scores.get)
+                group_id, inst_id = best_key
+                inst = self.group_instances[group_id]['instances'][inst_id]
                 inst.is_busy = True
                 return inst
             logger.info("Waiting for token...")
@@ -317,7 +385,7 @@ class TokenKeeper:
         wait=wait_exponential(multiplier=1, min=4, max=30),
         reraise=True
     )
-    def _execute_api_call(self, instance : TokenInstance, profile : Profile, endpoint : str, **kwargs):
+    def _execute_api_call(self, instance : TokenInstance, profile : Profile, endpoint : str, **kwargs):       
         start_time = time.time()
         try:
             lookup_key = profile.account_id if profile.account_id else profile.psn_username
@@ -897,21 +965,24 @@ class TokenKeeper:
     @property
     def stats(self) -> Dict:
         stats = {}
-        for inst in self.instances.values():
-            auth = inst.client.authenticator
-            stats[inst.instance_id] = {
-                "busy": inst.is_busy,
-                "healthy": time.time() - inst.last_health < self.health_interval,
-                "calls_in_window": self._get_calls_in_window(inst.token),
-                "access_token_expiry_in": inst.get_access_expiry_in_seconds(),
-                "refresh_token_expiry_in": inst.get_refresh_expiry_in_seconds(),
-                "token_scopes": auth.token_response.get("scope", "unknown") if auth.token_response else "none",
-                "npsso_cookie": "present" if auth.npsso_cookie else "missing",
-                "uptime_seconds": time.time() - inst.last_health if inst.last_health > 0 else 0,
-                "last_error": inst.last_error,
-                "pending_refresh": bool(redis_client.get(f"token_keeper:pending_refresh:{self.machine_id}:{inst.instance_id}")),
-                "outbound_ip": inst.outbound_ip,
-            }
+        for group_id, group in self.group_instances.items():
+            for inst_id, inst in group['instances'].items():
+                auth = inst.client.authenticator
+                key = f"{group_id}-{inst_id}"
+                stats[key] = {
+                    "group_id": group_id,
+                    "busy": inst.is_busy,
+                    "healthy": time.time() - inst.last_health < self.health_interval,
+                    "calls_in_window": self._get_calls_in_window(inst.token),
+                    "access_token_expiry_in": inst.get_access_expiry_in_seconds(),
+                    "refresh_token_expiry_in": inst.get_refresh_expiry_in_seconds(),
+                    "token_scopes": auth.token_response.get("scope", "unknown") if auth.token_response else "none",
+                    "npsso_cookie": "present" if auth.npsso_cookie else "missing",
+                    "uptime_seconds": time.time() - inst.last_health if inst.last_health > 0 else 0,
+                    "last_error": inst.last_error,
+                    "pending_refresh": bool(redis_client.get(f"token_keeper:pending_refresh:{self.machine_id}:{group_id}:{inst_id}")),
+                    "outbound_ip": inst.outbound_ip,
+                }
         return stats
 
 token_keeper = TokenKeeper()
