@@ -240,7 +240,10 @@ class TokenKeeper:
                     proxy_url=proxy
                 )
                 try:
-                    ip_response = requests.get('https://api.ipify.org', timeout=2)
+                    session = requests.Session()
+                    if inst.proxy_url:
+                        session.proxies = {'http': inst.proxy_url, 'https': inst.proxy_url}
+                    ip_response = session.get('https://api.ipify.org', timeout=2)
                     inst.outbound_ip = ip_response.text
                     logger.info(f"Group {group_id} Instance {inst.instance_id} using IP: {inst.outbound_ip}")
                 except Exception as e:
@@ -279,7 +282,10 @@ class TokenKeeper:
                 log_api_call("keeper_refresh", inst.token, None, 200, time.time() - start)
                 logger.info(f"Instance {inst.instance_id} refreshed proactively")
                 try:
-                    ip_response = requests.get('https://api.ipify.org', timeout=2)
+                    session = requests.Session()
+                    if inst.proxy_url:
+                        session.proxies = {'http': inst.proxy_url, 'https': inst.proxy_url}
+                    ip_response = session.get('https://api.ipify.org', timeout=2)
                     inst.outbound_ip = ip_response.text
                     logger.info(f"Instance {inst.instance_id} using IP: {inst.outbound_ip}")
                 except Exception as e:
