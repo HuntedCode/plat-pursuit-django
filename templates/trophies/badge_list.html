@@ -56,6 +56,36 @@
             </div>
         </div>
     </div>
+
+    {% if is_paginated %}
+        <div class="flex flex-col md:flex-row justify-center items-center gap-2 mb-6">
+            <div class="btn-group">
+                {% if page_obj.has_previous %}
+                    <a href="?page=1{% if request.GET.series_slug %}&series_slug={{ request.GET.series_slug }}{% endif %}{% if request.GET.sort %}&sort={{ request.GET.sort }}{% endif %}#filter-form" class="btn btn-outline btn-sm md:btn-md">&laquo; First</a>
+                    <a href="?page={{ page_obj.previous_page_number }}{% if request.GET.series_slug %}&series_slug={{ request.GET.series_slug }}{% endif %}{% if request.GET.sort %}&sort={{ request.GET.sort }}{% endif %}#filter-form" class="btn btn-outline btn-sm md:btn-md">Previous</a>
+                {% endif %}
+                
+                <span class="btn btn-active btn-sm md:btn-md">Page {{ page_obj.number }} of {{ paginator.num_pages }}</span>
+                
+                {% if page_obj.has_next %}
+                    <a href="?page={{ page_obj.next_page_number }}{% if request.GET.series_slug %}&series_slug={{ request.GET.series_slug }}{% endif %}{% if request.GET.sort %}&sort={{ request.GET.sort }}{% endif %}#filter-form" class="btn btn-outline btn-sm md:btn-md">Next</a>
+                    <a href="?page={{ paginator.num_pages }}{% if request.GET.series_slug %}&series_slug={{ request.GET.series_slug }}{% endif %}{% if request.GET.sort %}&sort={{ request.GET.sort }}{% endif %}#filter-form" class="btn btn-outline btn-sm md:btn-md">Last &raquo;</a>
+                {% endif %}
+            </div>
+
+            <form method="get" action="?{% if request.GET.series_slug %}series_slug={{ request.GET.series_slug }}&{% endif %}{% if request.GET.sort %}sort={{ request.GET.sort }}&{% endif %}page=#filter-form" class="form-control flex-row items-center space-x-2 ml-4">
+                {% for key, value in request.GET.items %}
+                    {% if key != 'page' %}
+                        <input type="hidden" name="{{ key }}" value="{{ value }}">
+                    {% endif %}
+                {% endfor %}
+                <label class="label font-semibold" for="page-input">Go to page:</label>
+                <input type="number" id="page-input" name="page" min="1" max="{{ paginator.num_pages }}" value="{{ page_obj.number }}" class="input w-20" />
+                <button type="submit" class="btn btn-primary btn-sm">Go</button>
+            </form>
+        </div>
+    {% endif %}
+
     {% if view_type == 'list' %}
         <div id="items-grid" class="space-y-2">
             {% include 'trophies/partials/badge_list/badge_list_items.html' %}
@@ -65,6 +95,36 @@
             {% include 'trophies/partials/badge_list/badge_cards.html' %}
         </div>
     {% endif %}
+
+    {% if is_paginated %}
+        <div class="flex flex-col md:flex-row justify-center items-center gap-2 mt-6">
+            <div class="btn-group">
+                {% if page_obj.has_previous %}
+                    <a href="?page=1{% if request.GET.series_slug %}&series_slug={{ request.GET.series_slug }}{% endif %}{% if request.GET.sort %}&sort={{ request.GET.sort }}{% endif %}#filter-form" class="btn btn-outline btn-sm md:btn-md">&laquo; First</a>
+                    <a href="?page={{ page_obj.previous_page_number }}{% if request.GET.series_slug %}&series_slug={{ request.GET.series_slug }}{% endif %}{% if request.GET.sort %}&sort={{ request.GET.sort }}{% endif %}#filter-form" class="btn btn-outline btn-sm md:btn-md">Previous</a>
+                {% endif %}
+                
+                <span class="btn btn-active btn-sm md:btn-md">Page {{ page_obj.number }} of {{ paginator.num_pages }}</span>
+                
+                {% if page_obj.has_next %}
+                    <a href="?page={{ page_obj.next_page_number }}{% if request.GET.series_slug %}&series_slug={{ request.GET.series_slug }}{% endif %}{% if request.GET.sort %}&sort={{ request.GET.sort }}{% endif %}#filter-form" class="btn btn-outline btn-sm md:btn-md">Next</a>
+                    <a href="?page={{ paginator.num_pages }}{% if request.GET.series_slug %}&series_slug={{ request.GET.series_slug }}{% endif %}{% if request.GET.sort %}&sort={{ request.GET.sort }}{% endif %}#filter-form" class="btn btn-outline btn-sm md:btn-md">Last &raquo;</a>
+                {% endif %}
+            </div>
+
+            <form method="get" action="?{% if request.GET.series_slug %}series_slug={{ request.GET.series_slug }}&{% endif %}{% if request.GET.sort %}sort={{ request.GET.sort }}&{% endif %}page=#filter-form" class="form-control flex-row items-center space-x-2 ml-4">
+                {% for key, value in request.GET.items %}
+                    {% if key != 'page' %}
+                        <input type="hidden" name="{{ key }}" value="{{ value }}">
+                    {% endif %}
+                {% endfor %}
+                <label class="label font-semibold" for="page-input">Go to page:</label>
+                <input type="number" id="page-input" name="page" min="1" max="{{ paginator.num_pages }}" value="{{ page_obj.number }}" class="input w-20" />
+                <button type="submit" class="btn btn-primary btn-sm">Go</button>
+            </form>
+        </div>
+    {% endif %}
+
 {% endblock %}
 
 {% block js_scripts %}

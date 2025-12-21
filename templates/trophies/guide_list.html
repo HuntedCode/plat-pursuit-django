@@ -45,25 +45,66 @@
             {% endwith %}
         </h1>
     </div>
+
+    {% if is_paginated %}
+        <div class="flex flex-col md:flex-row justify-center items-center gap-2 mb-2">
+            <div class="btn-group">
+                {% if page_obj.has_previous %}
+                    <a href="?page=1{% if request.GET.query %}&query={{ request.GET.query }}{% endif %}{% if request.GET.sort %}&sort={{ request.GET.sort }}{% endif %}#filter-form" class="btn btn-outline btn-sm md:btn-md">&laquo; First</a>
+                    <a href="?page={{ page_obj.previous_page_number }}{% if request.GET.query %}&query={{ request.GET.query }}{% endif %}{% if request.GET.sort %}&sort={{ request.GET.sort }}{% endif %}#filter-form" class="btn btn-outline btn-sm md:btn-md">Previous</a>
+                {% endif %}
+                
+                <span class="btn btn-active btn-sm md:btn-md">Page {{ page_obj.number }} of {{ paginator.num_pages }}</span>
+                
+                {% if page_obj.has_next %}
+                    <a href="?page={{ page_obj.next_page_number }}{% if request.GET.query %}&query={{ request.GET.query }}{% endif %}{% if request.GET.sort %}&sort={{ request.GET.sort }}{% endif %}#filter-form" class="btn btn-outline btn-sm md:btn-md">Next</a>
+                    <a href="?page={{ paginator.num_pages }}{% if request.GET.query %}&query={{ request.GET.query }}{% endif %}{% if request.GET.sort %}&sort={{ request.GET.sort }}{% endif %}#filter-form" class="btn btn-outline btn-sm md:btn-md">Last &raquo;</a>
+                {% endif %}
+            </div>
+
+            <form method="get" action="?{% if request.GET.query %}query={{ request.GET.query }}&{% endif %}{% if request.GET.sort %}sort={{ request.GET.sort }}&{% endif %}page=#filter-form" class="form-control flex-row items-center space-x-2 ml-4">
+                {% for key, value in request.GET.items %}
+                    {% if key != 'page' %}
+                        <input type="hidden" name="{{ key }}" value="{{ value }}">
+                    {% endif %}
+                {% endfor %}
+                <label class="label font-semibold" for="page-input">Go to page:</label>
+                <input type="number" id="page-input" name="page" min="1" max="{{ paginator.num_pages }}" value="{{ page_obj.number }}" class="input w-20" />
+                <button type="submit" class="btn btn-primary btn-sm">Go</button>
+            </form>
+        </div>
+    {% endif %}
+
     <div id="items-grid" class="grid grid-cols-1 lg:grid-cols-2 gap-4">
             {% include 'trophies/partials/guide_list/guide_list_items.html' %}
     </div>
-    <!-- Pagination (DaisyUI styled) -->
+
     {% if is_paginated %}
-        <div class="flex justify-center mt-6">
+        <div class="flex flex-col md:flex-row justify-center items-center gap-2 mt-6">
             <div class="btn-group">
                 {% if page_obj.has_previous %}
-                    <a href="?page=1{% if request.GET.query %}&query={{ request.GET.query }}{% endif %}{% if request.GET.sort %}&sort={{ request.GET.sort }}{% endif %}" class="btn btn-outline">&laquo; First</a>
-                    <a href="?page={{ page_obj.previous_page_number }}{% if request.GET.query %}&query={{ request.GET.query }}{% endif %}{% if request.GET.sort %}&sort={{ request.GET.sort }}{% endif %}" class="btn btn-outline">Previous</a>
+                    <a href="?page=1{% if request.GET.query %}&query={{ request.GET.query }}{% endif %}{% if request.GET.sort %}&sort={{ request.GET.sort }}{% endif %}#filter-form" class="btn btn-outline btn-sm md:btn-md">&laquo; First</a>
+                    <a href="?page={{ page_obj.previous_page_number }}{% if request.GET.query %}&query={{ request.GET.query }}{% endif %}{% if request.GET.sort %}&sort={{ request.GET.sort }}{% endif %}#filter-form" class="btn btn-outline btn-sm md:btn-md">Previous</a>
                 {% endif %}
                 
-                <span class="btn btn-active">Page {{ page_obj.number }} of {{ paginator.num_pages }}</span>
+                <span class="btn btn-active btn-sm md:btn-md">Page {{ page_obj.number }} of {{ paginator.num_pages }}</span>
                 
                 {% if page_obj.has_next %}
-                    <a href="?page={{ page_obj.next_page_number }}{% if request.GET.query %}&query={{ request.GET.query }}{% endif %}{% if request.GET.sort %}&sort={{ request.GET.sort }}{% endif %}" class="btn btn-outline">Next</a>
-                    <a href="?page={{ paginator.num_pages }}{% if request.GET.query %}&query={{ request.GET.query }}{% endif %}{% if request.GET.sort %}&sort={{ request.GET.sort }}{% endif %}" class="btn btn-outline">Last &raquo;</a>
+                    <a href="?page={{ page_obj.next_page_number }}{% if request.GET.query %}&query={{ request.GET.query }}{% endif %}{% if request.GET.sort %}&sort={{ request.GET.sort }}{% endif %}#filter-form" class="btn btn-outline btn-sm md:btn-md">Next</a>
+                    <a href="?page={{ paginator.num_pages }}{% if request.GET.query %}&query={{ request.GET.query }}{% endif %}{% if request.GET.sort %}&sort={{ request.GET.sort }}{% endif %}#filter-form" class="btn btn-outline btn-sm md:btn-md">Last &raquo;</a>
                 {% endif %}
             </div>
+
+            <form method="get" action="?{% if request.GET.query %}query={{ request.GET.query }}&{% endif %}{% if request.GET.sort %}sort={{ request.GET.sort }}&{% endif %}page=#filter-form" class="form-control flex-row items-center space-x-2 ml-4">
+                {% for key, value in request.GET.items %}
+                    {% if key != 'page' %}
+                        <input type="hidden" name="{{ key }}" value="{{ value }}">
+                    {% endif %}
+                {% endfor %}
+                <label class="label font-semibold" for="page-input">Go to page:</label>
+                <input type="number" id="page-input" name="page" min="1" max="{{ paginator.num_pages }}" value="{{ page_obj.number }}" class="input w-20" />
+                <button type="submit" class="btn btn-primary btn-sm">Go</button>
+            </form>
         </div>
     {% endif %}
 {% endblock %}

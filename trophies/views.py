@@ -10,9 +10,9 @@ from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.admin.views.decorators import staff_member_required
 from django.shortcuts import redirect, render, get_object_or_404
-from django.http import Http404, StreamingHttpResponse, JsonResponse, HttpResponseRedirect
+from django.http import Http404, HttpResponse, JsonResponse, HttpResponseRedirect
 from django.views.generic import ListView, View, DetailView, TemplateView
-from django.db.models import Q, F, Prefetch, OuterRef, Subquery, Value, IntegerField, FloatField, Count, Avg, Max, Exists, Min
+from django.db.models import Q, F, Prefetch, OuterRef, Subquery, Value, IntegerField, FloatField, Avg, Max, Min
 from django.db.models.functions import Coalesce
 from django.urls import reverse_lazy, reverse
 from django.utils import timezone
@@ -30,7 +30,7 @@ logger = logging.getLogger("psn_api")
 class GamesListView(ProfileHotbarMixin, ListView):
     model = Game
     template_name = 'trophies/game_list.html'
-    paginate_by = 30
+    paginate_by = 25
 
     def get_queryset(self):
         qs = super().get_queryset()
@@ -107,7 +107,7 @@ class GamesListView(ProfileHotbarMixin, ListView):
 
         print(self.paginate_by)
         context['form'] = GameSearchForm(self.request.GET)
-        context['paginate'] = self.paginate_by
+        context['is_paginated'] = self.object_list.count() > self.paginate_by
         context['selected_platforms'] = self.request.GET.getlist('platform')
         context['selected_regions'] = self.request.GET.getlist('regions')
         context['view_type'] = self.request.GET.get('view', 'grid')
@@ -115,19 +115,10 @@ class GamesListView(ProfileHotbarMixin, ListView):
         context['filter_shovelware'] = self.request.GET.get('filter_shovelware', '')
         return context
     
-    def get_template_names(self):
-        if self.request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-            view_type = self.request.GET.get('view', 'grid')
-            if view_type == 'list':
-                return ['trophies/partials/game_list/game_list_items.html']
-            else:
-                return ['trophies/partials/game_list/game_cards.html']
-        return super().get_template_names()
-    
 class TrophiesListView(ProfileHotbarMixin, ListView):
     model = Trophy
     template_name = 'trophies/trophy_list.html'
-    paginate_by = 30
+    paginate_by = 25
 
     def get_queryset(self):
         qs = super().get_queryset()
@@ -200,7 +191,7 @@ class TrophiesListView(ProfileHotbarMixin, ListView):
         ]
 
         context['form'] = TrophySearchForm(self.request.GET)
-        context['paginate'] = self.paginate_by
+        context['is_paginated'] = self.object_list.count() > self.paginate_by
         context['selected_platforms'] = self.request.GET.getlist('platform')
         context['selected_types'] = self.request.GET.getlist('type')
         context['selected_regions'] = self.request.GET.getlist('region')
@@ -209,15 +200,10 @@ class TrophiesListView(ProfileHotbarMixin, ListView):
         context['filter_shovelware'] = self.request.GET.get('filter_shovelware', '')
         return context
     
-    def get_template_names(self):
-        if self.request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-            return ['trophies/partials/trophy_list/trophy_list_items.html']
-        return super().get_template_names()
-    
 class ProfilesListView(ProfileHotbarMixin, ListView):
     model = Profile
     template_name = 'trophies/profile_list.html'
-    paginate_by = 20
+    paginate_by = 25
 
     def get_queryset(self):
         qs = super().get_queryset()
@@ -261,14 +247,9 @@ class ProfilesListView(ProfileHotbarMixin, ListView):
         ]
 
         context['form'] = ProfileSearchForm(self.request.GET)
-        context['paginate_by'] = self.paginate_by
+        context['is_paginated'] = self.object_list.count() > self.paginate_by
         context['filter_shovelware'] = self.request.GET.get('filter_shovelware', '')
         return context
-    
-    def get_template_names(self):
-        if self.request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-            return ['trophies/partials/profile_list/profile_cards.html']
-        return super().get_template_names()
     
 class SearchView(View):
     def get(self, request, *args, **kwargs):
@@ -862,12 +843,12 @@ class TrophyCaseView(ProfileHotbarMixin, ListView):
     model = EarnedTrophy
     template_name = 'trophies/trophy_case.html'
     context_object_name = 'platinums'
-    paginate_by = 30
+    paginate_by = 25
 
     def get_queryset(self):
         profile = get_object_or_404(Profile, psn_username=self.kwargs['psn_username'].lower())
         return EarnedTrophy.objects.filter(profile=profile, earned=True, trophy__trophy_type='platinum').select_related('trophy', 'trophy__game').order_by(F('earned_date_time').desc(nulls_last=True))
-    
+
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         profile = Profile.objects.get(psn_username=self.kwargs['psn_username'].lower())
@@ -879,17 +860,12 @@ class TrophyCaseView(ProfileHotbarMixin, ListView):
             {'text': f"{profile.display_psn_username}", 'url': reverse_lazy('profile_detail', kwargs={'psn_username': profile.psn_username})},
             {'text': 'Trophy Case'}
         ]
-        context['paginate'] = self.paginate_by
+        context['is_paginated'] = self.object_list.count() > self.paginate_by
         context['profile'] = profile
         context['selected_ids'] = selected_ids
         context['selected_count'] = len(selected_ids)
         context['toggle_selection_url'] = reverse('toggle-selection')
         return context
-    
-    def get_template_names(self):
-        if self.request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-            return ['trophies/partials/trophy_case/trophy_case_items.html']
-        return super().get_template_names()
 
 class ToggleSelectionView(LoginRequiredMixin, ProfileHotbarMixin, View):
     def post(self, request):
@@ -923,6 +899,7 @@ class BadgeListView(ProfileHotbarMixin, ListView):
     model = Badge
     template_name = 'trophies/badge_list.html'
     context_object_name = 'display_badges'
+    paginate_by = 25
 
     def get_queryset(self):
         qs = super().get_queryset().prefetch_related('concepts')
@@ -1027,18 +1004,10 @@ class BadgeListView(ProfileHotbarMixin, ListView):
         ]
 
         context['form'] = BadgeSearchForm(self.request.GET)
+        context['is_paginated'] = self.object_list.count() > self.paginate_by
         context['selected_tiers'] = self.request.GET.getlist('tier')
         context['view_type'] = self.request.GET.get('view', 'grid')
         return context
-    
-    def get_template_names(self):
-        if self.request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-            view_type = self.request.GET.get('view', 'grid')
-            if view_type == 'list':
-                return ['trophies/partials/badge_list/badge_list_items.html']
-            else:
-                return ['trophies/partials/badge_list/badge_cards.html']
-        return super().get_template_names()
 
 class BadgeDetailView(ProfileHotbarMixin, DetailView):
     model = Badge
@@ -1191,11 +1160,6 @@ class GuideListView(ProfileHotbarMixin, ListView):
         context['is_paginated'] = self.object_list.count() > self.paginate_by
 
         return context
-
-    def get_template_names(self):
-        if self.request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-            return ['trophies/partials/guide_list/guide_list_items.html']
-        return super().get_template_names()
 
 # Profile Linking Views
 
