@@ -61,15 +61,15 @@
         <div class="flex flex-col md:flex-row justify-center items-center gap-2 mb-6">
             <div class="btn-group">
                 {% if page_obj.has_previous %}
-                    <a href="?page=1{% if request.GET.series_slug %}&series_slug={{ request.GET.series_slug }}{% endif %}{% if request.GET.sort %}&sort={{ request.GET.sort }}{% endif %}#filter-form" class="btn btn-outline btn-sm md:btn-md">&laquo; First</a>
-                    <a href="?page={{ page_obj.previous_page_number }}{% if request.GET.series_slug %}&series_slug={{ request.GET.series_slug }}{% endif %}{% if request.GET.sort %}&sort={{ request.GET.sort }}{% endif %}#filter-form" class="btn btn-outline btn-sm md:btn-md">Previous</a>
+                    <a href="?page=1{% if request.GET.series_slug %}&series_slug={{ request.GET.series_slug }}{% endif %}{% if request.GET.sort %}&sort={{ request.GET.sort }}{% endif %}#filter-form" class="btn btn-outline btn-xs sm:btn-sm md:btn-md">&laquo; First</a>
+                    <a href="?page={{ page_obj.previous_page_number }}{% if request.GET.series_slug %}&series_slug={{ request.GET.series_slug }}{% endif %}{% if request.GET.sort %}&sort={{ request.GET.sort }}{% endif %}#filter-form" class="btn btn-outline btn-xs sm:btn-sm md:btn-md">Previous</a>
                 {% endif %}
                 
-                <span class="btn btn-active btn-sm md:btn-md">Page {{ page_obj.number }} of {{ paginator.num_pages }}</span>
+                <span class="btn btn-active btn-xs sm:btn-sm md:btn-md">Page {{ page_obj.number }} of {{ paginator.num_pages }}</span>
                 
                 {% if page_obj.has_next %}
-                    <a href="?page={{ page_obj.next_page_number }}{% if request.GET.series_slug %}&series_slug={{ request.GET.series_slug }}{% endif %}{% if request.GET.sort %}&sort={{ request.GET.sort }}{% endif %}#filter-form" class="btn btn-outline btn-sm md:btn-md">Next</a>
-                    <a href="?page={{ paginator.num_pages }}{% if request.GET.series_slug %}&series_slug={{ request.GET.series_slug }}{% endif %}{% if request.GET.sort %}&sort={{ request.GET.sort }}{% endif %}#filter-form" class="btn btn-outline btn-sm md:btn-md">Last &raquo;</a>
+                    <a href="?page={{ page_obj.next_page_number }}{% if request.GET.series_slug %}&series_slug={{ request.GET.series_slug }}{% endif %}{% if request.GET.sort %}&sort={{ request.GET.sort }}{% endif %}#filter-form" class="btn btn-outline btn-xs sm:btn-sm md:btn-md">Next</a>
+                    <a href="?page={{ paginator.num_pages }}{% if request.GET.series_slug %}&series_slug={{ request.GET.series_slug }}{% endif %}{% if request.GET.sort %}&sort={{ request.GET.sort }}{% endif %}#filter-form" class="btn btn-outline btn-xs sm:btn-sm md:btn-md">Last &raquo;</a>
                 {% endif %}
             </div>
 
@@ -100,15 +100,15 @@
         <div class="flex flex-col md:flex-row justify-center items-center gap-2 mt-6">
             <div class="btn-group">
                 {% if page_obj.has_previous %}
-                    <a href="?page=1{% if request.GET.series_slug %}&series_slug={{ request.GET.series_slug }}{% endif %}{% if request.GET.sort %}&sort={{ request.GET.sort }}{% endif %}#filter-form" class="btn btn-outline btn-sm md:btn-md">&laquo; First</a>
-                    <a href="?page={{ page_obj.previous_page_number }}{% if request.GET.series_slug %}&series_slug={{ request.GET.series_slug }}{% endif %}{% if request.GET.sort %}&sort={{ request.GET.sort }}{% endif %}#filter-form" class="btn btn-outline btn-sm md:btn-md">Previous</a>
+                    <a href="?page=1{% if request.GET.series_slug %}&series_slug={{ request.GET.series_slug }}{% endif %}{% if request.GET.sort %}&sort={{ request.GET.sort }}{% endif %}#filter-form" class="btn btn-outline btn-xs sm:btn-sm md:btn-md">&laquo; First</a>
+                    <a href="?page={{ page_obj.previous_page_number }}{% if request.GET.series_slug %}&series_slug={{ request.GET.series_slug }}{% endif %}{% if request.GET.sort %}&sort={{ request.GET.sort }}{% endif %}#filter-form" class="btn btn-outline btn-xs sm:btn-sm md:btn-md">Previous</a>
                 {% endif %}
                 
-                <span class="btn btn-active btn-sm md:btn-md">Page {{ page_obj.number }} of {{ paginator.num_pages }}</span>
+                <span class="btn btn-active btn-xs sm:btn-sm md:btn-md">Page {{ page_obj.number }} of {{ paginator.num_pages }}</span>
                 
                 {% if page_obj.has_next %}
-                    <a href="?page={{ page_obj.next_page_number }}{% if request.GET.series_slug %}&series_slug={{ request.GET.series_slug }}{% endif %}{% if request.GET.sort %}&sort={{ request.GET.sort }}{% endif %}#filter-form" class="btn btn-outline btn-sm md:btn-md">Next</a>
-                    <a href="?page={{ paginator.num_pages }}{% if request.GET.series_slug %}&series_slug={{ request.GET.series_slug }}{% endif %}{% if request.GET.sort %}&sort={{ request.GET.sort }}{% endif %}#filter-form" class="btn btn-outline btn-sm md:btn-md">Last &raquo;</a>
+                    <a href="?page={{ page_obj.next_page_number }}{% if request.GET.series_slug %}&series_slug={{ request.GET.series_slug }}{% endif %}{% if request.GET.sort %}&sort={{ request.GET.sort }}{% endif %}#filter-form" class="btn btn-outline btn-xs sm:btn-sm md:btn-md">Next</a>
+                    <a href="?page={{ paginator.num_pages }}{% if request.GET.series_slug %}&series_slug={{ request.GET.series_slug }}{% endif %}{% if request.GET.sort %}&sort={{ request.GET.sort }}{% endif %}#filter-form" class="btn btn-outline btn-xs sm:btn-sm md:btn-md">Last &raquo;</a>
                 {% endif %}
             </div>
 
