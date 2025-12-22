@@ -658,30 +658,16 @@ class ProfileDetailView(ProfileHotbarMixin, DetailView):
         header_stats['total_unearned_trophies'] = profile.total_unearned
         header_stats['total_completions'] = profile.total_completes
         header_stats['average_completion'] = profile.avg_progress
-
-        recent_platinum = profile.earned_trophy_entries.aggregate(
-            recent_date=Max('earned_date_time'),
-            rarest_rate=Min('trophy__trophy_earn_rate', filter=Q(trophy__trophy_type='platinum'))
-        )
-        if recent_platinum['recent_date']:
-            recent_entry = profile.earned_trophy_entries.filter(earned_date_time=recent_platinum['recent_date']).first()
-            header_stats['recent_platinum'] = {
-                'trophy': recent_entry.trophy,
-                'game': recent_entry.trophy.game,
-                'earned_date': recent_entry.earned_date_time,
-            } if recent_entry else None
-        else:
-            header_stats['recent_platinum'] = None
-
-        if recent_platinum['rarest_rate'] is not None:
-            rarest_entry = profile.earned_trophy_entries.filter(trophy__trophy_earn_rate=recent_platinum['rarest_rate'], trophy__trophy_type='platinum', earned=True).first()
-            header_stats['rarest_platinum'] = {
-                'trophy': rarest_entry.trophy,
-                'game': rarest_entry.trophy.game,
-                'earned_date': rarest_entry.earned_date_time,
-            } if rarest_entry else None
-        else:
-            header_stats['rarest_platinum'] = None
+        header_stats['recent_platinum'] = {
+            'trophy': profile.recent_plat.trophy,
+            'game': profile.recent_plat.trophy.game,
+            'earned_date': profile.recent_plat.earned_date_time,
+        } if profile.recent_plat else None
+        header_stats['rarest_platinum'] = {
+            'trophy': profile.rarest_plat.trophy,
+            'game': profile.rarest_plat.trophy.game,
+            'earned_date': profile.rarest_plat.earned_date_time,
+        } if profile.rarest_plat else None
 
         # Trophy Case Selections
         trophy_case = list(UserTrophySelection.objects.filter(profile=profile).order_by('-earned_trophy__earned_date_time'))

@@ -26,7 +26,7 @@ class ProfileAdmin(admin.ModelAdmin):
         'country_code',
         "is_plus",
     )
-    list_filter = ("is_linked", "is_plus", "sync_tier")
+    list_filter = ("is_linked", "is_plus", "sync_tier", "sync_status")
     search_fields = ("psn_username", "account_id", "user__username__iexact", "about_me")
     raw_id_fields = ("user",)
     ordering = ("psn_username",)
@@ -42,6 +42,10 @@ class ProfileAdmin(admin.ModelAdmin):
         (
             "Trophy Summary",
             {"fields": ("trophy_level", "progress", "tier", "earned_trophy_summary", 'total_trophies', 'total_unearned', 'total_plats', 'total_games', 'total_completes', 'avg_progress')},
+        ),
+        (
+            "Profile Platinums",
+            {"fields": ("recent_plat", "rarest_plat")},
         ),
         ("Sync Info", {"fields": ("extra_data", "last_synced", "last_profile_health_check", "sync_status", "sync_progress_value", "sync_progress_target", "sync_tier")}),
     )

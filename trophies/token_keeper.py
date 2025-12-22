@@ -887,8 +887,13 @@ class TokenKeeper:
         PSNManager.sync_complete(profile, 'medium_priority')
 
     def _sync_profilegame_stats(self, profile_id: int, touched_profilegame_ids: list[int]):
+        try:
+            profile = Profile.objects.get(id=profile_id)
+        except Profile.DoesNotExist:
+            logger.error(f"Profile {profile_id} does not exist.")
         job_type = 'sync_profilegame_stats'
 
+        profile.update_plats()
         PsnApiService.update_profilegame_stats(touched_profilegame_ids)
         logger.info(f"ProfileGame Stats updated for {profile_id} successfully! | {len(touched_profilegame_ids)} profilegames updated")
 

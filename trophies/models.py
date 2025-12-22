@@ -2,7 +2,7 @@ from django.db import models
 from django.utils import timezone
 from users.models import CustomUser
 from django.core.validators import RegexValidator, MinValueValidator, MaxValueValidator
-from django.db.models import F, Avg, Count
+from django.db.models import F, Avg, Count, Max, Min
 from datetime import timedelta
 from trophies.utils import count_unique_game_groups, calculate_trimmed_mean, TITLE_STATS_SUPPORTED_PLATFORMS, NA_REGION_CODES, EU_REGION_CODES, JP_REGION_CODES, AS_REGION_CODES, SHOVELWARE_THRESHOLD
 import secrets
@@ -77,10 +77,12 @@ class Profile(models.Model):
     total_games = models.PositiveIntegerField(default=0)
     total_completes = models.PositiveIntegerField(default=0)
     avg_progress = models.FloatField(default=0.0)
+    recent_plat = models.ForeignKey('EarnedTrophy', on_delete=models.SET_NULL, null=True, blank=True, related_name='recent_for_profiles', help_text='Most recent earned platinum.')
+    rarest_plat = models.ForeignKey('EarnedTrophy', on_delete=models.SET_NULL, null=True, blank=True, related_name='rarest_for_profiles', help_text='Rarest earned platinum by earn_rate.')
 
     class Meta:
         indexes = [
-models.Index(fields=["psn_username"], name="psn_username_idx"),
+            models.Index(fields=["psn_username"], name="psn_username_idx"),
             models.Index(fields=["account_id"], name="account_id_idx"),
             models.Index(fields=['discord_id'], name='discord_id_idx'),
             models.Index(fields=['is_discord_verified', 'last_synced'], name='verified_synced_idx'),
@@ -198,6 +200,22 @@ models.Index(fields=["psn_username"], name="psn_username_idx"),
         self.sync_progress_value = 0
         self.save(update_fields=['sync_progress_target', 'sync_progress_value'])
         self.refresh_from_db(fields=['sync_progress_target', 'sync_progress_value'])
+    
+    def update_plats(self):
+        """Recalculate and update recent and rarest platinums."""
+        platinums = self.earned_trophy_entries.filter(earned=True, trophy__trophy_type='platinum')
+
+        if not platinums.exists():
+            self.recent_plat = None
+            self.rarest_plat = None
+        else:
+            recent_date = platinums.aggregate(Max('earned_date_time'))['earned_date_time__max']
+            self.recent_plat = platinums.filter(earned_date_time=recent_date).first() if recent_date else None
+
+            min_rate = platinums.aggregate(Min('trophy__trophy_earn_rate'))['trophy__trophy_earn_rate__min']
+            self.rarest_plat = platinums.filter(trophy__trophy_earn_rate=min_rate).first() if min_rate is not None else None
+
+        self.save(update_fields=['recent_plat', 'rarest_plat'])
 
 
 class FeaturedProfile(models.Model):
