@@ -99,6 +99,7 @@
             <div class="divider divider-vertical lg:divider-horizontal"></div>
             <div class="flex flex-col justify-center items-center w-full lg:w-3/4">
                 <div class="flex flex-col lg:flex-row w-full gap-4">
+                    {% if header_stats.recent_platinum %}
                     {% with header_stats.recent_platinum.game as game %}
                     {% with header_stats.recent_platinum.trophy as trophy %}
                         <div class="flex flex-col w-full">
@@ -129,6 +130,8 @@
                         </div>
                     {% endwith %}
                     {% endwith %}
+                    {% endif %}
+                    {% if header_stats.rarest_platinum %}
                     {% with header_stats.rarest_platinum.game as game %}
                     {% with header_stats.rarest_platinum.trophy as trophy %}
                         <div class="flex flex-col w-full">
@@ -159,6 +162,7 @@
                         </div>
                     {% endwith %}
                     {% endwith %}
+                    {% endif %}
                 </div>
                 <div class="divider divider-vertical"></div>
                 <div class="flex flex-row justify-around w-full">
