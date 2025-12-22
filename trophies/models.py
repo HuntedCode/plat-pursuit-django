@@ -236,6 +236,7 @@ class Game(models.Model):
     np_service_name = models.CharField(max_length=50, blank=True)
     trophy_set_version = models.CharField(max_length=10, blank=True)
     title_name = models.CharField(max_length=255)
+    lock_title = models.BooleanField(default=False, help_text="Admin title override - won't be automatically updated.")
     title_detail = models.TextField(blank=True, null=True)
     title_image = models.URLField(blank=True, null=True)
     title_icon_url = models.URLField(blank=True, null=True)

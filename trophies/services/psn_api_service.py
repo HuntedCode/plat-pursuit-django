@@ -160,8 +160,8 @@ class PsnApiService:
                 except ProfileGame.DoesNotExist:
                     logger.error(f"Could not find ProfileGame entry for {profile} - {game}")
                     return False
-                
-                game.title_name = title_stats.name
+                if not game.lock_title:
+                    game.title_name = title_stats.name
                 game.title_image = title_stats.image_url
                 game.save(update_fields=['title_name', 'title_image'])
                 profile_game.play_count = title_stats.play_count
