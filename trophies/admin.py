@@ -72,6 +72,8 @@ class RegionListFilter(SimpleListFilter):
             ('EU', 'Europe'),
             ('JP', 'Japan'),
             ('AS', 'Asia'),
+            ('KR', 'Korea'),
+            ('CN', 'China'),
         )
     
     def queryset(self, request, queryset):
