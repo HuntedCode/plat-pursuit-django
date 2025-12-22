@@ -266,8 +266,7 @@ def update_profile_trophy_counts(profile):
     profile.total_plats = EarnedTrophy.objects.filter(profile=profile, earned=True, trophy__trophy_type='platinum').count()
     profile.save(update_fields=['total_trophies', 'total_unearned', 'total_plats'])
 
-# Common PS Apps - No Trophies
-MODERN_PLATFORMS = ['PS4', 'PS5']
+MODERN_PLATFORMS = ['PS5', 'PS4']
 ALL_PLATFORMS = MODERN_PLATFORMS + ['PS3', 'PSVITA', 'PSVR']
 
 TITLE_ID_BLACKLIST = ['CUSA05214_00', 'CUSA01015_00', 'CUSA00129_00', 'CUSA00131_00', 'CUSA05365_00', 'PPSA01650_00', 'PPSA02038_00', 'PPSA01614_00', 'PPSA01604_00', 'PPSA01665_00',]

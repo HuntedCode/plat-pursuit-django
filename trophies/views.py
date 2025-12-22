@@ -3,16 +3,15 @@ import logging
 import math
 from collections import defaultdict
 from datetime import datetime, timedelta, date
-import time
 from django.core.cache import cache
 from django.core.paginator import Paginator
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.admin.views.decorators import staff_member_required
 from django.shortcuts import redirect, render, get_object_or_404
-from django.http import Http404, HttpResponse, JsonResponse, HttpResponseRedirect
+from django.http import Http404, JsonResponse, HttpResponseRedirect
 from django.views.generic import ListView, View, DetailView, TemplateView
-from django.db.models import Q, F, Prefetch, OuterRef, Subquery, Value, IntegerField, FloatField, Avg, Max, Min
+from django.db.models import Q, F, Prefetch, OuterRef, Subquery, Value, IntegerField, FloatField, Avg, Max, Case, When
 from django.db.models.functions import Coalesce
 from django.urls import reverse_lazy, reverse
 from django.utils import timezone
@@ -23,7 +22,7 @@ from trophies.psn_manager import PSNManager
 from trophies.mixins import ProfileHotbarMixin
 from .models import Game, Trophy, Profile, EarnedTrophy, ProfileGame, TrophyGroup, UserTrophySelection, Badge, UserBadge, UserBadgeProgress, Concept, FeaturedGuide
 from .forms import GameSearchForm, TrophySearchForm, ProfileSearchForm, ProfileGamesForm, ProfileTrophiesForm, ProfileBadgesForm, UserConceptRatingForm, BadgeSearchForm, GuideSearchForm, LinkPSNForm, GameDetailForm
-from .utils import redis_client, MODERN_PLATFORMS, get_next_sync
+from .utils import redis_client, MODERN_PLATFORMS, ALL_PLATFORMS, get_next_sync
 
 logger = logging.getLogger("psn_api")
     
@@ -571,6 +570,14 @@ class GameDetailView(ProfileHotbarMixin, DetailView):
 
             badges = Badge.objects.filter(concepts=game.concept, tier=1).order_by('display_series')
             context['badges'] = badges
+
+            other_versions_qs = game.concept.games.exclude(pk=game.pk)
+            platform_order = {plat: idx for idx, plat in enumerate(ALL_PLATFORMS)}
+            other_versions_qs = other_versions_qs.annotate(
+                platform_order=Case(*[When(title_platform__contains=plat, then=Value(idx)) for plat, idx in platform_order.items()], default=999, output_field=IntegerField())
+            ).order_by('platform_order', 'title_name')
+            other_versions = list(other_versions_qs)
+            context['other_versions'] = other_versions
 
         
         profile = user.profile if user.is_authenticated and hasattr(user, 'profile') and user.profile and user.profile.is_linked else None
