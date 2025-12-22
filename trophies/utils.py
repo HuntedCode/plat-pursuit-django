@@ -266,6 +266,33 @@ def update_profile_trophy_counts(profile):
     profile.total_plats = EarnedTrophy.objects.filter(profile=profile, earned=True, trophy__trophy_type='platinum').count()
     profile.save(update_fields=['total_trophies', 'total_unearned', 'total_plats'])
 
+def detect_asian_language(title: str) -> str:
+    """Detect the primary Asian language in a game title."""
+    def count_chinese(text):
+        return sum(1 for c in text if '\u4e00' <= c <= '\u9fff') # Han (chinese primary)
+    
+    def count_japanese_unique(text):
+        hiragana = sum(1 for c in text if '\u3040' <= c <= '\u309f')
+        katakana = sum(1 for c in text if '\u30a0' <= c <= '\u30ff')
+        return hiragana + katakana
+    
+    def count_korean(text):
+        return sum(1 for c in text if '\uac00' <= c <= '\ud7af') # Hangul
+    
+    japanese_unique = count_japanese_unique(title)
+    korean = count_korean(title)
+    chinese = count_chinese(title) - japanese_unique
+
+    max_count = max(chinese, japanese_unique, korean)
+    if max_count == 0:
+        return 'Unknown'
+    elif japanese_unique == max_count:
+        return 'JP'
+    elif korean == max_count:
+        return 'KR'
+    elif chinese == max_count:
+        return 'CN'
+
 MODERN_PLATFORMS = ['PS5', 'PS4']
 ALL_PLATFORMS = MODERN_PLATFORMS + ['PS3', 'PSVITA', 'PSVR']
 
@@ -279,7 +306,9 @@ NA_REGION_CODES = ['IP', 'UB', 'UP', 'US', 'UT']
 EU_REGION_CODES = ['EB', 'EP']
 JP_REGION_CODES = ['JA', 'JB', 'JP', 'KP']
 AS_REGION_CODES = ['HA,' 'HB', 'HP', 'HT']
-REGIONS = ['NA', 'EU', 'JP', 'AS']
+KR_REGION_CODES = ['KR']
+CN_REGION_CODES = ['CN']
+REGIONS = ['NA', 'EU', 'JP', 'AS', 'KR', 'CN']
 
 SHOVELWARE_THRESHOLD = 90.0
 

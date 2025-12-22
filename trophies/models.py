@@ -4,7 +4,7 @@ from users.models import CustomUser
 from django.core.validators import RegexValidator, MinValueValidator, MaxValueValidator
 from django.db.models import F, Avg, Count, Max, Min
 from datetime import timedelta
-from trophies.utils import count_unique_game_groups, calculate_trimmed_mean, TITLE_STATS_SUPPORTED_PLATFORMS, NA_REGION_CODES, EU_REGION_CODES, JP_REGION_CODES, AS_REGION_CODES, SHOVELWARE_THRESHOLD
+from trophies.utils import count_unique_game_groups, calculate_trimmed_mean, TITLE_STATS_SUPPORTED_PLATFORMS, NA_REGION_CODES, EU_REGION_CODES, JP_REGION_CODES, AS_REGION_CODES, KR_REGION_CODES, CN_REGION_CODES, SHOVELWARE_THRESHOLD
 import secrets
 
 
@@ -279,6 +279,10 @@ class Game(models.Model):
                 region = 'JP'
             elif region in AS_REGION_CODES:
                 region = 'AS'
+            elif region in KR_REGION_CODES:
+                region = 'KR'
+            elif region in CN_REGION_CODES:
+                region = 'CN'
             else:
                 return
             if region not in self.region:
