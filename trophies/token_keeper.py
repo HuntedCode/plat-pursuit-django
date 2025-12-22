@@ -728,6 +728,7 @@ class TokenKeeper:
                     if not region_code == 'Unknown':
                         game.add_region(region_code)
                         game.is_regional = True
+                        game.save(update_fields=['is_regional'])
                         logger.info(f"Game {game.title_name} detected as Asian regional.")
                     else:
                         logger.warning(f"Concept for {title_id.title_id} returned an error code.")
