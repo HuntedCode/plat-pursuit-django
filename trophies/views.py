@@ -131,6 +131,18 @@ class TrophiesListView(ProfileHotbarMixin, ListView):
     template_name = 'trophies/trophy_list.html'
     paginate_by = 25
 
+    def dispatch(self, request, *args, **kwargs):
+        if not request.GET:
+            default_params = {'platform': MODERN_PLATFORMS}
+            if request.user.is_authenticated and request.user.default_region:
+                default_params['region'] = ['global', request.user.default_region]
+            
+            if default_params:
+                query_string = urlencode(default_params, doseq=True)
+                url = reverse('trophies_list') + '?' + query_string
+                return HttpResponseRedirect(url)
+        return super().dispatch(request, *args, **kwargs)
+
     def get_queryset(self):
         qs = super().get_queryset()
         form = TrophySearchForm(self.request.GET)
