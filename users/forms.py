@@ -19,9 +19,10 @@ class CustomUserCreationForm(SignupForm):
 class UserSettingsForm(UserChangeForm):
     class Meta:
         model = CustomUser
-        fields = ['user_timezone']
+        fields = ['user_timezone', 'default_region']
         widgets = {
             'user_timezone': forms.Select(attrs={'class': 'select w-full'}),
+            'default_region': forms.Select(attrs={'class': 'select w-full'}),
         }
 
     def __init__(self, *args, **kwargs):

@@ -279,6 +279,7 @@ NA_REGION_CODES = ['IP', 'UB', 'UP', 'US', 'UT']
 EU_REGION_CODES = ['EB', 'EP']
 JP_REGION_CODES = ['JA', 'JB', 'JP', 'KP']
 AS_REGION_CODES = ['HA,' 'HB', 'HP', 'HT']
+REGIONS = ['NA', 'EU', 'JP', 'AS']
 
 SHOVELWARE_THRESHOLD = 90.0
 

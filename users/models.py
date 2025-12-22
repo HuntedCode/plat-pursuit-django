@@ -2,6 +2,7 @@ from django.db import models
 from django.contrib.auth.models import AbstractUser, BaseUserManager
 from django.utils.translation import gettext_lazy as _
 import pytz
+from trophies.utils import REGIONS
 
 
 # Create your models here.
@@ -28,6 +29,7 @@ class UserManager(BaseUserManager):
 class CustomUser(AbstractUser):
     email = models.EmailField(_("email address"), unique=True, blank=False, null=False)
     user_timezone = models.CharField(max_length=63, choices=[(tz, tz) for tz in pytz.common_timezones], default='UTC', help_text="User's preferred timezone. UTC default.")
+    default_region = models.CharField(max_length=2, choices=[(r, r) for r in REGIONS], null=True, blank=True, default=None, help_text="User's preferred default region filter for games.")
 
     USERNAME_FIELD = "email"
     REQUIRED_FIELDS = []
@@ -36,5 +38,5 @@ class CustomUser(AbstractUser):
 
     class Meta:
         indexes = [
-            models.Index(fields=["email"])   
+            models.Index(fields=["email"]),
         ]

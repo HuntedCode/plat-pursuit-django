@@ -18,7 +18,7 @@
             <!-- User Settings Section -->
             <h3 class="text-2xl text-base-content font-semibold italic mb-2">User Settings</h3>
             <div class="flex flex-col border-4 border-base-300 shadow-lg shadow-neutral rounded-box p-4 w-7/8 mx-auto">
-                <h3 class="text-xl font-semibold mb-2 italic">Change Timezone</h3>
+                <h3 class="text-xl font-semibold mb-2 italic">Regional Info</h3>
                 <form method="post" class="space-y-4 w-7/8 mx-auto">
                     {% csrf_token %}
                     <input type="hidden" name="action" value="update_user">
@@ -27,6 +27,13 @@
                         {{ user_form.user_timezone }}
                         {% if user_form.user_timezone.errors %}
                             <div class="alert alert-error mt-1">{{ user_form.user_timezone.errors }}</div>
+                        {% endif %}
+                    </div>
+                    <div class="form-control">
+                        <label class="label" for="{{ user_form.default_region.id_for_label }}">Default Region</label>
+                        {{ user_form.default_region }}
+                        {% if user_form.default_region.errors %}
+                            <div class="alert alert-error mt-1">{{ user_form.default_region.errors }}</div>
                         {% endif %}
                     </div>
                     <button type="submit" class="btn btn-primary w-full">Save User Settings</button>

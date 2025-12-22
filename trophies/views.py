@@ -18,6 +18,7 @@ from django.utils import timezone
 from django.utils.decorators import method_decorator
 from django_ratelimit.decorators import ratelimit
 from random import choice
+from urllib.parse import urlencode
 from trophies.psn_manager import PSNManager
 from trophies.mixins import ProfileHotbarMixin
 from .models import Game, Trophy, Profile, EarnedTrophy, ProfileGame, TrophyGroup, UserTrophySelection, Badge, UserBadge, UserBadgeProgress, Concept, FeaturedGuide
@@ -30,6 +31,18 @@ class GamesListView(ProfileHotbarMixin, ListView):
     model = Game
     template_name = 'trophies/game_list.html'
     paginate_by = 25
+
+    def dispatch(self, request, *args, **kwargs):
+        if not request.GET:
+            default_params = {'platform': MODERN_PLATFORMS}
+            if request.user.is_authenticated and request.user.default_region:
+                default_params['regions'] = ['global', request.user.default_region]
+            
+            if default_params:
+                query_string = urlencode(default_params, doseq=True)
+                url = reverse('games_list') + '?' + query_string
+                return HttpResponseRedirect(url)
+        return super().dispatch(request, *args, **kwargs)
 
     def get_queryset(self):
         qs = super().get_queryset()
@@ -104,7 +117,6 @@ class GamesListView(ProfileHotbarMixin, ListView):
             {'text': 'Games'},
         ]
 
-        print(self.paginate_by)
         context['form'] = GameSearchForm(self.request.GET)
         context['is_paginated'] = self.object_list.count() > self.paginate_by
         context['selected_platforms'] = self.request.GET.getlist('platform')
