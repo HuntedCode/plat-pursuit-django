@@ -946,6 +946,8 @@ class TokenKeeper:
                     game = title['game']
                     args = [game.np_communication_id, game.title_platform[0] if not game.title_platform[0] == 'PSPC' else game.title_platform[1]]
                     PSNManager.assign_job('sync_trophies', args=args, profile_id=profile.id, priority_override='high_priority')
+        profile.last_profile_health_check = timezone.now()
+        profile.save(update_fields=['last_profile_health_check'])
 
     def _job_sync_games_only(self, profile_id: int):
         try:
