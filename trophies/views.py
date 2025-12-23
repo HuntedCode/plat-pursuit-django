@@ -47,7 +47,15 @@ class GamesListView(ProfileHotbarMixin, ListView):
     def get_queryset(self):
         qs = super().get_queryset()
         form = GameSearchForm(self.request.GET)
-        order = ['title_name']
+
+        qs = qs.annotate(
+            sort_priority=Case(
+                When(Q(title_name__regex=r'^[a-zA-Z0-9 \-!@#$%^&*()_+=.,?/:;\"\'\[\]{}|\\<>~`]+$'), then=Value(0)),
+                default=Value(1),
+                output_field=IntegerField()
+            )
+        )
+        order=['sort_priority', 'title_name']
 
         platinums_earned = Subquery(Trophy.objects.filter(game=OuterRef('pk'), trophy_type='platinum').values('earned_count')[:1])
         platinums_rate = Subquery(Trophy.objects.filter(game=OuterRef('pk'), trophy_type='platinum').values('earn_rate')[:1])
@@ -92,17 +100,17 @@ class GamesListView(ProfileHotbarMixin, ListView):
                 qs = qs.filter(is_shovelware=False)
 
             if sort_val == 'played':
-                order = ['-played_count', 'title_name']
+                order = ['sort_priority', '-played_count', 'title_name']
             elif sort_val == 'played_inv':
-                order = ['played_count', 'title_name']
+                order = ['sort_priority', 'played_count', 'title_name']
             elif sort_val == 'plat_earned':
-                order = ['-platinums_earned_count', 'title_name']
+                order = ['sort_priority', '-platinums_earned_count', 'title_name']
             elif sort_val == 'plat_earned_inv':
-                order = ['platinums_earned_count', 'title_name']
+                order = ['sort_priority', 'platinums_earned_count', 'title_name']
             elif sort_val == 'plat_rate':
-                order = ['-platinums_earn_rate', 'title_name']
+                order = ['sort_priority', '-platinums_earn_rate', 'title_name']
             elif sort_val == 'plat_rate_inv':
-                order = ['platinums_earn_rate', 'title_name']
+                order = ['sort_priority', 'platinums_earn_rate', 'title_name']
 
         qs = qs.prefetch_related(
             Prefetch('trophies', queryset=Trophy.objects.filter(trophy_type='platinum'), to_attr='platinum_trophy')
@@ -146,7 +154,15 @@ class TrophiesListView(ProfileHotbarMixin, ListView):
     def get_queryset(self):
         qs = super().get_queryset()
         form = TrophySearchForm(self.request.GET)
-        order = ['trophy_name']
+
+        qs = qs.annotate(
+            sort_priority=Case(
+                When(Q(trophy_name__regex=r'^[a-zA-Z0-9 \-!@#$%^&*()_+=.,?/:;\"\'\[\]{}|\\<>~`]+$'), then=Value(0)),
+                default=Value(1),
+                output_field=IntegerField()
+            )
+        )
+        order=['sort_priority', 'trophy_name']
 
         if form.is_valid():
             query = form.cleaned_data.get('query')
@@ -191,17 +207,17 @@ class TrophiesListView(ProfileHotbarMixin, ListView):
 
 
             if sort_val == 'earned':
-                order = ['-earned_count', 'trophy_name']
+                order = ['sort_priority', '-earned_count', 'trophy_name']
             elif sort_val == 'earned_inv':
-                order = ['earned_count', 'trophy_name']
+                order = ['sort_priority', 'earned_count', 'trophy_name']
             elif sort_val == 'rate':
-                order = ['-earn_rate', 'trophy_name']
+                order = ['sort_priority', '-earn_rate', 'trophy_name']
             elif sort_val == 'rate_inv':
-                order = ['earn_rate', 'trophy_name']
+                order = ['sort_priority', 'earn_rate', 'trophy_name']
             elif sort_val == 'psn_rate':
-                order = ['-trophy_earn_rate', 'trophy_name']
+                order = ['sort_priority', '-trophy_earn_rate', 'trophy_name']
             elif sort_val == 'psn_rate_inv':
-                order = ['trophy_earn_rate', 'trophy_name']
+                order = ['sort_priority', 'trophy_earn_rate', 'trophy_name']
 
         return qs.order_by(*order)
     
