@@ -66,7 +66,11 @@ class PSNManager:
     
     @classmethod
     def profile_refresh(cls, profile: Profile):
-        if not profile.sync_status == 'syncing':
+        if profile.sync_status == 'error':
+            profile.reset_sync_progress()
+            profile.set_sync_status('syncing')
+            cls.assign_job('check_profile_health', args=[], profile_id=profile.id)
+        elif profile.sync_status == 'synced':
             profile.reset_sync_progress()
             profile.set_sync_status('syncing')
             cls.assign_job('profile_refresh', args=[], profile_id=profile.id)
