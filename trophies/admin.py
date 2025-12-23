@@ -93,7 +93,6 @@ class RegionListFilter(SimpleListFilter):
 class GameAdmin(admin.ModelAdmin):
     list_display = (
         "title_name",
-        "lock_title",
         "np_communication_id",
         "title_platform",
         "concept",
@@ -116,6 +115,7 @@ class GameAdmin(admin.ModelAdmin):
                     "np_communication_id",
                     "np_service_name",
                     "title_name",
+                    "lock_title",
                     "concept",
                     "region",
                     "is_regional",
