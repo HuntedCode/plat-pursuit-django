@@ -80,6 +80,18 @@ def badge_color(badge):
         return 'primary'
 
 @register.filter
+def badge_tier(badge):
+    tier = badge.tier
+    if tier == 1:
+        return 'Bronze'
+    elif tier == 2:
+        return 'Silver'
+    elif tier == 3:
+        return 'Gold'
+    elif tier == 4:
+        return 'Platinum'
+
+@register.filter
 def multiply(value, arg):
     try:
         return float(value) * float(arg)

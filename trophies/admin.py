@@ -299,7 +299,7 @@ class BadgeAdmin(admin.ModelAdmin):
     list_filter = ['tier', 'badge_type']
     search_fields = ['name', 'series_slug']
     filter_horizontal = ['concepts',]
-    fields = ['name', 'series_slug', 'description', 'icon', 'base_badge', 'tier', 'badge_type', 'display_title', 'display_series', 'discord_role_id', 'requires_all', 'min_required', 'requirements', 'concepts', 'earned_count']
+    fields = ['name', 'series_slug', 'description', 'badge_image', 'base_badge', 'tier', 'badge_type', 'display_title', 'display_series', 'discord_role_id', 'requires_all', 'min_required', 'requirements', 'concepts', 'earned_count']
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         if db_field.name == 'base_badge':

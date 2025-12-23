@@ -1,6 +1,7 @@
 from django.db import models
 from django.utils import timezone
 from users.models import CustomUser
+from django.conf.urls.static import static
 from django.core.validators import RegexValidator, MinValueValidator, MaxValueValidator
 from django.db.models import F, Avg, Count, Max, Min
 from datetime import timedelta
@@ -618,10 +619,10 @@ class Event(models.Model):
 
 class Badge(models.Model):
     TIER_CHOICES = [
-        (1, 'Tier 1 (Platinum, Modern)'),
-        (2, 'Tier 2 (100%, Modern)'),
-        (3, 'Tier 3 (Platinum, All Platforms)'),
-        (4, 'Tier 4 (100%, All Platforms)'),
+        (1, 'Bronze'),
+        (2, 'Silver'),
+        (3, 'Gold'),
+        (4, 'Platinum'),
     ]
     BADGE_TYPES = [
         ('series', 'Series (Concept-based)'),
@@ -631,7 +632,7 @@ class Badge(models.Model):
     name = models.CharField(max_length=255)
     series_slug = models.SlugField(max_length=100, blank=True, null=True, help_text='Groups tiers of the same series')
     description = models.TextField(blank=True)
-    icon = models.ImageField(upload_to='badges/', blank=True, null=True)
+    badge_image = models.ImageField(upload_to='badges/main/', blank=True, null=True, help_text='Main badge layer - defaults to static if blank.')
     base_badge = models.ForeignKey('self', on_delete=models.SET_NULL, null=True, blank=True, related_name='derived_badges', help_text='Reference a base (Tier 1) badge to inherit its icon')
     display_title = models.CharField(max_length=100, blank=True)
     display_series = models.CharField(max_length=100, blank=True)
@@ -652,14 +653,6 @@ class Badge(models.Model):
             models.Index(fields=['badge_type'], name='badge_type_idx'),
             models.Index(fields=['earned_count'], name='badge_earned_count_idx'),
         ]
-    
-    @property
-    def effective_icon_url(self):
-        if self.icon:
-            return self.icon.url
-        elif self.base_badge and self.base_badge.icon:
-            return self.base_badge.icon.url
-        return None
 
     @property
     def effective_display_series(self):
@@ -685,6 +678,23 @@ class Badge(models.Model):
             return self.base_badge.description
         return None
     
+    def get_badge_layers(self):
+        """Return dict of layer URLs for backdrop, main and foreground."""
+
+        main_url = self.badge_image.url if self.badge_image else self.base_badge.badge_image.url if self.base_badge else 'images/badges/default.png'
+        backdrop_url = f"images/badges/backdrops/{self.tier}_backdrop.png"
+        if self.badge_image:
+            foreground_url = f"images/badges/foregrounds/{self.tier}_foreground.png"
+            return {
+                'backdrop': backdrop_url,
+                'main': main_url,
+                'foreground': foreground_url
+            }
+        return {
+            'backdrop': backdrop_url,
+            'main': main_url,
+        }
+
     def __str__(self):
         return f"{self.name} (Tier {self.tier})"
     

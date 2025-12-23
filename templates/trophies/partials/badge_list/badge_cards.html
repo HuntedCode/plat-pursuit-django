@@ -5,12 +5,12 @@
         <div class="card-body m-0 px-3 py-3 gap-0">
             <h3 class="text-lg font-bold line-clamp-1 italic pr-1 hover:scale-105">{{ badge.effective_display_title }}</h3>
             <div class="flex flex-row justify-between items-end mb-1">
-                <h5 class="text-base text-{{ badge|badge_color }} font-bold hover:scale-105">Tier {{ badge.tier }}</h5>
-                <h5 class="text-xs text-base-content/70 font-semibold italic pr-1 hover:scale-105">Total Earned (Tier 1): {{ item.tier1_earned_count }}</h5>
+                <h5 class="text-base text-{{ badge|badge_color }} font-bold hover:scale-105">{{ badge|badge_tier }}</h5>
+                <h5 class="text-xs text-base-content/70 font-semibold italic pr-1 hover:scale-105">Total Earned: {{ item.tier1_earned_count }}</h5>
             </div>
-            <figure class="border-4 border-base-300 rounded-box transition-all duration-300 group-hover:bg-{{ badge|badge_color }}">
-                <img src="{{ badge.effective_icon_url }}" alt="{{ badge.name }}" class="w-full object-cover" loading="lazy" />
-            </figure>
+            <div class="w-32 h-32 mx-auto">
+                {% include 'partials/badge.html' with layers=badge.get_badge_layers %}
+            </div>
             <h2 class="text-lg text-base-content font-semibold text-center italic line-clamp-1 pr-1 hover:scale-105">{{ badge.effective_display_series }}</h2>
             <h6 class="text-xs text-base-content/70 font-semibold text-center italic line-clamp-1 pr-1 hover:scale-105">{{ badge.effective_description }}</h6>
 
