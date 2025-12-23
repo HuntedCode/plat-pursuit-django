@@ -43,23 +43,8 @@ class ProfileAdmin(admin.ModelAdmin):
             "Trophy Summary",
             {"fields": ("trophy_level", "progress", "tier", "earned_trophy_summary", 'total_trophies', 'total_unearned', 'total_plats', 'total_games', 'total_completes', 'avg_progress')},
         ),
-        (
-            "Profile Platinums",
-            {"fields": ("recent_plat", "rarest_plat")},
-        ),
         ("Sync Info", {"fields": ("extra_data", "last_synced", "last_profile_health_check", "sync_status", "sync_progress_value", "sync_progress_target", "sync_tier")}),
     )
-    actions = ["link_to_user"]
-
-    def link_to_user(self, request, queryset):
-        for profile in queryset:
-            if not profile.is_linked:
-                profile.link_to_user(request.user)
-                self.message_user(
-                    request, f"Linked {profile.psn_username} to {request.user.username}"
-                )
-
-    link_to_user.short_description = "Link selected profiles to current user"
 
 
 class RegionListFilter(SimpleListFilter):
