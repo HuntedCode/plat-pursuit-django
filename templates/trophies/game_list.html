@@ -123,24 +123,19 @@
         <div class="flex flex-col md:flex-row justify-center items-center gap-2 mb-2">
             <div class="btn-group">
                 {% if page_obj.has_previous %}
-                    <a href="?page=1{% if request.GET.query %}&query={{ request.GET.query }}{% endif %}{% if request.GET.sort %}&sort={{ request.GET.sort }}{% endif %}{% if request.GET.platform %}&platform={{ request.GET.platform }}{% endif %}{% if request.GET.regions %}&regions={{ request.GET.regions }}{% endif %}{% if request.GET.letter %}&letter={{ request.GET.letter }}{% endif %}{% if request.GET.show_only_platinum %}&show_only_platinum={{ request.GET.show_only_platinum }}{% endif %}{% if request.GET.filter_shovelware %}&filter_shovelware={{ request.GET.filter_shovelware }}{% endif %}#filter-form" class="btn btn-outline btn-xs sm:btn-sm md:btn-md">&laquo; First</a>
-                    <a href="?page={{ page_obj.previous_page_number }}{% if request.GET.query %}&query={{ request.GET.query }}{% endif %}{% if request.GET.sort %}&sort={{ request.GET.sort }}{% endif %}{% if request.GET.platform %}&platform={{ request.GET.platform }}{% endif %}{% if request.GET.regions %}&regions={{ request.GET.regions }}{% endif %}{% if request.GET.letter %}&letter={{ request.GET.letter }}{% endif %}{% if request.GET.show_only_platinum %}&show_only_platinum={{ request.GET.show_only_platinum }}{% endif %}{% if request.GET.filter_shovelware %}&filter_shovelware={{ request.GET.filter_shovelware }}{% endif %}#filter-form" class="btn btn-outline btn-xs sm:btn-sm md:btn-md">Previous</a>
+                    <a href="?{% querystring exclude='page' %}&page=1#filter-form" class="btn btn-outline btn-xs sm:btn-sm md:btn-md">&laquo; First</a>
+                    <a href="?{% querystring exclude='page' %}&page={{ page_obj.previous_page_number }}#filter-form" class="btn btn-outline btn-xs sm:btn-sm md:btn-md">Previous</a>
                 {% endif %}
                 
                 <span class="btn btn-active btn-xs sm:btn-sm md:btn-md">Page {{ page_obj.number }} of {{ paginator.num_pages }}</span>
                 
                 {% if page_obj.has_next %}
-                    <a href="?page={{ page_obj.next_page_number }}{% if request.GET.query %}&query={{ request.GET.query }}{% endif %}{% if request.GET.sort %}&sort={{ request.GET.sort }}{% endif %}{% if request.GET.platform %}&platform={{ request.GET.platform }}{% endif %}{% if request.GET.regions %}&regions={{ request.GET.regions }}{% endif %}{% if request.GET.letter %}&letter={{ request.GET.letter }}{% endif %}{% if request.GET.show_only_platinum %}&show_only_platinum={{ request.GET.show_only_platinum }}{% endif %}{% if request.GET.filter_shovelware %}&filter_shovelware={{ request.GET.filter_shovelware }}{% endif %}#filter-form" class="btn btn-outline btn-xs sm:btn-sm md:btn-md">Next</a>
-                    <a href="?page={{ paginator.num_pages }}{% if request.GET.query %}&query={{ request.GET.query }}{% endif %}{% if request.GET.sort %}&sort={{ request.GET.sort }}{% endif %}{% if request.GET.platform %}&platform={{ request.GET.platform }}{% endif %}{% if request.GET.regions %}&regions={{ request.GET.regions }}{% endif %}{% if request.GET.letter %}&letter={{ request.GET.letter }}{% endif %}{% if request.GET.show_only_platinum %}&show_only_platinum={{ request.GET.show_only_platinum }}{% endif %}{% if request.GET.filter_shovelware %}&filter_shovelware={{ request.GET.filter_shovelware }}{% endif %}#filter-form" class="btn btn-outline btn-xs sm:btn-sm md:btn-md">Last &raquo;</a>
+                    <a href="?{% querystring exclude='page' %}&page={{ page_obj.next_page_number }}#filter-form" class="btn btn-outline btn-xs sm:btn-sm md:btn-md">Next</a>
+                    <a href="?{% querystring exclude='page' %}&page={{ paginator.num_pages }}#filter-form" class="btn btn-outline btn-xs sm:btn-sm md:btn-md">Last &raquo;</a>
                 {% endif %}
             </div>
 
-            <form method="get" action="?{% if request.GET.query %}&query={{ request.GET.query }}{% endif %}{% if request.GET.sort %}&sort={{ request.GET.sort }}{% endif %}{% if request.GET.platform %}&platform={{ request.GET.platform }}{% endif %}{% if request.GET.regions %}&regions={{ request.GET.regions }}{% endif %}{% if request.GET.letter %}&letter={{ request.GET.letter }}{% endif %}{% if request.GET.show_only_platinum %}&show_only_platinum={{ request.GET.show_only_platinum }}{% endif %}{% if request.GET.filter_shovelware %}&filter_shovelware={{ request.GET.filter_shovelware }}{% endif %}page=#filter-form" class="form-control flex-row items-center space-x-2 ml-4">
-                {% for key, value in request.GET.items %}
-                    {% if key != 'page' %}
-                        <input type="hidden" name="{{ key }}" value="{{ value }}">
-                    {% endif %}
-                {% endfor %}
+            <form id="page-jump-form" method="get" class="form-control flex-row items-center space-x-2 ml-4">
                 <label class="label font-semibold" for="page-input">Go to page:</label>
                 <input type="number" id="page-input" name="page" min="1" max="{{ paginator.num_pages }}" value="{{ page_obj.number }}" class="input w-20" />
                 <button type="submit" class="btn btn-primary btn-sm">Go</button>
@@ -162,34 +157,36 @@
         <div class="flex flex-col md:flex-row justify-center items-center gap-2 mt-6">
             <div class="btn-group">
                 {% if page_obj.has_previous %}
-                    <a href="?page=1{% if request.GET.query %}&query={{ request.GET.query }}{% endif %}{% if request.GET.sort %}&sort={{ request.GET.sort }}{% endif %}{% if request.GET.platform %}&platform={{ request.GET.platform }}{% endif %}{% if request.GET.regions %}&regions={{ request.GET.regions }}{% endif %}{% if request.GET.letter %}&letter={{ request.GET.letter }}{% endif %}{% if request.GET.show_only_platinum %}&show_only_platinum={{ request.GET.show_only_platinum }}{% endif %}{% if request.GET.filter_shovelware %}&filter_shovelware={{ request.GET.filter_shovelware }}{% endif %}#filter-form" class="btn btn-outline btn-xs sm:btn-sm md:btn-md">&laquo; First</a>
-                    <a href="?page={{ page_obj.previous_page_number }}{% if request.GET.query %}&query={{ request.GET.query }}{% endif %}{% if request.GET.sort %}&sort={{ request.GET.sort }}{% endif %}{% if request.GET.platform %}&platform={{ request.GET.platform }}{% endif %}{% if request.GET.regions %}&regions={{ request.GET.regions }}{% endif %}{% if request.GET.letter %}&letter={{ request.GET.letter }}{% endif %}{% if request.GET.show_only_platinum %}&show_only_platinum={{ request.GET.show_only_platinum }}{% endif %}{% if request.GET.filter_shovelware %}&filter_shovelware={{ request.GET.filter_shovelware }}{% endif %}#filter-form" class="btn btn-outline btn-xs sm:btn-sm md:btn-md">Previous</a>
+                    <a href="?{% querystring exclude='page' %}&page=1#filter-form" class="btn btn-outline btn-xs sm:btn-sm md:btn-md">&laquo; First</a>
+                    <a href="?{% querystring exclude='page' %}&page={{ page_obj.previous_page_number }}#filter-form" class="btn btn-outline btn-xs sm:btn-sm md:btn-md">Previous</a>
                 {% endif %}
                 
                 <span class="btn btn-active btn-xs sm:btn-sm md:btn-md">Page {{ page_obj.number }} of {{ paginator.num_pages }}</span>
                 
                 {% if page_obj.has_next %}
-                    <a href="?page={{ page_obj.next_page_number }}{% if request.GET.query %}&query={{ request.GET.query }}{% endif %}{% if request.GET.sort %}&sort={{ request.GET.sort }}{% endif %}{% if request.GET.platform %}&platform={{ request.GET.platform }}{% endif %}{% if request.GET.regions %}&regions={{ request.GET.regions }}{% endif %}{% if request.GET.letter %}&letter={{ request.GET.letter }}{% endif %}{% if request.GET.show_only_platinum %}&show_only_platinum={{ request.GET.show_only_platinum }}{% endif %}{% if request.GET.filter_shovelware %}&filter_shovelware={{ request.GET.filter_shovelware }}{% endif %}#filter-form" class="btn btn-outline btn-xs sm:btn-sm md:btn-md">Next</a>
-                    <a href="?page={{ paginator.num_pages }}{% if request.GET.query %}&query={{ request.GET.query }}{% endif %}{% if request.GET.sort %}&sort={{ request.GET.sort }}{% endif %}{% if request.GET.platform %}&platform={{ request.GET.platform }}{% endif %}{% if request.GET.regions %}&regions={{ request.GET.regions }}{% endif %}{% if request.GET.letter %}&letter={{ request.GET.letter }}{% endif %}{% if request.GET.show_only_platinum %}&show_only_platinum={{ request.GET.show_only_platinum }}{% endif %}{% if request.GET.filter_shovelware %}&filter_shovelware={{ request.GET.filter_shovelware }}{% endif %}#filter-form" class="btn btn-outline btn-xs sm:btn-sm md:btn-md">Last &raquo;</a>
+                    <a href="?{% querystring exclude='page' %}&page={{ page_obj.next_page_number }}#filter-form" class="btn btn-outline btn-xs sm:btn-sm md:btn-md">Next</a>
+                    <a href="?{% querystring exclude='page' %}&page={{ paginator.num_pages }}#filter-form" class="btn btn-outline btn-xs sm:btn-sm md:btn-md">Last &raquo;</a>
                 {% endif %}
             </div>
-
-            <form method="get" action="?{% if request.GET.query %}&query={{ request.GET.query }}{% endif %}{% if request.GET.sort %}&sort={{ request.GET.sort }}{% endif %}{% if request.GET.platform %}&platform={{ request.GET.platform }}{% endif %}{% if request.GET.regions %}&regions={{ request.GET.regions }}{% endif %}{% if request.GET.letter %}&letter={{ request.GET.letter }}{% endif %}{% if request.GET.show_only_platinum %}&show_only_platinum={{ request.GET.show_only_platinum }}{% endif %}{% if request.GET.filter_shovelware %}&filter_shovelware={{ request.GET.filter_shovelware }}{% endif %}page=#filter-form" class="form-control flex-row items-center space-x-2 ml-4">
-                {% for key, value in request.GET.items %}
-                    {% if key != 'page' %}
-                        <input type="hidden" name="{{ key }}" value="{{ value }}">
-                    {% endif %}
-                {% endfor %}
-                <label class="label font-semibold" for="page-input">Go to page:</label>
-                <input type="number" id="page-input" name="page" min="1" max="{{ paginator.num_pages }}" value="{{ page_obj.number }}" class="input w-20" />
-                <button type="submit" class="btn btn-primary btn-sm">Go</button>
-            </form>
         </div>
     {% endif %}
 
 {% endblock %}
 
 {% block js_scripts %}
+    <script>
+        document.getElementById('page-jump-form').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const newPage = document.getElementById('page-input').value;
+            const currentParams = new URLSearchParams(window.location.search);
+            currentParams.set('page', newPage);
+            
+            const newUrl = `${window.location.pathname}?${currentParams.toString()}#filter-form`;
+            
+            window.location.href = newUrl;
+        });
+    </script>
     <script src="{% static 'js\submit_shimmer.js' %}"></script>
     <script src="{% static 'js\list_page_filters.js' %}"></script>
 {% endblock %}

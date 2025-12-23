@@ -14,3 +14,11 @@ def query_transform(context, **kwargs):
         else:
             query[key] = str(new_value)
     return query.urlencode()
+
+@register.simple_tag(takes_context=True)
+def querystring(context, exclude=None):
+    request = context['request']
+    params = request.GET.copy()
+    if exclude:
+        params.pop(exclude, None)
+    return params.urlencode()
