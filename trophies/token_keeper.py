@@ -888,7 +888,7 @@ class TokenKeeper:
                 PsnApiService.update_profile_game_with_title_stats(profile, stats)
             
             profile.add_to_sync_target(job_counter)
-        if timezone.now() - timedelta(days=1) < profile.last_profile_health_check:
+        if timezone.now() - timedelta(days=1) > profile.last_profile_health_check:
             PSNManager.assign_job('check_profile_health', args=[], profile_id=profile.id, priority_override='medium_priority')
         PSNManager.assign_job('sync_profilegame_stats', args=[touched_profilegame_ids], profile_id=profile.id, priority_override='medium_priority')
         PSNManager.check_profile_badges(profile, 'medium_priority')
