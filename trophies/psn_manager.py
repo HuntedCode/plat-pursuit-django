@@ -67,9 +67,7 @@ class PSNManager:
     @classmethod
     def profile_refresh(cls, profile: Profile):
         if profile.sync_status == 'error':
-            profile.reset_sync_progress()
-            profile.set_sync_status('syncing')
-            cls.assign_job('sync_games_only', args=[], profile_id=profile.id)
+            cls.initial_sync(profile)
         elif profile.sync_status == 'synced':
             profile.reset_sync_progress()
             profile.set_sync_status('syncing')
