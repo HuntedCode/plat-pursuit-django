@@ -70,23 +70,21 @@
                     </div>
                 {% endif %}
             </div>
-            {% if game.concept %}
-                {% if image_urls.screenshot_urls %}
-                    <div class="max-w-full lg:max-w-1/2 xl:max-w-full flex flex-col items-center">
-                        <div class="carousel w-9/10 max-h-64 border-4 border-base-300 shadow-lg shadow-neutral rounded-box hover:scale-105" id="screenshot-carousel">
-                            {% for url in image_urls.screenshot_urls %}
-                                <div id="item{{ forloop.counter }}" class="carousel-item w-full">
-                                    <img src="{{ url }}" class="w-full" />
-                                </div>
-                            {% endfor %}
-                        </div>
-                        <div class="flex flex-wrap w-9/10 justify-center gap-2 py-2">
-                            {% for url in image_urls.screenshot_urls %}
-                                <a class="btn btn-xs" data-slide-to="item{{ forloop.counter }}">{{ forloop.counter }}</a>
-                            {% endfor %}
-                        </div>
+            {% if game.concept and image_urls.screenshot_urls %}
+                <div class="max-w-full lg:max-w-1/2 xl:max-w-full flex flex-col items-center">
+                    <div class="carousel w-9/10 max-h-64 border-4 border-base-300 shadow-lg shadow-neutral rounded-box hover:scale-105" id="screenshot-carousel">
+                        {% for url in image_urls.screenshot_urls %}
+                            <div id="item{{ forloop.counter }}" class="carousel-item w-full">
+                                <img src="{{ url }}" class="w-full" />
+                            </div>
+                        {% endfor %}
                     </div>
-                {% endif %}
+                    <div class="flex flex-wrap w-9/10 justify-center gap-2 py-2">
+                        {% for url in image_urls.screenshot_urls %}
+                            <a class="btn btn-xs" data-slide-to="item{{ forloop.counter }}">{{ forloop.counter }}</a>
+                        {% endfor %}
+                    </div>
+                </div>
             {% else %}
                 {% if profile %}
                     <div class="justify-self-center w-full">
