@@ -16,7 +16,9 @@ class Command(BaseCommand):
         for row in reader:
             title_id_str = row.get('titleId')
             platform = 'PS4'
-            region = row.get('region', 'IP')
+            region = row.get('region')
+            if region == '':
+                region = 'IP'
             created_count = 0
             if title_id_str:
                 title_id, created = TitleID.objects.get_or_create(title_id=title_id_str, defaults={'platform': platform, 'region': region})
@@ -30,7 +32,9 @@ class Command(BaseCommand):
         for row in reader:
             title_id_str = row.get('titleId')
             platform = 'PS5'
-            region = row.get('region', 'IP')
+            region = row.get('region')
+            if region == '':
+                region = 'IP'
             if title_id_str:
                 title_id, created = TitleID.objects.get_or_create(title_id=title_id_str, defaults={'platform': platform, 'region': region})
                 if created:
