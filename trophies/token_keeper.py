@@ -90,9 +90,10 @@ class TokenInstance:
             self.update_expiry_times()
     
     def update_expiry_times(self):
-        auth = self.client.authenticator
-        self.access_expiry = datetime.fromtimestamp(auth.access_token_expiration_time)
-        self.refresh_expiry = datetime.fromtimestamp(auth.refresh_token_expiration_time)
+        if self.client:
+            auth = self.client.authenticator
+            self.access_expiry = datetime.fromtimestamp(auth.access_token_expiration_time)
+            self.refresh_expiry = datetime.fromtimestamp(auth.refresh_token_expiration_time)
 
     def get_access_expiry_in_seconds(self):
         if self.access_expiry:
@@ -228,16 +229,28 @@ class TokenKeeper:
             instances = {}
             for i, token in enumerate(tokens):
                 start_time = time.time()
-                client = ProxiedPSNAWP(token, proxy_url=proxy)
-                self._record_call(token)
-                client.user(online_id='PlatPursuit') # Generates refresh tokens, etc.
-                inst = TokenInstance(
-                    instance_id=i,
-                    token=token,
-                    client=client,
-                    user_cache={},
-                    proxy_url=proxy
-                )
+                try:
+                    client = ProxiedPSNAWP(token, proxy_url=proxy)
+                    self._record_call(token)
+                    client.user(online_id='PlatPursuit') # Generates refresh tokens, etc.
+                    inst = TokenInstance(
+                        instance_id=i,
+                        token=token,
+                        client=client,
+                        user_cache={},
+                        proxy_url=proxy,
+                        last_health=time.time()
+                    )
+                except Exception as e:
+                    inst = TokenInstance(
+                        instance_id=i,
+                        token=token,
+                        client=None,
+                        user_cache={},
+                        proxy_url=proxy,
+                        last_health=0
+                    )
+                    logger.warning(f"Failed to init client for instance {i} | {token}")
                 try:
                     session = requests.Session()
                     if inst.proxy_url:
@@ -371,7 +384,7 @@ class TokenKeeper:
             instance_scores = {}
             for group_id, group in self.group_instances.items():
                 for inst_id, inst in group['instances'].items():
-                    if not inst.is_busy and self._is_healthy(inst):
+                    if not inst.is_busy and self._is_healthy(inst) and not inst.last_health == 0:
                         key = (group_id, inst_id)
                         instance_scores[key] = self._get_calls_in_window(inst.token)
             
