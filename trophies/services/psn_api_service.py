@@ -369,6 +369,7 @@ class PsnApiService:
         )
         base_badge.concepts.add(*concepts)
         base_badge.save()
+        base_badge.update_most_recent_concept()
 
         for i, tier in enumerate(['Silver', 'Gold', 'Platinum']):
             badge = Badge.objects.create(

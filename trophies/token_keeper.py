@@ -723,11 +723,12 @@ class TokenKeeper:
                 if error_code is None:
                     concept, _ = PsnApiService.create_concept_from_details(details)
                     
-                    release_date = details.get('defaultProduct', {}).get('releaseDate', None)
-                    if release_date is None:
-                        release_date = details.get('releaseDate', {}).get('date', '')
+                    if concept.release_date is None:
+                        release_date = details.get('defaultProduct', {}).get('releaseDate', None)
+                        if release_date is None:
+                            release_date = details.get('releaseDate', {}).get('date', '')
+                        concept.update_release_date(release_date)
                     media_data = self._extract_media(details)
-                    concept.update_release_date(release_date)
                     concept.update_media(media_data['all_media'], media_data['icon_url'], media_data['bg_url'])
                     game.add_concept(concept)
                     game.add_region(title_id.region)

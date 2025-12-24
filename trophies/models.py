@@ -354,6 +354,9 @@ class Concept(models.Model):
         if date:
             self.release_date = date
             self.save(update_fields=['release_date'])
+            badges = self.badges.all()
+            for badge in badges:
+                badge.update_most_recent_concept()
     
     def has_user_earned_platinum(self, profile):
         platinum_trophies = Trophy.objects.filter(game__concept=self, trophy_type='platinum')
@@ -644,6 +647,7 @@ class Badge(models.Model):
     min_required = models.PositiveIntegerField(default=0, help_text="For large series (e.g. 10 out of 30)")
     requirements = models.JSONField(default=dict, blank=True, help_text="For misc badges")
     concepts = models.ManyToManyField(Concept, related_name='badges', blank=True, help_text="Required Concepts for series badges")
+    most_recent_concept = models.ForeignKey(Concept, on_delete=models.SET_NULL, null=True, blank=True, related_name='most_recent_for_badges', help_text='Concept with the latest release_date')
     created_at = models.DateTimeField(auto_now_add=True)
     earned_count = models.PositiveIntegerField(default=0, help_text="Count of users who have earned this badge tier")
 
@@ -653,6 +657,7 @@ class Badge(models.Model):
             models.Index(fields=['series_slug', 'tier'], name='badge_series_tier_idx'),
             models.Index(fields=['badge_type'], name='badge_type_idx'),
             models.Index(fields=['earned_count'], name='badge_earned_count_idx'),
+            models.Index(fields=['most_recent_concept'], name='badge_recent_concept_idx'),
         ]
 
     @property
@@ -695,6 +700,14 @@ class Badge(models.Model):
             'backdrop': backdrop_url,
             'main': main_url,
         }
+
+    def update_most_recent_concept(self):
+        if not self.concepts.exists():
+            self.most_recent_concept = None
+        else:
+            max_date = self.concepts.aggregate(Max('release_date'))['release_date__max']
+            self.most_recent_concept = self.concepts.filter(release_date=max_date).first() if max_date else None
+            self.save(update_fields=['most_recent_concept'])
 
     def __str__(self):
         return f"{self.name} (Tier {self.tier})"

@@ -44,17 +44,6 @@
                 {% endif %}
             {% endwith %}
         </h1>
-        <div class="flex flex-row gap-2 self-end mb-4 pr-4">
-            <div class="tooltip" data-tip="{% if view_type == 'list' %}Switch To Grid View{% else %}Switch To List View{% endif %}">
-                <button id="view-toggle" type="button" class="btn btn-square btn-sm lg:btn-lg bg-base-100" data-view-type="{{ view_type|default:'grid' }}">
-                    {% if view_type == 'list' %}
-                        <svg xmlns="http://www.w3.org/2000/svg" class="justify-self-center self-center" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--color-base-content)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
-                    {% else %}
-                        <svg xmlns="http://www.w3.org/2000/svg" class="justify-self-center self-center" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--color-base-content)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
-                    {% endif %}
-                </button>
-            </div>
-        </div>
     </div>
 
     {% if is_paginated %}
@@ -81,15 +70,9 @@
         </div>
     {% endif %}
 
-    {% if view_type == 'list' %}
-        <div id="items-grid" class="space-y-2">
-            {% include 'trophies/partials/badge_list/badge_list_items.html' %}
-        </div>
-    {% else %}
-        <div id="items-grid" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-2">
-            {% include 'trophies/partials/badge_list/badge_cards.html' %}
-        </div>
-    {% endif %}
+    <div id="items-grid" class="space-y-2">
+        {% include 'trophies/partials/badge_list/badge_list_items.html' %}
+    </div>
 
     {% if is_paginated %}
         <div class="flex flex-col md:flex-row justify-center items-center gap-2 mt-6">
