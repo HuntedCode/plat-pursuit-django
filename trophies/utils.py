@@ -6,7 +6,6 @@ import requests
 import logging
 from django.db.models import Exists, OuterRef, Q
 from django.conf import settings
-from django.utils import timezone
 from datetime import timedelta
 from dotenv import load_dotenv
 from typing import List, Set
@@ -92,11 +91,28 @@ def calculate_trimmed_mean(data, trim_percent=0.1):
         return None
     return stats.trim_mean(data, trim_percent)
 
-def check_profile_badges(profile):
-    from trophies.models import Profile, Badge
-    badges_qs = Badge.objects.filter(badge_type='series').prefetch_related('concepts')
-    for badge in badges_qs:
-        process_badge(profile, badge)
+def check_profile_badges(profile, profilegame_ids):
+    from trophies.models import ProfileGame, Badge
+    pg_qs = ProfileGame.objects.filter(id__in=profilegame_ids, profile=profile)
+
+    unique_badges = set()
+    for pg in pg_qs:
+        concept = pg.game.concept
+        if concept:
+            for badge in concept.badges.all():
+                unique_badges.add(badge)
+                derived = Badge.objects.filter(base_badge=badge)
+                unique_badges.update(derived)
+    
+    checked_count = 0
+    for badge in unique_badges:
+        try:
+            process_badge(profile, badge)
+            checked_count += 1
+        except Exception as e:
+            logger.error(f"Error checking badge {badge.id} for profile {profile.psn_username}")
+    logger.info(f"Checked {checked_count} unique badges for profile {profile.psn_username}")
+    return checked_count
 
 def get_badge_metrics(profile, badge):
     """Computes the number of qualifying Concepts achieved by the user and required value for a series badge. Returns 0 for misc badges or invalid configs."""

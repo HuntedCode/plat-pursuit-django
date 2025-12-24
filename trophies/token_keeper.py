@@ -22,7 +22,7 @@ from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_excep
 from .models import Profile, Game, TitleID, TrophyGroup
 from .services.psn_api_service import PsnApiService
 from .psn_manager import PSNManager
-from .utils import redis_client, log_api_call, TITLE_ID_BLACKLIST, TITLE_STATS_SUPPORTED_PLATFORMS, check_profile_badges, update_profile_games, update_profile_trophy_counts, detect_asian_language
+from .utils import redis_client, log_api_call, TITLE_ID_BLACKLIST, TITLE_STATS_SUPPORTED_PLATFORMS, update_profile_games, update_profile_trophy_counts, detect_asian_language, check_profile_badges
 
 logger = logging.getLogger("psn_api")
 
@@ -350,8 +350,6 @@ class TokenKeeper:
                     self._job_sync_complete(profile_id)
                 elif job_type == 'handle_privacy_error':
                     self._job_handle_privacy_error(profile_id)
-                elif job_type == 'check_profile_badges':
-                    self._job_check_profile_badges(profile_id)
                 else:
                     logger.error(f"Unknown job type: {job_type}")
                     raise
@@ -512,16 +510,6 @@ class TokenKeeper:
         profile.set_sync_status('synced')
         logger.info(f"{profile.display_psn_username} account has finished syncing!")
     
-    def _job_check_profile_badges(self, profile_id: int):
-        try:
-            profile = Profile.objects.get(id=profile_id)
-        except Profile.DoesNotExist:
-            logger.error(f"Profile {profile_id} does not exist.")
-        job_type = 'check_profile_badges'
-
-        check_profile_badges(profile)
-        logger.info(f"Badges checked for {profile.display_psn_username} successfully!")
-    
     def _job_handle_privacy_error(self, profile_id: int):
         try:
             profile = Profile.objects.get(id=profile_id)
@@ -681,7 +669,6 @@ class TokenKeeper:
                 PsnApiService.update_profile_game_with_title_stats(profile, stats)
             
             profile.add_to_sync_target(job_counter)
-            PSNManager.check_profile_badges(profile, 'low_priority')
             PSNManager.sync_complete(profile, 'low_priority')
 
     def _job_sync_trophies(self, profile_id: int, np_communication_id: str, platform: str):
@@ -905,7 +892,6 @@ class TokenKeeper:
         if timezone.now() - timedelta(days=1) > profile.last_profile_health_check:
             PSNManager.assign_job('check_profile_health', args=[], profile_id=profile.id, priority_override='medium_priority')
         PSNManager.assign_job('sync_profilegame_stats', args=[touched_profilegame_ids], profile_id=profile.id, priority_override='medium_priority')
-        PSNManager.check_profile_badges(profile, 'medium_priority')
         PSNManager.sync_complete(profile, 'medium_priority')
 
     def _sync_profilegame_stats(self, profile_id: int, touched_profilegame_ids: list[int]):
@@ -917,6 +903,7 @@ class TokenKeeper:
 
         profile.update_plats()
         PsnApiService.update_profilegame_stats(touched_profilegame_ids)
+        check_profile_badges(profile, touched_profilegame_ids)
         logger.info(f"ProfileGame Stats updated for {profile_id} successfully! | {len(touched_profilegame_ids)} profilegames updated")
 
     def _job_check_profile_health(self, profile_id: int):
@@ -1017,7 +1004,6 @@ class TokenKeeper:
         if check_profile_health:
             PSNManager.assign_job('check_profile_health', args=[], profile_id=profile.id, priority_override='medium_priority')
         PSNManager.assign_job('sync_profilegame_stats', args=[touched_profilegame_ids], profile_id=profile.id, priority_override='medium_priority')
-        PSNManager.check_profile_badges(profile, 'medium_priority')
         PSNManager.sync_complete(profile, 'medium_priority')
 
     @property
