@@ -186,13 +186,10 @@ class Profile(models.Model):
             self.refresh_from_db(fields=['sync_status'])
     
     def add_to_sync_target(self, value: int):
-        print('called...')
         if value:
-            print(f"Adding {value} to target for {self.display_psn_username}")
             self.sync_progress_target = F('sync_progress_target') + value
             self.save(update_fields=['sync_progress_target'])
             self.refresh_from_db(fields=['sync_progress_target'])
-            print(f"New target: {self.sync_progress_target}")
     
     def increment_sync_progress(self):
         self.sync_progress_value = F('sync_progress_value') + 1
