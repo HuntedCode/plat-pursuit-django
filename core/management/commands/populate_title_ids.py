@@ -22,6 +22,9 @@ class Command(BaseCommand):
             created_count = 0
             if title_id_str:
                 title_id, created = TitleID.objects.get_or_create(title_id=title_id_str, defaults={'platform': platform, 'region': region})
+                if title_id.region == '':
+                    title_id.region = 'IP'
+                    title_id.save(update_fields=['region'])
                 if created:
                     created_count += 1
         
@@ -37,6 +40,9 @@ class Command(BaseCommand):
                 region = 'IP'
             if title_id_str:
                 title_id, created = TitleID.objects.get_or_create(title_id=title_id_str, defaults={'platform': platform, 'region': region})
+                if title_id.region == '':
+                    title_id.region = 'IP'
+                    title_id.save(update_fields=['region'])
                 if created:
                     created_count += 1
         
