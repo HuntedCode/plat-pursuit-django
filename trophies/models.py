@@ -636,6 +636,7 @@ class Badge(models.Model):
     base_badge = models.ForeignKey('self', on_delete=models.SET_NULL, null=True, blank=True, related_name='derived_badges', help_text='Reference a base (Tier 1) badge to inherit its icon')
     display_title = models.CharField(max_length=100, blank=True)
     display_series = models.CharField(max_length=100, blank=True)
+    user_title = models.CharField(max_length=100, blank=True, help_text="Title earned by user upon badge completion.")
     discord_role_id = models.BigIntegerField(null=True, blank=True, help_text="Discord role ID to auto assign upon earning the badge (optional).")
     tier = models.IntegerField(choices=TIER_CHOICES, default=1)
     badge_type = models.CharField(max_length=10, choices=BADGE_TYPES, default='series')

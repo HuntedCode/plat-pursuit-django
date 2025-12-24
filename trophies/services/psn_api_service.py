@@ -4,7 +4,7 @@ from datetime import timedelta
 from dateutil import parser as date_parser
 from django.utils import timezone
 from django.db.models import F
-from trophies.models import Profile, Game, ProfileGame, Trophy, EarnedTrophy, Concept, TrophyGroup
+from trophies.models import Profile, Game, ProfileGame, Trophy, EarnedTrophy, Concept, TrophyGroup, Badge
 from trophies.utils import DISCORD_PLATINUM_WEBHOOK_URL, PLAT_PURSUIT_EMOJI_ID, PLATINUM_EMOJI_ID
 from psnawp_api.models.title_stats import TitleStats
 from psnawp_api.models.trophies import TrophyTitle, TrophyGroupSummary
@@ -354,3 +354,26 @@ class PsnApiService:
             pg.most_recent_trophy_date = recent_date if recent_date else None
         if pg_qs.exists():
             ProfileGame.objects.bulk_update(pg_qs, ['earned_trophies_count', 'unearned_trophies_count', 'has_plat', 'most_recent_trophy_date'])
+    
+    @classmethod
+    def create_badge_group_from_form(cls, form_data: dict):
+        name = form_data['name']
+        concepts = Concept.objects.filter(id__in=form_data['concepts'])
+        base_badge = Badge.objects.create(
+            name=name + ' Bronze',
+            series_slug=form_data['series_slug'],
+            description=f"Earn plats in the {form_data['name']} series!",
+            display_title=name + ' Series Master',
+            display_series=name + ' Series',
+            tier=1,
+        )
+        base_badge.concepts.add(*concepts)
+        base_badge.save()
+
+        for i, tier in enumerate(['Silver', 'Gold', 'Platinum']):
+            badge = Badge.objects.create(
+                name = name + f" {tier}",
+                series_slug=form_data['series_slug'],
+                base_badge=base_badge,
+                tier=i + 2,
+            )

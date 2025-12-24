@@ -1,6 +1,6 @@
 import logging
 from django import forms
-from trophies.models import Profile, UserConceptRating, Badge
+from trophies.models import Profile, UserConceptRating, Concept
 
 logger = logging.getLogger('psn_api')
 
@@ -198,3 +198,24 @@ class GameDetailForm(forms.Form):
         required=False,
         label='Sort By',
     )
+
+# Admin Forms
+
+class BadgeCreationForm(forms.Form):
+    name = forms.CharField(max_length=255, required=True, label="Name", widget=forms.TextInput(attrs={'class': 'input w-full'}))
+    series_slug = forms.SlugField(max_length=100, required=True, label="Series Slug", widget=forms.TextInput(attrs={'class': 'input w-full'}))
+    concepts = forms.ModelMultipleChoiceField(
+        queryset=Concept.objects.order_by('unified_title'),  # Alphabetically sorted
+        required=False,  # Optional per your spec
+        widget=forms.CheckboxSelectMultiple(attrs={'class': 'space-y-2'}),
+        label="Select Concepts"
+    )
+
+    def get_badge_data(self):
+        if self.is_valid():
+            return {
+                'name': self.cleaned_data['name'],
+                'series_slug': self.cleaned_data['series_slug'],
+                'concepts': [c.id for c in self.cleaned_data['concepts']]
+            }
+        return {}

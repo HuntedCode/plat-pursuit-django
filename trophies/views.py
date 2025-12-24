@@ -11,18 +11,20 @@ from django.contrib.admin.views.decorators import staff_member_required
 from django.shortcuts import redirect, render, get_object_or_404
 from django.http import Http404, JsonResponse, HttpResponseRedirect
 from django.views.generic import ListView, View, DetailView, TemplateView
+from django.views.generic.edit import FormView
 from django.db.models import Q, F, Prefetch, OuterRef, Subquery, Value, IntegerField, FloatField, Avg, Max, Case, When
 from django.db.models.functions import Coalesce
 from django.urls import reverse_lazy, reverse
 from django.utils import timezone
 from django.utils.decorators import method_decorator
 from django_ratelimit.decorators import ratelimit
+from trophies.services.psn_api_service import PsnApiService
 from random import choice
 from urllib.parse import urlencode
 from trophies.psn_manager import PSNManager
 from trophies.mixins import ProfileHotbarMixin
 from .models import Game, Trophy, Profile, EarnedTrophy, ProfileGame, TrophyGroup, UserTrophySelection, Badge, UserBadge, UserBadgeProgress, Concept, FeaturedGuide
-from .forms import GameSearchForm, TrophySearchForm, ProfileSearchForm, ProfileGamesForm, ProfileTrophiesForm, ProfileBadgesForm, UserConceptRatingForm, BadgeSearchForm, GuideSearchForm, LinkPSNForm, GameDetailForm
+from .forms import GameSearchForm, TrophySearchForm, ProfileSearchForm, ProfileGamesForm, ProfileTrophiesForm, ProfileBadgesForm, UserConceptRatingForm, BadgeSearchForm, GuideSearchForm, LinkPSNForm, GameDetailForm, BadgeCreationForm
 from .utils import redis_client, MODERN_PLATFORMS, ALL_PLATFORMS, get_next_sync
 
 logger = logging.getLogger("psn_api")
@@ -1445,3 +1447,21 @@ class TokenMonitoringView(TemplateView):
         for profile_id in stats:
             stats[profile_id]['total'] = sum(stats[profile_id].values())
         return stats
+    
+# Admin Views
+
+@method_decorator(staff_member_required, name='dispatch')
+class BadgeCreationView(FormView):
+    template_name = 'trophies/badge_creation.html'
+    form_class = BadgeCreationForm
+    success_url = '/staff/badge-create/'
+
+    def form_valid(self, form):
+        try:
+            badge_data = form.get_badge_data()
+            PsnApiService.create_badge_group_from_form(badge_data)
+            messages.success(self.request, 'Badge group created successfully!')
+        except Exception as e:
+            logger.error(f"Error creating badge: {e}")
+            messages.error(self.request, 'Error creating badge. Check logs.')
+        return super().form_valid(form)

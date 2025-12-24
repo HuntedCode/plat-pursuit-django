@@ -22,7 +22,7 @@ from django.contrib.auth.views import LogoutView
 from django.urls import path, include
 from django.views.generic import TemplateView
 from core.views import IndexView
-from trophies.views import GamesListView, TrophiesListView, ProfilesListView, SearchView, GameDetailView, ProfileDetailView, TrophyCaseView, ToggleSelectionView, BadgeListView, BadgeDetailView, GuideListView, ProfileSyncStatusView, TriggerSyncView, SearchSyncProfileView, AddSyncStatusView, LinkPSNView, ProfileVerifyView, TokenMonitoringView
+from trophies.views import GamesListView, TrophiesListView, ProfilesListView, SearchView, GameDetailView, ProfileDetailView, TrophyCaseView, ToggleSelectionView, BadgeListView, BadgeDetailView, GuideListView, ProfileSyncStatusView, TriggerSyncView, SearchSyncProfileView, AddSyncStatusView, LinkPSNView, ProfileVerifyView, TokenMonitoringView, BadgeCreationView
 from users.views import CustomConfirmEmailView
 
 urlpatterns = [
@@ -45,6 +45,7 @@ urlpatterns = [
     path('search/', SearchView.as_view(), name='search'),
     path('logout/', LogoutView.as_view(next_page='home'), name='logout'),
 
+    path('staff/badge-create/', BadgeCreationView.as_view(), name='badge_creation'),
 
     path('api/profile-verify/', ProfileVerifyView.as_view(), name='profile_verify'),
     path('api/trigger-sync/', TriggerSyncView.as_view(), name='trigger_sync'),
