@@ -169,7 +169,11 @@ class PsnApiService:
                 profile_game.last_played_date_time = title_stats.last_played_date_time
                 profile_game.play_duration = title_stats.play_duration
                 profile_game.save(update_fields=['play_count', 'first_played_date_time', 'last_played_date_time', 'play_duration'])
-            return True
+            if game.concept:
+                return True
+            else:
+                logger.warning(f"Game {title_stats.title_id} does not have an expected concept.")
+                return False
         logger.warning(f"No games found for {title_stats.title_id}")
         return False
 
