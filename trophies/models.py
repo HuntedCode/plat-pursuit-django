@@ -178,6 +178,9 @@ class Profile(models.Model):
 
     def set_sync_status(self, value: str):
         if value in ['syncing', 'synced', 'error']:
+            if value == 'error' and not self.account_id:
+                self.delete()
+                return
             self.sync_status = value
             self.save(update_fields=['sync_status'])
             self.refresh_from_db(fields=['sync_status'])
