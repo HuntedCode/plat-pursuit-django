@@ -327,7 +327,7 @@ class PsnApiService:
             game = Game.objects.get(np_communication_id=np_comm_id)
         except Game.DoesNotExist:
             logger.error(f"Could not find game {np_comm_id}")
-            return
+            return None, 0
 
         trophies = {
             'total': EarnedTrophy.objects.filter(profile=profile, trophy__game=game, earned=True).count(),

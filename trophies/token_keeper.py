@@ -949,12 +949,13 @@ class TokenKeeper:
         profile.last_profile_health_check = timezone.now()
         profile.save(update_fields=['last_profile_health_check'])
 
-    def _job_sync_games_only(self, profile_id: int):
+    def _job_sync_games_only(self, profile_id: int, check_profile_health=True):
         try:
             profile = Profile.objects.get(id=profile_id)
         except Profile.DoesNotExist:
             logger.error(f"Profile {profile_id} does not exist.")
         job_type = 'sync_games_only'
+        job_counter = 0
 
         trophy_titles = []
         page_size = 400
@@ -969,10 +970,12 @@ class TokenKeeper:
             limit += page_size
             offset += page_size
         
+        touched_profilegame_ids = []
         num_title_stats = 0
         for title in trophy_titles:
             game, created, _ = PsnApiService.create_or_update_game(title)
             profile_game, _ = PsnApiService.create_or_update_profile_game(profile, game, title)
+            touched_profilegame_ids.append(profile_game.id)
             for platform in game.title_platform:
                 if platform in TITLE_STATS_SUPPORTED_PLATFORMS:
                     num_title_stats += 1
@@ -980,7 +983,8 @@ class TokenKeeper:
             title_defined_trophies_total = title.defined_trophies.bronze + title.defined_trophies.silver + title.defined_trophies.gold + title.defined_trophies.platinum
             args = [game.np_communication_id, game.title_platform[0] if not game.title_platform[0] == 'PSPC' else game.title_platform[1]]
             if game.get_total_defined_trophies() != title_defined_trophies_total:
-                PSNManager.assign_job('sync_trophy_groups', args, profile.id)
+                PSNManager.assign_job('sync_trophy_groups', args, profile.id, priority_override='medium_priority')
+                job_counter += 1
 
         # Assign jobs for title_stats
         page_size = 200
@@ -988,12 +992,19 @@ class TokenKeeper:
         offset = 0
         for i in range(num_title_stats // page_size):
             args=[limit, offset, page_size, False, True]
-            PSNManager.assign_job('sync_title_stats', args, profile_id)
+            PSNManager.assign_job('sync_title_stats', args, profile_id, priority_override='medium_priority')
             limit += page_size
             offset += page_size
         else:
             args=[limit, offset, page_size, True, True]
-            PSNManager.assign_job('sync_title_stats', args, profile_id)
+            PSNManager.assign_job('sync_title_stats', args, profile_id, priority_override='medium_priority')
+        
+        profile.add_to_sync_target(job_counter)
+        if check_profile_health:
+            PSNManager.assign_job('check_profile_health', args=[], profile_id=profile.id, priority_override='medium_priority')
+        PSNManager.assign_job('sync_profilegame_stats', args=[touched_profilegame_ids], profile_id=profile.id, priority_override='medium_priority')
+        PSNManager.check_profile_badges(profile, 'medium_priority')
+        PSNManager.sync_complete(profile, 'medium_priority')
 
     @property
     def stats(self) -> Dict:
