@@ -251,6 +251,7 @@ class Game(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     played_count = models.PositiveIntegerField(default=0, help_text="Denormalized count of profiles that have played the game (PP-specific).")
     is_regional = models.BooleanField(default=False)
+    region_lock = models.BooleanField(default=False, help_text="Admin region override lock - won't be automatically updated.")
     is_shovelware = models.BooleanField(default=False)
     is_obtainable= models.BooleanField(default=True)
 
@@ -272,7 +273,7 @@ class Game(models.Model):
             self.save(update_fields=['concept'])
     
     def add_region(self, region: str):
-        if region:
+        if region and not self.region_lock:
             if region in NA_REGION_CODES:
                 region = 'NA'
             elif region in EU_REGION_CODES:
@@ -337,7 +338,7 @@ class Concept(models.Model):
     def check_and_mark_regional(self):
         """Check if this concept has multiple games for the same platform. If so, mark as regional. Run post sync."""
         for platform in TITLE_STATS_SUPPORTED_PLATFORMS:
-                games = self.games.filter(title_platform__contains=platform)
+                games = self.games.filter(title_platform__contains=platform, region_lock=False)
                 if count_unique_game_groups(games) > 1:
                     for game in games:
                         game.is_regional = True
