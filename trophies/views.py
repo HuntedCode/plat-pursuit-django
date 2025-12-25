@@ -1023,7 +1023,7 @@ class BadgeListView(ProfileHotbarMixin, ListView):
         ]
 
         context['form'] = BadgeSearchForm(self.request.GET)
-        context['is_paginated'] = self.object_list.count() > self.paginate_by
+        context['is_paginated'] = len(context['display_data']) > self.paginate_by
         context['selected_tiers'] = self.request.GET.getlist('tier')
         context['view_type'] = self.request.GET.get('view', 'grid')
         return context

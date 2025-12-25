@@ -191,8 +191,8 @@ class Profile(models.Model):
             self.save(update_fields=['sync_progress_target'])
             self.refresh_from_db(fields=['sync_progress_target'])
     
-    def increment_sync_progress(self):
-        self.sync_progress_value = F('sync_progress_value') + 1
+    def increment_sync_progress(self, value: int = 1):
+        self.sync_progress_value = F('sync_progress_value') + value
         self.save(update_fields=['sync_progress_value'])
         self.refresh_from_db(fields=['sync_progress_value'])
 

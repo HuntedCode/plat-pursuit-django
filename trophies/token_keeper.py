@@ -581,7 +581,7 @@ class TokenKeeper:
                 PSNManager.assign_job('sync_trophy_groups', args, profile.id)
                 job_counter += 1
             PSNManager.assign_job('sync_trophies', args, profile.id)
-            job_counter +=1
+            job_counter += 2
         
         profile.add_to_sync_target(job_counter)
         update_profile_games(profile)
@@ -686,7 +686,7 @@ class TokenKeeper:
         for trophy_data in trophies:
             trophy, _ = PsnApiService.create_or_update_trophy_from_trophy_data(game, trophy_data)
             PsnApiService.create_or_update_earned_trophy_from_trophy_data(profile, trophy, trophy_data)
-        profile.increment_sync_progress()
+        profile.increment_sync_progress(value=2)
     
     def _job_sync_title_id(self, profile_id: str, title_id_str: str, np_communication_id: str):
         try:
