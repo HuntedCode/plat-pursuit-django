@@ -1110,7 +1110,7 @@ class BadgeDetailView(ProfileHotbarMixin, DetailView):
         context['breadcrumb'] = [
             {'text': 'Home', 'url': reverse_lazy('home')},
             {'text': 'Badges', 'url': reverse_lazy('badges_list')},
-            {'text': badge.effective_display_series if badge else 'Badge Series'},
+            {'text': context['badge'].effective_display_series},
         ]
 
         return context
