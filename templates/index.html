@@ -3,13 +3,6 @@
 {% block content %}
     {% include 'partials/breadcrumb.html' with items=breadcrumb %}
 
-    {% if messages %}
-        {% for message in messages %}
-            <div class="alert {% if message.tags == 'error' %}alert-error{% elif message.tags == 'success' %}alert-success{% else %}alert-info{% endif %} font-bold mb-4">
-                {{ message }}
-            </div>
-        {% endfor %}
-    {% endif %}
     <div class="space-y-8">
         <!-- Community Stats Page Header -->
         {% include 'partials/index/community-stats.html' with items=communityStats %}

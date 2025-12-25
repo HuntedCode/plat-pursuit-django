@@ -17,3 +17,11 @@
 {% else %}
 <p>No crumbs</p>
 {% endif %}
+
+{% if messages %}
+    {% for message in messages %}
+        <div class="alert {% if message.tags == 'error' %}alert-error{% elif message.tags == 'success' %}alert-success{% else %}alert-info{% endif %} font-bold mb-4">
+            {{ message }}
+        </div>
+    {% endfor %}
+{% endif %}
