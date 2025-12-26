@@ -122,7 +122,7 @@ class GameAdmin(admin.ModelAdmin):
             {"fields": ("title_icon_url", "title_platform", "metadata")},
         ),
     )
-    actions = ['toggle_is_regional']
+    actions = ['toggle_is_regional', 'add_psvr_platform']
 
     @admin.action(description="Toggle is_regional for selected games")
     def toggle_is_regional(self, request, queryset):
@@ -133,6 +133,20 @@ class GameAdmin(admin.ModelAdmin):
             
             count = queryset.count()
             messages.success(request, f"Toggled is_regional for {count} game(s).")
+    
+    @admin.action(description='Add "PSVR" to platforms for selected games')
+    def add_psvr_platform(self, request, queryset):
+        updated_count = 0
+        with transaction.atomic():
+            for game in queryset:
+                if 'PSVR' not in game.title_platform:
+                    game.title_platform.append('PSVR')
+                    game.save(update_fields=['title_platform'])
+                    updated_count += 1
+        if updated_count:
+            messages.success(request, f"Added 'PSVR' to {updated_count} game(s).")
+        else:
+            messages.info(request,  'No changes made. "PSVR" already present in selected games.')
 
     def total_defined_trophies(self, obj):
         return sum(obj.defined_trophies.values()) if obj.defined_trophies else 0
