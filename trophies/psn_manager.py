@@ -78,8 +78,9 @@ class PSNManager:
         cls.assign_job('check_profile_badges', args=[], profile_id=profile.id, priority_override=priority)
     
     @classmethod
-    def sync_complete(cls, profile: Profile, priority: str):
-        cls.assign_job('sync_complete', args=[], profile_id=profile.id, priority_override=priority)
+    def sync_complete(cls, profile: Profile, priority: str, touched_profilegame_ids: list[int]):
+        args = [touched_profilegame_ids]
+        cls.assign_job('sync_complete', args=args, profile_id=profile.id, priority_override=priority)
     
     @classmethod
     def check_profile_health(cls, profile: Profile):
@@ -88,10 +89,6 @@ class PSNManager:
     @classmethod
     def sync_profile_data(cls, profile: Profile):
         cls.assign_job('sync_profile_data', args=[], profile_id=profile.id)
-    
-    @classmethod
-    def sync_games_only(cls, profile: Profile):
-        cls.assign_job('sync_games_only', args=[], profile_id=profile.id, priority_override='high_priority')
 
     @classmethod
     def sync_profile_game_trophies(cls, profile: Profile, game: Game):

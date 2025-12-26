@@ -338,16 +338,10 @@ class TokenKeeper:
                     self._job_sync_trophies(profile_id, args[0], args[1])
                 elif job_type == 'profile_refresh':
                     self._job_profile_refresh(profile_id)
-                elif job_type == 'sync_profilegame_stats':
-                    self._sync_profilegame_stats(profile_id, args[0])
-                elif job_type == 'check_profile_health':
-                    self._job_check_profile_health(profile_id)
-                elif job_type == 'sync_games_only':
-                    self._job_sync_games_only(profile_id)
                 elif job_type == 'sync_title_id':
                     self._job_sync_title_id(profile_id, args[0], args[1])
                 elif job_type == 'sync_complete':
-                    self._job_sync_complete(profile_id)
+                    self._job_sync_complete(profile_id, args[0])
                 elif job_type == 'handle_privacy_error':
                     self._job_handle_privacy_error(profile_id)
                 else:
@@ -498,7 +492,7 @@ class TokenKeeper:
         
     # Job Requests
 
-    def _job_sync_complete(self, profile_id: int):
+    def _job_sync_complete(self, profile_id: int, touched_profilegame_ids: list[int]):
         try:
             profile = Profile.objects.get(id=profile_id)
         except Profile.DoesNotExist:
@@ -506,6 +500,49 @@ class TokenKeeper:
         job_type = 'sync_complete'
 
         time.sleep(10)
+
+        # Check profile heatlh
+        if timezone.now() - timedelta(days=1) > profile.last_profile_health_check:
+            summary = self._execute_api_call(self._get_instance_for_job(job_type), profile, 'trophy_summary')
+            tracked_trophies = PsnApiService.get_profile_trophy_summary(profile)
+
+            earned = summary.earned_trophies
+            summary_total = earned.bronze + earned.silver + earned.gold + earned.platinum
+
+            logger.info(f"Profile {profile_id} health: Summary: {summary_total} | Tracked: {tracked_trophies['total']} | {summary_total == tracked_trophies['total']}")
+
+            if summary_total > tracked_trophies['total']:
+                trophy_titles_to_be_updated = []
+                page_size = 400
+                limit = page_size
+                offset = 0
+                is_full = True
+                while is_full:
+                    titles = self._execute_api_call(self._get_instance_for_job(job_type), profile, 'trophy_titles', limit=limit, offset=offset, page_size=page_size)
+                    for title in titles:
+                        game, tracked = PsnApiService.get_tracked_trophies_for_game(profile, title.np_communication_id)
+                        title_total = title.earned_trophies.bronze + title.earned_trophies.silver + title.earned_trophies.gold + title.earned_trophies.platinum
+                        logger.info(f"{game.np_communication_id} - Tracked: {tracked['total']} | Title: {title_total} | {tracked['total'] == title_total}")
+                        if tracked['total'] != title_total:
+                            trophy_titles_to_be_updated.append({'title': title, 'game': game})
+                            logger.info(f"Mismatch for profile {profile_id} - {title.np_communication_id}: Tracked: {tracked['total']} | Title: {title_total}")
+                    is_full = len(titles) == page_size
+                    limit += page_size
+                    offset += page_size
+            
+                if len(trophy_titles_to_be_updated) > 0:
+                    for title in trophy_titles_to_be_updated:
+                        game = title['game']
+                        args = [game.np_communication_id, game.title_platform[0] if not game.title_platform[0] == 'PSPC' else game.title_platform[1]]
+                        PSNManager.assign_job('sync_trophies', args=args, profile_id=profile.id, priority_override='high_priority')
+            profile.last_profile_health_check = timezone.now()
+            profile.save(update_fields=['last_profile_health_check'])
+
+        profile.update_plats()
+        PsnApiService.update_profilegame_stats(touched_profilegame_ids)
+        check_profile_badges(profile, touched_profilegame_ids)
+        logger.info(f"ProfileGame Stats updated for {profile_id} successfully! | {len(touched_profilegame_ids)} profilegames updated")
+
         update_profile_trophy_counts(profile)
         profile.set_sync_status('synced')
         logger.info(f"{profile.display_psn_username} account has finished syncing!")
@@ -586,10 +623,6 @@ class TokenKeeper:
         profile.add_to_sync_target(job_counter)
         update_profile_games(profile)
 
-        # Check profile health after processing all titles
-        PSNManager.assign_job('sync_profilegame_stats', args=[touched_profilegame_ids], profile_id=profile.id, priority_override='low_priority')
-        PSNManager.assign_job('check_profile_health', args=[], profile_id=profile.id, priority_override='low_priority')
-
         # Assign jobs for title_stats
         page_size = 200
         limit = page_size
@@ -602,6 +635,8 @@ class TokenKeeper:
         else:
             args=[limit, offset, page_size, True, force_title_stats]
             PSNManager.assign_job('sync_title_stats', args, profile_id)
+        
+        PSNManager.sync_complete(profile, 'low_priority', touched_profilegame_ids)
     
     def _job_sync_trophy_groups(self, profile_id: int, np_communication_id: str, platform: str):
         try:
@@ -669,7 +704,6 @@ class TokenKeeper:
                 PsnApiService.update_profile_game_with_title_stats(profile, stats)
             
             profile.add_to_sync_target(job_counter)
-            PSNManager.sync_complete(profile, 'low_priority')
 
     def _job_sync_trophies(self, profile_id: int, np_communication_id: str, platform: str):
         try:
@@ -889,122 +923,7 @@ class TokenKeeper:
                 PsnApiService.update_profile_game_with_title_stats(profile, stats)
             
             profile.add_to_sync_target(job_counter)
-        if timezone.now() - timedelta(days=1) > profile.last_profile_health_check:
-            PSNManager.assign_job('check_profile_health', args=[], profile_id=profile.id, priority_override='medium_priority')
-        PSNManager.assign_job('sync_profilegame_stats', args=[touched_profilegame_ids], profile_id=profile.id, priority_override='medium_priority')
-        PSNManager.sync_complete(profile, 'medium_priority')
-
-    def _sync_profilegame_stats(self, profile_id: int, touched_profilegame_ids: list[int]):
-        try:
-            profile = Profile.objects.get(id=profile_id)
-        except Profile.DoesNotExist:
-            logger.error(f"Profile {profile_id} does not exist.")
-        job_type = 'sync_profilegame_stats'
-
-        profile.update_plats()
-        PsnApiService.update_profilegame_stats(touched_profilegame_ids)
-        check_profile_badges(profile, touched_profilegame_ids)
-        logger.info(f"ProfileGame Stats updated for {profile_id} successfully! | {len(touched_profilegame_ids)} profilegames updated")
-
-    def _job_check_profile_health(self, profile_id: int):
-        try:
-            profile = Profile.objects.get(id=profile_id)
-        except Profile.DoesNotExist:
-            logger.error(f"Profile {profile_id} does not exist.")
-        job_type = 'check_profile_health'
-
-        time.sleep(10)
-
-        summary = self._execute_api_call(self._get_instance_for_job(job_type), profile, 'trophy_summary')
-        tracked_trophies = PsnApiService.get_profile_trophy_summary(profile)
-
-        earned = summary.earned_trophies
-        summary_total = earned.bronze + earned.silver + earned.gold + earned.platinum
-
-        logger.info(f"Profile {profile_id} health: Summary: {summary_total} | Tracked: {tracked_trophies['total']} | {summary_total == tracked_trophies['total']}")
-
-        if summary_total > tracked_trophies['total']:
-            trophy_titles_to_be_updated = []
-            page_size = 400
-            limit = page_size
-            offset = 0
-            is_full = True
-            while is_full:
-                titles = self._execute_api_call(self._get_instance_for_job(job_type), profile, 'trophy_titles', limit=limit, offset=offset, page_size=page_size)
-                for title in titles:
-                    game, tracked = PsnApiService.get_tracked_trophies_for_game(profile, title.np_communication_id)
-                    title_total = title.earned_trophies.bronze + title.earned_trophies.silver + title.earned_trophies.gold + title.earned_trophies.platinum
-                    logger.info(f"{game.np_communication_id} - Tracked: {tracked['total']} | Title: {title_total} | {tracked['total'] == title_total}")
-                    if tracked['total'] != title_total:
-                        trophy_titles_to_be_updated.append({'title': title, 'game': game})
-                        logger.info(f"Mismatch for profile {profile_id} - {title.np_communication_id}: Tracked: {tracked['total']} | Title: {title_total}")
-                is_full = len(titles) == page_size
-                limit += page_size
-                offset += page_size
-        
-            if len(trophy_titles_to_be_updated) > 0:
-                for title in trophy_titles_to_be_updated:
-                    game = title['game']
-                    args = [game.np_communication_id, game.title_platform[0] if not game.title_platform[0] == 'PSPC' else game.title_platform[1]]
-                    PSNManager.assign_job('sync_trophies', args=args, profile_id=profile.id, priority_override='high_priority')
-        profile.last_profile_health_check = timezone.now()
-        profile.save(update_fields=['last_profile_health_check'])
-
-    def _job_sync_games_only(self, profile_id: int, check_profile_health=True):
-        try:
-            profile = Profile.objects.get(id=profile_id)
-        except Profile.DoesNotExist:
-            logger.error(f"Profile {profile_id} does not exist.")
-        job_type = 'sync_games_only'
-        job_counter = 0
-
-        trophy_titles = []
-        page_size = 400
-        limit = page_size
-        offset = 0
-        is_full = True
-
-        while is_full:
-            result = self._execute_api_call(self._get_instance_for_job(job_type), profile, 'trophy_titles', limit=limit, offset=offset, page_size=page_size)
-            is_full = len(result) == page_size
-            trophy_titles.extend(result)
-            limit += page_size
-            offset += page_size
-        
-        touched_profilegame_ids = []
-        num_title_stats = 0
-        for title in trophy_titles:
-            game, created, _ = PsnApiService.create_or_update_game(title)
-            profile_game, _ = PsnApiService.create_or_update_profile_game(profile, game, title)
-            touched_profilegame_ids.append(profile_game.id)
-            for platform in game.title_platform:
-                if platform in TITLE_STATS_SUPPORTED_PLATFORMS:
-                    num_title_stats += 1
-                    break
-            title_defined_trophies_total = title.defined_trophies.bronze + title.defined_trophies.silver + title.defined_trophies.gold + title.defined_trophies.platinum
-            args = [game.np_communication_id, game.title_platform[0] if not game.title_platform[0] == 'PSPC' else game.title_platform[1]]
-            if game.get_total_defined_trophies() != title_defined_trophies_total:
-                PSNManager.assign_job('sync_trophy_groups', args, profile.id, priority_override='medium_priority')
-                job_counter += 1
-
-        # Assign jobs for title_stats
-        page_size = 200
-        limit = page_size
-        offset = 0
-        for i in range(num_title_stats // page_size):
-            args=[limit, offset, page_size, False, True]
-            PSNManager.assign_job('sync_title_stats', args, profile_id, priority_override='medium_priority')
-            limit += page_size
-            offset += page_size
-        else:
-            args=[limit, offset, page_size, True, True]
-            PSNManager.assign_job('sync_title_stats', args, profile_id, priority_override='medium_priority')
-        
-        profile.add_to_sync_target(job_counter)
-        if check_profile_health:
-            PSNManager.assign_job('check_profile_health', args=[], profile_id=profile.id, priority_override='medium_priority')
-        PSNManager.assign_job('sync_profilegame_stats', args=[touched_profilegame_ids], profile_id=profile.id, priority_override='medium_priority')
-        PSNManager.sync_complete(profile, 'medium_priority')
+        PSNManager.sync_complete(profile, 'medium_priority', touched_profilegame_ids)
 
     @property
     def stats(self) -> Dict:
