@@ -1202,8 +1202,7 @@ class LinkPSNView(LoginRequiredMixin, View):
         if action == 'submit_username':
             form = self.form_class(request.POST)
             if form.is_valid():
-                psn_username = form.cleaned_data['psn_username'].lower()
-
+                psn_username = form.cleaned_data['psn_username'].lower().strip()
                 try:
                     profile, created = Profile.objects.get_or_create(psn_username=psn_username)
                     if profile.user and profile.user != request.user:

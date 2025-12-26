@@ -554,7 +554,7 @@ class TokenKeeper:
             logger.error(f"Profile {profile_id} does not exist.")
         job_type = 'handle_privacy_error'
 
-        time.sleep(1)
+        time.sleep(3)
 
         if not profile.psn_history_public:
             profile.set_sync_status('error')
