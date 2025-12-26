@@ -110,6 +110,7 @@ class GameAdmin(admin.ModelAdmin):
                     "title_detail",
                     "title_image",
                     "is_shovelware",
+                    "is_obtainable",
                 )
             },
         ),
