@@ -105,7 +105,7 @@ class TokenInstance:
             return (self.refresh_expiry - datetime.now()).total_seconds()
         return -1
         
-    def cleanup_cache(self, ttl_hours=24):
+    def cleanup_cache(self, ttl_hours=1):
         """Remove cache entries older than ttl_hours."""
         now = datetime.now()
         expired = [
