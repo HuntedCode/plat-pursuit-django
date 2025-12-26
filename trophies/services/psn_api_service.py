@@ -61,6 +61,7 @@ class PsnApiService:
                 "title_name": trophy_title.title_name.strip(),
                 "title_detail": trophy_title.title_detail,
                 "title_icon_url": trophy_title.title_icon_url,
+                "force_title_icon": False,
                 "title_platform": [platform.value for platform in trophy_title.title_platform],
                 "has_trophy_groups": trophy_title.has_trophy_groups,
                 "defined_trophies": {
