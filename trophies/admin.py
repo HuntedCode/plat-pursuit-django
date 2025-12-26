@@ -119,7 +119,7 @@ class GameAdmin(admin.ModelAdmin):
         ),
         (
             "Metadata",
-            {"fields": ("title_icon_url", "title_platform", "metadata")},
+            {"fields": ("title_icon_url", "force_title_icon", "title_platform", "metadata")},
         ),
     )
     actions = ['toggle_is_regional', 'add_psvr_platform']
