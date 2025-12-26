@@ -366,8 +366,40 @@ class TokenKeeper:
                 redis_client.srem("active_profiles", profile_id)
             job_json = redis_client.lpop(f"deferred_jobs:{profile_id}")
             if job_json:
+                if self._get_current_jobs_for_profile(profile_id) < self.max_jobs_per_profile:
+                    job_data = json.loads(job_json)
+                    PSNManager.assign_job(job_data['type'], job_data['args'], profile_id, job_data.get('priority_override'))
+                else:
+                    redis_client.lpush(f"deferred_jobs:{profile_id}", job_json)
+                    logger.warning(f"Deferred job for profile {profile_id} re-pushed - max jobs reached.")
+        self._assign_rotated_deferred()
+
+    def _get_current_jobs_for_profile(self, profile_id):
+        total = 0
+        for queue in ['low_priority']:
+            total += int(redis_client.get(f"profile_jobs:{profile_id}:{queue}") or 0)
+        return total
+    
+    def _assign_rotated_deferred(self):
+        active_profiles = redis_client.smembers("active_profiles")
+        if not active_profiles:
+            return
+        candidates = []
+        for prof_id_bytes in active_profiles:
+            prof_id = prof_id_bytes.decode()
+            deferred_key = f"deferred_jobs:{prof_id}"
+            if redis_client.llen(deferred_key) > 0:
+                current_jobs = self._get_current_jobs_for_profile(prof_id)
+                candidates.append((current_jobs, prof_id))
+        
+        if candidates:
+            candidates.sort()
+            selected_prof_id = candidates[0][1]
+            job_json = redis_client.lpop(f"deferred_jobs:{selected_prof_id}")
+            if job_json:
                 job_data = json.loads(job_json)
-                PSNManager.assign_job(job_data['type'], job_data['args'], profile_id, job_data.get('priority_override'))
+                PSNManager.assign_job(job_data['type'], job_data['args'], selected_prof_id, job_data.get('priority_override'))
+                logger.info(f"Rotated and assigned deferred job for profile {selected_prof_id}")
 
     def _get_instance_for_job(self, job_type: str) -> Optional[TokenInstance]:
         """Selects best instance for job, respecting workload and priority."""
