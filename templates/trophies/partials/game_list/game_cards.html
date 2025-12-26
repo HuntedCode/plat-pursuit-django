@@ -45,7 +45,7 @@
             </div>
             <div class="relative">
                 <figure class="border-4 border-base-300 rounded-box transition-all duration-300 group-hover:border-{{ game|platform_color }}">
-                    {% if game.title_image %}
+                    {% if game.title_image and not game.force_title_icon %}
                         <img src="{{ game.title_image }}" alt="{{ game.title_name }}" class="w-full object-cover" loading="lazy" />
                     {% else %}
                         <img src="{{ game.title_icon_url }}" alt="{{ game.title_name }}" class="w-full min-h-[255px] object-fill" loading="lazy" />

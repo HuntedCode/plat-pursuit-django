@@ -241,6 +241,7 @@ class Game(models.Model):
     title_detail = models.TextField(blank=True, null=True)
     title_image = models.URLField(blank=True, null=True)
     title_icon_url = models.URLField(blank=True, null=True)
+    force_title_icon = models.BooleanField(blank=True, null=True, help_text="Force displays to use the title icon instead of title image.")
     title_platform = models.JSONField(default=list, blank=True)
     has_trophy_groups = models.BooleanField(default=False)
     defined_trophies = models.JSONField(default=dict, blank=True)
@@ -303,6 +304,11 @@ class Game(models.Model):
 
     def get_total_defined_trophies(self):
         return self.defined_trophies['bronze'] + self.defined_trophies['silver'] + self.defined_trophies['gold'] + self.defined_trophies['platinum']
+    
+    def get_icon_url(self):
+        if self.force_title_icon or not self.title_image:
+            return self.title_icon_url
+        return self.title_image
 
     def __str__(self):
         return self.title_name

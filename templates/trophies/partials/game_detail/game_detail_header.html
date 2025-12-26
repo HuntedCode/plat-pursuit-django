@@ -5,7 +5,7 @@
             <div class="flex flex-col gap-2 items-center">
                 <div class="hover-3d max-w-3/4">
                     <figure class="relative h-fit shadow-md shadow-neutral border-4 border-base-300 rounded-box">
-                        {% if game.title_image %}
+                        {% if game.title_image and not game.force_title_icon %}
                             <img src="{{ game.title_image }}" alt="{{ game.title_name }}" class="w-full object-fill" />
                         {% else %}
                             <img src="{{ game.title_icon_url }}" alt="{{ game.title_name }}" class="w-full object-fill" />

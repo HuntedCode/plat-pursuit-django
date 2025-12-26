@@ -34,7 +34,7 @@ def get_featured_games(limit=6):
             'trophiesEarned': et_qs.count(),
             'platform': ', '.join(game.title_platform),
             'avgCompletion': pg_qs.aggregate(avg=Avg('progress'))['avg'] or 0,
-            'image': game.title_image if game.title_image else game.title_icon_url,
+            'image': game.get_icon_url(),
             'slug': f"/games/{game.np_communication_id}/",
         })
     return enriched
