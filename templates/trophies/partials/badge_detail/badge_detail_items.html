@@ -6,7 +6,7 @@
                 <div class="flex flex-col lg:flex-row lg:justify-between items-center gap-4 w-full">
                     <div class="flex flex-col lg:flex-row items-center justify-start gap-2 col-span-1 w-full">
                         <figure class="border-4 border-base-300 rounded-box transition-colors duration-300 mr-2 lg:mr-4 group-hover:border-{{ game|platform_color }} hover:scale-105">
-                            {% if game.title_image %}
+                            {% if game.title_image and not game.force_title_icon %}
                                 <img src="{{ game.title_image }}" alt="{{ game.title_name }}" class="lg:h-20 lg:w-20 object-cover shrink-0" loading="lazy" />
                             {% else %}
                                 <img src="{{ game.title_icon_url }}" alt="{{ game.title_name }}" class="lg:h-20 lg:w-20 object-fill shrink-0" loading="lazy" />
