@@ -341,7 +341,7 @@ class TokenKeeper:
                 elif job_type == 'sync_title_id':
                     self._job_sync_title_id(profile_id, args[0], args[1])
                 elif job_type == 'sync_complete':
-                    self._job_sync_complete(profile_id, args[0])
+                    self._job_sync_complete(profile_id, args[0], args[1])
                 elif job_type == 'handle_privacy_error':
                     self._job_handle_privacy_error(profile_id)
                 else:
@@ -524,16 +524,26 @@ class TokenKeeper:
         
     # Job Requests
 
-    def _job_sync_complete(self, profile_id: int, touched_profilegame_ids: list[int]):
+    def _job_sync_complete(self, profile_id: int, touched_profilegame_ids: list[int], queue_name: str):
         try:
             profile = Profile.objects.get(id=profile_id)
         except Profile.DoesNotExist:
             logger.error(f"Profile {profile_id} does not exist.")
+            return
         job_type = 'sync_complete'
-        logger.info(f"Starting complete sync job for {profile_id}...")
 
-        time.sleep(10)
+        timeout = 300
+        start_wait = time.time()
 
+        while int(redis_client.get(f"profile_jobs:{profile_id}:{queue_name}") or 0 ) > 1:
+            if time.time() - start_wait > timeout:
+                logger.error(f"Timeout waiting for jobs on profile {profile_id}. Aborting sync_complete.")
+                profile_id.set_sync_status('error')
+                return
+            time.sleep(1)
+        
+
+        logger.info(f"Starting complete sync job for {profile_id} after {time.time() - start_wait}...")
         # Check profile heatlh
         if not profile.last_profile_health_check or timezone.now() - timedelta(days=1) > profile.last_profile_health_check:
             logger.info(f"Starting health check for {profile_id}...")

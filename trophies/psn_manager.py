@@ -79,7 +79,7 @@ class PSNManager:
     
     @classmethod
     def sync_complete(cls, profile: Profile, priority: str, touched_profilegame_ids: list[int]):
-        args = [touched_profilegame_ids]
+        args = [touched_profilegame_ids, priority]
         cls.assign_job('sync_complete', args=args, profile_id=profile.id, priority_override=priority)
     
     @classmethod
