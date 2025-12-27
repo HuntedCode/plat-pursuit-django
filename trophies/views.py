@@ -1002,8 +1002,6 @@ class BadgeListView(ProfileHotbarMixin, ListView):
                         'progress_percentage': 0,
                     })
 
-        context['is_paginated'] = len(display_data) > self.paginate_by        
-
         sort_val = self.request.GET.get('sort', 'tier')
         if sort_val == 'name':
             display_data.sort(key=lambda d: d['badge'].effective_display_title)
@@ -1018,14 +1016,21 @@ class BadgeListView(ProfileHotbarMixin, ListView):
         else:
             display_data.sort(key=lambda d: d['badge'].effective_display_series)
 
+        
+        paginator = Paginator(display_data, self.paginate_by)
+        page_number = self.request.GET.get('page')
+        page_obj = paginator.get_page(page_number)
+
         context['display_data'] = display_data
+        context['page_obj'] = page_obj
+        context['is_paginated'] = page_obj.has_other_pages()
+
         context['breadcrumb'] = [
             {'text': 'Home', 'url': reverse_lazy('home')},
             {'text': 'Badges'},
         ]
 
         context['form'] = BadgeSearchForm(self.request.GET)
-        context['is_paginated'] = len(context['display_data']) >= self.paginate_by
         context['selected_tiers'] = self.request.GET.getlist('tier')
         return context
 
