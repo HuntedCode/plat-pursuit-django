@@ -341,7 +341,7 @@ class TokenKeeper:
                 elif job_type == 'sync_title_id':
                     self._job_sync_title_id(profile_id, args[0], args[1])
                 elif job_type == 'sync_complete':
-                    self._job_sync_complete(profile_id, args[0])
+                    self._job_sync_complete(profile_id)
                 elif job_type == 'handle_privacy_error':
                     self._job_handle_privacy_error(profile_id)
                 else:
@@ -673,7 +673,7 @@ class TokenKeeper:
         logger.info(f"Checking profile badges for {profile_id}...")
         check_profile_badges(profile, touched_profilegame_ids)
         
-        PSNManager.sync_complete(profile, 'low_priority', touched_profilegame_ids)
+        PSNManager.sync_complete(profile, 'low_priority')
     
     def _job_sync_trophy_groups(self, profile_id: int, np_communication_id: str, platform: str):
         try:
@@ -966,7 +966,7 @@ class TokenKeeper:
         logger.info(f"ProfileGame Stats updated for {profile_id} successfully! | {len(touched_profilegame_ids)} profilegames updated")
         logger.info(f"Checking profile badges for {profile_id}...")
         check_profile_badges(profile, touched_profilegame_ids)
-        PSNManager.sync_complete(profile, 'medium_priority', touched_profilegame_ids)
+        PSNManager.sync_complete(profile, 'medium_priority')
 
     @property
     def stats(self) -> Dict:
