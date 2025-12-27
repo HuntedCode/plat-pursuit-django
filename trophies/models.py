@@ -268,6 +268,16 @@ class Game(models.Model):
             models.Index(fields=['is_shovelware'], name='game_shovelware_idx'),
             models.Index(fields=['is_regional'], name='game_regional_idx'),
         ]
+    
+    def save(self, *args, **kwargs):
+        fields_to_clean = ['title_name']
+        
+        for field in fields_to_clean:
+            if hasattr(self, field):
+                value = getattr(self, field)
+                cleaned_value = re.sub(r'[™®]|(\bTM\b)|(\(R\))', '', value).strip()
+                setattr(self, field, cleaned_value)
+        super().save(*args, **kwargs)
 
     def add_concept(self, concept):
         if concept and not self.concept:
@@ -336,6 +346,16 @@ class Concept(models.Model):
             models.Index(fields=['publisher_name'], name='content_publisher_idx'),
             models.Index(fields=['release_date'], name='concept_release_date_idx'),
         ]
+    
+    def save(self, *args, **kwargs):
+        fields_to_clean = ['unified_title']
+        
+        for field in fields_to_clean:
+            if hasattr(self, field):
+                value = getattr(self, field)
+                cleaned_value = re.sub(r'[™®]|(\bTM\b)|(\(R\))', '', value).strip()
+                setattr(self, field, cleaned_value)
+        super().save(*args, **kwargs)
     
     def add_title_id(self, title_id: str):
         if title_id and title_id not in self.title_ids:
@@ -513,6 +533,16 @@ class Trophy(models.Model):
             models.Index(fields=['trophy_earn_rate'], name="trophy_psn_rate_idx"),
             models.Index(fields=['earn_rate'], name='trophy_pp_rate_idx'),
         ]
+    
+    def save(self, *args, **kwargs):
+        fields_to_clean = ['trophy_name']
+        
+        for field in fields_to_clean:
+            if hasattr(self, field):
+                value = getattr(self, field)
+                cleaned_value = re.sub(r'[™®]|(\bTM\b)|(\(R\))', '', value).strip()
+                setattr(self, field, cleaned_value)
+        super().save(*args, **kwargs)
     
     def get_pp_rarity_tier(self):
         """Compute Plat Pursuit specific rarity tier based on earn_rate.

@@ -4,32 +4,6 @@ from django.core.cache import cache
 from trophies.models import EarnedTrophy, ProfileGame, Badge, Trophy, UserBadge
 from trophies.utils import process_badge, notify_new_badge
 
-@receiver(post_save, sender=EarnedTrophy, dispatch_uid='badge_check_on_trophy_save')
-def check_badges_on_trophy_save(sender, instance, created, **kwargs):
-    if not instance.earned:
-        return
-    profile = instance.profile
-    concept = instance.trophy.game.concept
-    if not concept:
-        return
-    
-    relevant_badges = Badge.objects.filter(badge_type='series', concepts=concept).distinct()
-    for badge in relevant_badges:
-        process_badge(profile, badge)
-
-@receiver(post_save, sender=ProfileGame, dispatch_uid='badge_check_on_game_save')
-def check_badges_on_game_save(sender, instance, created, **kwargs):
-    if instance.progress < 100:
-        return
-    profile = instance.profile
-    concept = instance.game.concept
-    if not concept:
-        return
-    
-    relevant_badges = Badge.objects.filter(badge_type='series', concepts=concept, tier__in=[2, 4]).distinct()
-    for badge in relevant_badges:
-        process_badge(profile, badge)
-
 @receiver(post_save, sender=UserBadge, dispatch_uid='notification_on_new_badge')
 def notify_on_new_badge(sender, instance, created, **kwargs):
     if not created:
