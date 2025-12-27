@@ -1,11 +1,12 @@
 from django.db import models
 from django.utils import timezone
 from users.models import CustomUser
-from django.conf.urls.static import static
 from django.core.validators import RegexValidator, MinValueValidator, MaxValueValidator
+from django.db import transaction
 from django.db.models import F, Avg, Count, Max, Min
 from datetime import timedelta
-from trophies.utils import count_unique_game_groups, calculate_trimmed_mean, TITLE_STATS_SUPPORTED_PLATFORMS, NA_REGION_CODES, EU_REGION_CODES, JP_REGION_CODES, AS_REGION_CODES, KR_REGION_CODES, CN_REGION_CODES, SHOVELWARE_THRESHOLD
+from tenacity import retry, stop_after_attempt, wait_fixed
+from trophies.utils import count_unique_game_groups, calculate_trimmed_mean, TITLE_STATS_SUPPORTED_PLATFORMS, NA_REGION_CODES, EU_REGION_CODES, JP_REGION_CODES, AS_REGION_CODES, KR_REGION_CODES, CN_REGION_CODES, SHOVELWARE_THRESHOLD, redis_client
 import secrets
 import re
 
@@ -187,10 +188,30 @@ class Profile(models.Model):
             self.refresh_from_db(fields=['sync_status'])
     
     def add_to_sync_target(self, value: int):
-        if value:
-            self.sync_progress_target = F('sync_progress_target') + value
-            self.save(update_fields=['sync_progress_target'])
-            self.refresh_from_db(fields=['sync_progress_target'])
+        if not value:
+            return
+        
+        lock_key = f"sync_target_lock:{self.id}"
+
+        @retry(stop=stop_after_attempt(5), wait=wait_fixed(0.2))
+        def acquire_lock():
+            lock = redis_client.lock(lock_key, timeout=10)
+            if not lock.acquire(blocking=False):
+                raise ValueError("Could not acquire lock")
+            return lock
+        
+        try:
+            lock = acquire_lock()
+            try:
+                with transaction.atomic():
+                    locked_self = Profile.objects.select_for_update().get(id=self.id)
+                    locked_self.sync_progress_target = F('sync_progress_target') + value
+                    locked_self.save(update_fields=['sync_progress_target'])
+                    self.refresh_from_db(fields=['sync_progress_target'])
+            finally:
+                lock.release()
+        except Exception as e:
+            pass
     
     def increment_sync_progress(self, value: int = 1):
         self.sync_progress_value = F('sync_progress_value') + value
