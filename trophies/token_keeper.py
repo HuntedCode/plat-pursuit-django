@@ -363,7 +363,7 @@ class TokenKeeper:
 
     def _complete_job(self, profile_id, queue_name):
         """Handle finished job, check for deferred."""
-        if queue_name == 'low_priority':
+        if queue_name == 'low_priority' or 'medium_priority':
 
             counter_key = f"profile_jobs:{profile_id}:{queue_name}"
             deferred_key = f"deferred_jobs:{profile_id}"
