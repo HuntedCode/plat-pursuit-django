@@ -1002,7 +1002,7 @@ class BadgeListView(ProfileHotbarMixin, ListView):
                         'progress_percentage': 0,
                     })
 
-        context['is_paginated'] = display_data.count() > self.paginate_by        
+        context['is_paginated'] = len(display_data) > self.paginate_by        
 
         sort_val = self.request.GET.get('sort', 'tier')
         if sort_val == 'name':
