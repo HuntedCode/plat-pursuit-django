@@ -918,8 +918,8 @@ class ToggleSelectionView(LoginRequiredMixin, ProfileHotbarMixin, View):
 class BadgeListView(ProfileHotbarMixin, ListView):
     model = Badge
     template_name = 'trophies/badge_list.html'
-    context_object_name = 'display_badges'
-    paginate_by = 25
+    context_object_name = 'display_data'
+    paginate_by = None
 
     def get_queryset(self):
         qs = super().get_queryset().prefetch_related('concepts')
@@ -973,19 +973,22 @@ class BadgeListView(ProfileHotbarMixin, ListView):
                     
                 if display_badge:
                     progress = progress_dict.get(display_badge.id)
+                    progress_percentage = 0
+                    completed_concepts = 0
+                    required_concepts = 0
                     if progress and badge.badge_type == 'series':
+                        completed_concepts = progress.completed_concepts
+                        required_concepts = progress.required_concepts
                         if is_maxed:
                             progress_percentage = 100
                         else:
-                            progress_percentage = (progress.completed_concepts / progress.required_concepts * 100) if progress.required_concepts > 0 else 0
-                    else:
-                        progress_percentage = 0
+                            progress_percentage = (completed_concepts / required_concepts) * 100 if required_concepts > 0 else 0
 
                     display_data.append({
                         'badge': display_badge,
                         'tier1_earned_count': tier1_earned_count,
-                        'completed_concepts': progress.completed_concepts if progress else 0,
-                        'required_concepts': progress.required_concepts if progress else 0,
+                        'completed_concepts': completed_concepts,
+                        'required_concepts': required_concepts,
                         'progress_percentage': round(progress_percentage, 1),
                     })
         else:
@@ -1016,13 +1019,14 @@ class BadgeListView(ProfileHotbarMixin, ListView):
         else:
             display_data.sort(key=lambda d: d['badge'].effective_display_series)
 
-        
-        paginator = Paginator(display_data, self.paginate_by)
+        paginate_by = 25
+        paginator = Paginator(display_data, paginate_by)
         page_number = self.request.GET.get('page')
         page_obj = paginator.get_page(page_number)
 
-        context['display_data'] = display_data
+        context['display_data'] = page_obj
         context['page_obj'] = page_obj
+        context['paginator'] = paginator
         context['is_paginated'] = page_obj.has_other_pages()
 
         context['breadcrumb'] = [
