@@ -274,5 +274,10 @@ LOGGING = {
             "level": "INFO",
             "propagate": False,
         },
+        'storages': {
+            'handlers': ['console'],
+            'level': 'ERROR',
+            'propagate': False,
+        },
     },
 }
