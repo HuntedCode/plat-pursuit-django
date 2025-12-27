@@ -149,8 +149,9 @@ def get_badge_metrics(profile, badge):
         if required == 0:
             return {'achieved': 0, 'required': 0}
         
+        achieved = 0
         if is_complete_required:
-            user_achievements_qs = ProfileGame.objects.filter(profile=profile, progress=100, game__concept__in=filtered_concepts_qs, game__definied_trophies__platinum__gt=0)
+            user_achievements_qs = ProfileGame.objects.filter(profile=profile, progress=100, game__concept__in=filtered_concepts_qs, game__defined_trophies__platinum__gt=0)
             if is_obtainable_required:
                 user_achievements_qs = user_achievements_qs.filter(game__is_obtainable=True)
                 achieved = user_achievements_qs.values('game__concept').distinct().count()
