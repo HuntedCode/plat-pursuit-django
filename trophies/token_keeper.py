@@ -927,7 +927,7 @@ class TokenKeeper:
         job_counter = 0
         
         title_stats_to_be_updated = []
-        page_size = 200
+        page_size = 20
         limit = page_size
         offset = 0
         is_full = True
