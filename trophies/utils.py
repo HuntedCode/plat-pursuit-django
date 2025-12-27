@@ -4,11 +4,14 @@ import redis
 import hashlib
 import requests
 import logging
-from django.db.models import Exists, OuterRef, Q
+import time
+from django.db import transaction
+from django.db.models import Exists, OuterRef, Q, Count
+from django.db.models.query import QuerySet
 from django.conf import settings
 from datetime import timedelta
 from dotenv import load_dotenv
-from typing import List, Set
+from typing import List, Set, Dict
 from scipy import stats
 
 
@@ -93,65 +96,71 @@ def calculate_trimmed_mean(data, trim_percent=0.1):
 
 def check_profile_badges(profile, profilegame_ids):
     from trophies.models import ProfileGame, Badge
-    pg_qs = ProfileGame.objects.filter(id__in=profilegame_ids, profile=profile)
 
-    unique_badges = set()
-    for pg in pg_qs:
-        concept = pg.game.concept
-        if concept:
-            for badge in concept.badges.all():
-                unique_badges.add(badge)
-                derived = Badge.objects.filter(base_badge=badge)
-                unique_badges.update(derived)
+    start_time = time.time()
+
+    pg_qs: QuerySet[ProfileGame] = ProfileGame.objects.filter(id__in=profilegame_ids, profile=profile).select_related('game__concept').prefetch_related('game__concept__badges')
+
+    if not pg_qs.exists():
+        logger.info(f"No ProfileGames found for profile {profile.psn_username}")
+        return 0
     
+    concept_ids = pg_qs.values_list('game__concept_id', flat=True).filter(game__concept__isnull=False).distinct()
+
+    base_badges_qs = Badge.objects.filter(concepts__id__in=concept_ids, base_badge__isnull=True).distinct()
+
+    derived_badges_qs = Badge.objects.filter(base_badge__in=base_badges_qs).distinct()
+
+    unique_badges_qs = base_badges_qs | derived_badges_qs
+    unique_badges_qs = unique_badges_qs.prefetch_related('concepts', 'base_badge')
+
     checked_count = 0
-    for badge in unique_badges:
+    for badge in unique_badges_qs:
         try:
             process_badge(profile, badge)
             checked_count += 1
         except Exception as e:
-            logger.error(f"Error checking badge {badge.id} for profile {profile.psn_username}")
-    logger.info(f"Checked {checked_count} unique badges for profile {profile.psn_username}")
+            logger.error(f"Error checking badge {badge.id} for profile {profile.psn_username}: {e}")
+    
+    duration = time.time() - start_time
+    logger.info(f"Checked {checked_count} unique badges for profile {profile.psn_username} in {duration:.2f}s")
     return checked_count
 
 def get_badge_metrics(profile, badge):
     """Computes the number of qualifying Concepts achieved by the user and required value for a series badge. Returns 0 for misc badges or invalid configs."""
-    from trophies.models import Game, EarnedTrophy, ProfileGame
+    from trophies.models import Game, EarnedTrophy, ProfileGame, Badge
 
     if badge.badge_type == 'series':
-    
         platform_filter = get_platform_filter(badge)    
         is_complete_required = badge.tier in [2, 4]
         is_obtainable_required = badge.tier in [1, 2]
 
+        qualifying_games_filter = Q(platform_filter, defined_trophies__platinum__gt=0)
         if is_obtainable_required:
-            qualifying_games_qs = Game.objects.filter(platform_filter, is_obtainable=True, defined_trophies__platinum__gt=0).prefetch_related('concept')
-        else:
-            qualifying_games_qs = Game.objects.filter(platform_filter, defined_trophies__platinum__gt=0).prefetch_related('concept')
-        if badge.concepts.count() > 0:
-            filtered_concepts_qs = badge.concepts.filter(Exists(qualifying_games_qs.filter(concept=OuterRef('pk')))).distinct()
-        elif badge.base_badge and badge.base_badge.concepts.count() > 0:
-            filtered_concepts_qs = badge.base_badge.concepts.filter(Exists(qualifying_games_qs.filter(concept=OuterRef('pk')))).distinct()
-        else:
-            filtered_concepts_qs = None
+            qualifying_games_filter &= Q(is_obtainable=True)
+        
+        concepts_qs = badge.concepts if badge.concepts.exists() else (badge.base_badge.concepts if badge.base_base else Badge.objects.none())
+        if not concepts_qs.exists():
+            return {'achieved': 0, 'required': 0}
+        
+        filtered_concepts_qs = concepts_qs.filter(Exists(Game.objects.filter(qualifying_games_filter, concept=OuterRef('pk')))).distinct()
 
-        required = filtered_concepts_qs.count() if filtered_concepts_qs is not None else 0
+        required = filtered_concepts_qs.count()
         if required == 0:
             return {'achieved': 0, 'required': 0}
         
-        achieved = 0
-        for concept in filtered_concepts_qs:
-            qual_games = [g for g in qualifying_games_qs if g.concept == concept]
-            if not qual_games:
-                continue
-            
-            if is_complete_required:
-                    if ProfileGame.objects.filter(profile=profile, game__in=qual_games, progress=100).exists():
-                        achieved += 1
-            else:
-                if EarnedTrophy.objects.filter(profile=profile, trophy__game__in=qual_games, trophy__trophy_type='platinum', earned=True).exists():
-                    achieved += 1
-        return {'achieved': achieved, 'required': required}
+        if is_complete_required:
+            user_achievements_qs = ProfileGame.objects.filter(profile=profile, progress=100, game__concept__in=filtered_concepts_qs, game__definied_trophies__platinum__gt=0)
+            if is_obtainable_required:
+                user_achievements_qs = user_achievements_qs.filter(game__is_obtainable=True)
+                achieved = user_achievements_qs.values('game__concept').distinct().count()
+        else:
+            user_achievements_qs = EarnedTrophy.objects.filter(profile=profile, earned=True, trophy__trophy_type='platinum', trophy__game__concept__in=filtered_concepts_qs, trophy__game__defined_trophies__platinum__gt=0)
+            if is_obtainable_required:
+                user_achievements_qs = user_achievements_qs.filter(trophy__game__is_obtainable=True)
+                achieved = user_achievements_qs.values('trophy__game__concept').distinct().count()
+
+        return {'achieved': achieved, 'required': required}  
    
     elif badge.badge_type == 'misc':
         # Placeholder - update logic later.
@@ -169,6 +178,7 @@ def get_platform_filter(badge):
         platform_filter |= Q(title_platform__contains=plat)
     return platform_filter
 
+@transaction.atomic
 def process_badge(profile, badge):
     """Handles progress update and earning check for a single badge."""
     from trophies.models import UserBadge, UserBadgeProgress
@@ -181,34 +191,33 @@ def process_badge(profile, badge):
     achieved = metrics['achieved']
     required = metrics['required']
 
-    progress, _ = UserBadgeProgress.objects.get_or_create(
-        profile=profile,
-        badge=badge,
-        defaults={
-            'completed_concepts': achieved if badge.badge_type == 'series' else 0,
-            'required_concepts': required if badge.badge_type == 'series' else 0,
-            'progress_value': achieved if badge.badge_type == 'misc' else 0,
-            'required_value': required if badge.badge_type == 'misc' else 0,
-        }    
-    )
+    progress_fields = {}
     if badge.badge_type == 'series':
-        progress.completed_concepts = achieved
-        progress.required_concepts = required
+        progress_fields = {'completed_concepts': achieved, 'required_concepts': required}
     elif badge.badge_type == 'misc':
-        progress.progress_value = achieved
-        progress.required_value = required
-    progress.save(update_fields=['completed_concepts', 'required_concepts', 'progress_value', 'required_value', 'last_checked'])
-
+        progress_fields = {'progress_value': achieved, 'required_value': required}
+    
+    progress, created = UserBadgeProgress.objects.get_or_create(profile=profile, badge=badge, defaults=progress_fields)
+    if not created:
+        for field, value in progress_fields.items():
+            setattr(progress, field, value)
+        if progress_fields:
+            progress.save(update_fields=list(progress_fields.keys()))
+    
     needed = required if badge.requires_all else max(badge.min_required, 1)
-    if achieved >= needed and needed > 0 and not UserBadge.objects.filter(profile=profile, badge=badge).exists():
-        UserBadge.objects.create(profile=profile, badge=badge)
-        logger.info(f"Added badge {badge.effective_display_title} | tier: {badge.tier} for {profile.display_psn_username}")
-        return True
-    elif achieved < needed and UserBadge.objects.filter(profile=profile, badge=badge).exists():
-        UserBadge.objects.delete(profile=profile, badge=badge)
-        logger.info(f"DELETE badge {badge.effective_display_title} | tier: {badge.tier} from {profile.display_psn_username}")
-    return False
+    user_badge_exists = UserBadge.objects.filter(profile=profile, badge=badge).exists()
 
+    if achieved >= needed and needed > 0 and not user_badge_exists:
+        UserBadge.objects.create(profile=profile, badge=badge)
+        logger.info(f"Awarded badge {badge.effective_display_title} (tier: {badge.tier}) to {profile.display_psn_username}")
+        notify_new_badge(profile, badge)
+        return True
+    elif achieved < needed and user_badge_exists:
+        UserBadge.objects.filter(profile=profile, badge=badge).delete()
+        logger.info(f"Revoked badge {badge.effective_display_title} (tier: {badge.tier}) from {profile.display_psn_username}")
+
+    return False
+    
 def notify_new_badge(profile, badge):
     """Send Discord webhook embed for new badge."""
     try:
