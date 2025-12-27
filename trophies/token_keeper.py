@@ -574,12 +574,6 @@ class TokenKeeper:
 
         logger.info(f"Updating plats for {profile_id}...")
         profile.update_plats()
-        logger.info(f"Updating profilegame stats for {profile_id}...")
-        PsnApiService.update_profilegame_stats(touched_profilegame_ids)
-        logger.info(f"Checking profile badges for {profile_id}...")
-        check_profile_badges(profile, touched_profilegame_ids)
-        logger.info(f"ProfileGame Stats updated for {profile_id} successfully! | {len(touched_profilegame_ids)} profilegames updated")
-
         update_profile_trophy_counts(profile)
         profile.set_sync_status('synced')
         logger.info(f"{profile.display_psn_username} account has finished syncing!")
@@ -672,6 +666,12 @@ class TokenKeeper:
         else:
             args=[limit, offset, page_size, True, force_title_stats]
             PSNManager.assign_job('sync_title_stats', args, profile_id)
+        
+        logger.info(f"Updating profilegame stats for {profile_id}...")
+        PsnApiService.update_profilegame_stats(touched_profilegame_ids)
+        logger.info(f"ProfileGame Stats updated for {profile_id} successfully! | {len(touched_profilegame_ids)} profilegames updated")
+        logger.info(f"Checking profile badges for {profile_id}...")
+        check_profile_badges(profile, touched_profilegame_ids)
         
         PSNManager.sync_complete(profile, 'low_priority', touched_profilegame_ids)
     
@@ -960,6 +960,12 @@ class TokenKeeper:
                 PsnApiService.update_profile_game_with_title_stats(profile, stats)
             
             profile.add_to_sync_target(job_counter)
+
+        logger.info(f"Updating profilegame stats for {profile_id}...")
+        PsnApiService.update_profilegame_stats(touched_profilegame_ids)
+        logger.info(f"ProfileGame Stats updated for {profile_id} successfully! | {len(touched_profilegame_ids)} profilegames updated")
+        logger.info(f"Checking profile badges for {profile_id}...")
+        check_profile_badges(profile, touched_profilegame_ids)
         PSNManager.sync_complete(profile, 'medium_priority', touched_profilegame_ids)
 
     @property
