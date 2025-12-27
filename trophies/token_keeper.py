@@ -524,7 +524,7 @@ class TokenKeeper:
         
     # Job Requests
 
-    def _job_sync_complete(self, profile_id: int, touched_profilegame_ids: list[int]):
+    def _job_sync_complete(self, profile_id: int):
         try:
             profile = Profile.objects.get(id=profile_id)
         except Profile.DoesNotExist:
