@@ -405,7 +405,7 @@ class TokenKeeper:
                 logger.error(f"Error in _complete_job for profile {profile_id}: {e}")
             finally:
                 redis_client.delete(lock_key)
-                
+
             self._assign_rotated_deferred()
 
     def _get_current_jobs_for_profile(self, profile_id):
@@ -567,6 +567,8 @@ class TokenKeeper:
             return
         job_type = 'sync_complete'
 
+        time.sleep(5)
+
         logger.info(f"Starting complete sync job for {profile_id}...")
         # Check profile heatlh
         if not profile.last_profile_health_check or timezone.now() - timedelta(days=1) > profile.last_profile_health_check:
@@ -712,7 +714,7 @@ class TokenKeeper:
             'touched_profilegame_ids': touched_profilegame_ids,
             'queue_name': 'low_priority'
         })
-        redis_client.set(pending_key, pending_data, ex=7200)
+        redis_client.set(pending_key, pending_data, ex=21600)
     
     def _job_sync_trophy_groups(self, profile_id: int, np_communication_id: str, platform: str):
         try:
