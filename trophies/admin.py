@@ -278,6 +278,24 @@ class TitleIDAdmin(admin.ModelAdmin):
 class ConceptAdmin(admin.ModelAdmin):
     list_display = ('id', 'concept_id', 'unified_title', 'release_date', 'publisher_name', 'genres')
     search_fields = ('concept_id', 'unified_title')
+    actions = ['duplicate_concept']
+
+    @admin.action(description="Duplicate selected concepts")
+    def duplicate_concept(self, request, queryset):
+        for concept in queryset:
+            new_concept = concept
+            new_concept.pk = None
+
+            original_id  = concept.concept_id
+            i = 1
+            while True:
+                new_id = f"{original_id}-{i}"
+                if not Concept.objects.filter(concept_id=new_id).exists():
+                    break
+                i += 1
+            
+            new_concept.concept_id = new_id
+            new_concept.save()
 
 @admin.register(TrophyGroup)
 class TrophyGroupAdmin(admin.ModelAdmin):
