@@ -74,6 +74,7 @@ INSTALLED_APPS = [
     'rest_framework.authtoken',
     'api',
     'django_extensions',
+    'storages',
     'allauth',
     'allauth.account',
 ]
