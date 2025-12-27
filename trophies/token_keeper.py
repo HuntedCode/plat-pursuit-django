@@ -532,16 +532,25 @@ class TokenKeeper:
             return
         job_type = 'sync_complete'
 
-        timeout = 300
+        counter_key = f"profile_jobs:{profile_id}:{queue_name}"
+        deferred_key = f"deferred_jobs:{profile_id}"
+        timeout = 3600
         start_wait = time.time()
 
-        while int(redis_client.get(f"profile_jobs:{profile_id}:{queue_name}") or 0 ) > 1:
+        while True:
+            current = int(redis_client.get(counter_key) or 0)
+            deferred_len = redis_client.llen(deferred_key)
+
+            if current <= 1 and deferred_len == 0:
+                break
+
             if time.time() - start_wait > timeout:
                 logger.error(f"Timeout waiting for jobs on profile {profile_id}. Aborting sync_complete.")
                 profile_id.set_sync_status('error')
                 return
             time.sleep(1)
         
+        time.sleep(5)
 
         logger.info(f"Starting complete sync job for {profile_id} after {time.time() - start_wait}...")
         # Check profile heatlh

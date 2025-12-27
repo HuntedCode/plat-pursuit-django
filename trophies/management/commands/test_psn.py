@@ -201,7 +201,7 @@ class Command(BaseCommand):
             # Displays Key/Value combos for each endpoint. Comment out what you don't want to use.
             # self.user_get_presence(user) # user.get_presence()
             # self.user_profile(user)
-            self.user_profile_legacy(user)
+            # self.user_profile_legacy(user)
             #self.user_title_stats(user)
             # self.user_trophy_summary(user)
             # self.user_trophy_titles(user)
@@ -210,16 +210,16 @@ class Command(BaseCommand):
             #title_ids = []
             #for i in range(5):
             #    title_ids.append('CUSA07402_00')
-            platform = PlatformType.PS5
+            platform = PlatformType.PS4
             #self.user_trophies(user, np_comm_id, platform)
             #self.user_trophies_include_progress(user, np_comm_id, platform)
             # self.user_trophy_titles_for_title(user, title_ids)
             #self.user_trophy_groups_summary(user, np_comm_id, platform)
 
-            #game_title = psnawp.game_title('PPSA23060_00', PlatformType('PS5'), account_id=user.account_id)
+            game_title = psnawp.game_title('CUSA00949_00', PlatformType('PS4'), account_id=user.account_id)
             #print(game_title)
             #print(game_title.np_communication_id)
-            #pprint(game_title.get_details())
+            pprint(game_title.get_details())
             #pprint(game_title.trophies())
 
             #print(user.get_region())
