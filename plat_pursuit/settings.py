@@ -251,6 +251,13 @@ else:
     DEFAULT_FILE_STORAGE = 'plat_pursuit.settings.PublicMediaStorage'
     AWS_DEFAULT_ACL = None
 
+    print("Using AWS, values:")
+    print('AWS_S3_ACCESS_KEY_ID', AWS_S3_ACCESS_KEY_ID)
+    print('AWS_S3_SECRET_ACCESS_KEY', AWS_S3_SECRET_ACCESS_KEY)
+    print('AWS_S3_REGION_NAME', AWS_S3_REGION_NAME)
+    print('AWS_STORAGE_BUCKET_NAME', AWS_STORAGE_BUCKET_NAME)
+    print('AWS_S3_CUSTOM_DOMAIN', AWS_S3_CUSTOM_DOMAIN)
+
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 
