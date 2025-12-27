@@ -390,15 +390,22 @@ class TokenKeeper:
                 deferred_len = redis_client.llen(deferred_key)
                 pending_key = f"pending_sync_complete:{profile_id}"
                 if current_jobs <= 0 and deferred_len == 0 and redis_client.exists(pending_key):
-                    pending_data = json.loads(redis_client.get(pending_key))
-                    args = [pending_key['touched_profilegame_ids'], pending_data['queue_name']]
-                    PSNManager.assign_job('sync_complete', args, profile_id, pending_data['queue_name'])
-                    redis_client.delete(pending_key)
-                    logger.info(f"Triggered sync_complete for profile {profile_id}")
+                    raw_pending = redis_client.get(pending_key)
+                    try:
+                        pending_data = json.loads(raw_pending)
+                        if not isinstance(pending_data, dict):
+                            raise ValueError("Pending data is not a dictionary")
+                        args = [pending_data['touched_profilegame_ids'], pending_data['queue_name']]
+                        PSNManager.assign_job('sync_complete', args, profile_id, pending_data['queue_name'])
+                        redis_client.delete(pending_key)
+                        logger.info(f"Triggered sync_complete for profile {profile_id}")
+                    except (json.JSONDecodeError, ValueError, KeyError) as parse_err:
+                        logger.error(f"Failed to parse pending_sync_complete for profile {profile_id}")
             except Exception as e:
                 logger.error(f"Error in _complete_job for profile {profile_id}: {e}")
             finally:
                 redis_client.delete(lock_key)
+                
             self._assign_rotated_deferred()
 
     def _get_current_jobs_for_profile(self, profile_id):
