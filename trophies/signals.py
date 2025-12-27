@@ -1,8 +1,7 @@
 from django.db.models.signals import post_save, post_delete
 from django.dispatch import receiver
-from django.core.cache import cache
-from trophies.models import EarnedTrophy, ProfileGame, Badge, Trophy, UserBadge
-from trophies.utils import process_badge, notify_new_badge
+from trophies.models import UserBadge
+from trophies.utils import notify_new_badge
 
 @receiver(post_save, sender=UserBadge, dispatch_uid='notification_on_new_badge')
 def notify_on_new_badge(sender, instance, created, **kwargs):
