@@ -530,11 +530,13 @@ class TokenKeeper:
         except Profile.DoesNotExist:
             logger.error(f"Profile {profile_id} does not exist.")
         job_type = 'sync_complete'
+        logger.info(f"Starting complete sync job for {profile_id}...")
 
         time.sleep(10)
 
         # Check profile heatlh
-        if timezone.now() - timedelta(days=1) > profile.last_profile_health_check:
+        if not profile.last_profile_health_check or timezone.now() - timedelta(days=1) > profile.last_profile_health_check:
+            logger.info(f"Starting health check for {profile_id}...")
             summary = self._execute_api_call(self._get_instance_for_job(job_type), profile, 'trophy_summary')
             tracked_trophies = PsnApiService.get_profile_trophy_summary(profile)
 
@@ -570,8 +572,11 @@ class TokenKeeper:
             profile.last_profile_health_check = timezone.now()
             profile.save(update_fields=['last_profile_health_check'])
 
+        logger.info(f"Updating plats for {profile_id}...")
         profile.update_plats()
+        logger.info(f"Updating profilegame stats for {profile_id}...")
         PsnApiService.update_profilegame_stats(touched_profilegame_ids)
+        logger.info(f"Checking profile badges for {profile_id}...")
         check_profile_badges(profile, touched_profilegame_ids)
         logger.info(f"ProfileGame Stats updated for {profile_id} successfully! | {len(touched_profilegame_ids)} profilegames updated")
 
