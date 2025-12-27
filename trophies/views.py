@@ -17,6 +17,7 @@ from django.db.models.functions import Coalesce
 from django.urls import reverse_lazy, reverse
 from django.utils import timezone
 from django.utils.decorators import method_decorator
+from django.utils.text import slugify
 from django_ratelimit.decorators import ratelimit
 from trophies.services.psn_api_service import PsnApiService
 from random import choice
@@ -925,7 +926,7 @@ class BadgeListView(ProfileHotbarMixin, ListView):
         form = BadgeSearchForm(self.request.GET)
 
         if form.is_valid():
-            series_slug = form.cleaned_data.get('series_slug')
+            series_slug = slugify(form.cleaned_data.get('series_slug'))
             if series_slug:
                 qs = qs.filter(series_slug__icontains=series_slug)
         return qs
@@ -1000,7 +1001,8 @@ class BadgeListView(ProfileHotbarMixin, ListView):
                         'required_concepts': 0,
                         'progress_percentage': 0,
                     })
-        
+
+        context['is_paginated'] = display_data.count() > self.paginate_by        
 
         sort_val = self.request.GET.get('sort', 'tier')
         if sort_val == 'name':
@@ -1023,9 +1025,8 @@ class BadgeListView(ProfileHotbarMixin, ListView):
         ]
 
         context['form'] = BadgeSearchForm(self.request.GET)
-        context['is_paginated'] = len(context['display_data']) > self.paginate_by
+        context['is_paginated'] = len(context['display_data']) >= self.paginate_by
         context['selected_tiers'] = self.request.GET.getlist('tier')
-        context['view_type'] = self.request.GET.get('view', 'grid')
         return context
 
 class BadgeDetailView(ProfileHotbarMixin, DetailView):
