@@ -896,7 +896,7 @@ class TokenKeeper:
                 PSNManager.assign_job('sync_trophy_groups', args, profile.id)
                 job_counter += 1
             PSNManager.assign_job('sync_trophies', args, profile.id, priority_override='medium_priority')
-            job_counter += 1
+            job_counter += 2
         
         profile.add_to_sync_target(job_counter)
         update_profile_games(profile)
