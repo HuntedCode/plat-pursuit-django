@@ -105,16 +105,16 @@ class TokenInstance:
             return (self.refresh_expiry - datetime.now()).total_seconds()
         return -1
         
-    def cleanup_cache(self, ttl_hours=1):
-        """Remove cache entries older than ttl_hours."""
+    def cleanup_cache(self, ttl_minutes=5):
+        """Remove cache entries older than ttl_minutes."""
         now = datetime.now()
         expired = [
             key for key, entry in self.user_cache.items()
-            if now - entry['timestamp'] > timedelta(hours=ttl_hours)
+            if now - entry['timestamp'] > timedelta(minutes=ttl_minutes)
         ]
         for key in expired:
             del self.user_cache[key]
-        logger.debug(f"Cleaned {len(expired)} expired users from instance {self.instance_id}")
+        logger.info(f"Cleaned {len(expired)} expired users from instance {self.instance_id}")
 
 class TokenKeeper:
     """Singleton: Maintains 3 live PSNAWP instances and handles API requests via pub/sub."""
