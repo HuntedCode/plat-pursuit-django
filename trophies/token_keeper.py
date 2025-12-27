@@ -357,7 +357,7 @@ class TokenKeeper:
                     self._complete_job(profile_id, queue_name)
 
     @retry(stop=stop_after_attempt(5), wait=wait_fixed(0.2))
-    def acquire_lock(redis_client, lock_key):
+    def acquire_lock(self, redis_client, lock_key):
         if not redis_client.set(lock_key, "1", nx=True, ex=10):
             raise ValueError("Lock acquisiton failed")
 
@@ -396,7 +396,7 @@ class TokenKeeper:
                     redis_client.delete(pending_key)
                     logger.info(f"Triggered sync_complete for profile {profile_id}")
             except Exception as e:
-                logger.erorr(f"Error in _complete_job for profile {profile_id}: {e}")
+                logger.error(f"Error in _complete_job for profile {profile_id}: {e}")
             finally:
                 redis_client.delete(lock_key)
             self._assign_rotated_deferred()
