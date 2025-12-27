@@ -139,7 +139,7 @@ def get_badge_metrics(profile, badge):
         if is_obtainable_required:
             qualifying_games_filter &= Q(is_obtainable=True)
         
-        concepts_qs = badge.concepts if badge.concepts.exists() else (badge.base_badge.concepts if badge.base_base else Badge.objects.none())
+        concepts_qs = badge.concepts if badge.concepts.exists() else (badge.base_badge.concepts if badge.base_badge else Badge.objects.none())
         if not concepts_qs.exists():
             return {'achieved': 0, 'required': 0}
         
