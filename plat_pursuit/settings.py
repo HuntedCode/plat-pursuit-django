@@ -250,8 +250,11 @@ else:
         "default": {
             "BACKEND": "storages.backends.s3boto3.S3Boto3Storage",
             "OPTIONS": {
-                'location': 'media',
+                'location': 'media', # Store media files in a 'media' subfolder
             },
+        },
+        "staticfiles": {
+            "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
         },
     }
 
