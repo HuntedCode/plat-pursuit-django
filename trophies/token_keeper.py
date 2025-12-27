@@ -661,7 +661,7 @@ class TokenKeeper:
         update_profile_games(profile)
 
         # Assign jobs for title_stats
-        page_size = 200
+        page_size = 20
         limit = page_size
         offset = 0
         for i in range(num_title_stats // page_size):
