@@ -341,7 +341,7 @@ class TokenKeeper:
                 elif job_type == 'sync_title_id':
                     self._job_sync_title_id(profile_id, args[0], args[1])
                 elif job_type == 'sync_complete':
-                    self._job_sync_complete(profile_id)
+                    self._job_sync_complete(profile_id, args[0])
                 elif job_type == 'handle_privacy_error':
                     self._job_handle_privacy_error(profile_id)
                 else:
@@ -524,7 +524,7 @@ class TokenKeeper:
         
     # Job Requests
 
-    def _job_sync_complete(self, profile_id: int):
+    def _job_sync_complete(self, profile_id: int, touched_profilegame_ids: list[int]):
         try:
             profile = Profile.objects.get(id=profile_id)
         except Profile.DoesNotExist:
@@ -574,6 +574,12 @@ class TokenKeeper:
 
         logger.info(f"Updating plats for {profile_id}...")
         profile.update_plats()
+        logger.info(f"Updating profilegame stats for {profile_id}...")
+        PsnApiService.update_profilegame_stats(touched_profilegame_ids)
+        logger.info(f"Checking profile badges for {profile_id}...")
+        check_profile_badges(profile, touched_profilegame_ids)
+        logger.info(f"ProfileGame Stats updated for {profile_id} successfully! | {len(touched_profilegame_ids)} profilegames updated")
+
         update_profile_trophy_counts(profile)
         profile.set_sync_status('synced')
         logger.info(f"{profile.display_psn_username} account has finished syncing!")
@@ -667,13 +673,7 @@ class TokenKeeper:
             args=[limit, offset, page_size, True, force_title_stats]
             PSNManager.assign_job('sync_title_stats', args, profile_id)
         
-        logger.info(f"Updating profilegame stats for {profile_id}...")
-        PsnApiService.update_profilegame_stats(touched_profilegame_ids)
-        logger.info(f"ProfileGame Stats updated for {profile_id} successfully! | {len(touched_profilegame_ids)} profilegames updated")
-        logger.info(f"Checking profile badges for {profile_id}...")
-        check_profile_badges(profile, touched_profilegame_ids)
-        
-        PSNManager.sync_complete(profile, 'low_priority')
+        PSNManager.sync_complete(profile, 'low_priority', touched_profilegame_ids)
     
     def _job_sync_trophy_groups(self, profile_id: int, np_communication_id: str, platform: str):
         try:
@@ -960,13 +960,7 @@ class TokenKeeper:
                 PsnApiService.update_profile_game_with_title_stats(profile, stats)
             
             profile.add_to_sync_target(job_counter)
-
-        logger.info(f"Updating profilegame stats for {profile_id}...")
-        PsnApiService.update_profilegame_stats(touched_profilegame_ids)
-        logger.info(f"ProfileGame Stats updated for {profile_id} successfully! | {len(touched_profilegame_ids)} profilegames updated")
-        logger.info(f"Checking profile badges for {profile_id}...")
-        check_profile_badges(profile, touched_profilegame_ids)
-        PSNManager.sync_complete(profile, 'medium_priority')
+        PSNManager.sync_complete(profile, 'medium_priority', touched_profilegame_ids)
 
     @property
     def stats(self) -> Dict:
