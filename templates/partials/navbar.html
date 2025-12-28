@@ -3,9 +3,9 @@
 
     <div class="navbar-start flex items-center">
         <div class="flex-none dropdown dropdown-start lg:hidden">
-            <button class="btn btn-ghost btn-sm">
+            <summary class="btn btn-ghost btn-sm" tabindex="0" role="button" aria-label="Main menu">
                 <svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="oklch(97.807% 0.029 256.847)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
-            </button>
+            </summary>
             <ul tabindex="0" class="menu menu-sm dropdown-content mt-2 z-50 p-2 shadow-lg bg-base-100 border-2 border-base-200">
                 <li><a href="{% url 'trophies_list' %}">Trophies</a></li>
                 <li><a href="{% url 'games_list' %}">Games</a></li>
