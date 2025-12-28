@@ -13,16 +13,6 @@ def get_featured_games(limit=6):
         Q(end_date__gte=now) | Q(end_date__isnull=True)
     ).select_related('game')[:limit]
     featured = [fg.game for fg in manual_qs]
-
-    # Supplement if needed
-    remaining = limit - len(featured)
-    if remaining > 0:
-        recent_trophies_subq = EarnedTrophy.objects.filter(trophy=OuterRef('pk'), earned_date_time__gte=week_ago)
-        auto_qs = Game.objects.annotate(
-            recent_earns=Count('trophies__earned_trophy_entries', filter=Q(trophies__earned_trophy_entries__earned_date_time__gte=week_ago)),
-            play_count=Count('played_by')
-        ).filter(recent_earns__gt=0).order_by('-recent_earns', '-play_count')[:remaining]
-        featured.extend(auto_qs)
     
     # Enrich with stats
     enriched = []
