@@ -1,4 +1,4 @@
-from django.db.models import Count, Avg, Q
+from django.db.models import Count, Avg, Q, Exists, OuterRef
 from django.utils import timezone
 from datetime import timedelta
 from trophies.models import FeaturedGame, Game, ProfileGame, EarnedTrophy
@@ -17,6 +17,7 @@ def get_featured_games(limit=6):
     # Supplement if needed
     remaining = limit - len(featured)
     if remaining > 0:
+        recent_trophies_subq = EarnedTrophy.objects.filter(trophy=OuterRef('pk'), earned_date_time__gte=week_ago)
         auto_qs = Game.objects.annotate(
             recent_earns=Count('trophies__earned_trophy_entries', filter=Q(trophies__earned_trophy_entries__earned_date_time__gte=week_ago)),
             play_count=Count('played_by')
@@ -25,15 +26,18 @@ def get_featured_games(limit=6):
     
     # Enrich with stats
     enriched = []
+    game_ids = [g.id for g in featured]
+    pg_stats = ProfileGame.objects.filter(game__id__in=game_ids).aggregate(avg_completion=Avg('progress')) or {'avg_completion': 0}
+    et_counts = EarnedTrophy.objects.filter(trophy__game__id__in=game_ids, earned=True).values('trophy__game__id').annotate(total_earned=Count('id'))
+    et_dict = {item['trophy__game__id']: item['total_earned'] for item in et_counts}
+
     for game in featured:
-        pg_qs = game.played_by.all()
-        et_qs = EarnedTrophy.objects.filter(trophy__game=game, earned=True)
         enriched.append({
             'name': game.title_name,
             'trophies': game.defined_trophies,
-            'trophiesEarned': et_qs.count(),
+            'trophiesEarned': et_dict.get(game.id, 0),
             'platform': ', '.join(game.title_platform),
-            'avgCompletion': pg_qs.aggregate(avg=Avg('progress'))['avg'] or 0,
+            'avgCompletion': pg_stats['avg_completion'],
             'image': game.get_icon_url(),
             'slug': f"/games/{game.np_communication_id}/",
         })
