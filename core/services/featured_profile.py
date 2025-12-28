@@ -18,7 +18,7 @@ def get_featured_profile():
     total_plats = profile.total_plats
     total_trophies = profile.total_trophies
 
-    weekly_plat_filter = Q(trophy__trophy_type='platinum', earned=True, earned_date_time__gtw=week_ago)
+    weekly_plat_filter = Q(trophy__trophy_type='platinum', earned=True, earned_date_time__gte=week_ago)
     weekly_total_filter = Q(earned=True, earned_date_time__gte=week_ago)
 
     weekly_counts = EarnedTrophy.objects.filter(profile=profile).aggregate(
