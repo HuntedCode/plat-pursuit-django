@@ -104,7 +104,7 @@
                         <div class="flex flex-col w-full">
                             <h1 class="text-2xl text-base-content text-center italic hover:scale-105">Latest Platinum</h1>
                             {% if not profile.sync_status == 'syncing' and profile.psn_history_public %}
-                                <a href="{% url 'game_detail' game.np_communication_id %}" class="flex flex-row items-center w-full shadow-md shadow-neutral border-4 border-base-300 p-1 mb-2 cursor-pointer hover:border-primary hover:shadow-primary hover:scale-105">
+                                <a href="{% if game.np_communication_id %}{% url 'game_detail' game.np_communication_id %}{% endif %}" class="flex flex-row items-center w-full shadow-md shadow-neutral border-4 border-base-300 p-1 mb-2 cursor-pointer hover:border-primary hover:shadow-primary hover:scale-105">
                                     <figure class="w-28 h-28 border-4 border-primary rounded-box mr-4">
                                         {% if game.title_image and not game.force_title_icon %}
                                             <img src="{{ game.title_image }}" class="w-full object-cover hover:scale-105" />
@@ -134,7 +134,7 @@
                         <div class="flex flex-col w-full">
                             <h1 class="text-2xl text-base-content text-center italic hover:scale-105">Rarest Platinum</h1>
                             {% if not profile.sync_status == 'syncing' and profile.psn_history_public %}
-                                <a href="{% url 'game_detail' game.np_communication_id %}" class="flex flex-row items-center w-full shadow-md shadow-neutral border-4 border-base-300 p-1 mb-2 cursor-pointer hover:border-accent hover:shadow-accent hover:scale-105">
+                                <a href="{% if game.np_communication_id %}{% url 'game_detail' game.np_communication_id %}{% endif %}" class="flex flex-row items-center w-full shadow-md shadow-neutral border-4 border-base-300 p-1 mb-2 cursor-pointer hover:border-accent hover:shadow-accent hover:scale-105">
                                     <figure class="w-28 h-28 border-4 border-accent rounded-box mr-4">
                                         {% if game.title_image %}
                                             <img src="{{ game.title_image }}" class="w-full object-cover object-center hover:scale-105" />
