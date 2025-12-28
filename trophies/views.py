@@ -307,10 +307,11 @@ class GameDetailView(ProfileHotbarMixin, DetailView):
         user = self.request.user
         psn_username = self.kwargs.get('psn_username')
         today = date.today().isoformat()
+        now_utc = timezone.now()
         images_cache_key = f"game:imageurls:{game.np_communication_id}"
         images_timeout = 604800
-        stats_cache_key = f"game:stats:{game.np_communication_id}:{today}"
-        stats_timeout = 86400
+        stats_cache_key = f"game:stats:{game.np_communication_id}:{today}:{now_utc.hour:02d}"
+        stats_timeout = 3600
         trophy_groups_cache_key = f"game:trophygroups:{game.np_communication_id}"
         trophy_groups_timeout = 604800
 
