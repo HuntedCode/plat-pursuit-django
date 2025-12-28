@@ -25,6 +25,11 @@ class Command(BaseCommand):
             type=str,
             help='Flush keys/caches related to specific game page (np_communication_id required)'
         )
+        group.add_argument(
+            '--flush-token-keeper',
+            action='store_true',
+            help='Flush TokenKeeper queues, profile jobs, deferred jobs, and active profiles (destructive -- requires confirmation).'
+        )
 
     def handle(self, *args, **options):
         if not settings.DEBUG:
@@ -36,6 +41,8 @@ class Command(BaseCommand):
             self._handle_flush_index()
         elif options['flush_game_page']:
             self._handle_flush_game_page(options['flush_game_page'])
+        elif options['flush_token_keeper']:
+            self._handle_flush_token_keeper()
         
     def _confirm_action(self, action_desc):
         confirm = input(f"Are you sure you want to {action_desc}? (y/n):").strip().lower()
@@ -110,5 +117,36 @@ class Command(BaseCommand):
             self.stdout.write(self.style.SUCCESS(f"Flushed {deleted_count} keys for game {np_communication_id} page."))
         except Exception as e:
             logger.error(f"Error during index flush: {e}")
+            self.stdout.write(self.style.ERROR(f"Error: {e}"))
+    
+    def _handle_flush_token_keeper(self):
+        if not self._confirm_action("flush TokenKeeper queues, profile jobs, deferred jobs, and active profiles (irreversible)"):
+            self.stdout.write(self.style.ERROR("Operation cancelled."))
+            return
+        
+        try:
+            deleted_count = 0
+
+            # Clear job queues
+            queues = ['high_priority_jobs', 'medium_priority_jobs', 'low_priority_jobs']
+            for queue in queues:
+                redis_client.delete(queue)
+                deleted_count += 1
+            
+            # Clear profile_jobs:* (all queues)
+            for pattern in ['profile_jobs:*', 'deferred_jobs:*', 'pending_sync_complete:*']:
+                matching_keys = redis_client.keys(pattern)
+                if matching_keys:
+                    redis_client.delete(*matching_keys)
+                    deleted_count += len(matching_keys)
+            
+            # Clear active_profiles set
+            redis_client.delete('active_profiles')
+            deleted_count += 1
+
+            logger.info(f"Flushed {deleted_count} TokenKeeper-related keys/queues.")
+            self.stdout.write(self.style.SUCCESS(f"Flushed {deleted_count} TokenKeeper queues and profiles."))
+        except Exception as e:
+            logger.error(f"Error during TokenKeeper flush: {e}")
             self.stdout.write(self.style.ERROR(f"Error: {e}"))
 
