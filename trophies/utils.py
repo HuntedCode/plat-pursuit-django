@@ -211,7 +211,8 @@ def process_badge(profile, badge):
     if achieved >= needed and needed > 0 and not user_badge_exists:
         UserBadge.objects.create(profile=profile, badge=badge)
         logger.info(f"Awarded badge {badge.effective_display_title} (tier: {badge.tier}) to {profile.display_psn_username}")
-        notify_new_badge(profile, badge)
+        if profile.is_discord_verified and profile.discord_id:
+            notify_new_badge(profile, badge)
         return True
     elif achieved < needed and user_badge_exists:
         UserBadge.objects.filter(profile=profile, badge=badge).delete()
@@ -226,14 +227,14 @@ def notify_new_badge(profile, badge):
         plat_pursuit_emoji = f"<:PlatPursuit:{PLAT_PURSUIT_EMOJI_ID}>" if PLAT_PURSUIT_EMOJI_ID else "🏆"
 
         thumbnail_url = ''
-        if badge.icon or badge.base_badge:
+        if badge.badge_image or badge.base_badge:
             if settings.DEBUG:
                 thumbnail_url = 'https://psnobj.prod.dl.playstation.net/psnobj/NPWR20813_00/19515081-883c-41e2-9c49-8a8706c59efc.png'
             else:
-                if badge.icon:
-                    thumbnail_url = f"{settings.SITE_URL.rstrip('/')}{badge.icon.url}"
+                if badge.badge_image:
+                    thumbnail_url = f"{settings.SITE_URL.rstrip('/')}{badge.badge_image.url}"
                 else:
-                    thumbnail_url = f"{settings.SITE_URL.rstrip('/')}{badge.base_badge.icon.url}"
+                    thumbnail_url = f"{settings.SITE_URL.rstrip('/')}{badge.base_badge.badge_image.url}"
 
         description = f"{plat_pursuit_emoji} <@{profile.discord_id}> has earned a brand new badge!\n{platinum_emoji} **{badge.name}**"
         if badge.discord_role_id:
