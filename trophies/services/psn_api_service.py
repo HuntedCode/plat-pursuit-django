@@ -1,9 +1,11 @@
 import logging
 import requests
+import time
 from datetime import timedelta
-from dateutil import parser as date_parser
 from django.utils import timezone
-from django.db.models import F
+from django.db import transaction
+from django.db.models import F, Count, Max, Q
+from typing import List
 from trophies.models import Profile, Game, ProfileGame, Trophy, EarnedTrophy, Concept, TrophyGroup, Badge
 from trophies.utils import DISCORD_PLATINUM_WEBHOOK_URL, PLAT_PURSUIT_EMOJI_ID, PLATINUM_EMOJI_ID
 from psnawp_api.models.title_stats import TitleStats
@@ -345,20 +347,88 @@ class PsnApiService:
         return game, trophies
     
     @classmethod
+    @transaction.atomic
     def update_profilegame_stats(cls, profilegame_ids: list[int]):
-        from django.db.models import Max
-        pg_qs = ProfileGame.objects.filter(id__in=profilegame_ids).select_related('game')
-        for pg in pg_qs:
-            earned_qs = EarnedTrophy.objects.filter(profile=pg.profile, trophy__game=pg.game)
-            pg.earned_trophies_count = earned_qs.filter(earned=True).count()
-            pg.unearned_trophies_count = earned_qs.filter(earned=False).count()
-            pg.has_plat = earned_qs.filter(trophy__trophy_type='platinum', earned=True).exists()
-            recent_date = earned_qs.filter(earned=True).aggregate(
-                max_date=Max('earned_date_time')
-            )['max_date']
-            pg.most_recent_trophy_date = recent_date if recent_date else None
-        if pg_qs.exists():
-            ProfileGame.objects.bulk_update(pg_qs, ['earned_trophies_count', 'unearned_trophies_count', 'has_plat', 'most_recent_trophy_date'])
+        start_time = time.time()
+        batch_size = 500
+
+        pg_qs = ProfileGame.objects.filter(id__in=profilegame_ids).select_related('game', 'profile')
+        total_pgs = pg_qs.count()
+
+        if total_pgs == 0:
+            logger.info("No ProfileGames to update.")
+            return
+
+        pg_to_update = []
+        unique_game_ids = set()
+        
+        for i in range(0, total_pgs, batch_size):
+            batch_qs = pg_qs[i:i + batch_size].iterator()
+            for pg in batch_qs:
+                earned_qs = EarnedTrophy.objects.filter(profile=pg.profile, trophy__game=pg.game)
+                pg.earned_trophies_count = earned_qs.filter(earned=True).count()
+                pg.unearned_trophies_count = earned_qs.filter(earned=False).count()
+                pg.has_plat = earned_qs.filter(trophy__trophy_type='platinum', earned=True).exists()
+                recent_date = earned_qs.filter(earned=True).aggregate(max_date=Max('earned_date_time'))['max_date']
+                pg.most_recent_trophy_date = recent_date if recent_date else None
+                pg_to_update.append(pg)
+                unique_game_ids.add(pg.game.id)
+
+            if pg_to_update:
+                ProfileGame.objects.bulk_update(pg_to_update, ['earned_trophies_count', 'unearned_trophies_count', 'has_plat', 'most_recent_trophy_date'])
+                logger.info(f"Updated batch of {len(pg_to_update)} ProfileGames.")
+                pg_to_update = []
+        logger.info(f"Updated {total_pgs} ProfileGames.")
+
+        unique_game_ids = list(unique_game_ids)
+        total_games = len(unique_game_ids)
+        games_to_update = []
+        trophies_to_update = []
+
+        for i in range(0, total_games, batch_size):
+            game_batch_ids = unique_game_ids[i:i + batch_size]
+
+            played_counts_qs = ProfileGame.objects.filter(game__id__in=game_batch_ids).values('game__id').annotate(new_played_count=Count('id'))
+            played_counts_dict = {item['game__id']: item['new_played_count'] for item in played_counts_qs}
+
+            games_qs = Game.objects.filter(id__in=game_batch_ids)
+            for game in games_qs:
+                new_played_count = played_counts_dict.get(game.id, 0)
+                if new_played_count != game.played_count:
+                    game.played_count = new_played_count
+                    games_to_update.append(game)
+
+            earned_counts_qs = EarnedTrophy.objects.filter(trophy__game__id__in=game_batch_ids, earned=True).values('trophy__id').annotate(new_earned_count=Count('id'))
+
+            earned_counts_dict = {item['trophy__id']: item['new_earned_count'] for item in earned_counts_qs}
+
+            trophies_qs = Trophy.objects.filter(game__id__in=game_batch_ids)
+            for trophy in trophies_qs:
+                new_earned_count = earned_counts_dict.get(trophy.id, 0)
+                new_earn_rate = new_earned_count / played_counts_dict.get(trophy.game.id, 1) if played_counts_dict.get(trophy.game.id, 0) > 0 else 0.0
+                updated = False
+                if new_played_count != trophy.earned_count:
+                    trophy.earned_count = new_earned_count
+                    updated = True
+                if new_earn_rate != trophy.earn_rate:
+                    trophy.earn_rate = new_earn_rate
+                    updated = True
+                if updated:
+                    trophies_to_update.append(trophy)
+        
+            if games_to_update:
+                Game.objects.bulk_update(games_to_update, ['played_count'])
+                logger.info(f"Updated {len(games_to_update)} Games.")
+                games_to_update = []
+            
+            if trophies_to_update:
+                Trophy.objects.bulk_update(trophies_to_update, ['earned_count', 'earn_rate'])
+                logger.info(f"Updated {len(trophies_to_update)} Trophies.")
+                trophies_to_update = []
+        
+        duration = time.time() - start_time
+        logger.info(f"Completed stats update for {len(profilegame_ids)} ProfileGames ({total_games} unique games) in {duration:2f}s")
+            
     
     @classmethod
     def create_badge_group_from_form(cls, form_data: dict):
