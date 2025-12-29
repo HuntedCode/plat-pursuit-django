@@ -209,6 +209,7 @@ def process_badge(profile, badge, notify_bot=False):
     needed = required if badge.requires_all else max(badge.min_required, 1)
     user_badge_exists = UserBadge.objects.filter(profile=profile, badge=badge).exists()
 
+    newly_awarded = False
     if achieved >= needed and needed > 0 and not user_badge_exists:
         UserBadge.objects.create(profile=profile, badge=badge)
         logger.info(f"Awarded badge {badge.effective_display_title} (tier: {badge.tier}) to {profile.display_psn_username}")
@@ -284,7 +285,6 @@ def send_batch_role_notification(profile, badges):
     platinum_emoji = f"<:Platinum_Trophy:{PLATINUM_EMOJI_ID}>" if PLATINUM_EMOJI_ID else "🏆"
     plat_pursuit_emoji = f"<:PlatPursuit:{PLAT_PURSUIT_EMOJI_ID}>" if PLAT_PURSUIT_EMOJI_ID else "🏆"
 
-    # Use first badge for thumbnail
     first_badge = badges[0]
     thumbnail_url = None
     if settings.DEBUG:
@@ -328,6 +328,8 @@ def check_discord_role_badges(profile):
     from trophies.models import Badge
     start_time = time.time()
 
+    logger.info(f"verified/discord_id: {profile.is_discord_verified} | {profile.discord_id}")
+
     discord_badges = Badge.objects.filter(discord_role_id__isnull=False).prefetch_related('concepts', 'concepts__games', 'base_badge')
 
     if not discord_badges.exists():
@@ -343,7 +345,7 @@ def check_discord_role_badges(profile):
     checked_count = 0
     for badge in badges_to_process:
         try:
-            was_newly_rewarded = process_badge(profile, badge, notify_bot=True)
+            was_newly_awarded = process_badge(profile, badge, notify_bot=True)
 
             metrics = get_badge_metrics(profile, badge)
             achieved = metrics['achieved']
@@ -357,6 +359,8 @@ def check_discord_role_badges(profile):
         except Exception as e:
             logger.error(f"Error processing Discord role badge {badge.id} for profile {profile.psn_username}: {e}")
     
+    logger.info(f"Found {len(role_granting_badges)} qualifying role-granting badges")
+
     if role_granting_badges and profile.is_discord_verified and profile.discord_id:
         send_batch_role_notification(profile, role_granting_badges)
 
