@@ -181,7 +181,7 @@ def get_platform_filter(badge):
     return platform_filter
 
 @transaction.atomic
-def process_badge(profile, badge, force_noti=False):
+def process_badge(profile, badge, notify_bot=False):
     """Handles progress update and earning check for a single badge."""
     from trophies.models import UserBadge, UserBadgeProgress
 
@@ -212,14 +212,16 @@ def process_badge(profile, badge, force_noti=False):
     if achieved >= needed and needed > 0 and not user_badge_exists:
         UserBadge.objects.create(profile=profile, badge=badge)
         logger.info(f"Awarded badge {badge.effective_display_title} (tier: {badge.tier}) to {profile.display_psn_username}")
-        if force_noti or (profile.is_discord_verified and profile.discord_id):
-            notify_new_badge(profile, badge)
-        return True
+        newly_awarded = True
     elif achieved < needed and user_badge_exists:
         UserBadge.objects.filter(profile=profile, badge=badge).delete()
         logger.info(f"Revoked badge {badge.effective_display_title} (tier: {badge.tier}) from {profile.display_psn_username}")
 
-    return False
+    if badge.discord_role_id and (newly_awarded or notify_bot):
+        if profile.is_discord_verified and profile.discord_id:
+            notify_bot_badge_earned(profile, badge)
+
+    return newly_awarded
     
 def notify_new_badge(profile, badge):
     """Send Discord webhook embed for new badge."""
@@ -275,6 +277,52 @@ def notify_bot_badge_earned(profile, badge):
     except requests.RequestException as e:
         logger.error(f"Bot notification failed for badge {badge.name} (user {profile.psn_username}): {e}")
 
+def send_batch_role_notification(profile, badges):
+    if not badges:
+        return
+
+    platinum_emoji = f"<:Platinum_Trophy:{PLATINUM_EMOJI_ID}>" if PLATINUM_EMOJI_ID else "🏆"
+    plat_pursuit_emoji = f"<:PlatPursuit:{PLAT_PURSUIT_EMOJI_ID}>" if PLAT_PURSUIT_EMOJI_ID else "🏆"
+
+    # Use first badge for thumbnail
+    first_badge = badges[0]
+    thumbnail_url = None
+    if settings.DEBUG:
+        thumbnail_url = 'https://psnobj.prod.dl.playstation.net/psnobj/NPWR20813_00/19515081-883c-41e2-9c49-8a8706c59efc.png'
+    else:
+        if first_badge.badge_image:
+            thumbnail_url = first_badge.badge_image.url
+        elif first_badge.base_badge and first_badge.base_badge.badge_image:
+            thumbnail_url = first_badge.base_badge.badge_image.url
+
+    badge_lines = []
+    for badge in badges:
+        role_mention = f" <@&{badge.discord_role_id}>" if badge.discord_role_id else ""
+        badge_lines.append(f"{platinum_emoji} **{badge.name}**{role_mention}")
+
+    description = (
+        f"{plat_pursuit_emoji} <@{profile.discord_id}> — here are the Discord roles you've earned on Plat Pursuit!\n\n"
+        + "\n".join(badge_lines)
+        + "\n\nThank you for being part of the community! 🎉"
+    )
+
+    embed_data = {
+        'title': f"🎖️ Your Plat Pursuit Discord Roles ({len(badges)} total)",
+        'description': description,
+        'color': 0x674EA7,
+        'footer': {'text': 'Powered by Plat Pursuit | No Trophy Can Hide From Us'},
+    }
+    if thumbnail_url:
+        embed_data['thumbnail'] = {'url': thumbnail_url}
+
+    payload = {'embeds': [embed_data]}
+    try:
+        response = requests.post(DISCORD_PLATINUM_WEBHOOK_URL, json=payload)
+        response.raise_for_status()
+        logger.info(f"Sent batch role notification for {len(badges)} badges to {profile.psn_username}")
+    except requests.RequestException as e:
+        logger.error(f"Batch role webhook notification failed: {e}")
+
 @transaction.atomic
 def check_discord_role_badges(profile):
     from trophies.models import Badge
@@ -290,15 +338,28 @@ def check_discord_role_badges(profile):
     derived_badges = Badge.objects.filter(base_badge__id__in=discord_badge_ids).prefetch_related('concepts', 'base_badge')
 
     badges_to_process = set(discord_badges) | set(derived_badges)
+    role_granting_badges = []
 
     checked_count = 0
     for badge in badges_to_process:
         try:
-            process_badge(profile, badge, force_noti=True)
+            was_newly_rewarded = process_badge(profile, badge, notify_bot=True)
+
+            metrics = get_badge_metrics(profile, badge)
+            achieved = metrics['achieved']
+            required = metrics['required']
+            needed = required if badge.requires_all else max(badge.min_required, 1)
+
+            if achieved >= needed and needed > 0:
+                role_granting_badges.append(badge)
+
             checked_count += 1
         except Exception as e:
             logger.error(f"Error processing Discord role badge {badge.id} for profile {profile.psn_username}: {e}")
     
+    if role_granting_badges and profile.is_discord_verified and profile.discord_id:
+        send_batch_role_notification(profile, role_granting_badges)
+
     duration = time.time() - start_time
     logger.info(
         f"Processed {checked_count} Discord role related badges "
