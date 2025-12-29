@@ -750,7 +750,7 @@ class Badge(models.Model):
 
         main_url = self.badge_image.url if self.badge_image else self.base_badge.badge_image.url if self.base_badge and self.base_badge.badge_image else 'images/badges/default.png'
         backdrop_url = f"images/badges/backdrops/{self.tier}_backdrop.png"
-        if self.badge_image:
+        if self.badge_image or (self.base_badge and self.base_badge.badge_image):
             foreground_url = f"images/badges/foregrounds/{self.tier}_foreground.png"
             return {
                 'backdrop': backdrop_url,
