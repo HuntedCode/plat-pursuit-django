@@ -279,13 +279,23 @@ def notify_bot_badge_earned(profile, badge):
         logger.error(f"Bot notification failed for badge {badge.name} (user {profile.psn_username}): {e}")
 
 def send_batch_role_notification(profile, badges):
+    """
+    Sends a single Discord embed listing ONLY the badges that grant a Discord role.
+    Uses the first such badge's image as thumbnail.
+    """
     if not badges:
         return
 
     platinum_emoji = f"<:Platinum_Trophy:{PLATINUM_EMOJI_ID}>" if PLATINUM_EMOJI_ID else "🏆"
     plat_pursuit_emoji = f"<:PlatPursuit:{PLAT_PURSUIT_EMOJI_ID}>" if PLAT_PURSUIT_EMOJI_ID else "🏆"
 
-    first_badge = badges[0]
+    role_badges = [b for b in badges if b.discord_role_id]
+
+    if not role_badges:
+        logger.info(f"No role-granting badges for {profile.psn_username} — skipping notification")
+        return
+
+    first_badge = role_badges[0]
     thumbnail_url = None
     if settings.DEBUG:
         thumbnail_url = 'https://psnobj.prod.dl.playstation.net/psnobj/NPWR20813_00/19515081-883c-41e2-9c49-8a8706c59efc.png'
@@ -296,9 +306,8 @@ def send_batch_role_notification(profile, badges):
             thumbnail_url = first_badge.base_badge.badge_image.url
 
     badge_lines = []
-    for badge in badges:
-        role_mention = f" <@&{badge.discord_role_id}>" if badge.discord_role_id else ""
-        badge_lines.append(f"{platinum_emoji} **{badge.name}**{role_mention}")
+    for badge in role_badges:
+        badge_lines.append(f"{platinum_emoji} **{badge.name}** <@&{badge.discord_role_id}>")
 
     description = (
         f"{plat_pursuit_emoji} <@{profile.discord_id}> — here are the Discord roles you've earned on Plat Pursuit!\n\n"
@@ -307,7 +316,7 @@ def send_batch_role_notification(profile, badges):
     )
 
     embed_data = {
-        'title': f"🎖️ Your Plat Pursuit Discord Roles ({len(badges)} total)",
+        'title': f"🎖️ Your Plat Pursuit Discord Roles ({len(role_badges)} total)",
         'description': description,
         'color': 0x674EA7,
         'footer': {'text': 'Powered by Plat Pursuit | No Trophy Can Hide From Us'},
@@ -319,7 +328,7 @@ def send_batch_role_notification(profile, badges):
     try:
         response = requests.post(DISCORD_PLATINUM_WEBHOOK_URL, json=payload)
         response.raise_for_status()
-        logger.info(f"Sent batch role notification for {len(badges)} badges to {profile.psn_username}")
+        logger.info(f"Sent batch role notification for {len(role_badges)} role-granting badges to {profile.psn_username}")
     except requests.RequestException as e:
         logger.error(f"Batch role webhook notification failed: {e}")
 
