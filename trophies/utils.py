@@ -232,9 +232,9 @@ def notify_new_badge(profile, badge):
                 thumbnail_url = 'https://psnobj.prod.dl.playstation.net/psnobj/NPWR20813_00/19515081-883c-41e2-9c49-8a8706c59efc.png'
             else:
                 if badge.badge_image:
-                    thumbnail_url = f"{settings.SITE_URL.rstrip('/')}{badge.badge_image.url}"
+                    thumbnail_url = badge.badge_image.url
                 else:
-                    thumbnail_url = f"{settings.SITE_URL.rstrip('/')}{badge.base_badge.badge_image.url}"
+                    thumbnail_url = badge.base_badge.badge_image.url
 
         description = f"{plat_pursuit_emoji} <@{profile.discord_id}> has earned a brand new badge!\n{platinum_emoji} **{badge.name}**"
         if badge.discord_role_id:
