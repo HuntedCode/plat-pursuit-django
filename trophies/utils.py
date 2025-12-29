@@ -366,6 +366,8 @@ def check_discord_role_badges(profile):
 
     if role_granting_badges and profile.is_discord_verified and profile.discord_id:
         send_batch_role_notification(profile, role_granting_badges)
+    else:
+        logger.info("No notification sent: missing verification, discord_id, or qualifying badges")
 
     duration = time.time() - start_time
     logger.info(
