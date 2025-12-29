@@ -252,7 +252,7 @@ def notify_new_badge(profile, badge):
             'footer': {'text': f"Powered by Plat Pursuit | No Trophy Can Hide From Us"},
         }
         payload = {'embeds': [embed_data]}
-        response = requests.post(DISCORD_PLATINUM_WEBHOOK_URL, json=payload)
+        response = requests.post(DISCORD_BADGE_WEBHOOK_URL, json=payload)
         response.raise_for_status()
         logger.info(f"Sent notification of new badge for {profile.psn_username}")
         if badge.discord_role_id:
@@ -451,6 +451,7 @@ REGIONS = ['NA', 'EU', 'JP', 'AS', 'KR', 'CN']
 
 SHOVELWARE_THRESHOLD = 90.0
 
+DISCORD_BADGE_WEBHOOK_URL = os.getenv('DISCORD_BADGE_WEBHOOK_URL')
 DISCORD_PLATINUM_WEBHOOK_URL = os.getenv('DISCORD_PLATINUM_WEBHOOK_URL')
 PLATINUM_EMOJI_ID = os.getenv('PLATINUM_EMOJI_ID')
 PLAT_PURSUIT_EMOJI_ID = os.getenv('PLAT_PURSUIT_EMOJI_ID')
