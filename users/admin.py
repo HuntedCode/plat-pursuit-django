@@ -1,7 +1,7 @@
 from django.contrib import admin
-from django.contrib.auth.admin import UserAdmin  # Extend for auth features
+from django.contrib.auth.admin import UserAdmin
 from .models import CustomUser
-from .forms import CustomUserCreationForm  # If adding custom add/change forms
+from .forms import CustomUserCreationForm
 
 @admin.register(CustomUser)
 class CustomUserAdmin(UserAdmin):

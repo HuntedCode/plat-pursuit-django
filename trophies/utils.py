@@ -274,6 +274,38 @@ def notify_bot_badge_earned(profile, badge):
     except requests.RequestException as e:
         logger.error(f"Bot notification failed for badge {badge.name} (user {profile.psn_username}): {e}")
 
+@transaction.atomic
+def check_discord_role_badges(profile):
+    from trophies.models import Badge
+    start_time = time.time()
+
+    discord_badges = Badge.objects.filter(discord_role_id__isnull=False).prefetch_related('concepts', 'concepts__games', 'base_badge')
+
+    if not discord_badges.exists():
+        logger.info(f"No badges with discord_role_id found. Skipping for profile {profile.psn_username}")
+        return 0
+    
+    discord_badge_ids = set(discord_badges.values_list('id', flat=True))
+    derived_badges = Badge.objects.filter(base_badge__id__in=discord_badge_ids).prefetch_related('concepts', 'base_badge')
+
+    badges_to_process = set(discord_badges) | set(derived_badges)
+
+    checked_count = 0
+    for badge in badges_to_process:
+        try:
+            process_badge(profile, badge)
+            checked_count += 1
+        except Exception as e:
+            logger.error(f"Error processing Discord role badge {badge.id} for profile {profile.psn_username}: {e}")
+    
+    duration = time.time() - start_time
+    logger.info(
+        f"Processed {checked_count} Discord role related badges "
+        f"(direct: {len(discord_badges)}, derived: {len(derived_badges)}) "
+        f"for profile {profile.psn_username} in {duration:.2f}s"
+    )
+    return checked_count
+
 def get_next_sync(profile) -> int:
     # Update logic later
     next_sync = profile.last_synced + timedelta(hours=1)
