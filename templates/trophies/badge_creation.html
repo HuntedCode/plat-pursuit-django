@@ -59,6 +59,27 @@
                 }
             });
         });
+
+        function slugify(text) {
+            return text
+                .toString()
+                .normalize('NFD') // Split an accented letter into the base letter and the accent
+                .replace(/[\u0300-\u036f]/g, '') // Remove all previously split accents
+                .toLowerCase()
+                .trim()
+                .replace(/\s+/g, '-') // Replace spaces with -
+                .replace(/[^a-z0-9 -]/g, '') // Remove all chars not letters, numbers, and spaces
+                .replace(/-+/g, '-'); // Replace multiple dashes with a single dash
+        }
+
+        const nameInput = document.getElementById('id_name');
+        const seriesSlugInput = document.getElementById('id_series_slug');
+        console.log(nameInput);
+        console.log(seriesSlugInput)
+        nameInput.addEventListener('input', function() {
+            console.log("Input detected...")
+            seriesSlugInput.value = slugify(nameInput.value);
+        });
     });
 </script>
 {% endblock %}
