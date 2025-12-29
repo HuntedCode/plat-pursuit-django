@@ -30,6 +30,11 @@ class Command(BaseCommand):
             action='store_true',
             help='Flush TokenKeeper queues, profile jobs, deferred jobs, and active profiles (destructive -- requires confirmation).'
         )
+        group.add_argument(
+            '--flush-complete-lock',
+            type=int,
+            help='Flush TokenKeeper for a specific profile.'
+        )
 
     def handle(self, *args, **options):
         if not settings.DEBUG:
@@ -43,6 +48,8 @@ class Command(BaseCommand):
             self._handle_flush_game_page(options['flush_game_page'])
         elif options['flush_token_keeper']:
             self._handle_flush_token_keeper()
+        elif options['flush_complete_lock']:
+            self._handle_flush_complete_lock(options['flush_complete_lock'])
         
     def _confirm_action(self, action_desc):
         confirm = input(f"Are you sure you want to {action_desc}? (y/n):").strip().lower()
@@ -150,3 +157,11 @@ class Command(BaseCommand):
             logger.error(f"Error during TokenKeeper flush: {e}")
             self.stdout.write(self.style.ERROR(f"Error: {e}"))
 
+    def _handle_flush_complete_lock(self, profile_id: int):
+        if not self._confirm_action(f"flush TokenKeeper queues, profile jobs, deferred jobs, and active status for profile {profile_id} only (irreversible)"):
+                self.stdout.write(self.style.ERROR("Operation cancelled."))
+                return
+            
+        lock_key = f"complete_lock:{profile_id}"
+        redis_client.delete(lock_key)
+        self.stdout.write(self.style.SUCCESS(f"Lock successfully flushed!"))
