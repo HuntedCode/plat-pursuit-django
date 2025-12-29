@@ -352,7 +352,10 @@ def check_discord_role_badges(profile):
             required = metrics['required']
             needed = required if badge.requires_all else max(badge.min_required, 1)
 
-            if achieved >= needed and needed > 0:
+            qualifies = achieved >= needed and needed > 0
+            logger.info(f"Badge {badge.name} (ID {badge.id}): achieved={achieved}, needed={needed}, qualifies={qualifies}, role_id={badge.discord_role_id}")
+
+            if qualifies:
                 role_granting_badges.append(badge)
 
             checked_count += 1
