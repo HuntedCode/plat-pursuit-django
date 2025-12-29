@@ -1,7 +1,6 @@
 from django.db.models.signals import post_save, post_delete
 from django.dispatch import receiver
 from trophies.models import UserBadge
-from trophies.utils import notify_new_badge
 
 @receiver(post_save, sender=UserBadge, dispatch_uid="update_badge_earned_count")
 def update_badge_earned_count_on_save(sender, instance, created, **kwargs):
