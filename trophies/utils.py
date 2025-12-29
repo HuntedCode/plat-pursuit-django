@@ -181,7 +181,7 @@ def get_platform_filter(badge):
     return platform_filter
 
 @transaction.atomic
-def process_badge(profile, badge):
+def process_badge(profile, badge, force_noti=False):
     """Handles progress update and earning check for a single badge."""
     from trophies.models import UserBadge, UserBadgeProgress
 
@@ -212,7 +212,7 @@ def process_badge(profile, badge):
     if achieved >= needed and needed > 0 and not user_badge_exists:
         UserBadge.objects.create(profile=profile, badge=badge)
         logger.info(f"Awarded badge {badge.effective_display_title} (tier: {badge.tier}) to {profile.display_psn_username}")
-        if profile.is_discord_verified and profile.discord_id:
+        if force_noti or (profile.is_discord_verified and profile.discord_id):
             notify_new_badge(profile, badge)
         return True
     elif achieved < needed and user_badge_exists:
@@ -294,7 +294,7 @@ def check_discord_role_badges(profile):
     checked_count = 0
     for badge in badges_to_process:
         try:
-            process_badge(profile, badge)
+            process_badge(profile, badge, force_noti=True)
             checked_count += 1
         except Exception as e:
             logger.error(f"Error processing Discord role badge {badge.id} for profile {profile.psn_username}: {e}")
