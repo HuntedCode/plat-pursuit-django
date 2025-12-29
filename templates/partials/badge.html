@@ -1,7 +1,7 @@
 {% load static custom_filters %}
 <div class="relative w-full h-full rounded-box overflow-hidden transition-all duration-300 hover:scale-105">
     <img src="{% static layers.backdrop %}" alt="Badge Backdrop" class="absolute inset-0 w-full h-full object-cover" loading="lazy" />
-    <img src="{% if badge.badge_image %}{{ layers.main }}{% else %}{% static layers.main %}{% endif %}" alt="Badge Main Layer" class="absolute inset-0 w-full h-full object-cover" loading="lazy" />
+    <img src="{% if badge.badge_image or badge.base_badge %}{{ layers.main }}{% else %}{% static layers.main %}{% endif %}" alt="Badge Main Layer" class="absolute inset-0 w-full h-full object-cover" loading="lazy" />
     {% if badge.badge_image %}
         <img src="{% static layers.foreground %}" alt="Badge Foreground" class="absolute inset-0 w-full h-full object-cover" loading="lazy" />
     {% endif %}
