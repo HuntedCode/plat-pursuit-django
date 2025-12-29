@@ -239,6 +239,9 @@ def notify_new_badge(profile, badge):
                     thumbnail_url = badge.badge_image.url
                 else:
                     thumbnail_url = badge.base_badge.badge_image.url
+            
+            if not thumbnail_url:
+                thumbnail_url = 'images/badges/default.png'
 
         description = f"{plat_pursuit_emoji} <@{profile.discord_id}> has earned a brand new badge!\n{platinum_emoji} **{badge.name}**"
         if badge.discord_role_id:
@@ -307,10 +310,10 @@ def send_batch_role_notification(profile, badges):
 
     badge_lines = []
     for badge in role_badges:
-        badge_lines.append(f"{platinum_emoji} **{badge.name}** <@&{badge.discord_role_id}>")
+        badge_lines.append(f"{platinum_emoji} **{badge.display_series}** <@&{badge.discord_role_id}>")
 
     description = (
-        f"{plat_pursuit_emoji} <@{profile.discord_id}> — here are the Discord roles you've earned on Plat Pursuit!\n\n"
+        f"{plat_pursuit_emoji} <@{profile.discord_id}> — here are the Discord roles you've earned on PlatPursuit!\n\n"
         + "\n".join(badge_lines)
         + "\n\nThank you for being part of the community! 🎉"
     )
