@@ -13,6 +13,10 @@
                             <figure class="border-4 border-base-300 shadow-md shadow-neutral w-28 h-28 hover:border-{{ badge|badge_color }} hover:shadow-{{ badge|badge_color }}">
                                 <img src="{{ badge.most_recent_concept.concept_icon_url }}" class="w-full object-cover hover:scale-105" />
                             </figure>
+                        {% elif badge.base_badge.most_recent_concept %}
+                            <figure class="border-4 border-base-300 shadow-md shadow-neutral w-28 h-28 hover:border-{{ badge|badge_color }} hover:shadow-{{ badge|badge_color }}">
+                                <img src="{{ badge.base_badge.most_recent_concept.concept_icon_url }}" class="w-full object-cover hover:scale-105" />
+                            </figure>
                         {% endif %}
                     </div>
                     <div class="flex flex-col items-center lg:items-start justify-center">
