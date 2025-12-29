@@ -277,6 +277,7 @@ class Game(models.Model):
     region_lock = models.BooleanField(default=False, help_text="Admin region override lock - won't be automatically updated.")
     is_shovelware = models.BooleanField(default=False)
     is_obtainable= models.BooleanField(default=True)
+    is_delisted = models.BooleanField(default=False)
 
     class Meta:
         indexes = [
@@ -287,6 +288,7 @@ class Game(models.Model):
             models.Index(fields=['created_at'], name='game_created_idx'),
             models.Index(fields=['is_obtainable', 'title_platform'], name='game_obtainable_platform_idx'),
             models.Index(fields=['is_shovelware'], name='game_shovelware_idx'),
+            models.Index(fields=['is_delisted'], name='game_delisted_idx'),
             models.Index(fields=['is_regional'], name='game_regional_idx'),
         ]
     

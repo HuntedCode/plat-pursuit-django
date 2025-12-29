@@ -89,8 +89,9 @@ class GameAdmin(admin.ModelAdmin):
         "total_defined_trophies",
         "played_count",
         "is_shovelware",
+        "is_delisted",
     )
-    list_filter = ("has_trophy_groups", "is_regional", RegionListFilter, 'is_shovelware', 'is_obtainable')
+    list_filter = ("has_trophy_groups", "is_regional", RegionListFilter, 'is_shovelware', 'is_delisted', 'is_obtainable')
     search_fields = ("title_name", "np_communication_id")
     ordering = ("title_name",)
     fieldsets = (
@@ -111,6 +112,7 @@ class GameAdmin(admin.ModelAdmin):
                     "title_image",
                     "is_shovelware",
                     "is_obtainable",
+                    "is_delisted",
                 )
             },
         ),

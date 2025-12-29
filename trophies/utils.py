@@ -138,6 +138,7 @@ def get_badge_metrics(profile, badge):
         qualifying_games_filter = Q(platform_filter, defined_trophies__platinum__gt=0)
         if is_obtainable_required:
             qualifying_games_filter &= Q(is_obtainable=True)
+            qualifying_games_filter &= Q(is_delisted=False)
         
         concepts_qs = badge.concepts if badge.concepts.exists() else (badge.base_badge.concepts if badge.base_badge else Badge.objects.none())
         if not concepts_qs.exists():
@@ -153,12 +154,12 @@ def get_badge_metrics(profile, badge):
         if is_complete_required:
             user_achievements_qs = ProfileGame.objects.filter(profile=profile, progress=100, game__concept__in=filtered_concepts_qs, game__defined_trophies__platinum__gt=0)
             if is_obtainable_required:
-                user_achievements_qs = user_achievements_qs.filter(game__is_obtainable=True)
+                user_achievements_qs = user_achievements_qs.filter(game__is_obtainable=True, game__is_delisted=False)
             achieved = user_achievements_qs.values('game__concept').distinct().count()
         else:
             user_achievements_qs = EarnedTrophy.objects.filter(profile=profile, earned=True, trophy__trophy_type='platinum', trophy__game__concept__in=filtered_concepts_qs, trophy__game__defined_trophies__platinum__gt=0)
             if is_obtainable_required:
-                user_achievements_qs = user_achievements_qs.filter(trophy__game__is_obtainable=True)
+                user_achievements_qs = user_achievements_qs.filter(trophy__game__is_obtainable=True, trophy__game__is_delisted=False)
             achieved = user_achievements_qs.values('trophy__game__concept').distinct().count()
 
         return {'achieved': achieved, 'required': required}  
