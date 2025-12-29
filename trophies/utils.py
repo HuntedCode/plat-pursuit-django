@@ -245,7 +245,7 @@ def notify_new_badge(profile, badge):
             if not thumbnail_url:
                 thumbnail_url = 'images/badges/default.png'
 
-        description = f"{plat_pursuit_emoji} <@{profile.discord_id}> has earned a brand new badge!\n{platinum_emoji} **{badge.name}**"
+        description = f"{plat_pursuit_emoji} <@{profile.discord_id}> has earned a brand new role!\n{platinum_emoji} **{badge.display_series}**"
         if badge.discord_role_id:
             description += f"\nYou've earned the <@&{badge.discord_role_id}> role! Congrats! 🎉"
 
@@ -260,8 +260,6 @@ def notify_new_badge(profile, badge):
         response = requests.post(DISCORD_PLATINUM_WEBHOOK_URL, json=payload)
         response.raise_for_status()
         logger.info(f"Sent notification of new badge for {profile.psn_username}")
-        if badge.discord_role_id:
-            notify_bot_badge_earned(profile, badge)
     except requests.RequestException as e:
         logger.error(f"Webhook notification failed: {e}")
 
