@@ -218,7 +218,7 @@ def process_badge(profile, badge, notify_bot=False):
         UserBadge.objects.filter(profile=profile, badge=badge).delete()
         logger.info(f"Revoked badge {badge.effective_display_title} (tier: {badge.tier}) from {profile.display_psn_username}")
 
-    if badge.discord_role_id and (newly_awarded or notify_bot):
+    if badge.discord_role_id and (newly_awarded or notify_bot) and UserBadge.objects.filter(profile=profile, badge=badge).exists():
         if profile.is_discord_verified and profile.discord_id:
             notify_bot_badge_earned(profile, badge)
 
