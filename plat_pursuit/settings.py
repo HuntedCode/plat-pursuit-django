@@ -25,6 +25,10 @@ SITE_URL = 'https://platpursuit.com'
 BOT_API_URL = os.getenv('BOT_API_URL', 'http://127.0.0.1:5000')
 BOT_API_KEY = os.getenv('BOT_API_KEY')
 
+DISCORD_PLATINUM_WEBHOOK_URL = os.getenv('DISCORD_PLATINUM_WEBHOOK_URL')
+PLATINUM_EMOJI_ID = os.getenv('PLATINUM_EMOJI_ID')
+PLAT_PURSUIT_EMOJI_ID = os.getenv('PLAT_PURSUIT_EMOJI_ID')
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
