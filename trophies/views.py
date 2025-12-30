@@ -923,7 +923,7 @@ class BadgeListView(ProfileHotbarMixin, ListView):
     paginate_by = None
 
     def get_queryset(self):
-        qs = super().get_queryset().prefetch_related('concepts')
+        qs = super().get_queryset().prefetch_related('concepts__games')
         form = BadgeSearchForm(self.request.GET)
 
         if form.is_valid():
@@ -949,7 +949,7 @@ class BadgeListView(ProfileHotbarMixin, ListView):
 
             all_badges_ids = [b.id for group in grouped_badges.values() for b in group]
             progress_qs = UserBadgeProgress.objects.filter(profile=profile, badge__id__in=all_badges_ids)
-            progress_dict = {p.badge_id: p for p in progress_qs}
+            progress_dict = {p.badge.id: p for p in progress_qs}
 
             for slug, group in grouped_badges.items():
                 sorted_group = sorted(group, key=lambda b: b.tier)
@@ -959,66 +959,97 @@ class BadgeListView(ProfileHotbarMixin, ListView):
                 tier1_badge = next((b for b in sorted_group if b.tier == 1), None)
                 tier1_earned_count = tier1_badge.earned_count if tier1_badge else 0
 
-                if slug in earned_dict:
-                    highest_tier = earned_dict[slug]
-                    next_badge = next((b for b in sorted_group if b.tier > highest_tier), None)
-                    if next_badge:
-                        display_badge = next_badge
-                        is_maxed = False
-                    else:
-                        display_badge = sorted_group[-1]
-                        is_maxed = True
-                else:
-                    display_badge = next((b for b in sorted_group if b.tier == 1), sorted_group[0])
-                    is_maxed = False
-                    
-                if display_badge:
-                    progress = progress_dict.get(display_badge.id)
-                    progress_percentage = 0
-                    completed_concepts = 0
-                    required_concepts = 0
-                    if progress and badge.badge_type == 'series':
-                        completed_concepts = progress.completed_concepts
-                        required_concepts = progress.required_concepts
-                        if is_maxed:
-                            progress_percentage = 100
-                        else:
-                            progress_percentage = (completed_concepts / required_concepts) * 100 if required_concepts > 0 else 0
+                all_games = set()
+                for badge in sorted_group:
+                    for concept in badge.concepts.all():
+                        for game in concept.games.all():
+                            all_games.add(game)
+                total_games = len(all_games)
+                trophy_types = {
+                    'bronze': sum(game.defined_trophies['bronze'] for game in all_games),
+                    'silver': sum(game.defined_trophies['silver'] for game in all_games),
+                    'gold': sum(game.defined_trophies['gold'] for game in all_games),
+                    'platinum': sum(game.defined_trophies['platinum'] for game in all_games),
+                }
 
-                    display_data.append({
-                        'badge': display_badge,
-                        'tier1_earned_count': tier1_earned_count,
-                        'completed_concepts': completed_concepts,
-                        'required_concepts': required_concepts,
-                        'progress_percentage': round(progress_percentage, 1),
-                    })
+                highest_tier = earned_dict.get(slug, 0)
+                display_badge = next((b for b in sorted_group if b.tier == highest_tier), None) if highest_tier > 0 else tier1_badge                
+                if not display_badge:
+                    continue
+
+                is_earned = highest_tier > 0
+                next_badge = next((b for b in sorted_group if b.tier > highest_tier), None)
+                is_maxed = next_badge is None and is_earned
+                progress_badge = next_badge if next_badge else display_badge
+
+                progress = progress_dict.get(progress_badge.id) if progress_badge else None
+                required_concepts = progress_badge.concepts.count() if progress_badge else 0
+                completed_concepts = 0
+                progress_percentage = 0
+
+                if is_maxed:
+                    completed_concepts = required_concepts
+                    progress_percentage = 100
+                elif progress and progress_badge.badge_type == 'series':
+                    completed_concepts = progress.completed_concepts
+                    required_concepts = progress.required_concepts
+                    progress_percentage = (completed_concepts / required_concepts) * 100 if required_concepts > 0 else 0
+                else:
+                    completed_concepts = 0
+                    progress_percentage = 0
+
+                display_data.append({
+                    'badge': display_badge,
+                    'tier1_earned_count': tier1_earned_count,
+                    'completed_concepts': completed_concepts,
+                    'required_concepts': required_concepts,
+                    'progress_percentage': round(progress_percentage, 1),
+                    'trophy_types': trophy_types,
+                    'total_games': total_games,
+                    'is_earned': is_earned,
+                })
         else:
             for slug, group in grouped_badges.items():
                 sorted_group = sorted(group, key=lambda b: b.tier)
                 tier1 = next((b for b in sorted_group if b.tier == 1), None)
                 if tier1:
                     tier1_earned_count = tier1.earned_count
+                    all_games = set()
+                    for badge in sorted_group:
+                        for concept in badge.concepts.all():
+                            for game in concept.games.all():
+                                all_games.add(game)
+                    total_games = len(all_games)
+                    trophy_types = {
+                        'bronze': sum(game.defined_trophies['bronze'] for game in all_games),
+                        'silver': sum(game.defined_trophies['silver'] for game in all_games),
+                        'gold': sum(game.defined_trophies['gold'] for game in all_games),
+                        'platinum': sum(game.defined_trophies['platinum'] for game in all_games),
+                    }
                     display_data.append({
                         'badge': tier1,
                         'tier1_earned_count': tier1_earned_count,
                         'completed_concepts': 0,
                         'required_concepts': 0,
                         'progress_percentage': 0,
+                        'trophy_types': trophy_types,
+                        'total_games': total_games,
+                        'is_earned': False
                     })
 
         sort_val = self.request.GET.get('sort', 'tier')
         if sort_val == 'name':
-            display_data.sort(key=lambda d: d['badge'].effective_display_title)
+            display_data.sort(key=lambda d: d['badge'].effective_display_title or '')
         elif sort_val == 'tier':
-            display_data.sort(key=lambda d: (d['badge'].tier, d['badge'].effective_display_title))
+            display_data.sort(key=lambda d: (d['badge'].tier, d['badge'].effective_display_title or ''))
         elif sort_val == 'tier_desc':
-            display_data.sort(key=lambda d: (-d['badge'].tier, d['badge'].effective_display_title))
+            display_data.sort(key=lambda d: (-d['badge'].tier, d['badge'].effective_display_title or ''))
         elif sort_val == 'earned':
-            display_data.sort(key=lambda d: (-d['tier1_earned_count'], d['badge'].effective_display_title))
+            display_data.sort(key=lambda d: (-d['tier1_earned_count'], d['badge'].effective_display_title or ''))
         elif sort_val == 'earned_inv':
-            display_data.sort(key=lambda d: (d['tier1_earned_count'], d['badge'].effective_display_title))
+            display_data.sort(key=lambda d: (d['tier1_earned_count'], d['badge'].effective_display_title or ''))
         else:
-            display_data.sort(key=lambda d: d['badge'].effective_display_series)
+            display_data.sort(key=lambda d: d['badge'].effective_display_series or '')
 
         paginate_by = 25
         paginator = Paginator(display_data, paginate_by)

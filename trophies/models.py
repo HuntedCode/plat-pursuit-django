@@ -738,6 +738,14 @@ class Badge(models.Model):
         return None
     
     @property
+    def effective_user_title(self):
+        if self.user_title:
+            return self.user_title
+        elif self.base_badge and self.base_badge.user_title:
+            return self.base_badge.user_title
+        return None
+
+    @property
     def effective_description(self):
         if self.description:
             return self.description
