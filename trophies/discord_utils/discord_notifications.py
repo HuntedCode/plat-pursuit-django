@@ -2,20 +2,51 @@ import queue
 import time
 import requests
 import logging
+import os
 from django.conf import settings
+from dotenv import load_dotenv
+from urllib.parse import urlparse
 
 logger = logging.getLogger(__name__)
 
 webhook_queue = queue.Queue()
 
+load_dotenv()
+PROXY_URL = os.getenv('PROXY_URL')
+PROXIES = None
+if PROXY_URL:
+    # Parse the proxy URL to ensure it's correctly formatted
+    parsed_proxy = urlparse(PROXY_URL)
+    if not parsed_proxy.scheme or not parsed_proxy.hostname or not parsed_proxy.port:
+        raise ValueError("Invalid PROXY_URL format in .env")
+    PROXIES = {
+        'http': PROXY_URL,
+        'https': PROXY_URL
+    }
+
+def check_proxy_ip():
+    if not PROXY_URL:
+        logger.info("No proxy configured, skipping IP check.")
+        return
+    try:
+        response = requests.get('https://api.ipify.org?format=text', proxies=PROXIES, timeout=10)
+        response.raise_for_status()
+        ip = response.text.strip()
+        logger.info(f"Outbound IP via proxy: {ip}")
+    except requests.RequestException as e:
+        logger.error(f"Failed to check outbound IP via proxy: {e}")
+        raise 
+
 def webhook_sender_worker():
+    check_proxy_ip()
+
     while True:
         payload, webhook_url = webhook_queue.get()
         max_retries = 5
         retry_count = 0
         while retry_count < max_retries:
             try:
-                response = requests.post(webhook_url, json=payload)
+                response = requests.post(webhook_url, json=payload, proxies=PROXIES)
                 response.raise_for_status()
                 logger.info(f"Successfully sent webhook payload to {webhook_url}")
                 break
