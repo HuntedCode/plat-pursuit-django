@@ -5,12 +5,16 @@ from django.contrib import messages
 from django.contrib.auth import update_session_auth_hash
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.http import HttpResponse
 from django.shortcuts import render, redirect
 from django.views import View
+from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_POST
 from djstripe.models import Price, Customer
 import stripe
 import logging
 from users.forms import UserSettingsForm, CustomPasswordChangeForm
+from users.models import CustomUser
 
 logger = logging.getLogger('psn_api')
 
@@ -146,3 +150,29 @@ def subscribe_success(request):
         except stripe.error.StripeError as e:
             messages.error(request, f"Error verifying subscription: {str(e)}")
     return redirect('home')
+
+@csrf_exempt
+@require_POST
+def stripe_webhook(request):
+    payload = request.body
+    sig_header = request.META['HTTP_STRIPE_SIGNATURE']
+    event = None
+
+    try:
+        event = stripe.Webhook.construct_event(payload, sig_header, settings.DJSTRIPE_WEBHOOK_SECRET)
+    except ValueError as e:
+        logger.error(f"Webhook payload invalid: {e}")
+        return HttpResponse(status=400)
+    except stripe.error.SignatureVerificationError as e:
+        logger.error(f"Webhook signature verification failed: {e}")
+        return HttpResponse(status=400)
+    
+    if event.type in ['checkout.session.completed', 'customer.subscription.created', 'customer.subscription.updated', 'invoice.paid']:
+        customer_id = event.data.object.get('customer')
+        if customer_id:
+            user = CustomUser.objects.filter(stripe_customer_id=customer_id).first()
+            if user:
+                user.update_subscription_status()
+                logger.info(f"Updated tier for user {user.id}")
+
+    return HttpResponse(status=200)

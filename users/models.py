@@ -60,13 +60,13 @@ class CustomUser(AbstractUser):
         active_sub = next((sub for sub in subs if sub.status == 'active'), None)
         if active_sub:
             product_id = active_sub.plan['product']
-            if product_id == 'prod_ThqmB1BoJZn7TY':
+            if product_id == 'prod_ThqmB1BoJZn7TY' or product_id == 'prod_ThtXPwe3AD46Au':
                 self.premium_tier = 'ad_free'
-            elif product_id == 'prod_ThqljWr4cvnFFF':
+            elif product_id == 'prod_ThqljWr4cvnFFF' or product_id == 'prod_ThsI3EuCssYlTT':
                 self.premium_tier = 'premium_monthly'
-            elif product_id == 'prod_ThqpPjDyERnoaF':
+            elif product_id == 'prod_ThqpPjDyERnoaF' or product_id == 'prod_ThsIi3Xd8fY2Hk':
                 self.premium_tier = 'premium_yearly'
-            elif product_id == 'prod_ThquYbJOcBn65m':
+            elif product_id == 'prod_ThquYbJOcBn65m' or product_id == 'prod_ThtYQAPoY5pSCN':
                 self.premium_tier = 'supporter'
             else:
                 self.premium_tier = None

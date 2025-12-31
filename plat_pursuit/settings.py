@@ -39,7 +39,7 @@ DJSTRIPE_FOREIGN_KEY_TO_FIELD = 'id'
 
 DJSTRIPE_WEBHOOK_SECRET = os.getenv(f"DJSTRIPE_{STRIPE_MODE.upper()}_WEBHOOK_SECRET")
 DJSTRIPE_WEBHOOK_VALIDATION = 'verify_signature'
-DJSTRIPE_WEBHOOK_URL = r"^webhook/$"
+DJSTRIPE_WEBHOOK_URL = r"^stripe/webhook/$"
 
 # Discord Bot Integration
 BOT_API_URL = os.getenv('BOT_API_URL', 'http://127.0.0.1:5000')
