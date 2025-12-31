@@ -1,7 +1,7 @@
 {% load custom_filters %}
 {% for item in display_data %}
 {% with item.badge as badge %}
-    <a href="{% url 'badge_detail' badge.series_slug %}" class="card bg-base-100 border-4 border-base-300 shadow-xl shadow-neutral cursor-pointer transition-all duration-300 hover:scale-105 {% if item.is_earned %}hover:border-{{ badge|badge_color }} hover:shadow-{{ badge|badge_color }}{% endif %} hover:z-10 group">
+    <a href="{% url 'badge_detail' badge.series_slug %}" class="card bg-base-100 border-4 border-base-300 shadow-lg shadow-neutral cursor-pointer transition-all duration-300 hover:scale-105 {% if item.is_earned %}hover:border-{{ badge|badge_color }} hover:shadow-{{ badge|badge_color }}{% endif %} hover:z-10 group">
         <div class="card-body m-0 px-3 py-3 gap-0">
             <div class="flex flex-col lg:flex-row items-center justify-between">
                 <div class="flex flex-col lg:flex-row items-center gap-4">

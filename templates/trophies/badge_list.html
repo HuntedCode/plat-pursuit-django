@@ -5,6 +5,8 @@
 {% block content %}
     {% include 'partials/breadcrumb.html' with items=breadcrumb %}
 
+    {% include 'trophies/partials/badge_list/badge_list_header.html' %}
+
     <form id="filter-form" method="get" class="mb-4">
         <div class="flex flex-col lg:flex-row w-full">
             <div class="form-control fieldset w-full lg:w-1/3">
