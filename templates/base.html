@@ -8,18 +8,57 @@
     <link rel="icon" type="image/x-icon" href="{% static 'images/logo.png' %}" />
     <link rel="stylesheet" href="{% static 'css/output.css' %}" />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&family=Poppins:wght@400;600;700&display=swap" rel="stylesheet">
-    <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-4609084422711453"
-     crossorigin="anonymous"></script>
+    {% if ADSENSE_ENABLED %}
+      <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-4609084422711453"
+      crossorigin="anonymous"></script>
+    {% endif %}
     {% block extra_head %}{% endblock %}
   </head>
   <body class="bg-base-100 text-base-content min-h-screen flex flex-col" {% if image_urls.bg_url %}style="background-image: url('{{ image_urls.bg_url }}'); background-size: cover; background-position: center; background-attachment: fixed;"{% endif %}>
     {% include 'partials/navbar.html' %}
-    <main class="container mx-auto px-4 py-2 flex-grow">
-      {% if hotbar.active %}
-        {% include 'partials/hotbar.html' %}
-      {% endif %}
-      {% block content %}{% endblock %}
-    </main>
+
+    <div class="flex flex-1 flex-col lg:flex-row lg:items-start">
+
+      <aside class="hidden lg:block sticky top-20 w-40 bg-base-100 order-first self-start mt-20">
+          {% if ADSENSE_ENABLED %}
+          <div class="mb-6">
+              <ins class="adsbygoogle"
+                    style="display:block"
+                    data-ad-client="{{ ADSENSE_PUB_ID }}"
+                    data-ad-slot="3276850625"
+                    data-ad-format="auto"
+                    data-full-width-responsive="true"></ins>
+              <script>
+                  (adsbygoogle = window.adsbygoogle || []).push({});
+              </script>
+          </div>
+          {% endif %}
+      </aside>
+
+      <main class="container mx-auto px-4 py-2 flex-grow">
+        {% if hotbar.active %}
+          {% include 'partials/hotbar.html' %}
+        {% endif %}
+        {% block content %}{% endblock %}
+      </main>
+
+      <aside class="hidden lg:block sticky top-20 w-40 bg-base-100 self-start mt-20">
+        {% if ADSENSE_ENABLED %}
+          <div class="mb-6">
+            <ins class="adsbygoogle"
+                style="display:block"
+                data-ad-client="{{ ADSENSE_PUB_ID }}"
+                data-ad-slot="7712943179"
+                data-ad-format="auto"
+                data-full-width-responsive="true"></ins>
+            <script>
+                (adsbygoogle = window.adsbygoogle || []).push({});
+            </script>
+          </div>
+        {% endif %}
+      </aside>
+
+    </div>
     {% include 'partials/footer.html' %}
     {% include 'partials/back_to_top.html' %}
 

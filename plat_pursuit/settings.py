@@ -14,12 +14,14 @@ import os
 import dj_database_url
 from pathlib import Path
 from dotenv import load_dotenv
-from storages.backends.s3boto3 import S3Boto3Storage
 
 load_dotenv()
 
 AUTH_USER_MODEL = "users.CustomUser"
 SITE_URL = 'https://platpursuit.com'
+
+ADSENSE_PUB_ID = os.getenv('ADSENSE_PUB_ID')
+ADSENSE_ENABLED = os.getenv('ADSENSE_ENABLED', 'True') == 'True'
 
 # Discord Bot Integration
 BOT_API_URL = os.getenv('BOT_API_URL', 'http://127.0.0.1:5000')
@@ -142,6 +144,7 @@ TEMPLATES = [
                 "django.template.context_processors.request",
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
+                "plat_pursuit.context_processors.ads",
             ],
         },
     },

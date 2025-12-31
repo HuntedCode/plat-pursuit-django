@@ -27,9 +27,6 @@ class IndexView(ProfileHotbarMixin, TemplateView):
     LATEST_PLATINUMS_TIMEOUT = 3600
     PLAYING_NOW_KEY = 'playing_now'
     PLAYING_NOW_TIMEOUT = 86400
-    PSN_RARES_KEY = 'latest_psn_rares'
-    PP_RARES_KEY = 'latest_pp_rares'
-    RARES_TIMEOUT = 3600
     FEATURED_PROFILE_KEY = 'featured_profile'
     FEATURED_PROFILE_TIMEOUT = 86400
     EVENTS_KEY = 'upcoming_events'
@@ -95,22 +92,6 @@ class IndexView(ProfileHotbarMixin, TemplateView):
             self.PLAYING_NOW_TIMEOUT * 2
         )
         context['playingNow'] = playing_now
-
-        # PSN & PP Latest Rares - cache resets hourly at the top of the hour
-        psn_rares_key = f"{self.PSN_RARES_KEY}_{today_utc}_{now_utc.hour:02d}"
-        pp_rares_key = f"{self.PP_RARES_KEY}_{today_utc}_{now_utc.hour:02d}"
-        psn_rares = cache.get_or_set(
-            psn_rares_key,
-            lambda: get_latest_psn_rares(),
-            self.RARES_TIMEOUT * 2
-        )
-        pp_rares = cache.get_or_set(
-            pp_rares_key,
-            lambda: get_latest_pp_rares(),
-            self.RARES_TIMEOUT * 2
-        )
-        context['latestPsnRares'] = psn_rares
-        context['latestPpRares'] = pp_rares
 
         # Featured profile - cache resets weekly
         week_start = (now_utc - timedelta(days=now_utc.weekday())).date().isoformat()
