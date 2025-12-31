@@ -95,7 +95,7 @@ def calculate_trimmed_mean(data, trim_percent=0.1):
     return stats.trim_mean(data, trim_percent)
 
 def check_profile_badges(profile, profilegame_ids):
-    from trophies.models import ProfileGame, Badge
+    from trophies.models import ProfileGame, Badge, UserBadge
 
     start_time = time.time()
 
@@ -117,7 +117,10 @@ def check_profile_badges(profile, profilegame_ids):
     checked_count = 0
     for badge in unique_badges_qs:
         try:
-            process_badge(profile, badge)
+            if badge.tier > 1:
+                prev_badge = Badge.objects.get(series_slug=badge.series_slug, tier=badge.tier-1)
+                if UserBadge.objects.filter(profile, prev_badge).exists():
+                    process_badge(profile, badge)
             checked_count += 1
         except Exception as e:
             logger.error(f"Error checking badge {badge.id} for profile {profile.psn_username}: {e}")
@@ -135,7 +138,9 @@ def get_badge_metrics(profile, badge):
         is_complete_required = badge.tier in [2, 4]
         is_obtainable_required = badge.tier in [1, 2]
 
-        qualifying_games_filter = Q(platform_filter, defined_trophies__platinum__gt=0)
+        qualifying_games_filter = Q(platform_filter)
+        if badge.tier in [1, 3]:
+            qualifying_games_filter &= Q(defined_trophies__platinum__gt=0)
         if is_obtainable_required:
             qualifying_games_filter &= Q(is_obtainable=True)
             qualifying_games_filter &= Q(is_delisted=False)
