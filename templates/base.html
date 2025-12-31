@@ -19,7 +19,7 @@
 
     <div class="flex flex-1 flex-col lg:flex-row lg:items-start">
 
-      <aside class="hidden lg:block sticky top-20 w-40 bg-base-100 order-first self-start mt-20">
+      <aside class="hidden lg:block sticky top-20 w-40 order-first self-start mt-20">
           {% if ADSENSE_ENABLED %}
           <div class="mb-6">
               <ins class="adsbygoogle"
@@ -42,7 +42,7 @@
         {% block content %}{% endblock %}
       </main>
 
-      <aside class="hidden lg:block sticky top-20 w-40 bg-base-100 self-start mt-20">
+      <aside class="hidden lg:block sticky top-20 w-40 self-start mt-20">
         {% if ADSENSE_ENABLED %}
           <div class="mb-6">
             <ins class="adsbygoogle"

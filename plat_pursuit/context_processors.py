@@ -8,9 +8,8 @@ def ads(request):
 
     if request.user.is_authenticated:
         user = request.user
-
-    if hasattr(user, 'profile') and user.profile.sync_tier == 'preferred':
-        enabled = False
+        if hasattr(user, 'profile') and user.profile.sync_tier == 'preferred':
+            enabled = False
 
     return {
         'ADSENSE_PUB_ID': settings.ADSENSE_PUB_ID,
