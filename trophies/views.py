@@ -982,13 +982,12 @@ class BadgeListView(ProfileHotbarMixin, ListView):
                 progress_badge = next_badge if next_badge else display_badge
 
                 progress = progress_dict.get(progress_badge.id) if progress_badge else None
-                required_concepts = progress_badge.concepts.count() if progress_badge else 0
+                required_concepts = progress_badge.required_concepts
                 completed_concepts = 0
                 progress_percentage = 0
 
                 if progress and progress_badge.badge_type == 'series':
                     completed_concepts = progress.completed_concepts
-                    required_concepts = progress.required_concepts
                     progress_percentage = (completed_concepts / required_concepts) * 100 if required_concepts > 0 else 0
                 else:
                     completed_concepts = 0
@@ -1026,7 +1025,7 @@ class BadgeListView(ProfileHotbarMixin, ListView):
                         'badge': tier1,
                         'tier1_earned_count': tier1_earned_count,
                         'completed_concepts': 0,
-                        'required_concepts': 0,
+                        'required_concepts': tier1.required_concepts,
                         'progress_percentage': 0,
                         'trophy_types': trophy_types,
                         'total_games': total_games,

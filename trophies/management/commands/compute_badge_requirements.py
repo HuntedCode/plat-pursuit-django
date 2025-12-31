@@ -7,3 +7,4 @@ class Command(BaseCommand):
         for badge in badges:
             badge.required_concepts = badge.compute_required()
             badge.save(update_fields=['required_concepts'])
+        self.stdout.write(self.style.SUCCESS(f"Updated requirements for {len(badges)} badges successfully!"))
