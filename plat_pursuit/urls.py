@@ -19,8 +19,9 @@ from django.conf import settings
 from django.conf.urls.static import static
 from django.contrib import admin
 from django.contrib.auth.views import LogoutView
-from django.urls import path, include
+from django.urls import path, include, re_path
 from django.views.generic import TemplateView
+from djstripe.views import ProcessWebhookView
 from core.views import IndexView
 from trophies.views import GamesListView, TrophiesListView, ProfilesListView, SearchView, GameDetailView, ProfileDetailView, TrophyCaseView, ToggleSelectionView, BadgeListView, BadgeDetailView, GuideListView, ProfileSyncStatusView, TriggerSyncView, SearchSyncProfileView, AddSyncStatusView, LinkPSNView, ProfileVerifyView, TokenMonitoringView, BadgeCreationView
 from users.views import CustomConfirmEmailView
@@ -57,6 +58,8 @@ urlpatterns = [
     path('accounts/confirm-email/<str:key>/', CustomConfirmEmailView.as_view(), name='account_confirm_email'),
 
     path('monitoring/tokens/', TokenMonitoringView.as_view(), name='token_monitoring'),
+
+    path("stripe/", include("djstripe.urls", namespace="djstripe")),
 
     path('users/', include('users.urls')),
     path('accounts/', include('allauth.urls')),

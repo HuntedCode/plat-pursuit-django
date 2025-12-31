@@ -1,15 +1,18 @@
 # users/views.py
 from allauth.account.views import ConfirmEmailView
+from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth import update_session_auth_hash
+from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.shortcuts import render, redirect
 from django.views import View
+from djstripe.models import Price, Customer
+import stripe
 import logging
 from users.forms import UserSettingsForm, CustomPasswordChangeForm
-from trophies.models import Profile
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger('psn_api')
 
 class CustomConfirmEmailView(ConfirmEmailView):
     def get(self, *args, **kwargs):
@@ -70,3 +73,76 @@ class SettingsView(LoginRequiredMixin, View):
                 messages.error(request, 'No profile to unlink.')
             return redirect('settings')
         return redirect('settings')
+    
+@login_required
+def subscribe(request):
+    is_live = settings.STRIPE_MODE == 'live'
+
+    try:
+        if is_live:
+            prices = {
+                'ad_free': Price.objects.get(id='price_1SkR4XR5jhcbjB325xchFZm5'),
+                'premium_monthly': Price.objects.get(id='price_1SkR3wR5jhcbjB32vEaltpEJ'),
+                'premium_yearly': Price.objects.get(id='price_1SkR7jR5jhcbjB32BmKo4iQQ'),
+                'supporter': Price.objects.get(id='price_1SkRCuR5jhcbjB32yBFBm1h3'),
+            }
+        else:
+            prices = {
+                'ad_free': Price.objects.get(id='price_1SkTknR5jhcbjB32fnM6oP5A'),
+                'premium_monthly': Price.objects.get(id='price_1SkSXpR5jhcbjB32BA08Bv0o'),
+                'premium_yearly': Price.objects.get(id='price_1SkSY0R5jhcbjB327fYUtaJN'),
+                'supporter': Price.objects.get(id='price_1SkTlHR5jhcbjB32zjcM2I4P'),
+            }
+    except Price.DoesNotExist as e:
+        messages.error(request, "Pricing not available in current mode. Contact support.")
+        logger.error(f"Price fetch error: {e} in mode {settings.STRIPE_MODE}")
+        return redirect('home')
+
+    if request.method == 'POST':
+        logger.info('POST request received')
+        tier = request.POST.get('tier')
+        logger.info(f"Selected tier: {tier}")
+        if tier not in prices:
+            messages.error(request, "Invalid tier selected.")
+            logger.warning(f"Invalid tier: {tier}")
+            return redirect('subscribe')
+        
+        price = prices[tier]
+
+        customer, created = Customer.get_or_create(subscriber=request.user)
+        if created:
+            customer.email = request.user.email
+            customer.save()
+        request.user.stripe_customer_id = customer.id
+        request.user.save()
+
+        try:
+            session = stripe.checkout.Session.create(
+                customer=customer.id,
+                payment_method_types=['card', 'us_bank_account', 'amazon_pay', 'paypal', 'cashapp', 'link'],
+                line_items=[{'price': price.id, 'quantity': 1}],
+                mode='subscription',
+                success_url=request.build_absolute_uri('/users/subscribe/success/') + "?session_id={CHECKOUT_SESSION_ID}",
+                cancel_url=request.build_absolute_uri('/users/subscribe/'),
+                metadata={'tier': tier},
+            )
+            return redirect(session.url, code=303)
+        except stripe.error.StripeError as e:
+            messages.error(request, f"Error creating checkout: {str(e)}")
+            return redirect('subscribe')
+        
+    context = {'prices': {k: v.unit_amount / 100 for k, v in prices.items()}}
+    context['is_live'] = is_live
+    return render(request, 'users/subscribe.html', context)
+
+@login_required
+def subscribe_success(request):
+    session_id = request.GET.get('session_id')
+    if session_id:
+        try:
+            session = stripe.checkout.Session.retrieve(session_id)
+            request.user.update_subscription_status()
+            messages.success(request, "Subscription activated! Enjoy premium features.")
+        except stripe.error.StripeError as e:
+            messages.error(request, f"Error verifying subscription: {str(e)}")
+    return redirect('home')

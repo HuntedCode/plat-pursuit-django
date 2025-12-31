@@ -8,14 +8,14 @@ class CustomUserAdmin(UserAdmin):
     add_form = CustomUserCreationForm
 
     # Fields for list view (efficient, searchable)
-    list_display = ('email', 'is_linked_to_profile', 'user_timezone', 'default_region', 'is_staff', 'is_active', 'date_joined')
+    list_display = ('email', 'is_linked_to_profile', 'premium_tier', 'user_timezone', 'default_region', 'is_staff', 'is_active', 'date_joined')
     list_filter = ('is_staff', 'is_active', 'user_timezone')
     search_fields = ('email',)
     ordering = ('email',)
 
     fieldsets = (
         (None, {'fields': ('email', 'password')}),
-        ('Personal Info', {'fields': ('user_timezone', 'default_region')}),
+        ('Personal Info', {'fields': ('user_timezone', 'default_region', 'premium_tier')}),
         ('Permissions', {'fields': ('is_active', 'is_staff', 'is_superuser', 'groups', 'user_permissions')}),
         ('Important Dates', {'fields': ('last_login', 'date_joined')}),
     )

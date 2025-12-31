@@ -1,0 +1,72 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block content %}
+{{ is_live }}
+<div class="min-h-screen bg-base-200 flex items-center justify-center p-4">
+    <div class="max-w-4xl w-full space-y-8">
+        <h1 class="text-4xl font-bold text-center">Choose Your Plat Pursuit Plan</h1>
+        <p class="text-center text-lg">Unlock ad-free tracking, advanced analytics, and more!</p>
+        
+        <form method="post" class="grid grid-cols-1 md:grid-cols-4 gap-6">
+            {% csrf_token %}
+            
+            <!-- Ad-Free Tier -->
+            <div class="card border-4 border-base-300 bg-base-100 shadow-lg hover:scale-105 hover:border-primary hover:shadow-primary">
+                <div class="card-body">
+                    <h2 class="card-title">Ad-Free</h2>
+                    <p class="text-2xl font-bold">${{ prices.ad_free }}</p>
+                    <ul class="list-disc pl-4 space-y-1">
+                        <li>No ads</li>
+                        <li>Basic trophy tracking</li>
+                    </ul>
+                    <button type="submit" name="tier" value="ad_free" class="btn btn-primary mt-4">Select</button>
+                </div>
+            </div>
+            
+            <!-- Premium Monthly -->
+            <div class="card border-4 border-base-300 bg-base-100 shadow-lg hover:scale-105 hover:border-primary hover:shadow-primary">
+                <div class="card-body">
+                    <h2 class="card-title">Premium Monthly</h2>
+                    <p class="text-2xl font-bold">${{ prices.premium_monthly }}/mo</p>
+                    <ul class="list-disc pl-4 space-y-1">
+                        <li>Ad-free</li>
+                        <li>Advanced analytics</li>
+                        <li>Priority support</li>
+                    </ul>
+                    <button type="submit" name="tier" value="premium_monthly" class="btn btn-primary mt-4">Select</button>
+                </div>
+            </div>
+            
+            <!-- Premium Yearly -->
+            <div class="card border-4 border-base-300 bg-base-100 shadow-lg hover:scale-105 hover:border-primary hover:shadow-primary">
+                <div class="card-body">
+                    <h2 class="card-title">Premium Yearly</h2>
+                    <p class="text-2xl font-bold">${{ prices.premium_yearly }}/yr</p>
+                    <ul class="list-disc pl-4 space-y-1">
+                        <li>All monthly features</li>
+                        <li>20% discount</li>
+                        <li>Exclusive badges</li>
+                    </ul>
+                    <button type="submit" name="tier" value="premium_yearly" class="btn btn-primary mt-4">Select</button>
+                </div>
+            </div>
+            
+            <!-- Supporter -->
+            <div class="card border-4 border-base-300 bg-base-100 shadow-lg hover:scale-105 hover:border-primary hover:shadow-primary">
+                <div class="card-body">
+                    <h2 class="card-title">Supporter</h2>
+                    <p class="text-2xl font-bold">${{ prices.supporter }}/mo</p>
+                    <ul class="list-disc pl-4 space-y-1">
+                        <li>All premium features</li>
+                        <li>Community shoutouts</li>
+                        <li>Early access</li>
+                    </ul>
+                    <button type="submit" name="tier" value="supporter" class="btn btn-primary mt-4">Select</button>
+                </div>
+            </div>
+        </form>
+        <p class="text-center text-sm mt-2 italic">Pay with card, PayPal, Amazon Pay, or bank (availability varies by region and device)</p>
+    </div>
+</div>
+{% endblock %}

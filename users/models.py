@@ -3,7 +3,7 @@ from django.contrib.auth.models import AbstractUser, BaseUserManager
 from django.utils.translation import gettext_lazy as _
 import pytz
 from trophies.utils import REGIONS
-from djstripe.models import Customer, Subscription
+from djstripe.models import Subscription
 
 
 # Create your models here.
@@ -47,12 +47,19 @@ class CustomUser(AbstractUser):
     def is_premium(self):
         if not self.stripe_customer_id:
             return False
-        return Subscription.objects.filter(customer__id=self.stripe_customer_id, status='active').exists()
+        subs = Subscription.objects.filter(customer__id=self.stripe_customer_id)
+        return any(sub.status == 'active' for sub in subs)
     
     def update_subscription_status(self):
-        active_sub = Subscription.objects.filter(customer__id=self.stripe_customer_id, status='active').first()
+        if not self.stripe_customer_id:
+            self.premium_tier = None
+            self.save()
+            return
+        
+        subs = Subscription.objects.filter(customer__id=self.stripe_customer_id)
+        active_sub = next((sub for sub in subs if sub.status == 'active'), None)
         if active_sub:
-            product_id = active_sub.plan.product.id
+            product_id = active_sub.plan['product']
             if product_id == 'prod_ThqmB1BoJZn7TY':
                 self.premium_tier = 'ad_free'
             elif product_id == 'prod_ThqljWr4cvnFFF':
