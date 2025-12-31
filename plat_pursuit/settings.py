@@ -12,6 +12,7 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 
 import os
 import dj_database_url
+import stripe
 from pathlib import Path
 from dotenv import load_dotenv
 
@@ -22,6 +23,13 @@ SITE_URL = 'https://platpursuit.com'
 
 ADSENSE_PUB_ID = os.getenv('ADSENSE_PUB_ID')
 ADSENSE_ENABLED = os.getenv('ADSENSE_ENABLED', 'True') == 'True'
+
+STRIPE_PUBLISHABLE_KEY = os.getenv('STRIPE_PUBLISHABLE_KEY')
+STRIPE_SECRET_KEY = os.getenv('STRIPE_SECRET_KEY')
+DJSTRIPE_WEBHOOK_SECRET = os.getenv('STRIPE_WEBHOOK_SECRET')
+DJSTRIPE_USE_NATIVE_JSONFIELD = True
+DJSTRIPE_FOREIGN_KEY_TO_FIELD = 'id'
+stripe.api_key = STRIPE_SECRET_KEY
 
 # Discord Bot Integration
 BOT_API_URL = os.getenv('BOT_API_URL', 'http://127.0.0.1:5000')
@@ -84,7 +92,7 @@ INSTALLED_APPS = [
     'storages',
     'allauth',
     'allauth.account',
-    'dj-stripe',
+    'djstripe',
 ]
 
 AUTHENTICATION_BACKENDS = [
