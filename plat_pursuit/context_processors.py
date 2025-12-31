@@ -3,7 +3,7 @@ from django.conf import settings
 def ads(request):
     enabled = settings.ADSENSE_ENABLED
 
-    if request.path.startswith('/accounts/'):
+    if request.path.startswith('/accounts/') or request.path.startswith('/profiles/$'):
         enabled = False
 
     if request.user.is_authenticated:

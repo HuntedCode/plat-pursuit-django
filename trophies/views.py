@@ -814,8 +814,8 @@ class ProfileDetailView(ProfileHotbarMixin, DetailView):
                             next_badge = highest_badge
                             
                         progress_entry = UserBadgeProgress.objects.filter(profile=profile, badge=next_badge).first()
-                        if progress_entry and progress_entry.required_concepts > 0:
-                            progress_percentage = (progress_entry.completed_concepts / progress_entry.required_concepts) * 100
+                        if progress_entry and next_badge.required_concepts > 0:
+                            progress_percentage = (progress_entry.completed_concepts / next_badge.required_concepts) * 100
                         else:
                             progress_percentage = 0
                         if is_maxed:
@@ -1109,7 +1109,7 @@ class BadgeDetailView(ProfileHotbarMixin, DetailView):
 
             progress = UserBadgeProgress.objects.filter(profile=target_profile, badge=badge).first()
             context['progress'] = progress
-            context['progress_percent'] = progress.completed_concepts / progress.required_concepts * 100 if progress and progress.required_concepts > 0 else 0
+            context['progress_percent'] = progress.completed_concepts / badge.required_concepts * 100 if badge.required_concepts > 0 else 0
         else:
             context['badge'] = series_badges.filter(tier=1).first()
 
