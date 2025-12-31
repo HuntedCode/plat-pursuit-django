@@ -84,6 +84,7 @@ INSTALLED_APPS = [
     'storages',
     'allauth',
     'allauth.account',
+    'dj-stripe',
 ]
 
 AUTHENTICATION_BACKENDS = [
