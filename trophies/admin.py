@@ -336,7 +336,7 @@ class UserBadgeAdmin(admin.ModelAdmin):
 
 @admin.register(UserBadgeProgress)
 class UserBadgeProgressAdmin(admin.ModelAdmin):
-    list_display = ['profile', 'badge', 'completed_concepts', 'required_concepts', 'progress_value', 'required_value', 'last_checked']
+    list_display = ['profile', 'badge', 'completed_concepts', 'progress_value', 'last_checked']
     search_fields = ['profile__psn_username']
     
 @admin.register(FeaturedGuide)

@@ -119,7 +119,7 @@ def check_profile_badges(profile, profilegame_ids):
         try:
             if badge.tier > 1:
                 prev_badge = Badge.objects.get(series_slug=badge.series_slug, tier=badge.tier-1)
-                if UserBadge.objects.filter(profile, prev_badge).exists():
+                if UserBadge.objects.filter(profile=profile, badge=prev_badge).exists():
                     process_badge(profile, badge)
             checked_count += 1
         except Exception as e:

@@ -711,6 +711,8 @@ class Badge(models.Model):
     most_recent_concept = models.ForeignKey(Concept, on_delete=models.SET_NULL, null=True, blank=True, related_name='most_recent_for_badges', help_text='Concept with the latest release_date')
     created_at = models.DateTimeField(auto_now_add=True)
     earned_count = models.PositiveIntegerField(default=0, help_text="Count of users who have earned this badge tier")
+    required_concepts = models.PositiveIntegerField(default=0, help_text="Denormalized count of required concepts for series badges")
+    required_value = models.PositiveIntegerField(default=0, help_text="Denormalized required value for misc badges")
 
     class Meta:
         ordering = ['tier', 'name']
@@ -778,6 +780,34 @@ class Badge(models.Model):
             self.most_recent_concept = self.concepts.filter(release_date=max_date).first() if max_date else None
             self.save(update_fields=['most_recent_concept'])
 
+    def compute_required(self):
+        from django.db.models import Q, Exists, OuterRef
+        from trophies.models import Game
+        from trophies.utils import get_platform_filter
+
+        if self.badge_type == 'series':
+            platform_filter = get_platform_filter(self)
+            is_obtainable_required = self.tier in [1, 2]
+
+            qualifying_games_filter = Q(platform_filter)
+            if self.tier in [1, 3]:
+                qualifying_games_filter &= Q(defined_trophies__platinum__gt=0)
+            if is_obtainable_required:
+                qualifying_games_filter &= Q(is_obtainable=True)
+                qualifying_games_filter &= Q(is_delisted=False)
+            
+            concepts_qs = self.concepts if self.concepts.exists() else (self.base_badge.concepts if self.base_badge else Badge.objects.none())
+            if not concepts_qs.exists():
+                return {'achieved': 0, 'required': 0}
+            
+            filtered_concepts_qs = concepts_qs.filter(Exists(Game.objects.filter(qualifying_games_filter, concept=OuterRef('pk')))).distinct()
+
+            return filtered_concepts_qs.count()
+        elif self.badge_type == 'misc':
+            return self.requirements.get('count', 0)
+        
+        return 0
+
     def __str__(self):
         return f"{self.name} (Tier {self.tier})"
     
@@ -800,9 +830,7 @@ class UserBadgeProgress(models.Model):
     profile = models.ForeignKey(Profile, on_delete=models.CASCADE, related_name='badge_progress')
     badge = models.ForeignKey(Badge, on_delete=models.CASCADE, related_name='progress_for')
     completed_concepts = models.PositiveIntegerField(default=0)
-    required_concepts = models.PositiveIntegerField(default=0)
     progress_value = models.PositiveIntegerField(default=0)
-    required_value = models.PositiveIntegerField(default=0)
     last_checked = models.DateTimeField(auto_now=True)
 
     class Meta:
