@@ -979,7 +979,6 @@ class BadgeListView(ProfileHotbarMixin, ListView):
 
                 is_earned = highest_tier > 0
                 next_badge = next((b for b in sorted_group if b.tier > highest_tier), None)
-                is_maxed = next_badge is None and is_earned
                 progress_badge = next_badge if next_badge else display_badge
 
                 progress = progress_dict.get(progress_badge.id) if progress_badge else None
@@ -987,10 +986,7 @@ class BadgeListView(ProfileHotbarMixin, ListView):
                 completed_concepts = 0
                 progress_percentage = 0
 
-                if is_maxed:
-                    completed_concepts = required_concepts
-                    progress_percentage = 100
-                elif progress and progress_badge.badge_type == 'series':
+                if progress and progress_badge.badge_type == 'series':
                     completed_concepts = progress.completed_concepts
                     required_concepts = progress.required_concepts
                     progress_percentage = (completed_concepts / required_concepts) * 100 if required_concepts > 0 else 0
@@ -1099,13 +1095,14 @@ class BadgeDetailView(ProfileHotbarMixin, DetailView):
         context['target_profile'] = target_profile
 
         badge = None
-
+        is_earned = True
         if target_profile:
             highest_tier_earned = UserBadge.objects.filter(profile=target_profile, badge__series_slug=self.kwargs['series_slug']).aggregate(max_tier=Max('badge__tier'))['max_tier'] or 0
             badge = series_badges.filter(tier=highest_tier_earned).first()
             if not badge:
                 badge = series_badges.order_by('tier').first()
                 context['is_maxed'] = True
+                is_earned = False
             else:
                 context['is_maxed'] = False
 
@@ -1143,6 +1140,7 @@ class BadgeDetailView(ProfileHotbarMixin, DetailView):
                 'games': game_data,
             })
         context['grouped_games'] = grouped_games
+        context['is_earned'] = is_earned
 
         if len(grouped_games) > 0:
             recent_concept = grouped_games[0]['concept']
