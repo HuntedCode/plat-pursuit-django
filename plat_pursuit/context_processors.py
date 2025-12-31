@@ -6,7 +6,10 @@ def ads(request):
     if request.path.startswith('/accounts/'):
         enabled = False
 
-    if request.user.is_authenticated and request.user.profile and request.user.profile.sync_tier == 'preferred':
+    if request.user.is_authenticated:
+        user = request.user
+
+    if hasattr(user, 'profile') and user.profile.sync_tier == 'preferred':
         enabled = False
 
     return {
