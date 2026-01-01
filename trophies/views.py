@@ -1109,7 +1109,7 @@ class BadgeDetailView(ProfileHotbarMixin, DetailView):
 
             progress = UserBadgeProgress.objects.filter(profile=target_profile, badge=badge).first()
             context['progress'] = progress
-            context['progress_percent'] = progress.completed_concepts / badge.required_concepts * 100 if badge.required_concepts > 0 else 0
+            context['progress_percent'] = progress.completed_concepts / badge.required_concepts * 100 if progress and badge.required_concepts > 0 else 0
         else:
             context['badge'] = series_badges.filter(tier=1).first()
 
