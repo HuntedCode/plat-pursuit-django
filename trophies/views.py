@@ -1247,9 +1247,10 @@ class LinkPSNView(LoginRequiredMixin, View):
                     if profile.user and profile.user != request.user:
                         raise ValueError('This PSN account is already linked to another user.')
 
+                    time_since_last_sync = profile.get_time_since_last_sync()
                     if created:
                         PSNManager.initial_sync(profile)
-                    elif profile.get_time_since_last_sync() > timedelta(hours=1):
+                    elif (profile.sync_tier == 'basic' and time_since_last_sync > timedelta(hours=1)) or (profile.sync_tier == 'preferred' and time_since_last_sync > timedelta(minutes=5)):
                         PSNManager.profile_refresh(profile)
                     
                     if not profile.verification_code or profile.verification_expires_at < timezone.now():
@@ -1274,7 +1275,8 @@ class LinkPSNView(LoginRequiredMixin, View):
                 try:
                     start_time = timezone.now().timestamp()
                     profile = Profile.objects.get(psn_username=psn_username.lower())
-                    if profile.get_time_since_last_sync() > timedelta(hours=1):
+                    time_since_last_sync = profile.get_time_since_last_sync()
+                    if (profile.sync_tier == 'basic' and time_since_last_sync > timedelta(hours=1)) or (profile.sync_tier == 'preferred' and time_since_last_sync > timedelta(minutes=5)):
                         PSNManager.profile_refresh(profile)
                     else:
                         PSNManager.sync_profile_data(profile)
