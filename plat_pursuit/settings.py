@@ -32,12 +32,13 @@ if STRIPE_MODE == 'live':
 else:
     STRIPE_PUBLISHABLE_KEY = os.getenv('STRIPE_TEST_PUBLISHABLE_KEY')
     STRIPE_SECRET_KEY = os.getenv('STRIPE_TEST_SECRET_KEY')
-    
+
 DJSTRIPE_USE_NATIVE_JSONFIELD = True
 DJSTRIPE_FOREIGN_KEY_TO_FIELD = 'id'
 DJSTRIPE_WEBHOOK_SECRET = os.getenv(f"STRIPE_{STRIPE_MODE.upper()}_WEBHOOK_SECRET")
 DJSTRIPE_WEBHOOK_VALIDATION = 'verify_signature'
 DJSTRIPE_WEBHOOK_URL = r"^stripe/webhook/$"
+stripe.api_key = STRIPE_SECRET_KEY
 
 # Discord Bot Integration
 BOT_API_URL = os.getenv('BOT_API_URL', 'http://127.0.0.1:5000')
