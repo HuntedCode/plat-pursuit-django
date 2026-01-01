@@ -214,7 +214,11 @@ def send_subscription_notification(user):
             'footer': {'text': f"Powered by Plat Pursuit | No Trophy Can Hide From Us"},
         }
         payload = {'embeds': [embed_data]}
-        queue_webhook_send(payload, webhook_url='https://discord.com/api/webhooks/1443493609537015891/3h9Av6tMaH-41Kt-a-lTinyr-4KzohYaYdsWQgqEoKO5FttDY271xcjZj_cP6XT2VC8R')
+        if settings.STRIPE_MODE == 'live':
+            webhook_url = settings.DISCORD_PLATINUM_WEBHOOK_URL
+        else:
+            webhook_url = settings.DISCORD_TEST_WEBHOOK_URL
+        queue_webhook_send(payload, webhook_url=webhook_url)
         logger.info(f"Queued notification of new badge for {profile.psn_username}")
     except Exception as e:
         logger.error(f"Failed to queue badge notification: {e}")
