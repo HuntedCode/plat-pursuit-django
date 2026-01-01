@@ -137,6 +137,29 @@ class Profile(models.Model):
             return timezone.now() - self.last_synced
         return 0
     
+    def attempt_sync(self):
+        print("Attempting sync...")
+        if self.sync_tier == 'preferred':
+            delta = timedelta(minutes=5)
+        else:
+            delta = timedelta(hours=1)
+        print(f"Delta: {delta}")
+        if self.last_synced + delta < timezone.now():
+            from trophies.psn_manager import PSNManager
+            PSNManager.profile_refresh(self)
+            return True
+        return False
+    
+    def get_seconds_to_next_sync(self):
+        if self.sync_tier == 'preferred':
+            next_sync = self.last_synced + timedelta(minutes=5)
+        else:
+            next_sync = self.last_synced + timedelta(hours=1)
+        
+        if next_sync > timezone.now():
+            return (next_sync - timezone.now()).total_seconds()
+        return 0
+    
     def generate_verification_code(self):
         """Generate and set a secure, time-limited code."""
         self.verification_code = secrets.token_hex(3).upper()

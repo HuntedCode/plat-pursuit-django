@@ -31,8 +31,7 @@ class GenerateCodeView(APIView):
             if created:
                 PSNManager.initial_sync(profile)
             else:
-                if profile.get_time_since_last_sync() > timedelta(hours=1):
-                    PSNManager.profile_refresh(profile)
+                profile.attempt_sync()
 
             return Response({
                 "success": True,
@@ -61,9 +60,8 @@ class VerifyView(APIView):
                 timeout_seconds = 30
                 poll_interval_seconds = 1
 
-                if profile.get_time_since_last_sync() > timedelta(hours=1):
-                    PSNManager.profile_refresh(profile)
-                else:
+                is_syncing = profile.attempt_sync()
+                if not is_syncing:
                     PSNManager.sync_profile_data(profile)
 
                 while (timezone.now() - start_time).total_seconds() < timeout_seconds:
@@ -136,7 +134,8 @@ class RefreshView(APIView):
         try:
             profile = Profile.objects.get(discord_id=discord_id)
             time_since_last_sync = profile.get_time_since_last_sync()
-            if admin_override or (time_since_last_sync > timedelta(hours=1) or not profile.psn_history_public):
+            is_syncing = profile.attempt_sync()
+            if not is_syncing and (admin_override or not profile.psn_history_public):
                 PSNManager.profile_refresh(profile)
 
                 start_time = timezone.now()

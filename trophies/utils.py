@@ -303,13 +303,6 @@ def check_discord_role_badges(profile):
     )
     return checked_count
 
-def get_next_sync(profile) -> int: 
-    if profile.sync_tier == 'preferred':
-        next_sync = profile.last_synced + timedelta(minutes=5)
-    else:
-        next_sync = profile.last_synced + timedelta(hours=1)
-    return next_sync
-
 def update_profile_games(profile):
     from trophies.models import ProfileGame
     profile.total_games = ProfileGame.objects.filter(profile=profile).count()

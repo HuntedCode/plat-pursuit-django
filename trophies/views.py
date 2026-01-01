@@ -26,7 +26,7 @@ from trophies.psn_manager import PSNManager
 from trophies.mixins import ProfileHotbarMixin
 from .models import Game, Trophy, Profile, EarnedTrophy, ProfileGame, TrophyGroup, UserTrophySelection, Badge, UserBadge, UserBadgeProgress, Concept, FeaturedGuide
 from .forms import GameSearchForm, TrophySearchForm, ProfileSearchForm, ProfileGamesForm, ProfileTrophiesForm, ProfileBadgesForm, UserConceptRatingForm, BadgeSearchForm, GuideSearchForm, LinkPSNForm, GameDetailForm, BadgeCreationForm
-from .utils import redis_client, MODERN_PLATFORMS, ALL_PLATFORMS, get_next_sync
+from .utils import redis_client, MODERN_PLATFORMS, ALL_PLATFORMS
 
 logger = logging.getLogger("psn_api")
     
@@ -1250,8 +1250,8 @@ class LinkPSNView(LoginRequiredMixin, View):
                     time_since_last_sync = profile.get_time_since_last_sync()
                     if created:
                         PSNManager.initial_sync(profile)
-                    elif (profile.sync_tier == 'basic' and time_since_last_sync > timedelta(hours=1)) or (profile.sync_tier == 'preferred' and time_since_last_sync > timedelta(minutes=5)):
-                        PSNManager.profile_refresh(profile)
+                    else:
+                        profile.attempt_sync()
                     
                     if not profile.verification_code or profile.verification_expires_at < timezone.now():
                         profile.generate_verification_code()
@@ -1275,10 +1275,8 @@ class LinkPSNView(LoginRequiredMixin, View):
                 try:
                     start_time = timezone.now().timestamp()
                     profile = Profile.objects.get(psn_username=psn_username.lower())
-                    time_since_last_sync = profile.get_time_since_last_sync()
-                    if (profile.sync_tier == 'basic' and time_since_last_sync > timedelta(hours=1)) or (profile.sync_tier == 'preferred' and time_since_last_sync > timedelta(minutes=5)):
-                        PSNManager.profile_refresh(profile)
-                    else:
+                    is_syncing = profile.attempt_sync()
+                    if not is_syncing:
                         PSNManager.sync_profile_data(profile)
 
                     messages.info(request, "Verification in progress...")
@@ -1342,12 +1340,8 @@ class ProfileSyncStatusView(LoginRequiredMixin, View):
     @method_decorator(ratelimit(key='user', rate='60/m', method='GET'))
     def get(self, request):
         profile = request.user.profile
-        next_sync = get_next_sync(profile)
-        if next_sync > timezone.now():
-            seconds_to_next_sync = (next_sync - timezone.now()).total_seconds()
-        else:
-            seconds_to_next_sync = 0
-
+        seconds_to_next_sync = profile.get_seconds_to_next_sync()
+        print(seconds_to_next_sync)
         data = {
             'sync_status': profile.sync_status,
             'sync_progress': profile.sync_progress_value,
@@ -1363,12 +1357,10 @@ class TriggerSyncView(LoginRequiredMixin, View):
         if not profile:
             return JsonResponse({'error': 'No linked profile'}, status=400)
         
-        next_sync = get_next_sync(profile)
-        if next_sync > timezone.now():
-            seconds_left = (next_sync - timezone.now()).total_seconds()
+        is_syncing = profile.attempt_sync()
+        if not is_syncing:
+            seconds_left = profile.get_seconds_to_next_sync()
             return JsonResponse({'error': f'Cooldown active: {seconds_left} seconds left'}, status=429)
-        
-        PSNManager.profile_refresh(profile)
         return JsonResponse({'success': True, 'message': 'Sync started'})
 
 class SearchSyncProfileView(View):
@@ -1389,9 +1381,7 @@ class SearchSyncProfileView(View):
         if is_new:
             PSNManager.initial_sync(profile)
         else:
-            next_sync = get_next_sync(profile)
-            if timezone.now() > next_sync:
-                PSNManager.profile_refresh(profile)
+            profile.attempt_sync()
         return JsonResponse({
             'success': True,
             'message': f"{'Added and syncing' if is_new else 'Syncing'} {psn_username}",
