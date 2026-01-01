@@ -13,6 +13,7 @@ class ProfileAdmin(admin.ModelAdmin):
         "id",
         "account_id",
         "user",
+        "user_is_premium",
         "last_synced",
         "sync_status",
         "sync_progress_value",
@@ -26,14 +27,14 @@ class ProfileAdmin(admin.ModelAdmin):
         'country_code',
         "is_plus",
     )
-    list_filter = ("is_linked", "is_plus", "sync_tier", "sync_status")
+    list_filter = ("is_linked", "is_plus", "sync_tier", "sync_status", "user_is_premium",)
     search_fields = ("psn_username", "account_id", "user__username__iexact", "about_me")
     raw_id_fields = ("user",)
     ordering = ("psn_username",)
     fieldsets = (
         (
             "Core Info",
-            {"fields": ("psn_username", "display_psn_username", "account_id", "np_id", "user", "is_linked", "psn_history_public", "discord_id", "discord_linked_at", "is_discord_verified", "verification_code")},
+            {"fields": ("psn_username", "display_psn_username", "account_id", "np_id", "user", "user_is_premium", "is_linked", "psn_history_public", "discord_id", "discord_linked_at", "is_discord_verified", "verification_code")},
         ),
         (
             "Profile Details",
