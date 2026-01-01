@@ -190,7 +190,6 @@ def stripe_webhook(request):
                     user.save()
                     if hasattr(user, 'profile'):
                         user.profile.update_profile_premium(False)
-
-
+                    logger.info(f"Revoked tier for user {user.id}")
 
     return HttpResponse(status=200)
