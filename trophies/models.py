@@ -130,7 +130,7 @@ class Profile(models.Model):
     def update_profile_premium(self, is_premium: bool):
         self.sync_tier = 'preferred' if is_premium else 'basic'
         self.user_is_premium = is_premium
-        self.save(update_fields=['sync_tier', 'is_premium'])
+        self.save(update_fields=['sync_tier', 'user_is_premium'])
     
     def get_time_since_last_sync(self) -> timedelta:
         if self.last_synced:
