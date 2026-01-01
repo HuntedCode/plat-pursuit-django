@@ -58,7 +58,7 @@ urlpatterns = [
 
     path('monitoring/tokens/', TokenMonitoringView.as_view(), name='token_monitoring'),
 
-    path("stripe/webhook/", stripe_webhook, namespace="stripe_webhook"),
+    path("stripe/webhook/", stripe_webhook, name="stripe_webhook"),
 
     path('users/', include('users.urls')),
     path('accounts/', include('allauth.urls')),
