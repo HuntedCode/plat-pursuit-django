@@ -848,6 +848,8 @@ class ProfileDetailView(ProfileHotbarMixin, DetailView):
         context['trophy_case'] = trophy_case
         context['trophy_case_count'] = len(trophy_case)
         context['current_tab'] = tab
+        if profile.user_is_premium and profile.selected_background:
+            context['image_urls'] = {'bg_url': profile.selected_background.bg_url}
 
         return context
     

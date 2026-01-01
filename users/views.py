@@ -17,7 +17,7 @@ import stripe
 import logging
 from users.forms import UserSettingsForm, CustomPasswordChangeForm
 from users.models import CustomUser
-from trophies.models import Badge
+from trophies.forms import BackgroundSelectionForm
 
 logger = logging.getLogger('psn_api')
 
@@ -42,9 +42,11 @@ class SettingsView(LoginRequiredMixin, View):
         user_form = UserSettingsForm(instance=request.user)
         password_form = CustomPasswordChangeForm(user=request.user)
         profile = request.user.profile if hasattr(request.user, 'profile') else None
+        background_form = BackgroundSelectionForm(instance=profile) if profile else None
         context = {
             'user_form': user_form,
             'password_form': password_form,
+            'background_form': background_form if profile.user_is_premium else None,
             'profile': profile,
         }
         return render(request, self.template_name, context)
@@ -79,6 +81,19 @@ class SettingsView(LoginRequiredMixin, View):
             else:
                 messages.error(request, 'No profile to unlink.')
             return redirect('settings')
+        
+        elif action == 'update_background':
+            if not hasattr(request.user, 'profile') or not request.user.profile.user_is_premium:
+                messages.error(request, 'This feature is for premium users only!')
+                return redirect('settings')
+            background_form = BackgroundSelectionForm(request.POST, instance=request.user.profile)
+            if background_form.is_valid():
+                background_form.save()
+                messages.success(request, 'Profile background updated successfully!')
+            else:
+                messages.error(request, 'Error updating background.')
+            return redirect('settings')
+        
         return redirect('settings')
     
 @login_required

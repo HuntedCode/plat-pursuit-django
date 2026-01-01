@@ -83,6 +83,7 @@ class Profile(models.Model):
     avg_progress = models.FloatField(default=0.0)
     recent_plat = models.ForeignKey('EarnedTrophy', on_delete=models.SET_NULL, null=True, blank=True, related_name='recent_for_profiles', help_text='Most recent earned platinum.')
     rarest_plat = models.ForeignKey('EarnedTrophy', on_delete=models.SET_NULL, null=True, blank=True, related_name='rarest_for_profiles', help_text='Rarest earned platinum by earn_rate.')
+    selected_background = models.ForeignKey('Concept', on_delete=models.SET_NULL, null=True, blank=True, related_name='selected_by_profiles', help_text='Selected background concept for premium profiles.')
 
     class Meta:
         indexes = [
@@ -102,6 +103,7 @@ class Profile(models.Model):
             models.Index(fields=['country_code'], name='profile_country_code_idx'),
             models.Index(fields=['is_linked', 'sync_tier'], name='profile_linked_tier_idx'),
             models.Index(fields=['is_discord_verified', 'discord_linked_at'], name='profile_discord_idx'),
+            models.Index(fields=['user_is_premium', 'selected_background']),
         ]
 
     def __str__(self):
@@ -191,6 +193,7 @@ class Profile(models.Model):
     def get_average_progress(self):
         avg = self.played_games.aggregate(avg_progress=Avg('progress'))['avg_progress']
         return avg if avg is not None else 0.0
+
 
     def link_discord(self, discord_id: int):
         if self.discord_id:

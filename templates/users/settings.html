@@ -81,6 +81,22 @@
 
                         </div>
                     </div>
+
+                    <!-- Premium Background Selection (conditional) -->
+                    {% if background_form %}
+                        <div class="card bg-base-100 shadow-xl mb-6">
+                            <div class="card-body">
+                            <h2 class="card-title">Premium Background</h2>
+                            <p>Select from concepts you've earned a Platinum or 100% progress.</p>
+                            <form method="post">
+                                {% csrf_token %}
+                                <input type="hidden" name="action" value="update_background">
+                                {{ background_form.as_p }}
+                                <button type="submit" class="btn btn-primary">Save Background</button>
+                            </form>
+                            </div>
+                        </div>
+                    {% endif %}
                     
                     <label for="unlink-modal" class="btn btn-error w-full mt-4">Unlink PSN Profile</label>
                     

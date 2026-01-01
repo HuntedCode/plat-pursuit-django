@@ -38,7 +38,7 @@ class ProfileAdmin(admin.ModelAdmin):
         ),
         (
             "Profile Details",
-            {"fields": ("avatar_url", "about_me", "languages_used", "is_plus")},
+            {"fields": ("avatar_url", "about_me", "languages_used", "is_plus", "selected_background")},
         ),
         (
             "Trophy Summary",

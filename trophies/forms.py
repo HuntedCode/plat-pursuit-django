@@ -1,6 +1,7 @@
 import logging
 from django import forms
-from trophies.models import Profile, UserConceptRating, Concept
+from django.db.models import Q
+from trophies.models import Profile, UserConceptRating, Concept, ProfileGame
 
 logger = logging.getLogger('psn_api')
 
@@ -198,6 +199,26 @@ class GameDetailForm(forms.Form):
         required=False,
         label='Sort By',
     )
+
+class BackgroundSelectionForm(forms.ModelForm):
+    selected_background = forms.ModelChoiceField(
+        queryset=Concept.objects.none(),
+        label='Profile Background',
+        empty_label='Default Background',
+        required=False,
+        widget=forms.Select(attrs={'class': 'select w-full'})
+    )
+
+    class Meta:
+        model = Profile
+        fields = ['selected_background']
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.instance and self.instance.user_is_premium:
+            eligible_games = ProfileGame.objects.filter(profile=self.instance).filter(Q(has_plat=True) | Q(progress=100))
+            eligible_game_ids = eligible_games.values_list('game__id', flat=True)
+            self.fields['selected_background'].queryset = Concept.objects.filter(games__id__in=eligible_game_ids, bg_url__isnull=False).distinct().order_by('unified_title')
 
 # Admin Forms
 

@@ -1,7 +1,7 @@
 {% load custom_filters %}
 {% for pgame in profile_games %}
 {% with pgame.game as game %}
-    <a href="{% url 'game_detail_with_profile' game.np_communication_id profile.psn_username %}" class="card {% if pgame.progress == 100 %}bg-success/15{% elif pgame.earned_trophies.platinum == 1 %}bg-warning/20{% else %}bg-base-100{% endif %} border-4 border-base-300 shadow-md shadow-neutral cursor-pointer transition-all duration-300 hover:scale-105 hover:border-{{ game|platform_color }} hover:shadow-{{ game|platform_color }} hover:shadow-lg hover:z-10 group">
+    <a href="{% url 'game_detail_with_profile' game.np_communication_id profile.psn_username %}" class="card {% if pgame.progress == 100 %}bg-success/15{% elif pgame.earned_trophies.platinum == 1 %}bg-warning/20{% else %}bg-base-100/80{% endif %} border-4 border-base-300 shadow-md shadow-neutral cursor-pointer transition-all duration-300 hover:scale-105 hover:border-{{ game|platform_color }} hover:shadow-{{ game|platform_color }} hover:shadow-lg hover:z-10 group">
         <div class="card-body m-0 px-3 py-3 {% if pgame.progress == 100 %}border-4 border-success{% elif pgame.earned_trophies.platinum == 1 %}border-4 border-warning{% endif %}">
             <div class="flex flex-col lg:flex-row lg:justify-between items-center gap-4 w-full">
                 <div class="flex flex-col lg:flex-row items-center justify-start gap-2 col-span-1 w-full">
