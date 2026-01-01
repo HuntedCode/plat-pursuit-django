@@ -14,4 +14,13 @@ class Command(BaseCommand):
                 game.is_regional = True
                 game.save(update_fields=['is_regional'])
                 updated += 1
+            else:
+                trophy_group = game.trophy_groups.first()
+                if trophy_group is not None:
+                    region_code = detect_asian_language(trophy_group.trophy_group_name)
+                    if not region_code == 'Unknown':
+                        game.add_region(region_code)
+                        game.is_regional = True
+                        game.save(update_fields=['is_regional'])
+                        updated += 1
         self.stdout.write(self.style.SUCCESS(f"{updated} games successfully updated!"))
