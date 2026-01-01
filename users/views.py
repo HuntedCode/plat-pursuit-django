@@ -11,6 +11,7 @@ from django.views import View
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 from djstripe.models import Price, Customer
+from djstripe.models import Event as DJStripeEvent
 import stripe
 import logging
 from users.forms import UserSettingsForm, CustomPasswordChangeForm
@@ -167,6 +168,8 @@ def stripe_webhook(request):
         logger.error(f"Webhook signature verification failed: {e}")
         return HttpResponse(status=400)
     
+    dj_event = DJStripeEvent.process(event)
+
     if event.type in ['checkout.session.completed', 'customer.subscription.created', 'customer.subscription.updated', 'invoice.paid']:
         customer_id = event.data.object.get('customer')
         if customer_id:
