@@ -56,6 +56,7 @@ class Profile(models.Model):
     extra_data = models.JSONField(default=dict, blank=True)
     last_synced = models.DateTimeField(default=timezone.now)
     last_profile_health_check = models.DateTimeField(null=True)
+    user_is_premium = models.BooleanField(default=False)
     sync_tier = models.CharField(
         max_length=10,
         choices=[("basic", "Basic"), ("preferred", "Preferred")],
@@ -117,11 +118,19 @@ class Profile(models.Model):
             self.is_linked = True
             self.save(update_fields=['user', 'is_linked'])
 
+            self.update_profile_premium(user.premium_tier is not None)
+
     def unlink_user(self):
         if self.user:
             self.user = None
             self.is_linked = False
             self.save(update_fields=['user', 'is_linked'])
+            self.update_profile_premium(False)
+    
+    def update_profile_premium(self, is_premium: bool):
+        self.sync_tier = 'preferred' if is_premium else 'basic'
+        self.user_is_premium = is_premium
+        self.save(update_fields=['sync_tier', 'is_premium'])
     
     def get_time_since_last_sync(self) -> timedelta:
         if self.last_synced:

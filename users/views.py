@@ -1,4 +1,5 @@
 # users/views.py
+import time
 from allauth.account.views import ConfirmEmailView
 from django.conf import settings
 from django.contrib import messages
@@ -170,12 +171,26 @@ def stripe_webhook(request):
     
     dj_event = DJStripeEvent.process(event)
 
-    if event.type in ['checkout.session.completed', 'customer.subscription.created', 'customer.subscription.updated', 'invoice.paid']:
+    if event.type in ['checkout.session.completed', 'customer.subscription.created', 'invoice.paid']:
         customer_id = event.data.object.get('customer')
         if customer_id:
             user = CustomUser.objects.filter(stripe_customer_id=customer_id).first()
             if user:
                 user.update_subscription_status()
                 logger.info(f"Updated tier for user {user.id}")
+    
+    elif event.type == 'customer.subscription.deleted':
+        customer_id = event.data.object.get('customer')
+        if customer_id:
+            user = CustomUser.objects.filter(stripe_customer_id=customer_id).first()
+            if user:
+                subscription = event.data.object
+                if subscription:
+                    user.premium_tier = None
+                    user.save()
+                    if hasattr(user, 'profile'):
+                        user.profile.update_profile_premium(False)
+
+
 
     return HttpResponse(status=200)

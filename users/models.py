@@ -1,3 +1,4 @@
+import time
 from django.db import models
 from django.contrib.auth.models import AbstractUser, BaseUserManager
 from django.utils.translation import gettext_lazy as _
@@ -56,9 +57,11 @@ class CustomUser(AbstractUser):
             self.save()
             return
         
+        is_premium = False
         subs = Subscription.objects.filter(customer__id=self.stripe_customer_id)
         active_sub = next((sub for sub in subs if sub.status == 'active'), None)
         if active_sub:
+            is_premium = True
             product_id = active_sub.plan['product']
             if product_id == 'prod_ThqmB1BoJZn7TY' or product_id == 'prod_ThtXPwe3AD46Au':
                 self.premium_tier = 'ad_free'
@@ -70,8 +73,14 @@ class CustomUser(AbstractUser):
                 self.premium_tier = 'supporter'
             else:
                 self.premium_tier = None
+                is_premium = False
         else:
+            canceled_sub = Subscription.objects.filter(customer__id=self.stripe_customer_id, status='canceled').first()
+            if canceled_sub and canceled_sub.current_period_end > int(time.time()):
+                return
             self.premium_tier = None
+        if hasattr(self, 'profile'):
+            self.profile.update_profile_premium(is_premium)
         self.save()
 
 class UserSubscription(models.Model):
