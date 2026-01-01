@@ -103,7 +103,7 @@ def notify_new_badge(profile, badge):
         thumbnail_url = ''
         if badge.badge_image or badge.base_badge:
             if settings.DEBUG:
-                thumbnail_url = 'https://psnobj.prod.dl.playstation.net/psnobj/NPWR20813_00/19515081-883c-41e2-9c49-8a8706c59efc.png'
+                thumbnail_url = 'https://platpursuit.com/static/images/badges/default.png'
             else:
                 if badge.badge_image:
                     thumbnail_url = badge.badge_image.url
@@ -150,7 +150,7 @@ def send_batch_role_notification(profile, badges):
     first_badge = role_badges[0]
     thumbnail_url = None
     if settings.DEBUG:
-        thumbnail_url = 'https://psnobj.prod.dl.playstation.net/psnobj/NPWR20813_00/19515081-883c-41e2-9c49-8a8706c59efc.png'
+        thumbnail_url = 'https://platpursuit.com/static/images/badges/default.png'
     else:
         if first_badge.badge_image:
             thumbnail_url = first_badge.badge_image.url
@@ -199,7 +199,7 @@ def send_subscription_notification(user):
         platinum_emoji = f"<:Platinum_Trophy:{settings.PLATINUM_EMOJI_ID}>" if settings.PLATINUM_EMOJI_ID else "🏆"
         plat_pursuit_emoji = f"<:PlatPursuit:{settings.PLAT_PURSUIT_EMOJI_ID}>" if settings.PLAT_PURSUIT_EMOJI_ID else "🏆"
 
-        thumbnail_url = 'https://psnobj.prod.dl.playstation.net/psnobj/NPWR20813_00/19515081-883c-41e2-9c49-8a8706c59efc.png'
+        thumbnail_url = 'https://platpursuit.com/static/images/badges/default.png'
 
         description = f"{plat_pursuit_emoji} <@{profile.discord_id}> has just subscribed!\n{platinum_emoji} Our latest **{user.get_premium_tier()}** subscriber!"
         description += f"\nEnjoy your new perks and thank you for being an amazing part of this community! 🎉"

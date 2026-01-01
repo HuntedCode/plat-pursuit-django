@@ -148,7 +148,6 @@ def subscribe_success(request):
     if session_id:
         try:
             session = stripe.checkout.Session.retrieve(session_id)
-            request.user.update_subscription_status()
             messages.success(request, "Subscription activated! Enjoy premium features.")
         except stripe.error.StripeError as e:
             messages.error(request, f"Error verifying subscription: {str(e)}")
