@@ -17,6 +17,7 @@ import stripe
 import logging
 from users.forms import UserSettingsForm, CustomPasswordChangeForm
 from users.models import CustomUser
+from trophies.models import Badge
 
 logger = logging.getLogger('psn_api')
 

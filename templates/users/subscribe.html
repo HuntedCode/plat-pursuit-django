@@ -2,71 +2,93 @@
 {% load static %}
 
 {% block content %}
-{{ is_live }}
-<div class="min-h-screen bg-base-200 flex items-center justify-center p-4">
-    <div class="max-w-4xl w-full space-y-8">
-        <h1 class="text-4xl font-bold text-center">Choose Your Plat Pursuit Plan</h1>
-        <p class="text-center text-lg">Unlock ad-free tracking, advanced analytics, and more!</p>
+{% if not is_live %}
+    TEST MODE ACTIVE
+{% endif %}
+<div class="min-h-screen bg-base-200/50 border-4 border-base-300 shadow-lg shadow-neutral flex items-center justify-center p-4">
+    <div class="flex flex-col justify-center max-w-5xl w-full">
+        <figure class="relative w-45 h-45 mx-auto mb-4 hover:scale-105">
+            <img src="{% static 'images/badges/backdrops/3_backdrop.png' %}" class="w-full absolute top-0 left-0" />
+            <img src="{% static 'images/badges/default.png' %}" class="w-full absolute top-0 left-0" />
+        </figure>
+        <span class="text-rotate text-3xl font-bold text-center leading-[2] italic self-center mb-2 hover:scale-105">
+            <span class="justify-items-center">
+                <span class="pr-2">"Got some rare things on sale, Stranger..."</span>
+                <span class="pr-2">"Trouble with the trolley, eh?"</span>
+                <span class="pr-2">"It's dangerous to go alone..."</span>
+                <span class="pr-2">"There are many surprises within my store..."</span>
+                <span class="pr-2">"Khajiit has wares if you have coins."</span>
+                <span class="pr-2">"ENCHANTMENT?!"</span>
+            </span>
+        </span>
+        <p class="text-center text-accent text-lg mb-8 pr-1 italic hover:scale-105">Unlock ad-free tracking, advanced profile customization, and more!</p>
         
-        <form method="post" class="grid grid-cols-1 md:grid-cols-4 gap-6">
+        <form method="post" class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
             {% csrf_token %}
             
             <!-- Ad-Free Tier -->
             <div class="card border-4 border-base-300 bg-base-100 shadow-lg hover:scale-105 hover:border-primary hover:shadow-primary">
                 <div class="card-body">
-                    <h2 class="card-title">Ad-Free</h2>
-                    <p class="text-2xl font-bold">${{ prices.ad_free }}</p>
-                    <ul class="list-disc pl-4 space-y-1">
-                        <li>No ads</li>
-                        <li>Basic trophy tracking</li>
+                    <h2 class="card-title hover:scale-105">Ad-Free</h2>
+                    <p class="text-2xl text-primary font-semibold mb-2 hover:scale-105">${{ prices.ad_free }}<span class="text-base-content text-lg">/mo</span></p>
+                    <ul class="list-disc pl-4 space-y-1 self-start italic">
+                        <li class="text-primary hover:scale-105">No ads site wide</li>
                     </ul>
-                    <button type="submit" name="tier" value="ad_free" class="btn btn-primary mt-4">Select</button>
+                    <button type="submit" name="tier" value="ad_free" class="btn btn-secondary mt-4">Select</button>
                 </div>
             </div>
             
             <!-- Premium Monthly -->
-            <div class="card border-4 border-base-300 bg-base-100 shadow-lg hover:scale-105 hover:border-primary hover:shadow-primary">
+            <div class="card border-4 border-base-300 bg-base-100 shadow-lg hover:scale-105 hover:border-secondary hover:shadow-secondary">
                 <div class="card-body">
-                    <h2 class="card-title">Premium Monthly</h2>
-                    <p class="text-2xl font-bold">${{ prices.premium_monthly }}/mo</p>
-                    <ul class="list-disc pl-4 space-y-1">
-                        <li>Ad-free</li>
-                        <li>Advanced analytics</li>
-                        <li>Priority support</li>
+                    <h2 class="card-title hover:scale-105">Premium Monthly*</h2>
+                    <p class="text-2xl text-primary font-semibold mb-2 hover:scale-105">${{ prices.premium_monthly }}<span class="text-base-content text-lg">/mo</span></p>
+                    <ul class="list-disc pl-4 space-y-1 italic">
+                        <li class="hover:scale-105">No ads site wide</li>
+                        <li class="text-primary hover:scale-105">Refresh every 5 minutes</li>
+                        <li class="text-primary hover:scale-105">Profile Customization</li>
+                        <li class="text-primary hover:scale-105">Premium Discord Role</li>
                     </ul>
-                    <button type="submit" name="tier" value="premium_monthly" class="btn btn-primary mt-4">Select</button>
+                    <button type="submit" name="tier" value="premium_monthly" class="btn btn-secondary mt-4">Select</button>
                 </div>
             </div>
             
             <!-- Premium Yearly -->
-            <div class="card border-4 border-base-300 bg-base-100 shadow-lg hover:scale-105 hover:border-primary hover:shadow-primary">
+            <div class="relative card border-4 border-base-300 bg-base-100 shadow-lg hover:scale-105 hover:border-accent hover:shadow-accent">
                 <div class="card-body">
-                    <h2 class="card-title">Premium Yearly</h2>
-                    <p class="text-2xl font-bold">${{ prices.premium_yearly }}/yr</p>
-                    <ul class="list-disc pl-4 space-y-1">
-                        <li>All monthly features</li>
-                        <li>20% discount</li>
-                        <li>Exclusive badges</li>
+                    <h2 class="card-title hover:scale-105">Premium Yearly*</h2>
+                    <p class="text-2xl text-accent font-semibold mb-2 hover:scale-105">${{ prices.premium_yearly }}<span class="text-base-content text-lg">/yr</span></p>
+                    <ul class="list-disc pl-4 space-y-1 italic">
+                        <li class="hover:scale-105">No ads site wide</li>
+                        <li class="text-accent hover:scale-105">Refresh every 5 minutes</li>
+                        <li class="text-accent hover:scale-105">Profile Customization</li>
+                        <li class="text-accent hover:scale-105">Premium Discord Role</li>
                     </ul>
-                    <button type="submit" name="tier" value="premium_yearly" class="btn btn-primary mt-4">Select</button>
+                    <button type="submit" name="tier" value="premium_yearly" class="btn btn-secondary mt-4">Select</button>
                 </div>
+                <div class="absolute top-1.5 right-1 badge badge-sm badge-accent font-bold border-2 border-base-300 animate-bounce">Save 17%!</div>
             </div>
             
             <!-- Supporter -->
-            <div class="card border-4 border-base-300 bg-base-100 shadow-lg hover:scale-105 hover:border-primary hover:shadow-primary">
+            <div class="card border-4 border-base-300 bg-base-100 shadow-lg hover:scale-105 shimmer">
                 <div class="card-body">
-                    <h2 class="card-title">Supporter</h2>
-                    <p class="text-2xl font-bold">${{ prices.supporter }}/mo</p>
-                    <ul class="list-disc pl-4 space-y-1">
-                        <li>All premium features</li>
-                        <li>Community shoutouts</li>
-                        <li>Early access</li>
+                    <h2 class="card-title hover:scale-105">Supporter + Beta**</h2>
+                    <p class="text-2xl text-primary font-semibold mb-2 hover:scale-105">${{ prices.supporter }}<span class="text-base-content text-lg">/mo</span></p>
+                    <ul class="list-disc pl-4 space-y-1 italic">
+                        <li class="hover:scale-105">No ads site wide</li>
+                        <li class="hover:scale-105">Refresh every 5 minutes</li>
+                        <li class="hover:scale-105">Profile Customization</li>
+                        <li class="hover:scale-105">Premium Discord Role</li>
+                        <li class="text-primary hover:scale-105">Discord VIP Chat</li>
+                        <li class="text-primary hover:scale-105">Access to beta features</li>
                     </ul>
-                    <button type="submit" name="tier" value="supporter" class="btn btn-primary mt-4">Select</button>
+                    <button type="submit" name="tier" value="supporter" class="btn btn-secondary mt-4">Select</button>
                 </div>
             </div>
         </form>
-        <p class="text-center text-sm mt-2 italic">Pay with card, PayPal, Amazon Pay, or bank (availability varies by region and device)</p>
+        <p class="text-center text-sm font-semibold italic mb-2">Pay with card, PayPal, Amazon Pay, or bank! Availability varies by region and device.</p>
+        <p class="text-center text-sm text-base-content/70 italic">* Additional Premium features being added all the time!</p>
+        <p class="text-center text-sm text-base-content/70 italic mb-1">** Join our Discord to participate in any future beta tests!</p>
     </div>
 </div>
 {% endblock %}
