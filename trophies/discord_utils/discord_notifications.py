@@ -111,7 +111,7 @@ def notify_new_badge(profile, badge):
                     thumbnail_url = badge.base_badge.badge_image.url
             
             if not thumbnail_url:
-                thumbnail_url = static('images/badges/default.png')
+                thumbnail_url = settings.SITE_URL + static('images/badges/default.png')
 
         description = f"{plat_pursuit_emoji} <@{profile.discord_id}> has earned a brand new role!\n{platinum_emoji} **{badge.display_series}**"
         if badge.discord_role_id:
@@ -158,7 +158,7 @@ def send_batch_role_notification(profile, badges):
             thumbnail_url = first_badge.base_badge.badge_image.url
 
         if not thumbnail_url:
-                thumbnail_url = static('images/badges/default.png')
+                thumbnail_url = settings.SITE_URL + static('images/badges/default.png')
 
     badge_lines = []
     for badge in role_badges:
@@ -199,7 +199,7 @@ def send_subscription_notification(user):
         platinum_emoji = f"<:Platinum_Trophy:{settings.PLATINUM_EMOJI_ID}>" if settings.PLATINUM_EMOJI_ID else "🏆"
         plat_pursuit_emoji = f"<:PlatPursuit:{settings.PLAT_PURSUIT_EMOJI_ID}>" if settings.PLAT_PURSUIT_EMOJI_ID else "🏆"
 
-        thumbnail_url = static('images/badges/default.png')
+        thumbnail_url = settings.SITE_URL + static('images/badges/default.png')
 
         description = f"{plat_pursuit_emoji} <@{profile.discord_id}> has just subscribed!\n{platinum_emoji} Our latest **{user.get_premium_tier()}** subscriber!"
         description += f"\nEnjoy your new perks and thank you for being an amazing part of this community! 🎉"
