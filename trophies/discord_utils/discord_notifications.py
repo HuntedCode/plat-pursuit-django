@@ -204,10 +204,10 @@ def send_subscription_notification(user):
         description = f"{plat_pursuit_emoji} <@{profile.discord_id}> has just subscribed!\n{platinum_emoji} Our latest **{user.get_premium_tier()}** subscriber!"
         description += f"\nEnjoy your new perks and thank you for being an amazing part of this community! 🎉"
         description += f"\n\nWant to enjoy cool perks like ad-free web and 5 minutes refreshes, too?"
-        description += f"\nConsider subscribing on our website: https://platpuruit.com/users/subscribe/"
+        description += f"\nConsider subscribing on our website: https://platpursuit.com/users/subscribe/"
 
         embed_data = {
-            'title': f"⚡ {profile.display_psn_username} Just Subcribed! ⚡",
+            'title': f"⚡ {profile.display_psn_username} Just Subscribed! ⚡",
             'description': description,
             'color': 0x674EA7,
             'thumbnail': {'url': thumbnail_url},
