@@ -67,7 +67,7 @@ class CustomUser(AbstractUser):
             return 'Supporter'
         return 'Unknown'
 
-    def update_subscription_status(self):
+    def update_subscription_status(self, event_type: str):
         if not self.stripe_customer_id:
             self.premium_tier = None
             self.save()
@@ -97,7 +97,7 @@ class CustomUser(AbstractUser):
             self.premium_tier = None
         if hasattr(self, 'profile'):
             self.profile.update_profile_premium(is_premium)
-            if is_premium and not self.premium_tier == 'ad_free':
+            if event_type == 'customer.subscription.created' and is_premium and not self.premium_tier == 'ad_free':
                 send_subscription_notification(self)
                 if self.premium_tier in ['premium_monthly', 'premium_yearly']:
                     notify_bot_role_earned(self.profile, settings.DISCORD_PREMIUM_ROLE)

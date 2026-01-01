@@ -177,7 +177,7 @@ def stripe_webhook(request):
         if customer_id:
             user = CustomUser.objects.filter(stripe_customer_id=customer_id).first()
             if user:
-                user.update_subscription_status()
+                user.update_subscription_status(event.type)
                 logger.info(f"Updated tier for user {user.id}")
     
     elif event.type == 'customer.subscription.deleted':
