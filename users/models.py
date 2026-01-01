@@ -1,9 +1,11 @@
 import time
 from django.db import models
+from django.conf import settings
 from django.contrib.auth.models import AbstractUser, BaseUserManager
 from django.utils.translation import gettext_lazy as _
 import pytz
-from trophies.utils import REGIONS
+from trophies.discord_utils.discord_notifications import send_subscription_notification
+from trophies.utils import REGIONS, notify_bot_role_earned
 from djstripe.models import Subscription
 
 
@@ -51,6 +53,20 @@ class CustomUser(AbstractUser):
         subs = Subscription.objects.filter(customer__id=self.stripe_customer_id)
         return any(sub.status == 'active' for sub in subs)
     
+    def get_premium_tier(self):
+        if not self.premium_tier:
+            return None
+        
+        if self.premium_tier == 'ad_free':
+            return 'Ad Free'
+        elif self.premium_tier == 'premium_monthly':
+            return 'Premium Monthly'
+        elif self.premium_tier == 'premium_yearly':
+            return 'Premium Yearly'
+        elif self.premium_tier == 'supporter':
+            return 'Supporter'
+        return 'Unknown'
+
     def update_subscription_status(self):
         if not self.stripe_customer_id:
             self.premium_tier = None
@@ -81,6 +97,13 @@ class CustomUser(AbstractUser):
             self.premium_tier = None
         if hasattr(self, 'profile'):
             self.profile.update_profile_premium(is_premium)
+            if is_premium and not self.premium_tier == 'ad_free':
+                send_subscription_notification(self)
+                if self.premium_tier in ['premium_monthly', 'premium_yearly']:
+                    notify_bot_role_earned(self.profile, settings.DISCORD_PREMIUM_ROLE)
+                elif self.premium_tier == 'supporter':
+                    notify_bot_role_earned(self.profile, settings.DISCORD_PREMIUM_PLUS_ROLE)
+
         self.save()
 
 class UserSubscription(models.Model):

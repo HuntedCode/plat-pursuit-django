@@ -4,6 +4,7 @@ import requests
 import logging
 import os
 from django.conf import settings
+from django.templatetags import static
 from dotenv import load_dotenv
 from urllib.parse import urlparse
 
@@ -92,6 +93,9 @@ def notify_new_platinum(profile, earned_trophy):
 
 def notify_new_badge(profile, badge):
     """Send Discord webhook embed for new badge."""
+    if not profile or not badge:
+        return
+    
     try:
         platinum_emoji = f"<:Platinum_Trophy:{settings.PLATINUM_EMOJI_ID}>" if settings.PLATINUM_EMOJI_ID else "🏆"
         plat_pursuit_emoji = f"<:PlatPursuit:{settings.PLAT_PURSUIT_EMOJI_ID}>" if settings.PLAT_PURSUIT_EMOJI_ID else "🏆"
@@ -107,7 +111,7 @@ def notify_new_badge(profile, badge):
                     thumbnail_url = badge.base_badge.badge_image.url
             
             if not thumbnail_url:
-                thumbnail_url = 'images/badges/default.png'
+                thumbnail_url = static('images/badges/default.png')
 
         description = f"{plat_pursuit_emoji} <@{profile.discord_id}> has earned a brand new role!\n{platinum_emoji} **{badge.display_series}**"
         if badge.discord_role_id:
@@ -154,7 +158,7 @@ def send_batch_role_notification(profile, badges):
             thumbnail_url = first_badge.base_badge.badge_image.url
 
         if not thumbnail_url:
-                thumbnail_url = 'images/badges/default.png'
+                thumbnail_url = static('images/badges/default.png')
 
     badge_lines = []
     for badge in role_badges:
@@ -178,6 +182,39 @@ def send_batch_role_notification(profile, badges):
     payload = {'embeds': [embed_data]}
     try:
         queue_webhook_send(payload)
+        logger.info(f"Queued notification of new badge for {profile.psn_username}")
+    except Exception as e:
+        logger.error(f"Failed to queue badge notification: {e}")
+    
+def send_subscription_notification(user):
+    if not user or not hasattr(user, 'profile'):
+        return
+
+    profile = user.profile
+
+    if not profile.is_discord_verified or not profile.discord_id:
+        return
+    
+    try:
+        platinum_emoji = f"<:Platinum_Trophy:{settings.PLATINUM_EMOJI_ID}>" if settings.PLATINUM_EMOJI_ID else "🏆"
+        plat_pursuit_emoji = f"<:PlatPursuit:{settings.PLAT_PURSUIT_EMOJI_ID}>" if settings.PLAT_PURSUIT_EMOJI_ID else "🏆"
+
+        thumbnail_url = static('images/badges/default.png')
+
+        description = f"{plat_pursuit_emoji} <@{profile.discord_id}> has just subscribed!\n{platinum_emoji} Our latest **{user.get_premium_tier()}** subscriber!"
+        description += f"\nEnjoy your new perks and thank you for being an amazing part of this community! 🎉"
+        description += f"\n\nWant to enjoy cool perks like ad-free web and 5 minutes refreshes, too?"
+        description += f"\nConsider subscribing on our website: https://platpuruit.com/users/subscribe/"
+
+        embed_data = {
+            'title': f"⚡ {profile.display_psn_username} Just Subcribed! ⚡",
+            'description': description,
+            'color': 0x674EA7,
+            'thumbnail': {'url': thumbnail_url},
+            'footer': {'text': f"Powered by Plat Pursuit | No Trophy Can Hide From Us"},
+        }
+        payload = {'embeds': [embed_data]}
+        queue_webhook_send(payload, webhook_url='https://discord.com/api/webhooks/1443493609537015891/3h9Av6tMaH-41Kt-a-lTinyr-4KzohYaYdsWQgqEoKO5FttDY271xcjZj_cP6XT2VC8R')
         logger.info(f"Queued notification of new badge for {profile.psn_username}")
     except Exception as e:
         logger.error(f"Failed to queue badge notification: {e}")

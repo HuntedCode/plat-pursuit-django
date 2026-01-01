@@ -47,6 +47,8 @@ BOT_API_KEY = os.getenv('BOT_API_KEY')
 DISCORD_PLATINUM_WEBHOOK_URL = os.getenv('DISCORD_PLATINUM_WEBHOOK_URL')
 PLATINUM_EMOJI_ID = os.getenv('PLATINUM_EMOJI_ID')
 PLAT_PURSUIT_EMOJI_ID = os.getenv('PLAT_PURSUIT_EMOJI_ID')
+DISCORD_PREMIUM_ROLE = os.getenv('DISCORD_PREMIUM_ROLE')
+DISCORD_PREMIUM_PLUS_ROLE = os.getenv('DISCORD_PREMIUM_PLUS_ROLE')
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent

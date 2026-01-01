@@ -225,13 +225,13 @@ def process_badge(profile, badge, notify_bot=False):
 
     if badge.discord_role_id and (newly_awarded or notify_bot) and UserBadge.objects.filter(profile=profile, badge=badge).exists():
         if profile.is_discord_verified and profile.discord_id:
-            notify_bot_badge_earned(profile, badge)
+            notify_bot_role_earned(profile, badge.discord_role_id)
             if not notify_bot:
                 notify_new_badge(profile, badge)
 
     return newly_awarded
 
-def notify_bot_badge_earned(profile, badge):
+def notify_bot_role_earned(profile, role_id):
     """Notify Discord bot via API to assign role."""
     try:
         url = settings.BOT_API_URL + "/assign-role"
@@ -241,13 +241,13 @@ def notify_bot_badge_earned(profile, badge):
         }
         data = {
             'user_id': profile.discord_id,
-            'role_id': badge.discord_role_id,
+            'role_id': role_id,
         }
         response = requests.post(url, json=data, headers=headers)
         response.raise_for_status()
-        logger.info(f"Bot notified: Assigned role {badge.discord_role_id} to {profile.discord_id} for badge {badge.name}")
+        logger.info(f"Bot notified: Assigned role {role_id} to {profile.discord_id}.")
     except requests.RequestException as e:
-        logger.error(f"Bot notification failed for badge {badge.name} (user {profile.psn_username}): {e}")
+        logger.error(f"Bot notification failed for role {role_id} (user {profile.psn_username}): {e}")
 
 @transaction.atomic
 def check_discord_role_badges(profile):
