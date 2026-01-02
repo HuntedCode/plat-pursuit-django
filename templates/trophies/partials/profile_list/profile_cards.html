@@ -1,7 +1,7 @@
 {% load static custom_filters %}
 {% load humanize %}
 {% for profile in object_list %}
-    <a href="{% url 'profile_detail' profile.psn_username %}" class="card bg-base-100 border-4 border-base-300 shadow-xl shadow-neutral cursor-pointer transition-all duration-300 hover:scale-105 hover:border-primary hover:shadow-primary hover:z-10 group">
+    <a href="{% url 'profile_detail' profile.psn_username %}" class="card bg-base-100 border-4 {% if profile.user_is_premium %}shimmer{% else %}border-base-300{% endif %} shadow-xl shadow-neutral cursor-pointer transition-all duration-300 hover:scale-105 hover:border-primary hover:shadow-primary hover:z-10 group">
         <div class="relative card-body m-0 px-3 py-3">
             <div class="absolute top-2 right-4 text-lg text-base-content font-bold hover:scale-105">{{ profile.flag }}</div>
             {% if not profile.psn_history_public %}
