@@ -81,6 +81,7 @@ class CustomUser(AbstractUser):
             product_id = active_sub.plan['product']
             if product_id == 'prod_ThqmB1BoJZn7TY' or product_id == 'prod_ThtXPwe3AD46Au':
                 self.premium_tier = 'ad_free'
+                is_premium = False
             elif product_id == 'prod_ThqljWr4cvnFFF' or product_id == 'prod_ThsI3EuCssYlTT':
                 self.premium_tier = 'premium_monthly'
             elif product_id == 'prod_ThqpPjDyERnoaF' or product_id == 'prod_ThsIi3Xd8fY2Hk':
@@ -97,7 +98,7 @@ class CustomUser(AbstractUser):
             self.premium_tier = None
         if hasattr(self, 'profile'):
             self.profile.update_profile_premium(is_premium)
-            if event_type == 'customer.subscription.created' and is_premium and not self.premium_tier == 'ad_free':
+            if event_type == 'customer.subscription.created' and is_premium:
                 send_subscription_notification(self)
                 if self.premium_tier in ['premium_monthly', 'premium_yearly']:
                     notify_bot_role_earned(self.profile, settings.DISCORD_PREMIUM_ROLE)

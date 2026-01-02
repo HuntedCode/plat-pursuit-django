@@ -122,7 +122,7 @@ class Profile(models.Model):
             self.is_linked = True
             self.save(update_fields=['user', 'is_linked'])
 
-            self.update_profile_premium(user.premium_tier is not None)
+            self.update_profile_premium(user.premium_tier in ['premium_monthly', 'premium_yearly', 'supporter'])
 
     def unlink_user(self):
         if self.user:
@@ -690,6 +690,9 @@ class UserTrophySelection(models.Model):
 
     class Meta:
         unique_together = ['profile', 'earned_trophy']
+        Indexes = [
+            models.Index(fields=['profile'], name='trophy_sel_profile_idx'),
+        ]
     
     def save(self, *args, **kwargs):
         if self.profile.trophy_selections.count() >= 10 and not self.pk:

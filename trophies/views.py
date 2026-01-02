@@ -888,6 +888,10 @@ class TrophyCaseView(ProfileHotbarMixin, ListView):
         context['selected_ids'] = selected_ids
         context['selected_count'] = len(selected_ids)
         context['toggle_selection_url'] = reverse('toggle-selection')
+
+        is_own_profile = self.request.user.is_authenticated and self.request.user.profile == profile
+        max_selections = 10 if profile.user_is_premium else 3
+
         return context
 
 class ToggleSelectionView(LoginRequiredMixin, ProfileHotbarMixin, View):
