@@ -1,4 +1,4 @@
-{% load custom_filters %}
+{% load static custom_filters %}
 {% load humanize %}
 {% for profile in object_list %}
     <a href="{% url 'profile_detail' profile.psn_username %}" class="card bg-base-100 border-4 border-base-300 shadow-xl shadow-neutral cursor-pointer transition-all duration-300 hover:scale-105 hover:border-primary hover:shadow-primary hover:z-10 group">
@@ -7,6 +7,10 @@
             {% if not profile.psn_history_public %}
                 <div class="tooltip absolute top-2 left-4 hover:scale-105" data-tip="Game Data Privated">
                     <svg xmlns="http://www.w3.org/2000/svg" class="mx-auto" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="var(--color-error)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2"></polygon><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+                </div>
+            {% elif profile.user_is_premium %}
+                <div class="tooltip absolute top-2 left-4 hover:scale-105" data-tip="Premium User">
+                    <img src="{% static 'images/badges/default.png' %}" class="w-7.5 h-7.5" />
                 </div>
             {% endif %}
             <div class="flex flex-col items-center">
@@ -17,6 +21,7 @@
                 </div>
                 <h3 class="text-lg text-base-content font-bold h-10 line-clamp-1 hover:scale-105">{{ profile.display_psn_username }}</h3>
                 <p class="text-xs text-base-content/70 text-center line-clamp-2 min-h-[2rem] hover:scale-105">{{ profile.about_me }}</p>
+                <h3 class="text-lg legendary-title h-10 line-clamp-1 pr-1 italic hover:scale-105">{% if profile.user_is_premium %}{{ profile.selected_title }}{% endif %}</h3>
 
                 <div class="divider divider-vertical my-0"></div>
 

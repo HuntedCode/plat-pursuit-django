@@ -1,7 +1,7 @@
 import logging
 from django import forms
 from django.db.models import Q
-from trophies.models import Profile, UserConceptRating, Concept, ProfileGame
+from trophies.models import Profile, UserConceptRating, Concept, ProfileGame, Badge
 
 logger = logging.getLogger('psn_api')
 
@@ -200,7 +200,7 @@ class GameDetailForm(forms.Form):
         label='Sort By',
     )
 
-class BackgroundSelectionForm(forms.ModelForm):
+class PremiumSettingsForm(forms.ModelForm):
     selected_background = forms.ModelChoiceField(
         queryset=Concept.objects.none(),
         label='Profile Background',
@@ -208,17 +208,31 @@ class BackgroundSelectionForm(forms.ModelForm):
         required=False,
         widget=forms.Select(attrs={'class': 'select w-full'})
     )
+    selected_title = forms.ChoiceField(
+        choices= [],
+        label='User Title',
+        required=False,
+        widget=forms.Select(attrs={'class': 'select w-full'})
+    )
 
     class Meta:
         model = Profile
-        fields = ['selected_background']
+        fields = ['selected_background', 'selected_title']
     
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        if self.instance and self.instance.user_is_premium:
-            eligible_games = ProfileGame.objects.filter(profile=self.instance).filter(Q(has_plat=True) | Q(progress=100))
-            eligible_game_ids = eligible_games.values_list('game__id', flat=True)
-            self.fields['selected_background'].queryset = Concept.objects.filter(games__id__in=eligible_game_ids, bg_url__isnull=False).distinct().order_by('unified_title')
+        if self.instance:
+            if self.instance.user_is_premium:
+                eligible_games = ProfileGame.objects.filter(profile=self.instance).filter(Q(has_plat=True) | Q(progress=100))
+                eligible_game_ids = eligible_games.values_list('game__id', flat=True)
+                self.fields['selected_background'].queryset = Concept.objects.filter(games__id__in=eligible_game_ids, bg_url__isnull=False).distinct().order_by('unified_title')
+
+                eligible_titles = self.instance.get_eligible_titles()
+                self.fields['selected_title'].choices = [('', 'None')] + [(title, title) for title in eligible_titles]
+            else:
+                for field in self.fields:
+                    self.fields[field].widget.attrs['disabled'] = 'disabled'
+                    self.fields[field].help_text = 'Premium feature.'
 
 # Admin Forms
 
