@@ -942,6 +942,15 @@ class BadgeListView(ProfileHotbarMixin, ListView):
         for badge in badges:
             grouped_badges[badge.series_slug].append(badge)
         
+        title_filter = self.request.GET.get('title_filter') == 'true'
+        if title_filter:
+            filtered_groups = {}
+            for slug, group in grouped_badges.items():
+                tier1_badge = next((b for b in group if b.tier == 1), None)
+                if tier1_badge and tier1_badge.effective_user_title:
+                    filtered_groups[slug] = group
+            grouped_badges = filtered_groups
+
         display_data = []
         user = self.request.user
         if user.is_authenticated and hasattr(user, 'profile'):
