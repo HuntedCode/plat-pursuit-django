@@ -94,7 +94,7 @@ def calculate_trimmed_mean(data, trim_percent=0.1):
         return None
     return stats.trim_mean(data, trim_percent)
 
-def check_profile_badges(profile, profilegame_ids):
+def check_profile_badges(profile, profilegame_ids, skip_notis: bool = False):
     from trophies.models import ProfileGame, Badge, UserBadge
 
     start_time = time.time()
@@ -120,7 +120,7 @@ def check_profile_badges(profile, profilegame_ids):
             if badge.tier > 1:
                 prev_badge = Badge.objects.get(series_slug=badge.series_slug, tier=badge.tier-1)
                 if UserBadge.objects.filter(profile=profile, badge=prev_badge).exists():
-                    process_badge(profile, badge)
+                    process_badge(profile, badge, notify_bot=skip_notis)
             checked_count += 1
         except Exception as e:
             logger.error(f"Error checking badge {badge.id} for profile {profile.psn_username}: {e}")
@@ -200,9 +200,9 @@ def process_badge(profile, badge, notify_bot=False):
 
     progress_fields = {}
     if badge.badge_type == 'series':
-        progress_fields = {'completed_concepts': achieved, 'required_concepts': required}
+        progress_fields = {'completed_concepts': achieved}
     elif badge.badge_type == 'misc':
-        progress_fields = {'progress_value': achieved, 'required_value': required}
+        progress_fields = {'progress_value': achieved}
     
     progress, created = UserBadgeProgress.objects.get_or_create(profile=profile, badge=badge, defaults=progress_fields)
     if not created:
