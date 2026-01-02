@@ -5,13 +5,13 @@
 {% if not is_live %}
     TEST MODE ACTIVE
 {% endif %}
-<div class="min-h-screen w-fit bg-base-200/50 border-4 border-base-300 shadow-lg shadow-neutral flex items-center justify-center py-4 px-20 mx-auto">
+<div class="w-fit bg-base-200/50 border-4 border-base-300 shadow-lg shadow-neutral flex items-center justify-center py-4 px-4 md:px-8 lg:px-14 xl:px-20 mx-auto">
     <div class="flex flex-col justify-center max-w-5xl w-full">
         <figure class="relative w-45 h-45 mx-auto mb-4 hover:scale-105">
             <img src="{% static 'images/badges/backdrops/3_backdrop.png' %}" class="w-full absolute top-0 left-0" />
             <img src="{% static 'images/badges/default.png' %}" class="w-full absolute top-0 left-0" />
         </figure>
-        <span class="text-rotate duration-20000 text-3xl font-bold text-center leading-[2] italic self-center mb-2 hover:scale-105">
+        <span class="text-rotate duration-20000 text-xs md:text-lg lg:text-xl xl:text-2xl 2xl:text-3xl font-bold text-center leading-[2] italic self-center mb-2 hover:scale-105">
             <span class="justify-items-center">
                 <span class="pr-2">"Got some rare things on sale, Stranger..."</span>
                 <span class="pr-2">"Trouble with the trolley, eh?"</span>
@@ -21,9 +21,9 @@
                 <span class="pr-2">"ENCHANTMENT?!"</span>
             </span>
         </span>
-        <p class="text-center text-accent text-lg mb-8 pr-1 italic hover:scale-105">Unlock ad-free tracking, advanced profile customization, and more!</p>
+        <p class="text-center text-accent text-xs md:text-base xl:text-lg mb-8 pr-1 italic hover:scale-105">Unlock ad-free tracking, advanced profile customization, and more!</p>
         
-        <form method="post" class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
+        <form method="post" class="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-4 gap-6 mb-6">
             {% csrf_token %}
             
             <!-- Ad-Free Tier -->
