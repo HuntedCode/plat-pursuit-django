@@ -80,12 +80,19 @@
         <div class="divider divider-vertical"></div>
 
         <div class="flex flex-col lg:flex-row">
-            <div class="flex flex-col items-center gap-2 w-full lg:w-1/4">
-                {% if profile.is_plus %}
-                    <img src="{% static 'images/plus.png' %}" class="w-7 shrink-0 place-self-end hover:scale-105" />
+            <div class="relative flex flex-col items-center gap-2 w-full lg:w-1/4">
+                {% if profile.user_is_premium %}
+                    <div class="tooltip absolute top-2 left-2" data-tip="Premium Account">
+                        <img src="{% static 'images/badges/default.png' %}" class="w-7 shrink-0 place-self-start hover:scale-105" />
+                    </div>
                 {% endif %}
-                <div class="avatar mb-4 transition duration-300 group-hover:scale-105">
-                    <div class="w-48 lg:w-35 2xl:4-48 rounded-full ring-3 ring-primary">
+                {% if profile.is_plus %}
+                    <div class="tooltip absolute top-2 right-2" data-tip="PS+">
+                        <img src="{% static 'images/plus.png' %}" class="w-7 shrink-0 self-end hover:scale-105" />
+                    </div>
+                {% endif %}
+                <div class="avatar mb-4 transition duration-300 mt-6 group-hover:scale-105">
+                    <div class="w-48 lg:w-35 2xl:4-48 rounded-full ring-3 ring-primary {% if profile.user_is_premium %}border-4 shimmer{% endif %}">
                         <img src="{{ profile.avatar_url }}" alt="{{ profile.psn_username }}'s avatar" class="hover:scale-105" />
                     </div>
                 </div>
@@ -94,6 +101,9 @@
                     <h1 class="text-2xl lg:text-lg 2xl:text-2xl text-accent text-center italic hover:scale-105">{{ profile.flag }}</h1>
                 </div>
                 <h3 class="text-sm lg:text-xs 2xl:text-sm text-base-content/70 text-center pr-1 line-clamp-2 italic hover:scale-105">{{ profile.about_me }}</h3>
+                {% if profile.user_is_premium %}
+                    <h3 class="text-lg lg:text-base 2xl:text-lg legendary-title text-center pr-1 line-clamp-1 italic hover:scale-105">{{ profile.selected_title }}</h3>
+                {% endif %}
                 <a href="{% url 'trophy_case' profile.psn_username %}" class="btn btn-primary btn-lg">View Trophy Case</a>
             </div>
             <div class="divider divider-vertical lg:divider-horizontal"></div>
@@ -241,26 +251,46 @@
             <h3 class="text-2xl sm:text-3xl text-base-content text-center italic mb-2 hover:scale-105"><span class="text-trophy-platinum">Platinum</span> Trophy Case</h3>
             <div class="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-5 xl:grid-cols-10 gap-2 justify-self-center">
                 {% for item in trophy_case %}
-                {% with item.earned_trophy.trophy as trophy %}
-                    <a href="{% url 'game_detail_with_profile' trophy.game.np_communication_id profile.psn_username %}" class="card bg-base-100 border-2 border-base-300 shadow-md shadow-neutral hover:scale-105 hover:border-primary hover:shadow-primary cursor-pointer">
-                        <div class="card-body p-2">
-                            <div class="hover-3d">
-                                <figure class="w-full border-4 border-base-300 shadow-md shadow-neutral">
-                                    <img src="{{ trophy.trophy_icon_url }}" />
-                                </figure>
-                                <div></div>
-                                <div></div>
-                                <div></div>
-                                <div></div>
-                                <div></div>
-                                <div></div>
-                                <div></div>
-                                <div></div>
+                {% if item %}
+                    {% with item.earned_trophy.trophy as trophy %}
+                        <a href="{% url 'game_detail_with_profile' trophy.game.np_communication_id profile.psn_username %}" class="card bg-base-100 border-2 border-base-300 shadow-md shadow-neutral hover:scale-105 hover:border-primary hover:shadow-primary cursor-pointer">
+                            <div class="card-body p-2">
+                                <div class="hover-3d">
+                                    <figure class="w-full border-4 border-base-300 shadow-md shadow-neutral">
+                                        <img src="{{ trophy.trophy_icon_url }}" />
+                                    </figure>
+                                    <div></div>
+                                    <div></div>
+                                    <div></div>
+                                    <div></div>
+                                    <div></div>
+                                    <div></div>
+                                    <div></div>
+                                    <div></div>
+                                </div>
+                                <h4 class="text-xs text-base-content text-center font-semibold pr-1 italic line-clamp-2">{{ trophy.game.title_name }}</h4>
                             </div>
-                            <h4 class="text-xs text-base-content text-center font-semibold pr-1 italic line-clamp-2">{{ trophy.game.title_name }}</h4>
+                        </a>
+                    {% endwith%}
+                {% else %}
+                    <div class="card bg-base-200 border-2 border-dashed border-base-300 shadow-md opacity-50 cursor-not-allowed">
+                        <div class="card-body p-2 flex items-center justify-center">
+                            {% if profile.user_is_premium or forloop.counter <= 3 %}
+                            <!-- Regular placeholder for premium (all slots) or non-premium (first 3) -->
+                            <figure class="w-full h-full flex items-center justify-center">
+                                <img src="{% static 'images/badges/default.png' %}" class="w-full" alt="Placeholder" />
+                            </figure>
+                            <h4 class="text-xs text-base-content text-center font-semibold italic">Select Trophy</h4>
+                        {% else %}
+                            <!-- Locked placeholder for non-premium (slots 4-10) -->
+                             <figure class="w-full h-full flex items-center justify-center">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-15" viewBox="0 0 24 24" fill="none" stroke="var(--color-base-content)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+                            </figure>
+                            <h4 class="text-xs text-base-content text-center font-semibold italic">Premium</h4>
+                        {% endif %}
                         </div>
-                    </a>
-                {% endwith%}
+                    </div>
+                {% endif %}
                 {% endfor %}
             </div>
         {% endif %}

@@ -706,6 +706,8 @@ class ProfileDetailView(ProfileHotbarMixin, DetailView):
 
         # Trophy Case Selections
         trophy_case = list(UserTrophySelection.objects.filter(profile=profile).order_by('-earned_trophy__earned_date_time'))
+        max_trophies = 10
+        trophy_case = trophy_case + [None] * (max_trophies - len(trophy_case))
 
         if tab == 'games':
             form = ProfileGamesForm(self.request.GET)
