@@ -318,11 +318,11 @@ class UserConceptRatingAdmin(admin.ModelAdmin):
 
 @admin.register(Badge)
 class BadgeAdmin(admin.ModelAdmin):
-    list_display = ['name', 'tier', 'badge_type', 'series_slug', 'display_series', 'requires_all', 'min_required', 'earned_count']
+    list_display = ['name', 'tier', 'badge_type', 'series_slug', 'display_series', 'required_concepts', 'requires_all', 'min_required', 'earned_count']
     list_filter = ['tier', 'badge_type']
     search_fields = ['name', 'series_slug']
     filter_horizontal = ['concepts',]
-    fields = ['name', 'series_slug', 'description', 'badge_image', 'base_badge', 'tier', 'badge_type', 'display_title', 'display_series', 'user_title', 'discord_role_id', 'requires_all', 'min_required', 'requirements', 'concepts', 'earned_count']
+    fields = ['name', 'series_slug', 'description', 'badge_image', 'base_badge', 'tier', 'badge_type', 'display_title', 'display_series', 'user_title', 'discord_role_id', 'requires_all', 'min_required', 'requirements', 'concepts', 'required_concepts', 'earned_count']
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         if db_field.name == 'base_badge':
