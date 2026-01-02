@@ -5,11 +5,11 @@
         <div class="relative card-body m-0 px-3 py-3">
             <div class="absolute top-2 right-4 text-lg text-base-content font-bold hover:scale-105">{{ profile.flag }}</div>
             {% if not profile.psn_history_public %}
-                <div class="tooltip absolute top-2 left-4 hover:scale-105" data-tip="Game Data Privated">
+                <div class="tooltip absolute top-2 left-4 z-50 hover:scale-105" data-tip="Game Data Privated">
                     <svg xmlns="http://www.w3.org/2000/svg" class="mx-auto" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="var(--color-error)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2"></polygon><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
                 </div>
             {% elif profile.user_is_premium %}
-                <div class="tooltip absolute top-2 left-4 hover:scale-105" data-tip="Premium User">
+                <div class="tooltip absolute top-2 left-4 z-50 hover:scale-105" data-tip="Premium User">
                     <img src="{% static 'images/badges/default.png' %}" class="w-7.5 h-7.5" />
                 </div>
             {% endif %}

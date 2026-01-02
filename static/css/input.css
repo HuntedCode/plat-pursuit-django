@@ -94,7 +94,6 @@
   }
   .shimmer {
       position: relative;
-      overflow: hidden;
       animation: shimmer 3s infinite linear;
   }
   @keyframes shimmer {
