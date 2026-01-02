@@ -890,7 +890,8 @@ class TrophyCaseView(ProfileHotbarMixin, ListView):
         context['toggle_selection_url'] = reverse('toggle-selection')
 
         is_own_profile = self.request.user.is_authenticated and self.request.user.profile == profile
-        max_selections = 10 if profile.user_is_premium else 3
+        max_selections = 10 if profile.user_is_premium else 3 if is_own_profile else 0
+        context['max_selections'] = max_selections
 
         return context
 
@@ -907,11 +908,18 @@ class ToggleSelectionView(LoginRequiredMixin, ProfileHotbarMixin, View):
             if earned_trophy.profile != profile:
                 return JsonResponse({'success': False, 'error': 'Unauthorized: Not your trophy'}, status=403)
             
+            is_premium = profile.user_is_premium
+            max_selections = 10 if is_premium else 3
+            current_count = UserTrophySelection.objects.filter(profile=profile).count()
+
             selection, created = UserTrophySelection.objects.get_or_create(profile=profile, earned_trophy_id=earned_trophy_id)
             if not created:
                 selection.delete()
                 action = 'removed'
             else:
+                if current_count >= max_selections:
+                    selection.delete()
+                    return JsonResponse({'success': False, 'error': f'Max selections reached ({max_selections})'}, status=400)
                 action = 'added'
             return JsonResponse({'success': True, 'action': action})
         except EarnedTrophy.DoesNotExist:

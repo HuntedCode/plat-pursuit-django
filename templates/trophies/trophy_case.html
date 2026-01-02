@@ -55,7 +55,7 @@
 
     {% if request.user == profile.user %}
         <div class="fixed bottom-4 right-4 bg-base-100 p-2 rounded-box shadow-md shadow-accent border-4 border-accent z-20">
-            <span id="selected-counter" class="font-bold">Selected: {{ selected_count }}/10</span>
+            <span id="selected-counter" class="font-bold">Selected: {{ selected_count }}/{{ max_selections }}</span>
         </div>
     {% endif %}
 
@@ -78,6 +78,7 @@
     <script>
         const toggleSelectionUrl = "{{ toggle_selection_url }}";
         let selectedCount = {{ selected_count }};
+        const maxSelections = {{ max_selections }};
         document.addEventListener('DOMContentLoaded', function() {
             const grid = document.getElementById('items-grid');
             if (!grid) return;
@@ -91,7 +92,7 @@
 
                 const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
                 const counter = document.getElementById('selected-counter');
-                if (selectedCount < 10 || card.classList.contains('selected')) {
+                if (selectedCount < maxSelections || card.classList.contains('selected')) {
                     fetch(toggleSelectionUrl, {
                         method: 'POST',
                         headers: {
@@ -112,7 +113,7 @@
                                 card.classList.remove('border-primary', 'shadow-primary', 'scale-103', 'selected');
                                 selectedCount--;
                             }
-                            counter.textContent = `Selected: ${selectedCount}/10`;
+                            counter.textContent = `Selected: ${selectedCount}/${maxSelections}`;
                         } else {
                             console.error('Toggle failed');
 

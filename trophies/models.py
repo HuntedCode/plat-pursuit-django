@@ -690,9 +690,6 @@ class UserTrophySelection(models.Model):
 
     class Meta:
         unique_together = ['profile', 'earned_trophy']
-        Indexes = [
-            models.Index(fields=['profile'], name='trophy_sel_profile_idx'),
-        ]
     
     def save(self, *args, **kwargs):
         if self.profile.trophy_selections.count() >= 10 and not self.pk:
