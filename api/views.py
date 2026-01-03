@@ -135,8 +135,9 @@ class RefreshView(APIView):
             profile = Profile.objects.get(discord_id=discord_id)
             time_since_last_sync = profile.get_time_since_last_sync()
             is_syncing = profile.attempt_sync()
-            if not is_syncing or (admin_override or not profile.psn_history_public):
-                PSNManager.profile_refresh(profile)
+            if is_syncing or (admin_override or not profile.psn_history_public):
+                if not is_syncing:
+                    PSNManager.profile_refresh(profile)
 
                 start_time = timezone.now()
                 timeout_seconds = 30
