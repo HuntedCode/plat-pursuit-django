@@ -127,6 +127,7 @@ class GameAdmin(admin.ModelAdmin):
         ),
     )
     actions = ['toggle_is_regional', 'add_psvr_platform']
+    autocomplete_fields=['concept']
 
     @admin.action(description="Toggle is_regional for selected games")
     def toggle_is_regional(self, request, queryset):
