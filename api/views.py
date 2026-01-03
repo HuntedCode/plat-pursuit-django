@@ -153,7 +153,7 @@ class RefreshView(APIView):
                     time.sleep(poll_interval_seconds)
 
             else:
-                total_seconds = (timedelta(hours=1) - time_since_last_sync).total_seconds()
+                total_seconds = profile.get_seconds_to_next_sync()
                 minutes = math.ceil(total_seconds / 60)
                 return Response({'linked': True, 'succes': False, 'message': f"Too many profile refresh requests! Please try again in: {int(minutes)} minutes"})
         except Profile.DoesNotExist:
