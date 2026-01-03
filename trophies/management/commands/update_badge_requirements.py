@@ -6,4 +6,5 @@ class Command(BaseCommand):
         badges = Badge.objects.all()
         for badge in badges:
             badge.update_required()
+            badge.update_most_recent_concept()
         self.stdout.write(self.style.SUCCESS(f"Updated requirements for {len(badges)} badges successfully!"))
