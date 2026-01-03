@@ -2,7 +2,7 @@ from django.contrib import admin, messages
 from django.contrib.admin import SimpleListFilter
 from django.db import transaction
 from django.db.models import Q
-from .models import Profile, Game, Trophy, EarnedTrophy, ProfileGame, APIAuditLog, FeaturedGame, FeaturedProfile, Event, Concept, TitleID, TrophyGroup, UserTrophySelection, UserConceptRating, Badge, UserBadge, UserBadgeProgress, FeaturedGuide
+from .models import Profile, Game, Trophy, EarnedTrophy, ProfileGame, APIAuditLog, FeaturedGame, FeaturedProfile, Event, Concept, TitleID, TrophyGroup, UserTrophySelection, UserConceptRating, Badge, UserBadge, UserBadgeProgress, FeaturedGuide, Stage
 
 
 # Register your models here.
@@ -316,18 +316,31 @@ class UserConceptRatingAdmin(admin.ModelAdmin):
     list_filter = ('created_at', 'updated_at')
     search_fields = ('profile__psn_username', 'concept__unified_title')
 
+class StageInline(admin.TabularInline):
+    model = Stage
+    extra = 1
+    fields = ('stage_number', 'title', 'stage_icon', 'concepts', 'required_tiers')
+    autocomplete_fields = ['concepts']
+
 @admin.register(Badge)
 class BadgeAdmin(admin.ModelAdmin):
-    list_display = ['name', 'tier', 'badge_type', 'series_slug', 'display_series', 'required_concepts', 'requires_all', 'min_required', 'earned_count']
+    list_display = ['name', 'tier', 'badge_type', 'series_slug', 'display_series', 'required_stages', 'requires_all', 'min_required', 'earned_count', 'most_recent_concept']
     list_filter = ['tier', 'badge_type']
     search_fields = ['name', 'series_slug']
     filter_horizontal = ['concepts',]
-    fields = ['name', 'series_slug', 'description', 'badge_image', 'base_badge', 'tier', 'badge_type', 'display_title', 'display_series', 'user_title', 'discord_role_id', 'requires_all', 'min_required', 'requirements', 'concepts', 'required_concepts', 'earned_count']
+    fields = ['name', 'series_slug', 'description', 'badge_image', 'base_badge', 'tier', 'badge_type', 'display_title', 'display_series', 'user_title', 'discord_role_id', 'requires_all', 'min_required', 'requirements', 'concepts', 'earned_count']
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         if db_field.name == 'base_badge':
             kwargs['queryset'] = Badge.objects.filter(tier=1)
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
+@admin.register(Stage)
+class StageAdmin(admin.ModelAdmin):
+    list_display = ('__str__', 'series_slug', 'stage_number', 'title')
+    list_filter = ('series_slug', 'stage_number')
+    search_fields = ('title',)
+    autocomplete_fields = ['concepts']
 
 @admin.register(UserBadge)
 class UserBadgeAdmin(admin.ModelAdmin):
