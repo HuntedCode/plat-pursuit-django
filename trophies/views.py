@@ -1135,7 +1135,8 @@ class BadgeDetailView(ProfileHotbarMixin, DetailView):
             context['progress'] = progress
             context['progress_percent'] = progress.completed_concepts / badge.required_stages * 100 if progress and badge.required_stages > 0 else 0
         else:
-            context['badge'] = series_badges.filter(tier=1).first()
+            badge = series_badges.filter(tier=1).first()
+            context['badge'] = badge
 
         stages = Stage.objects.filter(series_slug=badge.series_slug).order_by('stage_number').prefetch_related(
             Prefetch('concepts__games', queryset=Game.objects.all().order_by('title_name'))
