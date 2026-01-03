@@ -871,8 +871,15 @@ class TrophyCaseView(ProfileHotbarMixin, ListView):
     paginate_by = 25
 
     def get_queryset(self):
+        form = TrophySearchForm(self.request.GET)
         profile = get_object_or_404(Profile, psn_username=self.kwargs['psn_username'].lower())
-        return EarnedTrophy.objects.filter(profile=profile, earned=True, trophy__trophy_type='platinum').select_related('trophy', 'trophy__game').order_by(F('earned_date_time').desc(nulls_last=True))
+        if form.is_valid():
+            query = form.cleaned_data.get('query')
+            qs = EarnedTrophy.objects.filter(profile=profile, earned=True, trophy__trophy_type='platinum').select_related('trophy', 'trophy__game').order_by(F('earned_date_time').desc(nulls_last=True))
+
+            if query:
+                qs = qs.filter(trophy__game__title_name__icontains=query)
+            return qs
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)

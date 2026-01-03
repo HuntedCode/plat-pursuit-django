@@ -200,6 +200,9 @@ class GameDetailForm(forms.Form):
         label='Sort By',
     )
 
+class TrophyCaseForm(forms.Form):
+    query = forms.CharField(required=False, label='Search by game name')
+
 class PremiumSettingsForm(forms.ModelForm):
     selected_background = forms.ModelChoiceField(
         queryset=Concept.objects.none(),
