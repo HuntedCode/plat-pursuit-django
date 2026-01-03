@@ -83,6 +83,8 @@ class PsnApiService:
                 # NEED TO UPDATE ALL TROPHIES FOR THIS GAME!
                 needs_trophy_update = True
                 logger.warning(f"TROPHIES NEED TO BE UPDATED FOR {game.title_name}")
+            if not game.lock_title:
+                game.title_name = trophy_title.title_name
             game.trophy_set_version = trophy_title.trophy_set_version
             game.np_service_name = trophy_title.np_service_name
             game.title_detail = trophy_title.title_detail
@@ -162,10 +164,8 @@ class PsnApiService:
                 except ProfileGame.DoesNotExist:
                     logger.error(f"Could not find ProfileGame entry for {profile} - {game}")
                     return False
-                if not game.lock_title:
-                    game.title_name = title_stats.name
                 game.title_image = title_stats.image_url
-                game.save(update_fields=['title_name', 'title_image'])
+                game.save(update_fields=['title_image'])
                 profile_game.play_count = title_stats.play_count
                 profile_game.first_played_date_time = title_stats.first_played_date_time
                 profile_game.last_played_date_time = title_stats.last_played_date_time
