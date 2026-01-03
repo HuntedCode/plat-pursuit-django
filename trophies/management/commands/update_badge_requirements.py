@@ -5,6 +5,5 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         badges = Badge.objects.all()
         for badge in badges:
-            badge.required_concepts = badge.compute_required()
-            badge.save(update_fields=['required_concepts'])
+            badge.update_required()
         self.stdout.write(self.style.SUCCESS(f"Updated requirements for {len(badges)} badges successfully!"))

@@ -1,6 +1,7 @@
 from django.db import models
 from django.utils import timezone
 from users.models import CustomUser
+from django.contrib.postgres.fields import ArrayField
 from django.core.validators import RegexValidator, MinValueValidator, MaxValueValidator
 from django.db import transaction
 from django.db.models import F, Avg, Count, Max, Min
@@ -754,6 +755,7 @@ class Badge(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     earned_count = models.PositiveIntegerField(default=0, help_text="Count of users who have earned this badge tier")
     required_concepts = models.PositiveIntegerField(default=0, help_text="Denormalized count of required concepts for series badges")
+    required_stages = models.PositiveIntegerField(default=0, help_text="Denormalized count of required stages for series badges")
     required_value = models.PositiveIntegerField(default=0, help_text="Denormalized required value for misc badges")
 
     class Meta:
@@ -815,12 +817,57 @@ class Badge(models.Model):
         }
 
     def update_most_recent_concept(self):
-        if not self.concepts.exists():
+        concepts = Concept.objects.filter(stages__series_slug=self.series_slug).distinct()
+        if not concepts:
             self.most_recent_concept = None
         else:
-            max_date = self.concepts.aggregate(Max('release_date'))['release_date__max']
-            self.most_recent_concept = self.concepts.filter(release_date=max_date).first() if max_date else None
+            max_date = concepts.aggregate(Max('release_date'))['release_date__max']
+            self.most_recent_concept = concepts.filter(release_date=max_date).first() if max_date else None
             self.save(update_fields=['most_recent_concept'])
+
+    def update_required(self):
+        from trophies.models import Stage
+        if self.badge_type == 'series':
+            stages = Stage.objects.filter(series_slug=self.series_slug)
+            required_count = 0
+            for stage in stages:
+                if stage.stage_number == 0:
+                    continue
+                if stage.applies_to_tier(self.tier):
+                    required_count += 1
+            self.required_stages = required_count
+            self.save(update_fields=['required_stages'])
+
+    def get_stage_completion(self, profile: Profile) -> dict[int, bool]:
+        if not profile:
+            return {}
+        
+        from django.db.models import Q
+
+        stages = Stage.objects.filter(Q(series_slug=self.series_slug) & (Q(required_tiers__len=0) | Q(required_tiers__contains=[self.tier]))).prefetch_related('concepts__games')
+
+        is_mod_platform = self.tier in [1, 2]
+        is_plat_check = self.tier in [1, 3]
+        is_progress_check = self.tier in [2, 4]
+
+        completion = {}
+        for stage in stages:
+            concepts = stage.concepts.all()
+
+            if not concepts:
+                continue
+
+            games_qs = Game.objects.filter(concept__in=concepts)
+            if is_mod_platform:
+                from trophies.utils import MODERN_PLATFORMS
+                platform_filter = Q()
+                for plat in MODERN_PLATFORMS:
+                    platform_filter |= Q(title_platform__contains=plat)
+                games_qs = games_qs.filter(platform_filter)
+            
+            has_completion = ProfileGame.objects.filter(profile=profile, game__in=games_qs).filter(Q(has_plat=True) if is_plat_check else Q(progress=100) if is_progress_check else Q(pk__isnull=True)).exists()
+            completion[stage.stage_number] = has_completion
+        return completion
 
     def compute_required(self):
         from django.db.models import Q, Exists, OuterRef
@@ -880,6 +927,27 @@ class UserBadgeProgress(models.Model):
         indexes = [
             models.Index(fields=['profile', 'badge'], name='userbadgeprogress_idx'),
         ]
+
+class Stage(models.Model):
+    series_slug = models.SlugField(max_length=100, db_index=True, help_text="Series slug this stage applies to.")
+    stage_number = models.IntegerField(validators=[MinValueValidator(0)], help_text="Stage number (0 for optional/tangential concepts.)")
+    title = models.CharField(max_length=255, blank=True, help_text="Optional stage title")
+    stage_icon = models.URLField(null=True, blank=True)
+    concepts = models.ManyToManyField(Concept, related_name='stages', blank=True, help_text='Concepts required for this stage.')
+    required_tiers = ArrayField(models.IntegerField(choices=[(1, 'Bronze'), (2, 'Silver'), (3, 'Gold'), (4, 'Platinum')]), blank=True, default=list)
+
+    class Meta:
+        unique_together = ['series_slug', 'stage_number']
+        ordering = ['stage_number']
+        indexes = [
+            models.Index(fields=['series_slug', 'stage_number'], name='stage_slug_number_idx')
+        ]
+
+    def __str__(self):
+        return f"{self.series_slug} - Stage {self.stage_number}"
+        
+    def applies_to_tier(self, tier: int) -> bool:
+        return not self.required_tiers or tier in self.required_tiers
 
 class APIAuditLog(models.Model):
     timestamp = models.DateTimeField(auto_now_add=True)
