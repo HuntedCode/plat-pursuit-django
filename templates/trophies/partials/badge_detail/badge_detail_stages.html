@@ -8,24 +8,26 @@
             <div class="flex flex-col gap-4 self-end">
                 <h1 class="text-lg sm:text-xl md:text-2xl xl:text-3xl text-center text-base-content line-clamp-1 pr-1 italic"><span class="text-accent font-semibold">Stage {{ stage.stage_number }}:</span> {{ stage.title }}</h1>
                 <div class="flex flex-row gap-4 justify-end">
-                    {% if not stage.required_tiers %}
-                        {% for i in '1234' %}
-                            <div class="tooltip" data-tip="Required for {{ i|badge_tier }}">
-                                <figure class="w-10 h-10 hover:scale-105">
-                                    <img src="{% static 'images/badges/backdrops/'|add:i|add:'_backdrop.png' %}" class="w-full" />
-                                </figure>
-                            </div>
-                        {% endfor %}
-                    {% else %}
-                        {% for i in stage.required_tiers %}
-                            <div class="tooltip" data-tip="Required for {{ i|badge_tier }}">
-                                <figure class="w-10 h-10 hover:scale-105">
-                                    {% with i|stringformat:'s' as i %}
+                    {% if not stage.tier == 0 %}
+                        {% if not stage.required_tiers %}
+                            {% for i in '1234' %}
+                                <div class="tooltip" data-tip="Required for {{ i|badge_tier }}">
+                                    <figure class="w-10 h-10 hover:scale-105">
                                         <img src="{% static 'images/badges/backdrops/'|add:i|add:'_backdrop.png' %}" class="w-full" />
-                                    {% endwith %}
-                                </figure>
-                            </div>
-                        {% endfor %}
+                                    </figure>
+                                </div>
+                            {% endfor %}
+                        {% else %}
+                            {% for i in stage.required_tiers %}
+                                <div class="tooltip" data-tip="Required for {{ i|badge_tier }}">
+                                    <figure class="w-10 h-10 hover:scale-105">
+                                        {% with i|stringformat:'s' as i %}
+                                            <img src="{% static 'images/badges/backdrops/'|add:i|add:'_backdrop.png' %}" class="w-full" />
+                                        {% endwith %}
+                                    </figure>
+                                </div>
+                            {% endfor %}
+                        {% endif %}
                     {% endif %}
                 </div>
             </div>
