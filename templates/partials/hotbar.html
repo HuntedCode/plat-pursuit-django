@@ -1,7 +1,7 @@
 {% load custom_filters %}
-<div id="hotbar-container" class="block xl:sticky top-2 z-40 bg-base-100 border-4 border-base-300 rounded-full shadow-md shadow-neutral p-0 w-full lg:w-3/4 mx-auto transition-all duration-300 ease-in-out">
+<div id="hotbar-container" class="block xl:sticky top-2 z-40 bg-base-100 border-4 border-base-300 rounded-full shadow-md shadow-neutral p-0 w-full xl:w-3/4 mx-auto transition-all duration-300 ease-in-out">
     <div class="border-4 border-primary rounded-full p-2">
-        <div class="container mx-auto flex flex-col lg:flex-row justify-center lg:justify-between items-center gap-2 lg:gap-4 lg:px-6">
+        <div class="container mx-auto flex flex-col xl:flex-row justify-center xl:justify-between items-center gap-2 xl:gap-4 xl:px-6">
             <div class="flex flex-row items-center gap-4">
                 {% if hotbar.profile %}
                     <a href="{% url 'profile_detail' hotbar.profile.psn_username %}" class="avatar">
@@ -11,24 +11,24 @@
                     </a>
                     <a href="{% url 'profile_detail' hotbar.profile.psn_username %}" class="flex flex-row items-center gap-3 cursor-pointer">
                         <span id="sync-user" class="text-xs sm:text-base font-bold">{{ hotbar.profile.display_psn_username }}</span>
-                        <span id="sync-badge" class="badge badge-xs lg:badge-md {% if hotbar.sync_status == 'synced' %}badge-success{% elif hotbar.sync_status == 'syncing' %}badge-warning{% else %}badge-error{% endif %} font-bold border-2 border-base-300 shadow-md shadow-neutral ml-2 hover:scale-105">{{ hotbar.sync_status|sync_status_display }}</span>
+                        <span id="sync-badge" class="badge badge-xs xl:badge-md {% if hotbar.sync_status == 'synced' %}badge-success{% elif hotbar.sync_status == 'syncing' %}badge-warning{% else %}badge-error{% endif %} font-bold border-2 border-base-300 shadow-md shadow-neutral ml-2 hover:scale-105">{{ hotbar.sync_status|sync_status_display }}</span>
                         <div id="sync-progress-div" class="flex flex-row items-center gap-1 {% if not hotbar.sync_status == 'syncing' %}hidden{% endif %}">
                             <span id="sync-progress-percent" class="text-sm text-base-content text-center">{{ hotbar.progress_percentage|floatformat:0|default:0 }}%</span>
                             <progress id="sync-progress-bar" class="progress progress-primary w-32" value="0" max="100"></progress>
                             <span class="loading loading-infinity loading-md"></span>
                         </div>
                     </a>
-                    <button id="sync-now-btn" class="btn btn-primary btn-xs lg:btn-sm border-2 border-base-300 shadow-md shadow-neutral {% if hotbar.sync_status == 'syncing' %} hidden{% endif %}" data-sync-status="{{ hotbar.sync_status }}" data-seconds="{{ hotbar.seconds_to_next_sync }}" {% if hotbar.seconds_to_next_sync > 0 %}disabled{% endif %}></button>
+                    <button id="sync-now-btn" class="btn btn-primary btn-xs xl:btn-sm border-2 border-base-300 shadow-md shadow-neutral {% if hotbar.sync_status == 'syncing' %} hidden{% endif %}" data-sync-status="{{ hotbar.sync_status }}" data-seconds="{{ hotbar.seconds_to_next_sync }}" {% if hotbar.seconds_to_next_sync > 0 %}disabled{% endif %}></button>
                 {% else %}
                     <p class="text-sm">Link your PSN profile to see status.</p>
                 {% endif %}
             </div>
             <div class="">
-                <form id="sync-form" method="post" action="{% url 'search_sync_profile' %}" class="flex-row items-center gap-2 lg:gap-4">
+                <form id="sync-form" method="post" action="{% url 'search_sync_profile' %}" class="flex-row items-center gap-2 xl:gap-4">
                     {% csrf_token %}
-                    <input id="add-sync-input" type="text" name="psn_username" placeholder="Enter PSN Username" class="input input-accent input-sm w-50 xl:w-75 shrink-1" required />
-                    <button id="add-sync-btn" type="submit" class="btn btn-accent btn-xs lg:btn-sm border-2 border-base-300 shadow-md shadow-neutral ml-2">Sync Profile</button>
-                    <a href="" id="add-sync-anchor" class="btn btn-success btn-xs lg:btn-sm border-2 border-base-300 shadow-md shadow-neutral hidden">Visit Profile</a>
+                    <input id="add-sync-input" type="text" name="psn_username" placeholder="Enter PSN Username" class="input input-accent input-sm w-30 md:w-50 2xl:w-75 shrink-1" required />
+                    <button id="add-sync-btn" type="submit" class="btn btn-accent btn-xs xl:btn-sm border-2 border-base-300 shadow-md shadow-neutral ml-2">Sync Profile</button>
+                    <a href="" id="add-sync-anchor" class="btn btn-success btn-xs xl:btn-sm border-2 border-base-300 shadow-md shadow-neutral hidden">Visit Profile</a>
                     <span id="add-sync-load" class="loading loading-spinner loading-lg hidden"></span>
                     <p id="add-sync-error-text" class="text-xs text-error font-bold line-clamp-2 pr-1 italic hidden">Sync error: check spelling or account perms, refresh the page and try again.</p>
                 </form>
@@ -36,7 +36,7 @@
         </div>
     </div>
 </div>
-<button id="hotbar-toggle" class="hidden lg:block sticky top-18 left-1/2 transform -translate-x-1/2 z-50 bg-base-300 border-2 border-base-300 rounded-b-full px-4 py-0 shadow-md shadow-neutral cursor-pointer transition-all duration-300 ease-in-out hover:bg-base-200 hover:scale-105 group">
+<button id="hotbar-toggle" class="hidden xl:block sticky top-18 left-1/2 transform -translate-x-1/2 z-50 bg-base-300 border-2 border-base-300 rounded-b-full px-4 py-0 shadow-md shadow-neutral cursor-pointer transition-all duration-300 ease-in-out hover:bg-base-200 hover:scale-105 group">
     <svg id="toggle-icon" class="w-5 h-5 rotate-180 group-hover:scale-115" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://2000.svg">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="4" d="M19 9l-7 7-7-7" />
     </svg>
