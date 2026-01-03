@@ -20,7 +20,7 @@
                         {% endif %}
                     </div>
                     <div class="flex flex-col items-center lg:items-start justify-center">
-                        <h3 class="text-lg font-bold line-clamp-1 italic pr-1 hover:scale-105">{{ badge.effective_display_title }} - {% if item.is_earned %}<span class="text-{{ badge|badge_color }}">{{ badge|badge_tier }}</span>{% else %}Unearned{% endif %}</h3>
+                        <h3 class="text-lg font-bold line-clamp-1 italic pr-1 hover:scale-105">{{ badge.effective_display_title }} - {% if item.is_earned %}<span class="text-{{ badge|badge_color }}">{{ badge.tier|badge_tier }}</span>{% else %}Unearned{% endif %}</h3>
                         <h2 class="text-base text-base-content text-start line-clamp-1 pr-1 hover:scale-105">{{ badge.effective_display_series }}</h2>
                         <h6 class="text-xs text-base-content/70 text-start italic line-clamp-1 pr-1 hover:scale-105">{{ badge.effective_description }}</h6>
                         <h5 class="text-xs text-base-content/70 font-semibold italic pr-1 hover:scale-105">Total games: {{ item.total_games }} | Total Earned: {{ item.tier1_earned_count }}</h5>                  
@@ -61,7 +61,7 @@
                             {% with item.progress_percentage as percent %}
                                 <div class="flex flex-col gap-0 items-center self-center w-full">
                                     <progress class="progress {% if percent < 33.0 %}progress-error{% elif percent < 66.0 %}progress-warning{% elif percent < 100.0 %}progress-success{% else %}progress-primary{% endif %} w-full hover:scale-105" value="{{ percent }}" max="100"></progress>
-                                    <p class="text-base text-base-content hover:scale-105">{{ item.completed_concepts }} / {{ item.required_concepts }} ({{ percent }}%)</p>
+                                    <p class="text-base text-base-content hover:scale-105">{{ item.completed_concepts }} / {{ item.required_stages }} ({{ percent }}%)</p>
                                 </div>
                             {% endwith %}
                         {% endif %}

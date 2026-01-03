@@ -80,8 +80,8 @@ def badge_color(badge):
         return 'primary'
 
 @register.filter
-def badge_tier(badge):
-    tier = badge.tier
+def badge_tier(tier):
+    tier = int(tier)
     if tier == 1:
         return 'Bronze'
     elif tier == 2:

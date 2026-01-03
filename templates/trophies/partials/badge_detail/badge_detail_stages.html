@@ -1,0 +1,34 @@
+{% load static custom_filters %}
+<div class="card bg-base-100 border-4 border-base-300 shadow-md shadow-neutral mb-4 transition-all duration-300 hover:border-primary hover:shadow-primary">  
+    <div class="card-body border-4 border-primary p-2 md:p-4">
+        <div class="flex flex-row items-center self-center justify-between gap-2 w-full">
+            <figure class="w-20 sm:w-22 md:w-25 xl:w-30 border-4 border-base-300 rounded-box hover:border-primary transition-all duration-300 hover:scale-105">
+                <img src="{{ stage.stage_icon }}" />
+            </figure>
+            <div class="flex flex-col gap-4 self-end">
+                <h1 class="text-lg sm:text-xl md:text-2xl xl:text-3xl text-center text-base-content line-clamp-1 pr-1 italic"><span class="text-accent font-semibold">Stage {{ stage.stage_number }}:</span> {{ stage.title }}</h1>
+                <div class="flex flex-row gap-4 justify-end">
+                    {% if not stage.required_tiers %}
+                        {% for i in '1234' %}
+                            <div class="tooltip" data-tip="Required for {{ i|badge_tier }}">
+                                <figure class="w-10 h-10 hover:scale-105">
+                                    <img src="{% static 'images/badges/backdrops/'|add:i|add:'_backdrop.png' %}" class="w-full" />
+                                </figure>
+                            </div>
+                        {% endfor %}
+                    {% else %}
+                        {% for i in stage.required_tiers %}
+                            <div class="tooltip" data-tip="Required for {{ i|badge_tier }}">
+                                <figure class="w-10 h-10 hover:scale-105">
+                                    {% with i|stringformat:'s' as i %}
+                                        <img src="{% static 'images/badges/backdrops/'|add:i|add:'_backdrop.png' %}" class="w-full" />
+                                    {% endwith %}
+                                </figure>
+                            </div>
+                        {% endfor %}
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

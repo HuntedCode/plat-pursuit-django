@@ -24,7 +24,7 @@ from random import choice
 from urllib.parse import urlencode
 from trophies.psn_manager import PSNManager
 from trophies.mixins import ProfileHotbarMixin
-from .models import Game, Trophy, Profile, EarnedTrophy, ProfileGame, TrophyGroup, UserTrophySelection, Badge, UserBadge, UserBadgeProgress, Concept, FeaturedGuide
+from .models import Game, Trophy, Profile, EarnedTrophy, ProfileGame, TrophyGroup, UserTrophySelection, Badge, UserBadge, UserBadgeProgress, Concept, FeaturedGuide, Stage
 from .forms import GameSearchForm, TrophySearchForm, ProfileSearchForm, ProfileGamesForm, ProfileTrophiesForm, ProfileBadgesForm, UserConceptRatingForm, BadgeSearchForm, GuideSearchForm, LinkPSNForm, GameDetailForm, BadgeCreationForm
 from .utils import redis_client, MODERN_PLATFORMS, ALL_PLATFORMS
 
@@ -816,8 +816,8 @@ class ProfileDetailView(ProfileHotbarMixin, DetailView):
                             next_badge = highest_badge
                             
                         progress_entry = UserBadgeProgress.objects.filter(profile=profile, badge=next_badge).first()
-                        if progress_entry and next_badge.required_concepts > 0:
-                            progress_percentage = (progress_entry.completed_concepts / next_badge.required_concepts) * 100
+                        if progress_entry and next_badge.required_stages > 0:
+                            progress_percentage = (progress_entry.completed_concepts / next_badge.required_stages) * 100
                         else:
                             progress_percentage = 0
                         if is_maxed:
@@ -1006,13 +1006,13 @@ class BadgeListView(ProfileHotbarMixin, ListView):
                 progress_badge = next_badge if next_badge else display_badge
 
                 progress = progress_dict.get(progress_badge.id) if progress_badge else None
-                required_concepts = progress_badge.required_concepts
+                required_stages = progress_badge.required_stages
                 completed_concepts = 0
                 progress_percentage = 0
 
                 if progress and progress_badge.badge_type == 'series':
                     completed_concepts = progress.completed_concepts
-                    progress_percentage = (completed_concepts / required_concepts) * 100 if required_concepts > 0 else 0
+                    progress_percentage = (completed_concepts / required_stages) * 100 if required_stages > 0 else 0
                 else:
                     completed_concepts = 0
                     progress_percentage = 0
@@ -1021,7 +1021,7 @@ class BadgeListView(ProfileHotbarMixin, ListView):
                     'badge': display_badge,
                     'tier1_earned_count': tier1_earned_count,
                     'completed_concepts': completed_concepts,
-                    'required_concepts': required_concepts,
+                    'required_stages': required_stages,
                     'progress_percentage': round(progress_percentage, 1),
                     'trophy_types': trophy_types,
                     'total_games': total_games,
@@ -1049,7 +1049,7 @@ class BadgeListView(ProfileHotbarMixin, ListView):
                         'badge': tier1,
                         'tier1_earned_count': tier1_earned_count,
                         'completed_concepts': 0,
-                        'required_concepts': tier1.required_concepts,
+                        'required_stages': tier1.required_stages,
                         'progress_percentage': 0,
                         'trophy_types': trophy_types,
                         'total_games': total_games,
@@ -1133,42 +1133,37 @@ class BadgeDetailView(ProfileHotbarMixin, DetailView):
 
             progress = UserBadgeProgress.objects.filter(profile=target_profile, badge=badge).first()
             context['progress'] = progress
-            context['progress_percent'] = progress.completed_concepts / badge.required_concepts * 100 if progress and badge.required_concepts > 0 else 0
+            context['progress_percent'] = progress.completed_concepts / badge.required_stages * 100 if progress and badge.required_stages > 0 else 0
         else:
             context['badge'] = series_badges.filter(tier=1).first()
 
-        highest_tier_badge = series_badges.order_by('-tier').first()
-        if highest_tier_badge:
-            if highest_tier_badge.concepts.count() > 0:
-                concepts = highest_tier_badge.concepts.all().order_by('-release_date')
-            else:
-                concepts = highest_tier_badge.base_badge.concepts.all().order_by('-release_date') if highest_tier_badge.base_badge and highest_tier_badge.base_badge.concepts.count() > 0 else Concept.objects.none()
-        else:
-            concepts = Concept.objects.none()
+        stages = Stage.objects.filter(series_slug=badge.series_slug).order_by('stage_number').prefetch_related(
+            Prefetch('concepts__games', queryset=Game.objects.all().order_by('title_name'))
+        )
+        
+        structured_data = []
+        for stage in stages:
+            games = set()
+            for concept in stage.concepts.all():
+                games.update(concept.games.all())
+            games = sorted(games, key=lambda g: g.title_name)
 
-        grouped_games = []
-        for concept in concepts:
-            games = concept.games.all().order_by('title_name')
-            game_data = []
-            for game in games:
-                is_modern = any(plat in MODERN_PLATFORMS for plat in game.title_platform) and game.is_obtainable
-                profile_game = ProfileGame.objects.filter(profile=target_profile, game=game).first() if target_profile else None
-                game_data.append({
-                    'game': game,
-                    'is_modern': is_modern,
-                    'profile_game': profile_game,
-                })
-            grouped_games.append({
-                'concept': concept,
-                'games': game_data,
+            profile_games = {}
+            if target_profile:
+                profile_games_qs = ProfileGame.objects.filter(profile=target_profile, game__in=games).select_related('game')
+                profile_games = {pg.game: pg for pg in profile_games_qs}
+
+            structured_data.append({
+                'stage': stage,
+                'games': [{'game': game, 'profile_game': profile_games.get(game, None)} for game in games]
             })
-        context['grouped_games'] = grouped_games
+
+        print(len(structured_data))
+        context['stage_data'] = structured_data
         context['is_earned'] = is_earned
 
-        if len(grouped_games) > 0:
-            recent_concept = grouped_games[0]['concept']
-            context['image_urls'] = {'bg_url': recent_concept.bg_url, 'recent_concept_icon_url': recent_concept.concept_icon_url}
-            context['recent_concept_name'] = recent_concept.unified_title
+        context['image_urls'] = {'bg_url': badge.most_recent_concept.bg_url, 'recent_concept_icon_url': badge.most_recent_concept.concept_icon_url}
+        context['recent_concept_name'] = badge.most_recent_concept.unified_title
 
         context['breadcrumb'] = [
             {'text': 'Home', 'url': reverse_lazy('home')},

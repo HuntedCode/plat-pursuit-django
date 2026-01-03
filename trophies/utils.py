@@ -186,6 +186,51 @@ def get_platform_filter(badge):
     return platform_filter
 
 @transaction.atomic
+def handle_badge(profile, badge, add_role_only=False):
+    from trophies.models import UserBadge, UserBadgeProgress
+    if not profile or not badge:
+        return
+    
+    if badge.badge_type == 'series':
+        stage_completion_dict = badge.get_stage_completion(profile)
+        badge_earned = True
+        completed_count = 0
+        for stage, is_complete in stage_completion_dict.items():
+            if stage == 0:
+                continue
+            elif not is_complete:
+                badge_earned = False
+                continue
+            completed_count += 1
+
+        progress, created = UserBadgeProgress.objects.get_or_create(profile=profile, badge=badge, defaults={'completed_concepts': completed_count})
+        if not created:
+            progress.completed_concepts = completed_count
+            progress.save(update_fields=['completed_concepts'])
+
+        user_badge_exists = False
+        badge_created = False
+        if badge_earned:
+            user_badge_exists = UserBadge.objects.filter(profile=profile, badge=badge).exists()
+            if badge_earned and not user_badge_exists:
+                UserBadge.objects.create(profile=profile, badge=badge)
+                badge_created = True
+                logger.info(f"Awarded badge {badge.effective_display_title} (tier: {badge.tier}) to {profile.display_psn_username}")
+        elif not badge_earned and user_badge_exists:
+            UserBadge.objects.filter(profile=profile, badge=badge).delete()
+            logger.info(f"Revoked badge {badge.effective_display_title} (tier: {badge.tier}) from {profile.display_psn_username}")
+        
+        if badge_created and badge.discord_role_id:
+            if profile.is_discord_verified and profile.discord_id:
+                notify_new_badge(profile, badge)
+                notify_bot_role_earned(profile, badge.discord_role_id)
+        elif add_role_only and badge.discord_role_id and user_badge_exists:
+            if profile.is_discord_verified and profile.discord_id:
+                notify_bot_role_earned(profile, badge.discord_role_id)
+
+        return badge_created
+
+@transaction.atomic
 def process_badge(profile, badge, notify_bot=False):
     """Handles progress update and earning check for a single badge."""
     from trophies.models import UserBadge, UserBadgeProgress

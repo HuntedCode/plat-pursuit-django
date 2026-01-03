@@ -25,15 +25,6 @@
                     <label class="label" for="{{ form.series_slug.id_for_label }}">Series Slug</label>
                     {{ form.series_slug }}
                 </div>
-                </div>
-                <div class="form-control">
-                    <label class="label" for="concepts-search">Select Concepts (searchable)</label>
-                    <input type="text" id="concepts-search" placeholder="Type to filter..." class="input input-bordered w-full mb-2" />
-                    <div id="concepts-list" class="max-h-48 overflow-y-auto border border-base-300 p-2 rounded-box">
-                        {{ form.concepts }}
-                    </div>
-                </div>
-                <button type="submit" class="btn btn-primary w-full mt-8">Create Badge Group</button>
             </form>
         </div>
     </div>

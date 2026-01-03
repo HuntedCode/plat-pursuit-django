@@ -4,21 +4,21 @@
     {% if profile %}
         <a href="{% url 'profile_detail' profile.psn_username %}" class="card shadow-lg shadow-neutral bg-base-100 border-4 border-base-300 w-full xl:w-9/30 transition-all duration-300 cursor-pointer hover:border-accent hover:shadow-accent">                    
             <div class="relative card-body flex flex-col gap-1 items-center justify-between">
-                <div class="avatar hover:scale-105">
+                <div class="avatar hover:scale-105 transition-all duration-300">
                     <div class="w-30 sm:w-35 md:w-40 lg:w-45 rounded-full ring-4 ring-primary">
                         <img class="bg-secondary/50" src="{{ profile.avatar_url }}" />
                     </div>
                 </div>
                 <div class="flex flex-col items-center">
                     <div class="flex flex-row items-end gap-2">
-                        <div class="text-xl sm:text-2xl text-base-content font-bold mt-4 line-clamp-2 hover:scale-105">{{ profile.display_psn_username }}</div>
+                        <div class="text-xl sm:text-2xl text-base-content font-bold mt-4 line-clamp-2">{{ profile.display_psn_username }}</div>
                         {% if profile.is_plus %}
-                            <img src="{% static 'images/plus.png' %}" class="w-7 h-7 mb-2 hover:scale-105" />
+                            <img src="{% static 'images/plus.png' %}" class="w-7 h-7 mb-2" />
                         {% endif %}
                     </div>
-                    <div class="text-sm sm:text-base text-base-content/70 italic pr-1 line-clamp-2 hover:scale-105">{{ profile.about_me }}</div>
+                    <div class="text-sm sm:text-base text-base-content/70 italic pr-1 line-clamp-2">{{ profile.about_me }}</div>
                 </div>
-                <div class="absolute top-2 right-4 text-xl md:text-2xl lg:text-3xl text-base-content font-bold text-center hover:scale-105">{{ profile.country_code }}</div>
+                <div class="absolute top-2 right-4 text-xl md:text-2xl lg:text-3xl text-base-content font-bold text-center">{{ profile.country_code }}</div>
             </div>
         </a>
     {% endif %}
@@ -28,8 +28,8 @@
                 {% include 'partials/badge.html' with layers=badge.get_badge_layers%}
             </figure>
             <div class="flex flex-col items-center">
-                <h3 class="text-xl sm:text-2xl font-bold line-clamp-1 italic pr-1 hover:scale-105">{{ badge.effective_display_title }} - {% if is_earned %}<span class="text-{{ badge|badge_color }}">{{ badge|badge_tier }}</span>{% else %}Unearned{% endif %}</h3>
-                <h2 class="text-lg text-base-content/70 text-center italic line-clamp-1 pr-1 hover:scale-105">{{ badge.effective_display_series }}</h2>
+                <h3 class="text-xl sm:text-2xl font-bold line-clamp-1 italic pr-1">{{ badge.effective_display_title }} - {% if is_earned %}<span class="text-{{ badge|badge_color }}">{{ badge.tier|badge_tier }}</span>{% else %}Unearned{% endif %}</h3>
+                <h2 class="text-lg text-base-content/70 text-center italic line-clamp-1 pr-1">{{ badge.effective_display_series }}</h2>
             </div>
         </div>
     </div>
@@ -50,8 +50,8 @@
                     <div></div>
                 </div>
                 <div class="flex flex-col items-center">
-                    <h3 class="text-xl sm:text-2xl font-bold line-clamp-1 italic pr-1 mb-0.5 hover:scale-105">Most Recent Game</h3>
-                    <h2 class="text-base text-base-content/70 text-center italic line-clamp-1 pr-1 hover:scale-105">{{ badge.most_recent_concept.unified_title }}</h2>
+                    <h3 class="text-xl sm:text-2xl font-bold line-clamp-1 italic pr-1 mb-0.5">Most Recent Game</h3>
+                    <h2 class="text-base text-base-content/70 text-center italic line-clamp-1 pr-1">{{ badge.most_recent_concept.unified_title }}</h2>
                 </div>
             </div>
         </div>

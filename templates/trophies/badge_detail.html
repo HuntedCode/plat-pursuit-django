@@ -8,21 +8,31 @@
         {% include 'trophies/partials/badge_detail/badge_detail_header.html' %}
     </section>
 
-    {% for group in grouped_games %}
-    {% with group.concept as concept %}
-        <section class="shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 w-full p-0 lg:p-4 mt-8">
-            {% include 'trophies/partials/badge_detail/badge_detail_concepts.html' %}
-            <div class="flex flex-col gap-4">
-                {% for game_data in group.games %}
-                {% with game_data.game as game %}
-                {% with game_data.profile_game as pgame %}
-                    {% include 'trophies/partials/badge_detail/badge_detail_items.html' %}
-                {% endwith %}
-                {% endwith %}
-                {% endfor %}
-            </div>
-        </section>
-    {% endwith %}
+    {% for data in stage_data %}
+        {% with data.stage as stage %}
+            <section class="shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 w-full p-0 lg:p-2 mt-8">
+                <div class="flex flex-row gap-2">
+                    <div class="hidden lg:block card sticky top-2 w-1/10 bg-base-100 border-4 border-base-300 shadow-md shadow-neutral h-full hover:border-secondary hover:shadow-secondary">
+                        <div class="card-body p-2 m-0">
+                            <span class="text-xl text-center">STAGE</span>
+                            <span class="text-7xl text-center">{{ stage.stage_number }}</span>
+                        </div>
+                    </div>
+                    <div class="w-full">
+                        {% include 'trophies/partials/badge_detail/badge_detail_stages.html' %}
+                        <div class="flex flex-col gap-4">
+                            {% for games in data.games %}
+                            {% with games.game as game %}
+                            {% with games.profile_game as pgame %}
+                                {% include 'trophies/partials/badge_detail/badge_detail_items.html' %}
+                            {% endwith %}
+                            {% endwith %}
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            </section> 
+        {% endwith %}
     {% endfor %}
 {% endwith %}
 {% endblock %}
