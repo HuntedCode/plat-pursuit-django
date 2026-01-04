@@ -1,0 +1,29 @@
+from django.core.management.base import BaseCommand
+from trophies.models import Badge, Profile
+from trophies.utils import handle_badge
+
+class Command(BaseCommand):
+    def add_arguments(self, parser):
+        parser.add_argument('--username', type=str, required=True)
+        parser.add_argument('--series', type=str, required=True)
+
+    def handle(self, *args, **options):
+        profile_str = options['profile']
+        series_slug = options['series']
+
+        if not profile_str or series_slug:
+                return
+        
+        try:
+                profile = Profile.objects.get(psn_username=profile_str)
+        except Profile.DoesNotExist:
+                self.stdout.write("Could not find profile.")
+                return
+
+        badges = Badge.objects.filter(series_slug=series_slug).order_by('tier')
+        checked_count = 0
+        for badge in badges:
+            handle_badge(profile, badge)
+            checked_count += 1
+        
+        self.stdout.write(self.style.SUCCESS(f"Checked {checked_count} badges successfully!"))

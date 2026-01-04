@@ -129,7 +129,7 @@ def get_platform_filter(badge):
     for plat in allowed_platforms:
         platform_filter |= Q(title_platform__contains=plat)
     return platform_filter
-
+    
 @transaction.atomic
 def handle_badge(profile, badge, add_role_only=False):
     from trophies.models import UserBadge, UserBadgeProgress, Badge
