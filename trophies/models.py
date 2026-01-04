@@ -279,7 +279,7 @@ class Profile(models.Model):
             self.recent_plat = platinums.filter(earned_date_time=recent_date).first() if recent_date else None
 
             min_rate = platinums.aggregate(Min('trophy__trophy_earn_rate'))['trophy__trophy_earn_rate__min']
-            self.rarest_plat = platinums.filter(trophy__trophy_earn_rate=min_rate).first() if min_rate is not None else None
+            self.rarest_plat = platinums.filter(trophy__trophy_earn_rate=min_rate).order_by('trophy__earn_rate').first() if min_rate is not None else None
 
         self.save(update_fields=['recent_plat', 'rarest_plat'])
 
