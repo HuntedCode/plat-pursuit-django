@@ -847,7 +847,6 @@ class Badge(models.Model):
 
         stages = Stage.objects.filter(Q(series_slug=self.series_slug) & (Q(required_tiers__len=0) | Q(required_tiers__contains=[self.tier]))).prefetch_related('concepts__games')
 
-        is_mod_platform = self.tier in [1, 2]
         is_plat_check = self.tier in [1, 3]
         is_progress_check = self.tier in [2, 4]
 
@@ -859,12 +858,6 @@ class Badge(models.Model):
                 continue
 
             games_qs = Game.objects.filter(concept__in=concepts)
-            if is_mod_platform:
-                from trophies.utils import MODERN_PLATFORMS
-                platform_filter = Q()
-                for plat in MODERN_PLATFORMS:
-                    platform_filter |= Q(title_platform__contains=plat)
-                games_qs = games_qs.filter(platform_filter)
             
             has_completion = ProfileGame.objects.filter(profile=profile, game__in=games_qs).filter(Q(has_plat=True) if is_plat_check else Q(progress=100) if is_progress_check else Q(pk__isnull=True)).exists()
             completion[stage.stage_number] = has_completion
