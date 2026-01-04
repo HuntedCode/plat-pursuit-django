@@ -8,7 +8,6 @@ from .services.stats import compute_community_stats
 from .services.featured import get_featured_games
 from .services.latest_platinums import get_latest_platinums
 from .services.playing_now import get_playing_now
-from .services.latest_rares import get_latest_psn_rares, get_latest_pp_rares
 from .services.featured_profile import get_featured_profile
 from .services.events import get_upcoming_events
 from .services.featured_guide import get_featured_guide
@@ -45,13 +44,12 @@ class IndexView(ProfileHotbarMixin, TemplateView):
             {'text': 'Dashboard'},
         ]
 
-        # Cache community stats - cache resets hourly at top of the hour UTC
+        # Cache community stats - cache resets hourly at top of the hour UTC (cron)
         community_stats_key = f"{self.STATS_CACHE_KEY}_{today_utc}_{now_utc.hour:02d}"
-        community_stats = cache.get_or_set(
-            community_stats_key,
-            compute_community_stats,
-            self.STATS_CACHE_TIMEOUT * 2
-        )
+        community_stats = cache.get(community_stats_key)
+        if community_stats is None:
+            prev_key = f"{self.STATS_CACHE_KEY}_{today_utc}_{(now_utc.hour - 1):02d}"
+            community_stats = cache.get(prev_key)
         context['communityStats'] = community_stats
 
         # Cache featured games - cache resets daily at midnight UTC
@@ -75,13 +73,12 @@ class IndexView(ProfileHotbarMixin, TemplateView):
         except Concept.DoesNotExist:
             pass
 
-        # Latest platinums - cache resets hourly at top of the hour UTC
+        # Latest platinums - cache resets hourly at top of the hour UTC (cron)
         latest_plats_key = f"{self.LATEST_PLATINUMS_KEY}_{today_utc}_{now_utc.hour:02d}"
-        latest_plats = cache.get_or_set(
-            latest_plats_key,
-            lambda: get_latest_platinums(),
-            self.LATEST_PLATINUMS_TIMEOUT * 2
-        )
+        latest_plats = cache.get(latest_plats_key)
+        if latest_plats is None:
+            prev_key = f"{self.LATEST_PLATINUMS_KEY}_{today_utc}_{(now_utc.hour - 1):02d}"
+            latest_plats = cache.get(prev_key)
         context['latestPlatinums'] = latest_plats
 
         # Playing Now - cache resets daily at midnight UTC
