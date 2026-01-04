@@ -71,6 +71,7 @@
                                     {% with i|add:"0" as i %}
                                         {% with completion|dict_get:i as comp %}
                                         {% with stage.stage_number as num %}
+                                        {% if not num == 0 %}
                                             {% with comp|dict_get:num as earned %}
                                             <div class="bg-base-100 border-4 {% if earned %}border-success{% else %}border-error{% endif %} shadow-md shadow-neutral rounded-box p-2">
                                                 {% if earned %}
@@ -80,6 +81,7 @@
                                                 {% endif %}
                                             </div>
                                             {% endwith %}
+                                        {% endif %}
                                         {% endwith %}
                                         {% endwith %}
                                     {% endwith %}  
