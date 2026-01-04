@@ -1,6 +1,6 @@
 from django import template
 from django.utils import timezone
-from datetime import datetime
+from datetime import datetime, timedelta
 from humanize import naturaltime
 
 register = template.Library()
@@ -19,6 +19,13 @@ def iso_naturaltime(value):
         return naturaltime(dt)
     except (ValueError, TypeError):
         return value
+
+@register.filter
+def timedelta_hours(duration: timedelta) -> str:
+    """Convert timedelta to total hours."""
+    if not duration:
+        return ''
+    return f"{round(duration.total_seconds() / 3600, 2)} Hours"
 
 @register.filter
 def platform_color(game):
