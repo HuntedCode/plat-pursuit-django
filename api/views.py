@@ -9,7 +9,7 @@ from django.db.models import F
 from django.utils import timezone
 from datetime import timedelta
 from trophies.psn_manager import PSNManager
-from trophies.utils import check_discord_role_badges
+from trophies.utils import initial_badge_check
 import time
 import math
 import logging
@@ -77,7 +77,7 @@ class VerifyView(APIView):
 
                 if profile.verify_code(profile.about_me):
                     profile.link_discord(discord_id)
-                    check_discord_role_badges(profile)
+                    initial_badge_check(profile)
                     return Response({'success': True, 'message': 'Verified and linked successfully!'})
                 else:
                     return Response({'success': False, 'message': 'Verification failed. Check code and try again.'})

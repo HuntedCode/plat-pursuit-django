@@ -765,6 +765,7 @@ class Badge(models.Model):
             models.Index(fields=['badge_type'], name='badge_type_idx'),
             models.Index(fields=['earned_count'], name='badge_earned_count_idx'),
             models.Index(fields=['most_recent_concept'], name='badge_recent_concept_idx'),
+            models.Index(fields=['tier'], name='badge_tier_idx'),
         ]
 
     @property
