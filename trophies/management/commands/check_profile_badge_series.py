@@ -11,7 +11,7 @@ class Command(BaseCommand):
         username_str = options['username']
         series_slug = options['series']
 
-        if not username_str or series_slug:
+        if not username_str or not series_slug:
             self.stdout.write("No arguments.")
             return
         
