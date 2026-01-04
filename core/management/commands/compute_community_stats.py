@@ -18,6 +18,6 @@ class Command(BaseCommand):
         try:
             stats = compute_community_stats()
             cache.set(key, stats, STATS_CACHE_TIMEOUT * 2)
-            logger.info(f"Community stats cached for {key}")
+            self.stdout.write(self.style.SUCCESS(f"Community stats cached for {key}"))
         except Exception as e:
-            logger.error(f"Failed to computer community stats: {e}")
+             self.stdout.write(self.style.ERROR(f"Failed to computer community stats: {e}"))
