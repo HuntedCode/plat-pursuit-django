@@ -8,19 +8,22 @@ class Command(BaseCommand):
         parser.add_argument('--series', type=str, required=True)
 
     def handle(self, *args, **options):
-        profile_str = options['profile']
+        username_str = options['username']
         series_slug = options['series']
 
-        if not profile_str or series_slug:
+        if not username_str or series_slug:
                 return
         
         try:
-                profile = Profile.objects.get(psn_username=profile_str)
+                profile = Profile.objects.get(psn_username=username_str)
         except Profile.DoesNotExist:
                 self.stdout.write("Could not find profile.")
                 return
 
         badges = Badge.objects.filter(series_slug=series_slug).order_by('tier')
+        if not badges:
+              self.stdout.write("Couldn't find any badges with that series_slug.")
+              return
         checked_count = 0
         for badge in badges:
             handle_badge(profile, badge)
