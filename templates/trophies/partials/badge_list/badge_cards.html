@@ -1,11 +1,11 @@
 {% load custom_filters %}
 {% for item in display_data %}
 {% with item.badge as badge %}
-    <a href="{% url 'badge_detail' badge.series_slug %}" class="card bg-base-100 border-4 border-base-300 shadow-xl shadow-neutral cursor-pointer transition-all duration-300 hover:scale-105 hover:border-{{ badge|badge_color }} hover:shadow-{{ badge|badge_color }} hover:z-10 group">
+    <a href="{% url 'badge_detail' badge.series_slug %}" class="card bg-base-100 border-4 border-base-300 shadow-xl shadow-neutral cursor-pointer transition-all duration-300 hover:scale-105 hover:border-{{ badge.tier|badge_color }} hover:shadow-{{ badge.tier|badge_color }} hover:z-10 group">
         <div class="card-body m-0 px-3 py-3 gap-0">
             <h3 class="text-lg font-bold line-clamp-2 italic pr-1 hover:scale-105">{{ badge.effective_display_title }}</h3>
             <div class="flex flex-row justify-between items-end mb-1">
-                <h5 class="text-base text-{{ badge|badge_color }} font-bold hover:scale-105">{{ badge.tier|badge_tier }}</h5>
+                <h5 class="text-base text-{{ badge.tier|badge_color }} font-bold hover:scale-105">{{ badge.tier|badge_tier }}</h5>
                 <h5 class="text-xs text-base-content/70 font-semibold italic pr-1 hover:scale-105">Total Earned: {{ item.tier1_earned_count }}</h5>
             </div>
             <div class="w-40 h-40 mx-auto">

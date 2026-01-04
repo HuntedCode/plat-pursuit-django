@@ -1159,8 +1159,12 @@ class BadgeDetailView(ProfileHotbarMixin, DetailView):
                 'games': [{'game': game, 'profile_game': profile_games.get(game, None)} for game in games]
             })
 
+        all_badges = Badge.objects.filter(series_slug=badge.series_slug).order_by('tier')
+        badge_completion = {b.tier: b.get_stage_completion(target_profile) for b in all_badges}
+
         print(len(structured_data))
         context['stage_data'] = structured_data
+        context['completion'] = badge_completion
         context['is_earned'] = is_earned
 
         context['image_urls'] = {'bg_url': badge.most_recent_concept.bg_url, 'recent_concept_icon_url': badge.most_recent_concept.concept_icon_url}

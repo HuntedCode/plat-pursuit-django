@@ -2,7 +2,7 @@
 {% if grouped_earned_badges %}
     {% for group in grouped_earned_badges %}
     {% with group.highest_badge as badge %}
-        <a href="{% url 'badge_detail_with_profile' badge.series_slug profile.psn_username %}" class="card bg-base-100/80 border-4 border-base-300 shadow-md shadow-neutral cursor-pointer hover:border-{{ badge|badge_color }} hover:shadow-{{ badge|badge_color }} hover:scale-105 group">
+        <a href="{% url 'badge_detail_with_profile' badge.series_slug profile.psn_username %}" class="card bg-base-100/80 border-4 border-base-300 shadow-md shadow-neutral cursor-pointer hover:border-{{ badge.tier|badge_color }} hover:shadow-{{ badge.tier|badge_color }} hover:scale-105 group">
             <div class="card-body">
                 <div class="w-42 h-42 mx-auto">
                     {% include 'partials/badge.html' with layers=badge.get_badge_layers %}

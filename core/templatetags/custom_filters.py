@@ -68,8 +68,8 @@ def trophy_color_dict(trophy):
         return 'trophy-platinum'
 
 @register.filter
-def badge_color(badge):
-    tier = badge.tier
+def badge_color(tier):
+    tier = int(tier)
     if tier == 1:
         return 'warning'
     elif tier == 2:

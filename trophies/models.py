@@ -870,34 +870,6 @@ class Badge(models.Model):
             completion[stage.stage_number] = has_completion
         return completion
 
-    def compute_required(self):
-        from django.db.models import Q, Exists, OuterRef
-        from trophies.models import Game
-        from trophies.utils import get_platform_filter
-
-        if self.badge_type == 'series':
-            platform_filter = get_platform_filter(self)
-            is_obtainable_required = self.tier in [1, 2]
-
-            qualifying_games_filter = Q(platform_filter)
-            if self.tier in [1, 3]:
-                qualifying_games_filter &= Q(defined_trophies__platinum__gt=0)
-            if is_obtainable_required:
-                qualifying_games_filter &= Q(is_obtainable=True)
-                qualifying_games_filter &= Q(is_delisted=False)
-            
-            concepts_qs = self.concepts if self.concepts.exists() else (self.base_badge.concepts if self.base_badge else Badge.objects.none())
-            if not concepts_qs.exists():
-                return {'achieved': 0, 'required': 0}
-            
-            filtered_concepts_qs = concepts_qs.filter(Exists(Game.objects.filter(qualifying_games_filter, concept=OuterRef('pk')))).distinct()
-
-            return filtered_concepts_qs.count()
-        elif self.badge_type == 'misc':
-            return self.requirements.get('count', 0)
-        
-        return 0
-
     def __str__(self):
         return f"{self.name} (Tier {self.tier})"
     

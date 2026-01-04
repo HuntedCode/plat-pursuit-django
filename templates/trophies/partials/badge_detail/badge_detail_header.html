@@ -22,13 +22,13 @@
             </div>
         </a>
     {% endif %}
-    <div class="card bg-base-100 border-4 border-base-300 shadow-lg shadow-neutral w-full xl:w-12/30 transition-all duration-300 hover:border-{{ badge|badge_color }} hover:shadow-{{ badge|badge_color }}">
+    <div class="card bg-base-100 border-4 border-base-300 shadow-lg shadow-neutral w-full xl:w-12/30 transition-all duration-300 hover:border-{{ badge.tier|badge_color }} hover:shadow-{{ badge.tier|badge_color }}">
         <div class="card-body flex flex-col items-center justify-between gap-0">
             <figure class="w-32 sm:w-37 md:w-42 lg:w-48 h-32 sm:h-37 md:h-42 lg:h-48 mx-auto overflow-visible {% if not is_earned %}grayscale hover:grayscale-0{% endif %}">
                 {% include 'partials/badge.html' with layers=badge.get_badge_layers%}
             </figure>
             <div class="flex flex-col items-center">
-                <h3 class="text-xl sm:text-2xl font-bold line-clamp-1 italic pr-1">{{ badge.effective_display_title }} - {% if is_earned %}<span class="text-{{ badge|badge_color }}">{{ badge.tier|badge_tier }}</span>{% else %}Unearned{% endif %}</h3>
+                <h3 class="text-xl sm:text-2xl font-bold line-clamp-1 italic pr-1">{{ badge.effective_display_title }} - {% if is_earned %}<span class="text-{{ badge.tier|badge_color }}">{{ badge.tier|badge_tier }}</span>{% else %}Unearned{% endif %}</h3>
                 <h2 class="text-lg text-base-content/70 text-center italic line-clamp-1 pr-1">{{ badge.effective_display_series }}</h2>
             </div>
         </div>
