@@ -173,7 +173,7 @@ def handle_badge(profile, badge, add_role_only=False):
             logger.info(f"Revoked badge {badge.effective_display_title} (tier: {badge.tier}) from {profile.display_psn_username}")
 
         if badge_earned and badge.discord_role_id:
-            if profile.is_discord_verified and profile.discord_role_id:
+            if profile.is_discord_verified and profile.discord_id:
                 notify_bot_role_earned(profile, badge.discord_role_id)
         
         if not add_role_only and badge_created and badge.discord_role_id:
