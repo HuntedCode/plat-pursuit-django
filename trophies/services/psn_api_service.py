@@ -293,7 +293,8 @@ class PsnApiService:
 
         if notify:
             earned_trophy.refresh_from_db()
-            notify_new_platinum(profile, earned_trophy)
+            if not earned_trophy.trophy.game.is_shovelware:
+                notify_new_platinum(profile, earned_trophy)
 
         return earned_trophy, created
 
