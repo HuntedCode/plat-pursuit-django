@@ -161,5 +161,8 @@ class Command(BaseCommand):
                 return
             
         lock_key = f"complete_lock:{profile_id}"
+        profile_jobs_key = f"profile_jobs:{profile_id}"
         redis_client.delete(lock_key)
         self.stdout.write(self.style.SUCCESS(f"Lock successfully flushed!"))
+        redis_client.delete(profile_id)
+        self.stdout.write(self.style.SUCCESS(f"Profile jobs successfully flushed!"))
