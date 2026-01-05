@@ -145,6 +145,7 @@ def handle_badge(profile, badge, add_role_only=False):
 
     if badge.badge_type == 'series':
         stage_completion_dict = badge.get_stage_completion(profile)
+        print(stage_completion_dict)
         badge_earned = True
         completed_count = 0
         for stage, is_complete in stage_completion_dict.items():
