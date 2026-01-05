@@ -1,11 +1,10 @@
-from django.db.models import Count, Avg, Q, Exists, OuterRef
+from django.db.models import Count, Avg, Q
 from django.utils import timezone
 from datetime import timedelta
-from trophies.models import FeaturedGame, Game, ProfileGame, EarnedTrophy
+from trophies.models import FeaturedGame, ProfileGame, EarnedTrophy, Game
 
 def get_featured_games(limit=6):
     now = timezone.now()
-    week_ago = now - timedelta(days=7)
 
     # Manual overrides
     manual_qs = FeaturedGame.objects.filter(
@@ -14,6 +13,10 @@ def get_featured_games(limit=6):
     ).select_related('game')[:limit]
     featured = [fg.game for fg in manual_qs]
     
+    if len(featured) < limit:
+        algo_games = compute_top_games()
+        featured += [g for g in algo_games][:limit - len(featured)]
+
     # Enrich with stats
     enriched = []
     game_ids = [g.id for g in featured]
@@ -33,3 +36,41 @@ def get_featured_games(limit=6):
         })
     return enriched
     
+def compute_top_games(limit=6):
+    now = timezone.now()
+    past_date = now - timedelta(days=7)
+
+    player_counts = ProfileGame.objects.filter(
+        last_updated_datetime__gte=past_date,
+        game__is_shovelware=False,
+    ).values('game__id').annotate(players=Count('profile', distinct=True)).order_by('-players')
+
+    trophy_counts = EarnedTrophy.objects.filter(
+        earned_date_time__gte=past_date,
+        trophy__game__is_shovelware=False,
+    ).values('trophy__game__id').annotate(trophies=Count('id')).order_by('-trophies')
+
+    games = {}
+    max_players = max(p['players'] for p in player_counts[:limit * 2]) if player_counts else 1
+    max_trophies = max(t['trophies'] for t in trophy_counts[:limit * 2]) if trophy_counts else 1
+    for p in player_counts:
+        games[p['game__id']] = {'players': p['players']}
+    for t in trophy_counts:
+        gid = t['trophy__game__id']
+        if gid in games:
+            games[gid]['trophies'] = t['trophies']
+        else:
+            games[gid] = {'players': 0, 'trophies': t['trophies']}
+    
+
+    for gid, stats in games.items():
+        norm_players = stats.get('players', 0) / max_players
+        norm_trophies = stats.get('trophies', 0) / max_trophies
+        stats['score'] = 0.6 * norm_players + 0.4 * norm_trophies
+    
+    top_ids = [gid for gid, stats in sorted(games.items(), key=lambda x: x[1]['score'], reverse=True)][:limit * 2]
+    top_games = Game.objects.filter(
+        id__in=top_ids,
+    ).order_by('-id')[:limit]
+
+    return list(top_games)

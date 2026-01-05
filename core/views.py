@@ -52,13 +52,13 @@ class IndexView(ProfileHotbarMixin, TemplateView):
             community_stats = cache.get(prev_key)
         context['communityStats'] = community_stats
 
-        # Cache featured games - cache resets daily at midnight UTC
+        # Cache featured games - cache resets daily at midnight UTC (cron)
         featured_key = f"{self.FEATURED_GAMES_KEY}_{today_utc}"
-        featured = cache.get_or_set(
-            featured_key,
-            lambda: get_featured_games(),
-            self.FEATURED_GAMES_TIMEOUT * 2
-        )
+        featured = cache.get(featured_key)
+        if featured is None:
+            prev_day = now_utc - timedelta(days=1)
+            prev_key = f"{self.FEATURED_GAMES_KEY}_{prev_day}"
+            featured = cache.get(prev_key)
         context['featuredGames'] = featured
 
         featured_guide_key = f"{self.FEATURED_GUIDE_KEY}_{today_utc}"

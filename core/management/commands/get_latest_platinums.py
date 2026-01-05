@@ -1,6 +1,5 @@
 from django.utils import timezone
 from django.core.management.base import BaseCommand
-from django.conf import settings
 from django.core.cache import cache
 from core.services.latest_platinums import get_latest_platinums
 
