@@ -76,11 +76,9 @@ class Command(BaseCommand):
         prefix = f"{cache_config['KEY_PREFIX']}:1:"
         
         index_patterns = [
-            f"{prefix}community_stats_*",
             f"{prefix}featured_games_*",
             f"{prefix}featured_guide_*",
             f"{prefix}featured_guide:*",
-            f"{prefix}latest_platinums_*",
             f"{prefix}playing_now_*",
             f"{prefix}latest_psn_rares_*",
             f"{prefix}latest_pp_rares_*",
