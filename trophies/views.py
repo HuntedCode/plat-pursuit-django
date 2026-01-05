@@ -596,7 +596,8 @@ class GameDetailView(ProfileHotbarMixin, DetailView):
                     cache.set(averages_cache_key, json.dumps(averages), timeout=stats_timeout)
             context['community_averages'] = averages
 
-            badges = Badge.objects.filter(concepts=game.concept, tier=1).order_by('display_series')
+            series_slugs = Stage.objects.filter(concepts__games=game).values_list('series_slug', flat=True).distinct()
+            badges = Badge.objects.filter(series_slug__in=Subquery(series_slugs), tier=1).distinct().order_by('tier')
             context['badges'] = badges
 
             other_versions_qs = game.concept.games.exclude(pk=game.pk)
@@ -947,7 +948,7 @@ class BadgeListView(ProfileHotbarMixin, ListView):
     paginate_by = None
 
     def get_queryset(self):
-        qs = super().get_queryset().prefetch_related('concepts__games')
+        qs = super().get_queryset()
         form = BadgeSearchForm(self.request.GET)
 
         if form.is_valid():
@@ -984,12 +985,8 @@ class BadgeListView(ProfileHotbarMixin, ListView):
                 tier1_badge = next((b for b in sorted_group if b.tier == 1), None)
                 tier1_earned_count = tier1_badge.earned_count if tier1_badge else 0
 
-                all_games = set()
-                for badge in sorted_group:
-                    for concept in badge.concepts.all():
-                        for game in concept.games.all():
-                            all_games.add(game)
-                total_games = len(all_games)
+                all_games = Game.objects.filter(concept__stages__series_slug=badge.series_slug).distinct()
+                total_games = all_games.count()
                 trophy_types = {
                     'bronze': sum(game.defined_trophies['bronze'] for game in all_games),
                     'silver': sum(game.defined_trophies['silver'] for game in all_games),
@@ -1011,7 +1008,7 @@ class BadgeListView(ProfileHotbarMixin, ListView):
                 completed_concepts = 0
                 progress_percentage = 0
 
-                if progress and progress_badge.badge_type == 'series':
+                if progress and progress_badge.badge_type in ['series', 'collection']:
                     completed_concepts = progress.completed_concepts
                     progress_percentage = (completed_concepts / required_stages) * 100 if required_stages > 0 else 0
                 else:
@@ -1034,12 +1031,8 @@ class BadgeListView(ProfileHotbarMixin, ListView):
                 tier1 = next((b for b in sorted_group if b.tier == 1), None)
                 if tier1:
                     tier1_earned_count = tier1.earned_count
-                    all_games = set()
-                    for badge in sorted_group:
-                        for concept in badge.concepts.all():
-                            for game in concept.games.all():
-                                all_games.add(game)
-                    total_games = len(all_games)
+                    all_games = Game.objects.filter(concept__stages__series_slug=badge.series_slug).distinct()
+                    total_games = all_games.count()
                     trophy_types = {
                         'bronze': sum(game.defined_trophies['bronze'] for game in all_games),
                         'silver': sum(game.defined_trophies['silver'] for game in all_games),

@@ -241,7 +241,7 @@ class PremiumSettingsForm(forms.ModelForm):
 
 class BadgeCreationForm(forms.Form):
     name = forms.CharField(max_length=255, required=True, label="Name", widget=forms.TextInput(attrs={'class': 'input w-full'}))
-    series_slug = forms.SlugField(max_length=100, required=True, label="Series Slug", widget=forms.TextInput(attrs={'class': 'input w-full'}))
+    series_slug = forms.SlugField(max_length=100, required=False, label="Series Slug", widget=forms.TextInput(attrs={'class': 'input w-full'}))
 
     def get_badge_data(self):
         if self.is_valid():

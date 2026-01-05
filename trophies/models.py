@@ -732,7 +732,8 @@ class Badge(models.Model):
         (4, 'Platinum'),
     ]
     BADGE_TYPES = [
-        ('series', 'Series (Concept-based)'),
+        ('series', 'Series'),
+        ('collection', 'Collection'),
         ('misc', 'Miscellaneous'),
     ]
 
@@ -750,7 +751,6 @@ class Badge(models.Model):
     requires_all = models.BooleanField(default=True, help_text="If True, user must complete all qualifying Concepts. If false, only the min_required.")
     min_required = models.PositiveIntegerField(default=0, help_text="For large series (e.g. 10 out of 30)")
     requirements = models.JSONField(default=dict, blank=True, help_text="For misc badges")
-    concepts = models.ManyToManyField(Concept, related_name='badges', blank=True, help_text="Required Concepts for series badges")
     most_recent_concept = models.ForeignKey(Concept, on_delete=models.SET_NULL, null=True, blank=True, related_name='most_recent_for_badges', help_text='Concept with the latest release_date')
     created_at = models.DateTimeField(auto_now_add=True)
     earned_count = models.PositiveIntegerField(default=0, help_text="Count of users who have earned this badge tier")
@@ -828,7 +828,7 @@ class Badge(models.Model):
 
     def update_required(self):
         from trophies.models import Stage
-        if self.badge_type == 'series':
+        if self.badge_type in ['series', 'collection']:
             stages = Stage.objects.filter(series_slug=self.series_slug)
             required_count = 0
             for stage in stages:

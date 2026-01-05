@@ -413,23 +413,21 @@ class PsnApiService:
     @classmethod
     def create_badge_group_from_form(cls, form_data: dict):
         name = form_data['name']
-        concepts = Concept.objects.filter(id__in=form_data['concepts'])
         base_badge = Badge.objects.create(
             name=name + ' Bronze',
-            series_slug=form_data['series_slug'],
+            series_slug=form_data['series_slug'] or '',
             description=f"Earn plats in the {form_data['name']} series!",
             display_title=name + ' Series Master',
             display_series=name + ' Series',
             tier=1,
         )
-        base_badge.concepts.add(*concepts)
         base_badge.save()
         base_badge.update_most_recent_concept()
 
         for i, tier in enumerate(['Silver', 'Gold', 'Platinum']):
             badge = Badge.objects.create(
                 name = name + f" {tier}",
-                series_slug=form_data['series_slug'],
+                series_slug=form_data['series_slug'] or '',
                 base_badge=base_badge,
                 tier=i + 2,
             )

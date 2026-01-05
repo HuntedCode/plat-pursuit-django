@@ -143,7 +143,7 @@ def handle_badge(profile, badge, add_role_only=False):
             logger.info(f"Skipped {badge.name} for {profile.psn_username} - previous tier {prev_tier} not earned.")
             return
 
-    if badge.badge_type == 'series':
+    if badge.badge_type in ['series', 'collection']:
         stage_completion_dict = badge.get_stage_completion(profile)
         print(stage_completion_dict)
         badge_earned = True
