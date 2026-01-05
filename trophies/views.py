@@ -825,6 +825,7 @@ class ProfileDetailView(ProfileHotbarMixin, DetailView):
                         
                         grouped_earned.append({
                             'highest_badge': highest_badge,
+                            'next_badge': next_badge,
                             'progress': progress_entry,
                             'percentage': progress_percentage,
                         })
