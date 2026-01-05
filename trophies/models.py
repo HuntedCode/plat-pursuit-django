@@ -906,7 +906,7 @@ class Stage(models.Model):
         unique_together = ['series_slug', 'stage_number']
         ordering = ['stage_number']
         indexes = [
-            models.Index(fields=['series_slug', 'stage_number'], name='stage_slug_number_idx')
+            models.Index(fields=['series_slug', 'stage_number'], name='stage_slug_number_idx'),
         ]
 
     def __str__(self):
@@ -914,6 +914,15 @@ class Stage(models.Model):
         
     def applies_to_tier(self, tier: int) -> bool:
         return not self.required_tiers or tier in self.required_tiers
+
+class PublisherBlacklist(models.Model):
+    name = models.CharField(max_length=255, unique=True)
+    date_added = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=['name'], name='blacklist_name_idx'),
+        ]
 
 class APIAuditLog(models.Model):
     timestamp = models.DateTimeField(auto_now_add=True)
