@@ -420,6 +420,7 @@ class PsnApiService:
             display_title=name + ' Series Master',
             display_series=name + ' Series',
             tier=1,
+            badge_type = form_data['badge_type'],
         )
         base_badge.save()
         base_badge.update_most_recent_concept()
@@ -430,4 +431,5 @@ class PsnApiService:
                 series_slug=form_data['series_slug'] or '',
                 base_badge=base_badge,
                 tier=i + 2,
+                badge_type = form_data['badge_type'],
             )
