@@ -220,6 +220,8 @@ class SubscriptionManagementView(LoginRequiredMixin, TemplateView):
     template_name = 'users/subscription_management.html'
 
     def get_context_data(self, **kwargs):
+        is_live = settings.STRIPE_MODE == 'live'
+
         context = super().get_context_data(**kwargs)
         user = self.request.user
         sub = Subscription.objects.filter(customer__subscriber=user).first()
@@ -236,4 +238,5 @@ class SubscriptionManagementView(LoginRequiredMixin, TemplateView):
         else:
             context['tier'] = 'None'
             context['status'] = 'Inactive' if sub else 'No Subscription'
+        context['is_live'] = is_live
         return context
