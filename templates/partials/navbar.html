@@ -120,7 +120,7 @@
                                 <li><a href="{% url 'subscribe' %}">PP Premium</a></li>
                             </div>
                         {% else %}
-                            <li><a href="{% url 'subscribe' %}">PP Premium</a></li>
+                            <li><a href="{% url 'subscription_management' %}">My Premium</a></li>
                         {% endif %}
                         <li><a href="{% url 'profile_detail' user.profile.psn_username %}">Profile</a></li>
                         <li><a href="{% url 'trophy_case' user.profile.psn_username %}">Trophy Case</a></li>

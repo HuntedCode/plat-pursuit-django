@@ -23,7 +23,7 @@ from django.urls import path, include
 from django.views.generic import TemplateView
 from core.views import IndexView
 from trophies.views import GamesListView, TrophiesListView, ProfilesListView, SearchView, GameDetailView, ProfileDetailView, TrophyCaseView, ToggleSelectionView, BadgeListView, BadgeDetailView, GuideListView, ProfileSyncStatusView, TriggerSyncView, SearchSyncProfileView, AddSyncStatusView, LinkPSNView, ProfileVerifyView, TokenMonitoringView, BadgeCreationView
-from users.views import CustomConfirmEmailView, stripe_webhook
+from users.views import CustomConfirmEmailView, stripe_webhook, SubscriptionManagementView
 
 urlpatterns = [
     path("admin/", admin.site.urls),
@@ -59,6 +59,7 @@ urlpatterns = [
     path('monitoring/tokens/', TokenMonitoringView.as_view(), name='token_monitoring'),
 
     path("stripe/webhook/", stripe_webhook, name="stripe_webhook"),
+    path('subscription-management/', SubscriptionManagementView.as_view(), name='subscription_management'),
 
     path('users/', include('users.urls')),
     path('accounts/', include('allauth.urls')),

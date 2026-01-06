@@ -1,5 +1,4 @@
 # users/views.py
-import time
 from allauth.account.views import ConfirmEmailView
 from django.conf import settings
 from django.contrib import messages
@@ -8,10 +7,12 @@ from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.http import HttpResponse
 from django.shortcuts import render, redirect
+from django.urls import reverse
 from django.views import View
+from django.views.generic import TemplateView
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
-from djstripe.models import Price, Customer
+from djstripe.models import Price, Customer, Subscription
 from djstripe.models import Event as DJStripeEvent
 import stripe
 import logging
@@ -100,6 +101,12 @@ class SettingsView(LoginRequiredMixin, View):
 def subscribe(request):
     is_live = settings.STRIPE_MODE == 'live'
 
+    if Subscription.objects.filter(customer__subscriber=request.user).exists():
+        subs = Subscription.objects.filter(customer__subscriber=request.user)
+        if any(sub.status == 'active' for sub in subs):
+            messages.info(request, 'You already have an active subscription. Manage it here.')
+            return redirect('subscription_management')
+
     try:
         if is_live:
             prices = {
@@ -186,7 +193,7 @@ def stripe_webhook(request):
     
     dj_event = DJStripeEvent.process(event)
 
-    if event.type in ['checkout.session.completed', 'customer.subscription.created', 'invoice.paid']:
+    if event.type in ['checkout.session.completed', 'customer.subscription.created', 'invoice.paid', 'customer.subscription.updated']:
         customer_id = event.data.object.get('customer')
         if customer_id:
             user = CustomUser.objects.filter(stripe_customer_id=customer_id).first()
@@ -208,3 +215,25 @@ def stripe_webhook(request):
                     logger.info(f"Revoked tier for user {user.id}")
 
     return HttpResponse(status=200)
+
+class SubscriptionManagementView(LoginRequiredMixin, TemplateView):
+    template_name = 'users/subscription_management.html'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        user = self.request.user
+        sub = Subscription.objects.filter(customer__subscriber=user).first()
+        if sub and sub.status == 'active':
+            context['tier'] = user.get_premium_tier()
+            context['status'] = sub.status.capitalize()
+            context['next_billing'] = sub.current_period_end if sub.current_period_end else 'N/A'
+
+            portal_session = stripe.billing_portal.Session.create(
+                customer=user.stripe_customer_id,
+                return_url=self.request.build_absolute_uri(reverse('profile_detail', kwargs={'psn_username': user.profile.psn_username if hasattr(user, 'profile') else ''}))
+            )
+            context['portal_url'] = portal_session.url
+        else:
+            context['tier'] = 'None'
+            context['status'] = 'Inactive' if sub else 'No Subscription'
+        return context

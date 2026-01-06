@@ -1,0 +1,40 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block content %}
+{% if not is_live %}
+    TEST MODE ACTIVE
+{% endif %}
+<div class="w-fit bg-base-200/50 border-4 border-base-300 shadow-lg shadow-neutral flex items-center justify-center py-4 px-4 md:px-8 lg:px-14 xl:px-20 mx-auto">
+    <div class="flex flex-col justify-center max-w-5xl w-full">
+        <figure class="relative w-45 h-45 mx-auto mb-4 hover:scale-105">
+            <img src="{% static 'images/badges/backdrops/3_backdrop.png' %}" class="w-full absolute top-0 left-0" />
+            <img src="{% static 'images/badges/default.png' %}" class="w-full absolute top-0 left-0" />
+        </figure>
+        <span class="text-rotate duration-20000 text-xs md:text-lg lg:text-xl xl:text-2xl 2xl:text-3xl font-bold text-center leading-[2] italic self-center mb-8">
+            <span class="justify-items-center">
+                <span class="pr-2">"Got some rare things on sale, Stranger..."</span>
+                <span class="pr-2">"Trouble with the trolley, eh?"</span>
+                <span class="pr-2">"It's dangerous to go alone..."</span>
+                <span class="pr-2">"There are many surprises within my store..."</span>
+                <span class="pr-2">"Khajiit has wares if you have coins."</span>
+                <span class="pr-2">"ENCHANTMENT?!"</span>
+            </span>
+        </span>
+        <div class="flex flex-col items-center justify-center max-w-2xl gap-4">
+            <h1 class="text-3xl text-base-content/70 font-bold pr-1 italic">Subscription Management</h1>
+            <div class="alert {% if status == 'No Subscription' %}alert-info{% else %}alert-success{% endif %}">
+                <span>Your current tier: <span class="font-bold">{{ tier }}</span></span>
+                <span>Status: <span class="font-bold">{{ status }}</span></span>
+            </div>
+            <p>Next billing: {{ next_billing }}</p>
+            {% if portal_url %}
+                <a href="{{ portal_url }}" class="btn btn-primary">Manage in Stripe</a>
+            {% else %}
+                <p>Upgrade to premium to manage your subscription.</p>
+                <a href="{% url 'subscribe' %}" class="btn btn-primary">Subscribe Now</a>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
