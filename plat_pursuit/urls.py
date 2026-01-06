@@ -21,7 +21,7 @@ from django.contrib import admin
 from django.contrib.auth.views import LogoutView
 from django.urls import path, include
 from django.views.generic import TemplateView
-from core.views import IndexView
+from core.views import IndexView, AdsTxtView
 from trophies.views import GamesListView, TrophiesListView, ProfilesListView, SearchView, GameDetailView, ProfileDetailView, TrophyCaseView, ToggleSelectionView, BadgeListView, BadgeDetailView, GuideListView, ProfileSyncStatusView, TriggerSyncView, SearchSyncProfileView, AddSyncStatusView, LinkPSNView, ProfileVerifyView, TokenMonitoringView, BadgeCreationView
 from users.views import CustomConfirmEmailView, stripe_webhook, SubscriptionManagementView
 
@@ -60,6 +60,7 @@ urlpatterns = [
 
     path("stripe/webhook/", stripe_webhook, name="stripe_webhook"),
     path('subscription-management/', SubscriptionManagementView.as_view(), name='subscription_management'),
+    path('ads.txt', AdsTxtView.as_view(), name='ads_txt'),
 
     path('users/', include('users.urls')),
     path('accounts/', include('allauth.urls')),

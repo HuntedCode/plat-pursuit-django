@@ -1,18 +1,22 @@
 import json
-from django.views.generic import TemplateView
+import logging
+from django.contrib.staticfiles.finders import find
+from django.conf import settings
+from django.http import HttpResponse
+from django.templatetags.static import static
+from django.views.generic import TemplateView, View
 from django.urls import reverse_lazy
 from django.core.cache import cache
 from django.utils import timezone
 from datetime import timedelta
-from .services.stats import compute_community_stats
-from .services.featured import get_featured_games
-from .services.latest_platinums import get_latest_platinums
 from .services.playing_now import get_playing_now
 from .services.featured_profile import get_featured_profile
 from .services.events import get_upcoming_events
 from .services.featured_guide import get_featured_guide
 from trophies.models import Concept
 from trophies.mixins import ProfileHotbarMixin
+
+logger = logging.getLogger('psn_api')
 
 class IndexView(ProfileHotbarMixin, TemplateView):
     template_name = 'index.html'
@@ -111,3 +115,18 @@ class IndexView(ProfileHotbarMixin, TemplateView):
         context['eventsPageSize'] = self.EVENTS_PAGE_SIZE
 
         return context
+    
+class AdsTxtView(View):
+    def get(self, request):
+        file_path = find('ads.txt')  # Finders search all STATICFILES_DIRS
+        if file_path:
+            try:
+                with open(file_path, 'r') as f:
+                    content = f.read()
+                return HttpResponse(content, content_type='text/plain')
+            except Exception as e:
+                logger.error(f"Error serving ads.txt: {e}")
+                return HttpResponse("ads.txt not found", status=404)
+        else:
+            logger.warning("ads.txt not found in static files")
+            return HttpResponse("ads.txt not found", status=404)
