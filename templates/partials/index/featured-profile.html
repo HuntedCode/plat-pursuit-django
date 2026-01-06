@@ -9,20 +9,20 @@
                 <img src="{{ item.avatar }}" alt="{{ item.name }}'s avatar" class="hover:scale-105" />
             </div>
         </div>
-        <h2 class="card-title text-base md:text-lg hover:scale-105">Plat Pursuer of the Week:</h2>
-        <h2 class="card-title text-xl sm:text-2xl md:text-3xl lg:text-2xl xl:text-4xl font-bold text-primary line-clamp-2 hover:scale-105">{{ item.name }}</h2>
-        <p class="text-sm italic text-base-content/70 line-clamp-3 hover:scale-105">"{{ item.bio }}"</p>
+        <h2 class="card-title text-base md:text-lg">Plat Pursuer of the Week:</h2>
+        <h2 class="card-title text-xl sm:text-2xl md:text-3xl lg:text-2xl xl:text-4xl font-bold text-primary line-clamp-2">{{ item.name }}</h2>
+        <p class="text-sm italic text-base-content/70 line-clamp-3">"{{ item.bio }}"</p>
 
         <div class="stats stats-vertical md:stats-horizontal lg:stats-vertical 2xl:stats-horizontal mt-4">
             <div class="stat">
-                <div class="stat-title hover:scale-105">Platinums</div>
-                <div class="stat-value text-primary hover:scale-105">{{ item.platinums.total|intcomma }}</div>
-                <div class="stat-desc hover:scale-105"><span class="text-primary">(+{{ item.platinums.weekly|intcomma }})</span> This Week</div>
+                <div class="stat-title">Platinums</div>
+                <div class="stat-value text-primary">{{ item.platinums.total|intcomma }}</div>
+                <div class="stat-desc"><span class="text-primary">(+{{ item.platinums.weekly|intcomma }})</span> This Week</div>
             </div>
             <div class="stat">
-                <div class="stat-title hover:scale-105">Trophies Earned</div>
-                <div class="stat-value text-secondary hover:scale-105">{{ item.trophies.total|intcomma }}</div>
-                <div class="stat-desc hover:scale-105"><span class="text-secondary">(+{{ item.trophies.weekly|intcomma }})</span> This Week</div>
+                <div class="stat-title">Trophies Earned</div>
+                <div class="stat-value text-secondary">{{ item.trophies.total|intcomma }}</div>
+                <div class="stat-desc"><span class="text-secondary">(+{{ item.trophies.weekly|intcomma }})</span> This Week</div>
             </div>
         </div>
     </div>

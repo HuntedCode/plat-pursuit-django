@@ -11,7 +11,7 @@
             <img src="{% static 'images/badges/backdrops/3_backdrop.png' %}" class="w-full absolute top-0 left-0" />
             <img src="{% static 'images/badges/default.png' %}" class="w-full absolute top-0 left-0" />
         </figure>
-        <span class="text-rotate duration-20000 text-xs md:text-lg lg:text-xl xl:text-2xl 2xl:text-3xl font-bold text-center leading-[2] italic self-center mb-2 hover:scale-105">
+        <span class="text-rotate duration-20000 text-xs md:text-lg lg:text-xl xl:text-2xl 2xl:text-3xl font-bold text-center leading-[2] italic self-center mb-2">
             <span class="justify-items-center">
                 <span class="pr-2">"Got some rare things on sale, Stranger..."</span>
                 <span class="pr-2">"Trouble with the trolley, eh?"</span>
@@ -21,7 +21,7 @@
                 <span class="pr-2">"ENCHANTMENT?!"</span>
             </span>
         </span>
-        <p class="text-center text-accent text-xs md:text-base xl:text-lg mb-8 pr-1 italic hover:scale-105">Unlock ad-free tracking, advanced profile customization, and more!</p>
+        <p class="text-center text-accent text-xs md:text-base xl:text-lg mb-8 pr-1 italic">Unlock ad-free tracking, advanced profile customization, and more!</p>
         
         <form method="post" class="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-4 gap-6 mb-6">
             {% csrf_token %}
@@ -29,9 +29,10 @@
             <!-- Ad-Free Tier -->
             <div class="card border-4 border-base-300 bg-base-100 shadow-lg hover:scale-105 hover:border-primary hover:shadow-primary">
                 <div class="card-body">
-                    <h2 class="card-title hover:scale-105">Ad-Free</h2>
-                    <p class="text-2xl text-primary font-semibold mb-2 hover:scale-105">${{ prices.ad_free }}<span class="text-base-content text-lg">/mo</span></p>
+                    <h2 class="card-title">Ad-Free</h2>
+                    <p class="text-2xl text-primary font-semibold mb-2">${{ prices.ad_free }}<span class="text-base-content text-lg">/mo</span></p>
                     <ul class="list-disc pl-4 space-y-1 self-start italic">
+                        <li class="text-primary font-bold hover:scale-105">Support PlatPursuit's constant development!</li>
                         <li class="text-primary hover:scale-105">No ads site wide</li>
                     </ul>
                     <button type="submit" name="tier" value="ad_free" class="btn btn-secondary mt-4">Select</button>
@@ -44,6 +45,7 @@
                     <h2 class="card-title hover:scale-105">Premium Monthly*</h2>
                     <p class="text-2xl text-primary font-semibold mb-2 hover:scale-105">${{ prices.premium_monthly }}<span class="text-base-content text-lg">/mo</span></p>
                     <ul class="list-disc pl-4 space-y-1 italic">
+                        <li class="text-primary font-bold hover:scale-105">Support PlatPursuit's constant development!</li>
                         <li class="hover:scale-105">No ads site wide</li>
                         <li class="text-primary hover:scale-105">Refresh every 5 minutes</li>
                         <li class="text-primary hover:scale-105">Profile Customization</li>
@@ -59,6 +61,7 @@
                     <h2 class="card-title hover:scale-105">Premium Yearly*</h2>
                     <p class="text-2xl text-accent font-semibold mb-2 hover:scale-105">${{ prices.premium_yearly }}<span class="text-base-content text-lg">/yr</span></p>
                     <ul class="list-disc pl-4 space-y-1 italic">
+                        <li class="text-accent font-bold hover:scale-105">Support PlatPursuit's constant development!</li>
                         <li class="hover:scale-105">No ads site wide</li>
                         <li class="text-accent hover:scale-105">Refresh every 5 minutes</li>
                         <li class="text-accent hover:scale-105">Profile Customization</li>
@@ -75,6 +78,7 @@
                     <h2 class="card-title hover:scale-105">Supporter + Beta**</h2>
                     <p class="text-2xl text-primary font-semibold mb-2 hover:scale-105">${{ prices.supporter }}<span class="text-base-content text-lg">/mo</span></p>
                     <ul class="list-disc pl-4 space-y-1 italic">
+                        <li class="text-primary font-bold hover:scale-105">Support PlatPursuit's constant development!</li>
                         <li class="hover:scale-105">No ads site wide</li>
                         <li class="hover:scale-105">Refresh every 5 minutes</li>
                         <li class="hover:scale-105">Profile Customization</li>

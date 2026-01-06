@@ -1,7 +1,7 @@
 {% with featured_concept as concept %}
     <div class="card shadow-lg shadow-neutral w-full bg-base-200 rounded-box border-2 border-base-300 transition duration-300 hover:border-primary hover:shadow-primary">
         <div class="rounded-box p-4 bg-base-200 w-full transition duration-300 hover:bg-base-300">
-            <h1 class="text-2xl sm:text-3xl lg:text-4xl text-base-content font-bold text-center italic hover:scale-105">Featured Guide</h1>
+            <h1 class="text-2xl sm:text-3xl lg:text-4xl text-base-content font-bold text-center italic">Featured Guide</h1>
             <div class="divider mt-2"></div>
             <div class="grid grid-cols-1 xl:grid-cols-2 gap-4">
                 <div class="aspect-video w-full border-4 border-base-300 rounded-box">
@@ -22,9 +22,9 @@
                         <div></div>
                     </div>
                     <div class="flex flex-col min-w-fit">
-                        <h1 class="text-2xl text-base-content text-center md:text-start font-semibold hover:scale-105">{{ concept.unified_title }}</h1>
-                        <h3 class="text-lg text-base-content text-center md:text-start font-semibold hover:scale-105">{{ concept.publisher_name }}</h3>
-                        <h3 class="text-lg text-base-content/70 text-center md:text-start font-semibold pr-1 italic hover:scale-105">Release Date: {{ concept.release_date|date }}</h3>
+                        <h1 class="text-2xl text-base-content text-center md:text-start font-semibold">{{ concept.unified_title }}</h1>
+                        <h3 class="text-lg text-base-content text-center md:text-start font-semibold">{{ concept.publisher_name }}</h3>
+                        <h3 class="text-lg text-base-content/70 text-center md:text-start font-semibold pr-1 italic">Release Date: {{ concept.release_date|date }}</h3>
                     </div>
                 </div>
             </div>

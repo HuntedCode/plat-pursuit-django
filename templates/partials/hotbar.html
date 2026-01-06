@@ -5,7 +5,7 @@
             <div class="flex flex-row items-center gap-4">
                 {% if hotbar.profile %}
                     <a href="{% url 'profile_detail' hotbar.profile.psn_username %}" class="avatar">
-                        <div class="w-8 rounded-full ring-2 ring-primary cursor-pointer">
+                        <div class="w-8 rounded-full ring-2 ring-primary cursor-pointer hover:scale-105">
                             <img src="{{ hotbar.profile.avatar_url|default:'/static/default-avatar.png' }}" alt="Profile Avatar" />
                         </div>
                     </a>

@@ -97,12 +97,12 @@
                     </div>
                 </div>
                 <div class="flex flex-row gap-1">
-                    <h1 class="text-2xl lg:text-lg 2xl:text-2xl text-base-content text-center pr-1 mr-1 italic hover:scale-105">{{ profile.display_psn_username }}</h1>
-                    <h1 class="text-2xl lg:text-lg 2xl:text-2xl text-accent text-center italic hover:scale-105">{{ profile.flag }}</h1>
+                    <h1 class="text-2xl lg:text-lg 2xl:text-2xl text-base-content text-center pr-1 mr-1 italic">{{ profile.display_psn_username }}</h1>
+                    <h1 class="text-2xl lg:text-lg 2xl:text-2xl text-accent text-center italic">{{ profile.flag }}</h1>
                 </div>
-                <h3 class="text-sm lg:text-xs 2xl:text-sm text-base-content/70 text-center pr-1 line-clamp-2 italic hover:scale-105">{{ profile.about_me }}</h3>
+                <h3 class="text-sm lg:text-xs 2xl:text-sm text-base-content/70 text-center pr-1 line-clamp-2 italic">{{ profile.about_me }}</h3>
                 {% if profile.user_is_premium %}
-                    <h3 class="text-lg lg:text-base 2xl:text-lg legendary-title text-center pr-1 line-clamp-1 italic hover:scale-105">{{ profile.selected_title }}</h3>
+                    <h3 class="text-lg lg:text-base 2xl:text-lg legendary-title text-center pr-1 line-clamp-1 italic">{{ profile.selected_title }}</h3>
                 {% endif %}
                 <a href="{% url 'trophy_case' profile.psn_username %}" class="btn btn-primary btn-lg">View Trophy Case</a>
             </div>
@@ -112,7 +112,7 @@
                     {% with header_stats.recent_platinum.game as game %}
                     {% with header_stats.recent_platinum.trophy as trophy %}
                         <div class="flex flex-col w-full">
-                            <h1 class="text-2xl text-base-content text-center italic hover:scale-105">Latest Platinum</h1>
+                            <h1 class="text-2xl text-base-content text-center italic">Latest Platinum</h1>
                             {% if not profile.sync_status == 'syncing' and profile.psn_history_public and game %}
                                 <a href="{% if game.np_communication_id %}{% url 'game_detail' game.np_communication_id %}{% endif %}" class="flex flex-row items-center w-full shadow-md shadow-neutral border-4 border-base-300 p-1 mb-2 cursor-pointer hover:border-primary hover:shadow-primary hover:scale-105">
                                     <figure class="w-28 h-28 border-4 border-primary rounded-box mr-4">
@@ -144,7 +144,7 @@
                     {% with header_stats.rarest_platinum.game as game %}
                     {% with header_stats.rarest_platinum.trophy as trophy %}
                         <div class="flex flex-col w-full">
-                            <h1 class="text-2xl text-base-content text-center italic hover:scale-105">Rarest Platinum</h1>
+                            <h1 class="text-2xl text-base-content text-center italic">Rarest Platinum</h1>
                             {% if not profile.sync_status == 'syncing' and profile.psn_history_public and game %}
                                 <a href="{% if game.np_communication_id %}{% url 'game_detail' game.np_communication_id %}{% endif %}" class="flex flex-row items-center w-full shadow-md shadow-neutral border-4 border-base-300 p-1 mb-2 cursor-pointer hover:border-accent hover:shadow-accent hover:scale-105">
                                     <figure class="w-28 h-28 border-4 border-accent rounded-box mr-4">
@@ -155,10 +155,10 @@
                                         {% endif %}
                                     </figure>
                                     <div class="flex flex-col">
-                                        <h1 class="text-xl text-base-content line-clamp-2 pr-1 hover:scale-105">{{ trophy.trophy_name }}</h1>
-                                        <h3 class="text-base text-secondary line-clamp-1 pr-1 italic hover:scale-105">{{ game.title_name }}</h3>
-                                        <h3 class="text-sm text-base-content/70 line-clamp-1 pr-1 italic hover:scale-105">Earned: {{ header_stats.rarest_platinum.earned_date }}</h3>
-                                        <h3 class="text-sm text-base-content line-clamp-1 pr-1 hover:scale-105">Rarity (PSN): {{ trophy.trophy_earn_rate }}% <span class="text-accent italic">({{ trophy.trophy_rarity|psn_rarity }})</span></h3>
+                                        <h1 class="text-xl text-base-content line-clamp-2 pr-1">{{ trophy.trophy_name }}</h1>
+                                        <h3 class="text-base text-secondary line-clamp-1 pr-1 italic">{{ game.title_name }}</h3>
+                                        <h3 class="text-sm text-base-content/70 line-clamp-1 pr-1 italic">Earned: {{ header_stats.rarest_platinum.earned_date }}</h3>
+                                        <h3 class="text-sm text-base-content line-clamp-1 pr-1">Rarity (PSN): {{ trophy.trophy_earn_rate }}% <span class="text-accent italic">({{ trophy.trophy_rarity|psn_rarity }})</span></h3>
                                     </div>
                                 </a>
                             {% elif not profile.psn_history_public %}
@@ -238,9 +238,9 @@
                     </div>
                     <div class="hidden xl:block border-4 border-base-300 shadow-md shadow-neutral hover:border-secondary hover:shadow-secondary hover:scale-105">
                         <div class="p-4">
-                            <h3 class="text-lg text-base-content hover:scale-105">Trophy Level: <span class="text-primary font-bold">{{ profile.trophy_level }}</span></h3>
-                            <progress class="progress {% if profile.progress < 33 %}progress-error{% elif profile.progress < 66 %}progress-warning{% else %}progress-success{% endif %} w-full hover:scale-105" value="{{ profile.progress }}" max="100"></progress>
-                            <h4 class="text-sm text-center italic hover:scale-105">{{ profile.progress }}% to next level.</h4>
+                            <h3 class="text-lg text-base-content">Trophy Level: <span class="text-primary font-bold">{{ profile.trophy_level }}</span></h3>
+                            <progress class="progress {% if profile.progress < 33 %}progress-error{% elif profile.progress < 66 %}progress-warning{% else %}progress-success{% endif %} w-full" value="{{ profile.progress }}" max="100"></progress>
+                            <h4 class="text-sm text-center italic">{{ profile.progress }}% to next level.</h4>
                         </div>
                     </div>
                 </div>
@@ -248,7 +248,7 @@
         </div>
         {% if trophy_case_count > 0 %}
             <div class="divider divider-vertical mb-0 pb-0"></div>
-            <h3 class="text-2xl sm:text-3xl text-base-content text-center italic mb-2 hover:scale-105"><span class="text-trophy-platinum">Platinum</span> Trophy Case</h3>
+            <h3 class="text-2xl sm:text-3xl text-base-content text-center italic mb-2"><span class="text-trophy-platinum">Platinum</span> Trophy Case</h3>
             <div class="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-5 xl:grid-cols-10 gap-2 justify-self-center">
                 {% for item in trophy_case %}
                 {% if item %}
