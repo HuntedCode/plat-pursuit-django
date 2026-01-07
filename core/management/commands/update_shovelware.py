@@ -11,9 +11,9 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS(f"Added {added} publishers to blacklist!"))
         
         total = 0
-        updated = 0
         publishers = PublisherBlacklist.objects.all()
         for pub in publishers:
+            updated = 0
             pub_games = Game.objects.filter(concept__publisher_name=pub.name)
             for game in pub_games:
                 if game.is_shovelware == False:
