@@ -1031,7 +1031,7 @@ class BadgeListView(ProfileHotbarMixin, ListView):
                 tier1 = next((b for b in sorted_group if b.tier == 1), None)
                 if tier1:
                     tier1_earned_count = tier1.earned_count
-                    all_games = Game.objects.filter(concept__stages__series_slug=badge.series_slug).distinct()
+                    all_games = Game.objects.filter(concept__stages__series_slug=tier1.series_slug).distinct()
                     total_games = all_games.count()
                     trophy_types = {
                         'bronze': sum(game.defined_trophies['bronze'] for game in all_games),
