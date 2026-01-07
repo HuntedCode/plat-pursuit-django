@@ -7,6 +7,7 @@ def get_latest_platinums(limit=10):
     month_ago = timezone.now() - timedelta(days=30)
     recent_platinums = EarnedTrophy.objects.filter(
         earned=True,
+        trophy__game__is_shovelware=False,
         trophy__trophy_type='platinum',
         earned_date_time__gte=month_ago
     ).select_related('profile', 'trophy', 'trophy__game').order_by(F('earned_date_time').desc(nulls_last=True))[:limit]
