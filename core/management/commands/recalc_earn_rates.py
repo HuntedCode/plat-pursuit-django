@@ -1,9 +1,6 @@
 from django.core.management.base import BaseCommand
-from django.db.models import Count
 from django.db import transaction
 from trophies.models import Game, Trophy, ProfileGame, EarnedTrophy
-from django.utils import timezone
-from datetime import timedelta  # If adding --since option later
 
 class Command(BaseCommand):
     help = 'Recalculates played_count on Games, earned_count & earn_rate on Trophies'

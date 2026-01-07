@@ -22,7 +22,7 @@ from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_excep
 from .models import Profile, Game, TitleID, TrophyGroup
 from .services.psn_api_service import PsnApiService
 from .psn_manager import PSNManager
-from .utils import redis_client, log_api_call, TITLE_ID_BLACKLIST, TITLE_STATS_SUPPORTED_PLATFORMS, update_profile_games, update_profile_trophy_counts, detect_asian_language, check_profile_badges
+from .utils import redis_client, log_api_call, TITLE_ID_BLACKLIST, TITLE_STATS_SUPPORTED_PLATFORMS, update_profile_games, update_profile_trophy_counts, detect_asian_language, check_profile_badges, initial_badge_check
 
 logger = logging.getLogger("psn_api")
 
@@ -357,39 +357,22 @@ class TokenKeeper:
                     self._complete_job(profile_id, queue_name)
 
     @retry(stop=stop_after_attempt(5), wait=wait_fixed(0.2))
-    def acquire_lock(self, redis_client, lock_key):
-        if not redis_client.set(lock_key, "1", nx=True, ex=10):
-            raise ValueError("Lock acquisiton failed")
-
     def _complete_job(self, profile_id, queue_name):
         """Handle finished job, check for deferred."""
         if queue_name == 'low_priority' or 'medium_priority':
 
             counter_key = f"profile_jobs:{profile_id}:{queue_name}"
-            deferred_key = f"deferred_jobs:{profile_id}"
-            lock_key = f"complete_lock:{profile_id}"
 
             try:
-                self.acquire_lock(redis_client, lock_key)
                 redis_client.decr(counter_key)
                 current_jobs = int(redis_client.get(f"profile_jobs:{profile_id}:{queue_name}") or 0)
                 if current_jobs <= 0:
                     redis_client.delete(f"profile_jobs:{profile_id}:{queue_name}")
                     redis_client.srem("active_profiles", profile_id)
 
-                job_json = redis_client.lpop(f"deferred_jobs:{profile_id}")
-                if job_json:
-                    if self._get_current_jobs_for_profile(profile_id) < self.max_jobs_per_profile:
-                        job_data = json.loads(job_json)
-                        PSNManager.assign_job(job_data['type'], job_data['args'], profile_id, job_data.get('priority_override'))
-                    else:
-                        redis_client.lpush(f"deferred_jobs:{profile_id}", job_json)
-                        logger.warning(f"Deferred job for profile {profile_id} re-pushed - max jobs reached.")
-
                 current_jobs = self._get_current_jobs_for_profile(profile_id)
-                deferred_len = redis_client.llen(deferred_key)
                 pending_key = f"pending_sync_complete:{profile_id}"
-                if current_jobs <= 0 and deferred_len == 0 and redis_client.exists(pending_key):
+                if current_jobs <= 0 and redis_client.exists(pending_key):
                     raw_pending = redis_client.get(pending_key)
                     try:
                         pending_data = json.loads(raw_pending)
@@ -400,41 +383,15 @@ class TokenKeeper:
                         redis_client.delete(pending_key)
                         logger.info(f"Triggered sync_complete for profile {profile_id}")
                     except (json.JSONDecodeError, ValueError, KeyError) as parse_err:
-                        logger.error(f"Failed to parse pending_sync_complete for profile {profile_id}")
+                        logger.error(f"Failed to parse pending_sync_complete for profile {profile_id}: {parse_err}")
             except Exception as e:
                 logger.error(f"Error in _complete_job for profile {profile_id}: {e}")
-            finally:
-                redis_client.delete(lock_key)
-
-            self._assign_rotated_deferred()
 
     def _get_current_jobs_for_profile(self, profile_id):
         total = 0
         for queue in ['low_priority', 'medium_priority']:
             total += int(redis_client.get(f"profile_jobs:{profile_id}:{queue}") or 0)
         return total
-    
-    def _assign_rotated_deferred(self):
-        active_profiles = redis_client.smembers("active_profiles")
-        if not active_profiles:
-            return
-        candidates = []
-        for prof_id_bytes in active_profiles:
-            prof_id = prof_id_bytes.decode()
-            deferred_key = f"deferred_jobs:{prof_id}"
-            if redis_client.llen(deferred_key) > 0:
-                current_jobs = self._get_current_jobs_for_profile(prof_id)
-                candidates.append((current_jobs, prof_id))
-        
-        if candidates:
-            candidates.sort()
-            if candidates[0][0] < self.max_jobs_per_profile:
-                selected_prof_id = candidates[0][1]
-                job_json = redis_client.lpop(f"deferred_jobs:{selected_prof_id}")
-                if job_json:
-                    job_data = json.loads(job_json)
-                    PSNManager.assign_job(job_data['type'], job_data['args'], selected_prof_id, job_data.get('priority_override'))
-                    logger.info(f"Rotated and assigned deferred job for profile {selected_prof_id}")
 
     def _get_instance_for_job(self, job_type: str) -> Optional[TokenInstance]:
         """Selects best instance for job, respecting workload and priority."""
@@ -605,8 +562,11 @@ class TokenKeeper:
                         game = title['game']
                         args = [game.np_communication_id, game.title_platform[0] if not game.title_platform[0] == 'PSPC' else game.title_platform[1]]
                         PSNManager.assign_job('sync_trophies', args=args, profile_id=profile.id, priority_override='high_priority')
+            badge_check = True if profile.last_profile_health_check else False
             profile.last_profile_health_check = timezone.now()
             profile.save(update_fields=['last_profile_health_check'])
+            if badge_check:
+                initial_badge_check(profile, False)
 
         logger.info(f"Updating plats for {profile_id}...")
         profile.update_plats()

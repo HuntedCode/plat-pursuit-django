@@ -19,11 +19,6 @@ class PSNManager:
         """Assign job to queue, respecting priorities."""
         queue_name = priority_override or cls._get_queue_for_job(job_type)
         if queue_name == "low_priority" or "medium_priority":
-            current_jobs = int(redis_client.get(f"profile_jobs:{profile_id}:{queue_name}") or 0)
-            if current_jobs >= cls.max_jobs_per_profile:
-                logger.info(f"Trickling: Profile {profile_id} at max jobs ({current_jobs}) - deferring")
-                cls._defer_job(profile_id, job_type, args, priority_override)
-                return
             redis_client.incr(f"profile_jobs:{profile_id}:{queue_name}")
             redis_client.sadd("active_profiles", profile_id)
         

@@ -4,6 +4,6 @@ from trophies.utils import initial_badge_check
 
 class Command(BaseCommand):
     def handle(self, *args, **options):
-        discord_profiles = Profile.objects.all()
-        for profile in discord_profiles:
+        profiles = Profile.objects.all()
+        for profile in profiles:
             initial_badge_check(profile, discord_notify=False)

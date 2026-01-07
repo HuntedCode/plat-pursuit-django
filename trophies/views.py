@@ -391,7 +391,7 @@ class GameDetailView(ProfileHotbarMixin, DetailView):
                         milestones.append({'label': 'First Trophy'})
                     
                     mid_idx = math.ceil((total_trophies - 1) * 0.5)
-                    if len(earned_list) >= mid_idx:
+                    if len(earned_list) > mid_idx:
                         mid = earned_list[mid_idx]
                         milestones.append({
                             'label': '50% Trophy',

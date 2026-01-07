@@ -156,13 +156,13 @@ class Command(BaseCommand):
             self.stdout.write(self.style.ERROR(f"Error: {e}"))
 
     def _handle_flush_complete_lock(self, profile_id: int):
-        if not self._confirm_action(f"flush TokenKeeper queues, profile jobs, deferred jobs, and active status for profile {profile_id} only (irreversible)"):
+        if not self._confirm_action(f"flush TokenKeeper lock and pending complete for profile {profile_id} only (irreversible)"):
                 self.stdout.write(self.style.ERROR("Operation cancelled."))
                 return
             
         lock_key = f"complete_lock:{profile_id}"
-        profile_jobs_key = f"profile_jobs:{profile_id}"
+        profile_jobs_key = f"pending_sync_complete:{profile_id}"
         redis_client.delete(lock_key)
         self.stdout.write(self.style.SUCCESS(f"Lock successfully flushed!"))
         redis_client.delete(profile_id)
-        self.stdout.write(self.style.SUCCESS(f"Profile jobs successfully flushed!"))
+        self.stdout.write(self.style.SUCCESS(f"Pending complete successfully flushed!"))
