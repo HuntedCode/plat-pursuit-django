@@ -22,4 +22,4 @@ class Command(BaseCommand):
                     updated += 1
             self.stdout.write(f"Marked {updated} games from {pub.name}")
             total += updated
-        self.stdout.write(self.style.SUCCESS(f"Successfully marked games from {total} publishers!"))
+        self.stdout.write(self.style.SUCCESS(f"Successfully marked {total} games from {len(publishers)} publishers!"))
