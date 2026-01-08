@@ -146,6 +146,7 @@ def handle_badge(profile, badge, add_role_only=False):
 
     if badge.badge_type in ['series', 'collection']:
         stage_completion_dict = badge.get_stage_completion(profile)
+        print(stage_completion_dict)
         badge_earned = True
         completed_count = 0
         for stage, is_complete in stage_completion_dict.items():
@@ -159,7 +160,8 @@ def handle_badge(profile, badge, add_role_only=False):
         progress, created = UserBadgeProgress.objects.get_or_create(profile=profile, badge=badge, defaults={'completed_concepts': completed_count})
         if not created:
             progress.completed_concepts = completed_count
-            progress.save(update_fields=['completed_concepts'])
+            progress.last_checked = timezone.now()
+            progress.save(update_fields=['completed_concepts', 'last_checked'])
 
         user_badge_exists = False
         badge_created = False
