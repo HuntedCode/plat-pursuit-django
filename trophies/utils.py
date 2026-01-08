@@ -6,12 +6,13 @@ import requests
 import logging
 import time
 from django.db import transaction
-from django.db.models import Exists, OuterRef, Q, Count
+from django.db.models import OuterRef, Q, Max, Subquery
+from django.db.models.functions import Coalesce
 from django.db.models.query import QuerySet
 from django.conf import settings
-from datetime import timedelta
+from django.utils import timezone
 from dotenv import load_dotenv
-from typing import List, Set, Dict
+from typing import List, Set
 from scipy import stats
 from trophies.discord_utils.discord_notifications import send_batch_role_notification, notify_new_badge
 
@@ -240,6 +241,34 @@ def initial_badge_check(profile, discord_notify: bool = True):
     duration = time.time() - start_time
     logger.info(f"Checked {checked_count} unique badges for profile {profile.psn_username} in {duration:.2f}s")
     return checked_count
+
+def compute_earners_leaderboard(series_slug: str) -> list[dict]:
+    """Compute earners sorted by earn date."""
+    from trophies.models import UserBadge
+
+    max_tier_sub = UserBadge.objects.filter(
+        profile=OuterRef('profile'),
+        badge__series_slug=series_slug,
+    ).values('profile').annotate(max_tier=Max('badge__tier')).values('max_tier')
+
+    earn_date_sub = UserBadge.objects.filter(
+        profile=OuterRef('profile'),
+        badge__series_slug=series_slug,
+        badge__tier=Subquery(max_tier_sub),
+    ).order_by('-earned_at').values('earned_at')[:1]
+
+    earners = UserBadge.objects.filter(badge__series_slug=series_slug).select_related('profile').annotate(
+        max_tier=Coalesce(Subquery(max_tier_sub), 0),
+        earn_date=Coalesce(Subquery(earn_date_sub), timezone.now()),
+    ).distinct('profile').order_by('profile', '-max_tier', '-earn_date')
+
+    return [{
+        'psn_username': earner.profile.display_psn_username,
+        'earn_date': earner.earn_date.isoformat() if earner.earn_date else 'Unknown',
+        'avatar_url': earner.profile.avatar_url,
+        'flag': earner.profile.flag,
+        'highest_tier': earner.max_tier,
+    } for earner in earners]
 
 def update_profile_games(profile):
     from trophies.models import ProfileGame

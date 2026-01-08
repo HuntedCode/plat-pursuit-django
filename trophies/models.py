@@ -875,7 +875,8 @@ class UserBadge(models.Model):
     class Meta:
         unique_together = ['profile', 'badge']
         indexes = [
-            models.Index(fields=['profile', 'is_displayed'], name='userbadge_display_idx')
+            models.Index(fields=['profile', 'is_displayed'], name='userbadge_display_idx'),
+            models.Index(fields=['earned_at'], name='userbadge_earned_at_idx'),
         ]
 
     def __str__(self):
