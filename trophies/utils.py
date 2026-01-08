@@ -6,7 +6,7 @@ import requests
 import logging
 import time
 from django.db import transaction
-from django.db.models import OuterRef, Q, Max, Subquery
+from django.db.models import OuterRef, Q, Max, Subquery, Count
 from django.db.models.functions import Coalesce
 from django.db.models.query import QuerySet
 from django.conf import settings
@@ -269,6 +269,46 @@ def compute_earners_leaderboard(series_slug: str) -> list[dict]:
         'flag': earner.profile.flag,
         'highest_tier': earner.max_tier,
     } for earner in earners]
+
+def compute_progress_leaderboard(series_slug: str) -> list[dict]:
+    from trophies.models import Game, Concept, Stage, Profile, EarnedTrophy
+
+    stages = Stage.objects.filter(series_slug=series_slug)
+    concepts = Concept.objects.filter(stages__in=stages).distinct()
+    games = Game.objects.filter(concept__in=concepts).distinct()
+
+    users_with_progress = Profile.objects.filter(
+        Q(badge_progress__badge__series_slug=series_slug) | Q(played_games__game__in=games, played_games__earned_trophies__earned=True)
+    ).distinct()
+
+    aggregates = EarnedTrophy.objects.filter(
+        profile__in=users_with_progress,
+        trophy__game__in=games,
+        earned=True
+    ).values('profile').annotate(
+        plats=Count('id', filter=Q(trophy__trophy_type='platinum')),
+        golds=Count('id', filter=Q(trophy__trophy_type='gold')),
+        silvers=Count('id', filter=Q(trophy__trophy_type='silver')),
+        bronzes=Count('id', filter=Q(trophy__trophy_type='bronze')),
+        max_earn_date=Max('earned_date_time')
+    ).order_by('-plats', '-golds', '-silvers', '-bronzes', 'max_earn_date')
+
+    leaderboard = []
+    for agg in aggregates:
+        profile = Profile.objects.get(id=agg['profile'])
+        leaderboard.append({
+            'psn_username': profile.display_psn_username,
+            'flag': profile.flag,
+            'avatar_url': profile.avatar_url,
+            'trophy_totals': {
+                'plats': agg['plats'],
+                'golds': agg['golds'],
+                'silvers': agg['silvers'],
+                'bronzes': agg['bronzes'], 
+            },
+            'last_earned_date': agg['max_earn_date'].isoformat() if agg['max_earn_date'] else 'Unknown'
+        })
+    return leaderboard
 
 def update_profile_games(profile):
     from trophies.models import ProfileGame
