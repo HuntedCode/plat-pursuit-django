@@ -569,7 +569,7 @@ class TokenKeeper:
 
             if len(current_tracked_games) > 0:
                 for pgame in current_tracked_games:
-                    for trophy in profile.earned_trophy_entries.filter(game=pgame.game):
+                    for trophy in profile.earned_trophy_entries.filter(trophy__game=pgame.game):
                         trophy.user_hidden = True
                         trophy.save(update_fields=['user_hidden'])
                     pgame.user_hidden = True
