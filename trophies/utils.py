@@ -322,7 +322,7 @@ def update_profile_games(profile):
 def update_profile_trophy_counts(profile):
     from trophies.models import EarnedTrophy, ProfileGame
     from django.db.models import Sum
-    
+
     if not profile.hide_hiddens:
         trophy_totals_qs = ProfileGame.objects.filter(profile=profile).aggregate(
             unearned=Sum('unearned_trophies_count'),
@@ -333,8 +333,8 @@ def update_profile_trophy_counts(profile):
             unearned=Sum('unearned_trophies_count'),
             earned=Sum('earned_trophies_count'),
         )
-    profile.total_trophies = trophy_totals_qs.earned
-    profile.total_unearned = trophy_totals_qs.unearned
+    profile.total_trophies = trophy_totals_qs['earned']
+    profile.total_unearned = trophy_totals_qs['unearned']
     profile.total_plats = EarnedTrophy.objects.filter(profile=profile, earned=True, trophy__trophy_type='platinum').count()
     profile.total_games = ProfileGame.objects.filter(profile=profile).count()
     profile.total_completes = ProfileGame.objects.filter(profile=profile, progress=100).count()
