@@ -38,7 +38,7 @@
                 </div>
                 <div class="flex flex-row justify-between gap-8">
                     {% if lb_earners_user_page %}
-                        <a href="?{% query_transform lb_earners_page=lb_earners_user_page %}" class="btn btn-xs btn-accent tooltip" data-tip="Jump to your rank">My Rank</a>
+                        <a href="?{% query_transform lb_earners_page=lb_earners_user_page %}#1-rank-{{ lb_earners_user_rank }}" class="btn btn-xs btn-accent tooltip" data-tip="Jump to your rank">My Rank</a>
                     {% endif %}
                     <form class="input-group" onsubmit="updatePage(this, 'lb_earners_page'); return false;">
                         <input type="number" class="input input-bordered input-xs w-16" min="1" max="{{ lb_earners_paginator.num_pages }}" placeholder="Page" />
@@ -58,7 +58,7 @@
                 </thead>
                 <tbody>
                     {% for entry in lb_earners_page_obj %}
-                        <tr class="{% if request.user.is_authenticated and request.user.profile.display_psn_username == entry.psn_username %}bg-success/15{% endif %} h-15">
+                        <tr id="1-rank-{{ entry.rank }}" class="{% if request.user.is_authenticated and request.user.profile.display_psn_username == entry.psn_username %}bg-success/15{% endif %} h-15">
                             <td>{{ entry.rank }}</td>
                             <td class="text-xs sm:text-sm lg:text-base">
                                 <a href="{% url 'profile_detail' entry.psn_username %}">
@@ -101,7 +101,7 @@
 
                 <div class="flex flex-row justify-between gap-8">
                     {% if lb_earners_user_page %}
-                        <a href="?{% query_transform lb_earners_page=lb_earners_user_page %}" class="btn btn-xs btn-accent tooltip" data-tip="Jump to your rank">My Rank</a>
+                        <a href="?{% query_transform lb_earners_page=lb_earners_user_page %}#1-rank-{{ lb_earners_user_rank }}" class="btn btn-xs btn-accent tooltip" data-tip="Jump to your rank">My Rank</a>
                     {% endif %}
 
                     <form class="input-group" onsubmit="updatePage(this, 'lb_earners_page'); return false;">
@@ -130,7 +130,7 @@
                 
                 <div class="flex flex-row justify-between gap-8">
                     {% if lb_progress_user_page %}
-                        <a href="?{% query_transform lb_progress_page=lb_progress_user_page %}" class="btn btn-xs btn-accent tooltip" data-tip="Jump to your rank">My Rank</a>
+                        <a href="?{% query_transform lb_progress_page=lb_progress_user_page %}#2-rank-{{ lb_progress_user_rank }}" class="btn btn-xs btn-accent tooltip" data-tip="Jump to your rank">My Rank</a>
                     {% endif %}
 
                     <form class="input-group" onsubmit="updatePage(this, 'lb_progress_page'); return false;">
@@ -152,7 +152,7 @@
                 </thead>
                 <tbody>
                     {% for entry in lb_progress_page_obj %}
-                        <tr class="{% if request.user.is_authenticated and request.user.profile.display_psn_username == entry.psn_username %}bg-success/15{% endif %} h-15">
+                        <tr id="2-rank-{{ entry.rank }}" class="{% if request.user.is_authenticated and request.user.profile.display_psn_username == entry.psn_username %}bg-success/15{% endif %} h-15">
                             <td>{{ entry.rank }}</td>
                             <td>
                                 <a href="{% url 'profile_detail' entry.psn_username %}">
@@ -210,7 +210,7 @@
 
                 <div class="flex flex-row justify-between gap-8">
                     {% if lb_progress_user_page %}
-                        <a href="?{% query_transform lb_progress_page=lb_progress_user_page %}" class="btn btn-xs btn-accent tooltip" data-tip="Jump to your rank">My Rank</a>
+                        <a href="?{% query_transform lb_progress_page=lb_progress_user_page %}#2-rank-{{ lb_progress_user_rank }}" class="btn btn-xs btn-accent tooltip" data-tip="Jump to your rank">My Rank</a>
                     {% endif %}
 
                     <form class="input-group" onsubmit="updatePage(this, 'lb_progress_page'); return false;">

@@ -1211,10 +1211,12 @@ class BadgeLeaderboardsView(ProfileHotbarMixin, DetailView):
             for idx, entry in enumerate(lb_earners):
                 if entry['psn_username'] == user_psn:
                     context['lb_earners_user_page'] = (idx // lb_earners_paginate_by) + 1
+                    context['lb_earners_user_rank'] = idx + 1
                     break
             for idx, entry in enumerate(lb_progress):
                 if entry['psn_username'] == user_psn:
                     context['lb_progress_user_page'] = (idx // lb_progress_paginate_by) + 1
+                    context['lb_progress_user_rank'] = idx + 1
 
         lb_earners_paginator = Paginator(lb_earners, lb_earners_paginate_by)
         lb_earners_page = self.request.GET.get('lb_earners_page', 1)
