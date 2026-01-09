@@ -262,15 +262,18 @@ def compute_earners_leaderboard(series_slug: str) -> list[dict]:
     earners = UserBadge.objects.filter(badge__series_slug=series_slug).select_related('profile').annotate(
         max_tier=Coalesce(Subquery(max_tier_sub), 0),
         earn_date=Coalesce(Subquery(earn_date_sub), timezone.now()),
-    ).distinct('profile').order_by('-max_tier', '-earn_date', 'profile')
+    ).distinct('profile')
+
+    earners.order_by('-max_tier', '-earn_date', 'profile')
 
     return [{
+        'rank': rank + 1,
         'psn_username': earner.profile.display_psn_username,
         'earn_date': earner.earn_date.isoformat() if earner.earn_date else 'Unknown',
         'avatar_url': earner.profile.avatar_url,
         'flag': earner.profile.flag,
         'highest_tier': earner.max_tier,
-    } for earner in earners]
+    } for rank, earner in enumerate(earners)]
 
 def compute_progress_leaderboard(series_slug: str) -> list[dict]:
     from trophies.models import Game, Concept, Stage, Profile, EarnedTrophy
@@ -296,9 +299,10 @@ def compute_progress_leaderboard(series_slug: str) -> list[dict]:
     ).order_by('-plats', '-golds', '-silvers', '-bronzes', 'max_earn_date')
 
     leaderboard = []
-    for agg in aggregates:
+    for rank, agg in enumerate(aggregates):
         profile = Profile.objects.get(id=agg['profile'])
         leaderboard.append({
+            'rank': rank + 1,
             'psn_username': profile.display_psn_username,
             'flag': profile.flag,
             'avatar_url': profile.avatar_url,

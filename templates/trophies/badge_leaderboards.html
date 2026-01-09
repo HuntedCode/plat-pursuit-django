@@ -59,7 +59,7 @@
                 <tbody>
                     {% for entry in lb_earners_page_obj %}
                         <tr class="{% if request.user.is_authenticated and request.user.profile.display_psn_username == entry.psn_username %}bg-success/15{% endif %} h-15">
-                            <td>{{ forloop.counter }}</td>
+                            <td>{{ entry.rank }}</td>
                             <td class="text-xs sm:text-sm lg:text-base">
                                 <a href="{% url 'profile_detail' entry.psn_username %}">
                                     <div class="avatar mr-2 hidden sm:inline-flex">
@@ -153,7 +153,7 @@
                 <tbody>
                     {% for entry in lb_progress_page_obj %}
                         <tr class="{% if request.user.is_authenticated and request.user.profile.display_psn_username == entry.psn_username %}bg-success/15{% endif %} h-15">
-                            <td>{{ forloop.counter }}</td>
+                            <td>{{ entry.rank }}</td>
                             <td>
                                 <a href="{% url 'profile_detail' entry.psn_username %}">
                                     <div class="avatar mr-2 hidden sm:inline-flex">
