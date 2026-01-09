@@ -58,7 +58,7 @@
                 </thead>
                 <tbody>
                     {% for entry in lb_earners_page_obj %}
-                        <tr class="{% if request.user.is_authenticated and request.user.profile.display_psn_username == entry.psn_username %}bg-success/15{% endif %}">
+                        <tr class="{% if request.user.is_authenticated and request.user.profile.display_psn_username == entry.psn_username %}bg-success/15{% endif %} h-15">
                             <td>{{ forloop.counter }}</td>
                             <td class="text-xs sm:text-sm lg:text-base">
                                 <a href="{% url 'profile_detail' entry.psn_username %}">
@@ -152,7 +152,7 @@
                 </thead>
                 <tbody>
                     {% for entry in lb_progress_page_obj %}
-                        <tr class="{% if request.user.is_authenticated and request.user.profile.display_psn_username == entry.psn_username %}bg-success/15{% endif %}">
+                        <tr class="{% if request.user.is_authenticated and request.user.profile.display_psn_username == entry.psn_username %}bg-success/15{% endif %} h-15">
                             <td>{{ forloop.counter }}</td>
                             <td>
                                 <a href="{% url 'profile_detail' entry.psn_username %}">
