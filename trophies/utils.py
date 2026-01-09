@@ -262,7 +262,7 @@ def compute_earners_leaderboard(series_slug: str) -> list[dict]:
     earners = UserBadge.objects.filter(badge__series_slug=series_slug).select_related('profile').annotate(
         max_tier=Coalesce(Subquery(max_tier_sub), 0),
         earn_date=Coalesce(Subquery(earn_date_sub), timezone.now()),
-    ).distinct('profile').order_by('profile', '-max_tier', '-earn_date')
+    ).distinct('profile').order_by('-max_tier', '-earn_date', 'profile')
 
     return [{
         'psn_username': earner.profile.display_psn_username,
