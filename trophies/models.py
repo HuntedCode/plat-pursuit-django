@@ -79,6 +79,7 @@ class Profile(models.Model):
     total_trophies = models.PositiveIntegerField(default=0)
     total_unearned = models.PositiveIntegerField(default=0)
     total_plats = models.PositiveIntegerField(default=0)
+    total_hiddens = models.PositiveIntegerField(default=0)
     total_games = models.PositiveIntegerField(default=0)
     total_completes = models.PositiveIntegerField(default=0)
     avg_progress = models.FloatField(default=0.0)
@@ -86,6 +87,7 @@ class Profile(models.Model):
     rarest_plat = models.ForeignKey('EarnedTrophy', on_delete=models.SET_NULL, null=True, blank=True, related_name='rarest_for_profiles', help_text='Rarest earned platinum by earn_rate.')
     selected_background = models.ForeignKey('Concept', on_delete=models.SET_NULL, null=True, blank=True, related_name='selected_by_profiles', help_text='Selected background concept for premium profiles.')
     selected_title = models.CharField(max_length=100, blank=True, null=True, help_text="Selected user title text from earned badges.")
+    hide_hiddens = models.BooleanField(default=False, help_text="If true, hide hidden/deleted games from list and totals.")
 
     class Meta:
         indexes = [
@@ -529,6 +531,7 @@ class ProfileGame(models.Model):
     earned_trophies_count = models.PositiveIntegerField(default=0, help_text="Number of earned trophies.")
     unearned_trophies_count = models.PositiveIntegerField(default=0, help_text="Number of unearned trophies.")
     has_plat = models.BooleanField(default=False, help_text="Whether the plat has been earned.")
+    user_hidden = models.BooleanField(default=False, help_text="True if user has game hidden/deleted.")
 
     class Meta:
         unique_together = ["profile", "game"]
@@ -677,6 +680,7 @@ class EarnedTrophy(models.Model):
     progressed_date_time = models.DateTimeField(blank=True, null=True)
     earned_date_time = models.DateTimeField(null=True, blank=True)
     last_updated = models.DateTimeField(auto_now=True)
+    user_hidden = models.BooleanField(default=False, help_text="True if user has game hidden/deleted.")
 
     class Meta:
         unique_together = ["profile", "trophy"]

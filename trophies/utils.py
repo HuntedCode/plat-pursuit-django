@@ -320,11 +320,26 @@ def update_profile_games(profile):
     profile.save(update_fields=['total_games', 'total_completes', 'avg_progress'])
 
 def update_profile_trophy_counts(profile):
-    from trophies.models import EarnedTrophy
-    profile.total_trophies = EarnedTrophy.objects.filter(profile=profile, earned=True).count()
-    profile.total_unearned = EarnedTrophy.objects.filter(profile=profile, earned=False).count()
+    from trophies.models import EarnedTrophy, ProfileGame
+    from django.db.models import Sum
+    
+    if not profile.hide_hiddens:
+        trophy_totals_qs = ProfileGame.objects.filter(profile=profile).aggregate(
+            unearned=Sum('unearned_trophies_count'),
+            earned=Sum('earned_trophies_count'),
+        )
+    else:
+        trophy_totals_qs = ProfileGame.objects.filter(profile=profile, user_hidden=False).aggregate(
+            unearned=Sum('unearned_trophies_count'),
+            earned=Sum('earned_trophies_count'),
+        )
+    profile.total_trophies = trophy_totals_qs.earned
+    profile.total_unearned = trophy_totals_qs.unearned
     profile.total_plats = EarnedTrophy.objects.filter(profile=profile, earned=True, trophy__trophy_type='platinum').count()
-    profile.save(update_fields=['total_trophies', 'total_unearned', 'total_plats'])
+    profile.total_games = ProfileGame.objects.filter(profile=profile).count()
+    profile.total_completes = ProfileGame.objects.filter(profile=profile, progress=100).count()
+    profile.avg_progress = profile.get_average_progress()
+    profile.save(update_fields=['total_trophies', 'total_unearned', 'total_plats', 'total_games', 'total_completes', 'avg_progress'])
 
 def detect_asian_language(title: str) -> str:
     """Detect the primary Asian language in a game title."""

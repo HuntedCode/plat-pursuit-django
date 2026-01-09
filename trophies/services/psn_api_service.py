@@ -194,7 +194,8 @@ class PsnApiService:
                     "gold": trophy_title.earned_trophies.gold,
                     "platinum": trophy_title.earned_trophies.platinum
                 },
-                "last_updated_datetime": trophy_title.last_updated_datetime
+                "last_updated_datetime": trophy_title.last_updated_datetime,
+                "user_hidden": False,
             },
         )
 
@@ -272,7 +273,8 @@ class PsnApiService:
                 "progress": trophy_data.progress,
                 "progress_rate": trophy_data.progress_rate,
                 "progressed_date_time": trophy_data.progressed_date_time,
-                "earned_date_time": trophy_data.earned_date_time
+                "earned_date_time": trophy_data.earned_date_time,
+                "user_hidden": False,
             },
         )
 

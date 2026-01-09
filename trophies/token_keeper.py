@@ -19,7 +19,7 @@ from psnawp_api.models.trophies.trophy_constants import PlatformType
 from requests import HTTPError
 from requests.exceptions import ConnectionError, Timeout
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type, wait_fixed
-from .models import Profile, Game, TitleID, TrophyGroup
+from .models import Profile, Game, TitleID, TrophyGroup, ProfileGame
 from .services.psn_api_service import PsnApiService
 from .psn_manager import PSNManager
 from .utils import redis_client, log_api_call, TITLE_ID_BLACKLIST, TITLE_STATS_SUPPORTED_PLATFORMS, update_profile_games, update_profile_trophy_counts, detect_asian_language, check_profile_badges, initial_badge_check
@@ -527,41 +527,65 @@ class TokenKeeper:
         time.sleep(5)
 
         logger.info(f"Starting complete sync job for {profile_id}...")
+
         # Check profile heatlh
-        if not profile.last_profile_health_check or timezone.now() - timedelta(days=1) > profile.last_profile_health_check:
-            logger.info(f"Starting health check for {profile_id}...")
-            summary = self._execute_api_call(self._get_instance_for_job(job_type), profile, 'trophy_summary')
-            tracked_trophies = PsnApiService.get_profile_trophy_summary(profile)
+        logger.info(f"Starting health check for {profile_id}...")
+        summary = self._execute_api_call(self._get_instance_for_job(job_type), profile, 'trophy_summary')
+        tracked_trophies = PsnApiService.get_profile_trophy_summary(profile)
 
-            earned = summary.earned_trophies
-            summary_total = earned.bronze + earned.silver + earned.gold + earned.platinum
+        earned = summary.earned_trophies
+        summary_total = earned.bronze + earned.silver + earned.gold + earned.platinum
+        total_tracked = tracked_trophies['total'] + profile.total_hiddens
 
-            logger.info(f"Profile {profile_id} health: Summary: {summary_total} | Tracked: {tracked_trophies['total']} | {summary_total == tracked_trophies['total']}")
+        logger.info(f"Profile {profile_id} health: Summary: {summary_total} | Tracked: {total_tracked} (Hidden: {profile.total_hiddens}) | {summary_total == total_tracked}")
 
-            if summary_total > tracked_trophies['total']:
-                trophy_titles_to_be_updated = []
-                page_size = 400
-                limit = page_size
-                offset = 0
-                is_full = True
-                while is_full:
-                    titles = self._execute_api_call(self._get_instance_for_job(job_type), profile, 'trophy_titles', limit=limit, offset=offset, page_size=page_size)
-                    for title in titles:
-                        game, tracked = PsnApiService.get_tracked_trophies_for_game(profile, title.np_communication_id)
-                        title_total = title.earned_trophies.bronze + title.earned_trophies.silver + title.earned_trophies.gold + title.earned_trophies.platinum
-                        logger.info(f"{game.np_communication_id} - Tracked: {tracked['total']} | Title: {title_total} | {tracked['total'] == title_total}")
-                        if tracked['total'] != title_total:
-                            trophy_titles_to_be_updated.append({'title': title, 'game': game})
-                            logger.info(f"Mismatch for profile {profile_id} - {title.np_communication_id}: Tracked: {tracked['total']} | Title: {title_total}")
-                    is_full = len(titles) == page_size
-                    limit += page_size
-                    offset += page_size
+        if summary_total != total_tracked:
+            trophy_titles_to_be_updated = []
+            current_tracked_games = list(ProfileGame.objects.filter(profile=profile))
+            page_size = 400
+            limit = page_size
+            offset = 0
+            is_full = True
+            has_mismatch = False
+            while is_full:
+                titles = self._execute_api_call(self._get_instance_for_job(job_type), profile, 'trophy_titles', limit=limit, offset=offset, page_size=page_size)
+                for title in titles:
+                    game, tracked = PsnApiService.get_tracked_trophies_for_game(profile, title.np_communication_id)
+                    try:
+                        pgame = ProfileGame.objects.get(profile=profile, game=game)
+                    except:
+                        pass
+                    else:
+                        current_tracked_games.remove(pgame)
+                    title_total = title.earned_trophies.bronze + title.earned_trophies.silver + title.earned_trophies.gold + title.earned_trophies.platinum
+                    logger.info(f"{game.np_communication_id} - Tracked: {tracked['total']} | Title: {title_total} | {tracked['total'] == title_total}")
+                    if tracked['total'] != title_total:
+                        has_mismatch = True
+                        trophy_titles_to_be_updated.append({'title': title, 'game': game})
+                        logger.info(f"Mismatch for profile {profile_id} - {title.np_communication_id}: Tracked: {tracked['total']} | Title: {title_total}")
+                is_full = len(titles) == page_size
+                limit += page_size
+                offset += page_size
+
+            if len(current_tracked_games) > 0:
+                for pgame in current_tracked_games:
+                    for trophy in profile.earned_trophy_entries.filter(game=pgame.game):
+                        trophy.user_hidden = True
+                        trophy.save(update_fields=['user_hidden'])
+                    pgame.user_hidden = True
+                    pgame.save(update_fields=['user_hidden'])
+
+            if has_mismatch and len(trophy_titles_to_be_updated) > 0:
+                for title in trophy_titles_to_be_updated:
+                    game = title['game']
+                    args = [game.np_communication_id, game.title_platform[0] if not game.title_platform[0] == 'PSPC' else game.title_platform[1]]
+                    PSNManager.assign_job('sync_trophies', args=args, profile_id=profile.id, priority_override='high_priority')
+            else:
+                profile.total_hiddens = summary_total - total_tracked
+                profile.save(update_fields=['total_hiddens'])
+                logger.info(f"New total hiddens for profile {profile.id}: {summary_total - total_tracked}")
             
-                if len(trophy_titles_to_be_updated) > 0:
-                    for title in trophy_titles_to_be_updated:
-                        game = title['game']
-                        args = [game.np_communication_id, game.title_platform[0] if not game.title_platform[0] == 'PSPC' else game.title_platform[1]]
-                        PSNManager.assign_job('sync_trophies', args=args, profile_id=profile.id, priority_override='high_priority')
+            # Check badges
             badge_check = True if profile.last_profile_health_check else False
             profile.last_profile_health_check = timezone.now()
             profile.save(update_fields=['last_profile_health_check'])
