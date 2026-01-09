@@ -553,7 +553,7 @@ class TokenKeeper:
                     try:
                         game, tracked = PsnApiService.get_tracked_trophies_for_game(profile, title.np_communication_id)
                     except Game.DoesNotExist:
-                         game, _, _ =PsnApiService.create_or_update_game(title)
+                         game, _, _ = PsnApiService.create_or_update_game(title)
                          
                     try:
                         pgame = ProfileGame.objects.get(profile=profile, game=game)

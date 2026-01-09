@@ -303,12 +303,13 @@ class PsnApiService:
     @classmethod
     def get_profile_trophy_summary(cls, profile: Profile):
         return {
-            'total': EarnedTrophy.objects.filter(profile=profile, earned=True).count(),
-            'bronze': EarnedTrophy.objects.filter(profile=profile, earned=True, trophy__trophy_type='bronze').count(),
-            'silver': EarnedTrophy.objects.filter(profile=profile, earned=True, trophy__trophy_type='silver').count(),
-            'gold': EarnedTrophy.objects.filter(profile=profile, earned=True, trophy__trophy_type='gold').count(),
-            'platinum': EarnedTrophy.objects.filter(profile=profile, earned=True, trophy__trophy_type='platinum').count(),
+            'total': EarnedTrophy.objects.filter(profile=profile, earned=True).count() or 0,
+            'bronze': EarnedTrophy.objects.filter(profile=profile, earned=True, trophy__trophy_type='bronze').count() or 0,
+            'silver': EarnedTrophy.objects.filter(profile=profile, earned=True, trophy__trophy_type='silver').count() or 0,
+            'gold': EarnedTrophy.objects.filter(profile=profile, earned=True, trophy__trophy_type='gold').count() or 0,
+            'platinum': EarnedTrophy.objects.filter(profile=profile, earned=True, trophy__trophy_type='platinum').count() or 0,
         }
+
     
     @classmethod
     def get_tracked_trophies_for_game(cls, profile: Profile, np_comm_id: str):
@@ -316,7 +317,7 @@ class PsnApiService:
             game = Game.objects.get(np_communication_id=np_comm_id)
         except Game.DoesNotExist:
             logger.error(f"Could not find game {np_comm_id}")
-            return None, 0
+            raise
 
         trophies = {
             'total': EarnedTrophy.objects.filter(profile=profile, trophy__game=game, earned=True).count(),
