@@ -60,14 +60,14 @@
                         {% for entry in lb_earners_page_obj %}
                             <tr id="1-rank-{{ entry.rank }}" class="{% if request.user.is_authenticated and request.user.profile.display_psn_username == entry.psn_username %}bg-success/15{% endif %} h-15">
                                 <td>{{ entry.rank }}</td>
-                                <td class="text-xs sm:text-sm lg:text-base {% if entry.is_premium %}legendary-title{% endif %}">
+                                <td class="text-xs sm:text-sm lg:text-base">
                                     <a href="{% url 'profile_detail' entry.psn_username %}">
                                         <div class="avatar mr-2 hidden sm:inline-flex">
                                             <div class="w-4 lg:w-6 rounded-full ring-2 ring-primary cursor-pointer hover:scale-105">
                                                 <img src="{{ entry.avatar_url|default:'/static/default-avatar.png' }}" alt="Profile Avatar" />
                                             </div>
                                         </div>
-                                        {{ entry.psn_username }} • {{ entry.flag }}
+                                        <span class="{% if entry.is_premium %}legendary-title{% endif %}">{{ entry.psn_username }}</span> • {{ entry.flag }}
                                     </a>
                                 </td>
                                 <td>
@@ -154,14 +154,14 @@
                         {% for entry in lb_progress_page_obj %}
                             <tr id="2-rank-{{ entry.rank }}" class="{% if request.user.is_authenticated and request.user.profile.display_psn_username == entry.psn_username %}bg-success/15{% endif %} h-15">
                                 <td>{{ entry.rank }}</td>
-                                <td class="{% if entry.is_premium %}legendary-title{% endif %}">
+                                <td>
                                     <a href="{% url 'profile_detail' entry.psn_username %}">
                                         <div class="avatar mr-2 hidden sm:inline-flex">
                                             <div class="w-4 lg:w-6 rounded-full ring-2 ring-primary cursor-pointer hover:scale-105">
                                                 <img src="{{ entry.avatar_url|default:'/static/default-avatar.png' }}" alt="Profile Avatar" />
                                             </div>
                                         </div>
-                                        {{ entry.psn_username }} • {{ entry.flag }}
+                                        <span class="{% if entry.is_premium %}legendary-title{% endif %}">{{ entry.psn_username }}</span> • {{ entry.flag }}
                                     </a>
                                 </td>
                                 <td>
