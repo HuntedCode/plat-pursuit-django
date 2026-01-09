@@ -22,7 +22,7 @@ from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_excep
 from .models import Profile, Game, TitleID, TrophyGroup, ProfileGame
 from .services.psn_api_service import PsnApiService
 from .psn_manager import PSNManager
-from .utils import redis_client, log_api_call, TITLE_ID_BLACKLIST, TITLE_STATS_SUPPORTED_PLATFORMS, update_profile_games, update_profile_trophy_counts, detect_asian_language, check_profile_badges, initial_badge_check
+from .utils import redis_client, log_api_call, TITLE_ID_BLACKLIST, TITLE_STATS_SUPPORTED_PLATFORMS, update_profile_games, update_profile_trophy_counts, detect_asian_language, check_profile_badges
 
 logger = logging.getLogger("psn_api")
 
@@ -550,7 +550,11 @@ class TokenKeeper:
             while is_full:
                 titles = self._execute_api_call(self._get_instance_for_job(job_type), profile, 'trophy_titles', limit=limit, offset=offset, page_size=page_size)
                 for title in titles:
-                    game, tracked = PsnApiService.get_tracked_trophies_for_game(profile, title.np_communication_id)
+                    try:
+                        game, tracked = PsnApiService.get_tracked_trophies_for_game(profile, title.np_communication_id)
+                    except Game.DoesNotExist:
+                         game, _, _ =PsnApiService.create_or_update_game(title)
+                         
                     try:
                         pgame = ProfileGame.objects.get(profile=profile, game=game)
                     except:

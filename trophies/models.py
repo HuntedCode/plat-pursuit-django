@@ -447,9 +447,6 @@ class Concept(models.Model):
         if date:
             self.release_date = date
             self.save(update_fields=['release_date'])
-            badges = self.badges.all()
-            for badge in badges:
-                badge.update_most_recent_concept()
     
     def has_user_earned_platinum(self, profile):
         platinum_trophies = Trophy.objects.filter(game__concept=self, trophy_type='platinum')

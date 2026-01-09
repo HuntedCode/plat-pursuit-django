@@ -1177,6 +1177,65 @@ class BadgeDetailView(ProfileHotbarMixin, DetailView):
 
         return context
 
+class BadgeLeaderboardsView(ProfileHotbarMixin, DetailView):
+    model = Badge
+    template_name = 'trophies/badge_leaderboards.html'
+    slug_field = 'series_slug'
+    slug_url_kwarg = 'series_slug'
+    context_object_name = 'series_badges'
+
+    def get_object(self, queryset=None):
+        series_slug = self.kwargs[self.slug_url_kwarg]
+        return Badge.objects.get(series_slug=series_slug, tier=1)
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        badge = self.object
+        series_slug = badge.series_slug
+        user = self.request.user
+
+        earners_key = f"lb_earners_{series_slug}"
+        progress_key = f"lb_progress_{series_slug}"
+
+        lb_earners = cache.get(earners_key, [])
+        lb_earners_paginate_by = 50
+        lb_progress = cache.get(progress_key, [])
+        lb_progress_paginate_by = 50
+
+        context['lb_earners_refresh_time'] = cache.get(f"{earners_key}_refresh_time")
+        context['lb_progress_refresh_time'] = cache.get(f"{progress_key}_refresh_time")
+
+        if user.is_authenticated and hasattr(user, 'profile'):
+            # Find user profile
+            user_psn = user.profile.display_psn_username
+            for idx, entry in enumerate(lb_earners):
+                if entry['psn_username'] == user_psn:
+                    context['lb_earners_user_page'] = (idx // lb_earners_paginate_by) + 1
+                    break
+            for idx, entry in enumerate(lb_progress):
+                if entry['psn_username'] == user_psn:
+                    context['lb_progress_user_page'] = (idx // lb_progress_paginate_by) + 1
+
+        lb_earners_paginator = Paginator(lb_earners, lb_earners_paginate_by)
+        lb_earners_page = self.request.GET.get('lb_earners_page', 1)
+        context['lb_earners_page_obj'] = lb_earners_paginator.get_page(lb_earners_page)
+        context['lb_earners_paginator'] = lb_earners_paginator
+
+        lb_progress_paginator = Paginator(lb_progress, lb_progress_paginate_by)
+        lb_progress_page = self.request.GET.get('lb_progress_page', 1)
+        context['lb_progress_page_obj'] = lb_progress_paginator.get_page(lb_progress_page)
+        context['lb_progress_paginator'] = lb_progress_paginator
+
+        context['badge'] = badge
+        context['breadcrumb'] = [
+            {'text': 'Home', 'url': reverse_lazy('home')},
+            {'text': 'Badges', 'url': reverse_lazy('badges_list')},
+            {'text': 'Leaderboards', 'url': ''},
+            {'text': context['badge'].effective_display_series},
+        ]
+        
+        return context
+
 class GuideListView(ProfileHotbarMixin, ListView):
     model = Concept
     template_name = 'trophies/guide_list.html'

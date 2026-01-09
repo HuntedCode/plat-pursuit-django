@@ -16,7 +16,7 @@ class Command(BaseCommand):
         for slug in unique_slugs:
             try:
                 data = compute_earners_leaderboard(slug)
-                key = f"lb_earners_date_{slug}"
+                key = f"lb_earners_{slug}"
                 cache.set(key, data, 3600 * 2)
                 cache.set(f"{key}_refresh_time", timezone.now().isoformat(), 3600 * 2)
                 self.stdout.write(f"Updated earners leaderboard for series {slug}")

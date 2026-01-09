@@ -1,0 +1,244 @@
+{% extends 'base.html' %}
+{% load static custom_filters query_tags %}
+
+{% block title %}{{ badge.effective_display_series }} - Leaderboards{% endblock %}
+{% block content %}
+
+    {% include 'partials/breadcrumb.html' with items=breadcrumb %}
+
+    <div class="flex flex-row items-center justify-center gap-4">
+        <figure class="w-32 sm:w-37 md:w-42 lg:w-48 h-32 sm:h-37 md:h-42 lg:h-48 overflow-visible">
+            {% include 'partials/badge.html' with layers=badge.get_badge_layers %}
+        </figure>
+        <div class="flex flex-col gap-0">
+            <h1 class="text-sm sm:text-lg md:text-xl lg:text-2xl text-base-content text-start pr-1 italic">{{ badge.effective_display_series }}</h1>
+            <h1 class="text-sm sm:text-lg md:text-xl lg:text-2xl legendary-title text-start pr-1 italic">{{ badge.effective_display_title }}</h1>
+            <h1 class="text-sm sm:text-lg md:text-xl lg:text-2xl text-base-content text-start">Leaderboards</h1>
+        </div>
+    </div>
+
+    <div class="divider divider-vertical"></div>
+
+    <div class="grid grid-cols-1 xl:grid-cols-2 gap-4">
+
+        <div class="flex flex-col justify-start gap-2">
+            <h2 class="text-lg italic font-bold">Badge Earns By Date</h2>
+            <p class="text-sm text-base-content/70 text-center pr-1 italic">Leaderboard Updated: {{ lb_earners_refresh_time|iso_datetime }}</p>
+            <div class="flex flex-col sm:flex-row justify-between items-center gap-4 mt-4 w-7/8 mx-auto">
+                <div class="btn-group">
+                    {% if lb_earners_page_obj.has_previous %}
+                    <a href="?{% query_transform lb_earners_page=1 %}" class="btn btn-xs">First</a>
+                    <a href="?{% query_transform lb_earners_page=lb_earners_page_obj.previous_page_number %}" class="btn btn-xs">Prev</a>
+                    {% endif %}
+                    <span class="btn btn-xs btn-secondary btn-active">Page {{ lb_earners_page_obj.number }} of {{ lb_earners_paginator.num_pages }}</span>
+                    {% if lb_earners_page_obj.has_next %}
+                    <a href="?{% query_transform lb_earners_page=lb_earners_page_obj.next_page_number %}" class="btn btn-xs">Next</a>
+                    <a href="?{% query_transform lb_earners_page=lb_earners_paginator.num_pages %}" class="btn btn-xs">Last</a>
+                    {% endif %}
+                </div>
+                <div class="flex flex-row justify-between gap-8">
+                    {% if lb_earners_user_page %}
+                        <a href="?{% query_transform lb_earners_page=lb_earners_user_page %}" class="btn btn-xs btn-accent tooltip" data-tip="Jump to your rank">My Rank</a>
+                    {% endif %}
+                    <form class="input-group" onsubmit="updatePage(this, 'lb_earners_page'); return false;">
+                        <input type="number" class="input input-bordered input-xs w-16" min="1" max="{{ lb_earners_paginator.num_pages }}" placeholder="Page" />
+                        <button type="submit" class="btn btn-xs btn-primary">Go</button>
+                    </form>
+                </div>
+            </div>
+
+            <table class="table table-zebra border-4 border-base-300 shadow-lg shadow-neutral rounded-box w-full">
+                <thead>
+                    <tr>
+                        <th></th>
+                        <th class="text-sm">User</th>
+                        <th class="text-sm">Tier</th>
+                        <th class="text-sm">Earned Date</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for entry in lb_earners_page_obj %}
+                        <tr class="{% if request.user.is_authenticated and request.user.profile.display_psn_username == entry.psn_username %}bg-success/15{% endif %}">
+                            <td>{{ forloop.counter }}</td>
+                            <td class="text-xs sm:text-sm lg:text-base">
+                                <a href="{% url 'profile_detail' entry.psn_username %}">
+                                    <div class="avatar mr-2 hidden sm:inline-flex">
+                                        <div class="w-4 lg:w-6 rounded-full ring-2 ring-primary cursor-pointer hover:scale-105">
+                                            <img src="{{ entry.avatar_url|default:'/static/default-avatar.png' }}" alt="Profile Avatar" />
+                                        </div>
+                                    </div>
+                                    {{ entry.psn_username }} • {{ entry.flag }}
+                                </a>
+                            </td>
+                            <td>
+                                {% with entry.highest_tier|stringformat:'s' as tier %}
+                                    <div class="tooltip" data-tip="{{ tier|badge_tier }}">
+                                        <figure class="w-6 hover:scale-105">
+                                            <img src="{% static 'images/badges/backdrops/'|add:tier|add:'_backdrop.png' %}" class="w-full" alt="{{ tier|badge_tier }}" />
+                                        </figure>
+                                    </div>
+                                {% endwith %}
+                            </td>
+                            <td class="text-xs sm:text-sm lg:text-base italic">{{ entry.earn_date|iso_datetime }}</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+
+            <div class="flex flex-col sm:flex-row justify-between items-center gap-4 mt-4 w-7/8 mx-auto">
+
+                <div class="btn-group">
+                    {% if lb_earners_page_obj.has_previous %}
+                    <a href="?{% query_transform lb_earners_page=1 %}" class="btn btn-xs">First</a>
+                    <a href="?{% query_transform lb_earners_page=lb_earners_page_obj.previous_page_number %}" class="btn btn-xs">Prev</a>
+                    {% endif %}
+                    <span class="btn btn-xs btn-secondary btn-active">Page {{ lb_earners_page_obj.number }} of {{ lb_earners_paginator.num_pages }}</span>
+                    {% if lb_earners_page_obj.has_next %}
+                    <a href="?{% query_transform lb_earners_page=lb_earners_page_obj.next_page_number %}" class="btn btn-xs">Next</a>
+                    <a href="?{% query_transform lb_earners_page=lb_earners_paginator.num_pages %}" class="btn btn-xs">Last</a>
+                    {% endif %}
+                </div>
+
+                <div class="flex flex-row justify-between gap-8">
+                    {% if lb_earners_user_page %}
+                        <a href="?{% query_transform lb_earners_page=lb_earners_user_page %}" class="btn btn-xs btn-accent tooltip" data-tip="Jump to your rank">My Rank</a>
+                    {% endif %}
+
+                    <form class="input-group" onsubmit="updatePage(this, 'lb_earners_page'); return false;">
+                        <input type="number" class="input input-bordered input-xs w-16" min="1" max="{{ lb_earners_paginator.num_pages }}" placeholder="Page" />
+                        <button type="submit" class="btn btn-xs btn-primary">Go</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <div class="flex flex-col justify-start-start gap-2">
+            <h2 class="text-xl italic font-bold">Badge Trophy Leaders</h2>
+            <p class="text-sm text-base-content/70 text-center pr-1 italic">Leaderboard Updated: {{ lb_progress_refresh_time|iso_datetime }}</p>
+            <div class="flex flex-col sm:flex-row justify-between items-center gap-4 mt-4 w-7/8 mx-auto">
+                <div class="btn-group">
+                    {% if lb_progress_page_obj.has_previous %}
+                    <a href="?{% query_transform lb_progress_page=1 %}" class="btn btn-xs">First</a>
+                    <a href="?{% query_transform lb_progress_page=lb_progress_page_obj.previous_page_number %}" class="btn btn-xs">Prev</a>
+                    {% endif %}
+                    <span class="btn btn-xs btn-secondary btn-active">Page {{ lb_progress_page_obj.number }} of {{ lb_progress_paginator.num_pages }}</span>
+                    {% if lb_progress_page_obj.has_next %}
+                    <a href="?{% query_transform lb_progress_page=lb_progress_page_obj.next_page_number %}" class="btn btn-xs">Next</a>
+                    <a href="?{% query_transform lb_progress_page=lb_progress_paginator.num_pages %}" class="btn btn-xs">Last</a>
+                    {% endif %}
+                </div>
+                
+                <div class="flex flex-row justify-between gap-8">
+                    {% if lb_progress_user_page %}
+                        <a href="?{% query_transform lb_progress_page=lb_progress_user_page %}" class="btn btn-xs btn-accent tooltip" data-tip="Jump to your rank">My Rank</a>
+                    {% endif %}
+
+                    <form class="input-group" onsubmit="updatePage(this, 'lb_progress_page'); return false;">
+                        <input type="number" class="input input-bordered input-xs w-16" min="1" max="{{ lb_progress_paginator.num_pages }}" placeholder="Page" />
+                        <button type="submit" class="btn btn-xs btn-primary">Go</button>
+                    </form>
+                </div>
+            </div>
+
+            <div class="w-full overflow-x-scroll">
+                <table class="table table-zebra border-4 border-base-300 shadow-lg shadow-neutral rounded-box w-full">
+                <thead>
+                    <tr>
+                        <th></th>
+                        <th>User</th>
+                        <th>Badge Trophies</th>
+                        <th>Last Earned</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for entry in lb_progress_page_obj %}
+                        <tr class="{% if request.user.is_authenticated and request.user.profile.display_psn_username == entry.psn_username %}bg-success/15{% endif %}">
+                            <td>{{ forloop.counter }}</td>
+                            <td>
+                                <a href="{% url 'profile_detail' entry.psn_username %}">
+                                    <div class="avatar mr-2 hidden sm:inline-flex">
+                                        <div class="w-4 lg:w-6 rounded-full ring-2 ring-primary cursor-pointer hover:scale-105">
+                                            <img src="{{ entry.avatar_url|default:'/static/default-avatar.png' }}" alt="Profile Avatar" />
+                                        </div>
+                                    </div>
+                                    {{ entry.psn_username }} • {{ entry.flag }}
+                                </a>
+                            </td>
+                            <td>
+                                <div class="flex flex-col lg:flex-row justify-center items-center gap-3">
+                                    <div class="flex flex-row gap-3">
+                                        <div class="flex flex-row items-center gap-0">
+                                            <svg class="w-4 mr-1 hover:scale-105"  version="1.1" id="_x32_" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 512 512" xml:space="preserve" fill="var(--color-trophy-platinum)"><g id="SVGRepo_bgCarrier" stroke-width="0"></g><g id="SVGRepo_tracerCarrier" stroke-linecap="round" stroke-linejoin="round"></g><g id="SVGRepo_iconCarrier"><g> <path class="st0" d="M102.49,0c0,27.414,0,104.166,0,137.062c0,112.391,99.33,156.25,153.51,156.25 c54.18,0,153.51-43.859,153.51-156.25c0-32.896,0-109.648,0-137.062H102.49z M256.289,50.551l-68.164,29.768v98.474l-0.049,19.53 c-0.526-0.112-47.274-10.112-47.274-78.391c0-28.17,0-69.6,0-69.6h60.385L256.289,50.551z"></path> <polygon class="st0" points="315.473,400.717 291.681,367.482 279.791,318.506 256,322.004 232.209,318.506 220.314,367.482 205.347,388.394 196.527,400.476 196.699,400.476 196.527,400.717 "></polygon> <polygon class="st0" points="366.93,432.24 366.93,432 145.07,432 145.07,511.598 145.07,511.76 145.07,511.76 145.07,512 366.93,512 366.93,432.402 366.93,432.24 "></polygon> <path class="st0" d="M511.638,96.668c-0.033-1.268-0.068-2.336-0.068-3.174V45.1h-73.889v38.736h35.152v9.658 c0,1.127,0.037,2.557,0.086,4.258c0.389,13.976,1.303,46.707-21.545,70.203c-5.121,5.266-11.221,9.787-18.219,13.613 c-3.883,17.635-10.109,33.564-18.104,47.814c26.561-6.406,48.026-17.898,64.096-34.422 C513.402,159.734,512.121,113.918,511.638,96.668z"></path> <path class="st0" d="M60.625,167.955c-22.848-23.496-21.934-56.227-21.541-70.203c0.047-1.701,0.082-3.131,0.082-4.258v-9.658 h34.842h0.07l0,0h0.24V45.1H0.43v48.394c0,0.838-0.032,1.906-0.068,3.174c-0.482,17.25-1.76,63.066,32.494,98.293 c16.068,16.524,37.531,28.014,64.092,34.422c-7.996-14.25-14.22-30.182-18.103-47.816C71.846,177.74,65.746,173.221,60.625,167.955 z"></path> </g> </g></svg>
+                                            <p class="text-base-content text-xs font-bold">1{{ entry.trophy_totals.plats }}</p>
+                                        </div>
+                                        <div class="flex flex-row items-center gap-0">
+                                            <svg class="w-4 mr-1 hover:scale-105" version="1.1" id="_x32_" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 512 512" xml:space="preserve" fill="var(--color-trophy-gold)"><g id="SVGRepo_bgCarrier" stroke-width="0"></g><g id="SVGRepo_tracerCarrier" stroke-linecap="round" stroke-linejoin="round"></g><g id="SVGRepo_iconCarrier"><g> <path class="st0" d="M102.49,0c0,27.414,0,104.166,0,137.062c0,112.391,99.33,156.25,153.51,156.25 c54.18,0,153.51-43.859,153.51-156.25c0-32.896,0-109.648,0-137.062H102.49z M256.289,50.551l-68.164,29.768v98.474l-0.049,19.53 c-0.526-0.112-47.274-10.112-47.274-78.391c0-28.17,0-69.6,0-69.6h60.385L256.289,50.551z"></path> <polygon class="st0" points="315.473,400.717 291.681,367.482 279.791,318.506 256,322.004 232.209,318.506 220.314,367.482 205.347,388.394 196.527,400.476 196.699,400.476 196.527,400.717 "></polygon> <polygon class="st0" points="366.93,432.24 366.93,432 145.07,432 145.07,511.598 145.07,511.76 145.07,511.76 145.07,512 366.93,512 366.93,432.402 366.93,432.24 "></polygon> <path class="st0" d="M511.638,96.668c-0.033-1.268-0.068-2.336-0.068-3.174V45.1h-73.889v38.736h35.152v9.658 c0,1.127,0.037,2.557,0.086,4.258c0.389,13.976,1.303,46.707-21.545,70.203c-5.121,5.266-11.221,9.787-18.219,13.613 c-3.883,17.635-10.109,33.564-18.104,47.814c26.561-6.406,48.026-17.898,64.096-34.422 C513.402,159.734,512.121,113.918,511.638,96.668z"></path> <path class="st0" d="M60.625,167.955c-22.848-23.496-21.934-56.227-21.541-70.203c0.047-1.701,0.082-3.131,0.082-4.258v-9.658 h34.842h0.07l0,0h0.24V45.1H0.43v48.394c0,0.838-0.032,1.906-0.068,3.174c-0.482,17.25-1.76,63.066,32.494,98.293 c16.068,16.524,37.531,28.014,64.092,34.422c-7.996-14.25-14.22-30.182-18.103-47.816C71.846,177.74,65.746,173.221,60.625,167.955 z"></path> </g> </g></svg>
+                                            <p class="text-base-content text-xs font-bold">1{{ entry.trophy_totals.golds }}</p>
+                                        </div>
+                                    </div>
+                                    <div class="flex flex-row gap-3 mb-2 lg:mb-0">
+                                        <div class="flex flex-row items-center gap-0">
+                                            <svg class="w-4 mr-1 hover:scale-105" version="1.1" id="_x32_" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 512 512" xml:space="preserve" fill="var(--color-trophy-silver)"><g id="SVGRepo_bgCarrier" stroke-width="0"></g><g id="SVGRepo_tracerCarrier" stroke-linecap="round" stroke-linejoin="round"></g><g id="SVGRepo_iconCarrier"><g> <path class="st0" d="M102.49,0c0,27.414,0,104.166,0,137.062c0,112.391,99.33,156.25,153.51,156.25 c54.18,0,153.51-43.859,153.51-156.25c0-32.896,0-109.648,0-137.062H102.49z M256.289,50.551l-68.164,29.768v98.474l-0.049,19.53 c-0.526-0.112-47.274-10.112-47.274-78.391c0-28.17,0-69.6,0-69.6h60.385L256.289,50.551z"></path> <polygon class="st0" points="315.473,400.717 291.681,367.482 279.791,318.506 256,322.004 232.209,318.506 220.314,367.482 205.347,388.394 196.527,400.476 196.699,400.476 196.527,400.717 "></polygon> <polygon class="st0" points="366.93,432.24 366.93,432 145.07,432 145.07,511.598 145.07,511.76 145.07,511.76 145.07,512 366.93,512 366.93,432.402 366.93,432.24 "></polygon> <path class="st0" d="M511.638,96.668c-0.033-1.268-0.068-2.336-0.068-3.174V45.1h-73.889v38.736h35.152v9.658 c0,1.127,0.037,2.557,0.086,4.258c0.389,13.976,1.303,46.707-21.545,70.203c-5.121,5.266-11.221,9.787-18.219,13.613 c-3.883,17.635-10.109,33.564-18.104,47.814c26.561-6.406,48.026-17.898,64.096-34.422 C513.402,159.734,512.121,113.918,511.638,96.668z"></path> <path class="st0" d="M60.625,167.955c-22.848-23.496-21.934-56.227-21.541-70.203c0.047-1.701,0.082-3.131,0.082-4.258v-9.658 h34.842h0.07l0,0h0.24V45.1H0.43v48.394c0,0.838-0.032,1.906-0.068,3.174c-0.482,17.25-1.76,63.066,32.494,98.293 c16.068,16.524,37.531,28.014,64.092,34.422c-7.996-14.25-14.22-30.182-18.103-47.816C71.846,177.74,65.746,173.221,60.625,167.955 z"></path> </g> </g></svg>
+                                            <p class="text-base-content text-xs font-bold">1{{ entry.trophy_totals.silvers }}</p>
+                                        </div>
+                                        <div class="flex flex-row items-center gap-0">
+                                            <svg class="w-4 mr-1 hover:scale-105" version="1.1" id="_x32_" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 512 512" xml:space="preserve" fill="var(--color-trophy-bronze)"><g id="SVGRepo_bgCarrier" stroke-width="0"></g><g id="SVGRepo_tracerCarrier" stroke-linecap="round" stroke-linejoin="round"></g><g id="SVGRepo_iconCarrier"><g> <path class="st0" d="M102.49,0c0,27.414,0,104.166,0,137.062c0,112.391,99.33,156.25,153.51,156.25 c54.18,0,153.51-43.859,153.51-156.25c0-32.896,0-109.648,0-137.062H102.49z M256.289,50.551l-68.164,29.768v98.474l-0.049,19.53 c-0.526-0.112-47.274-10.112-47.274-78.391c0-28.17,0-69.6,0-69.6h60.385L256.289,50.551z"></path> <polygon class="st0" points="315.473,400.717 291.681,367.482 279.791,318.506 256,322.004 232.209,318.506 220.314,367.482 205.347,388.394 196.527,400.476 196.699,400.476 196.527,400.717 "></polygon> <polygon class="st0" points="366.93,432.24 366.93,432 145.07,432 145.07,511.598 145.07,511.76 145.07,511.76 145.07,512 366.93,512 366.93,432.402 366.93,432.24 "></polygon> <path class="st0" d="M511.638,96.668c-0.033-1.268-0.068-2.336-0.068-3.174V45.1h-73.889v38.736h35.152v9.658 c0,1.127,0.037,2.557,0.086,4.258c0.389,13.976,1.303,46.707-21.545,70.203c-5.121,5.266-11.221,9.787-18.219,13.613 c-3.883,17.635-10.109,33.564-18.104,47.814c26.561-6.406,48.026-17.898,64.096-34.422 C513.402,159.734,512.121,113.918,511.638,96.668z"></path> <path class="st0" d="M60.625,167.955c-22.848-23.496-21.934-56.227-21.541-70.203c0.047-1.701,0.082-3.131,0.082-4.258v-9.658 h34.842h0.07l0,0h0.24V45.1H0.43v48.394c0,0.838-0.032,1.906-0.068,3.174c-0.482,17.25-1.76,63.066,32.494,98.293 c16.068,16.524,37.531,28.014,64.092,34.422c-7.996-14.25-14.22-30.182-18.103-47.816C71.846,177.74,65.746,173.221,60.625,167.955 z"></path> </g> </g></svg>
+                                            <p class="text-base-content text-xs font-bold">1{{ entry.trophy_totals.bronzes }}</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </td>
+                            <td class="text-xs italic">{{ entry.last_earned_date|iso_datetime }}</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+                </table>
+            </div>
+
+            <div class="flex flex-col sm:flex-row justify-between items-center gap-4 mt-4 w-7/8 mx-auto">
+                <div class="btn-group">
+                    {% if lb_progress_page_obj.has_previous %}
+                    <a href="?{% query_transform lb_progress_page=1 %}" class="btn btn-xs">First</a>
+                    <a href="?{% query_transform lb_progress_page=lb_progress_page_obj.previous_page_number %}" class="btn btn-xs">Prev</a>
+                    {% endif %}
+                    <span class="btn btn-xs btn-secondary btn-active">Page {{ lb_progress_page_obj.number }} of {{ lb_progress_paginator.num_pages }}</span>
+                    {% if lb_progress_page_obj.has_next %}
+                    <a href="?{% query_transform lb_progress_page=lb_progress_page_obj.next_page_number %}" class="btn btn-xs">Next</a>
+                    <a href="?{% query_transform lb_progress_page=lb_progress_paginator.num_pages %}" class="btn btn-xs">Last</a>
+                    {% endif %}
+                </div>
+
+                <div class="flex flex-row justify-between gap-8">
+                    {% if lb_progress_user_page %}
+                        <a href="?{% query_transform lb_progress_page=lb_progress_user_page %}" class="btn btn-xs btn-accent tooltip" data-tip="Jump to your rank">My Rank</a>
+                    {% endif %}
+
+                    <form class="input-group" onsubmit="updatePage(this, 'lb_progress_page'); return false;">
+                        <input type="number" class="input input-bordered input-xs w-16" min="1" max="{{ lb_progress_paginator.num_pages }}" placeholder="Page" />
+                        <button type="submit" class="btn btn-xs btn-primary">Go</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+{% endblock %}
+{% block js_scripts %}
+<script>
+    function updatePage(form, paramName) {
+        console.log("Trigger..")
+        const input = form.querySelector('input[type="number"]');
+        const page = input.value;
+        console.log(page)
+        console.log(input.max)
+        if (page < 1 || page > input.max) return;
+
+        console.log(form)
+        console.log(input)
+        console.log(page)
+
+        const url = new URL(window.location);
+        url.searchParams.set(paramName, page);
+        window.location.href = url.toString();
+    }
+</script>
+{% endblock %}
