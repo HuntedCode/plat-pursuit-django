@@ -6,8 +6,8 @@ import requests
 import logging
 import time
 from django.db import transaction
-from django.db.models import OuterRef, Q, Max, Subquery, Count
-from django.db.models.functions import Coalesce
+from django.db.models import Window, Q, Max, F, Count
+from django.db.models.functions import RowNumber
 from django.db.models.query import QuerySet
 from django.conf import settings
 from django.utils import timezone
@@ -248,31 +248,25 @@ def compute_earners_leaderboard(series_slug: str) -> list[dict]:
     """Compute earners sorted by earn date."""
     from trophies.models import UserBadge
 
-    max_tier_sub = UserBadge.objects.filter(
-        profile=OuterRef('profile'),
-        badge__series_slug=series_slug,
-    ).values('profile').annotate(max_tier=Max('badge__tier')).values('max_tier')
-
-    earn_date_sub = UserBadge.objects.filter(
-        profile=OuterRef('profile'),
-        badge__series_slug=series_slug,
-        badge__tier=Subquery(max_tier_sub),
-    ).order_by('-earned_at').values('earned_at')[:1]
-
-    earners = UserBadge.objects.filter(badge__series_slug=series_slug).select_related('profile').annotate(
-        max_tier=Coalesce(Subquery(max_tier_sub), 0),
-        earn_date=Coalesce(Subquery(earn_date_sub), timezone.now()),
-    ).distinct('profile')
-
-    earners.order_by('-max_tier', '-earn_date', 'profile')
-
+    earners = UserBadge.objects.filter(
+        badge__series_slug=series_slug
+    ).select_related('profile', 'badge').annotate(
+        row_number=Window(
+            RowNumber(),
+            partition_by=F('profile'),
+            order_by=[F('badge__tier').desc(), F('earned_at').asc()]
+        )
+    ).filter(row_number=1).order_by(
+        F('badge__tier').desc(), 'earned_at', 'profile__display_psn_username'
+    )
+    
     return [{
         'rank': rank + 1,
         'psn_username': earner.profile.display_psn_username,
-        'earn_date': earner.earn_date.isoformat() if earner.earn_date else 'Unknown',
+        'earn_date': earner.earned_at.isoformat() if earner.earned_at else 'Unknown',
         'avatar_url': earner.profile.avatar_url,
         'flag': earner.profile.flag,
-        'highest_tier': earner.max_tier,
+        'highest_tier': earner.badge.tier,
     } for rank, earner in enumerate(earners)]
 
 def compute_progress_leaderboard(series_slug: str) -> list[dict]:
