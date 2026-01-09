@@ -88,6 +88,7 @@ class Profile(models.Model):
     selected_background = models.ForeignKey('Concept', on_delete=models.SET_NULL, null=True, blank=True, related_name='selected_by_profiles', help_text='Selected background concept for premium profiles.')
     selected_title = models.CharField(max_length=100, blank=True, null=True, help_text="Selected user title text from earned badges.")
     hide_hiddens = models.BooleanField(default=False, help_text="If true, hide hidden/deleted games from list and totals.")
+    hide_zeros = models.BooleanField(default=False, help_text="If true, hide games with no trophies earned.")
 
     class Meta:
         indexes = [
@@ -194,10 +195,6 @@ class Profile(models.Model):
     def get_total_trophies_from_summary(self):
         if self.earned_trophy_summary:
             return self.earned_trophy_summary.get('bronze', 0) + self.earned_trophy_summary.get('silver', 0) + self.earned_trophy_summary.get('gold', 0) + self.earned_trophy_summary.get('platinum', 0)
-
-    def get_average_progress(self):
-        avg = self.played_games.aggregate(avg_progress=Avg('progress'))['avg_progress']
-        return avg if avg is not None else 0.0
 
     def get_eligible_titles(self):
         if not self.user_is_premium:

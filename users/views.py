@@ -18,7 +18,8 @@ import stripe
 import logging
 from users.forms import UserSettingsForm, CustomPasswordChangeForm
 from users.models import CustomUser
-from trophies.forms import PremiumSettingsForm
+from trophies.forms import PremiumSettingsForm, ProfileSettingsForm
+from trophies.utils import update_profile_trophy_counts
 
 logger = logging.getLogger('psn_api')
 
@@ -44,10 +45,12 @@ class SettingsView(LoginRequiredMixin, View):
         password_form = CustomPasswordChangeForm(user=request.user)
         profile = request.user.profile if hasattr(request.user, 'profile') else None
         premium_form = PremiumSettingsForm(instance=profile) if profile else None
+        profile_form = ProfileSettingsForm(instance=profile) if profile else None
         context = {
             'user_form': user_form,
             'password_form': password_form,
             'premium_form': premium_form,
+            'profile_form': profile_form,
             'profile': profile,
         }
         return render(request, self.template_name, context)
@@ -92,8 +95,23 @@ class SettingsView(LoginRequiredMixin, View):
                 premium_form.save()
                 messages.success(request, 'Premium settings updated successfully!')
             else:
-                messages.error(request, 'Error updating background.')
+                messages.error(request, 'Error updating premium settings.')
             return redirect('settings')
+        
+        elif action == 'update_profile':
+            if not hasattr(request.user, 'profile'):
+                messages.error(request, 'Link a PSN account to change this setting!')
+                return redirect('settings')
+            profile_form = ProfileSettingsForm(request.POST, instance=request.user.profile)
+            if profile_form.is_valid():
+                profile_form.save()
+                request.user.profile.refresh_from_db()
+                update_profile_trophy_counts(request.user.profile)
+                messages.success(request, 'Profile settings updated successfully!')
+            else:
+                messages.error(request, 'Error updating profile settings.')
+            return redirect('settings')
+
         
         return redirect('settings')
     

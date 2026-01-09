@@ -116,11 +116,40 @@
                             <span id="sync-user" class="text-xs sm:text-base font-bold">{{ profile.display_psn_username }}</span>
                             <div class="divider divider-horizontal m-0 p-0"></div>
                             <span class="text-xs sm:text-base font-bold">Last Sync: {{ profile.last_synced|date }}</span>
-
+                            
                         </div>
                     </div>
                     
                     <label for="unlink-modal" class="btn btn-error w-full mt-4">Unlink PSN Profile</label>
+
+                    <div class="divider divider-vertical w-full"></div>
+
+                    <h3 class="text-xl font-semibold mb-2 italic">Hide Games From Profile</h3>
+                    <form method="post" class="w-7/8 mx-auto">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="update_profile">
+                        <div class="form-control mb-2" disabled>
+                            <label class="label" for="{{ profile_form.hide_hiddens.id_for_label }}">Hide Hidden/Deleted Games</label>
+                            <br />
+                            {{ profile_form.hide_hiddens }}
+                            {% if profile_form.hide_hiddens.errors %}
+                                <div class="alert alert-error mt-1">{{ profile_form.hide_hiddens.errors }}</div>
+                            {% endif %}
+                        </div>
+                        <p class="text-center text-secondary font-bold pr-1 italic mb-4">Set to true to hide hidden/deleted games from your profile.</p>
+
+                        <div class="form-control mb-2" disabled>
+                            <label class="label" for="{{ profile_form.hide_zeros.id_for_label }}">Hide Zero Progress Games</label>
+                            <br />
+                            {{ profile_form.hide_zeros }}
+                            {% if profile_form.hide_zeros.errors %}
+                                <div class="alert alert-error mt-1">{{ profile_form.hide_zeros.errors }}</div>
+                            {% endif %}
+                        </div>
+                        <p class="text-center text-secondary font-bold pr-1 italic mb-4">Set to true to hide games you haven't earned a trophy in yet.</p>
+
+                        <button type="submit" class="btn btn-primary w-full" {% if not profile %}disabled{% endif %}>Save Profile Settings</button>
+                    </form>
                     
                     <input type="checkbox" id="unlink-modal" class="modal-toggle" />
                     <div class="modal backdrop-blur-lg">

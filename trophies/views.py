@@ -722,6 +722,11 @@ class ProfileDetailView(ProfileHotbarMixin, DetailView):
                     annotated_total_trophies=F('earned_trophies_count') + F('unearned_trophies_count')  # Computed from denorm
                 )
 
+                if profile.hide_hiddens:
+                    games_qs = games_qs.exclude(user_hidden=True)
+                if profile.hide_zeros:
+                    games_qs = games_qs.exclude(earned_trophies_count=0)
+
                 if query:
                     games_qs = games_qs.filter(Q(game__title_name__icontains=query))
                 if platforms:

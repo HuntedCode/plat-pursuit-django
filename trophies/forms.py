@@ -237,6 +237,22 @@ class PremiumSettingsForm(forms.ModelForm):
                     self.fields[field].widget.attrs['disabled'] = 'disabled'
                     self.fields[field].help_text = 'Premium feature.'
 
+class ProfileSettingsForm(forms.ModelForm):
+    hide_hiddens = forms.BooleanField(
+        label='Hide Hidden/Deleted Games',
+        required=False,
+        widget=forms.CheckboxInput(attrs={'class': 'toggle toggle-primary'})
+    )
+    hide_zeros = forms.BooleanField(
+        label='Hide Zero Progress Games',
+        required=False,
+        widget=forms.CheckboxInput(attrs={'class': 'toggle toggle-primary'})
+    )
+
+    class Meta:
+        model = Profile
+        fields = ['hide_hiddens', 'hide_zeros']
+
 # Admin Forms
 
 class BadgeCreationForm(forms.Form):

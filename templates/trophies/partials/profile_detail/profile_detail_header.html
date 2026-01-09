@@ -36,12 +36,14 @@
                     <svg xmlns="http://www.w3.org/2000/svg" class="w-14 h-14 group-hover:scale-105" viewBox="0 0 24 24" fill="none" stroke="var(--color-success)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.2 7.8l-7.7 7.7-4-4-5.7 5.7"/><path d="M15 7h6v6"/></svg>
                 </div>
                 <div class="stat-title text-base font-bold text-success italic group-hover:scale-105">Avg. Completion</div>
-                {% if not profile.psn_history_public %}
+                {% if not profile.sync_status == 'syncing' and profile.psn_history_public %}
+                    <div class="stat-value text-2xl text-base-content group-hover:scale-105">{{ header_stats.average_completion|floatformat:2 }}%</div>
+                {% elif not profile.psn_history_public %}
                     <div class="tooltip" data-tip="Game Data Privated">
                         <svg xmlns="http://www.w3.org/2000/svg" class="mx-auto" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="var(--color-error)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2"></polygon><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
                     </div>
                 {% else %}
-                    <div class="stat-value text-2xl text-base-content group-hover:scale-105">{{ header_stats.average_completion|floatformat:2 }}%</div>
+                    <span class="loading loading-infinity loading-xl"></span>
                 {% endif %}
             </div>
             <div class="stat group">

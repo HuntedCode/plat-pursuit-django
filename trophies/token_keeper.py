@@ -586,11 +586,8 @@ class TokenKeeper:
                 logger.info(f"New total hiddens for profile {profile.id}: {summary_total - total_tracked}")
             
             # Check badges
-            badge_check = True if profile.last_profile_health_check else False
             profile.last_profile_health_check = timezone.now()
             profile.save(update_fields=['last_profile_health_check'])
-            if badge_check:
-                initial_badge_check(profile, False)
 
         logger.info(f"Updating plats for {profile_id}...")
         profile.update_plats()
