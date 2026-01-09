@@ -267,6 +267,7 @@ def compute_earners_leaderboard(series_slug: str) -> list[dict]:
         'avatar_url': earner.profile.avatar_url,
         'flag': earner.profile.flag,
         'highest_tier': earner.badge.tier,
+        'is_premium': earner.profile.user_is_premium,
     } for rank, earner in enumerate(earners)]
 
 def compute_progress_leaderboard(series_slug: str) -> list[dict]:
@@ -306,7 +307,8 @@ def compute_progress_leaderboard(series_slug: str) -> list[dict]:
                 'silvers': agg['silvers'],
                 'bronzes': agg['bronzes'], 
             },
-            'last_earned_date': agg['max_earn_date'].isoformat() if agg['max_earn_date'] else 'Unknown'
+            'last_earned_date': agg['max_earn_date'].isoformat() if agg['max_earn_date'] else 'Unknown',
+            'is_premium': profile.user_is_premium,
         })
     return leaderboard
 

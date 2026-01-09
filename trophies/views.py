@@ -1229,6 +1229,7 @@ class BadgeLeaderboardsView(ProfileHotbarMixin, DetailView):
         context['lb_progress_paginator'] = lb_progress_paginator
 
         context['badge'] = badge
+        context['image_urls'] = {'bg_url': badge.most_recent_concept.bg_url, 'recent_concept_icon_url': badge.most_recent_concept.concept_icon_url}
         context['breadcrumb'] = [
             {'text': 'Home', 'url': reverse_lazy('home')},
             {'text': 'Badges', 'url': reverse_lazy('badges_list')},
