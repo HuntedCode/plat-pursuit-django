@@ -2,7 +2,7 @@ from django.core.management.base import BaseCommand
 from django.core.cache import cache
 from django.utils import timezone
 from trophies.models import Badge
-from trophies.utils import compute_earners_leaderboard, compute_progress_leaderboard
+from trophies.utils import compute_earners_leaderboard, compute_progress_leaderboard, compute_total_progress_leaderboard, compute_badge_xp_leaderboard
 
 class Command(BaseCommand):
     def handle(self, *args, **options):
@@ -12,6 +12,24 @@ class Command(BaseCommand):
             self.stdout.write(self.style.ERROR(f"No series found to update leaderboards."))
             return
         
+        try:
+            data = compute_total_progress_leaderboard()
+            key = 'lb_total_progress'
+            cache.set(key, data, 3600 * 2)
+            cache.set(f"{key}_refresh_time", timezone.now().isoformat(), 3600 * 2)
+            self.stdout.write('Updated total progress leaderboard.')
+        except Exception as e:
+            self.stdout.write(self.style.ERROR(f"Failed updating total progress leaderboard: {e}"))
+        
+        try:
+            data = compute_badge_xp_leaderboard()
+            key = 'lb_total_xp'
+            cache.set(key, data, 3600 * 2)
+            cache.set(f"{key}_refresh_time", timezone.now().isoformat(), 3600 * 2)
+            self.stdout.write('Updated total XP leaderboard.')
+        except Exception as e:
+            self.stdout.write(self.style.ERROR(f"Failed updating total XP leaderboard: {e}"))
+
         processed_count = 0
         for slug in unique_slugs:
             try:

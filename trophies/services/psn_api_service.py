@@ -302,13 +302,22 @@ class PsnApiService:
 
     @classmethod
     def get_profile_trophy_summary(cls, profile: Profile):
-        return {
-            'total': EarnedTrophy.objects.filter(profile=profile, earned=True).count() or 0,
-            'bronze': EarnedTrophy.objects.filter(profile=profile, earned=True, trophy__trophy_type='bronze').count() or 0,
-            'silver': EarnedTrophy.objects.filter(profile=profile, earned=True, trophy__trophy_type='silver').count() or 0,
-            'gold': EarnedTrophy.objects.filter(profile=profile, earned=True, trophy__trophy_type='gold').count() or 0,
-            'platinum': EarnedTrophy.objects.filter(profile=profile, earned=True, trophy__trophy_type='platinum').count() or 0,
-        }
+        try:
+            return {
+                'total': EarnedTrophy.objects.filter(profile=profile, earned=True).count() or 0,
+                'bronze': EarnedTrophy.objects.filter(profile=profile, earned=True, trophy__trophy_type='bronze').count() or 0,
+                'silver': EarnedTrophy.objects.filter(profile=profile, earned=True, trophy__trophy_type='silver').count() or 0,
+                'gold': EarnedTrophy.objects.filter(profile=profile, earned=True, trophy__trophy_type='gold').count() or 0,
+                'platinum': EarnedTrophy.objects.filter(profile=profile, earned=True, trophy__trophy_type='platinum').count() or 0,
+            }
+        except:
+            return {
+                'total': 0,
+                'bronze': 0,
+                'silver': 0,
+                'gold': 0,
+                'platinum': 0, 
+            }
 
     
     @classmethod

@@ -1,48 +1,36 @@
 {% extends 'base.html' %}
-{% load static custom_filters query_tags %}
+{% load static custom_filters query_tags humanize %}
 
 {% block title %}{{ badge.effective_display_series }} - Leaderboards{% endblock %}
 {% block content %}
     <section class="shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 w-full p-0 lg:p-4">
         {% include 'partials/breadcrumb.html' with items=breadcrumb %}
 
-        <div class="flex flex-row bg-base-100 border-4 border-base-300 shadow-md shadow-neutral rounded-box items-center justify-center gap-4 p-4 w-fit mx-auto">
-            <figure class="w-32 sm:w-37 md:w-42 lg:w-48 h-32 sm:h-37 md:h-42 lg:h-48 overflow-visible">
-                {% include 'partials/badge.html' with layers=badge.get_badge_layers %}
-            </figure>
-            <div class="flex flex-col gap-0">
-                <h1 class="text-sm sm:text-lg md:text-xl lg:text-2xl text-base-content text-start pr-1 italic">{{ badge.effective_display_series }}</h1>
-                <h1 class="text-sm sm:text-lg md:text-xl lg:text-2xl legendary-title text-start pr-1 italic">{{ badge.effective_user_title }}</h1>
-                <h1 class="text-sm sm:text-lg md:text-xl lg:text-2xl text-base-content text-start">Leaderboards</h1>
-            </div>
-        </div>
-        <div class="divider divider-vertical"></div>
-
         <h1 class="text3xl text-accent text-center font-bold italic mb-4">NOTE: Only PSN accounts LINKED to a PlatPursuit user account are considered.</h1>
 
         <div class="grid grid-cols-1 xl:grid-cols-2 gap-4">
 
             <div class="flex flex-col justify-start gap-2">
-                <h2 class="text-lg italic font-bold">Badge Earns By Date</h2>
-                <p class="text-sm text-base-content/70 text-center pr-1 italic">Leaderboard Updated: {{ lb_earners_refresh_time|iso_datetime }}</p>
+                <h2 class="text-lg italic font-bold">Total Badge XP Leaders</h2>
+                <p class="text-sm text-base-content/70 text-center pr-1 italic">Leaderboard Updated: {{ lb_total_xp_refresh_time|iso_datetime }}</p>
                 <div class="flex flex-col sm:flex-row justify-between items-center gap-4 mt-4 w-7/8 mx-auto">
                     <div class="btn-group">
-                        {% if lb_earners_page_obj.has_previous %}
-                        <a href="?{% query_transform lb_earners_page=1 %}" class="btn btn-xs">First</a>
-                        <a href="?{% query_transform lb_earners_page=lb_earners_page_obj.previous_page_number %}" class="btn btn-xs">Prev</a>
+                        {% if lb_total_xp_page_obj.has_previous %}
+                        <a href="?{% query_transform lb_total_xp_page=1 %}" class="btn btn-xs">First</a>
+                        <a href="?{% query_transform lb_total_xp_page=lb_total_xp_page_obj.previous_page_number %}" class="btn btn-xs">Prev</a>
                         {% endif %}
-                        <span class="btn btn-xs btn-secondary btn-active">Page {{ lb_earners_page_obj.number }} of {{ lb_earners_paginator.num_pages }}</span>
-                        {% if lb_earners_page_obj.has_next %}
-                        <a href="?{% query_transform lb_earners_page=lb_earners_page_obj.next_page_number %}" class="btn btn-xs">Next</a>
-                        <a href="?{% query_transform lb_earners_page=lb_earners_paginator.num_pages %}" class="btn btn-xs">Last</a>
+                        <span class="btn btn-xs btn-secondary btn-active">Page {{ lb_total_xp_page_obj.number }} of {{ lb_total_xp_paginator.num_pages }}</span>
+                        {% if lb_total_xp_page_obj.has_next %}
+                        <a href="?{% query_transform lb_total_xp_page=lb_total_xp_page_obj.next_page_number %}" class="btn btn-xs">Next</a>
+                        <a href="?{% query_transform lb_total_xp_page=lb_total_xp_paginator.num_pages %}" class="btn btn-xs">Last</a>
                         {% endif %}
                     </div>
                     <div class="flex flex-row justify-between gap-8">
-                        {% if lb_earners_user_page %}
-                            <a href="?{% query_transform lb_earners_page=lb_earners_user_page %}#1-rank-{{ lb_earners_user_rank }}" class="btn btn-xs btn-accent tooltip" data-tip="Jump to your rank">My Rank</a>
+                        {% if lb_total_xp_user_page %}
+                            <a href="?{% query_transform lb_total_xp_page=lb_total_xp_user_page %}#1-rank-{{ lb_total_xp_user_rank }}" class="btn btn-xs btn-accent tooltip" data-tip="Jump to your rank">My Rank</a>
                         {% endif %}
-                        <form class="input-group" onsubmit="updatePage(this, 'lb_earners_page'); return false;">
-                            <input type="number" class="input input-bordered input-xs w-16" min="1" max="{{ lb_earners_paginator.num_pages }}" placeholder="Page" />
+                        <form class="input-group" onsubmit="updatePage(this, 'lb_total_xp_page'); return false;">
+                            <input type="number" class="input input-bordered input-xs w-16" min="1" max="{{ lb_total_xp_paginator.num_pages }}" placeholder="Page" />
                             <button type="submit" class="btn btn-xs btn-primary">Go</button>
                         </form>
                     </div>
@@ -54,12 +42,12 @@
                             <tr>
                                 <th></th>
                                 <th class="text-sm">User</th>
-                                <th class="text-sm">Tier</th>
-                                <th class="text-sm">Earned Date</th>
+                                <th class="text-sm">Total XP</th>
+                                <th class="text-sm">Total Badges</th>
                             </tr>
                         </thead>
                         <tbody>
-                            {% for entry in lb_earners_page_obj %}
+                            {% for entry in lb_total_xp_page_obj %}
                                 <tr id="1-rank-{{ entry.rank }}" class="{% if request.user.is_authenticated and request.user.profile.display_psn_username == entry.psn_username %}bg-success/15{% endif %} h-15">
                                     <td>{{ entry.rank }}</td>
                                     <td class="text-xs sm:text-sm lg:text-base">
@@ -72,16 +60,8 @@
                                             <span class="{% if entry.is_premium %}legendary-title{% endif %}">{{ entry.psn_username }}</span> • {{ entry.flag }}
                                         </a>
                                     </td>
-                                    <td>
-                                        {% with entry.highest_tier|stringformat:'s' as tier %}
-                                            <div class="tooltip" data-tip="{{ tier|badge_tier }}">
-                                                <figure class="w-6 hover:scale-105">
-                                                    <img src="{% static 'images/badges/backdrops/'|add:tier|add:'_backdrop.png' %}" class="w-full" alt="{{ tier|badge_tier }}" />
-                                                </figure>
-                                            </div>
-                                        {% endwith %}
-                                    </td>
-                                    <td class="text-xs sm:text-sm lg:text-base italic">{{ entry.earn_date|iso_datetime }}</td>
+                                    <td class="text-sm sm:text-base lg:text-lg">{{ entry.total_xp|intcomma }}</td>
+                                    <td class="text-xl">{{ entry.total_badges|intcomma }}</td>
                                 </tr>
                             {% endfor %}
                         </tbody>
@@ -91,24 +71,24 @@
                 <div class="flex flex-col sm:flex-row justify-between items-center gap-4 mt-4 w-7/8 mx-auto">
 
                     <div class="btn-group">
-                        {% if lb_earners_page_obj.has_previous %}
-                        <a href="?{% query_transform lb_earners_page=1 %}" class="btn btn-xs">First</a>
-                        <a href="?{% query_transform lb_earners_page=lb_earners_page_obj.previous_page_number %}" class="btn btn-xs">Prev</a>
+                        {% if lb_total_xp_page_obj.has_previous %}
+                        <a href="?{% query_transform lb_total_xp_page=1 %}" class="btn btn-xs">First</a>
+                        <a href="?{% query_transform lb_total_xp_page=lb_total_xp_page_obj.previous_page_number %}" class="btn btn-xs">Prev</a>
                         {% endif %}
-                        <span class="btn btn-xs btn-secondary btn-active">Page {{ lb_earners_page_obj.number }} of {{ lb_earners_paginator.num_pages }}</span>
-                        {% if lb_earners_page_obj.has_next %}
-                        <a href="?{% query_transform lb_earners_page=lb_earners_page_obj.next_page_number %}" class="btn btn-xs">Next</a>
-                        <a href="?{% query_transform lb_earners_page=lb_earners_paginator.num_pages %}" class="btn btn-xs">Last</a>
+                        <span class="btn btn-xs btn-secondary btn-active">Page {{ lb_total_xp_page_obj.number }} of {{ lb_total_xp_paginator.num_pages }}</span>
+                        {% if lb_total_xp_page_obj.has_next %}
+                        <a href="?{% query_transform lb_total_xp_page=lb_total_xp_page_obj.next_page_number %}" class="btn btn-xs">Next</a>
+                        <a href="?{% query_transform lb_total_xp_page=lb_total_xp_paginator.num_pages %}" class="btn btn-xs">Last</a>
                         {% endif %}
                     </div>
 
                     <div class="flex flex-row justify-between gap-8">
-                        {% if lb_earners_user_page %}
-                            <a href="?{% query_transform lb_earners_page=lb_earners_user_page %}#1-rank-{{ lb_earners_user_rank }}" class="btn btn-xs btn-accent tooltip" data-tip="Jump to your rank">My Rank</a>
+                        {% if lb_total_xp_user_page %}
+                            <a href="?{% query_transform lb_total_xp_page=lb_total_xp_user_page %}#1-rank-{{ lb_total_xp_user_rank }}" class="btn btn-xs btn-accent tooltip" data-tip="Jump to your rank">My Rank</a>
                         {% endif %}
 
-                        <form class="input-group" onsubmit="updatePage(this, 'lb_earners_page'); return false;">
-                            <input type="number" class="input input-bordered input-xs w-16" min="1" max="{{ lb_earners_paginator.num_pages }}" placeholder="Page" />
+                        <form class="input-group" onsubmit="updatePage(this, 'lb_total_xp_page'); return false;">
+                            <input type="number" class="input input-bordered input-xs w-16" min="1" max="{{ lb_total_xp_paginator.num_pages }}" placeholder="Page" />
                             <button type="submit" class="btn btn-xs btn-primary">Go</button>
                         </form>
                     </div>
@@ -116,28 +96,28 @@
             </div>
 
             <div class="flex flex-col justify-start-start gap-2">
-                <h2 class="text-xl italic font-bold">Badge Trophy Leaders</h2>
-                <p class="text-sm text-base-content/70 text-center pr-1 italic">Leaderboard Updated: {{ lb_progress_refresh_time|iso_datetime }}</p>
+                <h2 class="text-xl italic font-bold">Total Badge Trophy Leaders</h2>
+                <p class="text-sm text-base-content/70 text-center pr-1 italic">Leaderboard Updated: {{ lb_total_progress_refresh_time|iso_datetime }}</p>
                 <div class="flex flex-col sm:flex-row justify-between items-center gap-4 mt-4 w-7/8 mx-auto">
                     <div class="btn-group">
-                        {% if lb_progress_page_obj.has_previous %}
-                        <a href="?{% query_transform lb_progress_page=1 %}" class="btn btn-xs">First</a>
-                        <a href="?{% query_transform lb_progress_page=lb_progress_page_obj.previous_page_number %}" class="btn btn-xs">Prev</a>
+                        {% if lb_total_progress_page_obj.has_previous %}
+                        <a href="?{% query_transform lb_total_progress_page=1 %}" class="btn btn-xs">First</a>
+                        <a href="?{% query_transform lb_total_progress_page=lb_total_progress_page_obj.previous_page_number %}" class="btn btn-xs">Prev</a>
                         {% endif %}
-                        <span class="btn btn-xs btn-secondary btn-active">Page {{ lb_progress_page_obj.number }} of {{ lb_progress_paginator.num_pages }}</span>
-                        {% if lb_progress_page_obj.has_next %}
-                        <a href="?{% query_transform lb_progress_page=lb_progress_page_obj.next_page_number %}" class="btn btn-xs">Next</a>
-                        <a href="?{% query_transform lb_progress_page=lb_progress_paginator.num_pages %}" class="btn btn-xs">Last</a>
+                        <span class="btn btn-xs btn-secondary btn-active">Page {{ lb_total_progress_page_obj.number }} of {{ lb_total_progress_paginator.num_pages }}</span>
+                        {% if lb_total_progress_page_obj.has_next %}
+                        <a href="?{% query_transform lb_total_progress_page=lb_total_progress_page_obj.next_page_number %}" class="btn btn-xs">Next</a>
+                        <a href="?{% query_transform lb_total_progress_page=lb_total_progress_paginator.num_pages %}" class="btn btn-xs">Last</a>
                         {% endif %}
                     </div>
                     
                     <div class="flex flex-row justify-between gap-8">
-                        {% if lb_progress_user_page %}
-                            <a href="?{% query_transform lb_progress_page=lb_progress_user_page %}#2-rank-{{ lb_progress_user_rank }}" class="btn btn-xs btn-accent tooltip" data-tip="Jump to your rank">My Rank</a>
+                        {% if lb_total_progress_user_page %}
+                            <a href="?{% query_transform lb_total_progress_page=lb_total_progress_user_page %}#2-rank-{{ lb_total_progress_user_rank }}" class="btn btn-xs btn-accent tooltip" data-tip="Jump to your rank">My Rank</a>
                         {% endif %}
 
-                        <form class="input-group" onsubmit="updatePage(this, 'lb_progress_page'); return false;">
-                            <input type="number" class="input input-bordered input-xs w-16" min="1" max="{{ lb_progress_paginator.num_pages }}" placeholder="Page" />
+                        <form class="input-group" onsubmit="updatePage(this, 'lb_total_progress_page'); return false;">
+                            <input type="number" class="input input-bordered input-xs w-16" min="1" max="{{ lb_total_progress_paginator.num_pages }}" placeholder="Page" />
                             <button type="submit" class="btn btn-xs btn-primary">Go</button>
                         </form>
                     </div>
@@ -154,7 +134,7 @@
                         </tr>
                     </thead>
                     <tbody>
-                        {% for entry in lb_progress_page_obj %}
+                        {% for entry in lb_total_progress_page_obj %}
                             <tr id="2-rank-{{ entry.rank }}" class="{% if request.user.is_authenticated and request.user.profile.display_psn_username == entry.psn_username %}bg-success/15{% endif %} h-15">
                                 <td>{{ entry.rank }}</td>
                                 <td>
@@ -200,24 +180,24 @@
 
                 <div class="flex flex-col sm:flex-row justify-between items-center gap-4 mt-4 w-7/8 mx-auto">
                     <div class="btn-group">
-                        {% if lb_progress_page_obj.has_previous %}
-                        <a href="?{% query_transform lb_progress_page=1 %}" class="btn btn-xs">First</a>
-                        <a href="?{% query_transform lb_progress_page=lb_progress_page_obj.previous_page_number %}" class="btn btn-xs">Prev</a>
+                        {% if lb_total_progress_page_obj.has_previous %}
+                        <a href="?{% query_transform lb_total_progress_page=1 %}" class="btn btn-xs">First</a>
+                        <a href="?{% query_transform lb_total_progress_page=lb_total_progress_page_obj.previous_page_number %}" class="btn btn-xs">Prev</a>
                         {% endif %}
-                        <span class="btn btn-xs btn-secondary btn-active">Page {{ lb_progress_page_obj.number }} of {{ lb_progress_paginator.num_pages }}</span>
-                        {% if lb_progress_page_obj.has_next %}
-                        <a href="?{% query_transform lb_progress_page=lb_progress_page_obj.next_page_number %}" class="btn btn-xs">Next</a>
-                        <a href="?{% query_transform lb_progress_page=lb_progress_paginator.num_pages %}" class="btn btn-xs">Last</a>
+                        <span class="btn btn-xs btn-secondary btn-active">Page {{ lb_total_progress_page_obj.number }} of {{ lb_total_progress_paginator.num_pages }}</span>
+                        {% if lb_total_progress_page_obj.has_next %}
+                        <a href="?{% query_transform lb_total_progress_page=lb_total_progress_page_obj.next_page_number %}" class="btn btn-xs">Next</a>
+                        <a href="?{% query_transform lb_total_progress_page=lb_total_progress_paginator.num_pages %}" class="btn btn-xs">Last</a>
                         {% endif %}
                     </div>
 
                     <div class="flex flex-row justify-between gap-8">
-                        {% if lb_progress_user_page %}
-                            <a href="?{% query_transform lb_progress_page=lb_progress_user_page %}#2-rank-{{ lb_progress_user_rank }}" class="btn btn-xs btn-accent tooltip" data-tip="Jump to your rank">My Rank</a>
+                        {% if lb_total_progress_user_page %}
+                            <a href="?{% query_transform lb_total_progress_page=lb_total_progress_user_page %}#2-rank-{{ lb_total_progress_user_rank }}" class="btn btn-xs btn-accent tooltip" data-tip="Jump to your rank">My Rank</a>
                         {% endif %}
 
-                        <form class="input-group" onsubmit="updatePage(this, 'lb_progress_page'); return false;">
-                            <input type="number" class="input input-bordered input-xs w-16" min="1" max="{{ lb_progress_paginator.num_pages }}" placeholder="Page" />
+                        <form class="input-group" onsubmit="updatePage(this, 'lb_total_progress_page'); return false;">
+                            <input type="number" class="input input-bordered input-xs w-16" min="1" max="{{ lb_total_progress_paginator.num_pages }}" placeholder="Page" />
                             <button type="submit" class="btn btn-xs btn-primary">Go</button>
                         </form>
                     </div>

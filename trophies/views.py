@@ -1233,8 +1233,57 @@ class BadgeLeaderboardsView(ProfileHotbarMixin, DetailView):
         context['breadcrumb'] = [
             {'text': 'Home', 'url': reverse_lazy('home')},
             {'text': 'Badges', 'url': reverse_lazy('badges_list')},
-            {'text': 'Leaderboards', 'url': ''},
-            {'text': context['badge'].effective_display_series},
+            {'text': context['badge'].effective_display_series, 'url': reverse_lazy('badge_detail', kwargs={'series_slug': badge.series_slug})},
+            {'text': 'Leaderboards'},
+        ]
+        
+        return context
+
+class OverallBadgeLeaderboardsView(ProfileHotbarMixin, TemplateView):
+    template_name = 'trophies/overall_badge_leaderboards.html'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        user = self.request.user
+
+        xp_key = f"lb_total_xp"
+        progress_key = f"lb_total_progress"
+
+        lb_total_xp = cache.get(xp_key, [])
+        lb_total_xp_paginate_by = 50
+        lb_total_progress = cache.get(progress_key, [])
+        lb_total_progress_paginate_by = 50
+
+        context['lb_total_xp_refresh_time'] = cache.get(f"{xp_key}_refresh_time")
+        context['lb_total_progress_refresh_time'] = cache.get(f"{progress_key}_refresh_time")
+
+        if user.is_authenticated and hasattr(user, 'profile'):
+            # Find user profile
+            user_psn = user.profile.display_psn_username
+            for idx, entry in enumerate(lb_total_xp):
+                if entry['psn_username'] == user_psn:
+                    context['lb_total_xp_user_page'] = (idx // lb_total_xp_paginate_by) + 1
+                    context['lb_total_xp_user_rank'] = idx + 1
+                    break
+            for idx, entry in enumerate(lb_total_progress):
+                if entry['psn_username'] == user_psn:
+                    context['lb_total_progress_user_page'] = (idx // lb_total_progress_paginate_by) + 1
+                    context['lb_total_progress_user_rank'] = idx + 1
+
+        lb_total_xp_paginator = Paginator(lb_total_xp, lb_total_xp_paginate_by)
+        lb_total_xp_page = self.request.GET.get('lb_total_xp_page', 1)
+        context['lb_total_xp_page_obj'] = lb_total_xp_paginator.get_page(lb_total_xp_page)
+        context['lb_total_xp_paginator'] = lb_total_xp_paginator
+
+        lb_total_progress_paginator = Paginator(lb_total_progress, lb_total_progress_paginate_by)
+        lb_total_progress_page = self.request.GET.get('lb_total_progress_page', 1)
+        context['lb_total_progress_page_obj'] = lb_total_progress_paginator.get_page(lb_total_progress_page)
+        context['lb_total_progress_paginator'] = lb_total_progress_paginator
+
+        context['breadcrumb'] = [
+            {'text': 'Home', 'url': reverse_lazy('home')},
+            {'text': 'Badges', 'url': reverse_lazy('badges_list')},
+            {'text': 'Leaderboards'},
         ]
         
         return context

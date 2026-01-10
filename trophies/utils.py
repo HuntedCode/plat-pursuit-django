@@ -6,8 +6,8 @@ import requests
 import logging
 import time
 from django.db import transaction
-from django.db.models import Window, Q, Max, F, Count
-from django.db.models.functions import RowNumber
+from django.db.models import Window, Q, Max, F, Count, Sum, When, Value, IntegerField, Case
+from django.db.models.functions import RowNumber, Coalesce
 from django.db.models.query import QuerySet
 from django.conf import settings
 from django.utils import timezone
@@ -249,7 +249,8 @@ def compute_earners_leaderboard(series_slug: str) -> list[dict]:
     from trophies.models import UserBadge
 
     earners = UserBadge.objects.filter(
-        badge__series_slug=series_slug
+        badge__series_slug=series_slug,
+        profile__is_linked=True
     ).select_related('profile', 'badge').annotate(
         row_number=Window(
             RowNumber(),
@@ -278,7 +279,8 @@ def compute_progress_leaderboard(series_slug: str) -> list[dict]:
     games = Game.objects.filter(concept__in=concepts).distinct()
 
     users_with_progress = Profile.objects.filter(
-        Q(badge_progress__badge__series_slug=series_slug) | Q(played_games__game__in=games, played_games__earned_trophies__earned=True)
+        (Q(badge_progress__badge__series_slug=series_slug) | Q(played_games__game__in=games, earned_trophy_entries__earned=True))
+        & Q(is_linked=True)
     ).distinct()
 
     aggregates = EarnedTrophy.objects.filter(
@@ -311,6 +313,81 @@ def compute_progress_leaderboard(series_slug: str) -> list[dict]:
             'is_premium': profile.user_is_premium,
         })
     return leaderboard
+
+def compute_total_progress_leaderboard() -> list[dict]:
+    from trophies.models import Game, Concept, Stage, Profile, EarnedTrophy
+
+    stages = Stage.objects.all()
+    concepts = Concept.objects.filter(stages__in=stages).distinct()
+    games = Game.objects.filter(concept__in=concepts).distinct()
+
+    users_with_progress = Profile.objects.filter(
+        Q(played_games__game__in=games, earned_trophy_entries__earned=True) & Q(is_linked=True)
+    ).distinct()
+
+    aggregates = EarnedTrophy.objects.filter(
+        profile__in=users_with_progress,
+        trophy__game__in=games,
+        earned=True
+    ).values('profile').annotate(
+        plats=Count('id', filter=Q(trophy__trophy_type='platinum')),
+        golds=Count('id', filter=Q(trophy__trophy_type='gold')),
+        silvers=Count('id', filter=Q(trophy__trophy_type='silver')),
+        bronzes=Count('id', filter=Q(trophy__trophy_type='bronze')),
+        max_earn_date=Max('earned_date_time')
+    ).order_by('-plats', '-golds', '-silvers', '-bronzes', 'max_earn_date')
+
+    leaderboard = []
+    for rank, agg in enumerate(aggregates):
+        profile = Profile.objects.get(id=agg['profile'])
+        leaderboard.append({
+            'rank': rank + 1,
+            'psn_username': profile.display_psn_username,
+            'flag': profile.flag,
+            'avatar_url': profile.avatar_url,
+            'trophy_totals': {
+                'plats': agg['plats'],
+                'golds': agg['golds'],
+                'silvers': agg['silvers'],
+                'bronzes': agg['bronzes'], 
+            },
+            'last_earned_date': agg['max_earn_date'].isoformat() if agg['max_earn_date'] else 'Unknown',
+            'is_premium': profile.user_is_premium,
+        })
+    return leaderboard
+
+def compute_badge_xp_leaderboard() -> list[dict]:
+    from trophies.models import Profile
+
+    earners = Profile.objects.filter(
+        badge_progress__isnull=False,
+        is_linked=True
+    ).annotate(
+        progress_xp=Coalesce(Sum(
+            Case(
+                When(badge_progress__badge__tier=1, then=F('badge_progress__completed_concepts') * Value(BRONZE_STAGE_XP)),
+                When(badge_progress__badge__tier=2, then=F('badge_progress__completed_concepts') * Value(SILVER_STAGE_XP)),
+                When(badge_progress__badge__tier=3, then=F('badge_progress__completed_concepts') * Value(GOLD_STAGE_XP)),
+                When(badge_progress__badge__tier=4, then=F('badge_progress__completed_concepts') * Value(PLAT_STAGE_XP)),
+                default=Value(0),
+                output_field=IntegerField()
+            )
+        ), 0),
+        badge_count=Count('badges'),
+        total_xp=F('progress_xp') + F('badge_count') * Value(BADGE_TIER_XP)
+    ).filter(total_xp__gt=0).order_by('-total_xp', '-badge_count', 'display_psn_username')
+
+    return [
+        {
+            'rank': rank + 1,
+            'psn_username': earner.display_psn_username,
+            'flag': earner.flag,
+            'avatar_url': earner.avatar_url,
+            'is_premium': earner.user_is_premium,
+            'total_xp': earner.total_xp,
+            'total_badges': earner.badge_count,
+        } for rank, earner in enumerate(earners)
+    ]
 
 def update_profile_games(profile):
     from trophies.models import ProfileGame
@@ -384,3 +461,9 @@ CN_REGION_CODES = ['CN']
 REGIONS = ['NA', 'EU', 'JP', 'AS', 'KR', 'CN']
 
 SHOVELWARE_THRESHOLD = 90.0
+
+BRONZE_STAGE_XP = 250
+SILVER_STAGE_XP = 75
+GOLD_STAGE_XP = 250
+PLAT_STAGE_XP = 75
+BADGE_TIER_XP = 3000
