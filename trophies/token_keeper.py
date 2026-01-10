@@ -379,7 +379,7 @@ class TokenKeeper:
                         if not isinstance(pending_data, dict):
                             raise ValueError("Pending data is not a dictionary")
                         args = [pending_data['touched_profilegame_ids'], pending_data['queue_name']]
-                        PSNManager.assign_job('sync_complete', args, profile_id, pending_data['queue_name'], priority_override='high_priority')
+                        PSNManager.assign_job('sync_complete', args, profile_id, priority_override='high_priority')
                         redis_client.delete(pending_key)
                         logger.info(f"Triggered sync_complete for profile {profile_id}")
                     except (json.JSONDecodeError, ValueError, KeyError) as parse_err:
