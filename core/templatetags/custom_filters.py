@@ -2,7 +2,7 @@ from django import template
 from django.utils import timezone
 from datetime import datetime, timedelta
 from humanize import naturaltime
-
+from trophies.utils import BRONZE_STAGE_XP, SILVER_STAGE_XP, GOLD_STAGE_XP, PLAT_STAGE_XP
 register = template.Library()
 
 @register.filter
@@ -112,6 +112,18 @@ def badge_tier(tier):
         return 'Gold'
     elif tier == 4:
         return 'Platinum'
+
+@register.filter
+def badge_tier_xp(tier):
+    tier = int(tier)
+    if tier == 1:
+        return BRONZE_STAGE_XP
+    elif tier == 2:
+        return SILVER_STAGE_XP
+    elif tier == 3:
+        return GOLD_STAGE_XP
+    elif tier == 4:
+        return PLAT_STAGE_XP
 
 @register.filter
 def multiply(value, arg):
