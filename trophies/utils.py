@@ -6,7 +6,7 @@ import requests
 import logging
 import time
 from django.db import transaction
-from django.db.models import Window, Q, Max, F, Count, Sum, When, Value, IntegerField, Case, OuterRef, Exists
+from django.db.models import Window, Q, Max, F, Count, Sum, When, Value, IntegerField, Case, OuterRef, Exists, Subquery
 from django.db.models.functions import RowNumber, Coalesce
 from django.db.models.query import QuerySet
 from django.conf import settings
@@ -278,11 +278,9 @@ def compute_progress_leaderboard(series_slug: str) -> list[dict]:
     concepts = Concept.objects.filter(stages__in=stages).distinct()
     games = Game.objects.filter(concept__in=concepts).distinct()
 
-    # Subqueries for existence checks to avoid joins that could duplicate rows
     badge_sub = UserBadgeProgress.objects.filter(profile=OuterRef('pk'), badge__series_slug=series_slug)
     trophy_sub = EarnedTrophy.objects.filter(profile=OuterRef('pk'), trophy__game__in=games, earned=True)
 
-    # Query profiles directly, filter with Exists (no duplicating joins), annotate aggregates, and sort in one go
     earners = Profile.objects.filter(
         Q(is_linked=True) & (Exists(badge_sub) | Exists(trophy_sub))
     ).annotate(
@@ -292,8 +290,8 @@ def compute_progress_leaderboard(series_slug: str) -> list[dict]:
         bronzes=Count('earned_trophy_entries__id', filter=Q(earned_trophy_entries__earned=True, earned_trophy_entries__trophy__game__in=games, earned_trophy_entries__trophy__trophy_type='bronze')),
         max_earn_date=Max('earned_trophy_entries__earned_date_time', filter=Q(earned_trophy_entries__earned=True, earned_trophy_entries__trophy__game__in=games))
     ).order_by(
-        '-plats', '-golds', '-silvers', '-bronzes', 'max_earn_date'  # Or '-max_earn_date' for latest activity first as tiebreaker
-    ).only(  # Defer unused fields for efficiency
+        '-plats', '-golds', '-silvers', '-bronzes', 'max_earn_date'
+    ).only(
         'display_psn_username', 'flag', 'avatar_url', 'user_is_premium'
     )
 
@@ -355,19 +353,25 @@ def compute_badge_xp_leaderboard() -> list[dict]:
 
     progress_sub = UserBadgeProgress.objects.filter(profile=OuterRef('pk'))
 
-    earners = Profile.objects.filter(
-        Q(is_linked=True) & Exists(progress_sub)
-    ).annotate(
-        progress_xp=Coalesce(Sum(
+    progress_qs = UserBadgeProgress.objects.filter(
+        profile=OuterRef('pk')
+    ).values('profile').annotate(
+        pxp=Sum(
             Case(
-                When(badge_progress__badge__tier=1, then=F('badge_progress__completed_concepts') * Value(BRONZE_STAGE_XP)),
-                When(badge_progress__badge__tier=2, then=F('badge_progress__completed_concepts') * Value(SILVER_STAGE_XP)),
-                When(badge_progress__badge__tier=3, then=F('badge_progress__completed_concepts') * Value(GOLD_STAGE_XP)),
-                When(badge_progress__badge__tier=4, then=F('badge_progress__completed_concepts') * Value(PLAT_STAGE_XP)),
+                When(badge__tier=1, then=F('completed_concepts') * Value(BRONZE_STAGE_XP)),
+                When(badge__tier=2, then=F('completed_concepts') * Value(SILVER_STAGE_XP)),
+                When(badge__tier=3, then=F('completed_concepts') * Value(GOLD_STAGE_XP)),
+                When(badge__tier=4, then=F('completed_concepts') * Value(PLAT_STAGE_XP)),
                 default=Value(0),
                 output_field=IntegerField()
             )
-        ), 0),
+        )
+    ).values('pxp')
+
+    earners = Profile.objects.filter(
+        Q(is_linked=True) & Exists(progress_sub)
+    ).annotate(
+        progress_xp=Coalesce(Subquery(progress_qs[:1]), 0),
         badge_count=Count('badges', distinct=True),
         total_xp=F('progress_xp') + F('badge_count') * Value(BADGE_TIER_XP)
     ).filter(
