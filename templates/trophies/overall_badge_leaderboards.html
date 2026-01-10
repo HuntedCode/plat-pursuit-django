@@ -60,8 +60,8 @@
                                             <span class="{% if entry.is_premium %}legendary-title{% endif %}">{{ entry.psn_username }}</span> • {{ entry.flag }}
                                         </a>
                                     </td>
-                                    <td class="text-sm sm:text-base lg:text-lg">{{ entry.total_xp|intcomma }}</td>
-                                    <td class="text-xl">{{ entry.total_badges|intcomma }}</td>
+                                    <td class="text-xs sm:text-sm lg:text-base">{{ entry.total_xp|intcomma }} xp</td>
+                                    <td class="text-xs sm:text-sm lg:text-base">{{ entry.total_badges|intcomma }}</td>
                                 </tr>
                             {% endfor %}
                         </tbody>
