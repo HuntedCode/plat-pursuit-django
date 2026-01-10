@@ -379,7 +379,7 @@ class TokenKeeper:
                         if not isinstance(pending_data, dict):
                             raise ValueError("Pending data is not a dictionary")
                         args = [pending_data['touched_profilegame_ids'], pending_data['queue_name']]
-                        PSNManager.assign_job('sync_complete', args, profile_id, pending_data['queue_name'])
+                        PSNManager.assign_job('sync_complete', args, profile_id, pending_data['queue_name'], priority_override='high_priority')
                         redis_client.delete(pending_key)
                         logger.info(f"Triggered sync_complete for profile {profile_id}")
                     except (json.JSONDecodeError, ValueError, KeyError) as parse_err:
@@ -562,7 +562,6 @@ class TokenKeeper:
                     else:
                         current_tracked_games.remove(pgame)
                     title_total = title.earned_trophies.bronze + title.earned_trophies.silver + title.earned_trophies.gold + title.earned_trophies.platinum
-                    logger.info(f"{game.np_communication_id} - Tracked: {tracked['total']} | Title: {title_total} | {tracked['total'] == title_total}")
                     if tracked['total'] != title_total:
                         has_mismatch = True
                         trophy_titles_to_be_updated.append({'title': title, 'game': game})
@@ -585,7 +584,7 @@ class TokenKeeper:
                     args = [game.np_communication_id, game.title_platform[0] if not game.title_platform[0] == 'PSPC' else game.title_platform[1]]
                     PSNManager.assign_job('sync_trophies', args=args, profile_id=profile.id, priority_override='high_priority')
             else:
-                profile.total_hiddens = summary_total - total_tracked
+                profile.total_hiddens = summary_total - total_tracked if summary_total - total_tracked >= 0 else 0
                 profile.save(update_fields=['total_hiddens'])
                 logger.info(f"New total hiddens for profile {profile.id}: {summary_total - total_tracked}")
             
