@@ -459,6 +459,7 @@ class Concept(models.Model):
         
         aggregates = ratings.aggregate(
             avg_difficulty=Avg('difficulty'),
+            avg_grindiness=Avg('grindiness'),
             avg_fun=Avg('fun_ranking'),
             avg_rating=Avg('overall_rating'),
             count=Count('id')
@@ -490,6 +491,7 @@ class UserConceptRating(models.Model):
     profile = models.ForeignKey(Profile, on_delete=models.CASCADE, related_name='concept_ratings')
     concept = models.ForeignKey(Concept, on_delete=models.CASCADE, related_name='user_ratings')
     difficulty = models.IntegerField(validators=[MinValueValidator(1), MaxValueValidator(10)], help_text='Platinum Difficulty rating (1-10)')
+    grindiness = models.IntegerField(validators=[MinValueValidator(1), MaxValueValidator(10)], help_text='Platinum grindiness rating (1-10)')
     hours_to_platinum = models.PositiveIntegerField(help_text='Estimated hours to achieve platinum.')
     fun_ranking = models.IntegerField(validators=[MinValueValidator(1), MaxValueValidator(10)], help_text='Fun ranking for the platinum (1-10)')
     overall_rating = models.FloatField(validators=[MinValueValidator(0.5), MaxValueValidator(5.0)], help_text="Overall game rating (1-5 stars)")

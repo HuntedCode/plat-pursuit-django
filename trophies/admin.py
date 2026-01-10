@@ -313,7 +313,7 @@ class UserTrophySelectionAdmin(admin.ModelAdmin):
 
 @admin.register(UserConceptRating)
 class UserConceptRatingAdmin(admin.ModelAdmin):
-    list_display = ('profile', 'concept', 'difficulty', 'hours_to_platinum', 'fun_ranking', 'overall_rating', 'created_at', 'updated_at')
+    list_display = ('profile', 'concept', 'difficulty', 'grindiness', 'hours_to_platinum', 'fun_ranking', 'overall_rating', 'created_at', 'updated_at')
     list_filter = ('created_at', 'updated_at')
     search_fields = ('profile__psn_username', 'concept__unified_title')
 
