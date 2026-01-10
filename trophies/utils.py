@@ -6,7 +6,7 @@ import requests
 import logging
 import time
 from django.db import transaction
-from django.db.models import Window, Q, Max, F, Count, Sum, When, Value, IntegerField, Case
+from django.db.models import Window, Q, Max, F, Count, Sum, When, Value, IntegerField, Case, OuterRef, Exists
 from django.db.models.functions import RowNumber, Coalesce
 from django.db.models.query import QuerySet
 from django.conf import settings
@@ -272,47 +272,45 @@ def compute_earners_leaderboard(series_slug: str) -> list[dict]:
     } for rank, earner in enumerate(earners)]
 
 def compute_progress_leaderboard(series_slug: str) -> list[dict]:
-    from trophies.models import Game, Concept, Stage, Profile, EarnedTrophy
+    from trophies.models import Game, Concept, Stage, Profile, EarnedTrophy, UserBadgeProgress
 
     stages = Stage.objects.filter(series_slug=series_slug)
     concepts = Concept.objects.filter(stages__in=stages).distinct()
     games = Game.objects.filter(concept__in=concepts).distinct()
 
-    users_with_progress = Profile.objects.filter(
-        (Q(badge_progress__badge__series_slug=series_slug) | Q(played_games__game__in=games, earned_trophy_entries__earned=True))
-        & Q(is_linked=True)
-    ).distinct()
+    # Subqueries for existence checks to avoid joins that could duplicate rows
+    badge_sub = UserBadgeProgress.objects.filter(profile=OuterRef('pk'), badge__series_slug=series_slug)
+    trophy_sub = EarnedTrophy.objects.filter(profile=OuterRef('pk'), trophy__game__in=games, earned=True)
 
-    aggregates = EarnedTrophy.objects.filter(
-        profile__in=users_with_progress,
-        trophy__game__in=games,
-        earned=True
-    ).values('profile').annotate(
-        plats=Count('id', filter=Q(trophy__trophy_type='platinum')),
-        golds=Count('id', filter=Q(trophy__trophy_type='gold')),
-        silvers=Count('id', filter=Q(trophy__trophy_type='silver')),
-        bronzes=Count('id', filter=Q(trophy__trophy_type='bronze')),
-        max_earn_date=Max('earned_date_time')
-    ).order_by('-plats', '-golds', '-silvers', '-bronzes', 'max_earn_date')
+    # Query profiles directly, filter with Exists (no duplicating joins), annotate aggregates, and sort in one go
+    earners = Profile.objects.filter(
+        Q(is_linked=True) & (Exists(badge_sub) | Exists(trophy_sub))
+    ).annotate(
+        plats=Count('earned_trophy_entries__id', filter=Q(earned_trophy_entries__earned=True, earned_trophy_entries__trophy__game__in=games, earned_trophy_entries__trophy__trophy_type='platinum')),
+        golds=Count('earned_trophy_entries__id', filter=Q(earned_trophy_entries__earned=True, earned_trophy_entries__trophy__game__in=games, earned_trophy_entries__trophy__trophy_type='gold')),
+        silvers=Count('earned_trophy_entries__id', filter=Q(earned_trophy_entries__earned=True, earned_trophy_entries__trophy__game__in=games, earned_trophy_entries__trophy__trophy_type='silver')),
+        bronzes=Count('earned_trophy_entries__id', filter=Q(earned_trophy_entries__earned=True, earned_trophy_entries__trophy__game__in=games, earned_trophy_entries__trophy__trophy_type='bronze')),
+        max_earn_date=Max('earned_trophy_entries__earned_date_time', filter=Q(earned_trophy_entries__earned=True, earned_trophy_entries__trophy__game__in=games))
+    ).order_by(
+        '-plats', '-golds', '-silvers', '-bronzes', 'max_earn_date'  # Or '-max_earn_date' for latest activity first as tiebreaker
+    ).only(  # Defer unused fields for efficiency
+        'display_psn_username', 'flag', 'avatar_url', 'user_is_premium'
+    )
 
-    leaderboard = []
-    for rank, agg in enumerate(aggregates):
-        profile = Profile.objects.get(id=agg['profile'])
-        leaderboard.append({
-            'rank': rank + 1,
-            'psn_username': profile.display_psn_username,
-            'flag': profile.flag,
-            'avatar_url': profile.avatar_url,
-            'trophy_totals': {
-                'plats': agg['plats'],
-                'golds': agg['golds'],
-                'silvers': agg['silvers'],
-                'bronzes': agg['bronzes'], 
-            },
-            'last_earned_date': agg['max_earn_date'].isoformat() if agg['max_earn_date'] else 'Unknown',
-            'is_premium': profile.user_is_premium,
-        })
-    return leaderboard
+    return [{
+        'rank': rank + 1,
+        'psn_username': earner.display_psn_username,
+        'flag': earner.flag,
+        'avatar_url': earner.avatar_url,
+        'trophy_totals': {
+            'plats': earner.plats,
+            'golds': earner.golds,
+            'silvers': earner.silvers,
+            'bronzes': earner.bronzes,
+        },
+        'last_earned_date': earner.max_earn_date.isoformat() if earner.max_earn_date else 'Unknown',
+        'is_premium': earner.user_is_premium,
+    } for rank, earner in enumerate(earners)]
 
 def compute_total_progress_leaderboard() -> list[dict]:
     from trophies.models import Game, Concept, Stage, Profile, EarnedTrophy
@@ -321,47 +319,44 @@ def compute_total_progress_leaderboard() -> list[dict]:
     concepts = Concept.objects.filter(stages__in=stages).distinct()
     games = Game.objects.filter(concept__in=concepts).distinct()
 
-    users_with_progress = Profile.objects.filter(
-        Q(played_games__game__in=games, earned_trophy_entries__earned=True) & Q(is_linked=True)
-    ).distinct()
-
-    aggregates = EarnedTrophy.objects.filter(
-        profile__in=users_with_progress,
-        trophy__game__in=games,
-        earned=True
-    ).values('profile').annotate(
-        plats=Count('id', filter=Q(trophy__trophy_type='platinum')),
-        golds=Count('id', filter=Q(trophy__trophy_type='gold')),
-        silvers=Count('id', filter=Q(trophy__trophy_type='silver')),
-        bronzes=Count('id', filter=Q(trophy__trophy_type='bronze')),
-        max_earn_date=Max('earned_date_time')
-    ).order_by('-plats', '-golds', '-silvers', '-bronzes', 'max_earn_date')
-
-    leaderboard = []
-    for rank, agg in enumerate(aggregates):
-        profile = Profile.objects.get(id=agg['profile'])
-        leaderboard.append({
-            'rank': rank + 1,
-            'psn_username': profile.display_psn_username,
-            'flag': profile.flag,
-            'avatar_url': profile.avatar_url,
-            'trophy_totals': {
-                'plats': agg['plats'],
-                'golds': agg['golds'],
-                'silvers': agg['silvers'],
-                'bronzes': agg['bronzes'], 
-            },
-            'last_earned_date': agg['max_earn_date'].isoformat() if agg['max_earn_date'] else 'Unknown',
-            'is_premium': profile.user_is_premium,
-        })
-    return leaderboard
-
-def compute_badge_xp_leaderboard() -> list[dict]:
-    from trophies.models import Profile
+    trophy_sub = EarnedTrophy.objects.filter(profile=OuterRef('pk'), trophy__game__in=games, earned=True)
 
     earners = Profile.objects.filter(
-        badge_progress__isnull=False,
-        is_linked=True
+        Q(is_linked=True) & Exists(trophy_sub)
+    ).annotate(
+        plats=Count('earned_trophy_entries__id', filter=Q(earned_trophy_entries__earned=True, earned_trophy_entries__trophy__game__in=games, earned_trophy_entries__trophy__trophy_type='platinum')),
+        golds=Count('earned_trophy_entries__id', filter=Q(earned_trophy_entries__earned=True, earned_trophy_entries__trophy__game__in=games, earned_trophy_entries__trophy__trophy_type='gold')),
+        silvers=Count('earned_trophy_entries__id', filter=Q(earned_trophy_entries__earned=True, earned_trophy_entries__trophy__game__in=games, earned_trophy_entries__trophy__trophy_type='silver')),
+        bronzes=Count('earned_trophy_entries__id', filter=Q(earned_trophy_entries__earned=True, earned_trophy_entries__trophy__game__in=games, earned_trophy_entries__trophy__trophy_type='bronze')),
+        max_earn_date=Max('earned_trophy_entries__earned_date_time', filter=Q(earned_trophy_entries__earned=True, earned_trophy_entries__trophy__game__in=games))
+    ).order_by(
+        '-plats', '-golds', '-silvers', '-bronzes', 'max_earn_date'
+    ).only(
+        'display_psn_username', 'flag', 'avatar_url', 'user_is_premium'
+    )
+
+    return [{
+        'rank': rank + 1,
+        'psn_username': earner.display_psn_username,
+        'flag': earner.flag,
+        'avatar_url': earner.avatar_url,
+        'trophy_totals': {
+            'plats': earner.plats,
+            'golds': earner.golds,
+            'silvers': earner.silvers,
+            'bronzes': earner.bronzes,
+        },
+        'last_earned_date': earner.max_earn_date.isoformat() if earner.max_earn_date else 'Unknown',
+        'is_premium': earner.user_is_premium,
+    } for rank, earner in enumerate(earners)]
+
+def compute_badge_xp_leaderboard() -> list[dict]:
+    from trophies.models import Profile, UserBadgeProgress
+
+    progress_sub = UserBadgeProgress.objects.filter(profile=OuterRef('pk'))
+
+    earners = Profile.objects.filter(
+        Q(is_linked=True) & Exists(progress_sub)
     ).annotate(
         progress_xp=Coalesce(Sum(
             Case(
@@ -373,9 +368,11 @@ def compute_badge_xp_leaderboard() -> list[dict]:
                 output_field=IntegerField()
             )
         ), 0),
-        badge_count=Count('badges'),
+        badge_count=Count('badges', distinct=True),
         total_xp=F('progress_xp') + F('badge_count') * Value(BADGE_TIER_XP)
-    ).filter(total_xp__gt=0).order_by('-total_xp', '-badge_count', 'display_psn_username')
+    ).filter(
+        total_xp__gt=0
+    ).order_by('-total_xp', '-badge_count', 'display_psn_username')
 
     return [
         {

@@ -38,8 +38,8 @@ urlpatterns = [
     path('badges/<str:series_slug>/', BadgeDetailView.as_view(), name='badge_detail'),
     path('badges/<str:series_slug>/<str:psn_username>/', BadgeDetailView.as_view(), name='badge_detail_with_profile'),
 
-    path('leaderboard/badge/', OverallBadgeLeaderboardsView.as_view(), name='overall_badge_leaderboards'),
-    path('leaderboard/badge/<str:series_slug>/', BadgeLeaderboardsView.as_view(), name='badge_leaderboards' ),
+    path('leaderboard/badges/', OverallBadgeLeaderboardsView.as_view(), name='overall_badge_leaderboards'),
+    path('leaderboard/badges/<str:series_slug>/', BadgeLeaderboardsView.as_view(), name='badge_leaderboards' ),
 
     path('pptv/', GuideListView.as_view(), name='guides_list'),
 
