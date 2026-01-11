@@ -87,7 +87,6 @@ class Profile(models.Model):
     recent_plat = models.ForeignKey('EarnedTrophy', on_delete=models.SET_NULL, null=True, blank=True, related_name='recent_for_profiles', help_text='Most recent earned platinum.')
     rarest_plat = models.ForeignKey('EarnedTrophy', on_delete=models.SET_NULL, null=True, blank=True, related_name='rarest_for_profiles', help_text='Rarest earned platinum by earn_rate.')
     selected_background = models.ForeignKey('Concept', on_delete=models.SET_NULL, null=True, blank=True, related_name='selected_by_profiles', help_text='Selected background concept for premium profiles.')
-    selected_title = models.CharField(max_length=100, blank=True, null=True, help_text="Selected user title text from earned badges.")
     hide_hiddens = models.BooleanField(default=False, help_text="If true, hide hidden/deleted games from list and totals.")
     hide_zeros = models.BooleanField(default=False, help_text="If true, hide games with no trophies earned.")
 
@@ -110,7 +109,6 @@ class Profile(models.Model):
             models.Index(fields=['is_linked', 'sync_tier'], name='profile_linked_tier_idx'),
             models.Index(fields=['is_discord_verified', 'discord_linked_at'], name='profile_discord_idx'),
             models.Index(fields=['user_is_premium', 'selected_background']),
-            models.Index(fields=['user_is_premium', 'selected_title']),
         ]
 
     def __str__(self):
@@ -203,12 +201,6 @@ class Profile(models.Model):
     
     def get_earned_titles(self):
         return Title.objects.earned_by_user(self)
-
-    def get_eligible_titles(self):
-        if not self.user_is_premium:
-            return []
-        eligible_badges = Badge.objects.filter(earned_by__profile=self, user_title__isnull=False).exclude(user_title='').distinct()
-        return sorted(set(badge.effective_user_title for badge in eligible_badges if badge.effective_user_title))
 
     def link_discord(self, discord_id: int):
         if self.discord_id:

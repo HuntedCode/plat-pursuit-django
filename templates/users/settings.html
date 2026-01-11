@@ -74,7 +74,8 @@
                             <span>Upgrade to premium to unlock these settings!</span>
                         </div>
                     {% endif %}
-                    <!-- Premium Background Selection -->
+
+                    <!-- Premium Settings -->
                     {% if premium_form %}
                         <h3 class="text-xl font-semibold mb-2 italic">Profile Customization</h3>
                         <form method="post" class="w-7/8 mx-auto">
@@ -90,10 +91,10 @@
                             <p class="text-center text-accent font-bold pr-1 italic mb-4">Earn Plats to unlock more backgrounds!</p>
 
                             <div class="form-control mb-2" disabled>
-                                <label class="label" for="{{ premium_form.selected_title.id_for_label }}">Selected Title</label>
-                                {{ premium_form.selected_title }}
-                                {% if premium_form.selected_title.errors %}
-                                    <div class="alert alert-error mt-1">{{ premium_form.selected_title.errors }}</div>
+                                <label class="label" for="{{ premium_form.title.id_for_label }}">Selected Title</label>
+                                {{ premium_form.title }}
+                                {% if premium_form.title.errors %}
+                                    <div class="alert alert-error mt-1">{{ premium_form.title.errors }}</div>
                                 {% endif %}
                             </div>
                             <p class="text-center text-accent font-bold pr-1 italic mb-4">Earn Badges to unlock more titles!</p>

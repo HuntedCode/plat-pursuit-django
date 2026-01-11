@@ -104,7 +104,7 @@
                 </div>
                 <h3 class="text-sm lg:text-xs 2xl:text-sm text-base-content/70 text-center pr-1 line-clamp-2 italic">{{ profile.about_me }}</h3>
                 {% if profile.user_is_premium %}
-                    <h3 class="text-lg lg:text-base 2xl:text-lg legendary-title text-center pr-1 line-clamp-1 italic">{{ profile.selected_title }}</h3>
+                    <h3 class="text-lg lg:text-base 2xl:text-lg legendary-title text-center pr-1 line-clamp-1 italic">{{ profile.displayed_title }}</h3>
                 {% endif %}
                 <a href="{% url 'trophy_case' profile.psn_username %}" class="btn btn-primary btn-lg">View Trophy Case</a>
             </div>

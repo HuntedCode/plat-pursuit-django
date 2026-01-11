@@ -1,7 +1,7 @@
 import logging
 from django import forms
 from django.db.models import Q
-from trophies.models import Profile, UserConceptRating, Concept, ProfileGame, Badge
+from trophies.models import Profile, UserConceptRating, Concept, ProfileGame, Title, UserTitle
 
 logger = logging.getLogger('psn_api')
 
@@ -213,16 +213,17 @@ class PremiumSettingsForm(forms.ModelForm):
         required=False,
         widget=forms.Select(attrs={'class': 'select w-full'})
     )
-    selected_title = forms.ChoiceField(
-        choices= [],
+    title = forms.ModelChoiceField(
+        queryset=Title.objects.none(),
         label='User Title',
+        empty_label='No Title',
         required=False,
-        widget=forms.Select(attrs={'class': 'select w-full'})
+        widget=forms.Select(attrs={'class': 'select w-full'}),
     )
 
     class Meta:
         model = Profile
-        fields = ['selected_background', 'selected_title']
+        fields = ['selected_background']
     
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -231,13 +232,37 @@ class PremiumSettingsForm(forms.ModelForm):
                 eligible_games = ProfileGame.objects.filter(profile=self.instance).filter(Q(has_plat=True) | Q(progress=100))
                 eligible_game_ids = eligible_games.values_list('game__id', flat=True)
                 self.fields['selected_background'].queryset = Concept.objects.filter(games__id__in=eligible_game_ids, bg_url__isnull=False).distinct().order_by('unified_title')
+                
+                self.fields['title'].queryset = self.instance.get_earned_titles()
 
-                eligible_titles = self.instance.get_eligible_titles()
-                self.fields['selected_title'].choices = [('', 'None')] + [(title, title) for title in eligible_titles]
+                current_title = Title.objects.filter(user_titles__profile=self.instance, user_titles__is_displayed=True).first()
+                self.initial['title'] = current_title
             else:
                 for field in self.fields:
                     self.fields[field].widget.attrs['disabled'] = 'disabled'
                     self.fields[field].help_text = 'Premium feature.'
+    
+    def clean(self):
+        cleaned_date = super().clean()
+        if not self.instance.user_is_premium:
+            for field in self.fields:
+                cleaned_date[field] = self.initial.get(field)
+        return cleaned_date
+    
+    def save(self, commit=True):
+        instance = super().save(commit=commit)
+
+        if self.instance.user_is_premium:
+            selected_title = self.cleaned_data.get('title')
+            if selected_title:
+                instance.user_titles.update(is_displayed=False)
+                user_title = UserTitle.objects.get(profile=instance, title=selected_title)
+                user_title.is_displayed = True
+                user_title.save(update_fields=['is_displayed'])
+            else:
+                instance.user_titles.update(is_displayed=False)
+        
+        return instance
 
 class ProfileSettingsForm(forms.ModelForm):
     hide_hiddens = forms.BooleanField(
