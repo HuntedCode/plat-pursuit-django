@@ -111,7 +111,7 @@ def notify_new_badge(profile, badge):
                     thumbnail_url = badge.base_badge.badge_image.url
             
             if not thumbnail_url:
-                thumbnail_url = settings.SITE_URL + static('images/badges/default.png')
+                thumbnail_url = 'https://platpursuit.com/static/images/badges/default.png'
 
         description = f"{plat_pursuit_emoji} <@{profile.discord_id}> has earned a brand new role!\n{platinum_emoji} **{badge.display_series}**"
         if badge.discord_role_id:
