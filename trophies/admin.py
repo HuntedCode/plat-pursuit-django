@@ -2,7 +2,7 @@ from django.contrib import admin, messages
 from django.contrib.admin import SimpleListFilter
 from django.db import transaction
 from django.db.models import Q
-from .models import Profile, Game, Trophy, EarnedTrophy, ProfileGame, APIAuditLog, FeaturedGame, FeaturedProfile, Event, Concept, TitleID, TrophyGroup, UserTrophySelection, UserConceptRating, Badge, UserBadge, UserBadgeProgress, FeaturedGuide, Stage, PublisherBlacklist
+from .models import Profile, Game, Trophy, EarnedTrophy, ProfileGame, APIAuditLog, FeaturedGame, FeaturedProfile, Event, Concept, TitleID, TrophyGroup, UserTrophySelection, UserConceptRating, Badge, UserBadge, UserBadgeProgress, FeaturedGuide, Stage, PublisherBlacklist, Title, UserTitle
 
 
 # Register your models here.
@@ -367,3 +367,11 @@ class FeaturedGuideAdmin(admin.ModelAdmin):
 @admin.register(PublisherBlacklist)
 class PublisherBlacklistAdmin(admin.ModelAdmin):
     list_display = ['name', 'date_added']
+
+@admin.register(Title)
+class TitleAdmin(admin.ModelAdmin):
+    list_display = ['name', 'created_at']
+
+@admin.register(UserTitle)
+class UserTitleAdmin(admin.ModelAdmin):
+    list_display = ['profile', 'title', 'source_type', 'source_id', 'earned_at', 'is_displayed']

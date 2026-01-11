@@ -13,6 +13,7 @@ import re
 
 
 # Create your models here.
+
 class Profile(models.Model):
     user = models.OneToOneField(
         CustomUser,
@@ -196,6 +197,13 @@ class Profile(models.Model):
         if self.earned_trophy_summary:
             return self.earned_trophy_summary.get('bronze', 0) + self.earned_trophy_summary.get('silver', 0) + self.earned_trophy_summary.get('gold', 0) + self.earned_trophy_summary.get('platinum', 0)
 
+    def displayed_title(self):
+        user_title = self.user_titles.filter(is_displayed=True).first()
+        return user_title.title.name if user_title else None
+    
+    def get_earned_titles(self):
+        return Title.objects.earned_by_user(self)
+
     def get_eligible_titles(self):
         if not self.user_is_premium:
             return []
@@ -281,7 +289,6 @@ class Profile(models.Model):
             self.rarest_plat = platinums.filter(trophy__trophy_earn_rate=min_rate).order_by('trophy__earn_rate').first() if min_rate is not None else None
 
         self.save(update_fields=['recent_plat', 'rarest_plat'])
-
 
 class FeaturedProfile(models.Model):
     profile = models.ForeignKey(Profile, on_delete=models.CASCADE)
@@ -745,6 +752,7 @@ class Badge(models.Model):
     display_title = models.CharField(max_length=100, blank=True)
     display_series = models.CharField(max_length=100, blank=True)
     user_title = models.CharField(max_length=100, blank=True, help_text="Title earned by user upon badge completion.")
+    title = models.ForeignKey('Title', on_delete=models.SET_NULL, null=True, blank=True, related_name='badge_title', help_text='Title awarded to user upon earning.')
     discord_role_id = models.BigIntegerField(null=True, blank=True, help_text="Discord role ID to auto assign upon earning the badge (optional).")
     tier = models.IntegerField(choices=TIER_CHOICES, default=1)
     badge_type = models.CharField(max_length=10, choices=BADGE_TYPES, default='series')
@@ -915,6 +923,56 @@ class Stage(models.Model):
         
     def applies_to_tier(self, tier: int) -> bool:
         return not self.required_tiers or tier in self.required_tiers
+
+class TitleManager(models.Manager):
+    """Fetch titles earned by a user, ordered alphabetically. Usage: Title.objects.earned_by_user(profile)"""
+    def earned_by_user(self, profile):
+        return self.filter(user_titles__profile=profile).order_by('user_titles__title__name')
+
+class Title(models.Model):
+    name = models.CharField(max_length=100, unique=True, help_text="The title text.")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    objects = TitleManager()
+
+    class Meta:
+        ordering = ['name']
+        indexes = [
+            models.Index(fields=['name'], name='title_name_idx'),
+        ]
+        verbose_name = 'Title'
+        verbose_name_plural = 'Titles'
+    
+    def __str__(self):
+        return self.name
+    
+class UserTitle(models.Model):
+    SOURCE_CHOICES = [
+        ('badge', 'Badge'),
+        ('milestone', 'Milestone')
+    ]
+
+    profile = models.ForeignKey(Profile, on_delete=models.CASCADE, related_name='user_titles')
+    title = models.ForeignKey(Title, on_delete=models.CASCADE, related_name='user_titles')
+    source_type = models.CharField(max_length=20, choices=SOURCE_CHOICES, help_text="Source of the title")
+    source_id = models.PositiveIntegerField(null=True, blank=True, help_text="ID of the granting object")
+    earned_at = models.DateTimeField(auto_now_add=True)
+    is_displayed = models.BooleanField(default=False, help_text="Whether this is the user's selected display title")
+
+    class Meta:
+        unique_together = ['profile', 'title']
+        indexes = [
+            models.Index(fields=['profile', 'is_displayed'], name='usertitle_display_idx'),
+            models.Index(fields=['earned_at'], name='usertitle_earned_at_idx'),
+            models.Index(fields=['source_type', 'source_id'], name='usertitle_source_idx'),
+        ]
+        verbose_name = 'User Title'
+        verbose_name_plural = 'User Titles'
+
+    def __str__(self):
+        return f"{self.profile.psn_username} - {self.title.name}"
+
+
 
 class PublisherBlacklist(models.Model):
     name = models.CharField(max_length=255, unique=True)

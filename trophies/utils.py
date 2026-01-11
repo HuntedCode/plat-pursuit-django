@@ -95,6 +95,8 @@ def calculate_trimmed_mean(data, trim_percent=0.1):
         return None
     return stats.trim_mean(data, trim_percent)
 
+# Badges
+
 def check_profile_badges(profile, profilegame_ids, skip_notis: bool = False):
     from trophies.models import ProfileGame, Badge, Stage
 
@@ -124,13 +126,6 @@ def check_profile_badges(profile, profilegame_ids, skip_notis: bool = False):
     logger.info(f"Checked {checked_count} unique badges for profile {profile.psn_username} in {duration:.2f}s")
     return checked_count
 
-def get_platform_filter(badge):
-    allowed_platforms = MODERN_PLATFORMS if badge.tier in [1, 2] else ALL_PLATFORMS
-    platform_filter = Q()
-    for plat in allowed_platforms:
-        platform_filter |= Q(title_platform__contains=plat)
-    return platform_filter
-    
 @transaction.atomic
 def handle_badge(profile, badge, add_role_only=False):
     from trophies.models import UserBadge, UserBadgeProgress, Badge
@@ -243,6 +238,8 @@ def initial_badge_check(profile, discord_notify: bool = True):
     duration = time.time() - start_time
     logger.info(f"Checked {checked_count} unique badges for profile {profile.psn_username} in {duration:.2f}s")
     return checked_count
+
+# Leaderboards
 
 def compute_earners_leaderboard(series_slug: str) -> list[dict]:
     """Compute earners sorted by earn date."""
@@ -389,6 +386,8 @@ def compute_badge_xp_leaderboard() -> list[dict]:
             'total_badges': earner.badge_count,
         } for rank, earner in enumerate(earners)
     ]
+
+# Update methods
 
 def update_profile_games(profile):
     from trophies.models import ProfileGame
