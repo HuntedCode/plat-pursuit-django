@@ -383,7 +383,9 @@ class MilestoneAdmin(admin.ModelAdmin):
 @admin.register(UserMilestone)
 class UserMilestoneAdmin(admin.ModelAdmin):
     list_display = ['profile', 'milestone', 'earned_at']
+    search_fields = ['profile__psn_username', 'milestone__name']
 
 @admin.register(UserMilestoneProgress)
 class UserMilestoneProgressAdmin(admin.ModelAdmin):
     list_display = ['profile', 'milestone', 'progress_value', 'last_checked']
+    search_fields = ['profile__psn_username', 'milestone__name']
