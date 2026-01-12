@@ -8,10 +8,8 @@
     <link rel="icon" type="image/x-icon" href="{% static 'images/logo.png' %}" />
     <link rel="stylesheet" href="{% static 'css/output.css' %}" />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&family=Poppins:wght@400;600;700&display=swap" rel="stylesheet">
-    {% if ADSENSE_ENABLED %}
-      <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-4609084422711453"
-      crossorigin="anonymous"></script>
-    {% endif %}
+    <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-4609084422711453"
+    crossorigin="anonymous"></script>
     {% block extra_head %}{% endblock %}
   </head>
   <body class="bg-base-100 text-base-content min-h-screen flex flex-col" {% if image_urls.bg_url %}style="background-image: url('{{ image_urls.bg_url }}'); background-size: cover; background-position: center; background-attachment: fixed;"{% endif %}>
@@ -20,7 +18,6 @@
     <div class="flex flex-1 flex-col lg:flex-row lg:items-start">
 
       <aside class="hidden lg:block sticky top-20 w-40 order-first self-start mt-20">
-          {% if ADSENSE_ENABLED %}
           <div class="mb-6">
               <ins class="adsbygoogle"
                     style="display:block"
@@ -32,7 +29,6 @@
                   (adsbygoogle = window.adsbygoogle || []).push({});
               </script>
           </div>
-          {% endif %}
       </aside>
 
       <main class="container mx-auto px-4 py-2 flex-grow">
@@ -43,7 +39,6 @@
       </main>
 
       <aside class="hidden lg:block sticky top-20 w-40 self-start mt-20">
-        {% if ADSENSE_ENABLED %}
           <div class="mb-6">
             <ins class="adsbygoogle"
                 style="display:block"
@@ -55,7 +50,6 @@
                 (adsbygoogle = window.adsbygoogle || []).push({});
             </script>
           </div>
-        {% endif %}
       </aside>
 
     </div>
