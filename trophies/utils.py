@@ -492,9 +492,12 @@ def update_profile_trophy_counts(profile):
 
     profile.total_trophies = total_earned
     profile.total_unearned = total_unearned
+    profile.total_bronzes = EarnedTrophy.objects.filter(profile=profile, earned=True, trophy__trophy_type='bronze').count()
+    profile.total_silvers = EarnedTrophy.objects.filter(profile=profile, earned=True, trophy__trophy_type='silver').count()
+    profile.total_golds = EarnedTrophy.objects.filter(profile=profile, earned=True, trophy__trophy_type='gold').count()
     profile.total_plats = EarnedTrophy.objects.filter(profile=profile, earned=True, trophy__trophy_type='platinum').count()
     profile.avg_progress = avg_progress
-    profile.save(update_fields=['total_trophies', 'total_unearned', 'total_plats', 'avg_progress'])
+    profile.save(update_fields=['total_trophies', 'total_unearned', 'total_bronzes', 'total_silvers', 'total_golds', 'total_plats', 'avg_progress'])
 
 def detect_asian_language(title: str) -> str:
     """Detect the primary Asian language in a game title."""

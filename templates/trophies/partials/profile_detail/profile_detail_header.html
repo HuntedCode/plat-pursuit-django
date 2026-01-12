@@ -190,7 +190,7 @@
                                         <svg xmlns="http://www.w3.org/2000/svg" class="mx-auto" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="var(--color-error)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2"></polygon><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
                                     </div>
                                 {% else %}
-                                    <div class="stat-value text-2xl text-base-content group-hover:scale-105">{{ profile.earned_trophy_summary.bronze|intcomma }}</div>
+                                    <div class="stat-value text-2xl text-base-content group-hover:scale-105">{{ profile.total_bronzes|intcomma }}</div>
                                 {% endif %}
                             </div>
 
@@ -204,7 +204,7 @@
                                         <svg xmlns="http://www.w3.org/2000/svg" class="mx-auto" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="var(--color-error)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2"></polygon><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
                                     </div>
                                 {% else %}
-                                    <div class="stat-value text-2xl text-base-content group-hover:scale-105">{{ profile.earned_trophy_summary.silver|intcomma }}</div>
+                                    <div class="stat-value text-2xl text-base-content group-hover:scale-105">{{ profile.total_silvers|intcomma }}</div>
                                 {% endif %}
                             </div>
 
@@ -218,7 +218,7 @@
                                         <svg xmlns="http://www.w3.org/2000/svg" class="mx-auto" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="var(--color-error)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2"></polygon><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
                                     </div>
                                 {% else %}
-                                    <div class="stat-value text-2xl text-base-content group-hover:scale-105">{{ profile.earned_trophy_summary.gold|intcomma }}</div>
+                                    <div class="stat-value text-2xl text-base-content group-hover:scale-105">{{ profile.total_golds|intcomma }}</div>
                                 {% endif %}
                             </div>
 
@@ -232,11 +232,11 @@
                                         <svg xmlns="http://www.w3.org/2000/svg" class="mx-auto" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="var(--color-error)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2"></polygon><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
                                     </div>
                                 {% else %}
-                                    <div class="stat-value text-2xl text-base-content group-hover:scale-105">{{ profile.earned_trophy_summary.platinum|intcomma }}</div>
+                                    <div class="stat-value text-2xl text-base-content group-hover:scale-105">{{ profile.total_plats|intcomma }}</div>
                                 {% endif %}
                             </div>
                         </div>                
-                        <p class="text-xs text-base-content text-center pr-1 italic">*Trophy totals are based on PSN aggregates. Hidden trophies are counted.</p>
+                        <p class="text-xs text-base-content text-center pr-1 italic">* Visit settings to update your hidden trophy visibility.</p>
                     </div>
                     <div class="hidden xl:block border-4 border-base-300 shadow-md shadow-neutral hover:border-secondary hover:shadow-secondary hover:scale-105">
                         <div class="p-4">

@@ -79,6 +79,9 @@ class Profile(models.Model):
     discord_linked_at = models.DateTimeField(blank=True, null=True, help_text='Timestamp when Discord was linked via bot.')
     total_trophies = models.PositiveIntegerField(default=0)
     total_unearned = models.PositiveIntegerField(default=0)
+    total_bronzes = models.PositiveIntegerField(default=0)
+    total_silvers = models.PositiveIntegerField(default=0)
+    total_golds = models.PositiveIntegerField(default=0)
     total_plats = models.PositiveIntegerField(default=0)
     total_hiddens = models.PositiveIntegerField(default=0)
     total_games = models.PositiveIntegerField(default=0)
@@ -99,6 +102,9 @@ class Profile(models.Model):
             models.Index(fields=['sync_status'], name='profile_sync_status_idx'),
             models.Index(fields=['total_trophies'], name='profile_total_trophies_idx'),
             models.Index(fields=['total_unearned'], name='profile_total_unearned_idx'),
+            models.Index(fields=['total_bronzes'], name='profile_total_bronzes_idx'),
+            models.Index(fields=['total_silvers'], name='profile_total_silver_idx'),
+            models.Index(fields=['total_golds'], name='profile_total_gold_idx'),
             models.Index(fields=['total_plats'], name='profile_total_plats_idx'),
             models.Index(fields=['total_games'], name='profile_total_games_idx'),
             models.Index(fields=['total_completes'], name='profile_total_completes_idx'),

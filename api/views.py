@@ -195,7 +195,7 @@ class TrophyCaseView(APIView):
         try:
             profile = Profile.objects.get(discord_id=discord_id)
             platinums = profile.earned_trophy_entries.filter(earned=True, trophy__trophy_type='platinum').order_by(F('earned_date_time').desc(nulls_last=True))
-            total_plats = platinums.count()
+            total_plats = profile.total_plats
             paginator = Paginator(platinums, per_page)
             paginated_platinums = paginator.page(page)
             serializer = TrophyCaseSerializer(paginated_platinums, many=True)
