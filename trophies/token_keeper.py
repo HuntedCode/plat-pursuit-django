@@ -11,6 +11,8 @@ from typing import Optional, Dict
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from django.utils import timezone
+from django.db.models import Sum
+from django.db.models.functions import Coalesce
 from psnawp_api import PSNAWP as BasePSNAWP
 from psnawp_api.core.request_builder import RequestBuilder as BaseRequestBuilder
 from psnawp_api.core.authenticator import Authenticator as BaseAuthenticator
@@ -536,10 +538,11 @@ class TokenKeeper:
         earned = summary.earned_trophies
         summary_total = earned.bronze + earned.silver + earned.gold + earned.platinum
         total_tracked = tracked_trophies['total'] + profile.total_hiddens
+        profilegame_total = ProfileGame.objects.filter(profile=profile).annotate(earned=Coalesce(Sum('earned_trophies_count'), 0))['earned']
 
-        logger.info(f"Profile {profile_id} health: Summary: {summary_total} | Tracked: {total_tracked} (Hidden: {profile.total_hiddens}) | {summary_total == total_tracked}")
+        logger.info(f"Profile {profile_id} health: Summary: {summary_total} | Tracked: {total_tracked} (Hidden: {profile.total_hiddens}) | Profilegame: {profilegame_total} | {summary_total == total_tracked}")
 
-        if summary_total != total_tracked:
+        if summary_total != total_tracked or total_tracked != profilegame_total:
             trophy_titles_to_be_updated = []
             current_tracked_games = list(ProfileGame.objects.filter(profile=profile))
             page_size = 400
@@ -566,6 +569,9 @@ class TokenKeeper:
                         has_mismatch = True
                         trophy_titles_to_be_updated.append({'title': title, 'game': game})
                         logger.info(f"Mismatch for profile {profile_id} - {title.np_communication_id}: Tracked: {tracked['total']} | Title: {title_total}")
+                    elif tracked['total'] != pgame.earned_trophies_count and pgame.id not in touched_profilegame_ids:
+                        touched_profilegame_ids.append(pgame.id)
+                        logger.warning(f"ProfileGame/tracked total mismatch, appending {pgame} to be updated. | Tracked: {tracked['total']} | PGame: {pgame.earned_trophies_count}")
                 is_full = len(titles) == page_size
                 limit += page_size
                 offset += page_size
