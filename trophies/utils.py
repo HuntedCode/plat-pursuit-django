@@ -399,21 +399,30 @@ def update_profile_trophy_counts(profile):
     from trophies.models import EarnedTrophy, ProfileGame
     from django.db.models import Sum
 
-    trophy_totals_qs = ProfileGame.objects.filter(profile=profile)
+    trophy_totals = ProfileGame.objects.filter(profile=profile)
     if profile.hide_hiddens:
-        trophy_totals_qs = trophy_totals_qs.filter(user_hidden=False)
+        trophy_totals = trophy_totals.filter(user_hidden=False)
     if profile.hide_zeros:
-        trophy_totals_qs = trophy_totals_qs.exclude(earned_trophies_count=0)
+        trophy_totals = trophy_totals.exclude(earned_trophies_count=0)
 
-    trophy_totals_qs = trophy_totals_qs.aggregate(
-        unearned=Sum('unearned_trophies_count'),
-        earned=Sum('earned_trophies_count'),
+    aggregates = trophy_totals.aggregate(
+        unearned=Coalesce(Sum('unearned_trophies_count'), 0),
+        earned=Coalesce(Sum('earned_trophies_count'), 0),
     )
 
-    profile.total_trophies = trophy_totals_qs['earned']
-    profile.total_unearned = trophy_totals_qs['unearned']
+    total_earned = aggregates['earned']
+    total_unearned = aggregates['unearned']
+
+    print(total_earned)
+    print(total_unearned)
+
+    total = total_earned + total_unearned
+    avg_progress = (total_earned / total * 100) if total > 0 else 0.0
+
+    profile.total_trophies = total_earned
+    profile.total_unearned = total_unearned
     profile.total_plats = EarnedTrophy.objects.filter(profile=profile, earned=True, trophy__trophy_type='platinum').count()
-    profile.avg_progress = trophy_totals_qs['earned'] / (trophy_totals_qs['unearned'] + trophy_totals_qs['earned']) * 100 if (trophy_totals_qs['unearned'] + trophy_totals_qs['earned'] > 0) else 0
+    profile.avg_progress = avg_progress
     profile.save(update_fields=['total_trophies', 'total_unearned', 'total_plats', 'avg_progress'])
 
 def detect_asian_language(title: str) -> str:
