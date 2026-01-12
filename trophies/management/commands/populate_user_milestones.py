@@ -22,6 +22,7 @@ class Command(BaseCommand):
             else:
                 check_all_milestones_for_user(profile=profile)
             self.stdout.write(self.style.SUCCESS(f"Profile {username} updated successfully!"))
+            return
 
 
         for profile in Profile.objects.all():
