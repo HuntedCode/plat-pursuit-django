@@ -538,7 +538,7 @@ class TokenKeeper:
         earned = summary.earned_trophies
         summary_total = earned.bronze + earned.silver + earned.gold + earned.platinum
         total_tracked = tracked_trophies['total'] + profile.total_hiddens
-        profilegame_total = ProfileGame.objects.filter(profile=profile).annotate(earned=Coalesce(Sum('earned_trophies_count'), 0))['earned']
+        profilegame_total = ProfileGame.objects.filter(profile=profile).aggregate(earned=Coalesce(Sum('earned_trophies_count'), 0))['earned']
 
         logger.info(f"Profile {profile_id} health: Summary: {summary_total} | Tracked: {total_tracked} (Hidden: {profile.total_hiddens}) | Profilegame: {profilegame_total} | {summary_total == total_tracked}")
 
