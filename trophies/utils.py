@@ -413,9 +413,6 @@ def update_profile_trophy_counts(profile):
     total_earned = aggregates['earned']
     total_unearned = aggregates['unearned']
 
-    print(total_earned)
-    print(total_unearned)
-
     total = total_earned + total_unearned
     avg_progress = (total_earned / total * 100) if total > 0 else 0.0
 
