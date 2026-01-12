@@ -2,7 +2,7 @@ from django.contrib import admin, messages
 from django.contrib.admin import SimpleListFilter
 from django.db import transaction
 from django.db.models import Q
-from .models import Profile, Game, Trophy, EarnedTrophy, ProfileGame, APIAuditLog, FeaturedGame, FeaturedProfile, Event, Concept, TitleID, TrophyGroup, UserTrophySelection, UserConceptRating, Badge, UserBadge, UserBadgeProgress, FeaturedGuide, Stage, PublisherBlacklist, Title, UserTitle
+from .models import Profile, Game, Trophy, EarnedTrophy, ProfileGame, APIAuditLog, FeaturedGame, FeaturedProfile, Event, Concept, TitleID, TrophyGroup, UserTrophySelection, UserConceptRating, Badge, UserBadge, UserBadgeProgress, FeaturedGuide, Stage, PublisherBlacklist, Title, UserTitle, Milestone, UserMilestone, UserMilestoneProgress
 
 
 # Register your models here.
@@ -375,3 +375,15 @@ class TitleAdmin(admin.ModelAdmin):
 @admin.register(UserTitle)
 class UserTitleAdmin(admin.ModelAdmin):
     list_display = ['profile', 'title', 'source_type', 'source_id', 'earned_at', 'is_displayed']
+
+@admin.register(Milestone)
+class MilestoneAdmin(admin.ModelAdmin):
+    list_display = ['name', 'title', 'discord_role_id', 'criteria_type', 'criteria_details', 'premium_only', 'required_value', 'earned_count']
+
+@admin.register(UserMilestone)
+class UserMilestoneAdmin(admin.ModelAdmin):
+    list_display = ['profile', 'milestone', 'earned_at']
+
+@admin.register(UserMilestoneProgress)
+class UserMilestoneProgressAdmin(admin.ModelAdmin):
+    list_display = ['profile', 'milestone', 'progress_value', 'last_checked']

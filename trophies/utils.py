@@ -14,7 +14,7 @@ from django.utils import timezone
 from dotenv import load_dotenv
 from typing import List, Set
 from scipy import stats
-from trophies.discord_utils.discord_notifications import send_batch_role_notification, notify_new_badge
+from trophies.discord_utils.discord_notifications import send_batch_role_notification, notify_new_badge, notify_new_milestone
 
 load_dotenv()
 logger = logging.getLogger("psn_api")
@@ -182,6 +182,9 @@ def handle_badge(profile, badge, add_role_only=False):
 
 def notify_bot_role_earned(profile, role_id):
     """Notify Discord bot via API to assign role."""
+    if settings.DEBUG:
+        return
+    
     try:
         url = settings.BOT_API_URL + "/assign-role"
         headers = {
@@ -238,6 +241,77 @@ def initial_badge_check(profile, discord_notify: bool = True):
     duration = time.time() - start_time
     logger.info(f"Checked {checked_count} unique badges for profile {profile.psn_username} in {duration:.2f}s")
     return checked_count
+
+# Milestones
+
+@transaction.atomic
+def check_and_award_milestone(profile, milestone, notify=True, force_role_update=False):
+    """Check if milestone is achieved for user with award if so."""
+    from trophies.models import UserMilestoneProgress, UserMilestone
+    from trophies.milestone_handlers import MILESTONE_HANDLERS
+
+    if milestone.premium_only and not profile.user_is_premium:
+        return False
+    
+    handler = MILESTONE_HANDLERS.get(milestone.criteria_type)
+    if not handler:
+        logger.warning(f"No handler for criteria_type: {milestone.criteria_type}")
+        return False
+    
+    result = handler(profile, milestone)
+
+    progress, created = UserMilestoneProgress.objects.get_or_create(
+        profile=profile, milestone=milestone, defaults={'progress_value': result['progress']}
+    )
+    if result['updated'] or progress.progress_value != result['progress']:
+        progress.progress_value = result['progress']
+        progress.save(update_fields=['progress_value'])
+    
+    if result['achieved']:
+        user_milestone, created = UserMilestone.objects.get_or_create(
+            profile=profile, milestone=milestone
+        )
+        if created:
+            milestone.earned_count += 1
+            milestone.save(update_fields=['earned_count'])
+            if milestone.discord_role_id:
+                notify_bot_role_earned(profile, milestone.discord_role_id)
+                if notify:
+                    notify_new_milestone(profile, milestone)
+        if not created and force_role_update and milestone.discord_role_id:
+            notify_bot_role_earned(profile, milestone.discord_role_id)
+        return {'awarded': True, 'created': created}
+    return {'awarded': False, 'created': False}
+
+def check_all_milestones_for_user(profile, criteria_type=None):
+    """Batch check all relevant milestones for a user."""
+    from trophies.models import Milestone
+
+    qs = Milestone.objects.all()
+
+    if criteria_type:
+        qs = qs.filter(criteria_type=criteria_type)
+
+    if criteria_type != 'plat_count':
+        awarded = []
+        for milestone in qs:
+            status = check_and_award_milestone(profile, milestone)
+            if status['created']:
+                awarded.append(milestone)
+        return awarded
+    
+    plat_qs = qs.order_by('required_value')
+    new_awards = []
+    for milestone in plat_qs:
+        status = check_and_award_milestone(profile, milestone, notify=False)
+        if status['created']:
+            new_awards.append(milestone)
+    
+    if new_awards:
+        highest = max(new_awards, key=lambda m: m.required_value)
+        print(f"Notifying for milestone {highest}")
+        notify_new_milestone(profile, highest)
+    return new_awards
 
 # Leaderboards
 

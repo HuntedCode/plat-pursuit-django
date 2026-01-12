@@ -964,7 +964,88 @@ class UserTitle(models.Model):
     def __str__(self):
         return f"{self.profile.psn_username} - {self.title.name}"
 
+class MilestoneManager(models.Manager):
+    def get_for_user(self, profile, criteria_type=None):
+        """Fetch milestones for user, optionally filtered by criteria, with progress ratio."""
+        qs = self.prefetch_related('user_milestones', 'user_milestone_progress').filter(user_milestones__profile=profile)
+        if criteria_type:
+            qs = qs.filter(criteria_type=criteria_type)
+        return qs.annotate(
+            progress_ratio=F('user_milestone_progress__progress_value') / F('required_value')
+        ).order_by('-progress_ratio', 'name')
 
+class Milestone(models.Model):
+    CRITERIA_TYPES = [
+        ('manual', 'Manual Award'),
+        ('plat_count', 'Earned Plats'),
+    ]
+
+    name = models.CharField(max_length=255, unique=True, help_text="Unique name")
+    description = models.TextField(blank=True, help_text="Description for display")
+    image = models.ImageField(upload_to='milestones/', blank=True, null=True, help_text='Visual icon')
+    title = models.ForeignKey(Title, on_delete=models.SET_NULL, null=True, blank=True, related_name='milestones')
+    discord_role_id = models.BigIntegerField(null=True, blank=True, help_text="Discord role ID to assign upon earning")
+    criteria_type = models.CharField(max_length=20, choices=CRITERIA_TYPES, default='manual')
+    criteria_details = models.JSONField(default=dict, blank=True, help_text="Flexible details")
+    manual_award = models.BooleanField(default=False, help_text="If True, admins award manually.")
+    premium_only = models.BooleanField(default=False, help_text="If True, can only be earned by current premium users")
+    requires_all = models.BooleanField(default=True, help_text="For multi-part criteria. False allowed min_required")
+    min_required = models.PositiveIntegerField(default=0, help_text="Minimum items needed if not requires_all")
+    required_value = models.PositiveIntegerField(default=0, help_text="Target for milestone")
+    earned_count = models.PositiveIntegerField(default=0, help_text="Counter for user earns")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    objects = MilestoneManager()
+
+    class Meta:
+        ordering = ['name']
+        indexes = [
+            models.Index(fields=['criteria_type'], name='milestone_type_idx'),
+            models.Index(fields=['earned_count'],  name='milestone_earned_count_idx'),
+        ]
+        verbose_name = 'Milestone'
+        verbose_name_plural = 'Milestones'
+
+    def save(self, *args, **kwargs):
+        self.required_value = self.criteria_details.get('target', 0)
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return self.name
+    
+class UserMilestone(models.Model):
+    profile = models.ForeignKey(Profile, on_delete=models.CASCADE, related_name='user_milestones')
+    milestone = models.ForeignKey(Milestone, on_delete=models.CASCADE, related_name='user_milestones')
+    earned_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ['profile', 'milestone']
+        indexes = [
+            models.Index(fields=['earned_at'], name='usermilestone_earned_at_idx'),
+        ]
+        verbose_name = 'User Milestone'
+        verbose_name_plural = 'User Milestones'
+
+    def __str__(self):
+        return f"{self.profile.psn_username} - {self.milestone.name}"
+    
+class UserMilestoneProgress(models.Model):
+    profile = models.ForeignKey(Profile, on_delete=models.CASCADE, related_name='user_milestone_progress')
+    milestone = models.ForeignKey(Milestone, on_delete=models.CASCADE, related_name='milestone_progress')
+    progress_value = models.PositiveIntegerField(default=0, help_text="Current progress")
+    last_checked = models.DateTimeField(auto_now=True, help_text="Timestamp of last progress update")
+
+    class Meta:
+        unique_together = ['profile', 'milestone']
+        indexes = [
+            models.Index(fields=['profile', 'milestone'], name='usermilestoneprogress_idx'),
+            models.Index(fields=['last_checked'], name='usermilestoneprog_checked_idx'),
+        ]
+        verbose_name = 'User Milestone Progress'
+        verbose_name_plural = 'User Milestone Progress'
+    
+    def __str__(self):
+        return f"{self.profile.psn_username} - {self.milestone.name} Progress"
 
 class PublisherBlacklist(models.Model):
     name = models.CharField(max_length=255, unique=True)

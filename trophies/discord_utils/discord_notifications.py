@@ -110,8 +110,8 @@ def notify_new_badge(profile, badge):
                 else:
                     thumbnail_url = badge.base_badge.badge_image.url
             
-            if not thumbnail_url:
-                thumbnail_url = 'https://platpursuit.com/static/images/badges/default.png'
+        if not thumbnail_url:
+            thumbnail_url = 'https://platpursuit.com/static/images/badges/default.png'
 
         description = f"{plat_pursuit_emoji} <@{profile.discord_id}> has earned a brand new role!\n{platinum_emoji} **{badge.display_series}**"
         if badge.discord_role_id:
@@ -129,6 +129,46 @@ def notify_new_badge(profile, badge):
         logger.info(f"Queued notification of new badge for {profile.psn_username}")
     except Exception as e:
         logger.error(f"Failed to queue badge notification: {e}")
+
+def notify_new_milestone(profile, milestone):
+    """Send Discord webhook embed for new milestone."""
+    if not profile or not milestone:
+        return
+    
+    try:
+        platinum_emoji = f"<:Platinum_Trophy:{settings.PLATINUM_EMOJI_ID}>" if settings.PLATINUM_EMOJI_ID else "🏆"
+        plat_pursuit_emoji = f"<:PlatPursuit:{settings.PLAT_PURSUIT_EMOJI_ID}>" if settings.PLAT_PURSUIT_EMOJI_ID else "🏆"
+
+        thumbnail_url = ''
+        if milestone.image:
+            if settings.DEBUG:
+                thumbnail_url = 'https://platpursuit.com/static/images/badges/default.png'
+            else:
+                thumbnail_url = milestone.image
+            
+        if not thumbnail_url:
+            thumbnail_url = 'https://platpursuit.com/static/images/badges/default.png'
+
+        description = f"{plat_pursuit_emoji} <@{profile.discord_id}> has completed a new milestone!\n{platinum_emoji}\n\n**{milestone.name}**\n{milestone.description}"
+        if milestone.discord_role_id:
+            description += f"\nYou've earned the <@&{milestone.discord_role_id}> role! Congrats! 🎉"
+
+        embed_data = {
+            'title': f"🚨 Milestone complete for {profile.display_psn_username}! 🚨",
+            'description': description,
+            'color': 0x674EA7,
+            'thumbnail': {'url': thumbnail_url},
+            'footer': {'text': f"Powered by Plat Pursuit | No Trophy Can Hide From Us"},
+        }
+        payload = {'embeds': [embed_data]}
+        if settings.DEBUG:
+            webhook_url = settings.DISCORD_TEST_WEBHOOK_URL
+        else:
+            webhook_url = settings.DISCORD_PLATINUM_WEBHOOK_URL
+        queue_webhook_send(payload, webhook_url=webhook_url)
+        logger.info(f"Queued notification of new milestone for {profile.psn_username}")
+    except Exception as e:
+        logger.error(f"Failed to queue milestone notification: {e}")
 
 def send_batch_role_notification(profile, badges):
     """
@@ -157,8 +197,8 @@ def send_batch_role_notification(profile, badges):
         elif first_badge.base_badge and first_badge.base_badge.badge_image:
             thumbnail_url = first_badge.base_badge.badge_image.url
 
-        if not thumbnail_url:
-                thumbnail_url = settings.SITE_URL + static('images/badges/default.png')
+    if not thumbnail_url:
+            thumbnail_url = settings.SITE_URL + static('images/badges/default.png')
 
     badge_lines = []
     for badge in role_badges:

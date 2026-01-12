@@ -24,7 +24,7 @@ from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_excep
 from .models import Profile, Game, TitleID, TrophyGroup, ProfileGame
 from .services.psn_api_service import PsnApiService
 from .psn_manager import PSNManager
-from .utils import redis_client, log_api_call, TITLE_ID_BLACKLIST, TITLE_STATS_SUPPORTED_PLATFORMS, update_profile_games, update_profile_trophy_counts, detect_asian_language, check_profile_badges
+from .utils import redis_client, log_api_call, TITLE_ID_BLACKLIST, TITLE_STATS_SUPPORTED_PLATFORMS, update_profile_games, update_profile_trophy_counts, detect_asian_language, check_profile_badges, check_all_milestones_for_user
 
 logger = logging.getLogger("psn_api")
 
@@ -605,6 +605,8 @@ class TokenKeeper:
         logger.info(f"Checking profile badges for {profile_id}...")
         check_profile_badges(profile, touched_profilegame_ids)
         logger.info(f"ProfileGame Stats updated for {profile_id} successfully! | {len(touched_profilegame_ids)} profilegames updated")
+        check_all_milestones_for_user(profile, criteria_type='plat_count')
+        logger.info(f"Milestones checked for {profile_id} successfully!")
 
         update_profile_trophy_counts(profile)
         profile.set_sync_status('synced')
