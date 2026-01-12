@@ -245,7 +245,7 @@ def initial_badge_check(profile, discord_notify: bool = True):
 # Milestones
 
 @transaction.atomic
-def check_and_award_milestone(profile, milestone, notify=True, force_role_update=False):
+def check_and_award_milestone(profile, milestone, notify=True):
     """Check if milestone is achieved for user with award if so."""
     from trophies.models import UserMilestoneProgress, UserMilestone
     from trophies.milestone_handlers import MILESTONE_HANDLERS
@@ -274,12 +274,10 @@ def check_and_award_milestone(profile, milestone, notify=True, force_role_update
         if created:
             milestone.earned_count += 1
             milestone.save(update_fields=['earned_count'])
-            if milestone.discord_role_id and profile.is_discord_verified and profile.discord_id:
-                notify_bot_role_earned(profile, milestone.discord_role_id)
-                if notify:
-                    notify_new_milestone(profile, milestone)
-        if not created and force_role_update and milestone.discord_role_id and profile.is_discord_verified and profile.discord_id:
+        if milestone.discord_role_id and profile.is_discord_verified and profile.discord_id:
             notify_bot_role_earned(profile, milestone.discord_role_id)
+            if notify:
+                notify_new_milestone(profile, milestone)
         return {'awarded': True, 'created': created}
     return {'awarded': False, 'created': False}
 
