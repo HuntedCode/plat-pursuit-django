@@ -5,14 +5,51 @@
             <div class="card-body m-0 px-3 py-3 {% if pgame.progress == 100 %}border-4 border-success{% elif pgame.earned_trophies.platinum == 1 %}border-4 border-warning{% endif %}">
                 <div class="flex flex-col lg:flex-row lg:justify-between items-center gap-4 w-full">
                     <div class="flex flex-col lg:flex-row items-center justify-start gap-2 col-span-1 w-full">
-                        <figure class="border-4 border-base-300 rounded-box transition-all duration-300 mr-2 lg:mr-4 group-hover:border-{{ game|platform_color }} hover:scale-105">
+                        <figure class="border-4 border-base-300 rounded-box transition-all duration-300 w-28 mr-2 lg:mr-4 group-hover:border-{{ game|platform_color }} hover:scale-105">
                             {% if game.title_image and not game.force_title_icon %}
-                                <img src="{{ game.title_image }}" alt="{{ game.title_name }}" class="lg:h-20 lg:w-20 object-cover shrink-0" loading="lazy" />
+                                <img src="{{ game.title_image }}" alt="{{ game.title_name }}" class="w-full object-cover shrink-0" loading="lazy" />
                             {% else %}
-                                <img src="{{ game.title_icon_url }}" alt="{{ game.title_name }}" class="lg:h-20 lg:w-20 object-fill shrink-0" loading="lazy" />
+                                <img src="{{ game.title_icon_url }}" alt="{{ game.title_name }}" class="w-full object-fill shrink-0" loading="lazy" />
                             {% endif %}
                         </figure>
                         <div class="flex flex-col gap-1 w-full">
+                            <div class="flex flex-row gap-0 items-center justify-start">
+                                {% if game.has_online_trophies %}
+                                    <div class="tooltip w-fit" data-tip="Online Trophies Required">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="w-7 h-7 hover:scale-105" viewBox="0 0 24 24" fill="none" stroke="var(--color-warning)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+                                    </div>
+                                    <div class="divider divider-horizontal m-0 p-0"></div>
+                                {% endif %}
+                                {% if ratings %}
+                                    <span class="flex flex-row gap-1 items-center tooltip font-bold {% if ratings.avg_difficulty < 4 %}text-success{% elif ratings.avg_difficulty < 8 %}text-warning{% else %}text-error{% endif %} w-fit" data-tip="Avg. Difficulty">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 hover:scale-105 pr-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M16.2 7.8l-2 6.3-6.4 2.1 2-6.3z"/></svg>                                
+                                        {{ ratings.avg_difficulty }}
+                                    </span>
+
+                                    <div class="divider divider-horizontal m-0 p-0"></div>
+
+                                    <span class="flex flex-row gap-1 items-center tooltip font-bold {% if ratings.avg_grindiness < 4 %}text-success{% elif ratings.avg_grindiness < 8 %}text-warning{% else %}text-error{% endif %} w-fit" data-tip="Avg. Grindiness">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 hover:scale-105 pr-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"> <path d="M2.5 2v6h6M21.5 22v-6h-6"/><path d="M22 11.5A10 10 0 0 0 3.2 7.2M2 12.5a10 10 0 0 0 18.8 4.2"/></svg>
+                                        {{ ratings.avg_grindiness }}
+                                    </span>
+
+                                    <div class="divider divider-horizontal m-0 p-0"></div>
+
+                                    <span class="flex flex-row gap-1 items-center tooltip font-bold {% if ratings.avg_hours < 25 %}text-success{% elif ratings.avg_hours < 75 %}text-warning{% elif ratings.avg_hours < 100 %}text-accent{% else %}text-error{% endif %} w-fit" data-tip="Avg. Hours To Plat">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 hover:scale-105 pr-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                                        {{ ratings.avg_hours }}
+                                    </span>
+
+                                    <div class="divider divider-horizontal m-0 p-0"></div>
+
+                                    <span class="flex flex-row gap-1 items-center tooltip font-bold w-fit" data-tip="Total Ratings">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 hover:scale-105 pr-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+                                        {{ ratings.count }}
+                                    </span>
+                                {% else %}
+                                    <p class="text-base-content/70 text-sm pr-1 italic">No ratings yet. Be the first!</p>
+                                {% endif %}
+                            </div>
                             <h1 class="text-lg 2xl:text-2xl text-base-content italic pr-1 line-clamp-2">{{ game.title_name }}</h1>
                             <div class="flex flex-row items-center gap-2">
                                 {% for platform in game.title_platform reversed %}

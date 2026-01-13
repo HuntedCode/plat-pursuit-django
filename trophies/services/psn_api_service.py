@@ -75,6 +75,7 @@ class PsnApiService:
                 "is_shovelware": False,
                 "is_obtainable": True,
                 "is_delisted": False,
+                "has_online_trophies": False,
             },
         )
         needs_trophy_update = created

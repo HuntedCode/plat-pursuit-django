@@ -1141,6 +1141,8 @@ class BadgeDetailView(ProfileHotbarMixin, DetailView):
             Prefetch('concepts__games', queryset=Game.objects.all().order_by('title_name'))
         )
         
+        today = date.today().isoformat()
+        stats_timeout = 3600
         structured_data = []
         for stage in stages:
             games = set()
@@ -1153,9 +1155,21 @@ class BadgeDetailView(ProfileHotbarMixin, DetailView):
                 profile_games_qs = ProfileGame.objects.filter(profile=target_profile, game__in=games).select_related('game')
                 profile_games = {pg.game: pg for pg in profile_games_qs}
 
+            community_ratings = {}
+            for game in games:
+                averages_cache_key = f"concept:averages:{game.concept.concept_id}:{today}"
+                cached_averages = cache.get(averages_cache_key)
+                if cached_averages:
+                    averages = json.loads(cached_averages)
+                else:
+                    averages = game.concept.get_community_averages()
+                    if averages:
+                        cache.set(averages_cache_key, json.dumps(averages), timeout=stats_timeout)
+                community_ratings[game] = averages
+
             structured_data.append({
                 'stage': stage,
-                'games': [{'game': game, 'profile_game': profile_games.get(game, None)} for game in games]
+                'games': [{'game': game, 'profile_game': profile_games.get(game, None), 'community_ratings': community_ratings.get(game, None)} for game in games]
             })
 
         all_badges = Badge.objects.filter(series_slug=badge.series_slug).order_by('tier')

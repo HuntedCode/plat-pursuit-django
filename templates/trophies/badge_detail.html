@@ -28,7 +28,9 @@
                             {% for games in data.games %}
                             {% with games.game as game %}
                             {% with games.profile_game as pgame %}
+                            {% with games.community_ratings as ratings %}
                                 {% include 'trophies/partials/badge_detail/badge_detail_items.html' %}
+                            {% endwith %}
                             {% endwith %}
                             {% endwith %}
                             {% endfor %}

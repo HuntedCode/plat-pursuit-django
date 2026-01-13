@@ -91,8 +91,9 @@ class GameAdmin(admin.ModelAdmin):
         "played_count",
         "is_shovelware",
         "is_delisted",
+        "has_online_trophies",
     )
-    list_filter = ("has_trophy_groups", "is_regional", RegionListFilter, 'is_shovelware', 'is_delisted', 'is_obtainable')
+    list_filter = ("has_trophy_groups", "is_regional", RegionListFilter, 'is_shovelware', 'is_delisted', 'is_obtainable', "has_online_trophies")
     search_fields = ("title_name", "np_communication_id")
     ordering = ("title_name",)
     fieldsets = (
@@ -114,6 +115,7 @@ class GameAdmin(admin.ModelAdmin):
                     "is_shovelware",
                     "is_obtainable",
                     "is_delisted",
+                    "has_online_trophies",
                 )
             },
         ),
@@ -337,7 +339,7 @@ class BadgeAdmin(admin.ModelAdmin):
 
 @admin.register(Stage)
 class StageAdmin(admin.ModelAdmin):
-    list_display = ('__str__', 'series_slug', 'stage_number', 'title')
+    list_display = ('__str__', 'series_slug', 'stage_number', 'title', 'has_online_trophies')
     list_filter = ('series_slug', 'stage_number')
     search_fields = ('title',)
     autocomplete_fields = ['concepts']

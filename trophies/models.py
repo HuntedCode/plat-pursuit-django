@@ -325,6 +325,7 @@ class Game(models.Model):
     is_shovelware = models.BooleanField(default=False)
     is_obtainable= models.BooleanField(default=True)
     is_delisted = models.BooleanField(default=False)
+    has_online_trophies = models.BooleanField(default=False)
 
     class Meta:
         indexes = [
@@ -337,6 +338,7 @@ class Game(models.Model):
             models.Index(fields=['is_shovelware'], name='game_shovelware_idx'),
             models.Index(fields=['is_delisted'], name='game_delisted_idx'),
             models.Index(fields=['is_regional'], name='game_regional_idx'),
+            models.Index(fields=['has_online_trophies'], name='game_online_trophies_idx'),
         ]
     
     def save(self, *args, **kwargs):
@@ -908,6 +910,7 @@ class Stage(models.Model):
     stage_icon = models.URLField(null=True, blank=True)
     concepts = models.ManyToManyField(Concept, related_name='stages', blank=True, help_text='Concepts required for this stage.')
     required_tiers = ArrayField(models.IntegerField(choices=[(1, 'Bronze'), (2, 'Silver'), (3, 'Gold'), (4, 'Platinum')]), blank=True, default=list)
+    has_online_trophies = models.BooleanField(default=False)
 
     class Meta:
         unique_together = ['series_slug', 'stage_number']
