@@ -23,21 +23,21 @@
                                 {% if ratings %}
                                     <span class="flex flex-row gap-1 items-center tooltip font-bold {% if ratings.avg_difficulty < 4 %}text-success{% elif ratings.avg_difficulty < 8 %}text-warning{% else %}text-error{% endif %} w-fit" data-tip="Avg. Difficulty">
                                         <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 hover:scale-105 pr-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M16.2 7.8l-2 6.3-6.4 2.1 2-6.3z"/></svg>                                
-                                        {{ ratings.avg_difficulty }}
+                                        {{ ratings.avg_difficulty|floatformat:1 }}
                                     </span>
 
                                     <div class="divider divider-horizontal m-0 p-0"></div>
 
                                     <span class="flex flex-row gap-1 items-center tooltip font-bold {% if ratings.avg_grindiness < 4 %}text-success{% elif ratings.avg_grindiness < 8 %}text-warning{% else %}text-error{% endif %} w-fit" data-tip="Avg. Grindiness">
                                         <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 hover:scale-105 pr-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"> <path d="M2.5 2v6h6M21.5 22v-6h-6"/><path d="M22 11.5A10 10 0 0 0 3.2 7.2M2 12.5a10 10 0 0 0 18.8 4.2"/></svg>
-                                        {{ ratings.avg_grindiness }}
+                                        {{ ratings.avg_grindiness|floatformat:1 }}
                                     </span>
 
                                     <div class="divider divider-horizontal m-0 p-0"></div>
 
                                     <span class="flex flex-row gap-1 items-center tooltip font-bold {% if ratings.avg_hours < 25 %}text-success{% elif ratings.avg_hours < 75 %}text-warning{% elif ratings.avg_hours < 100 %}text-accent{% else %}text-error{% endif %} w-fit" data-tip="Avg. Hours To Plat">
                                         <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 hover:scale-105 pr-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
-                                        {{ ratings.avg_hours }}
+                                        {{ ratings.avg_hours|floatformat:1 }}
                                     </span>
 
                                     <div class="divider divider-horizontal m-0 p-0"></div>
