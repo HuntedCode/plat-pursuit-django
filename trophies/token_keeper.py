@@ -380,10 +380,13 @@ class TokenKeeper:
                         pending_data = json.loads(raw_pending)
                         if not isinstance(pending_data, dict):
                             raise ValueError("Pending data is not a dictionary")
-                        args = [pending_data['touched_profilegame_ids'], pending_data['queue_name']]
-                        PSNManager.assign_job('sync_complete', args, profile_id, priority_override='high_priority')
-                        redis_client.delete(pending_key)
-                        logger.info(f"Triggered sync_complete for profile {profile_id}")
+                        if pending_data['armed']:
+                            args = [pending_data['touched_profilegame_ids'], pending_data['queue_name']]
+                            PSNManager.assign_job('sync_complete', args, profile_id, priority_override='high_priority')
+                            redis_client.delete(pending_key)
+                            logger.info(f"Triggered sync_complete for profile {profile_id}")
+                        else:
+                            logger.info(f"Sync complete not armed, skipping...")
                     except (json.JSONDecodeError, ValueError, KeyError) as parse_err:
                         logger.error(f"Failed to parse pending_sync_complete for profile {profile_id}: {parse_err}")
             except Exception as e:
@@ -775,6 +778,13 @@ class TokenKeeper:
             
             profile.add_to_sync_target(job_counter)
 
+        if is_last:
+            pending_key = f"pending_sync_complete:{profile_id}"
+            append_data = json.dumps({
+                'armed': True,
+            })
+            redis_client.append(pending_key, append_data)
+
     def _job_sync_trophies(self, profile_id: int, np_communication_id: str, platform: str):
         try:
             profile = Profile.objects.get(id=profile_id)
@@ -997,7 +1007,8 @@ class TokenKeeper:
         pending_key = f"pending_sync_complete:{profile_id}"
         pending_data = json.dumps({
             'touched_profilegame_ids': touched_profilegame_ids,
-            'queue_name': 'medium_priority'
+            'queue_name': 'medium_priority',
+            'armed': True
         })
         redis_client.set(pending_key, pending_data, ex=7200)
 
