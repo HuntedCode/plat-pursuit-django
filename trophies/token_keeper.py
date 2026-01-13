@@ -18,6 +18,7 @@ from psnawp_api.core.request_builder import RequestBuilder as BaseRequestBuilder
 from psnawp_api.core.authenticator import Authenticator as BaseAuthenticator
 from psnawp_api.core.psnawp_exceptions import PSNAWPForbiddenError
 from psnawp_api.models.trophies.trophy_constants import PlatformType
+from redis import WatchError
 from requests import HTTPError
 from requests.exceptions import ConnectionError, Timeout
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type, wait_fixed
@@ -780,10 +781,20 @@ class TokenKeeper:
 
         if is_last:
             pending_key = f"pending_sync_complete:{profile_id}"
-            append_data = json.dumps({
-                'armed': True,
-            })
-            redis_client.append(pending_key, append_data)
+            with redis_client.pipeline() as pipe:
+                while True:
+                    try:
+                        pipe.watch(pending_key)
+                        existing = pipe.get(pending_key)
+                        if existing:
+                            data = json.loads(existing)
+                            data['armed'] = True
+                            pipe.multi()
+                            pipe.set(pending_key, json.dumps(data), ex=7200)
+                            pipe.execute()
+                        break
+                    except WatchError:
+                        continue 
 
     def _job_sync_trophies(self, profile_id: int, np_communication_id: str, platform: str):
         try:
@@ -1008,7 +1019,7 @@ class TokenKeeper:
         pending_data = json.dumps({
             'touched_profilegame_ids': touched_profilegame_ids,
             'queue_name': 'medium_priority',
-            'armed': True
+            'armed': True,
         })
         redis_client.set(pending_key, pending_data, ex=7200)
 
