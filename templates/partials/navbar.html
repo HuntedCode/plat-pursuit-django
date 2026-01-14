@@ -1,10 +1,15 @@
 {% load static %}
-<nav class="navbar bg-base-200 shadow-lg">
+<nav class="navbar bg-base-200 shadow-lg" role="navigation" aria-label="Main navigation">
 
     <div class="navbar-start flex items-center">
         <div class="flex-none dropdown dropdown-start lg:hidden">
-            <summary class="btn btn-ghost btn-sm" tabindex="0" role="button" aria-label="Main menu">
-                <svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="oklch(97.807% 0.029 256.847)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
+            <summary class="btn btn-ghost btn-sm" tabindex="0" role="button" aria-label="Main menu" aria-expanded="false">
+                <svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="oklch(97.807% 0.029 256.847)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" role="img" aria-labelledby="mobile-menu-icon">
+                    <title id="mobile-menu-icon">Menu</title>
+                    <line x1="3" y1="12" x2="21" y2="12"></line>
+                    <line x1="3" y1="6" x2="21" y2="6"></line>
+                    <line x1="3" y1="18" x2="21" y2="18"></line>
+                </svg>
             </summary>
             <ul tabindex="0" class="menu menu-sm dropdown-content mt-2 z-50 p-2 shadow-lg bg-base-100 border-2 border-base-200">
                 <li><a href="{% url 'trophies_list' %}">Trophies</a></li>
@@ -26,17 +31,21 @@
                     </ul>
                 </li>
                 <li>
-                    <a href="{% url 'guides_list' %}">
+                    <a href="{% url 'guides_list' %}" aria-label="PPTV Guides">
                         <span class="flex flex-row gap-2 justify-end">
                             PPTV
-                            <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="var(--color-error)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="15" rx="2" ry="2"></rect><polyline points="17 2 12 7 7 2"></polyline></svg>
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="var(--color-error)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" role="img" aria-labelledby="pptv-icon-mobile">
+                                <title id="pptv-icon-mobile">Video</title>
+                                <rect x="2" y="7" width="20" height="15" rx="2" ry="2"></rect>
+                                <polyline points="17 2 12 7 7 2"></polyline>
+                            </svg>
                         </span>
                     </a>
                 </li>
             </ul>
         </div>
-        <a href="/" class="btn btn-ghost items-center text-xl font-logo hidden sm:flex">
-            <img src="{% static 'images/logo.png' %}" alt="Platinum Pursuit Logo" class="h-8 w-8 mr-2 rounded-full" />
+        <a href="/" class="btn btn-ghost items-center text-xl font-logo hidden sm:flex" aria-label="Platinum Pursuit Home">
+            <img src="{% static 'images/logo.png' %}" alt="Platinum Pursuit Logo" class="h-8 w-8 mr-2 rounded-full" loading="eager" decoding="async" />
             Platinum Pursuit
         </a>
     </div>
@@ -64,10 +73,14 @@
                 </details>
             </li>
             <li>
-                <a href="{% url 'guides_list' %}">
+                <a href="{% url 'guides_list' %}" aria-label="PPTV Guides">
                     <span class="flex flex-row gap-2 justify-end">
                         PPTV
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="var(--color-error)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="15" rx="2" ry="2"></rect><polyline points="17 2 12 7 7 2"></polyline></svg>
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="var(--color-error)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" role="img" aria-labelledby="pptv-icon-desktop">
+                            <title id="pptv-icon-desktop">Video</title>
+                            <rect x="2" y="7" width="20" height="15" rx="2" ry="2"></rect>
+                            <polyline points="17 2 12 7 7 2"></polyline>
+                        </svg>
                     </span>
                 </a>
             </li>
@@ -75,8 +88,8 @@
     </div>
 
     <div class="navbar-center flex sm:hidden">
-        <a href="/" class="btn btn-ghost flex items-center text-lg font-logo">
-            <img src="{% static 'images/logo.png' %}" alt="Platinum Pursuit Logo" class="h-8 w-8 mr-2 rounded-full" />
+        <a href="/" class="btn btn-ghost flex items-center text-lg font-logo" aria-label="Platinum Pursuit Home">
+            <img src="{% static 'images/logo.png' %}" alt="Platinum Pursuit Logo" class="h-8 w-8 mr-2 rounded-full" loading="eager" decoding="async" />
             Plat Pursuit
         </a>
     </div>
@@ -93,9 +106,13 @@
         </form>
 
         <div class="dropdown dropdown-end">
-            <div tabindex="0" role="button" class="btn btn-ghost btn-sm btn-circle">
+            <div tabindex="0" role="button" class="btn btn-ghost btn-sm btn-circle" aria-label="Search" aria-haspopup="true" aria-expanded="false">
                 <div class="w-15 rounded-full flex">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="oklch(97.807% 0.029 256.847)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="oklch(97.807% 0.029 256.847)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" role="img" aria-labelledby="search-icon">
+                        <title id="search-icon">Search</title>
+                        <circle cx="11" cy="11" r="8"></circle>
+                        <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                    </svg>
                 </div>
             </div>
             <div class="dropdown-content mt-2 z-50 p-2 shadow-lg bg-base-100 border-2 border-base-200">
@@ -116,14 +133,18 @@
             <div class="dropdown dropdown-end">
                 <div class="indicator">
                     {% if not user.profile or not user.premium_tier %}
-                        <span class="indicator-item border-2 border-base-300 rounded-full w-3 h-3 bg-error animate-pulse"></span>
+                        <span class="indicator-item border-2 border-base-300 rounded-full w-3 h-3 bg-error animate-pulse" aria-label="Attention required"></span>
                     {% endif %}
-                    <div tabindex="0" role="button" class="btn btn-ghost btn-circle avatar">
+                    <div tabindex="0" role="button" class="btn btn-ghost btn-circle avatar" aria-label="User menu" aria-haspopup="true" aria-expanded="false">
                         <div class="w-15 rounded-full ring-2 ring-primary">
                             {% if user.profile %}
-                                <img alt="Profile Picture" src="{{ user.profile.avatar_url }}" />
+                                <img alt="Profile Picture" src="{{ user.profile.avatar_url }}" loading="lazy" decoding="async" />
                             {% else %}
-                                <svg class="mx-auto my-1" xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="oklch(97.807% 0.029 256.847)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+                                <svg class="mx-auto my-1" xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="oklch(97.807% 0.029 256.847)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" role="img" aria-labelledby="default-avatar-icon">
+                                    <title id="default-avatar-icon">User avatar</title>
+                                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                                    <circle cx="12" cy="7" r="4"></circle>
+                                </svg>
                             {% endif %}
                         </div>
                     </div>
@@ -157,9 +178,13 @@
             </div>
         {% else %}
             <div class="dropdown dropdown-end">
-                <div tabindex="0" role="button" class="btn btn-ghost btn-circle avatar">
+                <div tabindex="0" role="button" class="btn btn-ghost btn-circle avatar" aria-label="Login menu" aria-haspopup="true" aria-expanded="false">
                     <div class="w-15 rounded-full flex ring-2 ring-primary">
-                        <svg class="mx-auto my-1" xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="oklch(97.807% 0.029 256.847)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+                        <svg class="mx-auto my-1" xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="oklch(97.807% 0.029 256.847)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" role="img" aria-labelledby="guest-avatar-icon">
+                            <title id="guest-avatar-icon">Guest user</title>
+                            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                            <circle cx="12" cy="7" r="4"></circle>
+                        </svg>
                     </div>
                 </div>
                 <ul tabindex="0" class="menu menu-sm dropdown-content mt-2 z-50 p-2 shadow-lg bg-base-100 border-2 border-base-200 w-fit">

@@ -1,5 +1,13 @@
 {% load custom_filters %}
-<div id="hotbar-container" class="block xl:sticky top-2 z-40 bg-base-100 border-4 border-base-300 rounded-full shadow-md shadow-neutral p-0 w-full xl:w-3/4 mx-auto transition-all duration-300 ease-in-out">
+{% load static %}
+<div id="hotbar-container"
+     class="block xl:sticky top-2 z-40 bg-base-100 border-4 border-base-300 rounded-full shadow-md shadow-neutral p-0 w-full xl:w-3/4 mx-auto transition-all duration-300 ease-in-out"
+     data-url-sync="{% url 'profile_sync_status' %}"
+     data-url-trigger="{% url 'trigger_sync' %}"
+     data-url-add-sync="{% url 'add_sync_status' %}"
+     data-csrf="{{ csrf_token }}"
+     data-sync-status="{{ hotbar.sync_status }}"
+     data-seconds="{{ hotbar.seconds_to_next_sync }}">
     <div class="border-4 border-primary rounded-full p-2">
         <div class="container mx-auto flex flex-col xl:flex-row justify-center xl:justify-between items-center gap-2 xl:gap-4 xl:px-6">
             <div class="flex flex-row items-center gap-4">
@@ -11,14 +19,18 @@
                     </a>
                     <a href="{% url 'profile_detail' hotbar.profile.psn_username %}" class="flex flex-row items-center gap-3 cursor-pointer">
                         <span id="sync-user" class="text-xs sm:text-base font-bold">{{ hotbar.profile.display_psn_username }}</span>
-                        <span id="sync-badge" class="badge badge-xs xl:badge-md {% if hotbar.sync_status == 'synced' %}badge-success{% elif hotbar.sync_status == 'syncing' %}badge-warning{% else %}badge-error{% endif %} font-bold border-2 border-base-300 shadow-md shadow-neutral ml-2 hover:scale-105">{{ hotbar.sync_status|sync_status_display }}</span>
+                        <div aria-live="polite" aria-atomic="true" class="sr-only" id="sync-status-announcement"></div>
+                        <span id="sync-badge" class="badge badge-xs xl:badge-md {% if hotbar.sync_status == 'synced' %}badge-success{% elif hotbar.sync_status == 'syncing' %}badge-warning{% else %}badge-error{% endif %} font-bold border-2 border-base-300 shadow-md shadow-neutral ml-2 hover:scale-105" role="status">{{ hotbar.sync_status|sync_status_display }}</span>
                         <div id="sync-progress-div" class="flex flex-row items-center gap-1 {% if not hotbar.sync_status == 'syncing' %}hidden{% endif %}">
                             <span id="sync-progress-percent" class="text-sm text-base-content text-center">{{ hotbar.progress_percentage|floatformat:0|default:0 }}%</span>
                             <progress id="sync-progress-bar" class="progress progress-primary w-32" value="0" max="100"></progress>
                             <span class="loading loading-infinity loading-md"></span>
                         </div>
                     </a>
-                    <button id="sync-now-btn" class="btn btn-primary btn-xs xl:btn-sm border-2 border-base-300 shadow-md shadow-neutral {% if hotbar.sync_status == 'syncing' %} hidden{% endif %}" data-sync-status="{{ hotbar.sync_status }}" data-seconds="{{ hotbar.seconds_to_next_sync }}" {% if hotbar.seconds_to_next_sync > 0 %}disabled{% endif %}></button>
+                    <button id="sync-now-btn"
+                            class="btn btn-primary btn-xs xl:btn-sm border-2 border-base-300 shadow-md shadow-neutral {% if hotbar.sync_status == 'syncing' %} hidden{% endif %}"
+                            aria-label="{% if hotbar.seconds_to_next_sync > 0 %}Sync available soon{% else %}Sync profile now{% endif %}"
+                            {% if hotbar.seconds_to_next_sync > 0 %}disabled{% endif %}></button>
                 {% else %}
                     <p class="text-sm">Link your PSN profile to see status.</p>
                 {% endif %}
@@ -26,285 +38,23 @@
             <div class="">
                 <form id="sync-form" method="post" action="{% url 'search_sync_profile' %}" class="flex-row items-center gap-2 xl:gap-4">
                     {% csrf_token %}
-                    <input id="add-sync-input" type="text" name="psn_username" placeholder="Enter PSN Username" class="input input-accent input-sm w-30 md:w-50 2xl:w-75 shrink-1" required />
-                    <button id="add-sync-btn" type="submit" class="btn btn-accent btn-xs xl:btn-sm border-2 border-base-300 shadow-md shadow-neutral ml-2">Sync Profile</button>
-                    <a href="" id="add-sync-anchor" class="btn btn-success btn-xs xl:btn-sm border-2 border-base-300 shadow-md shadow-neutral hidden">Visit Profile</a>
-                    <span id="add-sync-load" class="loading loading-spinner loading-lg hidden"></span>
+                    <input id="add-sync-input" type="text" name="psn_username" placeholder="Enter PSN Username" class="input input-accent input-sm w-30 md:w-50 2xl:w-75 shrink-1" autocomplete="off" required />
+                    <button id="add-sync-btn" type="submit" class="btn btn-accent btn-xs xl:btn-sm border-2 border-base-300 shadow-md shadow-neutral ml-2" aria-label="Sync new profile">Sync Profile</button>
+                    <a href="" id="add-sync-anchor" class="btn btn-success btn-xs xl:btn-sm border-2 border-base-300 shadow-md shadow-neutral hidden" aria-label="Visit synced profile">Visit Profile</a>
+                    <span id="add-sync-load" class="loading loading-spinner loading-lg hidden" role="status" aria-label="Syncing profile"></span>
                     <p id="add-sync-error-text" class="text-xs text-error font-bold line-clamp-2 pr-1 italic hidden">Sync error: check spelling or account perms, refresh the page and try again.</p>
                 </form>
             </div>
         </div>
     </div>
 </div>
-<button id="hotbar-toggle" class="hidden xl:block sticky top-18 left-1/2 transform -translate-x-1/2 z-50 bg-base-300 border-2 border-base-300 rounded-b-full px-4 py-0 shadow-md shadow-neutral cursor-pointer transition-all duration-300 ease-in-out hover:bg-base-200 hover:scale-105 group">
-    <svg id="toggle-icon" class="w-5 h-5 rotate-180 group-hover:scale-115" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://2000.svg">
+<button id="hotbar-toggle"
+        class="hidden xl:block sticky top-18 left-1/2 transform -translate-x-1/2 z-50 bg-base-300 border-2 border-base-300 rounded-b-full px-4 py-0 shadow-md shadow-neutral cursor-pointer transition-all duration-300 ease-in-out hover:bg-base-200 hover:scale-105 group"
+        aria-label="Toggle hotbar">
+    <svg id="toggle-icon" class="w-5 h-5 rotate-180 group-hover:scale-115" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="hotbar-toggle-icon">
+        <title id="hotbar-toggle-icon">Toggle hotbar visibility</title>
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="4" d="M19 9l-7 7-7-7" />
     </svg>
 </button>
 
-<script>
-    document.addEventListener('DOMContentLoaded', () => {
-        const syncUser = document.getElementById('sync-user');
-        const syncBtn = document.getElementById('sync-now-btn');
-        const syncBadge = document.getElementById('sync-badge');
-        const syncDiv = document.getElementById('sync-progress-div');
-        const syncProgress = document.getElementById('sync-progress-bar');
-        const syncPercent = document.getElementById('sync-progress-percent');
-
-        let pollingInterval;
-        let pollingStartTime;
-        let currentInterval = 2000;
-        let extendedInterval = 10000;
-        let extensionThreshold = 60000;
-
-        function updateHotbar(data) {
-            console.log(data.sync_target)
-            if (data.sync_status === 'synced') {
-                syncUser.classList.remove('hidden', 'xl:block');
-                syncBadge.classList.remove('badge-warning', 'badge-error');
-                syncBadge.classList.add('badge-success');
-                syncBadge.textContent = 'Synced!';
-                syncDiv.hidden = true;
-                if (pollingInterval) clearInterval(pollingInterval);
-                startSyncCountdown(data.seconds_to_next_sync);
-            } else if (data.sync_status === 'syncing') {
-                syncUser.classList.add('hidden', 'xl:block');
-                syncBadge.classList.remove('badge-success', 'badge-warning');
-                syncBadge.classList.add('badge-warning');
-                syncBadge.textContent = 'Syncing...';
-                syncBtn.hidden = true;
-                syncDiv.hidden = false;
-                syncDiv.classList.remove('hidden');
-                syncProgress.value = data.sync_progress;
-                syncProgress.max = data.sync_target;
-                syncPercent.textContent = `${parseInt(data.sync_percentage)}%`;
-            } else {
-                syncBadge.classList.remove('badge-success', 'badge-warning');
-                syncBadge.classList.add('badge-error');
-                syncBadge.textContent = 'Error';
-                syncDiv.hidden = true;
-                if (pollingInterval) clearInterval(pollingInterval);
-                startSyncCountdown(data.seconds_to_next_sync);
-            }
-        }
-
-        function updateSyncButton(seconds) {
-            if (seconds <= 0) {
-                syncBtn.innerHTML = 'Sync Now!';
-                syncBtn.disabled = false;
-            } else {
-                syncBtn.innerHTML = `${formatHMS(seconds)}`;
-                syncBtn.disabled = true;
-            }
-        }
-
-        function formatHMS(seconds) {
-            let h = Math.floor(seconds / 3600).toString().padStart(2, '0');
-            let m = Math.floor((seconds % 3600) / 60).toString().padStart(2, '0');
-            let s = Math.floor(seconds % 60).toString().padStart(2, '0');
-            return `${h}:${m}:${s}`;
-        }
-
-        function startSyncCountdown(seconds) {
-            syncBtn.hidden = false;
-            syncBtn.classList.remove('hidden');
-            const interval = setInterval(() => {
-                if (seconds <= 0) {
-                    clearInterval(interval);
-                    updateSyncButton(seconds);
-                } else {
-                    seconds--;
-                    updateSyncButton(seconds);
-                }
-            }, 1000);
-            updateSyncButton(seconds);
-        }
-
-        function pollSyncStatus() {
-            fetch('{% url "profile_sync_status" %}')
-                .then(response => response.json())
-                .then(data => updateHotbar(data))
-                .catch(error => console.error('Polling error:', error));
-        }
-
-        function startPolling() {
-            pollingStartTime = Date.now();
-            pollingInterval = setInterval(() => {
-                const elapsed = Date.now() - pollingStartTime;
-                if (elapsed > extensionThreshold && currentInterval != extendedInterval) {
-                    clearInterval(pollingInterval);
-                    currentInterval = extendedInterval;
-                    pollingInterval = setInterval(pollSyncStatus, currentInterval)
-                }
-                pollSyncStatus();
-            }, currentInterval);
-        }
-
-        syncBtn.addEventListener('click', () => {
-            if (syncBtn.disabled) return;
-
-            syncUser.classList.add('hidden', 'xl:block');
-            syncBadge.classList.remove('badge-success', 'badge-warning');
-            syncBadge.classList.add('badge-warning');
-            syncBadge.textContent = 'Syncing...';
-            syncBtn.hidden = true;
-            syncDiv.hidden = false;
-            syncDiv.classList.remove('hidden');
-
-            fetch('{% url "trigger_sync" %}', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRFToken': '{{ csrf_token }}'
-                },
-                body: JSON.stringify({})
-            })
-            .then(response => {
-                if (!response.ok) {
-                    throw new Error('Sync failed');
-                }
-                startPolling();
-                return response.json();
-            })
-            .then(data => {
-                if (data.error) {
-                    console.error(data.error);
-                    clearInterval(pollingInterval)
-                }
-            })
-            .catch(error => {
-                console.error('Sync trigger error:', error);
-                clearInterval(pollingInterval)
-            });
-        });
-
-        if (syncBtn.dataset.syncStatus === 'synced') {
-            startSyncCountdown(syncBtn.dataset.seconds || 0)
-        } else if (syncBtn.dataset.syncStatus === 'syncing') {
-            startPolling();
-        }
-
-
-        const addSyncBtn = document.getElementById('add-sync-btn');
-        const addSyncLoad = document.getElementById('add-sync-load');
-        const addSyncAnchor = document.getElementById('add-sync-anchor');
-        const addSyncInput = document.getElementById('add-sync-input');
-        const addSyncErrorText = document.getElementById('add-sync-error-text');
-
-        let addSyncInterval;
-
-        function checkAddSync(data) {
-            console.log(data)
-            if (data.sync_status === 'error') {
-                addSyncLoad.hidden = true;
-                addSyncInput.hidden = true;
-                addSyncErrorText.classList.remove('hidden');
-                addSyncErrorText.hidden = false;
-                clearInterval(addSyncInterval);
-            } else if (data.account_id) {
-                addSyncLoad.hidden = true;
-                addSyncAnchor.href = data.slug;
-                addSyncAnchor.classList.remove('hidden');
-                addSyncAnchor.hidden = false;
-                clearInterval(addSyncInterval);
-            }
-        }
-
-        function pollAddSync(psn_username) {
-            if (!psn_username) {
-                console.error('psn_username is required for polling');
-                return;
-            }
-            const url = `{% url 'add_sync_status' %}?psn_username=${encodeURIComponent(psn_username)}`;
-            fetch(url)
-                .then(response => {
-                    if (!response.ok) {
-                        throw new Error(`HTTP error. status: ${response.status}`);
-                    }
-                    return response.json();
-                })
-                .then(data => checkAddSync(data))
-                .catch(error => console.error('Polling error:', error));
-        }
-
-        document.getElementById('sync-form').addEventListener('submit', (e) => {
-            e.preventDefault();
-            const formData = new FormData(e.target);
-            fetch(e.target.action, {
-                method: 'POST',
-                body: formData,
-                headers: {'X-Requested-With': 'XMLHttpRequest'}
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    addSyncBtn.hidden = true;
-                    addSyncLoad.hidden = false;
-                    addSyncLoad.classList.remove('hidden');
-                    setTimeout(function () {
-                        addSyncInterval = setInterval(() => pollAddSync(data.psn_username), 2500);
-                    }, 2500);
-                } else {
-                    alert(data.error);
-                }
-            })
-            .catch(error => console.error('Sync error:', error));
-        });
-
-        // Hotbar toggle
-
-        const hotbarContainer = document.getElementById('hotbar-container');
-        const toggleBtn = document.getElementById('hotbar-toggle');
-        const toggleIcon = document.getElementById('toggle-icon');
-        const cookieName = 'hotbar_hidden';
-        const cookieDuration = 30 * 24 * 60 * 60 * 1000;
-
-        function getCookie(name) {
-            const value = `; ${document.cookie}`;
-            const parts = value.split(`; ${name}=`);
-            if (parts.length === 2) return parts.pop().split(';').shift();
-            return null
-        }
-
-        function setCookie(name, value, duration) {
-            const date = new Date();
-            date.setTime(date.getTime() + duration);
-            document.cookie = `${name}=${value}; expires=${date.toUTCString()}; path=/`;
-        }
-
-        function toggleHotbar() {
-            const isHidden = getCookie(cookieName) === 'true';
-            if (isHidden) {
-                hotbarContainer.classList.remove('-translate-y-[250%]');
-                toggleIcon.classList.add('rotate-180');
-                toggleBtn.classList.remove('-translate-y-[300%]');
-                setCookie(cookieName, 'false', cookieDuration);
-            } else {
-                hotbarContainer.classList.add('-translate-y-[250%]');
-                toggleIcon.classList.remove('rotate-180');
-                toggleBtn.classList.add('-translate-y-[300%]');
-                setCookie(cookieName, 'true', cookieDuration);
-            }
-        }
-
-        const hiddenCookie = getCookie(cookieName);
-        if (hiddenCookie === 'true') {
-            hotbarContainer.classList.add('-translate-y-[250%]');
-            toggleIcon.classList.remove('rotate-180');
-            toggleBtn.classList.add('-translate-y-[300%]');
-        } else {
-            hotbarContainer.style.display = false;
-            hotbarContainer.classList.remove('-translate-y-[250%]');
-            toggleIcon.classList.add('rotate-180');
-            toggleBtn.classList.remove('-translate-y-[300%]');
-            setTimeout(() => {
-                hotbarContainer.style.display = true;
-            }, 500);
-            if (hiddenCookie === null) {
-                setCookie(cookieName, 'false', cookieDuration);
-            }
-        }
-
-        toggleBtn.addEventListener('click', toggleHotbar);
-    });
-</script>
+<script src="{% static 'js/hotbar.js' %}"></script>

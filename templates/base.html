@@ -7,12 +7,17 @@
     <title>{% block title %}{{ title|default:"Platinum Pursuit" }}{% endblock %} - Platinum Pursuit</title>
     <link rel="icon" type="image/x-icon" href="{% static 'images/logo.png' %}" />
     <link rel="stylesheet" href="{% static 'css/output.css' %}" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&family=Poppins:wght@400;600;700&display=swap" rel="stylesheet">
     <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-4609084422711453"
     crossorigin="anonymous"></script>
     {% block extra_head %}{% endblock %}
   </head>
   <body class="bg-base-100 text-base-content min-h-screen flex flex-col" {% if image_urls.bg_url %}style="background-image: url('{{ image_urls.bg_url }}'); background-size: cover; background-position: center; background-attachment: fixed;"{% endif %}>
+    <a href="#main-content" class="sr-only focus:not-sr-only focus:absolute focus:top-0 focus:left-0 focus:z-50 focus:p-4 focus:bg-primary focus:text-primary-content focus:outline-none focus:ring-2 focus:ring-primary-focus">
+      Skip to main content
+    </a>
     {% include 'partials/navbar.html' %}
 
     <div class="flex flex-1 flex-col lg:flex-row lg:items-start">
@@ -33,7 +38,7 @@
           {% endif %}
       </aside>
 
-      <main class="container mx-auto px-4 py-2 flex-grow">
+      <main id="main-content" class="container mx-auto px-4 py-2 flex-grow" role="main">
         {% if hotbar.active %}
           {% include 'partials/hotbar.html' %}
         {% endif %}
