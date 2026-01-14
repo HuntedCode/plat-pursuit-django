@@ -1,7 +1,7 @@
 from django.core.management.base import BaseCommand
 from django.db.models import Sum
 from trophies.models import Profile, EarnedTrophy, ProfileGame
-from trophies.utils import update_profile_trophy_counts
+from trophies.services.profile_stats_service import update_profile_trophy_counts
 
 class Command(BaseCommand):
     def handle(self, *args, **options):

@@ -2,7 +2,7 @@ from django import template
 from django.utils import timezone
 from datetime import datetime, timedelta
 from humanize import naturaltime
-from trophies.utils import BRONZE_STAGE_XP, SILVER_STAGE_XP, GOLD_STAGE_XP, PLAT_STAGE_XP
+from trophies.util_modules.constants import BRONZE_STAGE_XP, SILVER_STAGE_XP, GOLD_STAGE_XP, PLAT_STAGE_XP
 register = template.Library()
 
 @register.filter

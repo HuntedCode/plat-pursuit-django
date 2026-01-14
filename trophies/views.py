@@ -26,7 +26,8 @@ from trophies.psn_manager import PSNManager
 from trophies.mixins import ProfileHotbarMixin
 from .models import Game, Trophy, Profile, EarnedTrophy, ProfileGame, TrophyGroup, UserTrophySelection, Badge, UserBadge, UserBadgeProgress, Concept, FeaturedGuide, Stage
 from .forms import GameSearchForm, TrophySearchForm, ProfileSearchForm, ProfileGamesForm, ProfileTrophiesForm, ProfileBadgesForm, UserConceptRatingForm, BadgeSearchForm, GuideSearchForm, LinkPSNForm, GameDetailForm, BadgeCreationForm
-from .utils import redis_client, MODERN_PLATFORMS, ALL_PLATFORMS
+from trophies.util_modules.cache import redis_client
+from trophies.util_modules.constants import MODERN_PLATFORMS, ALL_PLATFORMS
 
 logger = logging.getLogger("psn_api")
     

@@ -1,6 +1,6 @@
 from django.core.management.base import BaseCommand
 from trophies.models import Profile
-from trophies.utils import check_all_milestones_for_user
+from trophies.services.milestone_service import check_all_milestones_for_user
 
 class Command(BaseCommand):
     def add_arguments(self, parser):

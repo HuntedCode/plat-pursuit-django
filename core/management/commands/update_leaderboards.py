@@ -2,7 +2,12 @@ from django.core.management.base import BaseCommand
 from django.core.cache import cache
 from django.utils import timezone
 from trophies.models import Badge
-from trophies.utils import compute_earners_leaderboard, compute_progress_leaderboard, compute_total_progress_leaderboard, compute_badge_xp_leaderboard
+from trophies.services.leaderboard_service import (
+    compute_earners_leaderboard,
+    compute_progress_leaderboard,
+    compute_total_progress_leaderboard,
+    compute_badge_xp_leaderboard
+)
 
 class Command(BaseCommand):
     def handle(self, *args, **options):

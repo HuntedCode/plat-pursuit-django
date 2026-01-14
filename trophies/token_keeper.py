@@ -24,7 +24,12 @@ from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_excep
 from .models import Profile, Game, TitleID, TrophyGroup, ProfileGame
 from .services.psn_api_service import PsnApiService
 from .psn_manager import PSNManager
-from .utils import redis_client, log_api_call, TITLE_ID_BLACKLIST, TITLE_STATS_SUPPORTED_PLATFORMS, update_profile_games, update_profile_trophy_counts, detect_asian_language, check_profile_badges, check_all_milestones_for_user
+from trophies.util_modules.cache import redis_client, log_api_call
+from trophies.util_modules.constants import TITLE_ID_BLACKLIST, TITLE_STATS_SUPPORTED_PLATFORMS
+from trophies.util_modules.language import detect_asian_language
+from trophies.services.profile_stats_service import update_profile_games, update_profile_trophy_counts
+from trophies.services.badge_service import check_profile_badges
+from trophies.services.milestone_service import check_all_milestones_for_user
 
 logger = logging.getLogger("psn_api")
 

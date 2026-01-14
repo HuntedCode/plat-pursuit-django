@@ -19,7 +19,7 @@ import logging
 from users.forms import UserSettingsForm, CustomPasswordChangeForm
 from users.models import CustomUser
 from trophies.forms import PremiumSettingsForm, ProfileSettingsForm
-from trophies.utils import update_profile_trophy_counts
+from trophies.services.profile_stats_service import update_profile_trophy_counts
 
 logger = logging.getLogger('psn_api')
 

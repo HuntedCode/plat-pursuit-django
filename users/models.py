@@ -5,7 +5,8 @@ from django.contrib.auth.models import AbstractUser, BaseUserManager
 from django.utils.translation import gettext_lazy as _
 import pytz
 from trophies.discord_utils.discord_notifications import send_subscription_notification
-from trophies.utils import REGIONS, notify_bot_role_earned
+from trophies.util_modules.constants import REGIONS
+from trophies.services.badge_service import notify_bot_role_earned
 from djstripe.models import Subscription
 
 

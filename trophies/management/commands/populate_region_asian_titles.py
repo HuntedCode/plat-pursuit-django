@@ -1,6 +1,6 @@
 from django.core.management.base import BaseCommand
 from trophies.models import Game
-from trophies.utils import detect_asian_language
+from trophies.util_modules.language import detect_asian_language
 
 class Command(BaseCommand):
     def handle(self, *args, **options):

@@ -1,6 +1,6 @@
 from django.core.management.base import BaseCommand
 from trophies.models import Profile, ProfileGame
-from trophies.utils import check_profile_badges
+from trophies.services.badge_service import check_profile_badges
 
 class Command(BaseCommand):
     def handle(self, *args, **options):

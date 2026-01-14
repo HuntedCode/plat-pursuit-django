@@ -4,7 +4,7 @@ import json
 import time
 from dotenv import load_dotenv
 from .models import Profile, Game
-from .utils import redis_client
+from trophies.util_modules.cache import redis_client
 
 load_dotenv()
 logger = logging.getLogger("psn_api")

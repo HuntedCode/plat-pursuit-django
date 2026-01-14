@@ -1,6 +1,6 @@
 from django.core.management.base import BaseCommand
 from trophies.models import Badge, Profile
-from trophies.utils import handle_badge
+from trophies.services.badge_service import handle_badge
 
 class Command(BaseCommand):
     def add_arguments(self, parser):

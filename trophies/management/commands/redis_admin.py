@@ -1,6 +1,6 @@
 from django.core.management.base import BaseCommand
 from django.conf import settings
-from trophies.utils import redis_client
+from trophies.util_modules.cache import redis_client
 import logging
 
 logger = logging.getLogger(__name__)

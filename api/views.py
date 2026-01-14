@@ -9,7 +9,7 @@ from django.db.models import F
 from django.utils import timezone
 from datetime import timedelta
 from trophies.psn_manager import PSNManager
-from trophies.utils import initial_badge_check
+from trophies.services.badge_service import initial_badge_check
 import time
 import math
 import logging

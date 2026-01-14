@@ -7,7 +7,13 @@ from django.db import transaction
 from django.db.models import F, Avg, Count, Max, Min
 from datetime import timedelta
 from tenacity import retry, stop_after_attempt, wait_fixed
-from trophies.utils import count_unique_game_groups, calculate_trimmed_mean, TITLE_STATS_SUPPORTED_PLATFORMS, NA_REGION_CODES, EU_REGION_CODES, JP_REGION_CODES, AS_REGION_CODES, KR_REGION_CODES, CN_REGION_CODES, SHOVELWARE_THRESHOLD, redis_client
+from trophies.util_modules.language import count_unique_game_groups, calculate_trimmed_mean
+from trophies.util_modules.constants import (
+    TITLE_STATS_SUPPORTED_PLATFORMS, NA_REGION_CODES, EU_REGION_CODES,
+    JP_REGION_CODES, AS_REGION_CODES, KR_REGION_CODES, CN_REGION_CODES,
+    SHOVELWARE_THRESHOLD
+)
+from trophies.util_modules.cache import redis_client
 import secrets
 import re
 
