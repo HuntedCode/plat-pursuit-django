@@ -72,18 +72,9 @@ class GamesListView(ProfileHotbarMixin, ListView):
             if query:
                 qs = qs.filter(Q(title_name__icontains=query))
             if platforms:
-                platform_filter = Q()
-                for plat in platforms:
-                    platform_filter |= Q(title_platform__contains=plat)
-                qs = qs.filter(platform_filter)
+                qs = qs.for_platform(platforms)
             if regions:
-                region_filter = Q()
-                for r in regions:
-                    if r == 'global':
-                        region_filter |= Q(is_regional=False)
-                    else:
-                        region_filter |= Q(is_regional=True, region__contains=r)
-                qs = qs.filter(region_filter)
+                qs = qs.for_region(regions)
             if letter:
                 if letter == '0-9':
                     qs = qs.filter(title_name__regex=r'^[0-9]')
@@ -493,10 +484,7 @@ class GameDetailView(ProfileHotbarMixin, DetailView):
                         trophy__game=game,
                         earned=True
                     ).count(),
-                    'completes': ProfileGame.objects.filter(
-                        game=game,
-                        progress=100
-                    ).count(),
+                    'completes': ProfileGame.objects.filter(game=game).completed().count(),
                     'avg_progress': ProfileGame.objects.filter(game=game).aggregate(avg=Avg('progress'))['avg'] or 0.0
                 }
                 cache.set(stats_cache_key, json.dumps(stats), timeout=stats_timeout)
@@ -739,11 +727,11 @@ class ProfileDetailView(ProfileHotbarMixin, DetailView):
 
                 if plat_status:
                     if plat_status in ['plats', 'plats_100s', 'plats_no_100s']:
-                        games_qs = games_qs.filter(has_plat=True)
+                        games_qs = games_qs.platinum_earned()
                     elif plat_status in ['no_plats', 'no_plats_100s']:
                         games_qs = games_qs.filter(has_plat=False)
                     if plat_status in ['100s', 'plats_100s', 'no_plats_100s']:
-                        games_qs = games_qs.filter(progress=100)
+                        games_qs = games_qs.completed()
                     elif plat_status in ['no_100s']:
                         games_qs = games_qs.exclude(progress=100)
                     if plat_status == 'plats_no_100s':
@@ -814,10 +802,10 @@ class ProfileDetailView(ProfileHotbarMixin, DetailView):
                 for entry in earned_badges_qs:
                     series_slug = entry['badge__series_slug']
                     max_tier = entry['max_tier']
-                    highest_badge = Badge.objects.filter(series_slug=series_slug, tier=max_tier).first()
+                    highest_badge = Badge.objects.by_series(series_slug).filter(tier=max_tier).first()
                     if highest_badge:
                         next_tier = max_tier + 1
-                        next_badge = Badge.objects.filter(series_slug=series_slug, tier=next_tier).first()
+                        next_badge = Badge.objects.by_series(series_slug).filter(tier=next_tier).first()
                         is_maxed = next_badge is None
                         if is_maxed:
                             next_badge = highest_badge
@@ -1098,7 +1086,7 @@ class BadgeDetailView(ProfileHotbarMixin, DetailView):
 
     def get_object(self, queryset=None):
         series_slug = self.kwargs[self.slug_url_kwarg]
-        return Badge.objects.filter(series_slug=series_slug).order_by('tier')
+        return Badge.objects.by_series(series_slug)
     
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -1173,7 +1161,7 @@ class BadgeDetailView(ProfileHotbarMixin, DetailView):
                 'games': [{'game': game, 'profile_game': profile_games.get(game, None), 'community_ratings': community_ratings.get(game, None)} for game in games]
             })
 
-        all_badges = Badge.objects.filter(series_slug=badge.series_slug).order_by('tier')
+        all_badges = Badge.objects.by_series(badge.series_slug)
         badge_completion = {b.tier: b.get_stage_completion(target_profile) for b in all_badges}
 
         print(len(structured_data))

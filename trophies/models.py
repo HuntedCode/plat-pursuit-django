@@ -14,6 +14,10 @@ from trophies.util_modules.constants import (
     SHOVELWARE_THRESHOLD
 )
 from trophies.util_modules.cache import redis_client
+from trophies.managers import (
+    ProfileManager, GameManager, ProfileGameManager,
+    BadgeManager, MilestoneManager
+)
 import secrets
 import re
 
@@ -98,6 +102,8 @@ class Profile(models.Model):
     selected_background = models.ForeignKey('Concept', on_delete=models.SET_NULL, null=True, blank=True, related_name='selected_by_profiles', help_text='Selected background concept for premium profiles.')
     hide_hiddens = models.BooleanField(default=False, help_text="If true, hide hidden/deleted games from list and totals.")
     hide_zeros = models.BooleanField(default=False, help_text="If true, hide games with no trophies earned.")
+
+    objects = ProfileManager()
 
     class Meta:
         indexes = [
@@ -333,6 +339,8 @@ class Game(models.Model):
     is_delisted = models.BooleanField(default=False)
     has_online_trophies = models.BooleanField(default=False)
 
+    objects = GameManager()
+
     class Meta:
         indexes = [
             models.Index(fields=["np_communication_id", "title_name"], name="game_idx"),
@@ -541,6 +549,8 @@ class ProfileGame(models.Model):
     unearned_trophies_count = models.PositiveIntegerField(default=0, help_text="Number of unearned trophies.")
     has_plat = models.BooleanField(default=False, help_text="Whether the plat has been earned.")
     user_hidden = models.BooleanField(default=False, help_text="True if user has game hidden/deleted.")
+
+    objects = ProfileGameManager()
 
     class Meta:
         unique_together = ["profile", "game"]
@@ -772,6 +782,8 @@ class Badge(models.Model):
     required_stages = models.PositiveIntegerField(default=0, help_text="Denormalized count of required stages for series badges")
     required_value = models.PositiveIntegerField(default=0, help_text="Denormalized required value for misc badges")
 
+    objects = BadgeManager()
+
     class Meta:
         ordering = ['tier', 'name']
         indexes = [
@@ -978,16 +990,6 @@ class UserTitle(models.Model):
 
     def __str__(self):
         return f"{self.profile.psn_username} - {self.title.name}"
-
-class MilestoneManager(models.Manager):
-    def get_for_user(self, profile, criteria_type=None):
-        """Fetch milestones for user, optionally filtered by criteria, with progress ratio."""
-        qs = self.prefetch_related('user_milestones', 'user_milestone_progress').filter(user_milestones__profile=profile)
-        if criteria_type:
-            qs = qs.filter(criteria_type=criteria_type)
-        return qs.annotate(
-            progress_ratio=F('user_milestone_progress__progress_value') / F('required_value')
-        ).order_by('-progress_ratio', 'name')
 
 class Milestone(models.Model):
     CRITERIA_TYPES = [
