@@ -138,19 +138,27 @@ class Profile(models.Model):
         super().save(*args, **kwargs)
 
     def link_to_user(self, user):
-        if not self.user:
-            self.user = user
-            self.is_linked = True
-            self.save(update_fields=['user', 'is_linked'])
+        """
+        Link this PSN profile to a user account.
 
-            self.update_profile_premium(user.premium_tier in ['premium_monthly', 'premium_yearly', 'supporter'])
+        Delegates to VerificationService for actual logic.
+        Maintained for backward compatibility.
+
+        Args:
+            user: CustomUser instance to link to
+        """
+        from trophies.services.verification_service import VerificationService
+        VerificationService.link_profile_to_user(self, user)
 
     def unlink_user(self):
-        if self.user:
-            self.user = None
-            self.is_linked = False
-            self.save(update_fields=['user', 'is_linked'])
-            self.update_profile_premium(False)
+        """
+        Unlink this PSN profile from its user account.
+
+        Delegates to VerificationService for actual logic.
+        Maintained for backward compatibility.
+        """
+        from trophies.services.verification_service import VerificationService
+        VerificationService.unlink_profile_from_user(self)
     
     def update_profile_premium(self, is_premium: bool):
         self.sync_tier = 'preferred' if is_premium else 'basic'
@@ -158,56 +166,82 @@ class Profile(models.Model):
         self.save(update_fields=['sync_tier', 'user_is_premium'])
     
     def get_time_since_last_sync(self) -> timedelta:
-        if self.last_synced:
-            return timezone.now() - self.last_synced
-        return 0
-    
+        """
+        Get time elapsed since last successful sync.
+
+        Delegates to SyncService for actual logic.
+        Maintained for backward compatibility.
+
+        Returns:
+            timedelta: Time since last sync
+        """
+        from trophies.services.sync_service import SyncService
+        return SyncService.get_time_since_last_sync(self)
+
     def attempt_sync(self):
-        print("Attempting sync...")
-        if self.sync_tier == 'preferred':
-            delta = timedelta(minutes=5)
-        else:
-            delta = timedelta(hours=1)
-        print(f"Delta: {delta}")
-        if self.last_synced + delta < timezone.now():
-            from trophies.psn_manager import PSNManager
-            PSNManager.profile_refresh(self)
-            return True
-        return False
-    
+        """
+        Attempt to initiate profile synchronization.
+
+        Delegates to SyncService for actual logic.
+        Maintained for backward compatibility.
+
+        Returns:
+            bool: True if sync initiated, False if cooldown active
+        """
+        from trophies.services.sync_service import SyncService
+        return SyncService.initiate_sync(self)
+
     def get_seconds_to_next_sync(self):
-        if self.sync_tier == 'preferred':
-            next_sync = self.last_synced + timedelta(minutes=5)
-        else:
-            next_sync = self.last_synced + timedelta(hours=1)
-        
-        if next_sync > timezone.now():
-            return (next_sync - timezone.now()).total_seconds()
-        return 0
+        """
+        Get seconds remaining until next sync is allowed.
+
+        Delegates to SyncService for actual logic.
+        Maintained for backward compatibility.
+
+        Returns:
+            int: Seconds until next sync allowed
+        """
+        from trophies.services.sync_service import SyncService
+        return SyncService.get_seconds_to_next_sync(self)
     
     def generate_verification_code(self):
-        """Generate and set a secure, time-limited code."""
-        self.verification_code = secrets.token_hex(3).upper()
-        self.verification_expires_at = timezone.now() + timedelta(hours=1)
-        self.save(update_fields=['verification_code', 'verification_expires_at'])
-    
+        """
+        Generate and set a secure, time-limited verification code.
+
+        Delegates to VerificationService for actual logic.
+        Maintained for backward compatibility.
+
+        Returns:
+            str: The generated verification code
+        """
+        from trophies.services.verification_service import VerificationService
+        return VerificationService.generate_code(self)
+
     def verify_code(self, fetched_about_me: str) -> bool:
-        """Check if code is in About Me and unexpired."""
-        if not self.verification_code or not self.verification_expires_at:
-            return False
-        if timezone.now() > self.verification_expires_at:
-            self.clear_verification_code()
-            return False
-        if self.verification_code in fetched_about_me:
-            self.clear_verification_code()
-            return True
-        return False
-    
+        """
+        Verify that verification code appears in PSN About Me section.
+
+        Delegates to VerificationService for actual logic.
+        Maintained for backward compatibility.
+
+        Args:
+            fetched_about_me: About Me text from PSN API
+
+        Returns:
+            bool: True if verification successful
+        """
+        from trophies.services.verification_service import VerificationService
+        return VerificationService.verify_code(self, fetched_about_me)
+
     def clear_verification_code(self):
-        """Reset code fields for security/reuse."""
-        self.verification_code = None
-        self.verification_expires_at = None
-        self.save(update_fields=['verification_code', 'verification_expires_at'])
+        """
+        Clear verification code and expiry from profile.
+
+        Delegates to VerificationService for actual logic.
+        Maintained for backward compatibility.
+        """
+        from trophies.services.verification_service import VerificationService
+        VerificationService.clear_code(self)
 
     def get_total_trophies_from_summary(self):
         if self.earned_trophy_summary:
@@ -474,22 +508,17 @@ class Concept(models.Model):
         return EarnedTrophy.objects.filter(profile=profile, trophy__in=platinum_trophies, earned=True).exists()
 
     def get_community_averages(self):
-        ratings = self.user_ratings.all()
-        if not ratings.exists():
-            return None
-        
-        aggregates = ratings.aggregate(
-            avg_difficulty=Avg('difficulty'),
-            avg_grindiness=Avg('grindiness'),
-            avg_fun=Avg('fun_ranking'),
-            avg_rating=Avg('overall_rating'),
-            count=Count('id')
-        )
+        """
+        Calculate community rating averages for this game concept.
 
-        hours_list = list(ratings.values_list('hours_to_platinum', flat=True))
-        aggregates['avg_hours'] = calculate_trimmed_mean(hours_list, trim_percent=0.1) if hours_list else None
+        Delegates to RatingService for actual logic.
+        Maintained for backward compatibility.
 
-        return aggregates
+        Returns:
+            dict or None: Rating averages dictionary, or None if no ratings
+        """
+        from trophies.services.rating_service import RatingService
+        return RatingService.get_community_averages(self)
 
     def __str__(self):
         return self.unified_title or self.concept_id

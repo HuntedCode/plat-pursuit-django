@@ -32,6 +32,18 @@ from trophies.util_modules.constants import MODERN_PLATFORMS, ALL_PLATFORMS
 logger = logging.getLogger("psn_api")
     
 class GamesListView(ProfileHotbarMixin, ListView):
+    """
+    Display paginated list of games with filtering and sorting options.
+
+    Provides comprehensive game browsing functionality with filters for:
+    - Platform (PS4, PS5, PS Vita, etc.)
+    - Region (NA, EU, JP, global)
+    - Alphabetical letter
+    - Platinum trophy availability
+    - Shovelware exclusion
+
+    Defaults to modern platforms (PS4/PS5) and user's preferred region if authenticated.
+    """
     model = Game
     template_name = 'trophies/game_list.html'
     paginate_by = 25
@@ -122,6 +134,17 @@ class GamesListView(ProfileHotbarMixin, ListView):
         return context
     
 class TrophiesListView(ProfileHotbarMixin, ListView):
+    """
+    Display paginated list of trophies with filtering and sorting options.
+
+    Provides trophy browsing functionality with filters for:
+    - Trophy type (bronze, silver, gold, platinum)
+    - Platform
+    - Region
+    - Alphabetical letter
+
+    Useful for finding specific trophies or browsing rarest/most common achievements.
+    """
     model = Trophy
     template_name = 'trophies/trophy_list.html'
     paginate_by = 25
@@ -219,6 +242,16 @@ class TrophiesListView(ProfileHotbarMixin, ListView):
         return context
     
 class ProfilesListView(ProfileHotbarMixin, ListView):
+    """
+    Display paginated list of user profiles with filtering and sorting.
+
+    Provides profile browsing functionality with filters for:
+    - Username search
+    - Country
+    - Sort options (trophies, platinums, games, completions, average progress)
+
+    Useful for discovering other trophy hunters and viewing leaderboards.
+    """
     model = Profile
     template_name = 'trophies/profile_list.html'
     paginate_by = 25
@@ -270,6 +303,12 @@ class ProfilesListView(ProfileHotbarMixin, ListView):
         return context
     
 class SearchView(View):
+    """
+    AJAX endpoint for universal search across games, trophies, and profiles.
+
+    Returns JSON results for autocomplete functionality in the site-wide search bar.
+    Searches across game titles, trophy names, and PSN usernames based on type parameter.
+    """
     def get(self, request, *args, **kwargs):
         search_type = request.GET.get('type')
         query = request.GET.get('query', '')
@@ -284,343 +323,544 @@ class SearchView(View):
             return HttpResponseRedirect(reverse_lazy('home'))
 
 class GameDetailView(ProfileHotbarMixin, DetailView):
+    """
+    Display detailed game information including trophies, statistics, and user progress.
+
+    Shows trophy list with optional filtering/sorting, game statistics (players, completions),
+    milestone progress for linked profiles, and community ratings if applicable.
+    """
     model = Game
     template_name = 'trophies/game_detail.html'
     slug_field = 'np_communication_id'
     slug_url_kwarg = 'np_communication_id'
     context_object_name = 'game'
 
-    def get_queryset(self):
-        return super().get_queryset()
-    
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        game: Game = self.object
-        user = self.request.user
+    def _get_target_profile(self):
+        """
+        Get the target profile from URL parameter or authenticated user.
+
+        Returns:
+            Profile: Target profile instance or None if not found/authenticated
+        """
         psn_username = self.kwargs.get('psn_username')
-        today = date.today().isoformat()
-        now_utc = timezone.now()
-        images_cache_key = f"game:imageurls:{game.np_communication_id}"
-        images_timeout = 604800
-        stats_cache_key = f"game:stats:{game.np_communication_id}:{today}:{now_utc.hour:02d}"
-        stats_timeout = 3600
-        trophy_groups_cache_key = f"game:trophygroups:{game.np_communication_id}"
-        trophy_groups_timeout = 604800
+        user = self.request.user
 
         if psn_username:
             try:
-                target_profile = Profile.objects.get(psn_username__iexact=psn_username)
+                return Profile.objects.get(psn_username__iexact=psn_username)
             except Profile.DoesNotExist:
                 messages.error(self.request, "Profile not found.")
+                return None
         elif user.is_authenticated and hasattr(user, 'profile') and user.profile and user.profile.is_linked:
-            target_profile = user.profile
-        else:
-            target_profile = None
+            return user.profile
+        return None
 
-        logger.info(f"Target Profile: {target_profile} | Profile Username: {psn_username}")
+    def _build_profile_context(self, game, profile):
+        """
+        Build profile-specific context including progress, earned trophies, and milestones.
 
-        profile_progress = None
-        profile_trophy_totals = {}
-        profile_earned = {}
-        profile_group_totals = {}
-        milestones = [{'label': 'First Trophy'}, {'label': '50% Trophy'}, {'label': 'Platinum Trophy'}, {'label': '100% Trophy'}]
+        Args:
+            game: Game instance
+            profile: Profile instance
+
+        Returns:
+            dict: Context dictionary with profile progress, trophy totals, earned status, and milestones
+        """
+        context = {
+            'profile_progress': None,
+            'profile_earned': {},
+            'profile_trophy_totals': {},
+            'profile_group_totals': {},
+            'milestones': [
+                {'label': 'First Trophy'},
+                {'label': '50% Trophy'},
+                {'label': 'Platinum Trophy'},
+                {'label': '100% Trophy'}
+            ]
+        }
 
         has_trophies = Trophy.objects.filter(game=game).exists()
 
-        if target_profile:
-            try:
-                profile_game = ProfileGame.objects.get(profile=target_profile, game=game)
-                profile_progress = {
-                    'progress': profile_game.progress,
-                    'play_count': profile_game.play_count,
-                    'play_duration': profile_game.play_duration,
-                    'last_played': profile_game.last_played_date_time
+        try:
+            profile_game = ProfileGame.objects.get(profile=profile, game=game)
+            context['profile_progress'] = {
+                'progress': profile_game.progress,
+                'play_count': profile_game.play_count,
+                'play_duration': profile_game.play_duration,
+                'last_played': profile_game.last_played_date_time
+            }
+
+            if has_trophies:
+                # Get earned trophies data
+                earned_qs = EarnedTrophy.objects.filter(profile=profile, trophy__game=game).order_by('trophy__trophy_id')
+                context['profile_earned'] = {
+                    e.trophy.trophy_id: {
+                        'earned': e.earned,
+                        'progress': e.progress,
+                        'progress_rate': e.progress_rate,
+                        'progressed_date_time': e.progressed_date_time,
+                        'earned_date_time': e.earned_date_time
+                    } for e in earned_qs
                 }
 
-                if has_trophies:
-                    earned_qs = EarnedTrophy.objects.filter(profile=target_profile, trophy__game=game).order_by('trophy__trophy_id')
-                    profile_earned = {
-                        e.trophy.trophy_id: {
-                            'earned': e.earned,
-                            'progress': e.progress,
-                            'progress_rate': e.progress_rate,
-                            'progressed_date_time': e.progressed_date_time,
-                            'earned_date_time': e.earned_date_time
-                        } for e in earned_qs
-                    }
+                # Calculate trophy type totals
+                ordered_earned_qs = earned_qs.filter(earned=True).order_by(F('earned_date_time').asc(nulls_last=True))
+                context['profile_trophy_totals'] = {
+                    'bronze': ordered_earned_qs.filter(trophy__trophy_type='bronze').count() or 0,
+                    'silver': ordered_earned_qs.filter(trophy__trophy_type='silver').count() or 0,
+                    'gold': ordered_earned_qs.filter(trophy__trophy_type='gold').count() or 0,
+                    'platinum': ordered_earned_qs.filter(trophy__trophy_type='platinum').count() or 0,
+                }
 
-                    ordered_earned_qs = earned_qs.filter(earned=True).order_by(F('earned_date_time').asc(nulls_last=True))
+                # Calculate group totals
+                profile_group_totals = {}
+                for e in ordered_earned_qs:
+                    group_id = e.trophy.trophy_group_id or 'default'
+                    trophy_type = e.trophy.trophy_type
+                    if group_id not in profile_group_totals:
+                        profile_group_totals[group_id] = {'bronze': 0, 'silver': 0, 'gold': 0, 'platinum': 0}
+                    profile_group_totals[group_id][trophy_type] += 1
+                context['profile_group_totals'] = profile_group_totals
 
-                    profile_trophy_totals = {
-                        'bronze': ordered_earned_qs.filter(trophy__trophy_type='bronze').count() or 0,
-                        'silver': ordered_earned_qs.filter(trophy__trophy_type='silver').count() or 0,
-                        'gold': ordered_earned_qs.filter(trophy__trophy_type='gold').count() or 0,
-                        'platinum': ordered_earned_qs.filter(trophy__trophy_type='platinum').count() or 0,
-                    }
-                    
-                    for e in ordered_earned_qs:
-                        group_id = e.trophy.trophy_group_id or 'default'
-                        trophy_type = e.trophy.trophy_type
-                        if group_id not in profile_group_totals:
-                            profile_group_totals[group_id] = {'bronze': 0, 'silver': 0, 'gold': 0, 'platinum': 0}
-                        profile_group_totals[group_id][trophy_type] += 1
+                # Build milestones
+                context['milestones'] = self._build_milestones(ordered_earned_qs, len(earned_qs), context['profile_progress'])
 
-                    milestones = []
-                    earned_list = list(ordered_earned_qs)
-                    total_trophies = len(earned_qs)
-                    if len(earned_list) > 0:
-                        first = earned_list[0]
-                        milestones.append({
-                            'label': 'First Trophy',
-                            'trophy_name': first.trophy.trophy_name,
-                            'trophy_id': first.trophy.trophy_id,
-                            'trophy_icon_url': first.trophy.trophy_icon_url,
-                            'earned_date_time': first.earned_date_time,
-                            'trophy_earn_rate': first.trophy.trophy_earn_rate,
-                            'trophy_rarity': first.trophy.trophy_rarity
-                        })
-                    else:
-                        milestones.append({'label': 'First Trophy'})
-                    
-                    mid_idx = math.ceil((total_trophies - 1) * 0.5)
-                    if len(earned_list) > mid_idx:
-                        mid = earned_list[mid_idx]
-                        milestones.append({
-                            'label': '50% Trophy',
-                            'trophy_name': mid.trophy.trophy_name,
-                            'trophy_id': mid.trophy.trophy_id,
-                            'trophy_icon_url': mid.trophy.trophy_icon_url,
-                            'earned_date_time': mid.earned_date_time,
-                            'trophy_earn_rate': mid.trophy.trophy_earn_rate,
-                            'trophy_rarity': mid.trophy.trophy_rarity
-                        })
-                    else:
-                        milestones.append({'label': '50% Trophy'})
+        except ProfileGame.DoesNotExist:
+            pass
 
-                    plat_entry = None
-                    if len(earned_list) > 0:
-                        plat_entry = next((e for e in reversed(earned_list) if e.trophy.trophy_type == 'platinum'), None)
-                    if plat_entry:
-                        milestones.append({
-                            'label': 'Platinum Trophy',
-                            'trophy_name': plat_entry.trophy.trophy_name,
-                            'trophy_id': plat_entry.trophy.trophy_id,
-                            'trophy_icon_url': plat_entry.trophy.trophy_icon_url,
-                            'earned_date_time': plat_entry.earned_date_time,
-                            'trophy_earn_rate': plat_entry.trophy.trophy_earn_rate,
-                            'trophy_rarity': plat_entry.trophy.trophy_rarity
-                        })
-                    else:
-                        milestones.append({'label': 'Platinum Trophy'})
+        return context
 
-                    if profile_progress['progress'] == 100:
-                        complete = earned_list[-1]
-                        milestones.append({
-                            'label': '100% Trophy',
-                            'trophy_name': complete.trophy.trophy_name,
-                            'trophy_id': complete.trophy.trophy_id,
-                            'trophy_icon_url': complete.trophy.trophy_icon_url,
-                            'earned_date_time': complete.earned_date_time,
-                            'trophy_earn_rate': complete.trophy.trophy_earn_rate,
-                            'trophy_rarity': complete.trophy.trophy_rarity
-                        })
-                    else:
-                        milestones.append({'label': '100% Trophy'})
-            except ProfileGame.DoesNotExist:
-                pass
-        
+    def _build_milestones(self, ordered_earned_qs, total_trophies, profile_progress):
+        """
+        Build milestone trophy data (first, 50%, platinum, 100%).
+
+        Args:
+            ordered_earned_qs: QuerySet of earned trophies ordered by date
+            total_trophies: Total number of trophies in game
+            profile_progress: Profile progress dict with 'progress' key
+
+        Returns:
+            list: List of milestone dicts with trophy info or empty label
+        """
+        milestones = []
+        earned_list = list(ordered_earned_qs)
+
+        # First trophy
+        if len(earned_list) > 0:
+            first = earned_list[0]
+            milestones.append({
+                'label': 'First Trophy',
+                'trophy_name': first.trophy.trophy_name,
+                'trophy_id': first.trophy.trophy_id,
+                'trophy_icon_url': first.trophy.trophy_icon_url,
+                'earned_date_time': first.earned_date_time,
+                'trophy_earn_rate': first.trophy.trophy_earn_rate,
+                'trophy_rarity': first.trophy.trophy_rarity
+            })
+        else:
+            milestones.append({'label': 'First Trophy'})
+
+        # 50% trophy
+        mid_idx = math.ceil((total_trophies - 1) * 0.5)
+        if len(earned_list) > mid_idx:
+            mid = earned_list[mid_idx]
+            milestones.append({
+                'label': '50% Trophy',
+                'trophy_name': mid.trophy.trophy_name,
+                'trophy_id': mid.trophy.trophy_id,
+                'trophy_icon_url': mid.trophy.trophy_icon_url,
+                'earned_date_time': mid.earned_date_time,
+                'trophy_earn_rate': mid.trophy.trophy_earn_rate,
+                'trophy_rarity': mid.trophy.trophy_rarity
+            })
+        else:
+            milestones.append({'label': '50% Trophy'})
+
+        # Platinum trophy
+        plat_entry = None
+        if len(earned_list) > 0:
+            plat_entry = next((e for e in reversed(earned_list) if e.trophy.trophy_type == 'platinum'), None)
+        if plat_entry:
+            milestones.append({
+                'label': 'Platinum Trophy',
+                'trophy_name': plat_entry.trophy.trophy_name,
+                'trophy_id': plat_entry.trophy.trophy_id,
+                'trophy_icon_url': plat_entry.trophy.trophy_icon_url,
+                'earned_date_time': plat_entry.earned_date_time,
+                'trophy_earn_rate': plat_entry.trophy.trophy_earn_rate,
+                'trophy_rarity': plat_entry.trophy.trophy_rarity
+            })
+        else:
+            milestones.append({'label': 'Platinum Trophy'})
+
+        # 100% trophy
+        if profile_progress and profile_progress['progress'] == 100:
+            complete = earned_list[-1]
+            milestones.append({
+                'label': '100% Trophy',
+                'trophy_name': complete.trophy.trophy_name,
+                'trophy_id': complete.trophy.trophy_id,
+                'trophy_icon_url': complete.trophy.trophy_icon_url,
+                'earned_date_time': complete.earned_date_time,
+                'trophy_earn_rate': complete.trophy.trophy_earn_rate,
+                'trophy_rarity': complete.trophy.trophy_rarity
+            })
+        else:
+            milestones.append({'label': '100% Trophy'})
+
+        return milestones
+
+    def _build_images_context(self, game):
+        """
+        Build cached image URLs for game background, screenshots, and content rating.
+
+        Args:
+            game: Game instance
+
+        Returns:
+            dict: Image URLs or empty dict on error
+        """
+        images_cache_key = f"game:imageurls:{game.np_communication_id}"
+        images_timeout = 604800  # 1 week
+
         try:
             cached_images = cache.get(images_cache_key)
             if cached_images:
-                image_urls = json.loads(cached_images)
-            else:
-                bg_url = None
-                screenshot_urls = []
-                content_rating_url = None
-                if game.concept: 
-                    if game.concept.media:
-                        for img in game.concept.media:
-                            if img.get('type') == 'SCREENSHOT':
-                                screenshot_urls.append(img.get('url'))
-                        
-                        if len(screenshot_urls) < 1:
-                            for img in game.concept.media:
-                                img_type = img.get('type')
-                                if img_type == 'GAMEHUB_COVER_ART' or img_type == 'LOGO' or img_type == 'MASTER':
-                                    screenshot_urls.append(img.get('url'))
+                return json.loads(cached_images)
 
-                    if game.concept.content_rating:
-                        content_rating_url = game.concept.content_rating.get('url')
-                    
-                    image_urls = {
-                        'bg_url': game.concept.bg_url,
-                        'screenshot_urls': screenshot_urls,
-                        'content_rating_url': content_rating_url
-                    }
-                    cache.set(images_cache_key, json.dumps(image_urls), timeout=images_timeout)
-                else:
-                    image_urls = {}
+            if not game.concept:
+                return {}
+
+            screenshot_urls = []
+            content_rating_url = None
+
+            if game.concept.media:
+                # Prefer screenshots
+                for img in game.concept.media:
+                    if img.get('type') == 'SCREENSHOT':
+                        screenshot_urls.append(img.get('url'))
+
+                # Fallback to other image types if no screenshots
+                if len(screenshot_urls) < 1:
+                    for img in game.concept.media:
+                        img_type = img.get('type')
+                        if img_type in ['GAMEHUB_COVER_ART', 'LOGO', 'MASTER']:
+                            screenshot_urls.append(img.get('url'))
+
+            if game.concept.content_rating:
+                content_rating_url = game.concept.content_rating.get('url')
+
+            image_urls = {
+                'bg_url': game.concept.bg_url,
+                'screenshot_urls': screenshot_urls,
+                'content_rating_url': content_rating_url
+            }
+            cache.set(images_cache_key, json.dumps(image_urls), timeout=images_timeout)
+            return image_urls
+
         except Exception as e:
             logger.error(f"Game images cache failed for {game.np_communication_id}: {e}")
-            image_urls = {}
+            return {}
+
+    def _build_game_stats_context(self, game):
+        """
+        Build game statistics including player counts, completions, and average progress.
+
+        Args:
+            game: Game instance
+
+        Returns:
+            dict: Game statistics or empty dict on error
+        """
+        today = date.today().isoformat()
+        now_utc = timezone.now()
+        stats_cache_key = f"game:stats:{game.np_communication_id}:{today}:{now_utc.hour:02d}"
+        stats_timeout = 3600  # 1 hour
 
         try:
             cached_stats = cache.get(stats_cache_key)
             if cached_stats:
-                stats = json.loads(cached_stats)
-            else:
-                stats = {
-                    'total_players': game.played_count,
-                    'monthly_players': ProfileGame.objects.filter(
-                        game=game,
-                        last_played_date_time__gte=timezone.now() - timedelta(days=30)
-                    ).count(),
-                    'plats_earned': EarnedTrophy.objects.filter(
-                        trophy__game=game,
-                        trophy__trophy_type='platinum',
-                        earned=True
-                    ).count(),
-                    'total_earns': EarnedTrophy.objects.filter(
-                        trophy__game=game,
-                        earned=True
-                    ).count(),
-                    'completes': ProfileGame.objects.filter(game=game).completed().count(),
-                    'avg_progress': ProfileGame.objects.filter(game=game).aggregate(avg=Avg('progress'))['avg'] or 0.0
-                }
-                cache.set(stats_cache_key, json.dumps(stats), timeout=stats_timeout)
+                return json.loads(cached_stats)
+
+            stats = {
+                'total_players': game.played_count,
+                'monthly_players': ProfileGame.objects.filter(
+                    game=game,
+                    last_played_date_time__gte=timezone.now() - timedelta(days=30)
+                ).count(),
+                'plats_earned': EarnedTrophy.objects.filter(
+                    trophy__game=game,
+                    trophy__trophy_type='platinum',
+                    earned=True
+                ).count(),
+                'total_earns': EarnedTrophy.objects.filter(
+                    trophy__game=game,
+                    earned=True
+                ).count(),
+                'completes': ProfileGame.objects.filter(game=game).completed().count(),
+                'avg_progress': ProfileGame.objects.filter(game=game).aggregate(avg=Avg('progress'))['avg'] or 0.0
+            }
+            cache.set(stats_cache_key, json.dumps(stats), timeout=stats_timeout)
+            return stats
+
         except Exception as e:
             logger.error(f"Game stats cache failed for {game.np_communication_id}: {e}")
-            stats = {}
-        
-        full_trophies = []
-        trophy_groups = []
-        grouped_trophies = {}
+            return {}
 
-        form = GameDetailForm(self.request.GET)
-        context['form'] = form
-        
-        if has_trophies:
-            try:
-                trophies_qs = Trophy.objects.filter(game=game).order_by('trophy_id')
-                full_trophies = [
-                    {
-                        'trophy_id': t.trophy_id,
-                        'trophy_type': t.trophy_type,
-                        'trophy_name': t.trophy_name,
-                        'trophy_detail': t.trophy_detail,
-                        'trophy_icon_url': t.trophy_icon_url,
-                        'trophy_group_id': t.trophy_group_id,
-                        'progress_target_value': t.progress_target_value,
-                        'trophy_rarity': t.trophy_rarity,
-                        'trophy_earn_rate': t.trophy_earn_rate,
-                        'earned_count': t.earned_count,
-                        'earn_rate': t.earn_rate,
-                        'pp_rarity': t.get_pp_rarity_tier()
-                    } for t in trophies_qs
-                ]
-            except Exception as e:
-                logger.error(f"Game trophies query failed for {game.np_communication_id}: {e}")
-                full_trophies = []
-            
-            if form.is_valid():
-                earned_key = form.cleaned_data['earned']
-                if profile_earned:
-                    if earned_key == 'unearned':
-                        full_trophies = [t for t in full_trophies if not profile_earned.get(t['trophy_id'], {}).get('earned', False)]
-                    elif earned_key == 'earned':
-                        full_trophies = [t for t in full_trophies if profile_earned.get(t['trophy_id'], {}).get('earned', False)]
+    def _build_trophy_context(self, game, form, profile_earned):
+        """
+        Build trophy data with groups, filtering, and sorting.
 
-                sort_key = form.cleaned_data['sort']
-                if sort_key == 'earned_date':
-                    full_trophies.sort(
-                        key=lambda t: (
-                            profile_earned.get(t['trophy_id'], {}).get('earned_date_time') is None,
-                            profile_earned.get(t['trophy_id'], {}).get('earned_date_time') or timezone.make_aware(datetime.min)
-                        )
+        Args:
+            game: Game instance
+            form: GameDetailForm with filtering/sorting options
+            profile_earned: Dict of earned trophy data by trophy_id
+
+        Returns:
+            tuple: (full_trophies list, trophy_groups dict, grouped_trophies dict, has_trophies bool)
+        """
+        has_trophies = Trophy.objects.filter(game=game).exists()
+        if not has_trophies:
+            return [], {}, {}, False
+
+        try:
+            # Get all trophies
+            trophies_qs = Trophy.objects.filter(game=game).order_by('trophy_id')
+            full_trophies = [
+                {
+                    'trophy_id': t.trophy_id,
+                    'trophy_type': t.trophy_type,
+                    'trophy_name': t.trophy_name,
+                    'trophy_detail': t.trophy_detail,
+                    'trophy_icon_url': t.trophy_icon_url,
+                    'trophy_group_id': t.trophy_group_id,
+                    'progress_target_value': t.progress_target_value,
+                    'trophy_rarity': t.trophy_rarity,
+                    'trophy_earn_rate': t.trophy_earn_rate,
+                    'earned_count': t.earned_count,
+                    'earn_rate': t.earn_rate,
+                    'pp_rarity': t.get_pp_rarity_tier()
+                } for t in trophies_qs
+            ]
+        except Exception as e:
+            logger.error(f"Game trophies query failed for {game.np_communication_id}: {e}")
+            full_trophies = []
+
+        # Apply filtering and sorting
+        if form.is_valid():
+            earned_key = form.cleaned_data['earned']
+            if profile_earned:
+                if earned_key == 'unearned':
+                    full_trophies = [t for t in full_trophies if not profile_earned.get(t['trophy_id'], {}).get('earned', False)]
+                elif earned_key == 'earned':
+                    full_trophies = [t for t in full_trophies if profile_earned.get(t['trophy_id'], {}).get('earned', False)]
+
+            sort_key = form.cleaned_data['sort']
+            if sort_key == 'earned_date':
+                full_trophies.sort(
+                    key=lambda t: (
+                        profile_earned.get(t['trophy_id'], {}).get('earned_date_time') is None,
+                        profile_earned.get(t['trophy_id'], {}).get('earned_date_time') or timezone.make_aware(datetime.min)
                     )
-                elif sort_key == 'psn_rarity':
-                    full_trophies.sort(key=lambda t: t['trophy_earn_rate'], reverse=False)
-                elif sort_key == 'pp_rarity':
-                    full_trophies.sort(key=lambda t: t['earn_rate'], reverse=False)
-                elif sort_key == 'alpha':
-                    full_trophies.sort(key=lambda t: t['trophy_name'].lower())
+                )
+            elif sort_key == 'psn_rarity':
+                full_trophies.sort(key=lambda t: t['trophy_earn_rate'], reverse=False)
+            elif sort_key == 'pp_rarity':
+                full_trophies.sort(key=lambda t: t['earn_rate'], reverse=False)
+            elif sort_key == 'alpha':
+                full_trophies.sort(key=lambda t: t['trophy_name'].lower())
 
-            try:
-                cached_trophy_groups = cache.get(trophy_groups_cache_key)
-                if cached_trophy_groups:
-                    trophy_groups = json.loads(cached_trophy_groups)
-                else:
-                    trophy_groups_qs = TrophyGroup.objects.filter(game=game)
-                    trophy_groups = {
-                        g.trophy_group_id: {
-                            'trophy_group_name': g.trophy_group_name,
-                            'trophy_group_icon_url': g.trophy_group_icon_url,
-                            'defined_trophies': g.defined_trophies,
-                        } for g in trophy_groups_qs
-                    }
-                    cache.set(trophy_groups_cache_key, json.dumps(trophy_groups), timeout=trophy_groups_timeout)
-            except Exception as e:
-                logger.error(f"Trophy groups cache failed for {game.np_communication_id}: {e}")
-                trophy_groups = {}
-            
-            grouped_trophies = {}
-            for trophy in full_trophies:
-                group_id = trophy.get('trophy_group_id', 'default')
-                if group_id not in grouped_trophies:
-                    grouped_trophies[group_id] = []
-                grouped_trophies[group_id].append(trophy)
-            
-            sorted_groups = sorted(grouped_trophies.keys(), key=lambda x: (x != 'default', x))
-        else:
-            context['trophies_syncing'] = True
-
-        if game.concept:
-            averages_cache_key = f"concept:averages:{game.concept.concept_id}:{today}"
-            cached_averages = cache.get(averages_cache_key)
-            if cached_averages:
-                averages = json.loads(cached_averages)
+        # Get trophy groups
+        trophy_groups_cache_key = f"game:trophygroups:{game.np_communication_id}"
+        trophy_groups_timeout = 604800  # 1 week
+        try:
+            cached_trophy_groups = cache.get(trophy_groups_cache_key)
+            if cached_trophy_groups:
+                trophy_groups = json.loads(cached_trophy_groups)
             else:
-                averages = game.concept.get_community_averages()
-                if averages:
-                    cache.set(averages_cache_key, json.dumps(averages), timeout=stats_timeout)
-            context['community_averages'] = averages
+                trophy_groups_qs = TrophyGroup.objects.filter(game=game)
+                trophy_groups = {
+                    g.trophy_group_id: {
+                        'trophy_group_name': g.trophy_group_name,
+                        'trophy_group_icon_url': g.trophy_group_icon_url,
+                        'defined_trophies': g.defined_trophies,
+                    } for g in trophy_groups_qs
+                }
+                cache.set(trophy_groups_cache_key, json.dumps(trophy_groups), timeout=trophy_groups_timeout)
+        except Exception as e:
+            logger.error(f"Trophy groups cache failed for {game.np_communication_id}: {e}")
+            trophy_groups = {}
 
-            series_slugs = Stage.objects.filter(concepts__games=game).values_list('series_slug', flat=True).distinct()
-            badges = Badge.objects.filter(series_slug__in=Subquery(series_slugs), tier=1).distinct().order_by('tier')
-            context['badges'] = badges
+        # Group trophies
+        grouped_trophies = {}
+        for trophy in full_trophies:
+            group_id = trophy.get('trophy_group_id', 'default')
+            if group_id not in grouped_trophies:
+                grouped_trophies[group_id] = []
+            grouped_trophies[group_id].append(trophy)
 
-            other_versions_qs = game.concept.games.exclude(pk=game.pk)
-            platform_order = {plat: idx for idx, plat in enumerate(ALL_PLATFORMS)}
-            other_versions_qs = other_versions_qs.annotate(
-                platform_order=Case(*[When(title_platform__contains=plat, then=Value(idx)) for plat, idx in platform_order.items()], default=999, output_field=IntegerField())
-            ).order_by('platform_order', 'title_name')
-            other_versions = list(other_versions_qs)
-            context['other_versions'] = other_versions
+        # Sort groups (default first, then alphabetically)
+        sorted_groups = sorted(grouped_trophies.keys(), key=lambda x: (x != 'default', x))
+        sorted_grouped = {gid: grouped_trophies[gid] for gid in sorted_groups}
 
-        
+        return full_trophies, trophy_groups, sorted_grouped, has_trophies
+
+    def _build_concept_context(self, game):
+        """
+        Build concept-related context including community ratings, badges, and other versions.
+
+        Args:
+            game: Game instance
+
+        Returns:
+            dict: Concept context data or empty dict if no concept
+        """
+        if not game.concept:
+            return {}
+
+        context = {}
+        today = date.today().isoformat()
+        stats_timeout = 3600
+
+        # Community averages
+        averages_cache_key = f"concept:averages:{game.concept.concept_id}:{today}"
+        cached_averages = cache.get(averages_cache_key)
+        if cached_averages:
+            averages = json.loads(cached_averages)
+        else:
+            averages = game.concept.get_community_averages()
+            if averages:
+                cache.set(averages_cache_key, json.dumps(averages), timeout=stats_timeout)
+        context['community_averages'] = averages
+
+        # Related badges
+        series_slugs = Stage.objects.filter(concepts__games=game).values_list('series_slug', flat=True).distinct()
+        badges = Badge.objects.filter(series_slug__in=Subquery(series_slugs), tier=1).distinct().order_by('tier')
+        context['badges'] = badges
+
+        # Other platform versions
+        other_versions_qs = game.concept.games.exclude(pk=game.pk)
+        platform_order = {plat: idx for idx, plat in enumerate(ALL_PLATFORMS)}
+        other_versions_qs = other_versions_qs.annotate(
+            platform_order=Case(*[When(title_platform__contains=plat, then=Value(idx)) for plat, idx in platform_order.items()], default=999, output_field=IntegerField())
+        ).order_by('platform_order', 'title_name')
+        context['other_versions'] = list(other_versions_qs)
+
+        return context
+
+    def _build_rating_context(self, user, game):
+        """
+        Build user rating context if user has earned platinum.
+
+        Args:
+            user: Request user
+            game: Game instance
+
+        Returns:
+            dict: Rating context or empty dict
+        """
         profile = user.profile if user.is_authenticated and hasattr(user, 'profile') and user.profile and user.profile.is_linked else None
-        if profile and game.concept:
-            has_platinum = game.concept.has_user_earned_platinum(profile)
-            context['has_platinum'] = has_platinum
-            if has_platinum:
-                user_rating = game.concept.user_ratings.filter(profile=profile).first()
-                context['rating_form'] = UserConceptRatingForm(instance=user_rating)
+        if not profile or not game.concept:
+            return {}
 
-        context['breadcrumb'] = [
+        has_platinum = game.concept.has_user_earned_platinum(profile)
+        if not has_platinum:
+            return {}
+
+        user_rating = game.concept.user_ratings.filter(profile=profile).first()
+        return {
+            'has_platinum': has_platinum,
+            'rating_form': UserConceptRatingForm(instance=user_rating)
+        }
+
+    def _build_breadcrumbs(self, game, target_profile):
+        """
+        Build breadcrumb navigation.
+
+        Args:
+            game: Game instance
+            target_profile: Profile instance or None
+
+        Returns:
+            list: Breadcrumb items
+        """
+        return [
             {'text': 'Home', 'url': reverse_lazy('home')},
             {'text': 'Games', 'url': reverse_lazy('games_list')},
             {'text': f"{game.title_name}"}
         ]
-        context['profile'] = target_profile
-        context['profile_progress'] = profile_progress
-        context['profile_earned'] = profile_earned
-        context['profile_trophy_totals'] = profile_trophy_totals
-        context['profile_group_totals'] = profile_group_totals
-        context['game_stats'] = stats
-        context['grouped_trophies'] = {gid: grouped_trophies[gid] for gid in sorted_groups} if has_trophies else {}
-        context['trophy_groups'] = trophy_groups
-        context['image_urls'] = image_urls
-        context['milestones'] = milestones
+    
+    def get_context_data(self, **kwargs):
+        """
+        Build context for game detail page.
+
+        Delegates to helper methods for profile data, images, stats, trophies, and concept info.
+
+        Returns:
+            dict: Complete context for template rendering
+        """
+        context = super().get_context_data(**kwargs)
+        game = self.object
+        user = self.request.user
+
+        # Get target profile (from URL or authenticated user)
+        target_profile = self._get_target_profile()
+        psn_username = self.kwargs.get('psn_username')
+        logger.info(f"Target Profile: {target_profile} | Profile Username: {psn_username}")
+
+        # Build profile-specific context (progress, milestones, earned trophies)
+        if target_profile:
+            profile_context = self._build_profile_context(game, target_profile)
+            context['profile'] = target_profile
+            context['profile_progress'] = profile_context['profile_progress']
+            context['profile_earned'] = profile_context['profile_earned']
+            context['profile_trophy_totals'] = profile_context['profile_trophy_totals']
+            context['profile_group_totals'] = profile_context['profile_group_totals']
+            context['milestones'] = profile_context['milestones']
+        else:
+            context['profile'] = None
+            context['profile_progress'] = None
+            context['profile_earned'] = {}
+            context['profile_trophy_totals'] = {}
+            context['profile_group_totals'] = {}
+            context['milestones'] = [
+                {'label': 'First Trophy'},
+                {'label': '50% Trophy'},
+                {'label': 'Platinum Trophy'},
+                {'label': '100% Trophy'}
+            ]
+
+        # Build game images context
+        context['image_urls'] = self._build_images_context(game)
+
+        # Build game statistics context
+        context['game_stats'] = self._build_game_stats_context(game)
+
+        # Build trophy context with filtering/sorting
+        form = GameDetailForm(self.request.GET)
+        context['form'] = form
+        profile_earned = context.get('profile_earned', {})
+        full_trophies, trophy_groups, grouped_trophies, has_trophies = self._build_trophy_context(game, form, profile_earned)
+
+        if has_trophies:
+            context['grouped_trophies'] = grouped_trophies
+            context['trophy_groups'] = trophy_groups
+        else:
+            context['trophies_syncing'] = True
+            context['grouped_trophies'] = {}
+            context['trophy_groups'] = {}
+
+        # Build concept-related context (community ratings, badges, other versions)
+        concept_context = self._build_concept_context(game)
+        context.update(concept_context)
+
+        # Build user rating context (if earned platinum)
+        rating_context = self._build_rating_context(user, game)
+        context.update(rating_context)
+
+        # Build breadcrumbs
+        context['breadcrumb'] = self._build_breadcrumbs(game, target_profile)
+
         return context
     
     def post(self, request, *args, **kwargs):
@@ -650,6 +890,12 @@ class GameDetailView(ProfileHotbarMixin, DetailView):
         return HttpResponseRedirect(request.path)
     
 class ProfileDetailView(ProfileHotbarMixin, DetailView):
+    """
+    Display profile detail page with tabbed interface for games, trophies, and badges.
+
+    Shows header stats, trophy case selections, and tab-specific content with
+    filtering, sorting, and pagination.
+    """
     model = Profile
     template_name = 'trophies/profile_detail.html'
     slug_field = 'psn_username'
@@ -660,14 +906,298 @@ class ProfileDetailView(ProfileHotbarMixin, DetailView):
         psn_username = self.kwargs[self.slug_url_kwarg].lower()
         queryset = queryset or self.get_queryset()
         return get_object_or_404(queryset, **{self.slug_field: psn_username})
+
+    def _build_header_stats(self, profile):
+        """
+        Build header statistics for profile.
+
+        Args:
+            profile: Profile instance
+
+        Returns:
+            dict: Header stats with trophy counts, completions, and notable trophies
+        """
+        header_stats = {
+            'total_games': profile.total_games,
+            'total_earned_trophies': profile.total_trophies,
+            'total_unearned_trophies': profile.total_unearned,
+            'total_completions': profile.total_completes,
+            'average_completion': profile.avg_progress,
+        }
+
+        # Recent platinum
+        if profile.recent_plat:
+            header_stats['recent_platinum'] = {
+                'trophy': profile.recent_plat.trophy,
+                'game': profile.recent_plat.trophy.game,
+                'earned_date': profile.recent_plat.earned_date_time,
+            }
+        else:
+            header_stats['recent_platinum'] = None
+
+        # Rarest platinum
+        if profile.rarest_plat:
+            header_stats['rarest_platinum'] = {
+                'trophy': profile.rarest_plat.trophy,
+                'game': profile.rarest_plat.trophy.game,
+                'earned_date': profile.rarest_plat.earned_date_time,
+            }
+        else:
+            header_stats['rarest_platinum'] = None
+
+        return header_stats
+
+    def _build_trophy_case(self, profile):
+        """
+        Build trophy case selections list.
+
+        Args:
+            profile: Profile instance
+
+        Returns:
+            list: Trophy case selections padded to max_trophies
+        """
+        max_trophies = 10
+        trophy_case = list(UserTrophySelection.objects.filter(profile=profile).order_by('-earned_trophy__earned_date_time'))
+        # Pad with None to reach max_trophies
+        trophy_case = trophy_case + [None] * (max_trophies - len(trophy_case))
+        return trophy_case
+
+    def _build_games_tab_context(self, profile, per_page, page_number):
+        """
+        Build context for games tab with filtering and pagination.
+
+        Args:
+            profile: Profile instance
+            per_page: Items per page
+            page_number: Current page number
+
+        Returns:
+            dict: Context with profile_games and form
+        """
+        form = ProfileGamesForm(self.request.GET)
+        context = {'trophy_log': []}
+
+        if not form.is_valid():
+            context['profile_games'] = []
+            context['form'] = form
+            return context
+
+        # Get form data
+        query = form.cleaned_data.get('query')
+        platforms = form.cleaned_data.get('platform')
+        plat_status = form.cleaned_data.get('plat_status')
+        sort_val = form.cleaned_data.get('sort')
+
+        # Build queryset
+        games_qs = profile.played_games.all().select_related('game').annotate(
+            annotated_total_trophies=F('earned_trophies_count') + F('unearned_trophies_count')
+        )
+
+        # Apply profile settings
+        if profile.hide_hiddens:
+            games_qs = games_qs.exclude(user_hidden=True)
+        if profile.hide_zeros:
+            games_qs = games_qs.exclude(earned_trophies_count=0)
+
+        # Apply filters
+        if query:
+            games_qs = games_qs.filter(Q(game__title_name__icontains=query))
+        if platforms:
+            platform_filter = Q()
+            for plat in platforms:
+                platform_filter |= Q(game__title_platform__contains=plat)
+            games_qs = games_qs.filter(platform_filter)
+            context['selected_platforms'] = platforms
+
+        # Apply plat status filters
+        if plat_status:
+            if plat_status in ['plats', 'plats_100s', 'plats_no_100s']:
+                games_qs = games_qs.platinum_earned()
+            elif plat_status in ['no_plats', 'no_plats_100s']:
+                games_qs = games_qs.filter(has_plat=False)
+            if plat_status in ['100s', 'plats_100s', 'no_plats_100s']:
+                games_qs = games_qs.completed()
+            elif plat_status in ['no_100s']:
+                games_qs = games_qs.exclude(progress=100)
+            if plat_status == 'plats_no_100s':
+                games_qs = games_qs.exclude(progress=100)
+
+        # Apply sorting
+        order = ['-last_updated_datetime']
+        if sort_val == 'oldest':
+            order = ['last_updated_datetime']
+        elif sort_val == 'alpha':
+            order = ['game__title_name']
+        elif sort_val == 'completion':
+            order = ['-progress', 'game__title_name']
+        elif sort_val == 'completion_inv':
+            order = ['progress', 'game__title_name']
+        elif sort_val == 'trophies':
+            order = ['-annotated_total_trophies', 'game__title_name']
+        elif sort_val == 'earned':
+            order = ['-earned_trophies_count', 'game__title_name']
+        elif sort_val == 'unearned':
+            order = ['-unearned_trophies_count', 'game__title_name']
+
+        games_qs = games_qs.order_by(*order)
+
+        # Paginate
+        games_paginator = Paginator(games_qs, per_page)
+        if int(page_number) > games_paginator.num_pages:
+            game_page_obj = []
+        else:
+            game_page_obj = games_paginator.get_page(page_number)
+
+        context['profile_games'] = game_page_obj
+        context['form'] = form
+        return context
+
+    def _build_trophies_tab_context(self, profile, per_page, page_number):
+        """
+        Build context for trophies tab with filtering and pagination.
+
+        Args:
+            profile: Profile instance
+            per_page: Items per page
+            page_number: Current page number
+
+        Returns:
+            dict: Context with trophy_log and form
+        """
+        form = ProfileTrophiesForm(self.request.GET)
+        context = {'profile_games': []}
+
+        if not form.is_valid():
+            context['trophy_log'] = []
+            context['form'] = form
+            return context
+
+        # Get form data
+        query = form.cleaned_data.get('query')
+        platforms = form.cleaned_data.get('platform')
+        type = form.cleaned_data.get('type')
+
+        # Build queryset
+        trophies_qs = profile.earned_trophy_entries.filter(earned=True).select_related(
+            'trophy', 'trophy__game'
+        ).order_by(F('earned_date_time').desc(nulls_last=True))
+
+        # Apply filters
+        if query:
+            trophies_qs = trophies_qs.filter(
+                Q(trophy__trophy_name__icontains=query) | Q(trophy__game__title_name__icontains=query)
+            )
+        if platforms:
+            platform_filter = Q()
+            for plat in platforms:
+                platform_filter |= Q(trophy__game__title_platform__contains=plat)
+            trophies_qs = trophies_qs.filter(platform_filter)
+            context['selected_platforms'] = platforms
+        if type:
+            trophies_qs = trophies_qs.filter(trophy__trophy_type=type)
+
+        # Paginate
+        trophy_paginator = Paginator(trophies_qs, per_page)
+        if int(page_number) > trophy_paginator.num_pages:
+            trophy_page_obj = []
+        else:
+            trophy_page_obj = trophy_paginator.get_page(page_number)
+
+        context['trophy_log'] = trophy_page_obj
+        context['form'] = form
+        return context
+
+    def _build_badges_tab_context(self, profile):
+        """
+        Build context for badges tab with earned badges and progress.
+
+        Args:
+            profile: Profile instance
+
+        Returns:
+            dict: Context with grouped_earned_badges and form
+        """
+        form = ProfileBadgesForm(self.request.GET)
+        context = {}
+
+        if not form.is_valid():
+            context['grouped_earned_badges'] = []
+            context['form'] = form
+            return context
+
+        sort_val = form.cleaned_data.get('sort')
+
+        # Get earned badges
+        earned_badges_qs = UserBadge.objects.filter(profile=profile).select_related('badge').values(
+            'badge__series_slug'
+        ).annotate(max_tier=Max('badge__tier')).distinct()
+
+        grouped_earned = []
+        for entry in earned_badges_qs:
+            series_slug = entry['badge__series_slug']
+            max_tier = entry['max_tier']
+            highest_badge = Badge.objects.by_series(series_slug).filter(tier=max_tier).first()
+            if not highest_badge:
+                continue
+
+            next_tier = max_tier + 1
+            next_badge = Badge.objects.by_series(series_slug).filter(tier=next_tier).first()
+            is_maxed = next_badge is None
+            if is_maxed:
+                next_badge = highest_badge
+
+            # Calculate progress
+            progress_entry = UserBadgeProgress.objects.filter(profile=profile, badge=next_badge).first()
+            if progress_entry and next_badge.required_stages > 0:
+                progress_percentage = (progress_entry.completed_concepts / next_badge.required_stages) * 100
+            else:
+                progress_percentage = 0
+            if is_maxed:
+                progress_percentage = 100
+
+            grouped_earned.append({
+                'highest_badge': highest_badge,
+                'next_badge': next_badge,
+                'progress': progress_entry,
+                'percentage': progress_percentage,
+                'max_tier': max_tier,  # For sorting
+            })
+
+        # Sort
+        if sort_val == 'name':
+            grouped_earned.sort(key=lambda d: d['highest_badge'].effective_display_title)
+        elif sort_val == 'tier':
+            grouped_earned.sort(key=lambda d: (d['max_tier'], d['highest_badge'].effective_display_title))
+        elif sort_val == 'tier_desc':
+            grouped_earned.sort(key=lambda d: (-d['max_tier'], d['highest_badge'].effective_display_title))
+        else:
+            grouped_earned.sort(key=lambda d: d['highest_badge'].effective_display_series)
+
+        context['grouped_earned_badges'] = grouped_earned
+        context['form'] = form
+        return context
     
     def get_context_data(self, **kwargs):
+        """Build context for profile detail page with tab-specific content.
+
+        This method delegates to tab-specific helper methods to keep the code
+        organized and maintainable. Each tab (games, trophies, badges) has its
+        own focused handler method.
+
+        Args:
+            **kwargs: Standard Django context keyword arguments
+
+        Returns:
+            dict: Context dictionary with profile data, tab content, and metadata
+        """
         context = super().get_context_data(**kwargs)
         profile: Profile = self.object
         tab = self.request.GET.get('tab', 'games')
         per_page = 50
         page_number = self.request.GET.get('page', 1)
 
+        # Prefetch earned trophies for efficiency
         earned_trophies_prefetch = Prefetch(
             'earned_trophy_entries',
             queryset=EarnedTrophy.objects.filter(earned=True).select_related('trophy', 'trophy__game'),
@@ -675,177 +1205,33 @@ class ProfileDetailView(ProfileHotbarMixin, DetailView):
         )
         profile = Profile.objects.prefetch_related(earned_trophies_prefetch).get(id=profile.id)
 
-        # Header
-        header_stats = {}
+        # Build shared context (header stats and trophy case)
+        context['header_stats'] = self._build_header_stats(profile)
+        context['trophy_case'] = self._build_trophy_case(profile)
+        context['trophy_case_count'] = len(context['trophy_case'])
 
-        header_stats['total_games'] = profile.total_games
-        header_stats['total_earned_trophies'] = profile.total_trophies
-        header_stats['total_unearned_trophies'] = profile.total_unearned
-        header_stats['total_completions'] = profile.total_completes
-        header_stats['average_completion'] = profile.avg_progress
-        header_stats['recent_platinum'] = {
-            'trophy': profile.recent_plat.trophy,
-            'game': profile.recent_plat.trophy.game,
-            'earned_date': profile.recent_plat.earned_date_time,
-        } if profile.recent_plat else None
-        header_stats['rarest_platinum'] = {
-            'trophy': profile.rarest_plat.trophy,
-            'game': profile.rarest_plat.trophy.game,
-            'earned_date': profile.rarest_plat.earned_date_time,
-        } if profile.rarest_plat else None
-
-        # Trophy Case Selections
-        trophy_case = list(UserTrophySelection.objects.filter(profile=profile).order_by('-earned_trophy__earned_date_time'))
-        max_trophies = 10
-        trophy_case = trophy_case + [None] * (max_trophies - len(trophy_case))
-
+        # Delegate to tab-specific handler methods
         if tab == 'games':
-            form = ProfileGamesForm(self.request.GET)
-            if form.is_valid():
-                query = form.cleaned_data.get('query')
-                platforms = form.cleaned_data.get('platform')
-                plat_status = form.cleaned_data.get('plat_status')
-                sort_val = form.cleaned_data.get('sort')
-
-                games_qs = profile.played_games.all().select_related('game').annotate(
-                    annotated_total_trophies=F('earned_trophies_count') + F('unearned_trophies_count')  # Computed from denorm
-                )
-
-                if profile.hide_hiddens:
-                    games_qs = games_qs.exclude(user_hidden=True)
-                if profile.hide_zeros:
-                    games_qs = games_qs.exclude(earned_trophies_count=0)
-
-                if query:
-                    games_qs = games_qs.filter(Q(game__title_name__icontains=query))
-                if platforms:
-                    platform_filter = Q()
-                    for plat in platforms:
-                        platform_filter |= Q(game__title_platform__contains=plat)
-                    games_qs = games_qs.filter(platform_filter)
-                    context['selected_platforms'] = platforms
-
-                if plat_status:
-                    if plat_status in ['plats', 'plats_100s', 'plats_no_100s']:
-                        games_qs = games_qs.platinum_earned()
-                    elif plat_status in ['no_plats', 'no_plats_100s']:
-                        games_qs = games_qs.filter(has_plat=False)
-                    if plat_status in ['100s', 'plats_100s', 'no_plats_100s']:
-                        games_qs = games_qs.completed()
-                    elif plat_status in ['no_100s']:
-                        games_qs = games_qs.exclude(progress=100)
-                    if plat_status == 'plats_no_100s':
-                        games_qs = games_qs.exclude(progress=100)
-
-                order = ['-last_updated_datetime']
-                if sort_val == 'oldest':
-                    order = ['last_updated_datetime']
-                elif sort_val == 'alpha':
-                    order = ['game__title_name',]
-                elif sort_val == 'completion':
-                    order = ['-progress', 'game__title_name']
-                elif sort_val == 'completion_inv':
-                    order = ['progress', 'game__title_name']
-                elif sort_val == 'trophies':
-                    order = ['-annotated_total_trophies', 'game__title_name']
-                elif sort_val == 'earned':
-                    order = ['-earned_trophies_count', 'game__title_name']
-                elif sort_val == 'unearned':
-                    order = ['-unearned_trophies_count', 'game__title_name']
-
-                games_qs = games_qs.order_by(*order)
-
-                games_paginator = Paginator(games_qs, per_page)
-                if int(page_number) > games_paginator.num_pages:
-                    game_page_obj = []
-                else:
-                    game_page_obj = games_paginator.get_page(page_number)
-                context['profile_games'] = game_page_obj
-                context['trophy_log'] = []
-        
+            tab_context = self._build_games_tab_context(profile, per_page, page_number)
         elif tab == 'trophies':
-            form = ProfileTrophiesForm(self.request.GET)
-            if form.is_valid():
-                query = form.cleaned_data.get('query')
-                platforms = form.cleaned_data.get('platform')
-                type = form.cleaned_data.get('type')
-
-                trophies_qs = profile.earned_trophy_entries.filter(earned=True,).select_related('trophy', 'trophy__game').order_by(F('earned_date_time').desc(nulls_last=True))
-
-                if query:
-                    trophies_qs = trophies_qs.filter(Q(trophy__trophy_name__icontains=query) | Q(trophy__game__title_name__icontains=query))
-                if platforms:
-                    platform_filter = Q()
-                    for plat in platforms:
-                        platform_filter |= Q(trophy__game__title_platform__contains=plat)
-                    trophies_qs = trophies_qs.filter(platform_filter)
-                    context['selected_platforms'] = platforms
-                if type:
-                    trophies_qs = trophies_qs.filter(trophy__trophy_type=type)
-
-                trophy_paginator = Paginator(trophies_qs, per_page)
-                if int(page_number) > trophy_paginator.num_pages:
-                    trophy_page_obj = []
-                else:
-                    trophy_page_obj = trophy_paginator.get_page(page_number)
-                context['trophy_log'] = trophy_page_obj
-                context['profile_games'] = []
-        
+            tab_context = self._build_trophies_tab_context(profile, per_page, page_number)
         elif tab == 'badges':
-            form = ProfileBadgesForm(self.request.GET)
-            if form.is_valid():
-                sort_val = form.cleaned_data.get('sort')
+            tab_context = self._build_badges_tab_context(profile)
+        else:
+            # Default to games tab if invalid tab specified
+            tab_context = self._build_games_tab_context(profile, per_page, page_number)
 
-                earned_badges_qs = UserBadge.objects.filter(profile=profile).select_related('badge').values('badge__series_slug').annotate(max_tier=Max('badge__tier')).distinct()
+        context.update(tab_context)
 
-                grouped_earned = []
-                for entry in earned_badges_qs:
-                    series_slug = entry['badge__series_slug']
-                    max_tier = entry['max_tier']
-                    highest_badge = Badge.objects.by_series(series_slug).filter(tier=max_tier).first()
-                    if highest_badge:
-                        next_tier = max_tier + 1
-                        next_badge = Badge.objects.by_series(series_slug).filter(tier=next_tier).first()
-                        is_maxed = next_badge is None
-                        if is_maxed:
-                            next_badge = highest_badge
-                            
-                        progress_entry = UserBadgeProgress.objects.filter(profile=profile, badge=next_badge).first()
-                        if progress_entry and next_badge.required_stages > 0:
-                            progress_percentage = (progress_entry.completed_concepts / next_badge.required_stages) * 100
-                        else:
-                            progress_percentage = 0
-                        if is_maxed:
-                            progress_percentage = 100
-                        
-                        grouped_earned.append({
-                            'highest_badge': highest_badge,
-                            'next_badge': next_badge,
-                            'progress': progress_entry,
-                            'percentage': progress_percentage,
-                        })
-                
-                if sort_val == 'name':
-                    grouped_earned.sort(key=lambda d: d['highest_badge'].effective_display_title)
-                elif sort_val == 'tier':
-                    grouped_earned.sort(key=lambda d: (d['max_tier'], d['highest_badge'].effective_display_title))
-                elif sort_val == 'tier_desc':
-                    grouped_earned.sort(key=lambda d: (-d['max_tier'], d['highest_badge'].effective_display_title))
-                else:
-                    grouped_earned.sort(key=lambda d: d['highest_badge'].effective_display_series)
-
-                context['grouped_earned_badges'] = grouped_earned
-  
+        # Add shared metadata
         context['breadcrumb'] = [
             {'text': 'Home', 'url': reverse_lazy('home')},
             {'text': 'Profiles', 'url': reverse_lazy('profiles_list')},
             {'text': f"{profile.display_psn_username}"}
         ]
-        context['form'] = form
-        context['header_stats'] = header_stats
-        context['trophy_case'] = trophy_case
-        context['trophy_case_count'] = len(trophy_case)
         context['current_tab'] = tab
+
+        # Add premium background if applicable
         if profile.user_is_premium and profile.selected_background:
             context['image_urls'] = {'bg_url': profile.selected_background.bg_url}
 
@@ -861,6 +1247,13 @@ class ProfileDetailView(ProfileHotbarMixin, DetailView):
         return super().get_template_names()
     
 class TrophyCaseView(ProfileHotbarMixin, ListView):
+    """
+    Display user's platinum trophy collection for trophy case selection.
+
+    Shows all platinum trophies earned by a user, allowing them to select
+    up to 10 (premium) or 3 (free) trophies to showcase on their profile.
+    Provides filtering by game name and pagination.
+    """
     model = EarnedTrophy
     template_name = 'trophies/trophy_case.html'
     context_object_name = 'platinums'
@@ -901,6 +1294,16 @@ class TrophyCaseView(ProfileHotbarMixin, ListView):
         return context
 
 class ToggleSelectionView(LoginRequiredMixin, ProfileHotbarMixin, View):
+    """
+    AJAX endpoint to add or remove trophies from user's trophy case selection.
+
+    Handles toggling trophy selections with validation for:
+    - Maximum selection limits (3 for free users, 10 for premium)
+    - Trophy ownership verification
+    - Platinum trophy type requirement
+
+    Returns JSON response with success/error status.
+    """
     def post(self, request):
         earned_trophy_id = request.POST.get('earned_trophy_id')
         if not earned_trophy_id:
@@ -936,6 +1339,12 @@ class ToggleSelectionView(LoginRequiredMixin, ProfileHotbarMixin, View):
             return JsonResponse({'success': False, 'error': 'Internal error'}, status=500)
 
 class BadgeListView(ProfileHotbarMixin, ListView):
+    """
+    Display list of all badge series with progress tracking for authenticated users.
+
+    Shows tier 1 badges for each series, with earned status and completion progress
+    for logged-in users. Includes trophy totals and game counts for each series.
+    """
     model = Badge
     template_name = 'trophies/badge_list.html'
     context_object_name = 'display_data'
@@ -950,20 +1359,46 @@ class BadgeListView(ProfileHotbarMixin, ListView):
             if series_slug:
                 qs = qs.filter(series_slug__icontains=series_slug)
         return qs
-    
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        badges = context['object_list']
 
-        grouped_badges = defaultdict(list)
-        for badge in badges:
-            if badge.effective_user_title:
-                grouped_badges[badge.series_slug].append(badge)
+    def _calculate_series_stats(self, series_slug):
+        """
+        Calculate total games and trophy counts for a badge series.
 
+        Args:
+            series_slug: Badge series slug
+
+        Returns:
+            tuple: (total_games, trophy_types_dict)
+        """
+        all_games = Game.objects.filter(concept__stages__series_slug=series_slug).distinct()
+        total_games = all_games.count()
+        trophy_types = {
+            'bronze': sum(game.defined_trophies['bronze'] for game in all_games),
+            'silver': sum(game.defined_trophies['silver'] for game in all_games),
+            'gold': sum(game.defined_trophies['gold'] for game in all_games),
+            'platinum': sum(game.defined_trophies['platinum'] for game in all_games),
+        }
+        return total_games, trophy_types
+
+    def _build_badge_display_data(self, grouped_badges, profile=None):
+        """
+        Build display data for badges with optional progress tracking.
+
+        Consolidates logic for both authenticated and unauthenticated states.
+
+        Args:
+            grouped_badges: Dict of {series_slug: [badge list]}
+            profile: Profile instance or None
+
+        Returns:
+            list: Display data dicts for each badge series
+        """
         display_data = []
-        user = self.request.user
-        if user.is_authenticated and hasattr(user, 'profile'):
-            profile = user.profile
+
+        # Get user progress data if authenticated
+        earned_dict = {}
+        progress_dict = {}
+        if profile:
             user_earned = UserBadge.objects.filter(profile=profile).values('badge__series_slug').annotate(max_tier=Max('badge__tier'))
             earned_dict = {e['badge__series_slug']: e['max_tier'] for e in user_earned}
 
@@ -971,25 +1406,24 @@ class BadgeListView(ProfileHotbarMixin, ListView):
             progress_qs = UserBadgeProgress.objects.filter(profile=profile, badge__id__in=all_badges_ids)
             progress_dict = {p.badge.id: p for p in progress_qs}
 
-            for slug, group in grouped_badges.items():
-                sorted_group = sorted(group, key=lambda b: b.tier)
-                if not sorted_group:
-                    continue
+        # Build display data for each series
+        for slug, group in grouped_badges.items():
+            sorted_group = sorted(group, key=lambda b: b.tier)
+            if not sorted_group:
+                continue
 
-                tier1_badge = next((b for b in sorted_group if b.tier == 1), None)
-                tier1_earned_count = tier1_badge.earned_count if tier1_badge else 0
+            tier1_badge = next((b for b in sorted_group if b.tier == 1), None)
+            if not tier1_badge:
+                continue
 
-                all_games = Game.objects.filter(concept__stages__series_slug=tier1_badge.series_slug).distinct()
-                total_games = all_games.count()
-                trophy_types = {
-                    'bronze': sum(game.defined_trophies['bronze'] for game in all_games),
-                    'silver': sum(game.defined_trophies['silver'] for game in all_games),
-                    'gold': sum(game.defined_trophies['gold'] for game in all_games),
-                    'platinum': sum(game.defined_trophies['platinum'] for game in all_games),
-                }
+            # Calculate series stats
+            total_games, trophy_types = self._calculate_series_stats(tier1_badge.series_slug)
+            tier1_earned_count = tier1_badge.earned_count
 
+            # Determine display badge and progress
+            if profile:
                 highest_tier = earned_dict.get(slug, 0)
-                display_badge = next((b for b in sorted_group if b.tier == highest_tier), None) if highest_tier > 0 else tier1_badge                
+                display_badge = next((b for b in sorted_group if b.tier == highest_tier), None) if highest_tier > 0 else tier1_badge
                 if not display_badge:
                     continue
 
@@ -997,53 +1431,61 @@ class BadgeListView(ProfileHotbarMixin, ListView):
                 next_badge = next((b for b in sorted_group if b.tier > highest_tier), None)
                 progress_badge = next_badge if next_badge else display_badge
 
+                # Calculate progress
                 progress = progress_dict.get(progress_badge.id) if progress_badge else None
                 required_stages = progress_badge.required_stages
-                completed_concepts = 0
-                progress_percentage = 0
-
                 if progress and progress_badge.badge_type in ['series', 'collection']:
                     completed_concepts = progress.completed_concepts
                     progress_percentage = (completed_concepts / required_stages) * 100 if required_stages > 0 else 0
                 else:
                     completed_concepts = 0
                     progress_percentage = 0
+            else:
+                # Unauthenticated user - show tier 1
+                display_badge = tier1_badge
+                is_earned = False
+                completed_concepts = 0
+                required_stages = tier1_badge.required_stages
+                progress_percentage = 0
 
-                display_data.append({
-                    'badge': display_badge,
-                    'tier1_earned_count': tier1_earned_count,
-                    'completed_concepts': completed_concepts,
-                    'required_stages': required_stages,
-                    'progress_percentage': round(progress_percentage, 1),
-                    'trophy_types': trophy_types,
-                    'total_games': total_games,
-                    'is_earned': is_earned,
-                })
-        else:
-            for slug, group in grouped_badges.items():
-                sorted_group = sorted(group, key=lambda b: b.tier)
-                tier1 = next((b for b in sorted_group if b.tier == 1), None)
-                if tier1:
-                    tier1_earned_count = tier1.earned_count
-                    all_games = Game.objects.filter(concept__stages__series_slug=tier1.series_slug).distinct()
-                    total_games = all_games.count()
-                    trophy_types = {
-                        'bronze': sum(game.defined_trophies['bronze'] for game in all_games),
-                        'silver': sum(game.defined_trophies['silver'] for game in all_games),
-                        'gold': sum(game.defined_trophies['gold'] for game in all_games),
-                        'platinum': sum(game.defined_trophies['platinum'] for game in all_games),
-                    }
-                    display_data.append({
-                        'badge': tier1,
-                        'tier1_earned_count': tier1_earned_count,
-                        'completed_concepts': 0,
-                        'required_stages': tier1.required_stages,
-                        'progress_percentage': 0,
-                        'trophy_types': trophy_types,
-                        'total_games': total_games,
-                        'is_earned': False
-                    })
+            display_data.append({
+                'badge': display_badge,
+                'tier1_earned_count': tier1_earned_count,
+                'completed_concepts': completed_concepts,
+                'required_stages': required_stages,
+                'progress_percentage': round(progress_percentage, 1),
+                'trophy_types': trophy_types,
+                'total_games': total_games,
+                'is_earned': is_earned,
+            })
 
+        return display_data
+    
+    def get_context_data(self, **kwargs):
+        """
+        Build context for badge list page.
+
+        Groups badges by series, calculates progress for authenticated users,
+        and handles sorting and pagination.
+
+        Returns:
+            dict: Context with paginated badge display data
+        """
+        context = super().get_context_data(**kwargs)
+        badges = context['object_list']
+
+        # Group badges by series
+        grouped_badges = defaultdict(list)
+        for badge in badges:
+            if badge.effective_user_title:
+                grouped_badges[badge.series_slug].append(badge)
+
+        # Build display data (unified for auth/unauth users)
+        user = self.request.user
+        profile = user.profile if user.is_authenticated and hasattr(user, 'profile') else None
+        display_data = self._build_badge_display_data(grouped_badges, profile)
+
+        # Sort data
         sort_val = self.request.GET.get('sort', 'tier')
         if sort_val == 'name':
             display_data.sort(key=lambda d: d['badge'].effective_display_title or '')
@@ -1058,6 +1500,7 @@ class BadgeListView(ProfileHotbarMixin, ListView):
         else:
             display_data.sort(key=lambda d: d['badge'].effective_display_series or '')
 
+        # Paginate
         paginate_by = 25
         paginator = Paginator(display_data, paginate_by)
         page_number = self.request.GET.get('page')
@@ -1068,16 +1511,24 @@ class BadgeListView(ProfileHotbarMixin, ListView):
         context['paginator'] = paginator
         context['is_paginated'] = page_obj.has_other_pages()
 
+        # Breadcrumbs and form
         context['breadcrumb'] = [
             {'text': 'Home', 'url': reverse_lazy('home')},
             {'text': 'Badges'},
         ]
-
         context['form'] = BadgeSearchForm(self.request.GET)
         context['selected_tiers'] = self.request.GET.getlist('tier')
+
         return context
 
 class BadgeDetailView(ProfileHotbarMixin, DetailView):
+    """
+    Display detailed badge series information with progress tracking.
+
+    Shows all tiers in a badge series, user's progress (if authenticated),
+    required games organized by stages, and completion statistics.
+    Dynamically displays highest earned tier or next tier to unlock.
+    """
     model = Badge
     template_name = 'trophies/badge_detail.html'
     slug_field = 'series_slug'
@@ -1181,6 +1632,15 @@ class BadgeDetailView(ProfileHotbarMixin, DetailView):
         return context
 
 class BadgeLeaderboardsView(ProfileHotbarMixin, DetailView):
+    """
+    Display leaderboards for a specific badge series.
+
+    Shows two leaderboards:
+    1. Earners - Users who have earned the highest tier
+    2. Progress - Users making progress on the badge series
+
+    Leaderboards are cached and refreshed periodically. Shows user's rank if authenticated.
+    """
     model = Badge
     template_name = 'trophies/badge_leaderboards.html'
     slug_field = 'series_slug'
@@ -1243,6 +1703,15 @@ class BadgeLeaderboardsView(ProfileHotbarMixin, DetailView):
         return context
 
 class OverallBadgeLeaderboardsView(ProfileHotbarMixin, TemplateView):
+    """
+    Display overall badge leaderboards across all badge series.
+
+    Shows two global leaderboards:
+    1. Total XP - Users with the most badge experience points
+    2. Total Progress - Users with the most badge completion percentage
+
+    Leaderboards are cached and refreshed periodically. Shows user's rank if authenticated.
+    """
     template_name = 'trophies/overall_badge_leaderboards.html'
 
     def get_context_data(self, **kwargs):
@@ -1292,6 +1761,16 @@ class OverallBadgeLeaderboardsView(ProfileHotbarMixin, TemplateView):
         return context
 
 class GuideListView(ProfileHotbarMixin, ListView):
+    """
+    Display list of available trophy guides (PPTV section).
+
+    Shows game concepts that have associated guide content, with options to:
+    - Search by game name
+    - Sort by release date
+    - View featured guide of the day
+
+    Featured guide is cached daily and rotates based on priority or randomly.
+    """
     model = Concept
     template_name = 'trophies/guide_list.html'
     context_object_name = 'guides'
@@ -1359,6 +1838,18 @@ class GuideListView(ProfileHotbarMixin, ListView):
 # Profile Linking Views
 
 class LinkPSNView(LoginRequiredMixin, View):
+    """
+    Multi-step view for linking PSN account to web account.
+
+    Steps:
+    1. User enters PSN username
+    2. System generates verification code and syncs profile
+    3. User adds code to PSN "About Me" section
+    4. System verifies code presence via PSN API
+    5. Profile is linked to authenticated user account
+
+    Handles profile creation, sync, verification code generation, and final verification.
+    """
     template_name = 'account/link_psn.html'
     login_url = reverse_lazy('login')
     form_class = LinkPSNForm
@@ -1435,6 +1926,15 @@ class LinkPSNView(LoginRequiredMixin, View):
         return redirect('link_psn')
 
 class ProfileVerifyView(LoginRequiredMixin, View):
+    """
+    AJAX endpoint for polling PSN verification status during link flow.
+
+    Checks if profile has been synced since verification started and
+    if verification code appears in PSN "About Me" section.
+    Links profile to user account upon successful verification.
+
+    Rate limited to 60 requests per minute per user.
+    """
     @method_decorator(ratelimit(key='user', rate='60/m', method='GET'))
     def get(self, request):
         user = request.user
@@ -1474,6 +1974,14 @@ class ProfileVerifyView(LoginRequiredMixin, View):
 # Hotbar Views
 
 class ProfileSyncStatusView(LoginRequiredMixin, View):
+    """
+    AJAX endpoint for polling profile sync status in navigation hotbar.
+
+    Returns current sync status, progress percentage, and cooldown time.
+    Used by frontend to display sync progress bar and enable/disable sync button.
+
+    Rate limited to 60 requests per minute per user.
+    """
     @method_decorator(ratelimit(key='user', rate='60/m', method='GET'))
     def get(self, request):
         profile = request.user.profile
@@ -1489,6 +1997,12 @@ class ProfileSyncStatusView(LoginRequiredMixin, View):
         return JsonResponse(data)
 
 class TriggerSyncView(LoginRequiredMixin, View):
+    """
+    AJAX endpoint to manually trigger profile sync from navigation hotbar.
+
+    Validates cooldown period and initiates sync via job queue.
+    Returns error if sync is already in progress or cooldown is active.
+    """
     def post(self, request):
         profile = request.user.profile
         if not profile:
@@ -1501,6 +2015,13 @@ class TriggerSyncView(LoginRequiredMixin, View):
         return JsonResponse({'success': True, 'message': 'Sync started'})
 
 class SearchSyncProfileView(View):
+    """
+    AJAX endpoint to search for and add PSN profiles to the database.
+
+    Creates profile if it doesn't exist and initiates initial sync.
+    If profile exists, triggers a sync update.
+    Used by admin/moderator tools for adding new profiles.
+    """
     def post(self, request):
         psn_username = request.POST.get('psn_username')
         if not psn_username:
@@ -1526,6 +2047,12 @@ class SearchSyncProfileView(View):
         })
 
 class AddSyncStatusView(View):
+    """
+    AJAX endpoint to poll sync status after adding a new profile.
+
+    Returns sync status, account ID, and profile URL.
+    Used by admin/moderator tools to track sync progress after adding profiles.
+    """
     def get(self, request):
         psn_username = request.GET.get('psn_username')
         if not psn_username:
@@ -1552,6 +2079,17 @@ class AddSyncStatusView(View):
 
 @method_decorator(staff_member_required, name='dispatch')
 class TokenMonitoringView(TemplateView):
+    """
+    Admin dashboard for monitoring PSN API token usage and sync worker machines.
+
+    Displays:
+    - Token usage statistics per worker machine
+    - Queue depth and processing rates
+    - Profile sync queue statistics
+    - Error rates and health metrics
+
+    Restricted to staff members only.
+    """
     template_name = 'trophies/token_monitoring.html'
 
     def get_context_data(self, **kwargs):
@@ -1619,6 +2157,17 @@ class TokenMonitoringView(TemplateView):
 
 @method_decorator(staff_member_required, name='dispatch')
 class BadgeCreationView(FormView):
+    """
+    Admin tool for creating new badge series with multiple tiers.
+
+    Provides form interface for defining:
+    - Badge series metadata (name, slug, description)
+    - Multiple badge tiers with requirements
+    - Associated game concepts and stages
+    - Badge icons and visual assets
+
+    Restricted to staff members only.
+    """
     template_name = 'trophies/badge_creation.html'
     form_class = BadgeCreationForm
     success_url = '/staff/badge-create/'
