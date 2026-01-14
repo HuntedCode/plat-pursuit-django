@@ -18,7 +18,6 @@ from psnawp_api.core.request_builder import RequestBuilder as BaseRequestBuilder
 from psnawp_api.core.authenticator import Authenticator as BaseAuthenticator
 from psnawp_api.core.psnawp_exceptions import PSNAWPForbiddenError
 from psnawp_api.models.trophies.trophy_constants import PlatformType
-from redis import WatchError
 from requests import HTTPError
 from requests.exceptions import ConnectionError, Timeout
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type, wait_fixed
@@ -381,13 +380,10 @@ class TokenKeeper:
                         pending_data = json.loads(raw_pending)
                         if not isinstance(pending_data, dict):
                             raise ValueError("Pending data is not a dictionary")
-                        if pending_data['armed']:
-                            args = [pending_data['touched_profilegame_ids'], pending_data['queue_name']]
-                            PSNManager.assign_job('sync_complete', args, profile_id, priority_override='high_priority')
-                            redis_client.delete(pending_key)
-                            logger.info(f"Triggered sync_complete for profile {profile_id}")
-                        else:
-                            logger.info(f"Sync complete not armed, skipping...")
+                        args = [pending_data['touched_profilegame_ids'], pending_data['queue_name']]
+                        PSNManager.assign_job('sync_complete', args, profile_id, priority_override=pending_data['queue_name'])
+                        redis_client.delete(pending_key)
+                        logger.info(f"Triggered sync_complete for profile {profile_id}")
                     except (json.JSONDecodeError, ValueError, KeyError) as parse_err:
                         logger.error(f"Failed to parse pending_sync_complete for profile {profile_id}: {parse_err}")
             except Exception as e:
@@ -779,23 +775,6 @@ class TokenKeeper:
             
             profile.add_to_sync_target(job_counter)
 
-        if is_last:
-            pending_key = f"pending_sync_complete:{profile_id}"
-            with redis_client.pipeline() as pipe:
-                while True:
-                    try:
-                        pipe.watch(pending_key)
-                        existing = pipe.get(pending_key)
-                        if existing:
-                            data = json.loads(existing)
-                            data['armed'] = True
-                            pipe.multi()
-                            pipe.set(pending_key, json.dumps(data), ex=7200)
-                            pipe.execute()
-                        break
-                    except WatchError:
-                        continue 
-
     def _job_sync_trophies(self, profile_id: int, np_communication_id: str, platform: str):
         try:
             profile = Profile.objects.get(id=profile_id)
@@ -1018,8 +997,7 @@ class TokenKeeper:
         pending_key = f"pending_sync_complete:{profile_id}"
         pending_data = json.dumps({
             'touched_profilegame_ids': touched_profilegame_ids,
-            'queue_name': 'medium_priority',
-            'armed': True,
+            'queue_name': 'medium_priority'
         })
         redis_client.set(pending_key, pending_data, ex=7200)
 
