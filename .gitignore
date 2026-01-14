@@ -12,3 +12,4 @@ logs/plat_pursuit.log
 /media/
 .VSCodeCounter/
 docker-compose.yml
+REFACTORING_GUIDE.md

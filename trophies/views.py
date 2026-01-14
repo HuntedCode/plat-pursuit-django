@@ -1615,7 +1615,7 @@ class BadgeDetailView(ProfileHotbarMixin, DetailView):
         all_badges = Badge.objects.by_series(badge.series_slug)
         badge_completion = {b.tier: b.get_stage_completion(target_profile) for b in all_badges}
 
-        print(len(structured_data))
+        logger.debug(f"Badge detail loaded {len(structured_data)} stage data entries for {badge.series_slug}")
         context['stage_data'] = structured_data
         context['completion'] = badge_completion
         context['is_earned'] = is_earned
@@ -1986,7 +1986,7 @@ class ProfileSyncStatusView(LoginRequiredMixin, View):
     def get(self, request):
         profile = request.user.profile
         seconds_to_next_sync = profile.get_seconds_to_next_sync()
-        print(seconds_to_next_sync)
+        logger.debug(f"Sync status check for {profile.psn_username}: {seconds_to_next_sync}s until next sync")
         data = {
             'sync_status': profile.sync_status,
             'sync_progress': profile.sync_progress_value,
