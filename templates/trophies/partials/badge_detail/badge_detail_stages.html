@@ -1,13 +1,13 @@
 {% load static custom_filters %}
-<div class="card bg-base-100 border-4 border-base-300 shadow-md shadow-neutral mb-4 transition-all duration-300 hover:border-primary hover:shadow-primary">  
+<div class="card bg-base-100 border-4 border-base-300 shadow-md shadow-neutral mb-4 transition-all duration-300 hover:border-primary hover:shadow-primary">
     <div class="card-body border-4 border-primary p-2 md:p-4">
         <div class="flex flex-row items-center self-center justify-between gap-2 w-full">
             <figure class="hidden lg:block w-20 sm:w-22 md:w-25 xl:w-30 border-4 border-base-300 rounded-box hover:border-primary transition-all duration-300 hover:scale-105">
-                <img src="{{ stage.stage_icon }}" />
+                <img src="{{ stage.stage_icon }}" alt="{{ stage.title }} icon" loading="lazy" decoding="async" />
             </figure>
             <div class="flex flex-col gap-4 self-end w-full">
-                <h1 class="text-base sm:text-lg md:text-xl lg:text-2xl xl:text-3xl text-center lg:text-end text-base-content line-clamp-1 pr-1 italic"><span class="text-accent font-semibold">Stage {{ stage.stage_number }}:</span> {{ stage.title }}</h1>
-                <div class="flex flex-row gap-4 justify-center lg:justify-end">
+                <h2 class="text-base sm:text-lg md:text-xl lg:text-2xl xl:text-3xl text-center lg:text-end text-base-content line-clamp-1 pr-1 italic"><span class="text-accent font-semibold">Stage {{ stage.stage_number }}:</span> {{ stage.title }}</h2>
+                <div class="flex flex-row gap-4 justify-center lg:justify-end" role="list" aria-label="Badge tier requirements for this stage">
                     {% if not stage.stage_number == 0 %}
                         {% if not stage.required_tiers %}
                             {% for i in '1234' %}
@@ -15,13 +15,16 @@
                                     {% with completion|dict_get:j as comp %}
                                     {% with stage.stage_number as num %}
                                         {% with comp|dict_get:num as earned %}
-                                            <div class="flex flex-col gap-2">
+                                            <div class="flex flex-col gap-2" role="listitem">
                                                 <p class="text-xs text-base-content/70 italic">+{{ i|badge_tier_xp }} xp</p>
-                                                <label for="{{ i }}-modal" class="tooltip cursor-pointer" data-tip="Required for {{ i|badge_tier }}">
+                                                <label for="{{ i }}-modal" class="tooltip cursor-pointer" data-tip="Required for {{ i|badge_tier }}" aria-label="View {{ i|badge_tier }} requirements">
                                                     <figure class="relative w-6 h-6 md:w-8 md:h-8 lg:w-10 lg:h-10 hover:scale-105">
-                                                        <img src="{% static 'images/badges/backdrops/'|add:i|add:'_backdrop.png' %}" class="absolute top-0 left-0 w-full {% if earned %}grayscale{% endif %}" />
+                                                        <img src="{% static 'images/badges/backdrops/'|add:i|add:'_backdrop.png' %}" alt="{{ i|badge_tier }} badge backdrop" class="absolute top-0 left-0 w-full {% if earned %}grayscale{% endif %}" loading="lazy" decoding="async" />
                                                         {% if earned %}
-                                                            <svg xmlns="http://www.w3.org/2000/svg" class="absolute top-0 left-0 w-full" viewBox="0 0 24 24" fill="none" stroke="var(--color-success)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                                                            <svg xmlns="http://www.w3.org/2000/svg" class="absolute top-0 left-0 w-full" viewBox="0 0 24 24" fill="none" stroke="var(--color-success)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" role="img" aria-labelledby="earned-check-{{ i }}-{{ num }}">
+                                                                <title id="earned-check-{{ i }}-{{ num }}">Stage completed</title>
+                                                                <polyline points="20 6 9 17 4 12"></polyline>
+                                                            </svg>
                                                         {% endif %}
                                                     </figure>
                                                 </label>
@@ -36,15 +39,18 @@
                                 {% with completion|dict_get:i as comp %}
                                 {% with stage.stage_number as num %}
                                     {% with comp|dict_get:num as earned %}
-                                        <div class="flex flex-col gap-2">
+                                        <div class="flex flex-col gap-2" role="listitem">
                                             <p class="text-xs text-base-content/70 italic">+{{ i|badge_tier_xp }} xp</p>
-                                            <label for="{{ i }}-modal" class="tooltip cursor-pointer" data-tip="Required for {{ i|badge_tier }}">
+                                            <label for="{{ i }}-modal" class="tooltip cursor-pointer" data-tip="Required for {{ i|badge_tier }}" aria-label="View {{ i|badge_tier }} requirements">
                                                 <figure class="relative w-6 h-6 md:w-8 md:h-8 lg:w-10 lg:h-10 hover:scale-105">
                                                     {% with i|stringformat:'s' as i %}
-                                                        <img src="{% static 'images/badges/backdrops/'|add:i|add:'_backdrop.png' %}" class="absolute top-0 left-0 w-full {% if earned %}grayscale{% endif %}" />
+                                                        <img src="{% static 'images/badges/backdrops/'|add:i|add:'_backdrop.png' %}" alt="{{ i|badge_tier }} badge backdrop" class="absolute top-0 left-0 w-full {% if earned %}grayscale{% endif %}" loading="lazy" decoding="async" />
                                                     {% endwith %}
                                                     {% if earned %}
-                                                        <svg xmlns="http://www.w3.org/2000/svg" class="absolute top-0 left-0 w-full" viewBox="0 0 24 24" fill="none" stroke="var(--color-success)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                                                        <svg xmlns="http://www.w3.org/2000/svg" class="absolute top-0 left-0 w-full" viewBox="0 0 24 24" fill="none" stroke="var(--color-success)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" role="img" aria-labelledby="earned-check-tier-{{ i }}-{{ num }}">
+                                                            <title id="earned-check-tier-{{ i }}-{{ num }}">Stage completed</title>
+                                                            <polyline points="20 6 9 17 4 12"></polyline>
+                                                        </svg>
                                                     {% endif %}
                                                 </figure>
                                             </label>

@@ -9,7 +9,7 @@
             <div class="card-body px-4">
                 <div class="flex flex-col justify-center items-center mb-6">
                     <figure class="w-25">
-                        <img src="{% static 'images/logo.png' %}" class="w-full" />
+                        <img src="{% static 'images/logo.png' %}" class="w-full" alt="Platinum Pursuit Logo" loading="eager" decoding="async" />
                     </figure>
                     <p class="text-3xl text-base-content font-bold pr-1">Platinum Pursuit</p>
                     <p class="text-xs text-warning font-semibold italic pr-1">No Trophy Can Hide From Us</p>
@@ -17,70 +17,116 @@
                 <div class="bg-base-100 border-4 border-base-300 shadow-lg shadow-neutral rounded-box w-full mx-auto p-6 transition-all duration-300 hover:border-primary hover:shadow-primary">
                     <h2 class="text-2xl text-center font-semibold mb-4 italic">Sign Up</h2>
                     {% if form.errors %}
-                        <div class="alert alert-error border-4 border-base-300 rounded-box font-semibold w-3/4 mx-auto mb-4">
+                        <div class="alert alert-error border-4 border-base-300 rounded-box font-semibold w-3/4 mx-auto mb-4" role="alert">
                             {{ form.errors }}
                         </div>
                     {% endif %}
                     <form method="post" class="form-control gap-4">
                         {% csrf_token %}
                         <div class="flex flex-col gap-1 mb-4">
-                            <h3 class="text-lg text-base-content font-semibold text-start">Email</h3>
-                            <label class="input mx-auto">
+                            <label for="id_email" class="text-lg text-base-content font-semibold text-start">Email</label>
+                            <div class="input mx-auto">
                                 <span class="label">
-                                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--color-base-content)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1 .9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--color-base-content)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" role="img" aria-labelledby="email-icon-signup">
+                                        <title id="email-icon-signup">Email</title>
+                                        <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1 .9-2 2-2z"></path>
+                                        <polyline points="22,6 12,13 2,6"></polyline>
+                                    </svg>
                                 </span>
-                                <input type="email" name="email" placeholder="cool.guy@platpursuit.com" required>
-                            </label>
+                                <input type="email"
+                                       id="id_email"
+                                       name="email"
+                                       placeholder="cool.guy@platpursuit.com"
+                                       autocomplete="email"
+                                       aria-describedby="{% if form.email.errors %}email-error{% endif %}"
+                                       required>
+                            </div>
                             {% if form.email.errors %}
-                                <div class="alert alert-error border-4 border-base-300 rounded-box font-semibold w-3/4 mx-auto mt-1">
+                                <div id="email-error" class="alert alert-error border-4 border-base-300 rounded-box font-semibold w-3/4 mx-auto mt-1" role="alert">
                                     {{ form.email.errors }}
                                 </div>
                             {% endif %}
                         </div>
                         <div class="flex flex-col gap-1 mb-4">
-                            <h3 class="text-lg text-base-content font-semibold text-start">Confirm Email</h3>
-                            <label class="input mx-auto">
+                            <label for="id_email2" class="text-lg text-base-content font-semibold text-start">Confirm Email</label>
+                            <div class="input mx-auto">
                                 <span class="label">
-                                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--color-base-content)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1 .9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--color-base-content)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" role="img" aria-labelledby="email-confirm-icon">
+                                        <title id="email-confirm-icon">Email confirmation</title>
+                                        <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1 .9-2 2-2z"></path>
+                                        <polyline points="22,6 12,13 2,6"></polyline>
+                                    </svg>
                                 </span>
-                                <input type="email" name="email2" placeholder="cool.guy@platpursuit.com" required>
-                            </label>
+                                <input type="email"
+                                       id="id_email2"
+                                       name="email2"
+                                       placeholder="cool.guy@platpursuit.com"
+                                       autocomplete="email"
+                                       aria-describedby="{% if form.email2.errors %}email2-error{% endif %}"
+                                       required>
+                            </div>
                             {% if form.email2.errors %}
-                                <div class="alert alert-error border-4 border-base-300 rounded-box font-semibold w-3/4 mx-auto mt-1">
+                                <div id="email2-error" class="alert alert-error border-4 border-base-300 rounded-box font-semibold w-3/4 mx-auto mt-1" role="alert">
                                     {{ form.email2.errors }}
                                 </div>
                             {% endif %}
                         </div>
                         <div class="flex flex-col gap-1 mb-4">
-                            <h3 class="text-lg text-base-content font-semibold text-start">Password</h3>
-                            <label class="input mx-auto">
+                            <label for="id_password1" class="text-lg text-base-content font-semibold text-start">Password</label>
+                            <div class="input mx-auto relative">
                                 <span class="label">
-                                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--color-base-content)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 9.9-1"></path></svg>
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--color-base-content)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" role="img" aria-labelledby="password-icon-signup">
+                                        <title id="password-icon-signup">Password</title>
+                                        <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                                        <path d="M7 11V7a5 5 0 0 1 9.9-1"></path>
+                                    </svg>
                                 </span>
                                 {{ form.password1 }}
-                                <button type="button" class="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-500 hover:text-gray-700" aria-label="Toggle password visibility" onclick="togglePassword('id_password1')">
-                                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle><line x1="3" y1="3" x2="21" y2="21"></line></svg>
+                                <button type="button"
+                                        class="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-500 hover:text-gray-700"
+                                        aria-label="Show password"
+                                        aria-pressed="false"
+                                        data-password-toggle="id_password1">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" role="img" aria-labelledby="password-toggle-icon-1">
+                                        <title id="password-toggle-icon-1">Show or hide password</title>
+                                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                                        <circle cx="12" cy="12" r="3"></circle>
+                                        <line x1="3" y1="3" x2="21" y2="21"></line>
+                                    </svg>
                                 </button>
-                            </label>
+                            </div>
                             {% if form.password1.errors %}
-                                <div class="alert alert-error border-4 border-base-300 rounded-box font-semibold w-3/4 mx-auto mt-1">
+                                <div id="password1-error" class="alert alert-error border-4 border-base-300 rounded-box font-semibold w-3/4 mx-auto mt-1" role="alert">
                                     {{ form.password1.errors }}
                                 </div>
                             {% endif %}
                         </div>
                         <div class="flex flex-col gap-1 mb-4">
-                            <h3 class="text-lg text-base-content font-semibold text-start">Confirm Password</h3>
-                            <label class="input mx-auto">
+                            <label for="id_password2" class="text-lg text-base-content font-semibold text-start">Confirm Password</label>
+                            <div class="input mx-auto relative">
                                 <span class="label">
-                                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--color-base-content)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 9.9-1"></path></svg>
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--color-base-content)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" role="img" aria-labelledby="password-confirm-icon">
+                                        <title id="password-confirm-icon">Password confirmation</title>
+                                        <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                                        <path d="M7 11V7a5 5 0 0 1 9.9-1"></path>
+                                    </svg>
                                 </span>
                                 {{ form.password2 }}
-                                <button type="button" class="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-500 hover:text-gray-700" aria-label="Toggle password visibility" onclick="togglePassword('id_password2')">
-                                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle><line x1="3" y1="3" x2="21" y2="21"></line></svg>
+                                <button type="button"
+                                        class="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-500 hover:text-gray-700"
+                                        aria-label="Show password"
+                                        aria-pressed="false"
+                                        data-password-toggle="id_password2">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" role="img" aria-labelledby="password-toggle-icon-2">
+                                        <title id="password-toggle-icon-2">Show or hide password</title>
+                                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                                        <circle cx="12" cy="12" r="3"></circle>
+                                        <line x1="3" y1="3" x2="21" y2="21"></line>
+                                    </svg>
                                 </button>
-                            </label>
+                            </div>
                             {% if form.password2.errors %}
-                                <div class="alert alert-error border-4 border-base-300 rounded-box font-semibold w-3/4 mx-auto mt-1">
+                                <div id="password2-error" class="alert alert-error border-4 border-base-300 rounded-box font-semibold w-3/4 mx-auto mt-1" role="alert">
                                     {{ form.password2.errors }}
                                 </div>
                             {% endif %}
@@ -99,17 +145,5 @@
 </div>
 {% endblock %}
 {% block js_scripts %}
-    <script>
-        function togglePassword(fieldId) {
-            const field = document.getElementById(fieldId);
-            const icon = field.nextElementSibling.querySelector('svg');
-            if (field.type === 'password') {
-                field.type = 'text';
-                icon.innerHTML = '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle>';
-            } else {
-                field.type = 'password';
-                icon.innerHTML = '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle><line x1="3" y1="3" x2="21" y2="21"></line>';
-            }
-        }
-    </script>
+    <script src="{% static 'js/auth-forms.js' %}"></script>
 {% endblock %}

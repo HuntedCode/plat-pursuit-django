@@ -6,19 +6,19 @@
             <div class="relative card-body flex flex-col gap-1 items-center justify-between">
                 <div class="avatar hover:scale-105 transition-all duration-300">
                     <div class="w-30 sm:w-35 md:w-40 lg:w-45 rounded-full ring-4 ring-primary">
-                        <img class="bg-secondary/50" src="{{ profile.avatar_url }}" />
+                        <img class="bg-secondary/50" src="{{ profile.avatar_url }}" alt="{{ profile.display_psn_username }} avatar" loading="lazy" decoding="async" />
                     </div>
                 </div>
                 <div class="flex flex-col items-center">
                     <div class="flex flex-row items-end gap-2">
-                        <div class="text-xl sm:text-2xl text-base-content font-bold mt-4 line-clamp-2">{{ profile.display_psn_username }}</div>
+                        <p class="text-xl sm:text-2xl text-base-content font-bold mt-4 line-clamp-2">{{ profile.display_psn_username }}</p>
                         {% if profile.is_plus %}
-                            <img src="{% static 'images/plus.png' %}" class="w-7 h-7 mb-2" />
+                            <img src="{% static 'images/plus.png' %}" alt="PlayStation Plus member" class="w-7 h-7 mb-2" loading="lazy" decoding="async" />
                         {% endif %}
                     </div>
-                    <div class="text-sm sm:text-base text-base-content/70 italic pr-1 line-clamp-2">{{ profile.about_me }}</div>
+                    <p class="text-sm sm:text-base text-base-content/70 italic pr-1 line-clamp-2">{{ profile.about_me }}</p>
                 </div>
-                <div class="absolute top-2 right-4 text-xl md:text-2xl lg:text-3xl text-base-content font-bold text-center">{{ profile.country_code }}</div>
+                <div class="absolute top-2 right-4 text-xl md:text-2xl lg:text-3xl text-base-content font-bold text-center" aria-label="Country: {{ profile.country_code }}">{{ profile.country_code }}</div>
             </div>
         </a>
     {% endif %}
@@ -38,20 +38,20 @@
             <div class="card-body flex flex-col items-center justify-between gap-0">
                 <div class="hover-3d mb-3 group">
                     <figure class="border-4 border-base-300 rounded-box w-32 sm:w-37 md:w-42 lg:w-48 transition-all duration-300 group-hover:border-success group-hover:scale-105">
-                        <img src="{{ badge.most_recent_concept.concept_icon_url }}" class="w-full object-cover" />
+                        <img src="{{ badge.most_recent_concept.concept_icon_url }}" alt="{{ badge.most_recent_concept.unified_title }} cover" class="w-full object-cover" loading="lazy" decoding="async" />
                     </figure>
-                    <div></div>
-                    <div></div>
-                    <div></div>
-                    <div></div>
-                    <div></div>
-                    <div></div>
-                    <div></div>
-                    <div></div>
+                    <div aria-hidden="true"></div>
+                    <div aria-hidden="true"></div>
+                    <div aria-hidden="true"></div>
+                    <div aria-hidden="true"></div>
+                    <div aria-hidden="true"></div>
+                    <div aria-hidden="true"></div>
+                    <div aria-hidden="true"></div>
+                    <div aria-hidden="true"></div>
                 </div>
                 <div class="flex flex-col items-center">
-                    <h3 class="text-xl sm:text-2xl font-bold line-clamp-1 italic pr-1 mb-0.5">Most Recent Game</h3>
-                    <h2 class="text-base text-base-content/70 text-center italic line-clamp-1 pr-1">{{ badge.most_recent_concept.unified_title }}</h2>
+                    <p class="text-xl sm:text-2xl font-bold line-clamp-1 italic pr-1 mb-0.5">Most Recent Game</p>
+                    <p class="text-base text-base-content/70 text-center italic line-clamp-1 pr-1">{{ badge.most_recent_concept.unified_title }}</p>
                 </div>
             </div>
         </div>
