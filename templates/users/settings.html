@@ -37,6 +37,17 @@
                             <div class="alert alert-error mt-1">{{ user_form.default_region.errors }}</div>
                         {% endif %}
                     </div>
+                    <div class="form-control mb-4">
+                        <label class="label" for="{{ user_form.use_24hr_clock.id_for_label }}">Use 24-Hour Clock Format</label>
+                        <br />
+                        {{ user_form.use_24hr_clock }}
+                        <p class="text-center text-secondary font-bold pr-1 italic mt-1">
+                            Example: 24-hour shows "23:00", 12-hour shows "11:00 PM"
+                        </p>
+                        {% if user_form.use_24hr_clock.errors %}
+                            <div class="alert alert-error mt-1" role="alert">{{ user_form.use_24hr_clock.errors }}</div>
+                        {% endif %}
+                    </div>
                     <button type="submit" class="btn btn-primary w-full">Save User Settings</button>
                 </form>
 

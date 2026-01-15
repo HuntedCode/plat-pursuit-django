@@ -127,7 +127,7 @@
                                     <div class="flex flex-col">
                                         <h1 class="text-xl text-base-content line-clamp-2 pr-1 ">{{ trophy.trophy_name }}</h1>
                                         <h3 class="text-base text-secondary line-clamp-1 pr-1 italic ">{{ game.title_name }}</h3>
-                                        <h3 class="text-sm text-base-content/70 line-clamp-1 pr-1 italic ">Earned: {{ header_stats.recent_platinum.earned_date }}</h3>
+                                        <h3 class="text-sm text-base-content/70 line-clamp-1 pr-1 italic ">Earned: {{ header_stats.recent_platinum.earned_date|format_date:"with_tz" }}</h3>
                                         <h3 class="text-sm text-base-content line-clamp-1 pr-1 ">Rarity (PSN): {{ trophy.trophy_earn_rate }}% <span class="text-accent italic">({{ trophy.trophy_rarity|psn_rarity }})</span></h3>
                                     </div>
                                 </a>
@@ -159,7 +159,7 @@
                                     <div class="flex flex-col">
                                         <h1 class="text-xl text-base-content line-clamp-2 pr-1">{{ trophy.trophy_name }}</h1>
                                         <h3 class="text-base text-secondary line-clamp-1 pr-1 italic">{{ game.title_name }}</h3>
-                                        <h3 class="text-sm text-base-content/70 line-clamp-1 pr-1 italic">Earned: {{ header_stats.rarest_platinum.earned_date }}</h3>
+                                        <h3 class="text-sm text-base-content/70 line-clamp-1 pr-1 italic">Earned: {{ header_stats.rarest_platinum.earned_date|format_date:"with_tz" }}</h3>
                                         <h3 class="text-sm text-base-content line-clamp-1 pr-1">Rarity (PSN): {{ trophy.trophy_earn_rate }}% <span class="text-accent italic">({{ trophy.trophy_rarity|psn_rarity }})</span></h3>
                                     </div>
                                 </a>

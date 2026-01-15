@@ -149,9 +149,21 @@ def dict_get(dict_obj, key):
 
 @register.filter
 def format_date(value, arg=None):
+    """
+    Format a datetime value according to user preferences.
+
+    Automatically detects authenticated user's 24-hour clock preference.
+
+    Args:
+        value: datetime object to format
+        arg: optional format specifier ('short', 'format_short', 'with_tz')
+
+    Returns:
+        Formatted date string
+    """
     if value is None:
         return ''
-    
+
     if isinstance(value, str):
         try:
             value = datetime.strptime(value, '%b. %d, %Y, %I:%M %p')
@@ -160,18 +172,35 @@ def format_date(value, arg=None):
                 value = datetime.strptime(value, '%Y-%m-%d %H:%M:%S')
             except ValueError:
                 return value
-    
+
     if not isinstance(value, (datetime, timezone.datetime)):
         return value
-    
+
     current_tz = timezone.get_current_timezone()
     localized_value = value.astimezone(current_tz)
 
-    format_string = '%b. %d, %Y, %I:%M %p'
+    # Try to get the current authenticated user's 24hr preference
+    use_24hr = False
+    try:
+        from plat_pursuit.middleware import get_current_request
+        request = get_current_request()
+        if request and hasattr(request, 'user') and request.user.is_authenticated:
+            use_24hr = getattr(request.user, 'use_24hr_clock', False)
+    except (ImportError, AttributeError):
+        # Fallback: if we can't get the user, default to 12-hour format
+        pass
+
+    # Determine format string based on arg and user preference
     if arg == 'short':
         format_string = '%Y-%m-%d'
     elif arg == 'format_short':
         format_string = '%b. %d, %Y'
+    else:
+        # Default format - respect 24-hour preference
+        if use_24hr:
+            format_string = '%b. %d, %Y, %H:%M'  # 24-hour format
+        else:
+            format_string = '%b. %d, %Y, %I:%M %p'  # 12-hour format with AM/PM
 
     formatted = localized_value.strftime(format_string)
 

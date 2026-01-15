@@ -19,10 +19,16 @@ class CustomUserCreationForm(SignupForm):
 class UserSettingsForm(UserChangeForm):
     class Meta:
         model = CustomUser
-        fields = ['user_timezone', 'default_region']
+        fields = ['user_timezone', 'default_region', 'use_24hr_clock']
         widgets = {
             'user_timezone': forms.Select(attrs={'class': 'select w-full'}),
             'default_region': forms.Select(attrs={'class': 'select w-full'}),
+            'use_24hr_clock': forms.CheckboxInput(attrs={'class': 'toggle toggle-primary'}),
+        }
+        labels = {
+            'user_timezone': 'Timezone',
+            'default_region': 'Default Region',
+            'use_24hr_clock': 'Use 24-Hour Clock Format',
         }
 
     def __init__(self, *args, **kwargs):
