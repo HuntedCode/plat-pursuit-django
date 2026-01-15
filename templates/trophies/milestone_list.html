@@ -1,0 +1,20 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block title %}Milestones{% endblock %}
+
+{% block content %}
+    {% include 'partials/breadcrumb.html' with items=breadcrumb %}
+
+    {% include 'trophies/partials/milestone_list/milestone_list_header.html' %}
+
+    <div class="divider divider-vertical"></div>
+
+    <h1 class="text-md sm:text-lg md:text-2xl lg:text-3xl xl:text-4xl text-base-content text-start italic self-end mb-4">
+        All Milestones
+    </h1>
+
+    <div id="items-grid" class="space-y-2">
+        {% include 'trophies/partials/milestone_list/milestone_list_items.html' %}
+    </div>
+
+{% endblock %}

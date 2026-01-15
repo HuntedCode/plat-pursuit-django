@@ -24,7 +24,7 @@ from random import choice
 from urllib.parse import urlencode
 from trophies.psn_manager import PSNManager
 from trophies.mixins import ProfileHotbarMixin
-from .models import Game, Trophy, Profile, EarnedTrophy, ProfileGame, TrophyGroup, UserTrophySelection, Badge, UserBadge, UserBadgeProgress, Concept, FeaturedGuide, Stage
+from .models import Game, Trophy, Profile, EarnedTrophy, ProfileGame, TrophyGroup, UserTrophySelection, Badge, UserBadge, UserBadgeProgress, Concept, FeaturedGuide, Stage, Milestone, UserMilestone, UserMilestoneProgress
 from .forms import GameSearchForm, TrophySearchForm, ProfileSearchForm, ProfileGamesForm, ProfileTrophiesForm, ProfileBadgesForm, UserConceptRatingForm, BadgeSearchForm, GuideSearchForm, LinkPSNForm, GameDetailForm, BadgeCreationForm
 from trophies.util_modules.cache import redis_client
 from trophies.util_modules.constants import MODERN_PLATFORMS, ALL_PLATFORMS
@@ -1759,6 +1759,109 @@ class OverallBadgeLeaderboardsView(ProfileHotbarMixin, TemplateView):
         ]
         
         return context
+
+
+class MilestoneListView(ProfileHotbarMixin, ListView):
+    """
+    Display list of all milestones with progress tracking for authenticated users.
+
+    Shows all milestones ordered by required value, with earned status and
+    completion progress for logged-in users. Basic info shown for guests.
+    """
+    model = Milestone
+    template_name = 'trophies/milestone_list.html'
+    context_object_name = 'milestones'
+
+    def get_queryset(self):
+        """
+        Fetch milestones ordered by required_value.
+
+        Returns:
+            QuerySet: All milestones ordered by required value ascending
+        """
+        return Milestone.objects.ordered_by_value()
+
+    def _build_milestone_display_data(self, milestones, profile=None):
+        """
+        Build display data for milestones with optional progress tracking.
+
+        Args:
+            milestones: QuerySet of Milestone objects
+            profile: Profile instance or None
+
+        Returns:
+            list: Display data dicts for each milestone
+        """
+        display_data = []
+
+        # Get user progress/earned data if authenticated
+        earned_milestone_ids = set()
+        progress_dict = {}
+
+        if profile:
+            # Get earned milestones
+            earned_milestone_ids = set(
+                UserMilestone.objects.filter(profile=profile)
+                .values_list('milestone_id', flat=True)
+            )
+
+            # Get progress for all milestones
+            progress_qs = UserMilestoneProgress.objects.filter(
+                profile=profile,
+                milestone__in=milestones
+            )
+            progress_dict = {p.milestone_id: p.progress_value for p in progress_qs}
+
+        for milestone in milestones:
+            is_earned = milestone.id in earned_milestone_ids
+            progress_value = progress_dict.get(milestone.id, 0)
+            required_value = milestone.required_value
+
+            # Calculate progress percentage
+            if required_value > 0:
+                progress_percentage = min((progress_value / required_value) * 100, 100)
+            else:
+                progress_percentage = 100 if is_earned else 0
+
+            display_data.append({
+                'milestone': milestone,
+                'is_earned': is_earned,
+                'progress_value': progress_value,
+                'required_value': required_value,
+                'progress_percentage': round(progress_percentage, 1),
+                'earned_count': milestone.earned_count,
+            })
+
+        return display_data
+
+    def get_context_data(self, **kwargs):
+        """
+        Build context for milestone list page.
+
+        Returns:
+            dict: Context with milestone display data
+        """
+        context = super().get_context_data(**kwargs)
+        milestones = context['object_list']
+
+        # Get profile for authenticated users
+        user = self.request.user
+        profile = user.profile if user.is_authenticated and hasattr(user, 'profile') else None
+
+        # Build display data
+        display_data = self._build_milestone_display_data(milestones, profile)
+
+        context['display_data'] = display_data
+
+        # Breadcrumbs
+        context['breadcrumb'] = [
+            {'text': 'Home', 'url': reverse_lazy('home')},
+            {'text': 'Badges', 'url': reverse_lazy('badges_list')},
+            {'text': 'Milestones'},
+        ]
+
+        return context
+
 
 class GuideListView(ProfileHotbarMixin, ListView):
     """

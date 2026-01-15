@@ -1,0 +1,77 @@
+{% load static %}
+{% for item in display_data %}
+{% with item.milestone as milestone %}
+    <div class="card bg-base-100 border-4 border-base-300 shadow-lg shadow-neutral transition-all duration-300 {% if item.is_earned %}hover:border-success hover:shadow-success{% else %}hover:border-primary hover:shadow-primary{% endif %}">
+        <div class="{% if item.is_earned %}bg-success/15 border-4 border-success{% endif %} w-full">
+            <div class="card-body m-0 px-3 py-3 gap-0">
+                <div class="flex flex-col xl:flex-row items-center justify-between">
+                    <!-- Left side: Image + Info -->
+                    <div class="flex flex-col lg:flex-row items-center gap-4">
+                        <div class="flex flex-row gap-4 items-center">
+                            <!-- Milestone Image -->
+                            <div class="w-24 h-24 hover:scale-105">
+                                {% if milestone.image %}
+                                    <img src="{{ milestone.image.url }}" alt="{{ milestone.name }}" class="w-full h-full object-contain rounded-lg" />
+                                {% else %}
+                                    <div class="w-full h-full bg-base-300 rounded-lg flex items-center justify-center">
+                                        {% if not item.is_earned %}
+                                            <svg xmlns="http://www.w3.org/2000/svg" class="w-12 h-12 text-base-content" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
+                                            </svg>
+                                        {% else %}
+                                            <svg xmlns="http://www.w3.org/2000/svg" class="w-12 h-12" viewBox="0 0 24 24" fill="none" stroke="var(--color-success)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 11 12 14 22 4"></polyline><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path></svg>
+                                        {% endif %}
+                                    </div>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        <!-- Milestone Info -->
+                        <div class="flex flex-col items-center lg:items-start justify-center">
+                            <div class="flex flex-row gap-2 items-center">
+                                <h3 class="text-lg font-bold line-clamp-1 italic pr-1">{{ milestone.name }}</h3>
+                                {% if milestone.premium_only %}
+                                    <span class="badge badge-warning badge-xs">Premium</span>
+                                {% endif %}
+                            </div>
+                            <p class="text-sm text-base-content/70 text-center lg:text-start line-clamp-2 pr-1">{{ milestone.description }}</p>
+                        </div>
+                    </div>
+
+                    <!-- Title Reward (if has title) -->
+                    <div class="flex flex-row justify-between items-center w-1/2">
+                        {% if milestone.title %}
+                            <div class="my-2 xl:my-0">
+                                <h3 class="text-lg xl:text-xl legendary-title italic {% if not item.is_earned %}grayscale{% endif %}">
+                                    {{ milestone.title.name }}
+                                </h3>
+                            </div>
+                        {% endif %}
+
+                        <!-- Progress Section -->
+                        <div class="flex flex-col w-1/2 gap-2 mt-4 xl:mt-0">
+                            {% if user.is_authenticated and user.profile %}
+                                <h4 class="text-base font-semibold text-center mb-1">Your Progress</h4>
+                                {% with item.progress_percentage as percent %}
+                                    <div class="flex flex-col gap-0 items-center self-center w-full">
+                                        <progress class="progress {% if item.is_earned %}progress-success{% elif percent < 33.0 %}progress-error{% elif percent < 66.0 %}progress-warning{% else %}progress-info{% endif %} w-full" value="{{ percent }}" max="100"></progress>
+                                        <p class="text-base text-base-content">{% if percent < 100 %}{{ item.progress_value }}{% else %}{{ item.required_value }}{% endif %} / {{ item.required_value }} ({{ percent }}%)</p>
+                                    </div>
+                                {% endwith %}
+                            {% else %}
+                                <div class="text-center">
+                                    <a href="{% url 'account_login' %}" class="btn btn-primary btn-sm">Log in to track progress</a>
+                                </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+{% endwith %}
+{% empty %}
+    <div class="card bg-base-100 border-4 border-base-300 p-8 text-center">
+        <p class="text-base-content/70">No milestones found.</p>
+    </div>
+{% endfor %}
