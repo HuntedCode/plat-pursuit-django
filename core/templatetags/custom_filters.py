@@ -172,8 +172,8 @@ def format_date(value, arg=None):
         format_string = '%Y-%m-%d'
     elif arg == 'format_short':
         format_string = '%b. %d, %Y'
-        
-    formatted = value.strftime(format_string)
+
+    formatted = localized_value.strftime(format_string)
 
     if arg == 'with_tz':
         tz_abbrev = localized_value.tzinfo.tzname(localized_value)
