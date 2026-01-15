@@ -5,21 +5,21 @@
             <div class="divider mt-2"></div>
             <div class="grid grid-cols-1 xl:grid-cols-2 gap-4">
                 <div class="aspect-video w-full border-4 border-base-300 rounded-box">
-                    <iframe class="w-full h-full" src="https://www.youtube.com/embed/{{ concept.guide_slug }}" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
+                    <iframe class="w-full h-full" src="https://www.youtube.com/embed/{{ concept.guide_slug }}" title="{{ concept.unified_title }} - Featured Guide Video" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
                 </div>
                 <div class="flex flex-col md:flex-row items-center gap-4">
                     <div class="hover-3d w-fit h-fit">
                         <figure class="border-4 border-base-300 rounded-box w-full">
-                            <img src="{{ concept.concept_icon_url }}" class="w-full object-cover" />
+                            <img src="{{ concept.concept_icon_url }}" alt="{{ concept.unified_title }} icon" class="w-full object-cover" loading="lazy" decoding="async" />
                         </figure>
-                        <div></div>
-                        <div></div>
-                        <div></div>
-                        <div></div>
-                        <div></div>
-                        <div></div>
-                        <div></div>
-                        <div></div>
+                        <div aria-hidden="true"></div>
+                        <div aria-hidden="true"></div>
+                        <div aria-hidden="true"></div>
+                        <div aria-hidden="true"></div>
+                        <div aria-hidden="true"></div>
+                        <div aria-hidden="true"></div>
+                        <div aria-hidden="true"></div>
+                        <div aria-hidden="true"></div>
                     </div>
                     <div class="flex flex-col min-w-fit">
                         <h1 class="text-2xl text-base-content text-center md:text-start font-semibold">{{ concept.unified_title }}</h1>
