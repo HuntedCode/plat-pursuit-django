@@ -12,6 +12,8 @@ from django.db import transaction
 from django.conf import settings
 import requests
 
+from trophies.models import UserTitle
+
 logger = logging.getLogger("psn_api")
 
 
@@ -104,6 +106,16 @@ def check_and_award_milestone(profile, milestone, notify=True):
         if created:
             milestone.earned_count += 1
             milestone.save(update_fields=['earned_count'])
+            # Create UserTitle if milestone has an associated title
+            if milestone.title:
+                UserTitle.objects.get_or_create(
+                    profile=profile,
+                    title=milestone.title,
+                    defaults={
+                        'source_type': 'milestone',
+                        'source_id': milestone.id
+                    }
+                )
 
         # Assign Discord role if applicable
         if milestone.discord_role_id and profile.is_discord_verified and profile.discord_id:

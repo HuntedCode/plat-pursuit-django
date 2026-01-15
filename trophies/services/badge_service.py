@@ -15,6 +15,8 @@ from django.utils import timezone
 from django.conf import settings
 import requests
 
+from trophies.models import UserTitle
+
 logger = logging.getLogger("psn_api")
 
 
@@ -153,12 +155,30 @@ def handle_badge(profile, badge, add_role_only=False):
                 f"Awarded badge {badge.effective_display_title} (tier: {badge.tier}) "
                 f"to {profile.display_psn_username}"
             )
+            # Create UserTitle if badge has an associated title
+            if badge.title:
+                UserTitle.objects.get_or_create(
+                    profile=profile,
+                    title=badge.title,
+                    defaults={
+                        'source_type': 'badge',
+                        'source_id': badge.id
+                    }
+                )
         elif not badge_earned and user_badge_exists:
             UserBadge.objects.filter(profile=profile, badge=badge).delete()
             logger.info(
                 f"Revoked badge {badge.effective_display_title} (tier: {badge.tier}) "
                 f"from {profile.display_psn_username}"
             )
+            # Remove UserTitle if badge had an associated title
+            if badge.title:
+                UserTitle.objects.filter(
+                    profile=profile,
+                    title=badge.title,
+                    source_type='badge',
+                    source_id=badge.id
+                ).delete()
 
         # Handle Discord role assignment
         if badge_earned and badge.discord_role_id:
