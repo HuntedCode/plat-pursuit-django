@@ -1,8 +1,8 @@
 {% load static %}
 <div class="card bg-base-100 border-4 border-base-300 shadow-lg shadow-neutral rounded-box m-2">
     <div class="card-body py-2 px-4">
-        <h2 class="text-base sm:text-lg md:text-xl lg:text-2xl text-center text-base-content italic">Platinum Pursuit <img src="{% static 'images/logo.png' %}" class="inline w-12 h-12 ml-2 mr-1" /> Full Game Guide</h2>
+        <p class="text-base sm:text-lg md:text-xl lg:text-2xl text-center text-base-content italic font-bold">Platinum Pursuit <img src="{% static 'images/logo.png' %}" alt="Platinum Pursuit logo" class="inline w-12 h-12 ml-2 mr-1" loading="lazy" /> Full Game Guide</p>
         <div class="divider divider-vertical m-0 p-0"></div>
-        <iframe class="aspect-video w-full border-4 border-base-300 shadow-md shadow-neutral rounded-box" src="https://www.youtube.com/embed/{{ game.concept.guide_slug }}" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
+        <iframe class="aspect-video w-full border-4 border-base-300 shadow-md shadow-neutral rounded-box" src="https://www.youtube.com/embed/{{ game.concept.guide_slug }}" title="{{ game.title_name }} - Full Game Guide" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
     </div>
 </div>

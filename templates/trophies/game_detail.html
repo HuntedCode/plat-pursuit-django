@@ -3,10 +3,13 @@
 {% block title %}{{ game.title_name }}{% endblock %}
 
 {% block content %}
-    <section class="shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 w-full p-0 lg:p-4">
-        {% include 'partials/breadcrumb.html' with items=breadcrumb %}
-        {% include 'trophies/partials/game_detail/game_detail_header.html' %}
-    </section>
+    <div id="game-detail-container"
+         data-base-url="{% url 'game_detail' game.np_communication_id %}"
+         data-scroll-key="gameDetailScrollPos_{{ game.np_communication_id }}">
+        <section class="shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 w-full p-0 lg:p-4">
+            {% include 'partials/breadcrumb.html' with items=breadcrumb %}
+            {% include 'trophies/partials/game_detail/game_detail_header.html' %}
+        </section>
 
     <div class="flex flex-col xl:flex-row gap-4 mt-8 items-start">
         {% if game.concept.guide_slug %}
@@ -26,35 +29,42 @@
 
     {% if trophies_syncing %}
         <section class="shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 w-full p-0 lg:p-4 mt-8">
-            <div class="alert alert-info mb-4">
-            <span class="loading loading-spinner"></span>
-            Trophies are syncing—check back in a few moments for full details!
-        </div>
+            <div class="alert alert-info mb-4" role="status" aria-live="polite">
+                <span class="loading loading-spinner" aria-hidden="true"></span>
+                Trophies are syncing—check back in a few moments for full details!
+            </div>
         </section>
     {% else %}
         <section class="shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 w-full p-0 lg:p-4 mt-8 mx-auto">
             <div class="card bg-base-100 border-4 border-base-300 shadow-md shadow-neutral">
                 <div class="card-body px-4 py-2">
                     <form id="filter-form" method="get" class="mb-4">
-                        <div class="flex flex-col lg:flex-row w-7/8 justify-between mx-auto">
-                            <div class="form-control fieldset w-full lg:w-1/2">
-                                <legend class="fieldset-legend text-lg lg:text-xl italic">Sort By</legend>
-                                <select name="sort" id="id_sort" class="select select-primary w-7/8 justify-self-center">
-                                    {% for value, display in form.sort.field.choices %}
-                                        <option value="{{ value }}" {% if request.GET.sort == value %}selected{% endif %}>{{ display }}</option>
-                                    {% endfor %}
-                                </select>
+                        <fieldset>
+                            <legend class="sr-only">Filter and Sort Trophies</legend>
+                            <div class="flex flex-col lg:flex-row w-7/8 justify-between mx-auto">
+                                <div class="form-control w-full lg:w-1/2">
+                                    <label for="id_sort" class="label">
+                                        <span class="label-text text-lg lg:text-xl italic">Sort By</span>
+                                    </label>
+                                    <select name="sort" id="id_sort" class="select select-primary w-7/8 justify-self-center">
+                                        {% for value, display in form.sort.field.choices %}
+                                            <option value="{{ value }}" {% if request.GET.sort == value %}selected{% endif %}>{{ display }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                                <div class="form-control w-full lg:w-1/2">
+                                    <label for="id_earned" class="label">
+                                        <span class="label-text text-lg lg:text-xl italic">Earned Status</span>
+                                    </label>
+                                    <select name="earned" id="id_earned" class="select select-primary w-7/8 justify-self-center">
+                                        {% for value, display in form.earned.field.choices %}
+                                            <option value="{{ value }}" {% if request.GET.earned == value %}selected{% endif %}>{{ display }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                                <button id="submit-btn" type="submit" class="btn btn-md md:btn-lg border-3 shadow-md place-self-end mt-4 lg:mt-0" aria-label="Apply trophy filters" disabled>Feel The Power...</button>
                             </div>
-                            <div class="form-control fieldset w-full lg:w-1/2">
-                                <legend class="fieldset-legend text-lg lg:text-xl italic">Earned Status</legend>
-                                <select name="earned" id="id_earned" class="select select-primary w-7/8 justify-self-center">
-                                    {% for value, display in form.earned.field.choices %}
-                                        <option value="{{ value }}" {% if request.GET.earned == value %}selected{% endif %}>{{ display }}</option>
-                                    {% endfor %}
-                                </select>
-                            </div>
-                            <button id="submit-btn" type="submit" class="btn btn-md md:btn-lg border-3 shadow-md place-self-end mt-4 lg:mt-0" disabled>Feel The Power...</button>
-                        </div>
+                        </fieldset>
                     </form>
                 </div>
             </div>
@@ -70,58 +80,10 @@
             {% endwith %}
         {% endfor %}
     {% endif %}
+    </div>
 {% endblock %}
 
 {% block js_scripts %}
-    <script>
-        document.addEventListener('DOMContentLoaded', () => {
-            const carouselNavLinks = document.querySelectorAll('[data-slide-to]');
-            const carousel = document.getElementById('screenshot-carousel')
-
-            carouselNavLinks.forEach(link => {
-                link.addEventListener('click', (e) => {
-                    e.preventDefault();
-
-                    const targetId = e.currentTarget.dataset.slideTo;
-                    const targetSlide = document.getElementById(targetId);
-
-                    if (targetSlide) {
-                        carousel.scrollTo({
-                            left: targetSlide.offsetLeft,
-                            behavior: 'smooth'
-                        })
-                    }
-                });
-            });
-        });
-
-        const scrollKey = 'profileScrollPos';
-        form = document.getElementById('filter-form');
-        unearnedToggle = document.getElementById('unearned-toggle')
-        if (form) {
-            form.addEventListener('submit', () => {
-                localStorage.setItem(scrollKey, window.scrollY);
-                page = 2;
-                nextPageUrl = `${baseUrl}?page=${page}&${queryParams.toString()}`;
-            });
-        }
-
-        if (unearnedToggle) {
-            unearnedToggle.addEventListener('submit', () => {
-                localStorage.setItem(scrollKey, window.scrollY);
-                page = 2;
-                nextPageUrl = `${baseUrl}?page=${page}&${queryParams.toString()}`;
-            });
-        }
-
-        const savedScroll = localStorage.getItem(scrollKey);
-        if (savedScroll) {
-            window.scrollTo({
-                top: parseInt(savedScroll),
-                behavior: 'smooth'
-            });
-            localStorage.removeItem(scrollKey);
-        }
-    </script>
-    <script src="{% static 'js\submit_shimmer.js' %}"></script>
+    <script src="{% static 'js/game-detail.js' %}"></script>
+    <script src="{% static 'js/submit_shimmer.js' %}"></script>
 {% endblock %}
