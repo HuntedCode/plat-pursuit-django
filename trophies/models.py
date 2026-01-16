@@ -1120,3 +1120,325 @@ class APIAuditLog(models.Model):
 
     def __str__(self):
         return f"{self.endpoint} at {self.timestamp}"
+
+
+# =============================================================================
+# Community Guide Models
+# =============================================================================
+
+class GuideTag(models.Model):
+    """Predefined tags for categorizing guides (e.g., Trophy Roadmap, Collectibles)."""
+    name = models.CharField(max_length=50, unique=True)
+    slug = models.SlugField(max_length=50, unique=True)
+    display_order = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        ordering = ['display_order', 'name']
+        indexes = [
+            models.Index(fields=['slug'], name='guidetag_slug_idx'),
+        ]
+        verbose_name = 'Guide Tag'
+        verbose_name_plural = 'Guide Tags'
+
+    def __str__(self):
+        return self.name
+
+
+class AuthorTrust(models.Model):
+    """
+    Tracks trust level for guide authors.
+    - New authors start at 'new' and require moderation for all guides.
+    - After enough approved guides/stars, they become 'trusted' and can auto-publish.
+    - 'banned' authors cannot create new guides.
+    """
+    TRUST_LEVEL_CHOICES = [
+        ('new', 'New Author'),
+        ('trusted', 'Trusted Author'),
+        ('banned', 'Banned'),
+    ]
+
+    profile = models.OneToOneField(
+        'Profile',
+        on_delete=models.CASCADE,
+        related_name='author_trust'
+    )
+    trust_level = models.CharField(
+        max_length=20,
+        choices=TRUST_LEVEL_CHOICES,
+        default='new'
+    )
+    approved_guide_count = models.PositiveIntegerField(default=0)
+    total_stars_received = models.PositiveIntegerField(default=0)
+    promoted_at = models.DateTimeField(null=True, blank=True)
+    banned_at = models.DateTimeField(null=True, blank=True)
+    ban_reason = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Author Trust'
+        verbose_name_plural = 'Author Trust Records'
+
+    def __str__(self):
+        return f"{self.profile.psn_username} - {self.get_trust_level_display()}"
+
+    def can_auto_publish(self):
+        """Returns True if author can publish guides without moderation."""
+        return self.trust_level == 'trusted'
+
+    def is_banned(self):
+        """Returns True if author is banned from creating guides."""
+        return self.trust_level == 'banned'
+
+
+class Guide(models.Model):
+    """
+    Community-created guide for a game.
+    Guides go through moderation (unless author is trusted) before publishing.
+    Content is stored in related GuideSection objects.
+    """
+    STATUS_CHOICES = [
+        ('draft', 'Draft'),
+        ('pending', 'Pending Review'),
+        ('published', 'Published'),
+        ('rejected', 'Rejected'),
+        ('unlisted', 'Unlisted'),
+    ]
+
+    # Core fields
+    title = models.CharField(max_length=200)
+    slug = models.SlugField(max_length=220, unique=True)
+    summary = models.CharField(
+        max_length=500,
+        help_text="Brief text-only summary shown in listings and previews (max 500 chars)"
+    )
+
+    # Relationships
+    author = models.ForeignKey(
+        'Profile',
+        on_delete=models.CASCADE,
+        related_name='authored_guides'
+    )
+    game = models.ForeignKey(
+        'Game',
+        on_delete=models.CASCADE,
+        related_name='community_guides'
+    )
+    concept = models.ForeignKey(
+        'Concept',
+        on_delete=models.CASCADE,
+        related_name='community_guides'
+    )
+    tags = models.ManyToManyField(
+        'GuideTag',
+        related_name='guides',
+        blank=True
+    )
+
+    # Status and moderation
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='draft')
+    rejection_reason = models.TextField(blank=True)
+    moderated_by = models.ForeignKey(
+        'Profile',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='moderated_guides'
+    )
+    moderated_at = models.DateTimeField(null=True, blank=True)
+
+    # Denormalized rating stats (updated by GuideRating)
+    rating_count = models.PositiveIntegerField(default=0)
+    rating_sum = models.PositiveIntegerField(default=0)
+    average_rating = models.DecimalField(max_digits=3, decimal_places=2, default=0)
+
+    # Stats
+    view_count = models.PositiveIntegerField(default=0)
+
+    # Timestamps
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    published_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['-published_at', '-created_at']
+        indexes = [
+            models.Index(fields=['slug'], name='guide_slug_idx'),
+            models.Index(fields=['status'], name='guide_status_idx'),
+            models.Index(fields=['author'], name='guide_author_idx'),
+            models.Index(fields=['game'], name='guide_game_idx'),
+            models.Index(fields=['concept'], name='guide_concept_idx'),
+            models.Index(fields=['-average_rating'], name='guide_rating_idx'),
+            models.Index(fields=['-published_at'], name='guide_published_idx'),
+        ]
+        verbose_name = 'Community Guide'
+        verbose_name_plural = 'Community Guides'
+
+    def __str__(self):
+        return f"{self.title} by {self.author.psn_username}"
+
+    def save(self, *args, **kwargs):
+        if not self.slug:
+            self.slug = self._generate_unique_slug()
+        if not self.concept_id and self.game_id:
+            self.concept = self.game.concept
+        super().save(*args, **kwargs)
+
+    def _generate_unique_slug(self):
+        from django.utils.text import slugify
+        base_slug = slugify(self.title)[:200]
+        slug = base_slug
+        counter = 1
+        while Guide.objects.filter(slug=slug).exists():
+            slug = f"{base_slug}-{counter}"
+            counter += 1
+        return slug
+
+    def is_published(self):
+        return self.status == 'published'
+
+    def is_editable_by(self, profile):
+        """Returns True if the given profile can edit this guide."""
+        return self.author_id == profile.id
+
+
+def guide_image_upload_path(instance, filename):
+    """Generate upload path: guides/<guide_id>/<filename>"""
+    import os
+    ext = os.path.splitext(filename)[1]
+    unique_name = f"{instance.guide_id}_{instance.pk or 'new'}_{filename[:50]}{ext}"
+    return f"guides/{instance.guide_id}/{unique_name}"
+
+
+class GuideImage(models.Model):
+    """
+    Image uploaded for use in a guide.
+    Images are stored in S3 and referenced in guide markdown.
+    """
+    guide = models.ForeignKey(
+        'Guide',
+        on_delete=models.CASCADE,
+        related_name='images'
+    )
+    image = models.ImageField(upload_to=guide_image_upload_path)
+    alt_text = models.CharField(max_length=200, blank=True)
+    caption = models.CharField(max_length=500, blank=True)
+    file_size = models.PositiveIntegerField(default=0)  # bytes
+    width = models.PositiveIntegerField(default=0)
+    height = models.PositiveIntegerField(default=0)
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['uploaded_at']
+        verbose_name = 'Guide Image'
+        verbose_name_plural = 'Guide Images'
+
+    def __str__(self):
+        return f"Image for {self.guide.title} ({self.id})"
+
+    def save(self, *args, **kwargs):
+        if self.image:
+            self.file_size = self.image.size
+            try:
+                from PIL import Image
+                img = Image.open(self.image)
+                self.width, self.height = img.size
+            except Exception:
+                pass
+        super().save(*args, **kwargs)
+
+    def get_markdown_reference(self):
+        """Returns markdown to embed this image."""
+        alt = self.alt_text or "Image"
+        return f"![{alt}]({self.image.url})"
+
+
+class GuideSection(models.Model):
+    """
+    A section of a guide. Guides are composed of ordered sections,
+    each with a title and markdown content.
+    """
+    guide = models.ForeignKey(
+        'Guide',
+        on_delete=models.CASCADE,
+        related_name='sections'
+    )
+    section_order = models.PositiveIntegerField(default=0)
+    title = models.CharField(max_length=200)
+    slug = models.SlugField(max_length=220)  # For anchor links
+    content = models.TextField(
+        help_text="Markdown content for this section (max 8000 chars)"
+    )
+
+    # Draft content for edits to published guides
+    draft_content = models.TextField(blank=True)
+    has_pending_edits = models.BooleanField(default=False)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['guide', 'section_order']
+        unique_together = [['guide', 'section_order'], ['guide', 'slug']]
+        verbose_name = 'Guide Section'
+        verbose_name_plural = 'Guide Sections'
+
+    def __str__(self):
+        return f"{self.guide.title} - {self.title}"
+
+    def save(self, *args, **kwargs):
+        if not self.slug:
+            self.slug = self._generate_slug()
+        super().save(*args, **kwargs)
+
+    def _generate_slug(self):
+        from django.utils.text import slugify
+        base_slug = slugify(self.title)[:200]
+        slug = base_slug
+        counter = 1
+        while GuideSection.objects.filter(guide=self.guide, slug=slug).exclude(pk=self.pk).exists():
+            slug = f"{base_slug}-{counter}"
+            counter += 1
+        return slug
+
+    def get_anchor_id(self):
+        """Returns the HTML anchor ID for this section."""
+        return f"section-{self.slug}"
+
+    def get_content_length(self):
+        """Returns the character count of the content."""
+        return len(self.content)
+
+
+class GuideRating(models.Model):
+    """
+    Star rating for a guide (1-5 stars).
+    One rating per user per guide.
+    """
+    guide = models.ForeignKey(
+        'Guide',
+        on_delete=models.CASCADE,
+        related_name='ratings'
+    )
+    profile = models.ForeignKey(
+        'Profile',
+        on_delete=models.CASCADE,
+        related_name='guide_ratings'
+    )
+    stars = models.PositiveSmallIntegerField(
+        choices=[(i, f"{i} Star{'s' if i > 1 else ''}") for i in range(1, 6)]
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ['guide', 'profile']
+        indexes = [
+            models.Index(fields=['guide'], name='guiderating_guide_idx'),
+            models.Index(fields=['profile'], name='guiderating_profile_idx'),
+        ]
+        verbose_name = 'Guide Rating'
+        verbose_name_plural = 'Guide Ratings'
+
+    def __str__(self):
+        return f"{self.profile.psn_username} rated {self.guide.title}: {self.stars} stars"

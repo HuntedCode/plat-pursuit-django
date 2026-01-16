@@ -2,7 +2,7 @@ from django.contrib import admin, messages
 from django.contrib.admin import SimpleListFilter
 from django.db import transaction
 from django.db.models import Q
-from .models import Profile, Game, Trophy, EarnedTrophy, ProfileGame, APIAuditLog, FeaturedGame, FeaturedProfile, Event, Concept, TitleID, TrophyGroup, UserTrophySelection, UserConceptRating, Badge, UserBadge, UserBadgeProgress, FeaturedGuide, Stage, PublisherBlacklist, Title, UserTitle, Milestone, UserMilestone, UserMilestoneProgress
+from .models import Profile, Game, Trophy, EarnedTrophy, ProfileGame, APIAuditLog, FeaturedGame, FeaturedProfile, Event, Concept, TitleID, TrophyGroup, UserTrophySelection, UserConceptRating, Badge, UserBadge, UserBadgeProgress, FeaturedGuide, Stage, PublisherBlacklist, Title, UserTitle, Milestone, UserMilestone, UserMilestoneProgress, GuideTag, AuthorTrust, Guide, GuideImage, GuideSection, GuideRating
 
 
 # Register your models here.
@@ -391,3 +391,107 @@ class UserMilestoneAdmin(admin.ModelAdmin):
 class UserMilestoneProgressAdmin(admin.ModelAdmin):
     list_display = ['profile', 'milestone', 'progress_value', 'last_checked']
     search_fields = ['profile__psn_username', 'milestone__name']
+
+
+# =============================================================================
+# Community Guide Admin
+# =============================================================================
+
+@admin.register(GuideTag)
+class GuideTagAdmin(admin.ModelAdmin):
+    list_display = ['name', 'slug', 'display_order']
+    search_fields = ['name', 'slug']
+    ordering = ['display_order']
+
+
+@admin.register(AuthorTrust)
+class AuthorTrustAdmin(admin.ModelAdmin):
+    list_display = ['profile', 'trust_level', 'approved_guide_count', 'total_stars_received', 'promoted_at', 'banned_at']
+    list_filter = ['trust_level']
+    search_fields = ['profile__psn_username']
+    readonly_fields = ['approved_guide_count', 'total_stars_received', 'promoted_at', 'created_at', 'updated_at']
+    raw_id_fields = ['profile']
+
+
+class GuideSectionInline(admin.TabularInline):
+    model = GuideSection
+    extra = 1
+    fields = ['section_order', 'title', 'slug', 'content', 'has_pending_edits']
+    readonly_fields = ['slug']
+    ordering = ['section_order']
+
+
+@admin.register(Guide)
+class GuideAdmin(admin.ModelAdmin):
+    list_display = ['title', 'author', 'game', 'status', 'section_count', 'average_rating', 'rating_count', 'view_count', 'published_at']
+    list_filter = ['status', 'created_at', 'published_at']
+    search_fields = ['title', 'author__psn_username', 'game__title_name']
+    readonly_fields = ['slug', 'rating_count', 'rating_sum', 'average_rating', 'view_count', 'created_at', 'updated_at', 'published_at', 'moderated_at']
+    raw_id_fields = ['author', 'game', 'concept', 'moderated_by']
+    filter_horizontal = ['tags']
+    inlines = [GuideSectionInline]
+    fieldsets = (
+        ('Guide Content', {
+            'fields': ('title', 'slug', 'summary', 'tags')
+        }),
+        ('Relationships', {
+            'fields': ('author', 'game', 'concept')
+        }),
+        ('Status & Moderation', {
+            'fields': ('status', 'rejection_reason', 'moderated_by', 'moderated_at')
+        }),
+        ('Stats', {
+            'fields': ('rating_count', 'rating_sum', 'average_rating', 'view_count')
+        }),
+        ('Timestamps', {
+            'fields': ('created_at', 'updated_at', 'published_at')
+        }),
+    )
+
+    def section_count(self, obj):
+        return obj.sections.count()
+    section_count.short_description = 'Sections'
+
+
+@admin.register(GuideImage)
+class GuideImageAdmin(admin.ModelAdmin):
+    list_display = ['id', 'guide', 'alt_text', 'file_size_display', 'width', 'height', 'uploaded_at']
+    list_filter = ['uploaded_at']
+    search_fields = ['guide__title', 'alt_text', 'caption']
+    readonly_fields = ['file_size', 'width', 'height', 'uploaded_at']
+    raw_id_fields = ['guide']
+
+    def file_size_display(self, obj):
+        if obj.file_size < 1024:
+            return f"{obj.file_size} B"
+        elif obj.file_size < 1024 * 1024:
+            return f"{obj.file_size / 1024:.1f} KB"
+        else:
+            return f"{obj.file_size / (1024 * 1024):.1f} MB"
+    file_size_display.short_description = 'File Size'
+
+
+@admin.register(GuideSection)
+class GuideSectionAdmin(admin.ModelAdmin):
+    list_display = ['title', 'guide', 'section_order', 'content_length', 'has_pending_edits', 'updated_at']
+    list_filter = ['has_pending_edits', 'updated_at']
+    search_fields = ['title', 'guide__title', 'content']
+    readonly_fields = ['slug', 'created_at', 'updated_at']
+    raw_id_fields = ['guide']
+    ordering = ['guide', 'section_order']
+
+    def content_length(self, obj):
+        length = len(obj.content)
+        if length > 8000:
+            return f"{length} ⚠️"
+        return length
+    content_length.short_description = 'Chars'
+
+
+@admin.register(GuideRating)
+class GuideRatingAdmin(admin.ModelAdmin):
+    list_display = ['profile', 'guide', 'stars', 'created_at', 'updated_at']
+    list_filter = ['stars', 'created_at']
+    search_fields = ['profile__psn_username', 'guide__title']
+    readonly_fields = ['created_at', 'updated_at']
+    raw_id_fields = ['profile', 'guide']
