@@ -227,3 +227,19 @@ MAX_ABOUT_ME_LENGTH = 1000
 # Shovelware Detection Thresholds
 SHOVELWARE_PLATINUM_RATE_THRESHOLD = 90.0  # > 90% platinum rate
 SHOVELWARE_AVG_HOURS_THRESHOLD = 0.5       # < 30 minutes average
+
+# Community Guide Constants
+
+# Trust thresholds (strict - requires BOTH)
+TRUSTED_MIN_APPROVED_GUIDES = 5
+TRUSTED_MIN_TOTAL_STARS = 100
+
+# Section limits by tier
+BASIC_MAX_SECTIONS = 20
+PREMIUM_MAX_SECTIONS = 30
+
+BASIC_SECTION_CHAR_LIMIT = 8000
+PREMIUM_SECTION_CHAR_LIMIT = 12000
+
+# Summary limit (same for all)
+SUMMARY_CHAR_LIMIT = 500
