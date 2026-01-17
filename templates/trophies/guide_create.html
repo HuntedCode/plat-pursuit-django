@@ -1,0 +1,208 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Create Guide - {{ game.title_name }}{% endblock %}
+
+{% block content %}
+<div class="container mx-auto p-4 max-w-2xl">
+    {% include 'partials/breadcrumb.html' with items=breadcrumb %}
+
+    <div class="card bg-base-100 border-4 border-base-300 shadow-lg shadow-neutral">
+        <div class="card-body">
+            <!-- Game Header -->
+            <div class="flex flex-col sm:flex-row items-center gap-4 mb-6">
+                <figure class="w-20 h-20 rounded-box border-2 border-base-300 overflow-hidden">
+                    <img src="{{ game.title_icon_url }}" alt="{{ game.title_name }}" class="w-full h-full object-cover" loading="lazy" />
+                </figure>
+                <div class="text-center sm:text-left">
+                    <h1 class="text-2xl text-base-content font-bold">Create Guide</h1>
+                    <p class="text-base-content/70 italic">{{ game.title_name }}</p>
+                </div>
+            </div>
+
+            <!-- Messages -->
+            {% if messages %}
+                <div aria-live="polite" aria-atomic="true" class="mb-4">
+                    {% for message in messages %}
+                        <div class="alert {% if message.tags == 'error' %}alert-error{% elif message.tags == 'success' %}alert-success{% else %}alert-info{% endif %} mb-2" role="{% if message.tags == 'error' %}alert{% else %}status{% endif %}">
+                            {{ message }}
+                        </div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+
+            <!-- Form -->
+            <form method="post" class="space-y-6">
+                {% csrf_token %}
+
+                <!-- Title -->
+                <div class="form-control">
+                    <label class="label" for="id_title">
+                        <span class="label-text text-lg font-semibold">{{ form.title.label }} <span class="text-error">*</span></span>
+                    </label>
+                    {{ form.title }}
+                    {% if form.title.errors %}
+                        <label class="label">
+                            <span class="label-text-alt text-error">{{ form.title.errors.0 }}</span>
+                        </label>
+                    {% endif %}
+                    <label class="label">
+                        <span class="label-text-alt text-base-content/70">{{ form.title.help_text }}</span>
+                    </label>
+                </div>
+
+                <!-- Summary -->
+                <div class="form-control">
+                    <label class="label" for="id_summary">
+                        <span class="label-text text-lg font-semibold">{{ form.summary.label }} <span class="text-error">*</span></span>
+                        <span class="label-text-alt" id="summary-counter">0/500</span>
+                    </label>
+                    {{ form.summary }}
+                    {% if form.summary.errors %}
+                        <label class="label">
+                            <span class="label-text-alt text-error">{{ form.summary.errors.0 }}</span>
+                        </label>
+                    {% endif %}
+                    <label class="label">
+                        <span class="label-text-alt text-base-content/70">{{ form.summary.help_text }}</span>
+                    </label>
+                </div>
+
+                <!-- Guide Type -->
+                <div class="form-control">
+                    <label class="label">
+                        <span class="label-text text-lg font-semibold">{{ form.guide_type.label }} <span class="text-error">*</span></span>
+                    </label>
+                    <div class="flex flex-col sm:flex-row gap-4">
+                        {% for radio in form.guide_type %}
+                            <label class="label cursor-pointer justify-start gap-3 p-4 border-2 border-base-300 rounded-box hover:border-primary transition-colors flex-1">
+                                {{ radio.tag }}
+                                <div>
+                                    <span class="label-text font-semibold">
+                                        {% if radio.choice_value == 'freeform' %}Freeform Guide{% else %}Trophy Roadmap{% endif %}
+                                    </span>
+                                    <p class="text-xs text-base-content/70">
+                                        {% if radio.choice_value == 'freeform' %}
+                                            Create custom sections for any content
+                                        {% else %}
+                                            Auto-generates sections for each trophy
+                                        {% endif %}
+                                    </p>
+                                </div>
+                            </label>
+                        {% endfor %}
+                    </div>
+                    {% if form.guide_type.errors %}
+                        <label class="label">
+                            <span class="label-text-alt text-error">{{ form.guide_type.errors.0 }}</span>
+                        </label>
+                    {% endif %}
+                </div>
+
+                <!-- Trophy Group (conditional - only for roadmap) -->
+                <div id="trophy-group-container" class="form-control" style="display: none;">
+                    <label class="label" for="id_trophy_group">
+                        <span class="label-text text-lg font-semibold">{{ form.trophy_group.label }} <span class="text-error">*</span></span>
+                    </label>
+                    {{ form.trophy_group }}
+                    {% if form.trophy_group.errors %}
+                        <label class="label">
+                            <span class="label-text-alt text-error">{{ form.trophy_group.errors.0 }}</span>
+                        </label>
+                    {% endif %}
+                    <label class="label">
+                        <span class="label-text-alt text-base-content/70">{{ form.trophy_group.help_text }}</span>
+                    </label>
+                </div>
+
+                <!-- Tags -->
+                <div class="form-control">
+                    <label class="label">
+                        <span class="label-text text-lg font-semibold">{{ form.tags.label }} <span class="text-error">*</span></span>
+                    </label>
+                    <div class="flex flex-wrap gap-3 p-4 border-2 border-base-300 rounded-box">
+                        {% for checkbox in form.tags %}
+                            <label class="label cursor-pointer gap-2 p-2 border-2 border-base-300 rounded-lg hover:border-primary transition-colors">
+                                {{ checkbox.tag }}
+                                <span class="label-text">{{ checkbox.choice_label }}</span>
+                            </label>
+                        {% endfor %}
+                    </div>
+                    {% if form.tags.errors %}
+                        <label class="label">
+                            <span class="label-text-alt text-error">{{ form.tags.errors.0 }}</span>
+                        </label>
+                    {% endif %}
+                    <label class="label">
+                        <span class="label-text-alt text-base-content/70">{{ form.tags.help_text }}</span>
+                    </label>
+                </div>
+
+                <!-- Submit -->
+                <div class="form-control mt-6">
+                    <button type="submit" class="btn btn-primary btn-lg w-full">
+                        Create Guide
+                    </button>
+                </div>
+
+                <!-- Cancel -->
+                <div class="text-center">
+                    <a href="{% url 'game_detail' game.np_communication_id %}" class="btn btn-ghost">Cancel</a>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block js_scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const guideTypeRadios = document.querySelectorAll('input[name="guide_type"]');
+    const trophyGroupContainer = document.getElementById('trophy-group-container');
+    const trophyGroupSelect = document.getElementById('id_trophy_group');
+    const summaryTextarea = document.getElementById('id_summary');
+    const summaryCounter = document.getElementById('summary-counter');
+
+    // Function to toggle trophy group visibility
+    function toggleTrophyGroup() {
+        const selectedType = document.querySelector('input[name="guide_type"]:checked');
+        if (selectedType && selectedType.value === 'roadmap') {
+            trophyGroupContainer.style.display = 'block';
+            trophyGroupSelect.required = true;
+        } else {
+            trophyGroupContainer.style.display = 'none';
+            trophyGroupSelect.required = false;
+        }
+    }
+
+    // Add event listeners to radio buttons
+    guideTypeRadios.forEach(function(radio) {
+        radio.addEventListener('change', toggleTrophyGroup);
+    });
+
+    // Initialize on page load
+    toggleTrophyGroup();
+
+    // Summary character counter
+    function updateSummaryCounter() {
+        const length = summaryTextarea.value.length;
+        summaryCounter.textContent = length + '/500';
+        if (length > 450) {
+            summaryCounter.classList.add('text-warning');
+        } else {
+            summaryCounter.classList.remove('text-warning');
+        }
+        if (length >= 500) {
+            summaryCounter.classList.add('text-error');
+            summaryCounter.classList.remove('text-warning');
+        } else {
+            summaryCounter.classList.remove('text-error');
+        }
+    }
+
+    summaryTextarea.addEventListener('input', updateSummaryCounter);
+    updateSummaryCounter(); // Initialize
+});
+</script>
+{% endblock %}

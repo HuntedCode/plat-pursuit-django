@@ -22,7 +22,7 @@ from django.contrib.auth.views import LogoutView
 from django.urls import path, include
 from django.views.generic import TemplateView
 from core.views import IndexView, AdsTxtView
-from trophies.views import GamesListView, TrophiesListView, ProfilesListView, SearchView, GameDetailView, ProfileDetailView, TrophyCaseView, ToggleSelectionView, BadgeListView, BadgeDetailView, GuideListView, ProfileSyncStatusView, TriggerSyncView, SearchSyncProfileView, AddSyncStatusView, LinkPSNView, ProfileVerifyView, TokenMonitoringView, BadgeCreationView, BadgeLeaderboardsView, OverallBadgeLeaderboardsView, MilestoneListView
+from trophies.views import GamesListView, TrophiesListView, ProfilesListView, SearchView, GameDetailView, ProfileDetailView, TrophyCaseView, ToggleSelectionView, BadgeListView, BadgeDetailView, GuideListView, ProfileSyncStatusView, TriggerSyncView, SearchSyncProfileView, AddSyncStatusView, LinkPSNView, ProfileVerifyView, TokenMonitoringView, BadgeCreationView, BadgeLeaderboardsView, OverallBadgeLeaderboardsView, MilestoneListView, GuideCreateView
 from users.views import CustomConfirmEmailView, stripe_webhook, SubscriptionManagementView
 
 urlpatterns = [
@@ -31,6 +31,7 @@ urlpatterns = [
     path('games/', GamesListView.as_view(), name='games_list'),
     path('games/<str:np_communication_id>/', GameDetailView.as_view(), name='game_detail'),
     path('games/<str:np_communication_id>/<str:psn_username>/', GameDetailView.as_view(), name='game_detail_with_profile'),
+    path('games/<str:np_communication_id>/guides/create/', GuideCreateView.as_view(), name='guide_create'),
     path('trophies/', TrophiesListView.as_view(), name='trophies_list'),
     path('profiles/', ProfilesListView.as_view(), name='profiles_list'),
     path('profiles/<str:psn_username>/', ProfileDetailView.as_view(), name='profile_detail'),

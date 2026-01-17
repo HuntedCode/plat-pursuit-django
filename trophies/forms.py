@@ -1,7 +1,7 @@
 import logging
 from django import forms
 from django.db.models import Q
-from trophies.models import Profile, UserConceptRating, Concept, ProfileGame, Title, UserTitle
+from trophies.models import Profile, UserConceptRating, Concept, ProfileGame, Title, UserTitle, GuideTag, TrophyGroup
 
 logger = logging.getLogger('psn_api')
 
@@ -295,3 +295,94 @@ class BadgeCreationForm(forms.Form):
                 'badge_type': self.cleaned_data['badge_type'],
             }
         return {}
+
+class GuideCreateForm(forms.Form):
+    """Form for creating a new guide (freeform or roadmap)."""
+
+    title = forms.CharField(
+        max_length=200,
+        widget=forms.TextInput(attrs={
+            'class': 'input input-primary w-full',
+            'placeholder': 'Enter guide title...',
+            'maxlength': '200'
+        }),
+        label='Title',
+        help_text='A descriptive title for your guide (max 200 characters)'
+    )
+
+    summary = forms.CharField(
+        max_length=500,
+        widget=forms.Textarea(attrs={
+            'class': 'textarea textarea-primary w-full',
+            'rows': 3,
+            'placeholder': 'Brief summary of what this guide covers...',
+            'maxlength': '500'
+        }),
+        label='Summary',
+        help_text='Text-only summary shown in listings (max 500 characters)'
+    )
+
+    guide_type = forms.ChoiceField(
+        choices=[
+            ('freeform', 'Freeform Guide'),
+            ('roadmap', 'Trophy Roadmap'),
+        ],
+        widget=forms.RadioSelect(attrs={
+            'class': 'radio radio-primary'
+        }),
+        initial='freeform',
+        label='Guide Type',
+        help_text='Freeform: Custom sections. Roadmap: Auto-generates trophy sections.'
+    )
+
+    trophy_group = forms.ChoiceField(
+        required=False,
+        widget=forms.Select(attrs={
+            'class': 'select select-primary w-full',
+            'id': 'id_trophy_group'
+        }),
+        label='Trophy Group',
+        help_text='Select base game or DLC trophy group for roadmap'
+    )
+
+    tags = forms.ModelMultipleChoiceField(
+        queryset=GuideTag.objects.all().order_by('display_order'),
+        widget=forms.CheckboxSelectMultiple(attrs={
+            'class': 'checkbox checkbox-primary'
+        }),
+        label='Tags',
+        help_text='Select at least one tag to categorize your guide'
+    )
+
+    def __init__(self, game=None, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if game:
+            # Populate trophy_group choices from game's trophy groups
+            trophy_groups = TrophyGroup.objects.filter(game=game).order_by('trophy_group_id')
+            choices = []
+            for tg in trophy_groups:
+                if tg.trophy_group_id == 'default':
+                    label = tg.trophy_group_name or 'Base Game'
+                else:
+                    label = tg.trophy_group_name or f'DLC: {tg.trophy_group_id}'
+                choices.append((tg.trophy_group_id, label))
+            self.fields['trophy_group'].choices = choices
+
+    def clean_tags(self):
+        """Ensure at least one tag is selected."""
+        tags = self.cleaned_data.get('tags')
+        if not tags or len(tags) < 1:
+            raise forms.ValidationError("You must select at least one tag.")
+        return tags
+
+    def clean(self):
+        """Validate that trophy group is provided for roadmap guides."""
+        cleaned_data = super().clean()
+        guide_type = cleaned_data.get('guide_type')
+        trophy_group = cleaned_data.get('trophy_group')
+
+        # Trophy group required for roadmap guides
+        if guide_type == 'roadmap' and not trophy_group:
+            self.add_error('trophy_group', 'Trophy group is required for roadmap guides.')
+
+        return cleaned_data

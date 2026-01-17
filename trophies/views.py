@@ -20,12 +20,13 @@ from django.utils.decorators import method_decorator
 from django.utils.text import slugify
 from django_ratelimit.decorators import ratelimit
 from trophies.services.psn_api_service import PsnApiService
+from trophies.services.guide_service import GuideService
 from random import choice
 from urllib.parse import urlencode
 from trophies.psn_manager import PSNManager
 from trophies.mixins import ProfileHotbarMixin
-from .models import Game, Trophy, Profile, EarnedTrophy, ProfileGame, TrophyGroup, UserTrophySelection, Badge, UserBadge, UserBadgeProgress, Concept, FeaturedGuide, Stage, Milestone, UserMilestone, UserMilestoneProgress
-from .forms import GameSearchForm, TrophySearchForm, ProfileSearchForm, ProfileGamesForm, ProfileTrophiesForm, ProfileBadgesForm, UserConceptRatingForm, BadgeSearchForm, GuideSearchForm, LinkPSNForm, GameDetailForm, BadgeCreationForm
+from .models import Game, Trophy, Profile, EarnedTrophy, ProfileGame, TrophyGroup, UserTrophySelection, Badge, UserBadge, UserBadgeProgress, Concept, FeaturedGuide, Stage, Milestone, UserMilestone, UserMilestoneProgress, Guide
+from .forms import GameSearchForm, TrophySearchForm, ProfileSearchForm, ProfileGamesForm, ProfileTrophiesForm, ProfileBadgesForm, UserConceptRatingForm, BadgeSearchForm, GuideSearchForm, LinkPSNForm, GameDetailForm, BadgeCreationForm, GuideCreateForm
 from trophies.util_modules.cache import redis_client
 from trophies.util_modules.constants import MODERN_PLATFORMS, ALL_PLATFORMS
 
@@ -2284,3 +2285,95 @@ class BadgeCreationView(FormView):
             logger.error(f"Error creating badge: {e}")
             messages.error(self.request, 'Error creating badge. Check logs.')
         return super().form_valid(form)
+
+class GuideCreateView(LoginRequiredMixin, ProfileHotbarMixin, FormView):
+    """
+    View for creating a new guide for a specific game.
+
+    Requires:
+    - User must be logged in
+    - User must have linked PSN profile
+    - User must pass GuideService.can_create_guide() check
+
+    Supports both freeform and roadmap guide types.
+    Guide is associated at the Concept level (shared across all regional/platform stacks),
+    but uses the specific Game's trophy data for roadmap population.
+    """
+    template_name = 'trophies/guide_create.html'
+    form_class = GuideCreateForm
+    login_url = 'account_login'
+
+    def dispatch(self, request, *args, **kwargs):
+        """Get game from URL and check permissions before processing."""
+        self.game = get_object_or_404(Game, np_communication_id=kwargs['np_communication_id'])
+
+        # Check if user can create guides
+        if request.user.is_authenticated:
+            if not hasattr(request.user, 'profile') or not request.user.profile:
+                messages.error(request, "You must link your PSN account to create guides.")
+                return redirect('link_psn')
+
+            self.profile = request.user.profile
+            can_create, reason = GuideService.can_create_guide(self.profile)
+            if not can_create:
+                messages.error(request, reason)
+                return redirect('game_detail', np_communication_id=self.game.np_communication_id)
+
+        return super().dispatch(request, *args, **kwargs)
+
+    def get_form_kwargs(self):
+        """Pass game to form for trophy group population."""
+        kwargs = super().get_form_kwargs()
+        kwargs['game'] = self.game
+        return kwargs
+
+    def get_context_data(self, **kwargs):
+        """Add game and breadcrumb to context."""
+        context = super().get_context_data(**kwargs)
+        context['game'] = self.game
+        context['breadcrumb'] = [
+            {'text': 'Home', 'url': reverse_lazy('home')},
+            {'text': 'Games', 'url': reverse_lazy('games_list')},
+            {'text': self.game.title_name, 'url': reverse_lazy('game_detail', kwargs={'np_communication_id': self.game.np_communication_id})},
+            {'text': 'Create Guide'},
+        ]
+        return context
+
+    def form_valid(self, form):
+        """Create guide using GuideService and redirect to game detail page."""
+        title = form.cleaned_data['title']
+        summary = form.cleaned_data['summary']
+        guide_type = form.cleaned_data['guide_type']
+        tags = form.cleaned_data['tags']
+        trophy_group_id = form.cleaned_data.get('trophy_group', 'default')
+
+        try:
+            if guide_type == 'roadmap':
+                guide = GuideService.create_roadmap_guide(
+                    profile=self.profile,
+                    game=self.game,
+                    title=title,
+                    summary=summary,
+                    trophy_group_id=trophy_group_id
+                )
+                # Roadmap guide auto-applies 'roadmap' tag, but we might want to add additional tags
+                if tags:
+                    existing_tags = list(guide.tags.all())
+                    guide.tags.set(list(tags) + existing_tags)
+            else:
+                guide = GuideService.create_guide(
+                    profile=self.profile,
+                    game=self.game,
+                    title=title,
+                    summary=summary,
+                    tags=list(tags)
+                )
+
+            messages.success(self.request, f'Guide "{guide.title}" created successfully!')
+            # Temporarily redirect to game detail - will change to guide_edit once that view exists
+            return redirect('game_detail', np_communication_id=self.game.np_communication_id)
+
+        except Exception as e:
+            logger.error(f"Error creating guide: {e}")
+            messages.error(self.request, f"An error occurred while creating your guide: {str(e)}")
+            return self.form_invalid(form)
