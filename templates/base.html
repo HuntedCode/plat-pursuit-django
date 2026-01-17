@@ -5,13 +5,13 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>{% block title %}{{ title|default:"Platinum Pursuit" }}{% endblock %} - Platinum Pursuit</title>
-    <meta name="description" content="{% block meta_description %}Platinum Pursuit - The PlayStation trophy hunting community. Track your trophies, discover guides, and connect with fellow hunters.{% endblock %}">
+    <meta name="description" content="{% block meta_description %}Platinum Pursuit - No trophy can hide from us. Track your trophies, earn game badges, and connect with fellow hunters.{% endblock %}">
     <meta name="robots" content="index, follow">
     <link rel="canonical" href="{% block canonical_url %}{{ request.build_absolute_uri }}{% endblock %}">
 
     <!-- Open Graph -->
     <meta property="og:title" content="{% block og_title %}{{ title|default:'Platinum Pursuit' }} - Platinum Pursuit{% endblock %}">
-    <meta property="og:description" content="{% block og_description %}Track your PlayStation trophies, discover guides, and connect with fellow trophy hunters.{% endblock %}">
+    <meta property="og:description" content="{% block og_description %}Track your PlayStation trophies, earn game badges, and connect with fellow trophy hunters.{% endblock %}">
     <meta property="og:type" content="website">
     <meta property="og:url" content="{{ request.build_absolute_uri }}">
     <meta property="og:image" content="{% block og_image %}{% static 'images/logo.png' %}{% endblock %}">
@@ -21,7 +21,7 @@
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:site" content="@platpursuit">
     <meta name="twitter:title" content="{% block twitter_title %}{{ title|default:'Platinum Pursuit' }} - Platinum Pursuit{% endblock %}">
-    <meta name="twitter:description" content="{% block twitter_description %}Track your PlayStation trophies, discover guides, and connect with fellow trophy hunters.{% endblock %}">
+    <meta name="twitter:description" content="{% block twitter_description %}Track your PlayStation trophies, earn game badges, and connect with fellow trophy hunters.{% endblock %}">
     <meta name="twitter:image" content="{% block twitter_image %}{% static 'images/logo.png' %}{% endblock %}">
 
     <link rel="icon" type="image/x-icon" href="{% static 'images/logo.png' %}" />
