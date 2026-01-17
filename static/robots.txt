@@ -1,0 +1,12 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://platpursuit.com/sitemap.xml
+
+# Disallow admin and API endpoints
+Disallow: /admin/
+Disallow: /api/
+
+# Disallow internal pages
+Disallow: /staff/
+Disallow: /monitoring/

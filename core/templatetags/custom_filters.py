@@ -145,8 +145,6 @@ def psn_rarity(rarity_int):
 
 @register.filter
 def dict_get(dict_obj, key):
-    if not dict_obj is dict:
-        return None
     return dict_obj.get(key)
 
 @register.filter

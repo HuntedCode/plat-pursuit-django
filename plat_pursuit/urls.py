@@ -19,9 +19,17 @@ from django.conf import settings
 from django.conf.urls.static import static
 from django.contrib import admin
 from django.contrib.auth.views import LogoutView
+from django.contrib.sitemaps.views import sitemap
 from django.urls import path, include
 from django.views.generic import TemplateView
-from core.views import IndexView, AdsTxtView
+from core.views import IndexView, AdsTxtView, RobotsTxtView, PrivacyPolicyView, TermsOfServiceView, AboutView, ContactView
+from core.sitemaps import StaticViewSitemap, GameSitemap, ProfileSitemap
+
+sitemaps = {
+    'static': StaticViewSitemap,
+    'games': GameSitemap,
+    'profiles': ProfileSitemap,
+}
 from trophies.views import GamesListView, TrophiesListView, ProfilesListView, SearchView, GameDetailView, ProfileDetailView, TrophyCaseView, ToggleSelectionView, BadgeListView, BadgeDetailView, GuideListView, ProfileSyncStatusView, TriggerSyncView, SearchSyncProfileView, AddSyncStatusView, LinkPSNView, ProfileVerifyView, TokenMonitoringView, BadgeCreationView, BadgeLeaderboardsView, OverallBadgeLeaderboardsView, MilestoneListView
 from users.views import CustomConfirmEmailView, stripe_webhook, SubscriptionManagementView
 
@@ -67,6 +75,13 @@ urlpatterns = [
     path("stripe/webhook/", stripe_webhook, name="stripe_webhook"),
     path('subscription-management/', SubscriptionManagementView.as_view(), name='subscription_management'),
     path('ads.txt', AdsTxtView.as_view(), name='ads_txt'),
+    path('robots.txt', RobotsTxtView.as_view(), name='robots_txt'),
+    path('sitemap.xml', sitemap, {'sitemaps': sitemaps}, name='sitemap'),
+
+    path('privacy/', PrivacyPolicyView.as_view(), name='privacy'),
+    path('terms/', TermsOfServiceView.as_view(), name='terms'),
+    path('about/', AboutView.as_view(), name='about'),
+    path('contact/', ContactView.as_view(), name='contact'),
 
     path('users/', include('users.urls')),
     path('accounts/', include('allauth.urls')),

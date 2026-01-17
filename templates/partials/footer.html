@@ -4,6 +4,12 @@
         <img src="{% static 'images/logo.png' %}" alt="Platinum Pursuit Logo" class="h-8 w-8 mr-2 rounded-full" loading="lazy" decoding="async" />
         <p>Copyright &copy; {% now "Y" %} Platinum Pursuit. All rights reserved.</p>
     </aside>
+    <nav class="grid-flow-col gap-4 md:place-self-center justify-self-center" aria-label="Legal pages">
+        <a href="{% url 'privacy' %}" class="link link-hover">Privacy</a>
+        <a href="{% url 'terms' %}" class="link link-hover">Terms</a>
+        <a href="{% url 'about' %}" class="link link-hover">About</a>
+        <a href="{% url 'contact' %}" class="link link-hover">Contact</a>
+    </nav>
     <nav class="grid-flow-col gap-4 md:place-self-center justify-self-center md:justify-self-end" aria-label="Social media links">
         <a href="https://www.x.com/platpursuit" target="_blank" rel="noopener noreferrer" aria-label="Follow us on X (formerly Twitter)">
             <svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24" fill="oklch(92% 0.004 286.32)" role="img" aria-labelledby="x-icon">

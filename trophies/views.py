@@ -1614,6 +1614,7 @@ class BadgeDetailView(ProfileHotbarMixin, DetailView):
 
         all_badges = Badge.objects.by_series(badge.series_slug)
         badge_completion = {b.tier: b.get_stage_completion(target_profile) for b in all_badges}
+        print(badge_completion)
 
         logger.debug(f"Badge detail loaded {len(structured_data)} stage data entries for {badge.series_slug}")
         context['stage_data'] = structured_data
