@@ -6,7 +6,8 @@ scattered throughout views. Using custom managers improves code
 reusability, testability, and maintainability.
 """
 from django.db import models
-from django.db.models import Q
+from django.db.models import Q, Exists, OuterRef, Value
+from django.contrib.contenttypes.models import ContentType
 
 
 class ProfileQuerySet(models.QuerySet):
@@ -437,3 +438,169 @@ class MilestoneManager(models.Manager):
         return qs.annotate(
             progress_ratio=F('user_milestone_progress__progress_value') / F('required_value')
         ).order_by('-progress_ratio', 'name')
+
+
+class CommentQuerySet(models.QuerySet):
+    """Custom queryset for Comment model."""
+
+    def active(self):
+        """
+        Filter to non-deleted comments.
+
+        Returns:
+            QuerySet: Comments that are not soft-deleted
+        """
+        return self.filter(is_deleted=False)
+
+    def for_content_object(self, obj):
+        """
+        Get comments for a specific Game or Trophy.
+
+        Args:
+            obj: Game or Trophy instance
+
+        Returns:
+            QuerySet: Comments for the object
+        """
+        ct = ContentType.objects.get_for_model(obj)
+        return self.filter(content_type=ct, object_id=obj.id)
+
+    def top_level(self):
+        """
+        Filter to root comments (no parent).
+
+        Returns:
+            QuerySet: Top-level comments without a parent
+        """
+        return self.filter(parent__isnull=True)
+
+    def replies_to(self, comment):
+        """
+        Get direct replies to a comment.
+
+        Args:
+            comment: Comment instance
+
+        Returns:
+            QuerySet: Direct child comments
+        """
+        return self.filter(parent=comment)
+
+    def by_top(self):
+        """
+        Order by upvote count (default sort).
+
+        Returns:
+            QuerySet: Comments ordered by most upvotes first
+        """
+        return self.order_by('-upvote_count', '-created_at')
+
+    def by_new(self):
+        """
+        Order by creation date descending.
+
+        Returns:
+            QuerySet: Comments ordered by newest first
+        """
+        return self.order_by('-created_at')
+
+    def by_old(self):
+        """
+        Order by creation date ascending.
+
+        Returns:
+            QuerySet: Comments ordered by oldest first
+        """
+        return self.order_by('created_at')
+
+    def with_author_data(self):
+        """
+        Optimize with profile and user data.
+
+        Returns:
+            QuerySet: Comments with prefetched author data
+        """
+        return self.select_related('profile', 'profile__user')
+
+    def with_vote_check(self, profile):
+        """
+        Annotate whether the given profile has voted on each comment.
+
+        Args:
+            profile: Profile instance to check votes for
+
+        Returns:
+            QuerySet: Comments with 'user_has_voted' annotation
+        """
+        if not profile:
+            return self.annotate(user_has_voted=Value(False))
+
+        # Import here to avoid circular imports
+        from trophies.models import CommentVote
+
+        return self.annotate(
+            user_has_voted=Exists(
+                CommentVote.objects.filter(
+                    comment=OuterRef('pk'),
+                    profile=profile
+                )
+            )
+        )
+
+
+class CommentManager(models.Manager):
+    """Custom manager for Comment model."""
+
+    def get_queryset(self):
+        """Return custom queryset."""
+        return CommentQuerySet(self.model, using=self._db)
+
+    def active(self):
+        """Proxy to queryset method."""
+        return self.get_queryset().active()
+
+    def for_content_object(self, obj):
+        """Proxy to queryset method."""
+        return self.get_queryset().for_content_object(obj)
+
+    def top_level(self):
+        """Proxy to queryset method."""
+        return self.get_queryset().top_level()
+
+    def by_top(self):
+        """Proxy to queryset method."""
+        return self.get_queryset().by_top()
+
+    def by_new(self):
+        """Proxy to queryset method."""
+        return self.get_queryset().by_new()
+
+    def by_old(self):
+        """Proxy to queryset method."""
+        return self.get_queryset().by_old()
+
+    def get_threaded_comments(self, obj, profile=None, sort='top'):
+        """
+        Get all comments for an object in threaded structure.
+
+        Args:
+            obj: Game or Trophy instance
+            profile: Optional profile to check votes
+            sort: 'top', 'new', or 'old'
+
+        Returns:
+            QuerySet: Comments optimized for display with nested replies
+        """
+        qs = self.for_content_object(obj).active().with_author_data()
+
+        if profile:
+            qs = qs.with_vote_check(profile)
+
+        if sort == 'new':
+            qs = qs.by_new()
+        elif sort == 'old':
+            qs = qs.by_old()
+        else:
+            qs = qs.by_top()
+
+        return qs

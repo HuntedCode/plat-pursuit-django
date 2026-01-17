@@ -1,6 +1,7 @@
 from django.db.models.signals import post_save, post_delete
 from django.dispatch import receiver
-from trophies.models import UserBadge
+from django.db.models import F
+from trophies.models import UserBadge, Comment
 
 @receiver(post_save, sender=UserBadge, dispatch_uid="update_badge_earned_count")
 def update_badge_earned_count_on_save(sender, instance, created, **kwargs):
@@ -15,3 +16,13 @@ def decrement_badge_earned_count_on_delete(sender, instance, **kwargs):
     if badge.earned_count > 0:
         badge.earned_count -= 1
         badge.save(update_fields=['earned_count'])
+
+
+@receiver(post_save, sender=Comment, dispatch_uid="update_comment_count_on_save")
+def update_comment_count_on_save(sender, instance, created, **kwargs):
+    """Update denormalized comment_count when comment is created."""
+    if created and not instance.is_deleted:
+        content_obj = instance.content_object
+        if content_obj:
+            content_obj.comment_count = F('comment_count') + 1
+            content_obj.save(update_fields=['comment_count'])

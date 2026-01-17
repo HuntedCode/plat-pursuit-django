@@ -2,9 +2,10 @@ from django.db import models
 from django.utils import timezone
 from users.models import CustomUser
 from django.contrib.postgres.fields import ArrayField
+from django.contrib.contenttypes.fields import GenericForeignKey
 from django.core.validators import RegexValidator, MinValueValidator, MaxValueValidator
 from django.db import transaction
-from django.db.models import F, Avg, Count, Max, Min
+from django.db.models import F, Max, Min
 from datetime import timedelta
 from tenacity import retry, stop_after_attempt, wait_fixed
 from trophies.util_modules.language import count_unique_game_groups, calculate_trimmed_mean
@@ -16,9 +17,8 @@ from trophies.util_modules.constants import (
 from trophies.util_modules.cache import redis_client
 from trophies.managers import (
     ProfileManager, GameManager, ProfileGameManager,
-    BadgeManager, MilestoneManager
+    BadgeManager, MilestoneManager, CommentManager
 )
-import secrets
 import re
 
 
@@ -372,6 +372,7 @@ class Game(models.Model):
     is_obtainable= models.BooleanField(default=True)
     is_delisted = models.BooleanField(default=False)
     has_online_trophies = models.BooleanField(default=False)
+    comment_count = models.PositiveIntegerField(default=0, help_text="Denormalized count of comments")
 
     objects = GameManager()
 
@@ -641,6 +642,7 @@ class Trophy(models.Model):
     )
     earned_count = models.PositiveIntegerField(default=0, help_text="Denormalized count of profiles that have earned this trophy (PP-specific).")
     earn_rate = models.FloatField(default=0.0)
+    comment_count = models.PositiveIntegerField(default=0, help_text="Denormalized count of comments")
 
     class Meta:
         unique_together = ["trophy_id", "game"]
@@ -1101,6 +1103,195 @@ class PublisherBlacklist(models.Model):
         indexes = [
             models.Index(fields=['name'], name='blacklist_name_idx'),
         ]
+
+
+class Comment(models.Model):
+    """
+    User-generated comment on Games or Trophies.
+
+    Uses GenericForeignKey to support multiple content types.
+    Supports threaded replies via parent_id self-referential FK.
+    """
+    # Generic relation to Game or Trophy
+    content_type = models.ForeignKey(
+        'contenttypes.ContentType',
+        on_delete=models.CASCADE,
+        limit_choices_to={'model__in': ('game', 'trophy')}
+    )
+    object_id = models.PositiveBigIntegerField()
+    content_object = GenericForeignKey('content_type', 'object_id')
+
+    # Author info
+    profile = models.ForeignKey(
+        Profile,
+        on_delete=models.CASCADE,
+        related_name='comments'
+    )
+
+    # Threading - self-referential for nested replies
+    parent = models.ForeignKey(
+        'self',
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='replies'
+    )
+
+    # Denormalized depth for query efficiency (0 = top-level, 1 = first reply, etc.)
+    depth = models.PositiveIntegerField(default=0)
+
+    # Content
+    body = models.TextField(
+        max_length=2000,
+        help_text="Comment text, max 2000 characters"
+    )
+    image = models.ImageField(
+        upload_to='comments/%Y/%m/',
+        null=True,
+        blank=True,
+        help_text="Optional image attachment (premium users only)"
+    )
+
+    # Vote count (denormalized for sorting efficiency)
+    upvote_count = models.PositiveIntegerField(default=0)
+
+    # Timestamps
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    # Edit tracking
+    is_edited = models.BooleanField(default=False)
+
+    # Soft delete
+    is_deleted = models.BooleanField(default=False)
+    deleted_at = models.DateTimeField(null=True, blank=True)
+
+    objects = CommentManager()
+
+    class Meta:
+        indexes = [
+            # Primary query: get comments for a content object sorted by upvotes
+            models.Index(fields=['content_type', 'object_id', '-upvote_count'], name='comment_content_votes_idx'),
+            # Get replies to a comment
+            models.Index(fields=['parent', '-upvote_count'], name='comment_replies_idx'),
+            # Get all comments by a profile
+            models.Index(fields=['profile', '-created_at'], name='comment_profile_idx'),
+            # Composite for threaded display
+            models.Index(fields=['content_type', 'object_id', 'depth', '-upvote_count'], name='comment_threaded_idx'),
+            # For moderation queue
+            models.Index(fields=['is_deleted', 'created_at'], name='comment_moderation_idx'),
+        ]
+        ordering = ['-upvote_count', '-created_at']
+
+    def __str__(self):
+        return f"Comment by {self.profile.psn_username} on {self.content_object}"
+
+    def save(self, *args, **kwargs):
+        # Calculate depth based on parent
+        if self.parent:
+            self.depth = self.parent.depth + 1
+        super().save(*args, **kwargs)
+
+    def soft_delete(self):
+        """Soft delete preserving thread structure."""
+        self.is_deleted = True
+        self.deleted_at = timezone.now()
+        self.body = '[deleted]'
+        self.image = None
+        self.save(update_fields=['is_deleted', 'deleted_at', 'body', 'image'])
+
+    @property
+    def display_body(self):
+        """Returns '[deleted]' if soft-deleted, else actual body."""
+        return '[deleted]' if self.is_deleted else self.body
+
+
+class CommentVote(models.Model):
+    """
+    Upvote on a comment. One vote per profile per comment.
+    """
+    comment = models.ForeignKey(
+        Comment,
+        on_delete=models.CASCADE,
+        related_name='votes'
+    )
+    profile = models.ForeignKey(
+        Profile,
+        on_delete=models.CASCADE,
+        related_name='comment_votes'
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ['comment', 'profile']
+        indexes = [
+            models.Index(fields=['comment', 'profile'], name='commentvote_unique_idx'),
+            models.Index(fields=['profile'], name='commentvote_profile_idx'),
+        ]
+
+    def __str__(self):
+        return f"{self.profile.psn_username} upvoted comment {self.comment.id}"
+
+
+class CommentReport(models.Model):
+    """
+    User report for moderation review.
+    """
+    REPORT_REASONS = [
+        ('spam', 'Spam'),
+        ('harassment', 'Harassment'),
+        ('inappropriate', 'Inappropriate Content'),
+        ('misinformation', 'Misinformation'),
+        ('other', 'Other'),
+    ]
+    REPORT_STATUS = [
+        ('pending', 'Pending Review'),
+        ('reviewed', 'Reviewed'),
+        ('dismissed', 'Dismissed'),
+        ('action_taken', 'Action Taken'),
+    ]
+
+    comment = models.ForeignKey(
+        Comment,
+        on_delete=models.CASCADE,
+        related_name='reports'
+    )
+    reporter = models.ForeignKey(
+        Profile,
+        on_delete=models.CASCADE,
+        related_name='submitted_reports'
+    )
+    reason = models.CharField(max_length=20, choices=REPORT_REASONS)
+    details = models.TextField(
+        max_length=500,
+        blank=True,
+        help_text="Additional context for the report"
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=REPORT_STATUS,
+        default='pending'
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    reviewed_by = models.ForeignKey(
+        CustomUser,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='reviewed_reports'
+    )
+    admin_notes = models.TextField(blank=True)
+
+    class Meta:
+        unique_together = ['comment', 'reporter']
+        indexes = [
+            models.Index(fields=['status', '-created_at'], name='report_status_idx'),
+            models.Index(fields=['comment'], name='report_comment_idx'),
+        ]
+
+    def __str__(self):
+        return f"Report on comment {self.comment.id} by {self.reporter.psn_username}"
 
 class APIAuditLog(models.Model):
     timestamp = models.DateTimeField(auto_now_add=True)

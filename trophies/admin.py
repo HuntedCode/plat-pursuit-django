@@ -2,7 +2,7 @@ from django.contrib import admin, messages
 from django.contrib.admin import SimpleListFilter
 from django.db import transaction
 from django.db.models import Q
-from .models import Profile, Game, Trophy, EarnedTrophy, ProfileGame, APIAuditLog, FeaturedGame, FeaturedProfile, Event, Concept, TitleID, TrophyGroup, UserTrophySelection, UserConceptRating, Badge, UserBadge, UserBadgeProgress, FeaturedGuide, Stage, PublisherBlacklist, Title, UserTitle, Milestone, UserMilestone, UserMilestoneProgress
+from .models import Profile, Game, Trophy, EarnedTrophy, ProfileGame, APIAuditLog, FeaturedGame, FeaturedProfile, Event, Concept, TitleID, TrophyGroup, UserTrophySelection, UserConceptRating, Badge, UserBadge, UserBadgeProgress, FeaturedGuide, Stage, PublisherBlacklist, Title, UserTitle, Milestone, UserMilestone, UserMilestoneProgress, Comment, CommentVote, CommentReport
 
 
 # Register your models here.
@@ -391,3 +391,252 @@ class UserMilestoneAdmin(admin.ModelAdmin):
 class UserMilestoneProgressAdmin(admin.ModelAdmin):
     list_display = ['profile', 'milestone', 'progress_value', 'last_checked']
     search_fields = ['profile__psn_username', 'milestone__name']
+
+
+@admin.register(Comment)
+class CommentAdmin(admin.ModelAdmin):
+    """Admin interface for comment moderation."""
+    list_display = [
+        'id',
+        'profile',
+        'content_type',
+        'content_object_link',
+        'body_preview',
+        'upvote_count',
+        'depth',
+        'is_deleted',
+        'created_at',
+    ]
+    list_filter = [
+        'is_deleted',
+        'is_edited',
+        'content_type',
+        'created_at',
+        'depth',
+    ]
+    search_fields = [
+        'body',
+        'profile__psn_username',
+        'profile__user__email',
+    ]
+    raw_id_fields = ['profile', 'parent']
+    readonly_fields = [
+        'content_type',
+        'object_id',
+        'content_object',
+        'depth',
+        'created_at',
+        'updated_at',
+        'deleted_at',
+        'upvote_count',
+    ]
+    ordering = ['-created_at']
+    date_hierarchy = 'created_at'
+    actions = ['soft_delete_comments', 'restore_comments', 'bulk_delete_comments']
+
+    fieldsets = (
+        ('Content', {
+            'fields': ('content_type', 'object_id', 'content_object', 'profile', 'body', 'image')
+        }),
+        ('Threading', {
+            'fields': ('parent', 'depth')
+        }),
+        ('Stats & Status', {
+            'fields': ('upvote_count', 'is_edited', 'is_deleted', 'deleted_at')
+        }),
+        ('Timestamps', {
+            'fields': ('created_at', 'updated_at')
+        }),
+    )
+
+    def body_preview(self, obj):
+        """Show truncated body text."""
+        if obj.is_deleted:
+            return '[deleted]'
+        return obj.body[:100] + '...' if len(obj.body) > 100 else obj.body
+    body_preview.short_description = 'Body'
+
+    def content_object_link(self, obj):
+        """Show link to the content object."""
+        content_obj = obj.content_object
+        if not content_obj:
+            return '-'
+        return str(content_obj)
+    content_object_link.short_description = 'Content'
+
+    @admin.action(description='Soft delete selected comments')
+    def soft_delete_comments(self, request, queryset):
+        """Soft delete comments (preserves thread structure)."""
+        count = 0
+        for comment in queryset.filter(is_deleted=False):
+            comment.soft_delete()
+            count += 1
+        self.message_user(
+            request,
+            f"Successfully soft-deleted {count} comment(s).",
+            messages.SUCCESS
+        )
+
+    @admin.action(description='Restore soft-deleted comments')
+    def restore_comments(self, request, queryset):
+        """Restore soft-deleted comments (admin only)."""
+        count = queryset.filter(is_deleted=True).update(
+            is_deleted=False,
+            deleted_at=None
+        )
+        self.message_user(
+            request,
+            f"Successfully restored {count} comment(s).",
+            messages.SUCCESS
+        )
+
+    @admin.action(description='Permanently delete selected comments')
+    def bulk_delete_comments(self, request, queryset):
+        """Hard delete comments from database."""
+        count = queryset.count()
+        queryset.delete()
+        self.message_user(
+            request,
+            f"Permanently deleted {count} comment(s).",
+            messages.WARNING
+        )
+
+
+@admin.register(CommentVote)
+class CommentVoteAdmin(admin.ModelAdmin):
+    """Admin interface for comment votes."""
+    list_display = [
+        'id',
+        'comment',
+        'profile',
+        'created_at',
+    ]
+    list_filter = ['created_at']
+    search_fields = [
+        'profile__psn_username',
+        'comment__body',
+    ]
+    raw_id_fields = ['comment', 'profile']
+    readonly_fields = ['created_at']
+    ordering = ['-created_at']
+    date_hierarchy = 'created_at'
+
+
+class ReportStatusFilter(SimpleListFilter):
+    """Filter reports by status."""
+    title = 'Status'
+    parameter_name = 'status'
+
+    def lookups(self, request, model_admin):
+        return CommentReport.REPORT_STATUS
+
+    def queryset(self, request, queryset):
+        if self.value():
+            return queryset.filter(status=self.value())
+        return queryset
+
+
+@admin.register(CommentReport)
+class CommentReportAdmin(admin.ModelAdmin):
+    """Admin interface for comment report moderation queue."""
+    list_display = [
+        'id',
+        'comment_preview',
+        'reporter',
+        'reason',
+        'status',
+        'created_at',
+        'reviewed_by',
+        'reviewed_at',
+    ]
+    list_filter = [
+        ReportStatusFilter,
+        'reason',
+        'created_at',
+        'reviewed_at',
+    ]
+    search_fields = [
+        'comment__body',
+        'reporter__psn_username',
+        'details',
+        'admin_notes',
+    ]
+    raw_id_fields = ['comment', 'reporter', 'reviewed_by']
+    readonly_fields = ['created_at', 'reviewed_at']
+    ordering = ['-created_at']
+    date_hierarchy = 'created_at'
+    actions = [
+        'mark_as_reviewed',
+        'mark_as_dismissed',
+        'take_action_and_delete',
+    ]
+
+    fieldsets = (
+        ('Report Info', {
+            'fields': ('comment', 'reporter', 'reason', 'details')
+        }),
+        ('Status', {
+            'fields': ('status', 'reviewed_at', 'reviewed_by', 'admin_notes')
+        }),
+        ('Timestamps', {
+            'fields': ('created_at',)
+        }),
+    )
+
+    def comment_preview(self, obj):
+        """Show truncated comment body."""
+        comment = obj.comment
+        if comment.is_deleted:
+            return '[deleted comment]'
+        return comment.body[:75] + '...' if len(comment.body) > 75 else comment.body
+    comment_preview.short_description = 'Comment'
+
+    @admin.action(description='Mark selected reports as reviewed')
+    def mark_as_reviewed(self, request, queryset):
+        """Mark reports as reviewed without taking action."""
+        from django.utils import timezone
+        count = queryset.filter(status='pending').update(
+            status='reviewed',
+            reviewed_at=timezone.now(),
+            reviewed_by=request.user
+        )
+        self.message_user(
+            request,
+            f"Marked {count} report(s) as reviewed.",
+            messages.SUCCESS
+        )
+
+    @admin.action(description='Mark selected reports as dismissed')
+    def mark_as_dismissed(self, request, queryset):
+        """Dismiss reports as invalid."""
+        from django.utils import timezone
+        count = queryset.filter(status='pending').update(
+            status='dismissed',
+            reviewed_at=timezone.now(),
+            reviewed_by=request.user
+        )
+        self.message_user(
+            request,
+            f"Dismissed {count} report(s).",
+            messages.SUCCESS
+        )
+
+    @admin.action(description='Take action: Mark reviewed & soft-delete comment')
+    def take_action_and_delete(self, request, queryset):
+        """Mark as action taken and soft-delete the reported comment."""
+        from django.utils import timezone
+        count = 0
+        for report in queryset.filter(status='pending'):
+            # Soft delete the comment
+            report.comment.soft_delete()
+            # Mark report as action taken
+            report.status = 'action_taken'
+            report.reviewed_at = timezone.now()
+            report.reviewed_by = request.user
+            report.save(update_fields=['status', 'reviewed_at', 'reviewed_by'])
+            count += 1
+        self.message_user(
+            request,
+            f"Took action on {count} report(s) and soft-deleted the comments.",
+            messages.WARNING
+        )

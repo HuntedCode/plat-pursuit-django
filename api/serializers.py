@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from trophies.models import Profile, EarnedTrophy
+from trophies.models import Profile, EarnedTrophy, Comment, CommentVote
 from django.db.models import F
 from django.utils.translation import gettext_lazy as _
 
@@ -83,3 +83,67 @@ class TrophyCaseSerializer(serializers.ModelSerializer):
     class Meta:
         model = EarnedTrophy
         fields = ['icon_url',]
+
+
+class CommentAuthorSerializer(serializers.ModelSerializer):
+    """Serializer for comment author info."""
+    username = serializers.CharField(source='display_psn_username')
+
+    class Meta:
+        model = Profile
+        fields = ['id', 'username', 'avatar_url', 'flag']
+
+
+class CommentSerializer(serializers.ModelSerializer):
+    """Serializer for Comment with nested replies."""
+    author = CommentAuthorSerializer(source='profile', read_only=True)
+    body = serializers.CharField(source='display_body', read_only=True)
+    replies = serializers.SerializerMethodField()
+    user_has_voted = serializers.SerializerMethodField()
+    can_edit = serializers.SerializerMethodField()
+    can_delete = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Comment
+        fields = [
+            'id', 'author', 'body', 'image', 'upvote_count',
+            'is_edited', 'is_deleted', 'created_at', 'updated_at',
+            'depth', 'parent', 'replies',
+            'user_has_voted', 'can_edit', 'can_delete'
+        ]
+        read_only_fields = fields
+
+    def get_replies(self, obj):
+        """Recursively serialize replies."""
+        replies = obj.replies.filter(is_deleted=False).order_by('-upvote_count', '-created_at')
+        return CommentSerializer(replies, many=True, context=self.context).data
+
+    def get_user_has_voted(self, obj):
+        request = self.context.get('request')
+        if not request or not request.user.is_authenticated:
+            return False
+        profile = getattr(request.user, 'profile', None)
+        if not profile:
+            return False
+        return CommentVote.objects.filter(comment=obj, profile=profile).exists()
+
+    def get_can_edit(self, obj):
+        request = self.context.get('request')
+        if not request or not request.user.is_authenticated:
+            return False
+        profile = getattr(request.user, 'profile', None)
+        return profile and obj.profile == profile and not obj.is_deleted
+
+    def get_can_delete(self, obj):
+        request = self.context.get('request')
+        if not request or not request.user.is_authenticated:
+            return False
+        profile = getattr(request.user, 'profile', None)
+        is_admin = request.user.is_staff
+        return (profile and (obj.profile == profile or is_admin)) and not obj.is_deleted
+
+
+class CommentCreateSerializer(serializers.Serializer):
+    """Serializer for comment creation input."""
+    body = serializers.CharField(max_length=2000, required=True)
+    parent_id = serializers.IntegerField(required=False, allow_null=True)
