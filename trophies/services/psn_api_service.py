@@ -17,6 +17,7 @@ class PsnApiService:
     @classmethod
     def update_profile_from_legacy(cls, profile: Profile, legacy: dict, is_public: bool) -> Profile:
         """Update Profile model from PSN legacy profile data."""
+        profile.psn_username = legacy["profile"].get("onlineId").lower()
         profile.display_psn_username = legacy["profile"].get("onlineId")
         profile.account_id = legacy["profile"].get("accountId")
         profile.np_id = legacy["profile"].get("npId")
@@ -256,7 +257,7 @@ class PsnApiService:
             trophy.trophy_earn_rate = trophy_data.trophy_earn_rate if trophy_data.trophy_earn_rate else 0.0
             trophy.save()
         
-        if trophy.trophy_type == 'platinum':
+        if trophy.trophy_type == 'platinum' and not trophy.game.is_shovelware:
             game.update_is_shovelware(trophy.trophy_earn_rate)
         return trophy, created
 
