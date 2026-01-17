@@ -4,6 +4,7 @@ Constants and configuration values for the trophies app.
 This module centralizes magic numbers, configuration values, and constants
 used throughout the trophies application for better maintainability.
 """
+import re
 
 # Pagination Settings
 GAMES_PER_PAGE = 25
@@ -262,4 +263,19 @@ ALLOWED_CONTENT_TYPES = [
     'image/jpeg',
     'image/png',
     'image/webp',
+]
+
+# Cache timeout for rendered content (1 hour)
+RENDER_CACHE_TIMEOUT = 3600
+
+# Trophy mention pattern: [trophy:123]
+TROPHY_PATTERN = re.compile(r'\[trophy:(\d+)\]')
+
+# Spoiler pattern: ||hidden text||
+SPOILER_PATTERN = re.compile(r'\|\|(.*?)\|\|', re.DOTALL)
+
+# YouTube URL patterns
+YOUTUBE_PATTERNS = [
+    re.compile(r'https?://(?:www\.)?youtube\.com/watch\?v=([a-zA-Z0-9_-]{11})'),
+    re.compile(r'https?://youtu\.be/([a-zA-Z0-9_-]{11})'),
 ]
