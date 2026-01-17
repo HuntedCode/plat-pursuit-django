@@ -423,8 +423,8 @@ class GuideSectionInline(admin.TabularInline):
 
 @admin.register(Guide)
 class GuideAdmin(admin.ModelAdmin):
-    list_display = ['title', 'author', 'game', 'status', 'section_count', 'average_rating', 'rating_count', 'view_count', 'published_at']
-    list_filter = ['status', 'created_at', 'published_at']
+    list_display = ['title', 'author', 'game', 'guide_type', 'status', 'section_count', 'average_rating', 'rating_count', 'view_count', 'published_at']
+    list_filter = ['guide_type', 'status', 'created_at', 'published_at']
     search_fields = ['title', 'author__psn_username', 'game__title_name']
     readonly_fields = ['slug', 'rating_count', 'rating_sum', 'average_rating', 'view_count', 'created_at', 'updated_at', 'published_at', 'moderated_at']
     raw_id_fields = ['author', 'game', 'concept', 'moderated_by']
@@ -432,7 +432,7 @@ class GuideAdmin(admin.ModelAdmin):
     inlines = [GuideSectionInline]
     fieldsets = (
         ('Guide Content', {
-            'fields': ('title', 'slug', 'summary', 'tags')
+            'fields': ('title', 'slug', 'summary', 'guide_type', 'tags')
         }),
         ('Relationships', {
             'fields': ('author', 'game', 'concept')

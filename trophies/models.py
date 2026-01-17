@@ -1212,6 +1212,15 @@ class Guide(models.Model):
         max_length=500,
         help_text="Brief text-only summary shown in listings and previews (max 500 chars)"
     )
+    guide_type = models.CharField(
+        max_length=20,
+        choices=[
+            ('freeform', 'Freeform'),
+            ('roadmap', 'Trophy Roadmap'),
+        ],
+        default='freeform',
+        help_text="Type of guide structure"
+    )
 
     # Relationships
     author = models.ForeignKey(

@@ -13,7 +13,7 @@ from django.db.models import F
 from django.utils import timezone
 from django.core.exceptions import ValidationError, PermissionDenied
 
-from trophies.models import Guide, GuideSection, AuthorTrust
+from trophies.models import Guide, GuideSection, AuthorTrust, GuideTag
 from trophies.constants import SUMMARY_CHAR_LIMIT, BASIC_SECTION_CHAR_LIMIT, PREMIUM_SECTION_CHAR_LIMIT, BASIC_MAX_SECTIONS, PREMIUM_MAX_SECTIONS, TRUSTED_MIN_APPROVED_GUIDES, TRUSTED_MIN_TOTAL_STARS
 
 logger = logging.getLogger(__name__)
@@ -93,6 +93,134 @@ class GuideService:
         GuideService.get_or_create_author_trust(profile)
 
         logger.info(f"Guide created: {guide.id} by {profile.psn_username}")
+        return guide
+
+    @staticmethod
+    @transaction.atomic
+    def create_roadmap_guide(profile, game, title, summary):
+        """
+        Create a Trophy Roadmap guide with automatic sections for all trophies.
+
+        Creates:
+        - 3 fixed intro sections (Overview, Trophy Roadmap, General Tips)
+        - One section per trophy (ordered by trophy_id)
+        - Auto-applies "Roadmap" tag
+        - Template content for all sections
+
+        Args:
+            profile: Author profile
+            game: Game instance
+            title: Guide title
+            summary: Guide summary (max 500 chars)
+
+        Returns:
+            Guide instance
+
+        Raises:
+            PermissionDenied: If profile cannot create guides
+            ValidationError: If summary too long, no trophies, or trophy count exceeds limits
+        """
+        # Check permissions
+        can_create, reason = GuideService.can_create_guide(profile)
+        if not can_create:
+            raise PermissionDenied(reason)
+
+        # Validate summary length
+        if len(summary) > SUMMARY_CHAR_LIMIT:
+            raise ValidationError(
+                f"Summary must be {SUMMARY_CHAR_LIMIT} characters or less"
+            )
+
+        # Fetch trophies
+        trophies = game.trophies.all().order_by('trophy_id')
+        trophy_count = trophies.count()
+
+        # Validate that game has trophies
+        if trophy_count == 0:
+            raise ValidationError(
+                "Cannot create Trophy Roadmap guide for a game with no trophies"
+            )
+
+        # Calculate total sections and check limits
+        total_sections = 3 + trophy_count
+        max_sections = PREMIUM_MAX_SECTIONS if profile.user_is_premium else BASIC_MAX_SECTIONS
+
+        if total_sections > max_sections:
+            if profile.user_is_premium:
+                raise ValidationError(
+                    f"This game has {trophy_count} trophies, which would require "
+                    f"{total_sections} total sections (including 3 intro sections). "
+                    f"Your Premium account allows up to {max_sections} sections. "
+                    f"This game has too many trophies for a Trophy Roadmap guide."
+                )
+            else:
+                raise ValidationError(
+                    f"This game has {trophy_count} trophies, which would require "
+                    f"{total_sections} total sections (including 3 intro sections). "
+                    f"Your Basic account allows up to {max_sections} sections. "
+                    f"Upgrade to Premium for more sections."
+                )
+
+        # Get roadmap tag
+        try:
+            roadmap_tag = GuideTag.objects.get(slug='roadmap')
+        except GuideTag.DoesNotExist:
+            raise ValidationError(
+                "Roadmap tag does not exist. Please create it in the admin panel."
+            )
+
+        # Create guide
+        guide = Guide.objects.create(
+            author=profile,
+            game=game,
+            concept=game.concept,
+            title=title,
+            summary=summary,
+            guide_type='roadmap',
+            status='draft'
+        )
+
+        # Apply roadmap tag
+        guide.tags.set([roadmap_tag])
+
+        # Create 3 intro sections
+        GuideSection.objects.create(
+            guide=guide,
+            title="Overview",
+            content=GuideService._get_roadmap_overview_template(game),
+            section_order=0
+        )
+
+        GuideSection.objects.create(
+            guide=guide,
+            title="Trophy Roadmap",
+            content=GuideService._get_roadmap_roadmap_template(game),
+            section_order=1
+        )
+
+        GuideSection.objects.create(
+            guide=guide,
+            title="General Tips",
+            content=GuideService._get_roadmap_tips_template(game),
+            section_order=2
+        )
+
+        # Create trophy sections
+        for idx, trophy in enumerate(trophies):
+            GuideSection.objects.create(
+                guide=guide,
+                title=trophy.trophy_name,
+                content=GuideService._get_trophy_section_template(trophy),
+                section_order=3 + idx
+            )
+
+        # Create or get author trust
+        GuideService.get_or_create_author_trust(profile)
+
+        logger.info(
+            f"Roadmap guide created: {guide.id} by {profile.psn_username} "
+            f"for {game.title_name} with {trophy_count} trophies"
+        )
         return guide
 
     @staticmethod
@@ -635,3 +763,169 @@ class GuideService:
             guide: Guide instance
         """
         Guide.objects.filter(pk=guide.pk).update(view_count=F('view_count') + 1)
+
+    # === Template Helpers for Roadmap Guides ===
+
+    @staticmethod
+    def _get_roadmap_overview_template(game):
+        """
+        Get template content for the Overview section of a roadmap guide.
+
+        Args:
+            game: Game instance
+
+        Returns:
+            str: Markdown template content
+        """
+        return f"""This is a Trophy Roadmap guide for **{game.title_name}**.
+
+**Estimated Platinum Difficulty:** [Rate 1-10]
+
+**Estimated Time to Platinum:** [Time estimate]
+
+**Missable Trophies:** [Yes/No - List any missables]
+
+**Minimum Playthroughs:** [Number]
+
+**Glitched/Unobtainable Trophies:** [Yes/No - Describe any issues]
+
+## Introduction
+
+[Brief introduction to the game and what to expect from the platinum journey]
+
+## Recommended Roadmap Outline
+
+[High-level overview of the recommended approach to earning the platinum]
+
+**Step 1:** [Brief description]
+**Step 2:** [Brief description]
+**Step 3:** [Brief description]
+"""
+
+    @staticmethod
+    def _get_roadmap_roadmap_template(game):
+        """
+        Get template content for the Trophy Roadmap section.
+
+        Args:
+            game: Game instance
+
+        Returns:
+            str: Markdown template content
+        """
+        return f"""This section provides a detailed step-by-step roadmap for earning all trophies in **{game.title_name}**.
+
+**Note:** Trophy references like [trophy:123] will automatically link to the specific trophy section below.
+
+## Step 1: [Phase Name]
+
+[Describe what to do in this phase]
+
+**Trophies you should earn:**
+- [trophy:1] - [Trophy Name]
+- [trophy:2] - [Trophy Name]
+- [trophy:3] - [Trophy Name]
+
+## Step 2: [Phase Name]
+
+[Describe what to do in this phase]
+
+**Trophies you should earn:**
+- [trophy:4] - [Trophy Name]
+- [trophy:5] - [Trophy Name]
+
+## Step 3: Cleanup
+
+[Describe cleanup phase for any remaining trophies]
+
+**Remaining trophies:**
+- [trophy:X] - [Trophy Name]
+- [trophy:Y] - [Trophy Name]
+"""
+
+    @staticmethod
+    def _get_roadmap_tips_template(game):
+        """
+        Get template content for the General Tips section.
+
+        Args:
+            game: Game instance
+
+        Returns:
+            str: Markdown template content
+        """
+        return f"""This section contains general tips and information for earning trophies in **{game.title_name}**.
+
+## General Tips
+
+**Tip 1:** [First general tip]
+
+**Tip 2:** [Second general tip]
+
+**Tip 3:** [Third general tip]
+
+## Difficulty Settings
+
+[Information about difficulty settings and their impact on trophies]
+
+## Collectibles
+
+[Information about collectibles if applicable]
+
+## Online Trophies
+
+[Information about online trophies, if applicable. Note if servers are active/inactive]
+
+## Glitches & Bugs
+
+[Known glitches, bugs, or workarounds]
+
+## Useful Resources
+
+[Links to helpful resources, videos, or other guides]
+"""
+
+    @staticmethod
+    def _get_trophy_section_template(trophy):
+        """
+        Get template content for an individual trophy section.
+
+        Args:
+            trophy: Trophy instance
+
+        Returns:
+            str: Markdown template content
+        """
+        # Map trophy types to emojis
+        emoji_map = {
+            'bronze': '🥉',
+            'silver': '🥈',
+            'gold': '🥇',
+            'platinum': '🏆'
+        }
+        emoji = emoji_map.get(trophy.trophy_type.lower(), '')
+
+        trophy_description = trophy.trophy_detail if trophy.trophy_detail else '[Trophy description from PSN]'
+
+        return f"""{emoji} **{trophy.trophy_type.title()} Trophy**
+
+{trophy_description}
+
+## How to Earn
+
+[Detailed instructions on how to earn [trophy:{trophy.trophy_id}]]
+
+## Important Notes
+
+**Missable:** [Yes/No]
+
+**Difficulty:** [Easy/Medium/Hard]
+
+**Time Required:** [Time estimate]
+
+**Location/Requirements:** [Where to earn this trophy or what's required]
+
+## Tips & Strategies
+
+[Helpful tips, strategies, or things to watch out for when earning this trophy]
+"""

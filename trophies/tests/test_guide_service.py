@@ -1082,3 +1082,285 @@ class UtilityMethodTests(GuideServiceTestCase):
 
         guide.refresh_from_db()
         self.assertEqual(guide.view_count, initial_count + 3)
+
+
+class RoadmapGuideTests(GuideServiceTestCase):
+    """Tests for Trophy Roadmap guide creation."""
+
+    def setUp(self):
+        """Create test fixtures including trophies."""
+        super().setUp()
+
+        # Create trophies for test game
+        from trophies.models import Trophy
+
+        self.trophy1 = Trophy.objects.create(
+            game=self.game,
+            trophy_id=0,
+            trophy_name='Platinum Trophy',
+            trophy_type='Platinum',
+            trophy_detail='Earn all trophies'
+        )
+        self.trophy2 = Trophy.objects.create(
+            game=self.game,
+            trophy_id=1,
+            trophy_name='First Steps',
+            trophy_type='Bronze',
+            trophy_detail='Complete the tutorial'
+        )
+        self.trophy3 = Trophy.objects.create(
+            game=self.game,
+            trophy_id=2,
+            trophy_name='Halfway There',
+            trophy_type='Silver',
+            trophy_detail='Complete half the game'
+        )
+        self.trophy4 = Trophy.objects.create(
+            game=self.game,
+            trophy_id=3,
+            trophy_name='Master',
+            trophy_type='Gold',
+            trophy_detail='Complete all challenges'
+        )
+
+    def test_create_roadmap_guide_success(self):
+        """Basic roadmap guide creation should work."""
+        guide = GuideService.create_roadmap_guide(
+            profile=self.profile_linked,
+            game=self.game,
+            title='Complete Trophy Roadmap',
+            summary='A comprehensive roadmap for all trophies'
+        )
+
+        self.assertIsNotNone(guide.id)
+        self.assertEqual(guide.title, 'Complete Trophy Roadmap')
+        self.assertEqual(guide.author, self.profile_linked)
+        self.assertEqual(guide.game, self.game)
+        self.assertEqual(guide.status, 'draft')
+
+    def test_roadmap_guide_has_correct_type(self):
+        """Roadmap guides should have guide_type='roadmap'."""
+        guide = GuideService.create_roadmap_guide(
+            profile=self.profile_linked,
+            game=self.game,
+            title='Trophy Roadmap',
+            summary='Summary'
+        )
+
+        self.assertEqual(guide.guide_type, 'roadmap')
+
+    def test_roadmap_guide_auto_applies_tag(self):
+        """Roadmap guides should automatically have the Roadmap tag applied."""
+        guide = GuideService.create_roadmap_guide(
+            profile=self.profile_linked,
+            game=self.game,
+            title='Trophy Roadmap',
+            summary='Summary'
+        )
+
+        tags = list(guide.tags.all())
+        self.assertEqual(len(tags), 1)
+        self.assertEqual(tags[0].slug, 'roadmap')
+
+    def test_roadmap_guide_creates_intro_sections(self):
+        """Roadmap guides should create 3 intro sections in correct order."""
+        guide = GuideService.create_roadmap_guide(
+            profile=self.profile_linked,
+            game=self.game,
+            title='Trophy Roadmap',
+            summary='Summary'
+        )
+
+        sections = list(guide.sections.order_by('section_order'))
+
+        # Should have 3 intro sections + 4 trophy sections = 7 total
+        self.assertEqual(len(sections), 7)
+
+        # Check intro sections
+        self.assertEqual(sections[0].title, 'Overview')
+        self.assertEqual(sections[0].section_order, 0)
+
+        self.assertEqual(sections[1].title, 'Trophy Roadmap')
+        self.assertEqual(sections[1].section_order, 1)
+
+        self.assertEqual(sections[2].title, 'General Tips')
+        self.assertEqual(sections[2].section_order, 2)
+
+    def test_roadmap_guide_creates_trophy_sections(self):
+        """Roadmap guides should create sections for all trophies."""
+        guide = GuideService.create_roadmap_guide(
+            profile=self.profile_linked,
+            game=self.game,
+            title='Trophy Roadmap',
+            summary='Summary'
+        )
+
+        sections = list(guide.sections.order_by('section_order'))
+
+        # Trophy sections start at index 3
+        self.assertEqual(sections[3].title, 'Platinum Trophy')
+        self.assertEqual(sections[3].section_order, 3)
+
+        self.assertEqual(sections[4].title, 'First Steps')
+        self.assertEqual(sections[4].section_order, 4)
+
+        self.assertEqual(sections[5].title, 'Halfway There')
+        self.assertEqual(sections[5].section_order, 5)
+
+        self.assertEqual(sections[6].title, 'Master')
+        self.assertEqual(sections[6].section_order, 6)
+
+    def test_roadmap_guide_trophy_ordering(self):
+        """Trophy sections should be ordered by trophy_id."""
+        guide = GuideService.create_roadmap_guide(
+            profile=self.profile_linked,
+            game=self.game,
+            title='Trophy Roadmap',
+            summary='Summary'
+        )
+
+        trophy_sections = list(guide.sections.order_by('section_order')[3:])
+
+        # Verify they match trophy_id order
+        self.assertEqual(trophy_sections[0].title, 'Platinum Trophy')  # trophy_id 0
+        self.assertEqual(trophy_sections[1].title, 'First Steps')     # trophy_id 1
+        self.assertEqual(trophy_sections[2].title, 'Halfway There')   # trophy_id 2
+        self.assertEqual(trophy_sections[3].title, 'Master')          # trophy_id 3
+
+    def test_roadmap_guide_section_content_has_templates(self):
+        """All sections should have non-blank template content."""
+        guide = GuideService.create_roadmap_guide(
+            profile=self.profile_linked,
+            game=self.game,
+            title='Trophy Roadmap',
+            summary='Summary'
+        )
+
+        sections = list(guide.sections.order_by('section_order'))
+
+        # Check all sections have content
+        for section in sections:
+            self.assertIsNotNone(section.content)
+            self.assertGreater(len(section.content), 0)
+
+        # Check intro sections contain game title
+        for i in range(3):
+            self.assertIn(self.game.title_name, sections[i].content)
+
+        # Check trophy sections contain trophy-specific content
+        for i in range(3, 7):
+            self.assertIn('Trophy', sections[i].content)
+            self.assertIn('How to Earn', sections[i].content)
+
+    def test_roadmap_guide_zero_trophies_raises_error(self):
+        """Creating roadmap for game with no trophies should raise ValidationError."""
+        with self.assertRaises(ValidationError) as context:
+            GuideService.create_roadmap_guide(
+                profile=self.profile_linked,
+                game=self.game2,  # Has no trophies
+                title='Trophy Roadmap',
+                summary='Summary'
+            )
+
+        self.assertIn('no trophies', str(context.exception))
+
+    def test_roadmap_guide_exceeds_basic_limit(self):
+        """Creating roadmap with too many trophies should fail for basic users."""
+        from trophies.models import Trophy
+
+        # Create 18 trophies (3 intro + 18 trophies = 21 sections > 20 basic limit)
+        for i in range(18):
+            Trophy.objects.create(
+                game=self.game2,
+                trophy_id=i,
+                trophy_name=f'Trophy {i}',
+                trophy_type='Bronze',
+                trophy_detail=f'Description {i}'
+            )
+
+        with self.assertRaises(ValidationError) as context:
+            GuideService.create_roadmap_guide(
+                profile=self.profile_linked,  # Basic user
+                game=self.game2,
+                title='Trophy Roadmap',
+                summary='Summary'
+            )
+
+        error_msg = str(context.exception)
+        self.assertIn('18 trophies', error_msg)
+        self.assertIn('21 total sections', error_msg)
+        self.assertIn('Basic account', error_msg)
+        self.assertIn('20 sections', error_msg)
+
+    def test_roadmap_guide_exceeds_premium_limit(self):
+        """Creating roadmap with too many trophies should fail for premium users."""
+        from trophies.models import Trophy
+
+        # Create 28 trophies (3 intro + 28 trophies = 31 sections > 30 premium limit)
+        for i in range(28):
+            Trophy.objects.create(
+                game=self.game2,
+                trophy_id=i,
+                trophy_name=f'Trophy {i}',
+                trophy_type='Bronze',
+                trophy_detail=f'Description {i}'
+            )
+
+        with self.assertRaises(ValidationError) as context:
+            GuideService.create_roadmap_guide(
+                profile=self.profile_premium,  # Premium user
+                game=self.game2,
+                title='Trophy Roadmap',
+                summary='Summary'
+            )
+
+        error_msg = str(context.exception)
+        self.assertIn('28 trophies', error_msg)
+        self.assertIn('31 total sections', error_msg)
+        self.assertIn('Premium account', error_msg)
+        self.assertIn('30 sections', error_msg)
+
+    def test_roadmap_guide_missing_roadmap_tag(self):
+        """Creating roadmap guide should fail if Roadmap tag doesn't exist."""
+        # Delete the roadmap tag
+        self.tag1.delete()
+
+        with self.assertRaises(ValidationError) as context:
+            GuideService.create_roadmap_guide(
+                profile=self.profile_linked,
+                game=self.game,
+                title='Trophy Roadmap',
+                summary='Summary'
+            )
+
+        self.assertIn('Roadmap tag does not exist', str(context.exception))
+
+    def test_roadmap_guide_unlinked_profile(self):
+        """Unlinked profiles should not be able to create roadmap guides."""
+        with self.assertRaises(PermissionDenied) as context:
+            GuideService.create_roadmap_guide(
+                profile=self.profile_unlinked,
+                game=self.game,
+                title='Trophy Roadmap',
+                summary='Summary'
+            )
+
+        self.assertIn('link your PSN account', str(context.exception))
+
+    def test_roadmap_guide_banned_author(self):
+        """Banned authors should not be able to create roadmap guides."""
+        AuthorTrust.objects.create(
+            profile=self.profile_linked,
+            trust_level='banned',
+            ban_reason='Spam'
+        )
+
+        with self.assertRaises(PermissionDenied) as context:
+            GuideService.create_roadmap_guide(
+                profile=self.profile_linked,
+                game=self.game,
+                title='Trophy Roadmap',
+                summary='Summary'
+            )
+
+        self.assertIn('banned from creating guides', str(context.exception))
