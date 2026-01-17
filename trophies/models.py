@@ -2,7 +2,6 @@ from django.db import models
 from django.utils import timezone
 from users.models import CustomUser
 from django.contrib.postgres.fields import ArrayField
-from django.contrib.contenttypes.fields import GenericForeignKey
 from django.core.validators import RegexValidator, MinValueValidator, MaxValueValidator
 from django.db import transaction
 from django.db.models import F, Max, Min
@@ -372,7 +371,6 @@ class Game(models.Model):
     is_obtainable= models.BooleanField(default=True)
     is_delisted = models.BooleanField(default=False)
     has_online_trophies = models.BooleanField(default=False)
-    comment_count = models.PositiveIntegerField(default=0, help_text="Denormalized count of comments")
 
     objects = GameManager()
 
@@ -459,6 +457,7 @@ class Concept(models.Model):
     bg_url = models.URLField(null=True, blank=True)
     concept_icon_url = models.URLField(null=True, blank=True)
     guide_slug = models.CharField(max_length=50, blank=True, null=True)
+    comment_count = models.PositiveIntegerField(default=0, help_text="Denormalized count of all comments on this concept")
 
     class Meta:
         indexes = [
@@ -642,7 +641,6 @@ class Trophy(models.Model):
     )
     earned_count = models.PositiveIntegerField(default=0, help_text="Denormalized count of profiles that have earned this trophy (PP-specific).")
     earn_rate = models.FloatField(default=0.0)
-    comment_count = models.PositiveIntegerField(default=0, help_text="Denormalized count of comments")
 
     class Meta:
         unique_together = ["trophy_id", "game"]
@@ -1107,19 +1105,26 @@ class PublisherBlacklist(models.Model):
 
 class Comment(models.Model):
     """
-    User-generated comment on Games or Trophies.
+    User-generated comment on Concepts or Trophies within Concepts.
 
-    Uses GenericForeignKey to support multiple content types.
+    Comments are unified across game stacks:
+    - Concept-level comments (trophy_id=null): Discussion about the game in general
+    - Trophy-level comments (trophy_id=X): Discussion about a specific trophy across all stacks
+
     Supports threaded replies via parent_id self-referential FK.
     """
-    # Generic relation to Game or Trophy
-    content_type = models.ForeignKey(
-        'contenttypes.ContentType',
+    # Concept-based relation instead of GenericFK
+    concept = models.ForeignKey(
+        'Concept',
         on_delete=models.CASCADE,
-        limit_choices_to={'model__in': ('game', 'trophy')}
+        related_name='comments',
+        help_text="The game concept this comment belongs to",
     )
-    object_id = models.PositiveBigIntegerField()
-    content_object = GenericForeignKey('content_type', 'object_id')
+    trophy_id = models.IntegerField(
+        null=True,
+        blank=True,
+        help_text="Trophy position within concept (null = concept-level comment)"
+    )
 
     # Author info
     profile = models.ForeignKey(
@@ -1170,21 +1175,23 @@ class Comment(models.Model):
 
     class Meta:
         indexes = [
-            # Primary query: get comments for a content object sorted by upvotes
-            models.Index(fields=['content_type', 'object_id', '-upvote_count'], name='comment_content_votes_idx'),
+            # Primary query: get comments for a concept sorted by upvotes
+            models.Index(fields=['concept', 'trophy_id', '-upvote_count'], name='comment_concept_votes_idx'),
             # Get replies to a comment
             models.Index(fields=['parent', '-upvote_count'], name='comment_replies_idx'),
             # Get all comments by a profile
             models.Index(fields=['profile', '-created_at'], name='comment_profile_idx'),
             # Composite for threaded display
-            models.Index(fields=['content_type', 'object_id', 'depth', '-upvote_count'], name='comment_threaded_idx'),
+            models.Index(fields=['concept', 'trophy_id', 'depth', '-upvote_count'], name='comment_threaded_idx'),
             # For moderation queue
             models.Index(fields=['is_deleted', 'created_at'], name='comment_moderation_idx'),
         ]
         ordering = ['-upvote_count', '-created_at']
 
     def __str__(self):
-        return f"Comment by {self.profile.psn_username} on {self.content_object}"
+        if self.trophy_id is not None:
+            return f"Comment by {self.profile.psn_username} on {self.concept} (Trophy {self.trophy_id})"
+        return f"Comment by {self.profile.psn_username} on {self.concept}"
 
     def save(self, *args, **kwargs):
         # Calculate depth based on parent

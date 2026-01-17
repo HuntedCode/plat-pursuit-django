@@ -2,8 +2,9 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
-from .serializers import GenerateCodeSerializer, VerifySerializer, ProfileSerializer, TrophyCaseSerializer
-from trophies.models import Profile
+from .serializers import GenerateCodeSerializer, VerifySerializer, ProfileSerializer, TrophyCaseSerializer, CommentSerializer, CommentCreateSerializer
+from trophies.models import Profile, Comment, Concept
+from trophies.services.comment_service import CommentService
 from django.core.paginator import Paginator
 from django.db.models import F
 from django.utils import timezone
@@ -210,4 +211,295 @@ class TrophyCaseView(APIView):
             return Response({'linked': False, 'message': 'No linked profile found.'})
         except Exception as e:
             logger.error(f"Trophy case error: {e}")
+            return Response({'error': 'Internal error.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class CommentListView(APIView):
+    """Get comments for a Concept or Trophy within a Concept."""
+
+    def get(self, request, concept_id, trophy_id=None):
+        """
+        GET /api/v1/comments/concept/<concept_id>/
+        GET /api/v1/comments/concept/<concept_id>/trophy/<trophy_id>/
+        Query params: sort (top/new/old)
+        """
+        try:
+            # Get the concept
+            try:
+                concept = Concept.objects.get(id=concept_id)
+            except Concept.DoesNotExist:
+                return Response({'error': 'Concept not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+            # Get user profile if authenticated
+            profile = None
+            if request.user.is_authenticated:
+                profile = getattr(request.user, 'profile', None)
+
+            # Get sort parameter
+            sort = request.query_params.get('sort', 'top')
+            if sort not in ['top', 'new', 'old']:
+                sort = 'top'
+
+            # Get comments using service
+            comments = CommentService.get_comments_for_concept(
+                concept,
+                profile,
+                sort,
+                trophy_id
+            )
+
+            # Only return top-level comments (replies are nested in serializer)
+            top_level_comments = comments.filter(parent__isnull=True)
+
+            # Serialize
+            serializer = CommentSerializer(
+                top_level_comments,
+                many=True,
+                context={'request': request}
+            )
+
+            return Response({
+                'comments': serializer.data,
+                'count': concept.comment_count,
+                'sort': sort,
+                'trophy_id': trophy_id
+            })
+
+        except Exception as e:
+            logger.error(f"Comment list error: {e}")
+            return Response({'error': 'Internal error.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class CommentCreateView(APIView):
+    """Create a new comment or reply on a Concept or Trophy."""
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, concept_id, trophy_id=None):
+        """
+        POST /api/v1/comments/concept/<concept_id>/create/
+        POST /api/v1/comments/concept/<concept_id>/trophy/<trophy_id>/create/
+        Body: { body, parent_id (optional), image (optional) }
+        """
+        try:
+            # Get user profile
+            profile = getattr(request.user, 'profile', None)
+            if not profile:
+                return Response(
+                    {'error': 'User does not have a profile.'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Get the concept
+            try:
+                concept = Concept.objects.get(id=concept_id)
+            except Concept.DoesNotExist:
+                return Response({'error': 'Concept not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+            # Validate input
+            serializer = CommentCreateSerializer(data=request.data)
+            if not serializer.is_valid():
+                return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+            body = serializer.validated_data['body']
+            parent_id = serializer.validated_data.get('parent_id')
+            image = request.FILES.get('image')
+
+            # Get parent comment if specified
+            parent = None
+            if parent_id:
+                try:
+                    parent = Comment.objects.get(id=parent_id)
+                    # Verify parent is for the same concept and trophy_id
+                    if parent.concept != concept or parent.trophy_id != trophy_id:
+                        return Response(
+                            {'error': 'Parent comment does not belong to this concept/trophy.'},
+                            status=status.HTTP_400_BAD_REQUEST
+                        )
+                except Comment.DoesNotExist:
+                    return Response({'error': 'Parent comment not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+            # Create comment using service
+            comment, error = CommentService.create_comment(
+                profile=profile,
+                concept=concept,
+                body=body,
+                parent=parent,
+                image=image,
+                trophy_id=trophy_id
+            )
+
+            if error:
+                return Response({'error': error}, status=status.HTTP_400_BAD_REQUEST)
+
+            # Serialize and return
+            comment_serializer = CommentSerializer(comment, context={'request': request})
+            return Response(comment_serializer.data, status=status.HTTP_201_CREATED)
+
+        except Exception as e:
+            logger.error(f"Comment create error: {e}")
+            return Response({'error': 'Internal error.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class CommentDetailView(APIView):
+    """Update or delete a comment."""
+    permission_classes = [IsAuthenticated]
+
+    def put(self, request, comment_id):
+        """
+        PUT /api/v1/comments/<comment_id>/
+        Body: { body }
+        """
+        try:
+            profile = getattr(request.user, 'profile', None)
+            if not profile:
+                return Response(
+                    {'error': 'User does not have a profile.'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Get comment
+            try:
+                comment = Comment.objects.get(id=comment_id)
+            except Comment.DoesNotExist:
+                return Response({'error': 'Comment not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+            # Validate input
+            new_body = request.data.get('body')
+            if not new_body:
+                return Response({'error': 'body is required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+            # Edit using service
+            success, error = CommentService.edit_comment(comment, profile, new_body)
+
+            if not success:
+                return Response({'error': error}, status=status.HTTP_400_BAD_REQUEST)
+
+            # Serialize and return
+            serializer = CommentSerializer(comment, context={'request': request})
+            return Response(serializer.data)
+
+        except Exception as e:
+            logger.error(f"Comment edit error: {e}")
+            return Response({'error': 'Internal error.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    def delete(self, request, comment_id):
+        """
+        DELETE /api/v1/comments/<comment_id>/
+        """
+        try:
+            profile = getattr(request.user, 'profile', None)
+            if not profile:
+                return Response(
+                    {'error': 'User does not have a profile.'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Get comment
+            try:
+                comment = Comment.objects.get(id=comment_id)
+            except Comment.DoesNotExist:
+                return Response({'error': 'Comment not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+            # Check if user is admin
+            is_admin = request.user.is_staff
+
+            # Delete using service
+            success, error = CommentService.delete_comment(comment, profile, is_admin)
+
+            if not success:
+                return Response({'error': error}, status=status.HTTP_400_BAD_REQUEST)
+
+            return Response({'success': True, 'message': 'Comment deleted.'})
+
+        except Exception as e:
+            logger.error(f"Comment delete error: {e}")
+            return Response({'error': 'Internal error.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class CommentVoteView(APIView):
+    """Toggle upvote on a comment."""
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, comment_id):
+        """
+        POST /api/v1/comments/<comment_id>/vote/
+        """
+        try:
+            profile = getattr(request.user, 'profile', None)
+            if not profile:
+                return Response(
+                    {'error': 'User does not have a profile.'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Get comment
+            try:
+                comment = Comment.objects.get(id=comment_id)
+            except Comment.DoesNotExist:
+                return Response({'error': 'Comment not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+            # Toggle vote using service
+            voted, error = CommentService.toggle_vote(comment, profile)
+
+            if error:
+                return Response({'error': error}, status=status.HTTP_400_BAD_REQUEST)
+
+            return Response({
+                'voted': voted,
+                'upvote_count': comment.upvote_count
+            })
+
+        except Exception as e:
+            logger.error(f"Comment vote error: {e}")
+            return Response({'error': 'Internal error.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class CommentReportView(APIView):
+    """Report a comment for moderation."""
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, comment_id):
+        """
+        POST /api/v1/comments/<comment_id>/report/
+        Body: { reason, details (optional) }
+        """
+        try:
+            profile = getattr(request.user, 'profile', None)
+            if not profile:
+                return Response(
+                    {'error': 'User does not have a profile.'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Get comment
+            try:
+                comment = Comment.objects.get(id=comment_id)
+            except Comment.DoesNotExist:
+                return Response({'error': 'Comment not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+            # Get reason and details
+            reason = request.data.get('reason')
+            details = request.data.get('details', '')
+
+            if not reason:
+                return Response({'error': 'reason is required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+            # Validate reason
+            valid_reasons = ['spam', 'harassment', 'inappropriate', 'misinformation', 'other']
+            if reason not in valid_reasons:
+                return Response(
+                    {'error': f'Invalid reason. Must be one of: {", ".join(valid_reasons)}'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Create report using service
+            success, error = CommentService.report_comment(comment, profile, reason, details)
+
+            if not success:
+                return Response({'error': error}, status=status.HTTP_400_BAD_REQUEST)
+
+            return Response({'success': True, 'message': 'Comment reported successfully.'})
+
+        except Exception as e:
+            logger.error(f"Comment report error: {e}")
             return Response({'error': 'Internal error.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

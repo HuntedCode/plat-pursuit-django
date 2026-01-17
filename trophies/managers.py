@@ -7,7 +7,6 @@ reusability, testability, and maintainability.
 """
 from django.db import models
 from django.db.models import Q, Exists, OuterRef, Value
-from django.contrib.contenttypes.models import ContentType
 
 
 class ProfileQuerySet(models.QuerySet):
@@ -452,18 +451,30 @@ class CommentQuerySet(models.QuerySet):
         """
         return self.filter(is_deleted=False)
 
-    def for_content_object(self, obj):
+    def for_concept(self, concept):
         """
-        Get comments for a specific Game or Trophy.
+        Get all comments for a concept (concept-level only, no trophy comments).
 
         Args:
-            obj: Game or Trophy instance
+            concept: Concept instance
 
         Returns:
-            QuerySet: Comments for the object
+            QuerySet: Concept-level comments
         """
-        ct = ContentType.objects.get_for_model(obj)
-        return self.filter(content_type=ct, object_id=obj.id)
+        return self.filter(concept=concept, trophy_id__isnull=True)
+
+    def for_trophy(self, concept, trophy_id):
+        """
+        Get comments for a specific trophy across all game stacks in a concept.
+
+        Args:
+            concept: Concept instance
+            trophy_id: Trophy position within concept
+
+        Returns:
+            QuerySet: Trophy-level comments
+        """
+        return self.filter(concept=concept, trophy_id=trophy_id)
 
     def top_level(self):
         """
@@ -559,9 +570,13 @@ class CommentManager(models.Manager):
         """Proxy to queryset method."""
         return self.get_queryset().active()
 
-    def for_content_object(self, obj):
+    def for_concept(self, concept):
         """Proxy to queryset method."""
-        return self.get_queryset().for_content_object(obj)
+        return self.get_queryset().for_concept(concept)
+
+    def for_trophy(self, concept, trophy_id):
+        """Proxy to queryset method."""
+        return self.get_queryset().for_trophy(concept, trophy_id)
 
     def top_level(self):
         """Proxy to queryset method."""
@@ -579,19 +594,23 @@ class CommentManager(models.Manager):
         """Proxy to queryset method."""
         return self.get_queryset().by_old()
 
-    def get_threaded_comments(self, obj, profile=None, sort='top'):
+    def get_threaded_comments(self, concept, profile=None, sort='top', trophy_id=None):
         """
-        Get all comments for an object in threaded structure.
+        Get all comments for a concept or trophy in threaded structure.
 
         Args:
-            obj: Game or Trophy instance
+            concept: Concept instance
             profile: Optional profile to check votes
             sort: 'top', 'new', or 'old'
+            trophy_id: Optional trophy_id for trophy-level comments (None = concept-level)
 
         Returns:
             QuerySet: Comments optimized for display with nested replies
         """
-        qs = self.for_content_object(obj).active().with_author_data()
+        if trophy_id is not None:
+            qs = self.for_trophy(concept, trophy_id).active().with_author_data()
+        else:
+            qs = self.for_concept(concept).active().with_author_data()
 
         if profile:
             qs = qs.with_vote_check(profile)

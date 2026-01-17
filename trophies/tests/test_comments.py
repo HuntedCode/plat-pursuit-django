@@ -2,7 +2,7 @@
 Tests for the comment system.
 
 This test suite covers:
-- Comment model and manager
+- Comment model and manager (Concept-based)
 - CommentVote model
 - CommentReport model
 - CommentService business logic
@@ -10,8 +10,7 @@ This test suite covers:
 """
 from django.test import TestCase
 from django.utils import timezone
-from django.contrib.contenttypes.models import ContentType
-from trophies.models import Profile, Game, Trophy, Comment, CommentVote, CommentReport
+from trophies.models import Profile, Game, Trophy, Concept, Comment, CommentVote, CommentReport
 from trophies.services.comment_service import CommentService
 from users.models import CustomUser
 
@@ -46,10 +45,17 @@ class CommentModelTest(TestCase):
             is_linked=True
         )
 
-        # Create a game
+        # Create a concept
+        self.concept = Concept.objects.create(
+            unified_title='Test Game Concept',
+            concept_id='CUSA12345'
+        )
+
+        # Create a game linked to concept
         self.game = Game.objects.create(
             np_communication_id='NPWR12345_00',
-            title_name='Test Game'
+            title_name='Test Game',
+            concept=self.concept
         )
 
         # Create a trophy
@@ -60,17 +66,17 @@ class CommentModelTest(TestCase):
             game=self.game
         )
 
-    def test_create_comment_on_game(self):
-        """Test creating a comment on a game."""
+    def test_create_comment_on_concept(self):
+        """Test creating a comment on a concept."""
         comment = Comment.objects.create(
-            content_type=ContentType.objects.get_for_model(self.game),
-            object_id=self.game.id,
+            concept=self.concept,
             profile=self.profile,
             body='This is a test comment'
         )
 
         self.assertEqual(comment.profile, self.profile)
-        self.assertEqual(comment.content_object, self.game)
+        self.assertEqual(comment.concept, self.concept)
+        self.assertIsNone(comment.trophy_id)
         self.assertEqual(comment.body, 'This is a test comment')
         self.assertEqual(comment.depth, 0)
         self.assertFalse(comment.is_deleted)
@@ -78,31 +84,30 @@ class CommentModelTest(TestCase):
         self.assertEqual(comment.upvote_count, 0)
 
     def test_create_comment_on_trophy(self):
-        """Test creating a comment on a trophy."""
+        """Test creating a comment on a trophy within a concept."""
         comment = Comment.objects.create(
-            content_type=ContentType.objects.get_for_model(self.trophy),
-            object_id=self.trophy.id,
+            concept=self.concept,
+            trophy_id=1,
             profile=self.profile,
             body='Trophy tip: do this first'
         )
 
-        self.assertEqual(comment.content_object, self.trophy)
+        self.assertEqual(comment.concept, self.concept)
+        self.assertEqual(comment.trophy_id, 1)
         self.assertEqual(comment.body, 'Trophy tip: do this first')
 
     def test_threaded_comments(self):
         """Test creating nested replies."""
         # Create parent comment
         parent = Comment.objects.create(
-            content_type=ContentType.objects.get_for_model(self.game),
-            object_id=self.game.id,
+            concept=self.concept,
             profile=self.profile,
             body='Parent comment'
         )
 
         # Create reply
         reply = Comment.objects.create(
-            content_type=ContentType.objects.get_for_model(self.game),
-            object_id=self.game.id,
+            concept=self.concept,
             profile=self.profile2,
             body='Reply to parent',
             parent=parent
@@ -116,23 +121,20 @@ class CommentModelTest(TestCase):
         """Test depth calculation for deeply nested replies."""
         # Create comment chain
         parent = Comment.objects.create(
-            content_type=ContentType.objects.get_for_model(self.game),
-            object_id=self.game.id,
+            concept=self.concept,
             profile=self.profile,
             body='Level 0'
         )
 
         reply1 = Comment.objects.create(
-            content_type=ContentType.objects.get_for_model(self.game),
-            object_id=self.game.id,
+            concept=self.concept,
             profile=self.profile2,
             body='Level 1',
             parent=parent
         )
 
         reply2 = Comment.objects.create(
-            content_type=ContentType.objects.get_for_model(self.game),
-            object_id=self.game.id,
+            concept=self.concept,
             profile=self.profile,
             body='Level 2',
             parent=reply1
@@ -145,8 +147,7 @@ class CommentModelTest(TestCase):
     def test_soft_delete(self):
         """Test soft delete functionality."""
         comment = Comment.objects.create(
-            content_type=ContentType.objects.get_for_model(self.game),
-            object_id=self.game.id,
+            concept=self.concept,
             profile=self.profile,
             body='Comment to delete'
         )
@@ -161,8 +162,7 @@ class CommentModelTest(TestCase):
     def test_display_body_property(self):
         """Test display_body property shows correct content."""
         comment = Comment.objects.create(
-            content_type=ContentType.objects.get_for_model(self.game),
-            object_id=self.game.id,
+            concept=self.concept,
             profile=self.profile,
             body='Normal comment'
         )
@@ -189,22 +189,26 @@ class CommentManagerTest(TestCase):
             is_linked=True
         )
 
+        self.concept = Concept.objects.create(
+            unified_title='Test Game Concept',
+            concept_id='CUSA12345'
+        )
+
         self.game = Game.objects.create(
             np_communication_id='NPWR12345_00',
-            title_name='Test Game'
+            title_name='Test Game',
+            concept=self.concept
         )
 
         # Create mix of active and deleted comments
         self.active_comment = Comment.objects.create(
-            content_type=ContentType.objects.get_for_model(self.game),
-            object_id=self.game.id,
+            concept=self.concept,
             profile=self.profile,
             body='Active comment'
         )
 
         self.deleted_comment = Comment.objects.create(
-            content_type=ContentType.objects.get_for_model(self.game),
-            object_id=self.game.id,
+            concept=self.concept,
             profile=self.profile,
             body='Deleted comment',
             is_deleted=True
@@ -217,26 +221,44 @@ class CommentManagerTest(TestCase):
         self.assertIn(self.active_comment, active_comments)
         self.assertNotIn(self.deleted_comment, active_comments)
 
-    def test_for_content_object(self):
-        """Test for_content_object() method."""
-        comments = Comment.objects.for_content_object(self.game)
+    def test_for_concept(self):
+        """Test for_concept() method."""
+        comments = Comment.objects.for_concept(self.concept)
 
         self.assertEqual(comments.count(), 2)
         self.assertIn(self.active_comment, comments)
         self.assertIn(self.deleted_comment, comments)
 
+    def test_for_trophy(self):
+        """Test for_trophy() method."""
+        trophy_comment = Comment.objects.create(
+            concept=self.concept,
+            trophy_id=1,
+            profile=self.profile,
+            body='Trophy comment'
+        )
+
+        concept_comment = Comment.objects.create(
+            concept=self.concept,
+            profile=self.profile,
+            body='Concept comment'
+        )
+
+        trophy_comments = Comment.objects.for_trophy(self.concept, 1)
+
+        self.assertIn(trophy_comment, trophy_comments)
+        self.assertNotIn(concept_comment, trophy_comments)
+
     def test_top_level_filter(self):
         """Test top_level() method."""
         parent = Comment.objects.create(
-            content_type=ContentType.objects.get_for_model(self.game),
-            object_id=self.game.id,
+            concept=self.concept,
             profile=self.profile,
             body='Parent'
         )
 
         reply = Comment.objects.create(
-            content_type=ContentType.objects.get_for_model(self.game),
-            object_id=self.game.id,
+            concept=self.concept,
             profile=self.profile,
             body='Reply',
             parent=parent
@@ -250,16 +272,14 @@ class CommentManagerTest(TestCase):
     def test_by_top_sorting(self):
         """Test by_top() sorting by upvote count."""
         comment1 = Comment.objects.create(
-            content_type=ContentType.objects.get_for_model(self.game),
-            object_id=self.game.id,
+            concept=self.concept,
             profile=self.profile,
             body='Low votes',
             upvote_count=1
         )
 
         comment2 = Comment.objects.create(
-            content_type=ContentType.objects.get_for_model(self.game),
-            object_id=self.game.id,
+            concept=self.concept,
             profile=self.profile,
             body='High votes',
             upvote_count=10
@@ -272,15 +292,13 @@ class CommentManagerTest(TestCase):
     def test_by_new_sorting(self):
         """Test by_new() sorting by creation date."""
         old_comment = Comment.objects.create(
-            content_type=ContentType.objects.get_for_model(self.game),
-            object_id=self.game.id,
+            concept=self.concept,
             profile=self.profile,
             body='Old comment'
         )
 
         new_comment = Comment.objects.create(
-            content_type=ContentType.objects.get_for_model(self.game),
-            object_id=self.game.id,
+            concept=self.concept,
             profile=self.profile,
             body='New comment'
         )
@@ -307,14 +325,13 @@ class CommentVoteTest(TestCase):
             is_linked=True
         )
 
-        self.game = Game.objects.create(
-            np_communication_id='NPWR12345_00',
-            title_name='Test Game'
+        self.concept = Concept.objects.create(
+            unified_title='Test Game Concept',
+            concept_id='CUSA12345'
         )
 
         self.comment = Comment.objects.create(
-            content_type=ContentType.objects.get_for_model(self.game),
-            object_id=self.game.id,
+            concept=self.concept,
             profile=self.profile,
             body='Test comment'
         )
@@ -362,14 +379,13 @@ class CommentReportTest(TestCase):
             is_linked=True
         )
 
-        self.game = Game.objects.create(
-            np_communication_id='NPWR12345_00',
-            title_name='Test Game'
+        self.concept = Concept.objects.create(
+            unified_title='Test Game Concept',
+            concept_id='CUSA12345'
         )
 
         self.comment = Comment.objects.create(
-            content_type=ContentType.objects.get_for_model(self.game),
-            object_id=self.game.id,
+            concept=self.concept,
             profile=self.profile,
             body='Test comment'
         )
@@ -447,9 +463,15 @@ class CommentServiceTest(TestCase):
             is_linked=False
         )
 
+        self.concept = Concept.objects.create(
+            unified_title='Test Game Concept',
+            concept_id='CUSA12345'
+        )
+
         self.game = Game.objects.create(
             np_communication_id='NPWR12345_00',
-            title_name='Test Game'
+            title_name='Test Game',
+            concept=self.concept
         )
 
     def test_can_comment_linked_user(self):
@@ -489,7 +511,7 @@ class CommentServiceTest(TestCase):
         """Test successful comment creation."""
         comment, error = CommentService.create_comment(
             profile=self.profile,
-            content_object=self.game,
+            concept=self.concept,
             body='Great game!'
         )
 
@@ -503,7 +525,7 @@ class CommentServiceTest(TestCase):
         long_body = 'x' * 2001
         comment, error = CommentService.create_comment(
             profile=self.profile,
-            content_object=self.game,
+            concept=self.concept,
             body=long_body
         )
 
@@ -514,7 +536,7 @@ class CommentServiceTest(TestCase):
         """Test comment creation with empty body."""
         comment, error = CommentService.create_comment(
             profile=self.profile,
-            content_object=self.game,
+            concept=self.concept,
             body='   '
         )
 
@@ -525,7 +547,7 @@ class CommentServiceTest(TestCase):
         """Test comment creation fails for unlinked user."""
         comment, error = CommentService.create_comment(
             profile=self.unlinked_profile,
-            content_object=self.game,
+            concept=self.concept,
             body='Test'
         )
 
@@ -536,7 +558,7 @@ class CommentServiceTest(TestCase):
         """Test successful comment edit."""
         comment, _ = CommentService.create_comment(
             profile=self.profile,
-            content_object=self.game,
+            concept=self.concept,
             body='Original text'
         )
 
@@ -556,7 +578,7 @@ class CommentServiceTest(TestCase):
         """Test editing someone else's comment fails."""
         comment, _ = CommentService.create_comment(
             profile=self.profile,
-            content_object=self.game,
+            concept=self.concept,
             body='Original text'
         )
 
@@ -573,7 +595,7 @@ class CommentServiceTest(TestCase):
         """Test successful comment deletion."""
         comment, _ = CommentService.create_comment(
             profile=self.profile,
-            content_object=self.game,
+            concept=self.concept,
             body='Delete me'
         )
 
@@ -591,7 +613,7 @@ class CommentServiceTest(TestCase):
         """Test adding a vote."""
         comment, _ = CommentService.create_comment(
             profile=self.profile,
-            content_object=self.game,
+            concept=self.concept,
             body='Vote on me'
         )
 
@@ -609,7 +631,7 @@ class CommentServiceTest(TestCase):
         """Test removing a vote."""
         comment, _ = CommentService.create_comment(
             profile=self.profile,
-            content_object=self.game,
+            concept=self.concept,
             body='Vote on me'
         )
 
@@ -628,7 +650,7 @@ class CommentServiceTest(TestCase):
         """Test that users cannot vote on their own comments."""
         comment, _ = CommentService.create_comment(
             profile=self.profile,
-            content_object=self.game,
+            concept=self.concept,
             body='My comment'
         )
 
@@ -641,7 +663,7 @@ class CommentServiceTest(TestCase):
         """Test successful comment reporting."""
         comment, _ = CommentService.create_comment(
             profile=self.profile,
-            content_object=self.game,
+            concept=self.concept,
             body='Reportable content'
         )
 
@@ -660,7 +682,7 @@ class CommentServiceTest(TestCase):
         """Test that a user cannot report the same comment twice."""
         comment, _ = CommentService.create_comment(
             profile=self.profile,
-            content_object=self.game,
+            concept=self.concept,
             body='Reportable content'
         )
 
@@ -690,9 +712,15 @@ class CommentSignalTest(TestCase):
             is_linked=True
         )
 
+        self.concept = Concept.objects.create(
+            unified_title='Test Game Concept',
+            concept_id='CUSA12345'
+        )
+
         self.game = Game.objects.create(
             np_communication_id='NPWR12345_00',
-            title_name='Test Game'
+            title_name='Test Game',
+            concept=self.concept
         )
 
         self.trophy = Trophy.objects.create(
@@ -702,46 +730,44 @@ class CommentSignalTest(TestCase):
             game=self.game
         )
 
-    def test_comment_count_incremented_on_game(self):
-        """Test that comment_count is incremented when comment is created on game."""
-        initial_count = self.game.comment_count
+    def test_comment_count_incremented_on_concept(self):
+        """Test that comment_count is incremented when comment is created on concept."""
+        initial_count = self.concept.comment_count
 
         Comment.objects.create(
-            content_type=ContentType.objects.get_for_model(self.game),
-            object_id=self.game.id,
+            concept=self.concept,
             profile=self.profile,
             body='Test comment'
         )
 
-        self.game.refresh_from_db()
-        self.assertEqual(self.game.comment_count, initial_count + 1)
+        self.concept.refresh_from_db()
+        self.assertEqual(self.concept.comment_count, initial_count + 1)
 
     def test_comment_count_incremented_on_trophy(self):
         """Test that comment_count is incremented when comment is created on trophy."""
-        initial_count = self.trophy.comment_count
+        initial_count = self.concept.comment_count
 
         Comment.objects.create(
-            content_type=ContentType.objects.get_for_model(self.trophy),
-            object_id=self.trophy.id,
+            concept=self.concept,
+            trophy_id=1,
             profile=self.profile,
             body='Trophy tip'
         )
 
-        self.trophy.refresh_from_db()
-        self.assertEqual(self.trophy.comment_count, initial_count + 1)
+        self.concept.refresh_from_db()
+        self.assertEqual(self.concept.comment_count, initial_count + 1)
 
     def test_comment_count_not_incremented_for_deleted(self):
         """Test that deleted comments don't increment count via signal."""
-        initial_count = self.game.comment_count
+        initial_count = self.concept.comment_count
 
         Comment.objects.create(
-            content_type=ContentType.objects.get_for_model(self.game),
-            object_id=self.game.id,
+            concept=self.concept,
             profile=self.profile,
             body='Deleted from start',
             is_deleted=True
         )
 
-        self.game.refresh_from_db()
+        self.concept.refresh_from_db()
         # Signal should not increment for deleted comments
-        self.assertEqual(self.game.comment_count, initial_count)
+        self.assertEqual(self.concept.comment_count, initial_count)

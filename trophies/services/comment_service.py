@@ -9,7 +9,6 @@ from django.db import transaction
 from django.db.models import F
 from django.core.cache import cache
 from django.utils import timezone
-from django.contrib.contenttypes.models import ContentType
 
 logger = logging.getLogger('psn_api')
 
@@ -53,16 +52,17 @@ class CommentService:
 
     @staticmethod
     @transaction.atomic
-    def create_comment(profile, content_object, body, parent=None, image=None):
+    def create_comment(profile, concept, body, parent=None, image=None, trophy_id=None):
         """
-        Create a new comment.
+        Create a new comment on a Concept or Trophy within a Concept.
 
         Args:
             profile: Profile instance (author)
-            content_object: Game or Trophy instance
+            concept: Concept instance
             body: Comment text
             parent: Optional parent Comment for replies
             image: Optional ImageFile
+            trophy_id: Optional trophy_id for trophy-level comments (None = concept-level)
 
         Returns:
             tuple: (Comment instance, error_message or None)
@@ -73,6 +73,10 @@ class CommentService:
         can_comment, reason = CommentService.can_comment(profile)
         if not can_comment:
             return None, reason
+
+        # Validate concept
+        if not concept:
+            return None, "Cannot comment on games without a concept."
 
         # Validate body length
         if len(body) > CommentService.MAX_COMMENT_LENGTH:
@@ -89,28 +93,27 @@ class CommentService:
         if parent:
             if parent.depth >= CommentService.MAX_DEPTH:
                 return None, "Maximum reply depth reached."
-            # Ensure parent is for the same content object
-            if parent.content_object != content_object:
+            # Ensure parent is for the same concept and trophy_id
+            if parent.concept != concept or parent.trophy_id != trophy_id:
                 return None, "Invalid parent comment."
 
         try:
-            ct = ContentType.objects.get_for_model(content_object)
             comment = Comment.objects.create(
-                content_type=ct,
-                object_id=content_object.id,
+                concept=concept,
+                trophy_id=trophy_id,
                 profile=profile,
                 parent=parent,
                 body=body.strip(),
                 image=image if image and CommentService.can_attach_image(profile) else None
             )
 
-            # Update denormalized count
-            CommentService._update_comment_count(content_object, delta=1)
+            # Update denormalized count on Concept
+            CommentService._update_comment_count(concept, delta=1)
 
             # Invalidate cache
-            CommentService.invalidate_cache(content_object)
+            CommentService.invalidate_cache(concept, trophy_id)
 
-            logger.info(f"Comment {comment.id} created by {profile.psn_username}")
+            logger.info(f"Comment {comment.id} created by {profile.psn_username} on concept {concept.id} (trophy_id={trophy_id})")
             return comment, None
 
         except Exception as e:
@@ -148,7 +151,7 @@ class CommentService:
         comment.is_edited = True
         comment.save(update_fields=['body', 'is_edited', 'updated_at'])
 
-        CommentService.invalidate_cache(comment.content_object)
+        CommentService.invalidate_cache(comment.concept, comment.trophy_id)
 
         logger.info(f"Comment {comment.id} edited by {profile.psn_username}")
         return True, None
@@ -179,7 +182,7 @@ class CommentService:
         # Update count (don't decrement - preserves thread structure)
         # We keep the comment in the count but mark it deleted
 
-        CommentService.invalidate_cache(comment.content_object)
+        CommentService.invalidate_cache(comment.concept, comment.trophy_id)
 
         action = "admin deleted" if is_admin else "deleted"
         logger.info(f"Comment {comment.id} {action} by {profile.psn_username}")
@@ -233,35 +236,38 @@ class CommentService:
             return True, None
 
     @staticmethod
-    def get_comments_for_object(obj, profile=None, sort='top'):
+    def get_comments_for_concept(concept, profile=None, sort='top', trophy_id=None):
         """
-        Get comments for a Game or Trophy.
+        Get comments for a Concept or Trophy within a Concept.
 
         Args:
-            obj: Game or Trophy instance
+            concept: Concept instance
             profile: Optional viewing profile (for vote status)
             sort: 'top', 'new', or 'old'
+            trophy_id: Optional trophy_id for trophy-level comments (None = concept-level)
 
         Returns:
-            QuerySet: Comments for the object
+            QuerySet: Comments for the concept/trophy
         """
         from trophies.models import Comment
-        return Comment.objects.get_threaded_comments(obj, profile, sort)
+        return Comment.objects.get_threaded_comments(concept, profile, sort, trophy_id)
 
     @staticmethod
-    def get_comment_context_for_profile(comment, viewing_profile):
+    def get_comment_context_for_profile(comment, viewing_profile, game=None):
         """
         Build context dict for displaying a comment with author info.
 
         Args:
             comment: Comment instance
             viewing_profile: Profile viewing the comment
+            game: Optional specific Game instance to check author's progress on
 
         Returns:
             dict: Comment data with author indicators
         """
         author_profile = comment.profile
-        content_obj = comment.content_object
+        concept = comment.concept
+        trophy_id = comment.trophy_id
 
         context = {
             'comment': comment,
@@ -272,42 +278,70 @@ class CommentService:
             'is_edited': comment.is_edited,
         }
 
-        # Author indicators based on content type
-        if hasattr(content_obj, 'np_communication_id'):  # Game
-            # Check if author has played/completed this game
+        # Author indicators based on comment type
+        if trophy_id is None:
+            # Concept-level comment: Show author's game completion status
+            # Check across all games in the concept for any completion
             from trophies.models import ProfileGame
-            try:
-                pg = ProfileGame.objects.get(profile=author_profile, game=content_obj)
+
+            # Get any game in this concept that the author has played
+            pg = ProfileGame.objects.filter(
+                profile=author_profile,
+                game__concept=concept
+            ).order_by('-progress').first()
+
+            if pg:
                 context['author_progress'] = pg.progress
                 context['author_has_platinum'] = pg.has_plat
-            except ProfileGame.DoesNotExist:
+            else:
                 context['author_progress'] = None
                 context['author_has_platinum'] = False
-        else:  # Trophy
-            # Check if author has earned this trophy
-            from trophies.models import EarnedTrophy
-            try:
-                et = EarnedTrophy.objects.get(profile=author_profile, trophy=content_obj)
-                context['author_has_trophy'] = et.earned
-                context['author_earned_date'] = et.earned_date_time
-            except EarnedTrophy.DoesNotExist:
+        else:
+            # Trophy-level comment: Show if author has earned this trophy
+            # trophy_id is consistent across stacks, check any stack in concept
+            from trophies.models import EarnedTrophy, Trophy
+
+            # Find trophy by trophy_id in any game stack of this concept
+            trophy = Trophy.objects.filter(
+                game__concept=concept,
+                trophy_id=trophy_id
+            ).first()
+
+            if trophy:
+                # Check if author earned it in any stack
+                et = EarnedTrophy.objects.filter(
+                    profile=author_profile,
+                    trophy__game__concept=concept,
+                    trophy__trophy_id=trophy_id,
+                    earned=True
+                ).first()
+
+                if et:
+                    context['author_has_trophy'] = True
+                    context['author_earned_date'] = et.earned_date_time
+                else:
+                    context['author_has_trophy'] = False
+                    context['author_earned_date'] = None
+            else:
                 context['author_has_trophy'] = False
                 context['author_earned_date'] = None
 
         return context
 
     @staticmethod
-    def _update_comment_count(content_object, delta=1):
-        """Update denormalized comment count on Game/Trophy."""
-        content_object.comment_count = F('comment_count') + delta
-        content_object.save(update_fields=['comment_count'])
-        content_object.refresh_from_db(fields=['comment_count'])
+    def _update_comment_count(concept, delta=1):
+        """Update denormalized comment count on Concept."""
+        concept.comment_count = F('comment_count') + delta
+        concept.save(update_fields=['comment_count'])
+        concept.refresh_from_db(fields=['comment_count'])
 
     @staticmethod
-    def invalidate_cache(content_object):
-        """Invalidate cached comments for a content object."""
-        ct = ContentType.objects.get_for_model(content_object)
-        cache_key = f"comments:{ct.model}:{content_object.id}"
+    def invalidate_cache(concept, trophy_id=None):
+        """Invalidate cached comments for a concept/trophy."""
+        if trophy_id is not None:
+            cache_key = f"comments:concept:{concept.id}:trophy:{trophy_id}"
+        else:
+            cache_key = f"comments:concept:{concept.id}"
         cache.delete(cache_key)
 
     @staticmethod

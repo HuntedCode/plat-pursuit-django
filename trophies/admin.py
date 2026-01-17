@@ -399,8 +399,8 @@ class CommentAdmin(admin.ModelAdmin):
     list_display = [
         'id',
         'profile',
-        'content_type',
-        'content_object_link',
+        'concept',
+        'trophy_id',
         'body_preview',
         'upvote_count',
         'depth',
@@ -410,7 +410,6 @@ class CommentAdmin(admin.ModelAdmin):
     list_filter = [
         'is_deleted',
         'is_edited',
-        'content_type',
         'created_at',
         'depth',
     ]
@@ -418,12 +417,10 @@ class CommentAdmin(admin.ModelAdmin):
         'body',
         'profile__psn_username',
         'profile__user__email',
+        'concept__concept_name',
     ]
-    raw_id_fields = ['profile', 'parent']
+    raw_id_fields = ['profile', 'parent', 'concept']
     readonly_fields = [
-        'content_type',
-        'object_id',
-        'content_object',
         'depth',
         'created_at',
         'updated_at',
@@ -436,7 +433,7 @@ class CommentAdmin(admin.ModelAdmin):
 
     fieldsets = (
         ('Content', {
-            'fields': ('content_type', 'object_id', 'content_object', 'profile', 'body', 'image')
+            'fields': ('concept', 'trophy_id', 'profile', 'body', 'image')
         }),
         ('Threading', {
             'fields': ('parent', 'depth')
@@ -455,14 +452,6 @@ class CommentAdmin(admin.ModelAdmin):
             return '[deleted]'
         return obj.body[:100] + '...' if len(obj.body) > 100 else obj.body
     body_preview.short_description = 'Body'
-
-    def content_object_link(self, obj):
-        """Show link to the content object."""
-        content_obj = obj.content_object
-        if not content_obj:
-            return '-'
-        return str(content_obj)
-    content_object_link.short_description = 'Content'
 
     @admin.action(description='Soft delete selected comments')
     def soft_delete_comments(self, request, queryset):
