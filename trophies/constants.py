@@ -248,3 +248,18 @@ SUMMARY_CHAR_LIMIT = 500
 RATING_CACHE_TIMEOUT = 3600
 MIN_STARS = 1
 MAX_STARS = 5
+
+# Image limits by tier
+BASIC_MAX_IMAGES = 10
+BASIC_MAX_FILE_SIZE = 3 * 1024 * 1024  # 3MB
+
+PREMIUM_MAX_IMAGES = 30
+PREMIUM_MAX_FILE_SIZE = 5 * 1024 * 1024  # 5MB
+
+# Allowed file types
+ALLOWED_EXTENSIONS = ['jpg', 'jpeg', 'png', 'webp']
+ALLOWED_CONTENT_TYPES = [
+    'image/jpeg',
+    'image/png',
+    'image/webp',
+]
