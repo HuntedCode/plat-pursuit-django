@@ -17,7 +17,7 @@ from django.contrib.auth import get_user_model
 
 from trophies.models import (
     Profile, Game, Concept, Guide, GuideSection, GuideTag,
-    AuthorTrust
+    AuthorTrust, Trophy, TrophyGroup
 )
 from trophies.services.guide_service import GuideService
 from trophies.constants import (
@@ -1088,39 +1088,73 @@ class RoadmapGuideTests(GuideServiceTestCase):
     """Tests for Trophy Roadmap guide creation."""
 
     def setUp(self):
-        """Create test fixtures including trophies."""
+        """Create test fixtures including trophies and trophy groups."""
         super().setUp()
 
-        # Create trophies for test game
-        from trophies.models import Trophy
+        # Create trophy groups
+        self.base_group = TrophyGroup.objects.create(
+            game=self.game,
+            trophy_group_id='default',
+            trophy_group_name='Base Game',
+            defined_trophies={'bronze': 2, 'silver': 1, 'gold': 1, 'platinum': 1}
+        )
+        self.dlc_group = TrophyGroup.objects.create(
+            game=self.game,
+            trophy_group_id='001',
+            trophy_group_name='Expansion Pack',
+            defined_trophies={'bronze': 3, 'silver': 2, 'gold': 1}
+        )
 
+        # Create base game trophies
         self.trophy1 = Trophy.objects.create(
             game=self.game,
             trophy_id=0,
             trophy_name='Platinum Trophy',
-            trophy_type='Platinum',
-            trophy_detail='Earn all trophies'
+            trophy_type='platinum',
+            trophy_detail='Earn all trophies',
+            trophy_group_id='default'
         )
         self.trophy2 = Trophy.objects.create(
             game=self.game,
             trophy_id=1,
             trophy_name='First Steps',
-            trophy_type='Bronze',
-            trophy_detail='Complete the tutorial'
+            trophy_type='bronze',
+            trophy_detail='Complete the tutorial',
+            trophy_group_id='default'
         )
         self.trophy3 = Trophy.objects.create(
             game=self.game,
             trophy_id=2,
             trophy_name='Halfway There',
-            trophy_type='Silver',
-            trophy_detail='Complete half the game'
+            trophy_type='silver',
+            trophy_detail='Complete half the game',
+            trophy_group_id='default'
         )
         self.trophy4 = Trophy.objects.create(
             game=self.game,
             trophy_id=3,
             trophy_name='Master',
-            trophy_type='Gold',
-            trophy_detail='Complete all challenges'
+            trophy_type='gold',
+            trophy_detail='Complete all challenges',
+            trophy_group_id='default'
+        )
+
+        # Create DLC trophies
+        self.dlc_trophy1 = Trophy.objects.create(
+            game=self.game,
+            trophy_id=4,
+            trophy_name='DLC Champion',
+            trophy_type='gold',
+            trophy_detail='Complete all DLC challenges',
+            trophy_group_id='001'
+        )
+        self.dlc_trophy2 = Trophy.objects.create(
+            game=self.game,
+            trophy_id=5,
+            trophy_name='DLC Explorer',
+            trophy_type='bronze',
+            trophy_detail='Explore the DLC area',
+            trophy_group_id='001'
         )
 
     def test_create_roadmap_guide_success(self):
@@ -1243,82 +1277,152 @@ class RoadmapGuideTests(GuideServiceTestCase):
             self.assertIsNotNone(section.content)
             self.assertGreater(len(section.content), 0)
 
-        # Check intro sections contain game title
-        for i in range(3):
-            self.assertIn(self.game.title_name, sections[i].content)
+        # Check Overview section contains game title
+        self.assertIn(self.game.title_name, sections[0].content)
+
+        # Check Trophy Roadmap section has roadmap content
+        self.assertIn('step-by-step', sections[1].content.lower())
+
+        # Check General Tips section contains game title
+        self.assertIn(self.game.title_name, sections[2].content)
 
         # Check trophy sections contain trophy-specific content
         for i in range(3, 7):
             self.assertIn('Trophy', sections[i].content)
             self.assertIn('How to Earn', sections[i].content)
 
+    def test_roadmap_guide_for_dlc(self):
+        """Should create roadmap guide for DLC trophy group."""
+        guide = GuideService.create_roadmap_guide(
+            profile=self.profile_linked,
+            game=self.game,
+            title='Expansion Pack Trophy Roadmap',
+            summary='DLC roadmap guide',
+            trophy_group_id='001'
+        )
+
+        self.assertIsNotNone(guide.id)
+        self.assertEqual(guide.guide_type, 'roadmap')
+
+        # Should have 3 intro sections + 2 DLC trophies = 5 sections
+        sections = list(guide.sections.order_by('section_order'))
+        self.assertEqual(len(sections), 5)
+
+        # Check DLC trophy sections are present
+        trophy_section_titles = [s.title for s in sections[3:]]
+        self.assertIn('DLC Champion', trophy_section_titles)
+        self.assertIn('DLC Explorer', trophy_section_titles)
+
+    def test_roadmap_guide_dlc_content_mentions_dlc(self):
+        """DLC roadmap templates should have DLC-specific text."""
+        guide = GuideService.create_roadmap_guide(
+            profile=self.profile_linked,
+            game=self.game,
+            title='Expansion Pack Trophy Roadmap',
+            summary='DLC roadmap guide',
+            trophy_group_id='001'
+        )
+
+        sections = list(guide.sections.order_by('section_order'))
+
+        # Overview should mention DLC
+        overview_content = sections[0].content
+        self.assertIn('DLC', overview_content)
+        self.assertIn('Expansion Pack', overview_content)
+        self.assertIn('Prerequisite', overview_content)
+
+        # Roadmap section should mention DLC
+        roadmap_content = sections[1].content
+        self.assertIn('dlc roadmap', roadmap_content.lower())
+        self.assertIn('expansion pack', roadmap_content.lower())
+
+    def test_roadmap_guide_only_includes_group_trophies(self):
+        """Roadmap guide should only include trophies from specified group."""
+        guide = GuideService.create_roadmap_guide(
+            profile=self.profile_linked,
+            game=self.game,
+            title='Base Game Roadmap',
+            summary='Base game only',
+            trophy_group_id='default'
+        )
+
+        sections = list(guide.sections.order_by('section_order'))
+        trophy_section_titles = [s.title for s in sections[3:]]
+
+        # Should include base game trophies
+        self.assertIn('Platinum Trophy', trophy_section_titles)
+        self.assertIn('First Steps', trophy_section_titles)
+
+        # Should NOT include DLC trophies
+        self.assertNotIn('DLC Champion', trophy_section_titles)
+        self.assertNotIn('DLC Explorer', trophy_section_titles)
+
     def test_roadmap_guide_zero_trophies_raises_error(self):
-        """Creating roadmap for game with no trophies should raise ValidationError."""
+        """Creating roadmap for trophy group with no trophies should raise ValidationError."""
+        # Create empty trophy group
+        empty_group = TrophyGroup.objects.create(
+            game=self.game2,
+            trophy_group_id='default',
+            trophy_group_name='Empty Group'
+        )
+
         with self.assertRaises(ValidationError) as context:
             GuideService.create_roadmap_guide(
                 profile=self.profile_linked,
-                game=self.game2,  # Has no trophies
+                game=self.game2,
                 title='Trophy Roadmap',
                 summary='Summary'
             )
 
         self.assertIn('no trophies', str(context.exception))
 
-    def test_roadmap_guide_exceeds_basic_limit(self):
-        """Creating roadmap with too many trophies should fail for basic users."""
-        from trophies.models import Trophy
+    def test_roadmap_guide_invalid_trophy_group(self):
+        """Creating roadmap with nonexistent trophy group should raise ValidationError."""
+        with self.assertRaises(ValidationError) as context:
+            GuideService.create_roadmap_guide(
+                profile=self.profile_linked,
+                game=self.game,
+                title='Trophy Roadmap',
+                summary='Summary',
+                trophy_group_id='999'  # Doesn't exist
+            )
 
-        # Create 18 trophies (3 intro + 18 trophies = 21 sections > 20 basic limit)
-        for i in range(18):
+        error_msg = str(context.exception)
+        self.assertIn('Trophy group', error_msg)
+        self.assertIn('999', error_msg)
+        self.assertIn('does not exist', error_msg)
+
+    def test_roadmap_guide_bypasses_section_limits(self):
+        """Roadmap guides should bypass section limits for complete trophy coverage."""
+        # Create a trophy group with 100 trophies (basic user)
+        large_group = TrophyGroup.objects.create(
+            game=self.game2,
+            trophy_group_id='default',
+            trophy_group_name='Large Game'
+        )
+
+        # Create 100 trophies (3 intro + 100 trophies = 103 sections)
+        for i in range(100):
             Trophy.objects.create(
                 game=self.game2,
                 trophy_id=i,
                 trophy_name=f'Trophy {i}',
-                trophy_type='Bronze',
-                trophy_detail=f'Description {i}'
+                trophy_type='bronze',
+                trophy_detail=f'Description {i}',
+                trophy_group_id='default'
             )
 
-        with self.assertRaises(ValidationError) as context:
-            GuideService.create_roadmap_guide(
-                profile=self.profile_linked,  # Basic user
-                game=self.game2,
-                title='Trophy Roadmap',
-                summary='Summary'
-            )
+        # Should succeed even though 103 > BASIC_MAX_SECTIONS (20)
+        guide = GuideService.create_roadmap_guide(
+            profile=self.profile_linked,  # Basic user
+            game=self.game2,
+            title='Trophy Roadmap',
+            summary='Summary'
+        )
 
-        error_msg = str(context.exception)
-        self.assertIn('18 trophies', error_msg)
-        self.assertIn('21 total sections', error_msg)
-        self.assertIn('Basic account', error_msg)
-        self.assertIn('20 sections', error_msg)
-
-    def test_roadmap_guide_exceeds_premium_limit(self):
-        """Creating roadmap with too many trophies should fail for premium users."""
-        from trophies.models import Trophy
-
-        # Create 28 trophies (3 intro + 28 trophies = 31 sections > 30 premium limit)
-        for i in range(28):
-            Trophy.objects.create(
-                game=self.game2,
-                trophy_id=i,
-                trophy_name=f'Trophy {i}',
-                trophy_type='Bronze',
-                trophy_detail=f'Description {i}'
-            )
-
-        with self.assertRaises(ValidationError) as context:
-            GuideService.create_roadmap_guide(
-                profile=self.profile_premium,  # Premium user
-                game=self.game2,
-                title='Trophy Roadmap',
-                summary='Summary'
-            )
-
-        error_msg = str(context.exception)
-        self.assertIn('28 trophies', error_msg)
-        self.assertIn('31 total sections', error_msg)
-        self.assertIn('Premium account', error_msg)
-        self.assertIn('30 sections', error_msg)
+        self.assertIsNotNone(guide.id)
+        # 3 intro + 100 trophies = 103 sections
+        self.assertEqual(guide.sections.count(), 103)
 
     def test_roadmap_guide_missing_roadmap_tag(self):
         """Creating roadmap guide should fail if Roadmap tag doesn't exist."""

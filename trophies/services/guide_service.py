@@ -13,7 +13,7 @@ from django.db.models import F
 from django.utils import timezone
 from django.core.exceptions import ValidationError, PermissionDenied
 
-from trophies.models import Guide, GuideSection, AuthorTrust, GuideTag
+from trophies.models import Guide, GuideSection, AuthorTrust, GuideTag, TrophyGroup
 from trophies.constants import SUMMARY_CHAR_LIMIT, BASIC_SECTION_CHAR_LIMIT, PREMIUM_SECTION_CHAR_LIMIT, BASIC_MAX_SECTIONS, PREMIUM_MAX_SECTIONS, TRUSTED_MIN_APPROVED_GUIDES, TRUSTED_MIN_TOTAL_STARS
 
 logger = logging.getLogger(__name__)
@@ -97,28 +97,31 @@ class GuideService:
 
     @staticmethod
     @transaction.atomic
-    def create_roadmap_guide(profile, game, title, summary):
+    def create_roadmap_guide(profile, game, title, summary, trophy_group_id='default'):
         """
-        Create a Trophy Roadmap guide with automatic sections for all trophies.
+        Create a Trophy Roadmap guide with automatic sections for all trophies in a trophy group.
 
         Creates:
         - 3 fixed intro sections (Overview, Trophy Roadmap, General Tips)
-        - One section per trophy (ordered by trophy_id)
+        - One section per trophy in the specified trophy group (ordered by trophy_id)
         - Auto-applies "Roadmap" tag
         - Template content for all sections
+
+        Note: Roadmap guides bypass section limits to ensure complete trophy coverage.
 
         Args:
             profile: Author profile
             game: Game instance
             title: Guide title
             summary: Guide summary (max 500 chars)
+            trophy_group_id: Trophy group ID (default='default' for base game, '001'/'002'/etc for DLC)
 
         Returns:
             Guide instance
 
         Raises:
             PermissionDenied: If profile cannot create guides
-            ValidationError: If summary too long, no trophies, or trophy count exceeds limits
+            ValidationError: If summary too long, no trophies in group, or trophy group doesn't exist
         """
         # Check permissions
         can_create, reason = GuideService.can_create_guide(profile)
@@ -131,35 +134,25 @@ class GuideService:
                 f"Summary must be {SUMMARY_CHAR_LIMIT} characters or less"
             )
 
-        # Fetch trophies
-        trophies = game.trophies.all().order_by('trophy_id')
-        trophy_count = trophies.count()
-
-        # Validate that game has trophies
-        if trophy_count == 0:
+        # Verify trophy group exists
+        try:
+            trophy_group = TrophyGroup.objects.get(game=game, trophy_group_id=trophy_group_id)
+        except TrophyGroup.DoesNotExist:
             raise ValidationError(
-                "Cannot create Trophy Roadmap guide for a game with no trophies"
+                f"Trophy group '{trophy_group_id}' does not exist for this game"
             )
 
-        # Calculate total sections and check limits
-        total_sections = 3 + trophy_count
-        max_sections = PREMIUM_MAX_SECTIONS if profile.user_is_premium else BASIC_MAX_SECTIONS
+        # Fetch trophies for THIS group only
+        trophies = game.trophies.filter(trophy_group_id=trophy_group_id).order_by('trophy_id')
+        trophy_count = trophies.count()
 
-        if total_sections > max_sections:
-            if profile.user_is_premium:
-                raise ValidationError(
-                    f"This game has {trophy_count} trophies, which would require "
-                    f"{total_sections} total sections (including 3 intro sections). "
-                    f"Your Premium account allows up to {max_sections} sections. "
-                    f"This game has too many trophies for a Trophy Roadmap guide."
-                )
-            else:
-                raise ValidationError(
-                    f"This game has {trophy_count} trophies, which would require "
-                    f"{total_sections} total sections (including 3 intro sections). "
-                    f"Your Basic account allows up to {max_sections} sections. "
-                    f"Upgrade to Premium for more sections."
-                )
+        # Validate that trophy group has trophies
+        if trophy_count == 0:
+            raise ValidationError(
+                f"Trophy group '{trophy_group_id}' has no trophies"
+            )
+
+        # NO SECTION LIMIT CHECKS - roadmap guides bypass limits to ensure completeness
 
         # Get roadmap tag
         try:
@@ -183,25 +176,25 @@ class GuideService:
         # Apply roadmap tag
         guide.tags.set([roadmap_tag])
 
-        # Create 3 intro sections
+        # Create 3 intro sections with DLC-aware templates
         GuideSection.objects.create(
             guide=guide,
             title="Overview",
-            content=GuideService._get_roadmap_overview_template(game),
+            content=GuideService._get_roadmap_overview_template(game, trophy_group),
             section_order=0
         )
 
         GuideSection.objects.create(
             guide=guide,
             title="Trophy Roadmap",
-            content=GuideService._get_roadmap_roadmap_template(game),
+            content=GuideService._get_roadmap_roadmap_template(game, trophy_group),
             section_order=1
         )
 
         GuideSection.objects.create(
             guide=guide,
             title="General Tips",
-            content=GuideService._get_roadmap_tips_template(game),
+            content=GuideService._get_roadmap_tips_template(game, trophy_group),
             section_order=2
         )
 
@@ -219,7 +212,7 @@ class GuideService:
 
         logger.info(
             f"Roadmap guide created: {guide.id} by {profile.psn_username} "
-            f"for {game.title_name} with {trophy_count} trophies"
+            f"for {game.title_name} (trophy group: {trophy_group_id}) with {trophy_count} trophies"
         )
         return guide
 
@@ -767,19 +760,29 @@ class GuideService:
     # === Template Helpers for Roadmap Guides ===
 
     @staticmethod
-    def _get_roadmap_overview_template(game):
+    def _get_roadmap_overview_template(game, trophy_group):
         """
         Get template content for the Overview section of a roadmap guide.
 
         Args:
             game: Game instance
+            trophy_group: TrophyGroup instance
 
         Returns:
             str: Markdown template content
         """
-        return f"""This is a Trophy Roadmap guide for **{game.title_name}**.
+        is_dlc = trophy_group.trophy_group_id != 'default'
 
-**Estimated Platinum Difficulty:** [Rate 1-10]
+        if is_dlc:
+            title = f"This is a DLC Trophy Roadmap guide for **{trophy_group.trophy_group_name}** ({game.title_name})."
+            prerequisite = "\n**Prerequisite:** Complete the base game first (recommended).\n"
+        else:
+            title = f"This is a Trophy Roadmap guide for **{game.title_name}**."
+            prerequisite = ""
+
+        return f"""{title}
+{prerequisite}
+**Estimated Difficulty:** [Rate 1-10]
 
 **Estimated Time to Platinum:** [Time estimate]
 
@@ -803,17 +806,21 @@ class GuideService:
 """
 
     @staticmethod
-    def _get_roadmap_roadmap_template(game):
+    def _get_roadmap_roadmap_template(game, trophy_group):
         """
         Get template content for the Trophy Roadmap section.
 
         Args:
             game: Game instance
+            trophy_group: TrophyGroup instance
 
         Returns:
             str: Markdown template content
         """
-        return f"""This section provides a detailed step-by-step roadmap for earning all trophies in **{game.title_name}**.
+        is_dlc = trophy_group.trophy_group_id != 'default'
+        header = f"DLC Roadmap: {trophy_group.trophy_group_name}" if is_dlc else "Main Game Roadmap"
+
+        return f"""This section provides a step-by-step {header.lower()}.
 
 **Note:** Trophy references like [trophy:123] will automatically link to the specific trophy section below.
 
@@ -844,18 +851,26 @@ class GuideService:
 """
 
     @staticmethod
-    def _get_roadmap_tips_template(game):
+    def _get_roadmap_tips_template(game, trophy_group):
         """
         Get template content for the General Tips section.
 
         Args:
             game: Game instance
+            trophy_group: TrophyGroup instance
 
         Returns:
             str: Markdown template content
         """
-        return f"""This section contains general tips and information for earning trophies in **{game.title_name}**.
+        is_dlc = trophy_group.trophy_group_id != 'default'
 
+        if is_dlc:
+            dlc_note = f"\n**DLC Note:** Some tips may require completion of base game content first.\n"
+        else:
+            dlc_note = ""
+
+        return f"""This section contains general tips and information for earning trophies in **{game.title_name}**.
+{dlc_note}
 ## General Tips
 
 **Tip 1:** [First general tip]
