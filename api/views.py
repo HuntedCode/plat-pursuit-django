@@ -344,7 +344,6 @@ class CommentListView(APIView):
             'created_at': comment.created_at,
             'updated_at': comment.updated_at,
             'depth': depth if depth is not None else comment.depth,
-            'image': comment.image.url if comment.image else None,
             'author': {
                 'username': author_profile.display_psn_username or author_profile.psn_username,
                 'avatar_url': author_profile.avatar_url,
@@ -531,7 +530,6 @@ class CommentCreateView(APIView):
 
             body = serializer.validated_data['body']
             parent_id = serializer.validated_data.get('parent_id')
-            image = request.FILES.get('image')
 
             # Get parent comment if specified
             parent = None
@@ -553,7 +551,6 @@ class CommentCreateView(APIView):
                 concept=concept,
                 body=body,
                 parent=parent,
-                image=image,
                 trophy_id=trophy_id
             )
 

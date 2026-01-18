@@ -106,7 +106,7 @@ class CommentSerializer(serializers.ModelSerializer):
     class Meta:
         model = Comment
         fields = [
-            'id', 'author', 'body', 'image', 'upvote_count',
+            'id', 'author', 'body', 'upvote_count',
             'is_edited', 'is_deleted', 'created_at', 'updated_at',
             'depth', 'parent', 'replies',
             'user_has_voted', 'can_edit', 'can_delete'

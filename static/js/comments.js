@@ -5,26 +5,55 @@
 
 class CommentSystem {
     constructor(sectionId = 'comment-section') {
+        this.sectionId = sectionId;
         this.section = document.getElementById(sectionId);
-        if (!this.section) return;
+
+        if (!this.section) {
+            console.error(`Comment section not found: ${sectionId}`);
+            return;
+        }
 
         this.conceptId = this.section.dataset.conceptId;
         this.trophyId = this.section.dataset.trophyId || null;
         this.currentSort = 'top';
 
-        // DOM elements
-        this.commentsList = document.getElementById('comments-list');
-        this.commentsLoading = document.getElementById('comments-loading');
-        this.commentsEmpty = document.getElementById('comments-empty');
-        this.commentsError = document.getElementById('comments-error');
-        this.sortSelect = document.getElementById('comment-sort');
-        this.createForm = document.getElementById('comment-create-form');
-        this.commentBody = document.getElementById('comment-body');
-        this.charCount = document.getElementById('char-count');
-        this.discussionToggle = document.getElementById('discussion-toggle');
-        this.discussionContent = document.getElementById('discussion-content');
-        this.discussionSortContainer = document.getElementById('discussion-sort-container');
-        this.discussionToggleIcon = document.getElementById('discussion-toggle-icon');
+        // Determine if this is a trophy-level comment section
+        this.isTrophySection = sectionId.startsWith('trophy-comment-section-');
+
+        // DOM elements (scoped to section type)
+        if (this.isTrophySection) {
+            // Trophy-level selectors (scoped within the section)
+            this.commentsList = this.section.querySelector('.trophy-comments-list');
+            this.commentsLoading = this.section.querySelector('.trophy-comments-loading');
+            this.commentsEmpty = this.section.querySelector('.trophy-comments-empty');
+            this.commentsError = this.section.querySelector('.trophy-comments-error');
+            this.sortSelect = this.section.querySelector('.trophy-comment-sort');
+            this.createForm = this.section.querySelector('.trophy-comment-create-form');
+            this.commentBody = this.section.querySelector('.trophy-comment-body');
+            this.charCount = this.section.querySelector('.trophy-char-count');
+            this.discussionToggle = this.section.querySelector('.trophy-discussion-toggle');
+            this.discussionContent = this.section.querySelector('.trophy-discussion-content');
+            this.discussionSortContainer = this.section.querySelector('.trophy-discussion-sort-container');
+            this.discussionToggleIcon = this.section.querySelector('.trophy-toggle-icon');
+            this.commentCountBadge = document.getElementById(`trophy-comment-count-badge-${this.trophyId}`);
+            this.commentCount = document.getElementById(`trophy-comment-count-${this.trophyId}`);
+        } else {
+            // Game-level selectors (original IDs)
+            this.commentsList = document.getElementById('comments-list');
+            this.commentsLoading = document.getElementById('comments-loading');
+            this.commentsEmpty = document.getElementById('comments-empty');
+            this.commentsError = document.getElementById('comments-error');
+            this.sortSelect = document.getElementById('comment-sort');
+            this.createForm = document.getElementById('comment-create-form');
+            this.commentBody = document.getElementById('comment-body');
+            this.charCount = document.getElementById('char-count');
+            this.discussionToggle = document.getElementById('discussion-toggle');
+            this.discussionContent = document.getElementById('discussion-content');
+            this.discussionSortContainer = document.getElementById('discussion-sort-container');
+            this.discussionToggleIcon = document.getElementById('discussion-toggle-icon');
+            this.commentCountBadge = null;
+            this.commentCount = document.getElementById('comment-count');
+        }
 
         // Pagination state
         this.currentOffset = 0;
@@ -43,11 +72,16 @@ class CommentSystem {
     }
 
     setupEventListeners() {
-        // Discussion section toggle
-        if (this.discussionToggle) {
+        // Discussion section toggle (game-level only)
+        if (this.discussionToggle && !this.isTrophySection) {
             this.discussionToggle.addEventListener('click', () => {
                 this.toggleDiscussionSection();
             });
+        }
+
+        // For trophy sections, load comments immediately since there's no toggle
+        if (this.isTrophySection) {
+            this.loadComments(false);
         }
 
         // Sort change
@@ -74,8 +108,8 @@ class CommentSystem {
             });
         }
 
-        // Event delegation for dynamic buttons
-        document.addEventListener('click', (e) => {
+        // Event delegation for dynamic buttons - scoped to this section
+        this.section.addEventListener('click', (e) => {
             // Collapse button
             if (e.target.closest('.collapse-btn')) {
                 const btn = e.target.closest('.collapse-btn');
@@ -287,12 +321,16 @@ class CommentSystem {
             formData.append('parent_id', parentId);
         }
 
-        const imageInput = document.getElementById('comment-image');
-        if (imageInput && imageInput.files.length > 0) {
-            formData.append('image', imageInput.files[0]);
+        // Get submit button (scoped to section type)
+        let submitBtn;
+        if (this.isTrophySection) {
+            submitBtn = this.section.querySelector('.trophy-comment-submit-btn');
+        } else {
+            submitBtn = document.getElementById('comment-submit-btn');
         }
 
-        const submitBtn = document.getElementById('comment-submit-btn');
+        if (!submitBtn) return;
+
         submitBtn.disabled = true;
         submitBtn.innerHTML = '<span class="loading loading-spinner loading-sm"></span> Posting...';
 
@@ -315,7 +353,6 @@ class CommentSystem {
             this.showToast('Comment posted successfully!', 'success');
             this.commentBody.value = '';
             if (this.charCount) this.charCount.textContent = '0';
-            if (imageInput) imageInput.value = '';
             this.currentOffset = 0;  // Reset pagination
             await this.loadComments(false);  // Full reload, not append
 
@@ -337,10 +374,11 @@ class CommentSystem {
      * Toggle collapse/expand replies for a top-level comment
      */
     toggleCollapse(commentId) {
-        const btn = document.querySelector(`.collapse-btn[data-comment-id="${commentId}"]`);
-        const repliesContainer = document.querySelector(`.replies[data-replies-for="${commentId}"]`);
-        const collapsedIndicator = document.querySelector(`.collapsed-indicator[data-indicator-for="${commentId}"]`);
-        const loadMoreBtn = document.querySelector(`.load-more-replies-btn[data-comment-id="${commentId}"]`);
+        // Scope selectors to this section to avoid conflicts between multiple CommentSystem instances
+        const btn = this.section.querySelector(`.collapse-btn[data-comment-id="${commentId}"]`);
+        const repliesContainer = this.section.querySelector(`.replies[data-replies-for="${commentId}"]`);
+        const collapsedIndicator = this.section.querySelector(`.collapsed-indicator[data-indicator-for="${commentId}"]`);
+        const loadMoreBtn = this.section.querySelector(`.load-more-replies-btn[data-comment-id="${commentId}"]`);
 
         if (!btn || !repliesContainer) return;
 
@@ -492,12 +530,12 @@ class CommentSystem {
 
     /**
      * Update comment count badge
+     * Note: Intentionally does nothing to prevent jarring count changes when loading comments
      */
-    updateCommentCount(count) {
-        const badge = document.getElementById('comment-count');
-        if (badge) {
-            badge.textContent = count;
-        }
+    updateCommentCount() {
+        // Don't update any count badges to prevent jarring changes
+        // All counts (both game-level and trophy-level) should remain static at page load values
+        // They only update when user creates a new comment (handled separately in comment creation flow)
     }
 
     /**
@@ -516,7 +554,15 @@ class CommentSystem {
     showError(message) {
         this.hideStates();
         this.commentsError.classList.remove('hidden');
-        document.getElementById('comments-error-message').textContent = message;
+
+        // Update error message (scoped to section type)
+        const errorMessageEl = this.isTrophySection
+            ? this.section.querySelector('.trophy-comments-error-message')
+            : document.getElementById('comments-error-message');
+
+        if (errorMessageEl) {
+            errorMessageEl.textContent = message;
+        }
     }
 
     hideStates() {

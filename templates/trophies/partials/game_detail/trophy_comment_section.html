@@ -1,0 +1,130 @@
+{% load static humanize %}
+{# Trophy-specific comment section - collapsible by default #}
+<div class="trophy-comment-section hidden bg-base-200 border-t-4 border-base-300 p-4"
+     id="trophy-comment-section-{{ trophy.trophy_id }}"
+     data-concept-id="{{ game.concept.id }}"
+     data-trophy-id="{{ trophy.trophy_id }}">
+
+    {# Section Header with Sort Dropdown #}
+    <div class="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 mb-4">
+        <h3 class="text-xl font-bold">Trophy Discussion</h3>
+
+        {# Sort Dropdown #}
+        <div class="form-control w-full lg:w-auto trophy-discussion-sort-container"
+             id="trophy-discussion-sort-{{ trophy.trophy_id }}">
+            <label for="trophy-comment-sort-{{ trophy.trophy_id }}" class="label">
+                <span class="label-text">Sort by</span>
+            </label>
+            <select class="select select-bordered select-sm w-full lg:w-auto trophy-comment-sort"
+                    id="trophy-comment-sort-{{ trophy.trophy_id }}">
+                <option value="top" selected>Top (Most Upvoted)</option>
+                <option value="new">New (Recent First)</option>
+                <option value="old">Old (Oldest First)</option>
+            </select>
+        </div>
+    </div>
+
+    {# Main Content Area - Two Column Layout #}
+    <div class="flex flex-col xl:flex-row gap-6 trophy-discussion-content"
+         id="trophy-discussion-content-{{ trophy.trophy_id }}">
+
+        {# Comments Container - Main Content (Left) #}
+        <div class="flex-1 space-y-4 max-w-4xl">
+            {# Loading State #}
+            <div class="flex justify-center items-center py-12 trophy-comments-loading"
+                 id="trophy-comments-loading-{{ trophy.trophy_id }}">
+                <span class="loading loading-spinner loading-lg text-primary"></span>
+                <span class="ml-3 text-lg">Loading comments...</span>
+            </div>
+
+            {# Empty State #}
+            <div class="hidden text-center py-12 trophy-comments-empty"
+                 id="trophy-comments-empty-{{ trophy.trophy_id }}">
+                <svg class="h-16 w-16 mx-auto text-base-content/30 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
+                </svg>
+                <p class="text-lg text-base-content/60 mb-2">No comments yet</p>
+                <p class="text-sm text-base-content/50">Be the first to share your thoughts on this trophy!</p>
+            </div>
+
+            {# Error State #}
+            <div class="hidden alert alert-error trophy-comments-error"
+                 id="trophy-comments-error-{{ trophy.trophy_id }}" role="alert">
+                <svg class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                </svg>
+                <span class="trophy-comments-error-message">Failed to load comments. Please try again.</span>
+            </div>
+
+            {# Comments List - Populated by JS #}
+            <div class="bg-base-100 border-4 border-base-300 shadow-lg shadow-neutral rounded-box px-4 pt-8">
+                <div class="trophy-comments-list" id="trophy-comments-list-{{ trophy.trophy_id }}"></div>
+            </div>
+        </div>
+
+        {# Comment Creation Sidebar (Right on Desktop, Bottom on Mobile) #}
+        <aside class="w-full xl:w-fit flex-shrink-0">
+            {% if user.is_authenticated %}
+                {% if user.profile.is_linked %}
+                    <div class="card bg-base-100 border-4 border-base-300 shadow-md shadow-neutral lg:sticky lg:top-20">
+                        <div class="card-body p-4">
+                            <h3 class="text-lg font-semibold mb-3">Share your thoughts</h3>
+                            <form class="trophy-comment-create-form space-y-3"
+                                  id="trophy-comment-create-form-{{ trophy.trophy_id }}">
+                                <div class="form-control">
+                                    <textarea class="textarea textarea-bordered h-32 resize-none w-full trophy-comment-body"
+                                              id="trophy-comment-body-{{ trophy.trophy_id }}"
+                                              name="body"
+                                              placeholder="What do you think about this trophy? Share tips, strategies, or your experience..."
+                                              maxlength="2000"
+                                              required></textarea>
+                                    <div class="label">
+                                        <span class="label-text-alt text-base-content/60">
+                                            <span class="trophy-char-count" id="trophy-char-count-{{ trophy.trophy_id }}">0</span>/2000
+                                        </span>
+                                    </div>
+                                </div>
+
+                                <div class="text-xs text-base-content/60 flex items-start gap-1">
+                                    <svg class="h-3 w-3 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                                    </svg>
+                                    <span>Be respectful and follow community guidelines</span>
+                                </div>
+
+                                <button type="submit"
+                                        class="btn btn-primary btn-sm w-full trophy-comment-submit-btn"
+                                        id="trophy-comment-submit-btn-{{ trophy.trophy_id }}">
+                                    <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/>
+                                    </svg>
+                                    Post Comment
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                {% else %}
+                    {# Not Linked Alert #}
+                    <div class="alert alert-warning" role="alert">
+                        <svg class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                        </svg>
+                        <span>
+                            You must <a href="{% url 'link_psn' %}" class="link link-hover font-semibold">link your PSN account</a> to comment.
+                        </span>
+                    </div>
+                {% endif %}
+            {% else %}
+                {# Not Logged In Alert #}
+                <div class="alert alert-info" role="alert">
+                    <svg fill="none" viewBox="0 0 24 24" class="stroke-current shrink-0 w-6 h-6">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                    </svg>
+                    <span>
+                        <a href="{% url 'account_login' %}" class="link link-hover font-semibold">Sign in</a> to join the discussion.
+                    </span>
+                </div>
+            {% endif %}
+        </aside>
+    </div>
+</div>

@@ -433,7 +433,7 @@ class CommentAdmin(admin.ModelAdmin):
 
     fieldsets = (
         ('Content', {
-            'fields': ('concept', 'trophy_id', 'profile', 'body', 'image')
+            'fields': ('concept', 'trophy_id', 'profile', 'body')
         }),
         ('Threading', {
             'fields': ('parent', 'depth')

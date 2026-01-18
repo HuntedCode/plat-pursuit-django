@@ -38,21 +38,8 @@ class CommentService:
         return True, None
 
     @staticmethod
-    def can_attach_image(profile):
-        """
-        Check if profile can attach images (premium only).
-
-        Args:
-            profile: Profile instance
-
-        Returns:
-            bool: True if premium user
-        """
-        return profile and profile.user_is_premium
-
-    @staticmethod
     @transaction.atomic
-    def create_comment(profile, concept, body, parent=None, image=None, trophy_id=None):
+    def create_comment(profile, concept, body, parent=None, trophy_id=None):
         """
         Create a new comment on a Concept or Trophy within a Concept.
 
@@ -61,7 +48,6 @@ class CommentService:
             concept: Concept instance
             body: Comment text
             parent: Optional parent Comment for replies
-            image: Optional ImageFile
             trophy_id: Optional trophy_id for trophy-level comments (None = concept-level)
 
         Returns:
@@ -85,10 +71,6 @@ class CommentService:
         if len(body.strip()) == 0:
             return None, "Comment cannot be empty."
 
-        # Validate image permission
-        if image and not CommentService.can_attach_image(profile):
-            return None, "Only premium users can attach images."
-
         # Validate depth for replies
         if parent:
             if parent.depth >= CommentService.MAX_DEPTH:
@@ -103,12 +85,10 @@ class CommentService:
                 trophy_id=trophy_id,
                 profile=profile,
                 parent=parent,
-                body=body.strip(),
-                image=image if image and CommentService.can_attach_image(profile) else None
+                body=body.strip()
             )
 
-            # Update denormalized count on Concept
-            CommentService._update_comment_count(concept, delta=1)
+            # Note: comment_count is updated automatically by signal for concept-level comments
 
             # Invalidate cache
             CommentService.invalidate_cache(concept, trophy_id)

@@ -20,8 +20,12 @@ def decrement_badge_earned_count_on_delete(sender, instance, **kwargs):
 
 @receiver(post_save, sender=Comment, dispatch_uid="update_comment_count_on_save")
 def update_comment_count_on_save(sender, instance, created, **kwargs):
-    """Update denormalized comment_count on Concept when comment is created."""
-    if created and not instance.is_deleted:
+    """Update denormalized comment_count on Concept when comment is created.
+
+    Only counts concept-level comments (trophy_id is null).
+    Trophy-level comments are counted separately per trophy.
+    """
+    if created and not instance.is_deleted and instance.trophy_id is None:
         concept = instance.concept
         if concept:
             concept.comment_count = F('comment_count') + 1

@@ -1150,12 +1150,6 @@ class Comment(models.Model):
         max_length=2000,
         help_text="Comment text, max 2000 characters"
     )
-    image = models.ImageField(
-        upload_to='comments/%Y/%m/',
-        null=True,
-        blank=True,
-        help_text="Optional image attachment (premium users only)"
-    )
 
     # Vote count (denormalized for sorting efficiency)
     upvote_count = models.PositiveIntegerField(default=0)
