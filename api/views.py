@@ -2,6 +2,7 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.authentication import SessionAuthentication, TokenAuthentication
 from .serializers import GenerateCodeSerializer, VerifySerializer, ProfileSerializer, TrophyCaseSerializer, CommentSerializer, CommentCreateSerializer
 from trophies.models import Profile, Comment, Concept
 from trophies.services.comment_service import CommentService
@@ -216,12 +217,21 @@ class TrophyCaseView(APIView):
 
 class CommentListView(APIView):
     """Get comments for a Concept or Trophy within a Concept."""
+    authentication_classes = [SessionAuthentication, TokenAuthentication]
+    permission_classes = []  # Allow unauthenticated users to view comments
 
     def get(self, request, concept_id, trophy_id=None):
         """
         GET /api/v1/comments/concept/<concept_id>/
         GET /api/v1/comments/concept/<concept_id>/trophy/<trophy_id>/
-        Query params: sort (top/new/old)
+        Query params:
+            - sort (top/new/old)
+            - response_format (html/json)
+            - limit (default: 5)
+            - offset (default: 0)
+            - reply_limit (default: 3)
+            - parent_id (for loading more replies)
+            - reply_offset (for loading more replies)
         """
         try:
             # Get the concept
@@ -240,6 +250,12 @@ class CommentListView(APIView):
             if sort not in ['top', 'new', 'old']:
                 sort = 'top'
 
+            # Get pagination parameters
+            limit = int(request.query_params.get('limit', 5))
+            offset = int(request.query_params.get('offset', 0))
+            reply_limit = int(request.query_params.get('reply_limit', 3))
+            parent_id = request.query_params.get('parent_id', None)
+
             # Get comments using service
             comments = CommentService.get_comments_for_concept(
                 concept,
@@ -248,30 +264,243 @@ class CommentListView(APIView):
                 trophy_id
             )
 
-            # Only return top-level comments (replies are nested in serializer)
+            # Check if this is a request for more replies of a specific comment
+            if parent_id:
+                return self._handle_reply_pagination(
+                    parent_id, comments, profile, request.user, sort, trophy_id
+                )
+
+            # Only return top-level comments (replies are nested)
             top_level_comments = comments.filter(parent__isnull=True)
+            total_count = top_level_comments.count()
 
-            # Serialize
-            serializer = CommentSerializer(
-                top_level_comments,
-                many=True,
-                context={'request': request}
-            )
+            # Apply pagination to top-level comments
+            paginated_comments = top_level_comments[offset:offset + limit]
+            has_more = (offset + limit) < total_count
 
-            return Response({
-                'comments': serializer.data,
-                'count': concept.comment_count,
-                'sort': sort,
-                'trophy_id': trophy_id
-            })
+            # Check if HTML format is requested
+            response_format = request.query_params.get('response_format', 'json')
+
+            if response_format == 'html':
+                # Render comments as HTML using template
+                from django.template.loader import render_to_string
+                from trophies.models import CommentVote
+                import traceback
+
+                try:
+                    comments_html = []
+                    for comment in paginated_comments:
+                        # Build context for each comment with reply pagination
+                        comment_data = self._build_comment_context(
+                            comment, profile, request.user,
+                            reply_offset=0, reply_limit=reply_limit
+                        )
+                        html = render_to_string('partials/comment.html', {'comment': comment_data})
+                        comments_html.append(html)
+
+                    return Response({
+                        'html': ''.join(comments_html),
+                        'count': total_count,
+                        'has_more': has_more,
+                        'next_offset': offset + limit,
+                        'sort': sort,
+                        'trophy_id': trophy_id
+                    })
+                except Exception as html_error:
+                    logger.error(f"HTML rendering error: {html_error}")
+                    logger.error(traceback.format_exc())
+                    return Response({'error': f'Template rendering failed: {str(html_error)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            else:
+                # Return JSON (original behavior with pagination)
+                serializer = CommentSerializer(
+                    paginated_comments,
+                    many=True,
+                    context={'request': request}
+                )
+
+                return Response({
+                    'comments': serializer.data,
+                    'count': total_count,
+                    'has_more': has_more,
+                    'next_offset': offset + limit,
+                    'sort': sort,
+                    'trophy_id': trophy_id
+                })
 
         except Exception as e:
             logger.error(f"Comment list error: {e}")
             return Response({'error': 'Internal error.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+    def _get_comment_base_context(self, comment, depth=None, parent_id=None):
+        """Build base context for a comment without permissions or author indicators."""
+        author_profile = comment.profile
+
+        return {
+            'id': comment.id,
+            'body': comment.display_body,
+            'upvote_count': comment.upvote_count,
+            'is_edited': comment.is_edited,
+            'is_deleted': comment.is_deleted,
+            'created_at': comment.created_at,
+            'updated_at': comment.updated_at,
+            'depth': depth if depth is not None else comment.depth,
+            'image': comment.image.url if comment.image else None,
+            'author': {
+                'username': author_profile.display_psn_username or author_profile.psn_username,
+                'avatar_url': author_profile.avatar_url,
+                'flag': author_profile.flag,
+                'user_is_premium': author_profile.user_is_premium,
+            },
+            'user_has_voted': False,
+            'can_edit': False,
+            'can_delete': False,
+            'parent_id': parent_id,
+            'replies': []
+        }
+
+    def _add_permissions(self, context, comment, viewing_profile, user):
+        """Add permission flags to comment context."""
+        from trophies.models import CommentVote
+
+        if user.is_authenticated and viewing_profile:
+            context['user_has_voted'] = CommentVote.objects.filter(
+                comment=comment,
+                profile=viewing_profile
+            ).exists()
+            context['can_edit'] = (comment.profile == viewing_profile and not comment.is_deleted)
+            context['can_delete'] = (
+                (comment.profile == viewing_profile or user.is_staff) and
+                not comment.is_deleted
+            )
+
+    def _add_author_context(self, context, comment_profile, concept, trophy_id):
+        """Add author context indicators (progress, platinum, trophy earned)."""
+        from trophies.models import ProfileGame, EarnedTrophy
+
+        # Concept-level: show game progress
+        pg = ProfileGame.objects.filter(
+            profile=comment_profile,
+            game__concept=concept
+        ).order_by('-progress').first()
+
+        if pg:
+            context['author_progress'] = pg.progress
+            context['author_has_platinum'] = pg.has_plat
+        else:
+            context['author_progress'] = None
+            context['author_has_platinum'] = False
+
+        if not trophy_id is None:
+            # Trophy-level: show if earned
+            et = EarnedTrophy.objects.filter(
+                profile=comment_profile,
+                trophy__game__concept=concept,
+                trophy__trophy_id=trophy_id,
+                earned=True
+            ).first()
+            context['author_has_trophy'] = bool(et)
+
+    def _build_comment_context(self, comment, viewing_profile, user, reply_offset=0, reply_limit=3):
+        """Build context dict for rendering a comment template with reply pagination."""
+        concept = comment.concept
+        trophy_id = comment.trophy_id
+
+        # Build base context
+        context = self._get_comment_base_context(comment)
+
+        # Add permissions
+        self._add_permissions(context, comment, viewing_profile, user)
+
+        # Add author context
+        self._add_author_context(context, comment.profile, concept, trophy_id)
+
+        # Build flattened replies (all descendants at one level)
+        all_descendants = self._get_all_descendants(comment)
+        all_descendants.sort(key=lambda x: (-x.upvote_count, -x.created_at.timestamp()))
+
+        # Paginate replies
+        total_reply_count = len(all_descendants)
+        paginated_replies = all_descendants[reply_offset:reply_offset + reply_limit]
+
+        for reply in paginated_replies:
+            # Build reply with depth=1 and track parent_id
+            reply_context = self._get_comment_base_context(reply, depth=1, parent_id=reply.parent_id)
+
+            # Add permissions for reply
+            self._add_permissions(reply_context, reply, viewing_profile, user)
+
+            # Add author context for reply
+            self._add_author_context(reply_context, reply.profile, concept, trophy_id)
+
+            context['replies'].append(reply_context)
+
+        # Add pagination metadata
+        context['reply_count'] = total_reply_count
+        context['reply_has_more'] = (reply_offset + reply_limit) < total_reply_count
+        context['replies_shown'] = reply_offset + len(paginated_replies)
+
+        return context
+
+    def _get_all_descendants(self, comment):
+        """Recursively get all descendants of a comment."""
+        descendants = list(comment.replies.all())
+        for child in comment.replies.all():
+            descendants.extend(self._get_all_descendants(child))
+
+        return descendants
+
+    def _handle_reply_pagination(self, parent_id, comments, profile, user, sort, trophy_id):
+        """Handle loading more replies for a specific comment."""
+        from django.template.loader import render_to_string
+        import traceback
+
+        try:
+            # Get the parent comment
+            parent_comment = comments.filter(id=parent_id).first()
+            if not parent_comment:
+                return Response({'error': 'Comment not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+            # Get pagination parameters
+            reply_offset = int(self.request.query_params.get('reply_offset', 0))
+            reply_limit = int(self.request.query_params.get('reply_limit', 3))
+
+            # Build flattened replies with pagination
+            all_descendants = self._get_all_descendants(parent_comment)
+            all_descendants.sort(key=lambda x: (-x.upvote_count, -x.created_at.timestamp()))
+
+            # Paginate replies
+            total_reply_count = len(all_descendants)
+            paginated_replies = all_descendants[reply_offset:reply_offset + reply_limit]
+            has_more = (reply_offset + reply_limit) < total_reply_count
+
+            # Render only the reply HTML
+            replies_html = []
+            for reply in paginated_replies:
+                reply_context = self._get_comment_base_context(reply, depth=1, parent_id=reply.parent_id)
+                self._add_permissions(reply_context, reply, profile, user)
+                self._add_author_context(reply_context, reply.profile, parent_comment.concept, trophy_id)
+
+                html = render_to_string('partials/comment.html', {'comment': reply_context})
+                replies_html.append(html)
+
+            return Response({
+                'html': ''.join(replies_html),
+                'parent_id': parent_id,
+                'reply_count': total_reply_count,
+                'has_more': has_more,
+                'shown': reply_offset + len(paginated_replies),
+                'sort': sort
+            })
+
+        except Exception as e:
+            logger.error(f"Reply pagination error: {e}")
+            logger.error(traceback.format_exc())
+            return Response({'error': 'Failed to load replies.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 
 class CommentCreateView(APIView):
     """Create a new comment or reply on a Concept or Trophy."""
+    authentication_classes = [SessionAuthentication, TokenAuthentication]
     permission_classes = [IsAuthenticated]
 
     def post(self, request, concept_id, trophy_id=None):
@@ -342,6 +571,7 @@ class CommentCreateView(APIView):
 
 class CommentDetailView(APIView):
     """Update or delete a comment."""
+    authentication_classes = [SessionAuthentication, TokenAuthentication]
     permission_classes = [IsAuthenticated]
 
     def put(self, request, comment_id):
@@ -418,6 +648,7 @@ class CommentDetailView(APIView):
 
 class CommentVoteView(APIView):
     """Toggle upvote on a comment."""
+    authentication_classes = [SessionAuthentication, TokenAuthentication]
     permission_classes = [IsAuthenticated]
 
     def post(self, request, comment_id):
@@ -456,6 +687,7 @@ class CommentVoteView(APIView):
 
 class CommentReportView(APIView):
     """Report a comment for moderation."""
+    authentication_classes = [SessionAuthentication, TokenAuthentication]
     permission_classes = [IsAuthenticated]
 
     def post(self, request, comment_id):
