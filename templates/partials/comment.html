@@ -1,4 +1,4 @@
-{% load static humanize %}
+{% load static humanize custom_filters %}
 {# Reusable comment partial - displays a single comment with nested replies #}
 <div class="comment-item border-l-4 {% if comment.depth == 0 %}border-base-300 md:ml-6{% else %}border-primary/40{% endif %} pl-4 mb-4 ml-0 md:ml-[{{ comment.depth }}rem] relative"
      data-comment-id="{{ comment.id }}"
@@ -113,7 +113,7 @@
                 {% if comment.is_deleted %}
                     <p class="text-base-content/50 italic">[deleted]</p>
                 {% else %}
-                    <p class="whitespace-pre-wrap break-words text-sm">{{ comment.body }}</p>
+                    <p class="whitespace-pre-wrap break-words text-sm">{{ comment.body|parse_spoilers }}</p>
                 {% endif %}
             </div>
 

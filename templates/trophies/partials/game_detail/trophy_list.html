@@ -87,3 +87,181 @@
         </div>
     {% endfor %}
 </div>
+
+{# Trophy Guidelines Modals - Shared by all trophy comment sections #}
+{# Community Guidelines Modal (trophy-specific ID to avoid conflicts with game-level comments) #}
+<dialog id="trophy-guidelines-modal" class="modal">
+    <div class="modal-box max-w-2xl">
+        <h3 class="font-bold text-2xl mb-4">Community Guidelines</h3>
+        <div class="space-y-4">
+            <p class="text-sm text-base-content/70">Please review and follow these guidelines when participating in our community:</p>
+
+            <div class="space-y-3">
+                <div class="bg-base-200 p-4 rounded-lg">
+                    <h4 class="font-semibold mb-2 flex items-center gap-2">
+                        <svg class="h-5 w-5 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+                        </svg>
+                        Be Respectful
+                    </h4>
+                    <p class="text-sm text-base-content/70">Treat all members with respect. No harassment, hate speech, personal attacks, or discriminatory language of any kind.</p>
+                </div>
+
+                <div class="bg-base-200 p-4 rounded-lg">
+                    <h4 class="font-semibold mb-2 flex items-center gap-2">
+                        <svg class="h-5 w-5 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                        </svg>
+                        Keep It Family-Friendly
+                    </h4>
+                    <p class="text-sm text-base-content/70">Avoid NSFW content, explicit language, and mature themes. We want to maintain a welcoming environment for gamers of all ages.</p>
+                </div>
+
+                <div class="bg-base-200 p-4 rounded-lg">
+                    <h4 class="font-semibold mb-2 flex items-center gap-2">
+                        <svg class="h-5 w-5 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
+                        </svg>
+                        Stay On Topic
+                    </h4>
+                    <p class="text-sm text-base-content/70">Keep discussions relevant to PlayStation gaming, trophies, and the game being discussed. Avoid off-topic conversations.</p>
+                </div>
+
+                <div class="bg-base-200 p-4 rounded-lg">
+                    <h4 class="font-semibold mb-2 flex items-center gap-2">
+                        <svg class="h-5 w-5 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+                        </svg>
+                        No Spam or Self-Promotion
+                    </h4>
+                    <p class="text-sm text-base-content/70">Don't post repetitive content, advertisements, or excessive self-promotion. Share helpful content, not spam.</p>
+                </div>
+
+                <div class="bg-base-200 p-4 rounded-lg">
+                    <h4 class="font-semibold mb-2 flex items-center gap-2">
+                        <svg class="h-5 w-5 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                        </svg>
+                        Use Spoiler Tags
+                    </h4>
+                    <p class="text-sm text-base-content/70">Use spoiler tags ||like this|| when discussing plot points, endings, or major game revelations. Respect others' gaming experiences.</p>
+                </div>
+
+                <div class="bg-base-200 p-4 rounded-lg">
+                    <h4 class="font-semibold mb-2 flex items-center gap-2">
+                        <svg class="h-5 w-5 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        Be Helpful and Constructive
+                    </h4>
+                    <p class="text-sm text-base-content/70">Share tips, strategies, and advice that helps the community. Constructive criticism is welcome, but keep it respectful.</p>
+                </div>
+
+                <div class="bg-base-200 p-4 rounded-lg">
+                    <h4 class="font-semibold mb-2 flex items-center gap-2">
+                        <svg class="h-5 w-5 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        </svg>
+                        Follow Platform Rules
+                    </h4>
+                    <p class="text-sm text-base-content/70">Adhere to all applicable laws and PlayStation's Terms of Service. Don't share exploits, hacks, or methods to circumvent game systems.</p>
+                </div>
+
+                <div class="bg-base-200 p-4 rounded-lg">
+                    <h4 class="font-semibold mb-2 flex items-center gap-2">
+                        <svg class="h-5 w-5 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 21v-4m0 0V5a2 2 0 012-2h6.5l1 1H21l-3 6 3 6h-8.5l-1-1H5a2 2 0 00-2 2zm9-13.5V9" />
+                        </svg>
+                        Report Don't Retaliate
+                    </h4>
+                    <p class="text-sm text-base-content/70">If you see rule-breaking content, report it to moderators. Don't engage in arguments or retaliate with similar behavior.</p>
+                </div>
+
+                <div class="bg-base-200 p-4 rounded-lg">
+                    <h4 class="font-semibold mb-2 flex items-center gap-2">
+                        <svg class="h-5 w-5 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                        </svg>
+                        Protect Privacy
+                    </h4>
+                    <p class="text-sm text-base-content/70">Don't share personal information about yourself or others. Keep PSN usernames public but respect privacy otherwise.</p>
+                </div>
+            </div>
+        </div>
+        <div class="modal-action">
+            <button class="btn" onclick="document.getElementById('trophy-guidelines-modal').close()">Close</button>
+        </div>
+    </div>
+    <form method="dialog" class="modal-backdrop">
+        <button>close</button>
+    </form>
+</dialog>
+
+{# Guidelines Agreement Modal (first-time commenters) - same for trophy comments #}
+<dialog id="trophy-guidelines-agreement-modal" class="modal">
+    <div class="modal-box max-w-2xl">
+        <h3 class="font-bold text-2xl mb-4">Welcome to the Community!</h3>
+        <p class="mb-4">Before you post your first comment, please review and agree to our community guidelines:</p>
+
+        <div class="bg-base-200 p-4 rounded-lg mb-4 max-h-96 overflow-y-auto">
+            <div class="space-y-3">
+                <div class="border-l-4 border-primary pl-3">
+                    <h4 class="font-semibold">Be Respectful</h4>
+                    <p class="text-sm text-base-content/70">Treat all members with respect. No harassment, hate speech, personal attacks, or discriminatory language of any kind.</p>
+                </div>
+
+                <div class="border-l-4 border-primary pl-3">
+                    <h4 class="font-semibold">Keep It Family-Friendly</h4>
+                    <p class="text-sm text-base-content/70">Avoid NSFW content, explicit language, and mature themes. We want to maintain a welcoming environment for gamers of all ages.</p>
+                </div>
+
+                <div class="border-l-4 border-primary pl-3">
+                    <h4 class="font-semibold">Stay On Topic</h4>
+                    <p class="text-sm text-base-content/70">Keep discussions relevant to PlayStation gaming, trophies, and the game being discussed.</p>
+                </div>
+
+                <div class="border-l-4 border-primary pl-3">
+                    <h4 class="font-semibold">No Spam or Self-Promotion</h4>
+                    <p class="text-sm text-base-content/70">Don't post repetitive content, advertisements, or excessive self-promotion.</p>
+                </div>
+
+                <div class="border-l-4 border-primary pl-3">
+                    <h4 class="font-semibold">Use Spoiler Tags</h4>
+                    <p class="text-sm text-base-content/70">Use spoiler tags ||like this|| when discussing plot points, endings, or major revelations.</p>
+                </div>
+
+                <div class="border-l-4 border-primary pl-3">
+                    <h4 class="font-semibold">Be Helpful and Constructive</h4>
+                    <p class="text-sm text-base-content/70">Share tips and advice that helps the community. Keep criticism respectful.</p>
+                </div>
+
+                <div class="border-l-4 border-primary pl-3">
+                    <h4 class="font-semibold">Follow Platform Rules</h4>
+                    <p class="text-sm text-base-content/70">Adhere to laws and PlayStation's Terms of Service. Don't share exploits or hacks.</p>
+                </div>
+
+                <div class="border-l-4 border-primary pl-3">
+                    <h4 class="font-semibold">Report Don't Retaliate</h4>
+                    <p class="text-sm text-base-content/70">Report rule-breaking content to moderators instead of retaliating.</p>
+                </div>
+
+                <div class="border-l-4 border-primary pl-3">
+                    <h4 class="font-semibold">Protect Privacy</h4>
+                    <p class="text-sm text-base-content/70">Don't share personal information about yourself or others.</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="form-control mb-4">
+            <label class="label cursor-pointer justify-start gap-3">
+                <input type="checkbox" id="trophy-agree-to-guidelines" class="checkbox checkbox-primary">
+                <span class="label-text">I have read and agree to follow the community guidelines</span>
+            </label>
+        </div>
+
+        <div class="modal-action">
+            <button class="btn btn-ghost" onclick="document.getElementById('trophy-guidelines-agreement-modal').close(); document.getElementById('trophy-agree-to-guidelines').checked = false;">Cancel</button>
+            <button class="btn btn-primary" id="trophy-confirm-guidelines-btn" disabled onclick="confirmTrophyGuidelines()">Agree and Continue</button>
+        </div>
+    </div>
+</dialog>

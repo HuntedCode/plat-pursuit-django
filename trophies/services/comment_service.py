@@ -67,6 +67,8 @@ class CommentService:
             return False, "You must be logged in to comment."
         if not profile.is_linked:
             return False, "You must link a PSN profile to comment."
+        if not profile.guidelines_agreed:
+            return False, "You must agree to the community guidelines before commenting."
         return True, None
 
     @staticmethod

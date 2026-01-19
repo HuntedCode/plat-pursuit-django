@@ -741,3 +741,56 @@ class CommentReportView(APIView):
         except Exception as e:
             logger.error(f"Comment report error: {e}")
             return Response({'error': 'Internal error.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class AgreeToGuidelinesView(APIView):
+    """
+    API endpoint for users to agree to community guidelines.
+
+    POST /api/v1/guidelines/agree/
+    """
+    authentication_classes = [SessionAuthentication, TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        """Record user's agreement to community guidelines."""
+        try:
+            profile = request.user.profile
+
+            if not profile:
+                return Response(
+                    {'error': 'Profile not found.'},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+
+            if not profile.is_linked:
+                return Response(
+                    {'error': 'You must link your PSN account first.'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            if profile.guidelines_agreed:
+                return Response(
+                    {'success': True, 'message': 'You have already agreed to the guidelines.'},
+                    status=status.HTTP_200_OK
+                )
+
+            # Record agreement
+            from django.utils import timezone
+            profile.guidelines_agreed = True
+            profile.guidelines_agreed_at = timezone.now()
+            profile.save(update_fields=['guidelines_agreed', 'guidelines_agreed_at'])
+
+            logger.info(f"User {profile.psn_username} agreed to community guidelines")
+
+            return Response({
+                'success': True,
+                'message': 'Thank you for agreeing to our community guidelines!'
+            })
+
+        except Exception as e:
+            logger.error(f"Guidelines agreement error: {e}")
+            return Response(
+                {'error': 'Internal error.'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )

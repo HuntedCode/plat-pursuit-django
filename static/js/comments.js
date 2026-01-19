@@ -104,7 +104,13 @@ class CommentSystem {
         if (this.createForm) {
             this.createForm.addEventListener('submit', (e) => {
                 e.preventDefault();
-                this.createComment();
+
+                // Check guidelines before allowing comment
+                if (this.isTrophySection) {
+                    checkTrophyGuidelinesBeforeComment(() => this.createComment());
+                } else {
+                    checkGuidelinesBeforeComment(() => this.createComment());
+                }
             });
         }
 
@@ -978,6 +984,145 @@ class CommentSystem {
         return document.querySelector('[name=csrfmiddlewaretoken]')?.value ||
                document.cookie.split('; ').find(row => row.startsWith('csrftoken='))?.split('=')[1] || '';
     }
+}
+
+// Community Guidelines handling
+let hasAgreedToGuidelines = false;  // Will be set from data attribute in HTML
+let pendingCommentSubmission = null;
+
+// Initialize guidelines status from HTML data attribute
+document.addEventListener('DOMContentLoaded', () => {
+    const commentSection = document.getElementById('comment-section');
+    if (commentSection && commentSection.dataset.guidelinesAgreed) {
+        hasAgreedToGuidelines = commentSection.dataset.guidelinesAgreed === 'true';
+    }
+});
+
+// Enable/disable the agree button based on checkbox state
+document.addEventListener('DOMContentLoaded', () => {
+    const agreeCheckbox = document.getElementById('agree-to-guidelines');
+    const confirmBtn = document.getElementById('confirm-guidelines-btn');
+
+    if (agreeCheckbox && confirmBtn) {
+        agreeCheckbox.addEventListener('change', function() {
+            confirmBtn.disabled = !this.checked;
+        });
+    }
+
+    // Trophy comment agreement modal checkbox
+    const trophyAgreeCheckbox = document.getElementById('trophy-agree-to-guidelines');
+    const trophyConfirmBtn = document.getElementById('trophy-confirm-guidelines-btn');
+
+    if (trophyAgreeCheckbox && trophyConfirmBtn) {
+        trophyAgreeCheckbox.addEventListener('change', function() {
+            trophyConfirmBtn.disabled = !this.checked;
+        });
+    }
+});
+
+// Check if user needs to agree to guidelines before commenting
+function checkGuidelinesBeforeComment(callback) {
+    if (hasAgreedToGuidelines) {
+        // User has already agreed, proceed with comment
+        callback();
+    } else {
+        // Store the callback to execute after agreement
+        pendingCommentSubmission = callback;
+        // Show the agreement modal
+        document.getElementById('guidelines-agreement-modal').showModal();
+    }
+}
+
+// Same for trophy comments
+function checkTrophyGuidelinesBeforeComment(callback) {
+    if (hasAgreedToGuidelines) {
+        callback();
+    } else {
+        pendingCommentSubmission = callback;
+        document.getElementById('trophy-guidelines-agreement-modal').showModal();
+    }
+}
+
+// Handle guidelines agreement confirmation
+async function confirmGuidelines() {
+    const checkbox = document.getElementById('agree-to-guidelines');
+    if (!checkbox.checked) {
+        return;
+    }
+
+    try {
+        // Send agreement to backend
+        const response = await fetch('/api/v1/guidelines/agree/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCsrfTokenFromPage()
+            },
+            credentials: 'same-origin'  // Include session cookie for authentication
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            hasAgreedToGuidelines = true;
+            document.getElementById('guidelines-agreement-modal').close();
+            checkbox.checked = false;
+
+            // Execute the pending comment submission
+            if (pendingCommentSubmission) {
+                pendingCommentSubmission();
+                pendingCommentSubmission = null;
+            }
+        } else {
+            alert(data.error || 'Failed to record agreement. Please try again.');
+        }
+    } catch (error) {
+        console.error('Error agreeing to guidelines:', error);
+        alert('An error occurred. Please try again.');
+    }
+}
+
+// Handle trophy guidelines agreement confirmation
+async function confirmTrophyGuidelines() {
+    const checkbox = document.getElementById('trophy-agree-to-guidelines');
+    if (!checkbox.checked) {
+        return;
+    }
+
+    try {
+        const response = await fetch('/api/v1/guidelines/agree/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCsrfTokenFromPage()
+            },
+            credentials: 'same-origin'  // Include session cookie for authentication
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            hasAgreedToGuidelines = true;
+            document.getElementById('trophy-guidelines-agreement-modal').close();
+            checkbox.checked = false;
+
+            if (pendingCommentSubmission) {
+                pendingCommentSubmission();
+                pendingCommentSubmission = null;
+            }
+        } else {
+            alert(data.error || 'Failed to record agreement. Please try again.');
+        }
+    } catch (error) {
+        console.error('Error agreeing to guidelines:', error);
+        alert('An error occurred. Please try again.');
+    }
+}
+
+// Helper to get CSRF token
+function getCsrfTokenFromPage() {
+    return document.querySelector('[name=csrfmiddlewaretoken]')?.value ||
+           document.cookie.split('; ').find(row => row.startsWith('csrftoken='))?.split('=')[1] || '';
 }
 
 // Initialize comment system when DOM is ready

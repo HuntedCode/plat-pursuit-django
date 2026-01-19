@@ -2,7 +2,7 @@ from django.urls import path
 from .views import (
     SummaryView, GenerateCodeView, VerifyView, UnlinkView, CheckLinkedView,
     RefreshView, TrophyCaseView, CommentListView, CommentCreateView,
-    CommentDetailView, CommentVoteView, CommentReportView
+    CommentDetailView, CommentVoteView, CommentReportView, AgreeToGuidelinesView
 )
 
 app_name = 'api'
@@ -24,4 +24,7 @@ urlpatterns = [
     path('comments/<int:comment_id>/', CommentDetailView.as_view(), name='comment-detail'),
     path('comments/<int:comment_id>/vote/', CommentVoteView.as_view(), name='comment-vote'),
     path('comments/<int:comment_id>/report/', CommentReportView.as_view(), name='comment-report'),
+
+    # Community guidelines
+    path('guidelines/agree/', AgreeToGuidelinesView.as_view(), name='guidelines-agree'),
 ]
