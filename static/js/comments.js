@@ -475,18 +475,256 @@ class CommentSystem {
      * Show reply form
      */
     showReplyForm(commentId) {
-        // TODO: Implement reply form
-        console.log('Reply to comment:', commentId);
-        this.showToast('Reply functionality coming soon!', 'info');
+        // Check if reply form already exists for this comment
+        const existingForm = this.section.querySelector(`.reply-form-container[data-parent-id="${commentId}"]`);
+        if (existingForm) {
+            existingForm.remove();
+            return;
+        }
+
+        // Find the comment element
+        const commentEl = this.section.querySelector(`.comment-item[data-comment-id="${commentId}"]`);
+        if (!commentEl) return;
+
+        // Create reply form HTML
+        const replyFormHTML = `
+            <div class="reply-form-container mt-4 p-4 bg-base-200 rounded-lg border-2 border-primary" data-parent-id="${commentId}">
+                <h4 class="text-sm font-semibold mb-2">Reply to comment</h4>
+                <form class="space-y-3">
+                    <textarea
+                        class="textarea textarea-bordered w-full h-24 resize-none reply-body"
+                        placeholder="Write your reply..."
+                        maxlength="2000"
+                        required></textarea>
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs text-base-content/60">
+                            <span class="reply-char-count">0</span>/2000
+                        </span>
+                        <div class="flex gap-2">
+                            <button type="button" class="btn btn-ghost btn-sm cancel-reply-btn">Cancel</button>
+                            <button type="submit" class="btn btn-primary btn-sm submit-reply-btn">
+                                <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/>
+                                </svg>
+                                Post Reply
+                            </button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        `;
+
+        // Insert form at the end of the comment item (after everything)
+        commentEl.insertAdjacentHTML('beforeend', replyFormHTML);
+
+        // Get the inserted form
+        const form = this.section.querySelector(`.reply-form-container[data-parent-id="${commentId}"]`);
+        const textarea = form.querySelector('.reply-body');
+        const charCount = form.querySelector('.reply-char-count');
+        const cancelBtn = form.querySelector('.cancel-reply-btn');
+        const submitBtn = form.querySelector('.submit-reply-btn');
+
+        // Character count
+        textarea.addEventListener('input', () => {
+            charCount.textContent = textarea.value.length;
+        });
+
+        // Cancel button
+        cancelBtn.addEventListener('click', () => {
+            form.remove();
+        });
+
+        // Submit form
+        form.querySelector('form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            await this.submitReply(commentId, textarea.value, submitBtn, form);
+        });
+
+        // Focus textarea
+        textarea.focus();
+    }
+
+    /**
+     * Submit a reply to a comment
+     */
+    async submitReply(parentId, body, submitBtn, formEl) {
+        if (!body || body.trim().length === 0) {
+            this.showToast('Reply cannot be empty', 'error');
+            return;
+        }
+
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<span class="loading loading-spinner loading-sm"></span> Posting...';
+
+        try {
+            const formData = new FormData();
+            formData.append('body', body.trim());
+            formData.append('parent_id', parentId);
+
+            const url = `${this.getApiUrl()}create/`;
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': this.getCsrfToken(),
+                },
+                body: formData
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || `HTTP ${response.status}`);
+            }
+
+            // Success - reload comments
+            this.showToast('Reply posted successfully!', 'success');
+            formEl.remove();
+            this.currentOffset = 0;
+            await this.loadComments(false);
+
+        } catch (error) {
+            console.error('Failed to post reply:', error);
+            this.showToast(error.message || 'Failed to post reply', 'error');
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = `
+                <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/>
+                </svg>
+                Post Reply
+            `;
+        }
     }
 
     /**
      * Show edit form
      */
     showEditForm(commentId) {
-        // TODO: Implement edit form
-        console.log('Edit comment:', commentId);
-        this.showToast('Edit functionality coming soon!', 'info');
+        // Find the comment element
+        const commentEl = this.section.querySelector(`.comment-item[data-comment-id="${commentId}"]`);
+        if (!commentEl) return;
+
+        // Check if edit form already exists
+        const existingForm = commentEl.querySelector('.edit-form-container');
+        if (existingForm) {
+            existingForm.remove();
+            // Restore the comment body display
+            const bodyDiv = commentEl.querySelector('.prose');
+            if (bodyDiv) bodyDiv.classList.remove('hidden');
+            return;
+        }
+
+        // Get current comment body
+        const bodyDiv = commentEl.querySelector('.prose');
+        const bodyText = bodyDiv?.querySelector('p')?.textContent || '';
+
+        if (!bodyDiv) return;
+
+        // Hide the current body display
+        bodyDiv.classList.add('hidden');
+
+        // Create edit form HTML
+        const editFormHTML = `
+            <div class="edit-form-container mt-2 mb-3">
+                <form class="space-y-3">
+                    <textarea
+                        class="textarea textarea-bordered w-full h-32 resize-none edit-body"
+                        placeholder="Edit your comment..."
+                        maxlength="2000"
+                        required>${bodyText}</textarea>
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs text-base-content/60">
+                            <span class="edit-char-count">${bodyText.length}</span>/2000
+                        </span>
+                        <div class="flex gap-2">
+                            <button type="button" class="btn btn-ghost btn-sm cancel-edit-btn">Cancel</button>
+                            <button type="submit" class="btn btn-primary btn-sm submit-edit-btn">
+                                <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                                </svg>
+                                Save Changes
+                            </button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        `;
+
+        // Insert form after body
+        bodyDiv.insertAdjacentHTML('afterend', editFormHTML);
+
+        // Get the inserted form
+        const form = commentEl.querySelector('.edit-form-container');
+        const textarea = form.querySelector('.edit-body');
+        const charCount = form.querySelector('.edit-char-count');
+        const cancelBtn = form.querySelector('.cancel-edit-btn');
+        const submitBtn = form.querySelector('.submit-edit-btn');
+
+        // Character count
+        textarea.addEventListener('input', () => {
+            charCount.textContent = textarea.value.length;
+        });
+
+        // Cancel button
+        cancelBtn.addEventListener('click', () => {
+            form.remove();
+            bodyDiv.classList.remove('hidden');
+        });
+
+        // Submit form
+        form.querySelector('form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            await this.submitEdit(commentId, textarea.value, submitBtn, form, bodyDiv);
+        });
+
+        // Focus textarea and select all
+        textarea.focus();
+        textarea.select();
+    }
+
+    /**
+     * Submit an edit to a comment
+     */
+    async submitEdit(commentId, body, submitBtn, formEl, bodyDiv) {
+        if (!body || body.trim().length === 0) {
+            this.showToast('Comment cannot be empty', 'error');
+            return;
+        }
+
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<span class="loading loading-spinner loading-sm"></span> Saving...';
+
+        try {
+            const response = await fetch(`/api/v1/comments/${commentId}/`, {
+                method: 'PUT',
+                headers: {
+                    'X-CSRFToken': this.getCsrfToken(),
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ body: body.trim() })
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || `HTTP ${response.status}`);
+            }
+
+            // Success - reload comments to show updated content
+            this.showToast('Comment updated successfully!', 'success');
+            formEl.remove();
+            bodyDiv.classList.remove('hidden');
+            this.currentOffset = 0;
+            await this.loadComments(false);
+
+        } catch (error) {
+            console.error('Failed to edit comment:', error);
+            this.showToast(error.message || 'Failed to edit comment', 'error');
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = `
+                <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                </svg>
+                Save Changes
+            `;
+        }
     }
 
     /**
@@ -511,7 +749,8 @@ class CommentSystem {
             }
 
             this.showToast('Comment deleted successfully', 'success');
-            await this.loadComments();
+            this.currentOffset = 0;  // Reset pagination
+            await this.loadComments(false);  // Full reload
 
         } catch (error) {
             console.error('Failed to delete comment:', error);
@@ -523,9 +762,136 @@ class CommentSystem {
      * Show report modal
      */
     showReportModal(commentId) {
-        // TODO: Implement report modal
-        console.log('Report comment:', commentId);
-        this.showToast('Report functionality coming soon!', 'info');
+        // Check if modal already exists
+        let modal = document.getElementById('report-comment-modal');
+
+        if (!modal) {
+            // Create modal HTML
+            const modalHTML = `
+                <dialog id="report-comment-modal" class="modal">
+                    <div class="modal-box">
+                        <h3 class="font-bold text-lg mb-4">Report Comment</h3>
+
+                        <form id="report-comment-form" class="space-y-4">
+                            <div class="form-control">
+                                <label class="label">
+                                    <span class="label-text">Reason for reporting</span>
+                                </label>
+                                <select class="select select-bordered w-full" name="reason" required>
+                                    <option value="" disabled selected>Select a reason</option>
+                                    <option value="spam">Spam</option>
+                                    <option value="harassment">Harassment or bullying</option>
+                                    <option value="inappropriate">Inappropriate content</option>
+                                    <option value="misinformation">Misinformation</option>
+                                    <option value="other">Other</option>
+                                </select>
+                            </div>
+
+                            <div class="form-control">
+                                <label class="label">
+                                    <span class="label-text">Additional details (optional)</span>
+                                </label>
+                                <textarea
+                                    class="textarea textarea-bordered h-24"
+                                    name="details"
+                                    placeholder="Provide any additional context..."
+                                    maxlength="500"></textarea>
+                                <label class="label">
+                                    <span class="label-text-alt"></span>
+                                    <span class="label-text-alt report-details-count">0/500</span>
+                                </label>
+                            </div>
+
+                            <div class="alert alert-info">
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="stroke-current shrink-0 w-6 h-6">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                </svg>
+                                <span class="text-sm">Reports are reviewed by moderators. False reports may result in action against your account.</span>
+                            </div>
+
+                            <div class="modal-action">
+                                <button type="button" class="btn btn-ghost" onclick="document.getElementById('report-comment-modal').close()">Cancel</button>
+                                <button type="submit" class="btn btn-error">Submit Report</button>
+                            </div>
+                        </form>
+                    </div>
+                    <form method="dialog" class="modal-backdrop">
+                        <button>close</button>
+                    </form>
+                </dialog>
+            `;
+
+            // Insert modal into body
+            document.body.insertAdjacentHTML('beforeend', modalHTML);
+            modal = document.getElementById('report-comment-modal');
+
+            // Character count for details
+            const detailsTextarea = modal.querySelector('textarea[name="details"]');
+            const detailsCount = modal.querySelector('.report-details-count');
+            detailsTextarea.addEventListener('input', () => {
+                detailsCount.textContent = `${detailsTextarea.value.length}/500`;
+            });
+        }
+
+        // Store comment ID on the modal
+        modal.dataset.commentId = commentId;
+
+        // Reset form
+        const form = modal.querySelector('#report-comment-form');
+        form.reset();
+        modal.querySelector('.report-details-count').textContent = '0/500';
+
+        // Handle form submission
+        form.onsubmit = async (e) => {
+            e.preventDefault();
+            await this.submitReport(commentId, form);
+        };
+
+        // Show modal (DaisyUI modal)
+        modal.showModal();
+    }
+
+    /**
+     * Submit a report for a comment
+     */
+    async submitReport(commentId, form) {
+        const formData = new FormData(form);
+        const reason = formData.get('reason');
+        const details = formData.get('details') || '';
+
+        const submitBtn = form.querySelector('button[type="submit"]');
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<span class="loading loading-spinner loading-sm"></span> Submitting...';
+
+        try {
+            const response = await fetch(`/api/v1/comments/${commentId}/report/`, {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': this.getCsrfToken(),
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ reason, details })
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || `HTTP ${response.status}`);
+            }
+
+            // Success
+            this.showToast('Report submitted successfully. Thank you!', 'success');
+
+            // Close modal
+            const modal = document.getElementById('report-comment-modal');
+            modal.close();
+
+        } catch (error) {
+            console.error('Failed to submit report:', error);
+            this.showToast(error.message || 'Failed to submit report', 'error');
+        } finally {
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = 'Submit Report';
+        }
     }
 
     /**

@@ -1198,8 +1198,7 @@ class Comment(models.Model):
         self.is_deleted = True
         self.deleted_at = timezone.now()
         self.body = '[deleted]'
-        self.image = None
-        self.save(update_fields=['is_deleted', 'deleted_at', 'body', 'image'])
+        self.save(update_fields=['is_deleted', 'deleted_at', 'body'])
 
     @property
     def display_body(self):

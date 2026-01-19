@@ -693,6 +693,7 @@ class CommentReportView(APIView):
     authentication_classes = [SessionAuthentication, TokenAuthentication]
     permission_classes = [IsAuthenticated]
 
+    @method_decorator(ratelimit(key='user', rate='5/h', method='POST', block=True))
     def post(self, request, comment_id):
         """
         POST /api/v1/comments/<comment_id>/report/
