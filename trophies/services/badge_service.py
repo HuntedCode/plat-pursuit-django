@@ -109,7 +109,7 @@ def handle_badge(profile, badge, add_role_only=False):
         prev_badge = Badge.objects.filter(
             series_slug=badge.series_slug, tier=prev_tier
         ).first()
-        prev_badge_earned = prev_badge and not UserBadge.objects.filter(
+        prev_badge_earned = prev_badge and UserBadge.objects.filter(
             profile=profile, badge=prev_badge
         ).exists()
 
@@ -144,39 +144,39 @@ def handle_badge(profile, badge, add_role_only=False):
         ).exists()
         badge_created = False
 
-        if prev_badge_earned:
-            if badge_earned and not user_badge_exists:
-                UserBadge.objects.create(profile=profile, badge=badge)
-                badge_created = True
-                logger.info(
-                    f"Awarded badge {badge.effective_display_title} (tier: {badge.tier}) "
-                    f"to {profile.display_psn_username}"
+        if prev_badge_earned and badge_earned and not user_badge_exists:
+            UserBadge.objects.create(profile=profile, badge=badge)
+            badge_created = True
+            logger.info(
+                f"Awarded badge {badge.effective_display_title} (tier: {badge.tier}) "
+                f"to {profile.display_psn_username}"
+            )
+            # Create UserTitle if badge has an associated title
+            if badge.title:
+                UserTitle.objects.get_or_create(
+                    profile=profile,
+                    title=badge.title,
+                    defaults={
+                        'source_type': 'badge',
+                        'source_id': badge.id
+                    }
                 )
-                # Create UserTitle if badge has an associated title
-                if badge.title:
-                    UserTitle.objects.get_or_create(
-                        profile=profile,
-                        title=badge.title,
-                        defaults={
-                            'source_type': 'badge',
-                            'source_id': badge.id
-                        }
-                    )
-            elif not badge_earned and user_badge_exists:
-                UserBadge.objects.filter(profile=profile, badge=badge).delete()
-                logger.info(
-                    f"Revoked badge {badge.effective_display_title} (tier: {badge.tier}) "
-                    f"from {profile.display_psn_username}"
-                )
-                # Remove UserTitle if badge had an associated title
-                if badge.title:
-                    UserTitle.objects.filter(
-                        profile=profile,
-                        title=badge.title,
-                        source_type='badge',
-                        source_id=badge.id
-                    ).delete()
+        elif not badge_earned and user_badge_exists:
+            UserBadge.objects.filter(profile=profile, badge=badge).delete()
+            logger.info(
+                f"Revoked badge {badge.effective_display_title} (tier: {badge.tier}) "
+                f"from {profile.display_psn_username}"
+            )
+            # Remove UserTitle if badge had an associated title
+            if badge.title:
+                UserTitle.objects.filter(
+                    profile=profile,
+                    title=badge.title,
+                    source_type='badge',
+                    source_id=badge.id
+                ).delete()
 
+        if prev_badge_earned:
             # Handle Discord role assignment
             if badge_earned and badge.discord_role_id:
                 if profile.is_discord_verified and profile.discord_id:
