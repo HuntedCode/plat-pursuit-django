@@ -2,7 +2,7 @@ from django.contrib import admin, messages
 from django.contrib.admin import SimpleListFilter
 from django.db import transaction
 from django.db.models import Q
-from .models import Profile, Game, Trophy, EarnedTrophy, ProfileGame, APIAuditLog, FeaturedGame, FeaturedProfile, Event, Concept, TitleID, TrophyGroup, UserTrophySelection, UserConceptRating, Badge, UserBadge, UserBadgeProgress, FeaturedGuide, Stage, PublisherBlacklist, Title, UserTitle, Milestone, UserMilestone, UserMilestoneProgress, Comment, CommentVote, CommentReport
+from .models import Profile, Game, Trophy, EarnedTrophy, ProfileGame, APIAuditLog, FeaturedGame, FeaturedProfile, Event, Concept, TitleID, TrophyGroup, UserTrophySelection, UserConceptRating, Badge, UserBadge, UserBadgeProgress, FeaturedGuide, Stage, PublisherBlacklist, Title, UserTitle, Milestone, UserMilestone, UserMilestoneProgress, Comment, CommentVote, CommentReport, ModerationLog
 
 
 # Register your models here.
@@ -616,8 +616,12 @@ class CommentReportAdmin(admin.ModelAdmin):
         from django.utils import timezone
         count = 0
         for report in queryset.filter(status='pending'):
-            # Soft delete the comment
-            report.comment.soft_delete()
+            # Soft delete the comment with moderator logging
+            report.comment.soft_delete(
+                moderator=request.user,
+                reason=f"Admin action via Django admin on report #{report.id}",
+                request=request
+            )
             # Mark report as action taken
             report.status = 'action_taken'
             report.reviewed_at = timezone.now()
@@ -629,3 +633,57 @@ class CommentReportAdmin(admin.ModelAdmin):
             f"Took action on {count} report(s) and soft-deleted the comments.",
             messages.WARNING
         )
+
+
+@admin.register(ModerationLog)
+class ModerationLogAdmin(admin.ModelAdmin):
+    """Admin interface for moderation log (read-only)."""
+    list_display = [
+        'timestamp',
+        'moderator',
+        'action_type',
+        'comment_author',
+        'comment_preview_short',
+        'concept',
+    ]
+    list_filter = [
+        'action_type',
+        'moderator',
+        'timestamp',
+    ]
+    search_fields = [
+        'original_body',
+        'comment_author__psn_username',
+        'moderator__username',
+        'reason',
+        'internal_notes',
+    ]
+    readonly_fields = [
+        'timestamp',
+        'moderator',
+        'action_type',
+        'comment',
+        'comment_id_snapshot',
+        'comment_author',
+        'original_body',
+        'concept',
+        'trophy_id',
+        'related_report',
+        'reason',
+        'internal_notes',
+        'ip_address',
+    ]
+    ordering = ['-timestamp']
+    date_hierarchy = 'timestamp'
+
+    # Make read-only (don't allow creation/deletion via admin)
+    def has_add_permission(self, request):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    def comment_preview_short(self, obj):
+        """Show truncated original body."""
+        return obj.original_body[:50] + '...' if len(obj.original_body) > 50 else obj.original_body
+    comment_preview_short.short_description = 'Comment'

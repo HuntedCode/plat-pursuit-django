@@ -1,0 +1,325 @@
+{% extends 'base.html' %}
+{% load static humanize %}
+
+{% block title %}Comment Moderation{% endblock %}
+
+{% block content %}
+<div class="container mx-auto p-4">
+    {# Header #}
+    <div class="flex flex-col lg:flex-row justify-between items-start lg:items-center mb-6">
+        <h1 class="text-3xl font-bold mb-4 lg:mb-0">Comment Moderation Dashboard</h1>
+        <a href="{% url 'moderation_log' %}" class="btn btn-secondary btn-sm">
+            View Full Action Log
+        </a>
+    </div>
+
+    {# Stats Cards #}
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        <div class="stat bg-base-100 border-2 border-base-300 rounded-box">
+            <div class="stat-title">Pending</div>
+            <div class="stat-value text-error">{{ pending_count }}</div>
+            <div class="stat-desc">Awaiting review</div>
+        </div>
+        <div class="stat bg-base-100 border-2 border-base-300 rounded-box">
+            <div class="stat-title">Reviewed</div>
+            <div class="stat-value text-info">{{ reviewed_count }}</div>
+            <div class="stat-desc">No action needed</div>
+        </div>
+        <div class="stat bg-base-100 border-2 border-base-300 rounded-box">
+            <div class="stat-title">Dismissed</div>
+            <div class="stat-value text-success">{{ dismissed_count }}</div>
+            <div class="stat-desc">Invalid reports</div>
+        </div>
+        <div class="stat bg-base-100 border-2 border-base-300 rounded-box">
+            <div class="stat-title">Action Taken</div>
+            <div class="stat-value text-warning">{{ action_taken_count }}</div>
+            <div class="stat-desc">Comments deleted</div>
+        </div>
+    </div>
+
+    {# Messages #}
+    {% if messages %}
+        {% for message in messages %}
+            <div class="alert {% if message.tags == 'error' %}alert-error
+                {% elif message.tags == 'success' %}alert-success
+                {% elif message.tags == 'warning' %}alert-warning
+                {% else %}alert-info{% endif %} mb-4">
+                {{ message }}
+            </div>
+        {% endfor %}
+    {% endif %}
+
+    <div class="flex flex-col xl:flex-row gap-6">
+        {# Main Content - Report List #}
+        <div class="flex-1">
+            {# Tabs #}
+            <div class="tabs tabs-boxed mb-4">
+                <a href="?status=pending" class="tab {% if current_status == 'pending' %}tab-active{% endif %}">
+                    Pending ({{ pending_count }})
+                </a>
+                <a href="?status=reviewed" class="tab {% if current_status == 'reviewed' %}tab-active{% endif %}">
+                    Reviewed
+                </a>
+                <a href="?status=dismissed" class="tab {% if current_status == 'dismissed' %}tab-active{% endif %}">
+                    Dismissed
+                </a>
+                <a href="?status=action_taken" class="tab {% if current_status == 'action_taken' %}tab-active{% endif %}">
+                    Action Taken
+                </a>
+                <a href="?status=all" class="tab {% if current_status == 'all' %}tab-active{% endif %}">
+                    All
+                </a>
+            </div>
+
+            {# Filters #}
+            <div class="card bg-base-100 border-2 border-base-300 mb-4">
+                <div class="card-body p-4">
+                    <form method="get" class="flex flex-col md:flex-row gap-2">
+                        <input type="hidden" name="status" value="{{ current_status }}">
+
+                        <input type="text"
+                               name="search"
+                               value="{{ search_query }}"
+                               placeholder="Search comments, reporters..."
+                               class="input input-bordered flex-1">
+
+                        <select name="reason" class="select select-bordered">
+                            <option value="">All Reasons</option>
+                            {% for value, label in reason_choices %}
+                                <option value="{{ value }}" {% if current_reason == value %}selected{% endif %}>
+                                    {{ label }}
+                                </option>
+                            {% endfor %}
+                        </select>
+
+                        <button type="submit" class="btn btn-primary">Filter</button>
+                        <a href="?status={{ current_status }}" class="btn btn-ghost">Clear</a>
+                    </form>
+                </div>
+            </div>
+
+            {# Report List #}
+            {% if reports %}
+                <div class="space-y-4">
+                    {% for report in reports %}
+                        <div class="card bg-base-100 border-2 border-base-300">
+                            <div class="card-body">
+                                {# Report Header #}
+                                <div class="flex justify-between items-start mb-4">
+                                    <div>
+                                        <div class="badge badge-lg
+                                            {% if report.status == 'pending' %}badge-error
+                                            {% elif report.status == 'reviewed' %}badge-info
+                                            {% elif report.status == 'dismissed' %}badge-success
+                                            {% elif report.status == 'action_taken' %}badge-warning{% endif %}">
+                                            {{ report.get_status_display }}
+                                        </div>
+                                        <div class="badge badge-outline ml-2">
+                                            {{ report.get_reason_display }}
+                                        </div>
+                                    </div>
+                                    <div class="text-sm text-base-content/60">
+                                        Reported {{ report.created_at|naturaltime }}
+                                    </div>
+                                </div>
+
+                                {# Comment Content #}
+                                <div class="bg-base-200 p-4 rounded-lg mb-4">
+                                    <div class="flex items-center gap-2 mb-2">
+                                        <span class="font-semibold">
+                                            {{ report.comment.profile.psn_username }}
+                                        </span>
+                                        <span class="text-sm text-base-content/60">
+                                            on {{ report.comment.concept.unified_title }}
+                                            {% if report.comment.trophy_id %}(Trophy #{{ report.comment.trophy_id }}){% endif %}
+                                        </span>
+                                    </div>
+                                    <p class="{% if report.comment.is_deleted %}line-through text-error{% endif %}">
+                                        {{ report.comment.body }}
+                                    </p>
+                                    <div class="text-xs text-base-content/60 mt-2">
+                                        Posted {{ report.comment.created_at|naturaltime }}
+                                        {% if report.comment.is_edited %} • Edited{% endif %}
+                                        {% if report.comment.is_deleted %} • Deleted {{ report.comment.deleted_at|naturaltime }}{% endif %}
+                                    </div>
+                                </div>
+
+                                {# Report Details #}
+                                <div class="mb-4">
+                                    <div class="text-sm font-semibold mb-1">Report Details:</div>
+                                    <p class="text-sm">{{ report.details|default:"No additional details provided" }}</p>
+                                    <div class="text-xs text-base-content/60 mt-1">
+                                        Reported by {{ report.reporter.psn_username }}
+                                    </div>
+                                </div>
+
+                                {# Review Info (if reviewed) #}
+                                {% if report.reviewed_by %}
+                                    <div class="alert alert-info mb-4">
+                                        <div class="text-sm">
+                                            <strong>Reviewed by:</strong> {{ report.reviewed_by.profile.display_psn_username }}<br>
+                                            <strong>At:</strong> {{ report.reviewed_at|naturaltime }}<br>
+                                            {% if report.admin_notes %}
+                                                <strong>Notes:</strong> {{ report.admin_notes }}
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                {% endif %}
+
+                                {# Action Buttons (only for pending) #}
+                                {% if report.status == 'pending' %}
+                                    <div class="card-actions justify-end">
+                                        <button class="btn btn-success btn-sm"
+                                                onclick="showActionModal({{ report.id }}, 'review')">
+                                            Mark Reviewed
+                                        </button>
+                                        <button class="btn btn-warning btn-sm"
+                                                onclick="showActionModal({{ report.id }}, 'dismiss')">
+                                            Dismiss Report
+                                        </button>
+                                        <button class="btn btn-error btn-sm"
+                                                onclick="showActionModal({{ report.id }}, 'delete')">
+                                            Delete Comment
+                                        </button>
+                                    </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    {% endfor %}
+                </div>
+
+                {# Pagination #}
+                {% if is_paginated %}
+                    <div class="flex justify-center items-center gap-2 mt-6">
+                        <div class="btn-group">
+                            {% if page_obj.has_previous %}
+                                <a href="?page=1&status={{ current_status }}&reason={{ current_reason }}&search={{ search_query }}"
+                                   class="btn btn-outline btn-sm">&laquo; First</a>
+                                <a href="?page={{ page_obj.previous_page_number }}&status={{ current_status }}&reason={{ current_reason }}&search={{ search_query }}"
+                                   class="btn btn-outline btn-sm">Previous</a>
+                            {% endif %}
+
+                            <span class="btn btn-active btn-sm">
+                                Page {{ page_obj.number }} of {{ paginator.num_pages }}
+                            </span>
+
+                            {% if page_obj.has_next %}
+                                <a href="?page={{ page_obj.next_page_number }}&status={{ current_status }}&reason={{ current_reason }}&search={{ search_query }}"
+                                   class="btn btn-outline btn-sm">Next</a>
+                                <a href="?page={{ paginator.num_pages }}&status={{ current_status }}&reason={{ current_reason }}&search={{ search_query }}"
+                                   class="btn btn-outline btn-sm">Last &raquo;</a>
+                            {% endif %}
+                        </div>
+                    </div>
+                {% endif %}
+            {% else %}
+                <div class="text-center py-12">
+                    <p class="text-lg text-base-content/60">No reports found</p>
+                </div>
+            {% endif %}
+        </div>
+
+        {# Sidebar - Recent Activity #}
+        <aside class="w-full xl:w-96">
+            <div class="card bg-base-100 border-2 border-base-300 lg:sticky lg:top-20">
+                <div class="card-body">
+                    <h3 class="card-title text-lg">Recent Activity</h3>
+                    <div class="space-y-2">
+                        {% for log in recent_actions %}
+                            <div class="text-sm p-2 bg-base-200 rounded">
+                                <div class="font-semibold">{{ log.get_action_type_display }}</div>
+                                <div class="text-xs text-base-content/60">
+                                    by {{ log.moderator.profile.display_psn_username }}<br>
+                                    {{ log.timestamp|naturaltime }}
+                                </div>
+                            </div>
+                        {% empty %}
+                            <p class="text-sm text-base-content/60">No recent activity</p>
+                        {% endfor %}
+                    </div>
+                    <a href="{% url 'moderation_log' %}" class="btn btn-ghost btn-sm mt-4">
+                        View Full Log →
+                    </a>
+                </div>
+            </div>
+        </aside>
+    </div>
+</div>
+
+{# Action Modal #}
+<dialog id="action-modal" class="modal">
+    <div class="modal-box">
+        <h3 class="font-bold text-lg mb-4" id="modal-title">Take Action</h3>
+
+        <form method="post" id="action-form">
+            {% csrf_token %}
+            <input type="hidden" name="action" id="action-type">
+
+            <div class="form-control mb-4">
+                <label class="label">
+                    <span class="label-text">Reason (visible to staff)</span>
+                </label>
+                <textarea name="reason"
+                          class="textarea textarea-bordered h-24"
+                          placeholder="Why are you taking this action?"
+                          required></textarea>
+            </div>
+
+            <div class="form-control mb-4">
+                <label class="label">
+                    <span class="label-text">Internal Notes (staff-only)</span>
+                </label>
+                <textarea name="internal_notes"
+                          class="textarea textarea-bordered h-24"
+                          placeholder="Private notes for staff reference..."></textarea>
+            </div>
+
+            <div class="modal-action">
+                <button type="button" class="btn btn-ghost" onclick="document.getElementById('action-modal').close()">
+                    Cancel
+                </button>
+                <button type="submit" class="btn btn-primary" id="action-submit">
+                    Confirm
+                </button>
+            </div>
+        </form>
+    </div>
+    <form method="dialog" class="modal-backdrop">
+        <button>close</button>
+    </form>
+</dialog>
+
+<script>
+let currentReportId = null;
+
+function showActionModal(reportId, action) {
+    currentReportId = reportId;
+    const modal = document.getElementById('action-modal');
+    const form = document.getElementById('action-form');
+    const title = document.getElementById('modal-title');
+    const actionType = document.getElementById('action-type');
+    const submitBtn = document.getElementById('action-submit');
+
+    // Update form action URL
+    form.action = `/staff/moderation/action/${reportId}/`;
+    actionType.value = action;
+
+    // Update modal title and button based on action
+    if (action === 'delete') {
+        title.textContent = 'Delete Comment';
+        submitBtn.textContent = 'Delete Comment';
+        submitBtn.className = 'btn btn-error';
+    } else if (action === 'dismiss') {
+        title.textContent = 'Dismiss Report';
+        submitBtn.textContent = 'Dismiss';
+        submitBtn.className = 'btn btn-warning';
+    } else if (action === 'review') {
+        title.textContent = 'Mark as Reviewed';
+        submitBtn.textContent = 'Mark Reviewed';
+        submitBtn.className = 'btn btn-success';
+    }
+
+    modal.showModal();
+}
+</script>
+{% endblock %}

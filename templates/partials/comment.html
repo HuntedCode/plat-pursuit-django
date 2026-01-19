@@ -43,6 +43,14 @@
                    class="font-semibold {% if comment.author.user_is_premium %}legendary-title{% else %}text-primary{% endif %} hover:underline hover:text-primary-focus transition-colors">
                     {{ comment.author.username }}
                 </a>
+
+                {# Is Moderator #}
+                {% if comment.is_moderator %}
+                    <figure class="w-6 tooltip hover:scale-105" data-tip="Moderator">
+                        <img src="{% static 'images/badges/default.png' %}" class="w-full object-cover" />
+                    </figure>
+                {% endif %}
+                
                 <span class="text-base-content ml-1">•</span>
 
                 {# Country Flag #}

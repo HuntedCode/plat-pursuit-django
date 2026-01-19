@@ -354,6 +354,7 @@ class CommentListView(APIView):
                 'user_is_premium': author_profile.user_is_premium,
             },
             'user_has_voted': False,
+            'user_is_moderator': False,
             'can_edit': False,
             'can_delete': False,
             'parent_id': parent_id,
@@ -369,6 +370,7 @@ class CommentListView(APIView):
                 comment=comment,
                 profile=viewing_profile
             ).exists()
+            context['is_moderator'] = comment.profile.user.is_staff if comment.profile.user else False
             context['can_edit'] = (comment.profile == viewing_profile and not comment.is_deleted)
             context['can_delete'] = (
                 (comment.profile == viewing_profile or user.is_staff) and

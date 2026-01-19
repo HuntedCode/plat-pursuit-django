@@ -1193,12 +1193,47 @@ class Comment(models.Model):
             self.depth = self.parent.depth + 1
         super().save(*args, **kwargs)
 
-    def soft_delete(self):
-        """Soft delete preserving thread structure."""
+    def soft_delete(self, moderator=None, reason="", request=None):
+        """
+        Soft delete preserving thread structure and logging to ModerationLog.
+
+        Args:
+            moderator: CustomUser performing deletion (None = user self-delete)
+            reason: Reason for deletion (for audit trail)
+            request: HttpRequest object to capture IP address
+        """
+        # Preserve original body before deletion
+        original_body = self.body
+
+        # Mark as deleted
         self.is_deleted = True
         self.deleted_at = timezone.now()
         self.body = '[deleted]'
         self.save(update_fields=['is_deleted', 'deleted_at', 'body'])
+
+        # Log to ModerationLog if moderator action (not user self-delete)
+        if moderator:
+            ip_address = None
+            if request:
+                # Get IP from request
+                x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+                if x_forwarded_for:
+                    ip_address = x_forwarded_for.split(',')[0]
+                else:
+                    ip_address = request.META.get('REMOTE_ADDR')
+
+            ModerationLog.objects.create(
+                moderator=moderator,
+                action_type='delete',
+                comment=self,
+                comment_id_snapshot=self.id,
+                comment_author=self.profile,
+                original_body=original_body,
+                concept=self.concept,
+                trophy_id=self.trophy_id,
+                reason=reason,
+                ip_address=ip_address
+            )
 
     @property
     def display_body(self):
@@ -1311,3 +1346,99 @@ class APIAuditLog(models.Model):
 
     def __str__(self):
         return f"{self.endpoint} at {self.timestamp}"
+
+
+class ModerationLog(models.Model):
+    """
+    Audit trail for all comment moderation actions.
+
+    Preserves full context including original comment text for accountability
+    and appeal reviews.
+    """
+    ACTION_TYPES = [
+        ('delete', 'Comment Deleted'),
+        ('restore', 'Comment Restored'),
+        ('dismiss_report', 'Report Dismissed'),
+        ('approve_comment', 'Comment Approved'),
+        ('warning_issued', 'Warning Issued'),
+        ('bulk_delete', 'Bulk Delete'),
+        ('report_reviewed', 'Report Reviewed'),
+    ]
+
+    # Core fields
+    timestamp = models.DateTimeField(auto_now_add=True, db_index=True)
+    moderator = models.ForeignKey(
+        CustomUser,
+        on_delete=models.PROTECT,  # Never delete moderator history
+        related_name='moderation_actions'
+    )
+    action_type = models.CharField(max_length=20, choices=ACTION_TYPES, db_index=True)
+
+    # Target comment (preserved even if comment deleted)
+    comment = models.ForeignKey(
+        Comment,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name='moderation_logs'
+    )
+    comment_id_snapshot = models.IntegerField()  # Preserve ID if comment deleted
+    comment_author = models.ForeignKey(
+        Profile,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name='moderated_comments'
+    )
+
+    # Context preservation (CRITICAL for appeals/review)
+    original_body = models.TextField(
+        help_text="Original comment text preserved for context"
+    )
+    concept = models.ForeignKey(
+        'Concept',
+        on_delete=models.SET_NULL,
+        null=True
+    )
+    trophy_id = models.IntegerField(
+        null=True,
+        blank=True,
+        help_text="Trophy ID if comment was on trophy (null = concept-level)"
+    )
+
+    # Moderation context
+    related_report = models.ForeignKey(
+        CommentReport,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='action_logs'
+    )
+    reason = models.TextField(
+        help_text="Moderator's reason for action"
+    )
+    internal_notes = models.TextField(
+        blank=True,
+        help_text="Private staff notes (not shown to user)"
+    )
+
+    # IP tracking (for pattern detection)
+    ip_address = models.GenericIPAddressField(
+        null=True,
+        blank=True,
+        help_text="IP address of comment author at time of action"
+    )
+
+    class Meta:
+        ordering = ['-timestamp']
+        indexes = [
+            models.Index(fields=['-timestamp', 'moderator']),
+            models.Index(fields=['action_type', '-timestamp']),
+            models.Index(fields=['comment_author', '-timestamp']),
+        ]
+
+    def __str__(self):
+        return f"{self.get_action_type_display()} by {self.moderator.username} at {self.timestamp}"
+
+    @property
+    def comment_preview(self):
+        """Return truncated original body for display."""
+        return self.original_body[:100] + '...' if len(self.original_body) > 100 else self.original_body

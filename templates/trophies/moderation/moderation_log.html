@@ -1,0 +1,250 @@
+{% extends 'base.html' %}
+{% load static humanize %}
+
+{% block title %}Moderation Log{% endblock %}
+
+{% block content %}
+<div class="container mx-auto p-4">
+    <div class="flex flex-col lg:flex-row justify-between items-start lg:items-center mb-6">
+        <h1 class="text-3xl font-bold mb-4 lg:mb-0">Moderation Action Log</h1>
+        <a href="{% url 'comment_moderation' %}" class="btn btn-secondary btn-sm">
+            ← Back to Dashboard
+        </a>
+    </div>
+
+    {# Stats #}
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+        <div class="stat bg-base-100 border-2 border-base-300 rounded-box">
+            <div class="stat-title">Total Actions</div>
+            <div class="stat-value">{{ total_actions }}</div>
+        </div>
+        <div class="stat bg-base-100 border-2 border-base-300 rounded-box">
+            <div class="stat-title">Today</div>
+            <div class="stat-value text-primary">{{ actions_today }}</div>
+        </div>
+        <div class="stat bg-base-100 border-2 border-base-300 rounded-box">
+            <div class="stat-title">This Week</div>
+            <div class="stat-value text-secondary">{{ actions_this_week }}</div>
+        </div>
+    </div>
+
+    {# Filters #}
+    <div class="card bg-base-100 border-2 border-base-300 mb-6">
+        <div class="card-body">
+            <h3 class="card-title text-lg mb-4">Filters</h3>
+            <form method="get" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div class="form-control">
+                    <label class="label"><span class="label-text">Moderator</span></label>
+                    <select name="moderator" class="select select-bordered">
+                        <option value="">All Moderators</option>
+                        {% for mod in moderators %}
+                            <option value="{{ mod.id }}" {% if current_moderator == mod.id|stringformat:"s" %}selected{% endif %}>
+                                {{ mod.username }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="form-control">
+                    <label class="label"><span class="label-text">Action Type</span></label>
+                    <select name="action_type" class="select select-bordered">
+                        <option value="">All Actions</option>
+                        {% for value, label in action_type_choices %}
+                            <option value="{{ value }}" {% if current_action_type == value %}selected{% endif %}>
+                                {{ label }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="form-control">
+                    <label class="label"><span class="label-text">Date From</span></label>
+                    <input type="date" name="date_from" value="{{ date_from }}" class="input input-bordered">
+                </div>
+
+                <div class="form-control">
+                    <label class="label"><span class="label-text">Date To</span></label>
+                    <input type="date" name="date_to" value="{{ date_to }}" class="input input-bordered">
+                </div>
+
+                <div class="form-control flex-row items-end gap-2 md:col-span-2">
+                    <button type="submit" class="btn btn-primary flex-1">Apply Filters</button>
+                    <a href="{% url 'moderation_log' %}" class="btn btn-ghost">Clear</a>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    {# Log Table #}
+    <div class="overflow-x-auto">
+        <table class="table table-zebra w-full">
+            <thead>
+                <tr>
+                    <th>Timestamp</th>
+                    <th>Moderator</th>
+                    <th>Action</th>
+                    <th>Comment Author</th>
+                    <th>Comment Preview</th>
+                    <th>Reason</th>
+                    <th>Details</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for log in logs %}
+                    <tr>
+                        <td class="text-sm">
+                            {{ log.timestamp|date:"Y-m-d H:i" }}<br>
+                            <span class="text-xs text-base-content/60">{{ log.timestamp|naturaltime }}</span>
+                        </td>
+                        <td class="font-semibold">{{ log.moderator.profile.display_psn_username }}</td>
+                        <td>
+                            <div class="badge badge-sm
+                                {% if log.action_type == 'delete' %}badge-error
+                                {% elif log.action_type == 'dismiss_report' %}badge-warning
+                                {% elif log.action_type == 'restore' %}badge-success
+                                {% else %}badge-info{% endif %}">
+                                {{ log.get_action_type_display }}
+                            </div>
+                        </td>
+                        <td>
+                            {% if log.comment_author %}
+                                {{ log.comment_author.psn_username }}
+                            {% else %}
+                                <span class="text-base-content/60">Unknown</span>
+                            {% endif %}
+                        </td>
+                        <td class="max-w-xs truncate text-sm">
+                            {{ log.comment_preview }}
+                        </td>
+                        <td class="text-sm max-w-xs truncate">{{ log.reason|truncatewords:10 }}</td>
+                        <td>
+                            <button class="btn btn-ghost btn-xs"
+                                    onclick="showDetailsModal({{ log.id }})">
+                                View
+                            </button>
+                        </td>
+                    </tr>
+                {% empty %}
+                    <tr>
+                        <td colspan="7" class="text-center py-8 text-base-content/60">
+                            No log entries found
+                        </td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {# Pagination #}
+    {% if is_paginated %}
+        <div class="flex justify-center items-center gap-2 mt-6">
+            <div class="btn-group">
+                {% if page_obj.has_previous %}
+                    <a href="?page=1&moderator={{ current_moderator }}&action_type={{ current_action_type }}&date_from={{ date_from }}&date_to={{ date_to }}"
+                       class="btn btn-outline btn-sm">&laquo; First</a>
+                    <a href="?page={{ page_obj.previous_page_number }}&moderator={{ current_moderator }}&action_type={{ current_action_type }}&date_from={{ date_from }}&date_to={{ date_to }}"
+                       class="btn btn-outline btn-sm">Previous</a>
+                {% endif %}
+
+                <span class="btn btn-active btn-sm">
+                    Page {{ page_obj.number }} of {{ paginator.num_pages }}
+                </span>
+
+                {% if page_obj.has_next %}
+                    <a href="?page={{ page_obj.next_page_number }}&moderator={{ current_moderator }}&action_type={{ current_action_type }}&date_from={{ date_from }}&date_to={{ date_to }}"
+                       class="btn btn-outline btn-sm">Next</a>
+                    <a href="?page={{ paginator.num_pages }}&moderator={{ current_moderator }}&action_type={{ current_action_type }}&date_from={{ date_from }}&date_to={{ date_to }}"
+                       class="btn btn-outline btn-sm">Last &raquo;</a>
+                {% endif %}
+            </div>
+        </div>
+    {% endif %}
+</div>
+
+{# Details Modal #}
+<dialog id="details-modal" class="modal">
+    <div class="modal-box max-w-2xl">
+        <h3 class="font-bold text-lg mb-4">Action Details</h3>
+        <div id="modal-content" class="space-y-4">
+            {# Populated by JavaScript #}
+        </div>
+        <div class="modal-action">
+            <button class="btn" onclick="document.getElementById('details-modal').close()">Close</button>
+        </div>
+    </div>
+    <form method="dialog" class="modal-backdrop">
+        <button>close</button>
+    </form>
+</dialog>
+
+<script>
+// Store log data for modal (populated by Django)
+const logData = {
+    {% for log in logs %}
+        {{ log.id }}: {
+            timestamp: "{{ log.timestamp|date:'Y-m-d H:i:s' }}",
+            moderator: "{{ log.moderator.profile.display_psn_username }}",
+            action: "{{ log.get_action_type_display }}",
+            author: "{{ log.comment_author.psn_username|default:'Unknown' }}",
+            original_body: "{{ log.original_body|escapejs }}",
+            concept: "{{ log.concept.unified_title|default:'Unknown' }}",
+            trophy_id: {{ log.trophy_id|default:'null' }},
+            reason: "{{ log.reason|escapejs }}",
+            internal_notes: "{{ log.internal_notes|default:''|escapejs }}"
+        },
+    {% endfor %}
+};
+
+function showDetailsModal(logId) {
+    const log = logData[logId];
+    if (!log) return;
+
+    const modal = document.getElementById('details-modal');
+    const content = document.getElementById('modal-content');
+
+    content.innerHTML = `
+        <div class="alert alert-info">
+            <div>
+                <strong>Timestamp:</strong> ${log.timestamp}<br>
+                <strong>Moderator:</strong> ${log.moderator}<br>
+                <strong>Action:</strong> ${log.action}
+            </div>
+        </div>
+
+        <div>
+            <h4 class="font-semibold mb-2">Comment Author:</h4>
+            <p>${log.author}</p>
+        </div>
+
+        <div>
+            <h4 class="font-semibold mb-2">Context:</h4>
+            <p><strong>Game:</strong> ${log.concept}</p>
+            ${log.trophy_id ? `<p><strong>Trophy ID:</strong> ${log.trophy_id}</p>` : ''}
+        </div>
+
+        <div>
+            <h4 class="font-semibold mb-2">Original Comment:</h4>
+            <div class="bg-base-200 p-4 rounded">
+                ${log.original_body}
+            </div>
+        </div>
+
+        <div>
+            <h4 class="font-semibold mb-2">Reason:</h4>
+            <p>${log.reason}</p>
+        </div>
+
+        ${log.internal_notes ? `
+        <div>
+            <h4 class="font-semibold mb-2">Internal Notes:</h4>
+            <div class="bg-base-200 p-4 rounded">
+                ${log.internal_notes}
+            </div>
+        </div>
+        ` : ''}
+    `;
+
+    modal.showModal();
+}
+</script>
+{% endblock %}
