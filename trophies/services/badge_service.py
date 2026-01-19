@@ -161,7 +161,7 @@ def handle_badge(profile, badge, add_role_only=False):
                         'source_id': badge.id
                     }
                 )
-        elif not badge_earned and user_badge_exists:
+        elif (not badge_earned or not prev_badge_earned) and user_badge_exists:
             UserBadge.objects.filter(profile=profile, badge=badge).delete()
             logger.info(
                 f"Revoked badge {badge.effective_display_title} (tier: {badge.tier}) "
