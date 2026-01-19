@@ -13,7 +13,7 @@ class Command(BaseCommand):
                 pg_ids = []
                 for pg in pg_qs:
                     pg_ids.append(pg.id)
-                check_profile_badges(profile, pg_ids)
+                check_profile_badges(profile, pg_ids, skip_notis=True)
             except Exception as e:
                 self.stdout.write(f"Failed to update badges for profile {profile.psn_username}: {e}")
             updated_profiles += 1

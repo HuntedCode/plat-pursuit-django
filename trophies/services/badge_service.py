@@ -103,19 +103,15 @@ def handle_badge(profile, badge, add_role_only=False):
         return
 
     # Check prerequisite: Previous tier must be earned first
+    prev_badge_earned = True
     if badge.tier > 1:
         prev_tier = badge.tier - 1
         prev_badge = Badge.objects.filter(
             series_slug=badge.series_slug, tier=prev_tier
         ).first()
-        if prev_badge and not UserBadge.objects.filter(
+        prev_badge_earned = prev_badge and not UserBadge.objects.filter(
             profile=profile, badge=prev_badge
-        ).exists():
-            logger.info(
-                f"Skipped {badge.name} for {profile.psn_username} - "
-                f"previous tier {prev_tier} not earned."
-            )
-            return
+        ).exists()
 
     # Handle series and collection badges (concept-based)
     if badge.badge_type in ['series', 'collection']:
@@ -148,47 +144,48 @@ def handle_badge(profile, badge, add_role_only=False):
         ).exists()
         badge_created = False
 
-        if badge_earned and not user_badge_exists:
-            UserBadge.objects.create(profile=profile, badge=badge)
-            badge_created = True
-            logger.info(
-                f"Awarded badge {badge.effective_display_title} (tier: {badge.tier}) "
-                f"to {profile.display_psn_username}"
-            )
-            # Create UserTitle if badge has an associated title
-            if badge.title:
-                UserTitle.objects.get_or_create(
-                    profile=profile,
-                    title=badge.title,
-                    defaults={
-                        'source_type': 'badge',
-                        'source_id': badge.id
-                    }
+        if prev_badge_earned:
+            if badge_earned and not user_badge_exists:
+                UserBadge.objects.create(profile=profile, badge=badge)
+                badge_created = True
+                logger.info(
+                    f"Awarded badge {badge.effective_display_title} (tier: {badge.tier}) "
+                    f"to {profile.display_psn_username}"
                 )
-        elif not badge_earned and user_badge_exists:
-            UserBadge.objects.filter(profile=profile, badge=badge).delete()
-            logger.info(
-                f"Revoked badge {badge.effective_display_title} (tier: {badge.tier}) "
-                f"from {profile.display_psn_username}"
-            )
-            # Remove UserTitle if badge had an associated title
-            if badge.title:
-                UserTitle.objects.filter(
-                    profile=profile,
-                    title=badge.title,
-                    source_type='badge',
-                    source_id=badge.id
-                ).delete()
+                # Create UserTitle if badge has an associated title
+                if badge.title:
+                    UserTitle.objects.get_or_create(
+                        profile=profile,
+                        title=badge.title,
+                        defaults={
+                            'source_type': 'badge',
+                            'source_id': badge.id
+                        }
+                    )
+            elif not badge_earned and user_badge_exists:
+                UserBadge.objects.filter(profile=profile, badge=badge).delete()
+                logger.info(
+                    f"Revoked badge {badge.effective_display_title} (tier: {badge.tier}) "
+                    f"from {profile.display_psn_username}"
+                )
+                # Remove UserTitle if badge had an associated title
+                if badge.title:
+                    UserTitle.objects.filter(
+                        profile=profile,
+                        title=badge.title,
+                        source_type='badge',
+                        source_id=badge.id
+                    ).delete()
 
-        # Handle Discord role assignment
-        if badge_earned and badge.discord_role_id:
-            if profile.is_discord_verified and profile.discord_id:
-                notify_bot_role_earned(profile, badge.discord_role_id)
+            # Handle Discord role assignment
+            if badge_earned and badge.discord_role_id:
+                if profile.is_discord_verified and profile.discord_id:
+                    notify_bot_role_earned(profile, badge.discord_role_id)
 
-        # Send Discord notification for newly earned badge
-        if not add_role_only and badge_created and badge.discord_role_id:
-            if profile.is_discord_verified and profile.discord_id:
-                notify_new_badge(profile, badge)
+            # Send Discord notification for newly earned badge
+            if not add_role_only and badge_created and badge.discord_role_id:
+                if profile.is_discord_verified and profile.discord_id:
+                    notify_new_badge(profile, badge)
 
         return badge_created
 
