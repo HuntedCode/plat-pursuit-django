@@ -9,6 +9,9 @@ from trophies.services.comment_service import CommentService
 from django.core.paginator import Paginator
 from django.db.models import F
 from django.utils import timezone
+from django.utils.decorators import method_decorator
+from django.views.decorators.cache import never_cache
+from django_ratelimit.decorators import ratelimit
 from datetime import timedelta
 from trophies.psn_manager import PSNManager
 from trophies.services.badge_service import initial_badge_check
@@ -502,6 +505,7 @@ class CommentCreateView(APIView):
     authentication_classes = [SessionAuthentication, TokenAuthentication]
     permission_classes = [IsAuthenticated]
 
+    @method_decorator(ratelimit(key='user', rate='10/m', method='POST', block=True))
     def post(self, request, concept_id, trophy_id=None):
         """
         POST /api/v1/comments/concept/<concept_id>/create/
@@ -571,6 +575,7 @@ class CommentDetailView(APIView):
     authentication_classes = [SessionAuthentication, TokenAuthentication]
     permission_classes = [IsAuthenticated]
 
+    @method_decorator(ratelimit(key='user', rate='20/m', method='PUT', block=True))
     def put(self, request, comment_id):
         """
         PUT /api/v1/comments/<comment_id>/
@@ -648,6 +653,7 @@ class CommentVoteView(APIView):
     authentication_classes = [SessionAuthentication, TokenAuthentication]
     permission_classes = [IsAuthenticated]
 
+    @method_decorator(ratelimit(key='user', rate='30/m', method='POST', block=True))
     def post(self, request, comment_id):
         """
         POST /api/v1/comments/<comment_id>/vote/

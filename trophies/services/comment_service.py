@@ -5,6 +5,7 @@ Handles all business logic for comments, votes, and reports.
 Follows the RatingService pattern for consistency.
 """
 import logging
+import bleach
 from django.db import transaction
 from django.db.models import F
 from django.core.cache import cache
@@ -19,6 +20,37 @@ class CommentService:
     COMMENTS_CACHE_TIMEOUT = 300  # 5 minutes
     MAX_COMMENT_LENGTH = 2000
     MAX_DEPTH = 10  # Limit nesting depth
+
+    # Bleach configuration - allow no HTML tags at all for comments
+    ALLOWED_TAGS = []  # No HTML tags allowed
+    ALLOWED_ATTRIBUTES = {}  # No attributes allowed
+    STRIP_TAGS = True  # Strip all tags rather than escape them
+
+    @staticmethod
+    def sanitize_text(text):
+        """
+        Sanitize user-provided text to prevent XSS attacks.
+
+        Removes all HTML tags and dangerous content while preserving plain text.
+
+        Args:
+            text: Raw user input text
+
+        Returns:
+            str: Sanitized text safe for display
+        """
+        if not text:
+            return ""
+
+        # Strip all HTML tags and attributes
+        clean_text = bleach.clean(
+            text,
+            tags=CommentService.ALLOWED_TAGS,
+            attributes=CommentService.ALLOWED_ATTRIBUTES,
+            strip=CommentService.STRIP_TAGS
+        )
+
+        return clean_text.strip()
 
     @staticmethod
     def can_comment(profile):
@@ -64,11 +96,14 @@ class CommentService:
         if not concept:
             return None, "Cannot comment on games without a concept."
 
-        # Validate body length
+        # Sanitize the body text to prevent XSS
+        body = CommentService.sanitize_text(body)
+
+        # Validate body length (after sanitization)
         if len(body) > CommentService.MAX_COMMENT_LENGTH:
             return None, f"Comment must be under {CommentService.MAX_COMMENT_LENGTH} characters."
 
-        if len(body.strip()) == 0:
+        if len(body) == 0:
             return None, "Comment cannot be empty."
 
         # Validate depth for replies
@@ -121,13 +156,16 @@ class CommentService:
         if comment.is_deleted:
             return False, "Cannot edit a deleted comment."
 
+        # Sanitize the new body text
+        new_body = CommentService.sanitize_text(new_body)
+
         if len(new_body) > CommentService.MAX_COMMENT_LENGTH:
             return False, f"Comment must be under {CommentService.MAX_COMMENT_LENGTH} characters."
 
-        if len(new_body.strip()) == 0:
+        if len(new_body) == 0:
             return False, "Comment cannot be empty."
 
-        comment.body = new_body.strip()
+        comment.body = new_body
         comment.is_edited = True
         comment.save(update_fields=['body', 'is_edited', 'updated_at'])
 
