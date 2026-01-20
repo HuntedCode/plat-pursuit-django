@@ -182,6 +182,7 @@ TEMPLATES = [
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
                 "plat_pursuit.context_processors.ads",
+                "plat_pursuit.context_processors.moderation",
             ],
         },
     },
