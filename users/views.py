@@ -19,7 +19,7 @@ import logging
 from users.forms import UserSettingsForm, CustomPasswordChangeForm
 from users.models import CustomUser
 from trophies.forms import PremiumSettingsForm, ProfileSettingsForm
-from trophies.services.profile_stats_service import update_profile_trophy_counts
+from trophies.utils import update_profile_trophy_counts
 
 logger = logging.getLogger('psn_api')
 
@@ -166,7 +166,7 @@ def subscribe(request):
         try:
             session = stripe.checkout.Session.create(
                 customer=customer.id,
-                payment_method_types=['card', 'us_bank_account', 'amazon_pay', 'cashapp', 'link', 'paypal'],
+                payment_method_types=['card', 'us_bank_account', 'amazon_pay', 'cashapp', 'link'],
                 line_items=[{'price': price.id, 'quantity': 1}],
                 mode='subscription',
                 success_url=request.build_absolute_uri('/users/subscribe/success/') + "?session_id={CHECKOUT_SESSION_ID}",
