@@ -544,7 +544,13 @@ class CommentSystem {
         // Submit form
         form.querySelector('form').addEventListener('submit', async (e) => {
             e.preventDefault();
-            await this.submitReply(commentId, textarea.value, submitBtn, form);
+
+            // Check guidelines before allowing reply
+            if (this.isTrophySection) {
+                checkTrophyGuidelinesBeforeComment(() => this.submitReply(commentId, textarea.value, submitBtn, form));
+            } else {
+                checkGuidelinesBeforeComment(() => this.submitReply(commentId, textarea.value, submitBtn, form));
+            }
         });
 
         // Focus textarea
