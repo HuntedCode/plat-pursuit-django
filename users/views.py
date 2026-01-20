@@ -166,7 +166,7 @@ def subscribe(request):
         try:
             session = stripe.checkout.Session.create(
                 customer=customer.id,
-                payment_method_types=['card', 'us_bank_account', 'amazon_pay', 'cashapp', 'link'],
+                payment_method_types=['card', 'us_bank_account', 'amazon_pay', 'cashapp', 'link', 'paypal'],
                 line_items=[{'price': price.id, 'quantity': 1}],
                 mode='subscription',
                 success_url=request.build_absolute_uri('/users/subscribe/success/') + "?session_id={CHECKOUT_SESSION_ID}",
