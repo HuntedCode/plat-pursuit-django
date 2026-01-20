@@ -1,0 +1,227 @@
+{% load static humanize custom_filters %}
+{# Reusable comment partial - displays a single comment with nested replies #}
+<div class="comment-item border-l-4 {% if comment.depth == 0 %}border-base-300 md:ml-6{% else %}border-primary/40{% endif %} pl-4 mb-4 ml-0 md:ml-[{{ comment.depth }}rem] relative"
+     data-comment-id="{{ comment.id }}"
+     data-depth="{{ comment.depth }}">
+
+    {# Collapse button for top-level comments - positioned outside the border #}
+    {% if comment.depth == 0 and comment.replies %}
+        <button class="collapse-btn hidden md:flex absolute -left-8 top-1 flex-shrink-0 btn btn-ghost btn-xs w-5 h-5 p-0 min-h-0 z-10"
+                data-comment-id="{{ comment.id }}"
+                aria-label="Toggle replies"
+                title="Toggle replies">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 transition-transform duration-200" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+            </svg>
+        </button>
+    {% endif %}
+
+    <div class="flex gap-2 sm:gap-3 items-start">
+        {# Author Avatar #}
+        <div class="avatar flex-shrink-0">
+            <div class="w-6 h-6 sm:w-8 sm:h-8 rounded-full ring-2 ring-primary hover:scale-105">
+                {% if comment.author.avatar_url %}
+                    <img src="{{ comment.author.avatar_url }}"
+                        alt="{{ comment.author.username }}'s avatar"
+                        loading="lazy">
+                {% else %}
+                    <div class="bg-neutral flex items-center justify-center w-full h-full">
+                        <span class="text-neutral-content text-lg font-bold">
+                            {{ comment.author.username|first|upper }}
+                        </span>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+
+        {# Comment Content #}
+        <div class="flex-1 min-w-0">
+            {# Comment Header #}
+            <div class="flex flex-wrap items-center gap-2 mb-2">
+                {# Username #}
+                <a href="{% url 'profile_detail' comment.author.username %}"
+                   class="font-semibold {% if comment.author.user_is_premium %}legendary-title{% else %}text-primary{% endif %} hover:underline hover:text-primary-focus transition-colors">
+                    {{ comment.author.username }}
+                </a>
+
+                {# Is Moderator #}
+                {% if comment.is_moderator %}
+                    <figure class="w-6 tooltip hover:scale-105" data-tip="Moderator">
+                        <img src="{% static 'images/logo.png' %}" class="w-full object-cover" />
+                    </figure>
+                {% endif %}
+                
+                <span class="text-base-content ml-1">•</span>
+
+                {# Country Flag #}
+                {% if comment.author.flag %}
+                    <span class="text-lg" title="{{ comment.author.flag }}">
+                        {{ comment.author.flag }}
+                    </span>
+                {% endif %}
+
+                {# Timestamp #}
+                <span class="text-xs text-base-content/60">
+                    {{ comment.created_at|naturaltime }}
+                </span>
+
+                {# Edited Indicator #}
+                {% if comment.is_edited %}
+                    <span class="text-xs text-base-content/50 italic">
+                        (edited)
+                    </span>
+                {% endif %}
+
+                {# Has Plat #}
+                {% if comment.author_has_platinum %}
+                    <figure class="w-6 tooltip hover:scale-105" data-tip="User Has Plat">
+                        <img src="{% static 'images/plat.png' %}" class="w-full object-cover" />
+                    </figure>
+                {% endif %}
+
+                {% if comment.author_has_trophy %}
+                    <figure class="w-6 tooltip hover:scale-105" data-tip="User Earned Trophy">
+                        <svg class="w-full" version="1.1" id="_x32_" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 512 512" xml:space="preserve" fill="var(--color-base-content)"><g id="SVGRepo_bgCarrier" stroke-width="0"></g><g id="SVGRepo_tracerCarrier" stroke-linecap="round" stroke-linejoin="round"></g><g id="SVGRepo_iconCarrier"><g> <path class="st0" d="M102.49,0c0,27.414,0,104.166,0,137.062c0,112.391,99.33,156.25,153.51,156.25 c54.18,0,153.51-43.859,153.51-156.25c0-32.896,0-109.648,0-137.062H102.49z M256.289,50.551l-68.164,29.768v98.474l-0.049,19.53 c-0.526-0.112-47.274-10.112-47.274-78.391c0-28.17,0-69.6,0-69.6h60.385L256.289,50.551z"></path> <polygon class="st0" points="315.473,400.717 291.681,367.482 279.791,318.506 256,322.004 232.209,318.506 220.314,367.482 205.347,388.394 196.527,400.476 196.699,400.476 196.527,400.717 "></polygon> <polygon class="st0" points="366.93,432.24 366.93,432 145.07,432 145.07,511.598 145.07,511.76 145.07,511.76 145.07,512 366.93,512 366.93,432.402 366.93,432.24 "></polygon> <path class="st0" d="M511.638,96.668c-0.033-1.268-0.068-2.336-0.068-3.174V45.1h-73.889v38.736h35.152v9.658 c0,1.127,0.037,2.557,0.086,4.258c0.389,13.976,1.303,46.707-21.545,70.203c-5.121,5.266-11.221,9.787-18.219,13.613 c-3.883,17.635-10.109,33.564-18.104,47.814c26.561-6.406,48.026-17.898,64.096-34.422 C513.402,159.734,512.121,113.918,511.638,96.668z"></path> <path class="st0" d="M60.625,167.955c-22.848-23.496-21.934-56.227-21.541-70.203c0.047-1.701,0.082-3.131,0.082-4.258v-9.658 h34.842h0.07l0,0h0.24V45.1H0.43v48.394c0,0.838-0.032,1.906-0.068,3.174c-0.482,17.25-1.76,63.066,32.494,98.293 c16.068,16.524,37.531,28.014,64.092,34.422c-7.996-14.25-14.22-30.182-18.103-47.816C71.846,177.74,65.746,173.221,60.625,167.955 z"></path> </g> </g></svg>
+                    </figure>
+                {% endif %}
+
+                {% if comment.author_progress %}
+                    <div class="tooltip" data-tip="User's Total Progress">
+                        <span class="text-base-content text-xs sm:text-sm font-semibold">{{ comment.author_progress }}%</span>
+                    </div>
+                {% else %}
+                    <div class="tooltip" data-tip="User's Total Progress">
+                        <span class="text-base-content text-xs sm:text-sm font-semibold">0%</span>
+                    </div>
+                {% endif %}
+
+                {# Collapse button on mobile - shown on right side of header #}
+                {% if comment.depth == 0 and comment.replies %}
+                    <button class="collapse-btn md:hidden flex-shrink-0 btn btn-ghost btn-sm w-5 h-5 p-0 min-h-0 ml-auto"
+                            data-comment-id="{{ comment.id }}"
+                            aria-label="Toggle replies"
+                            title="Toggle replies">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 transition-transform duration-200" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                        </svg>
+                    </button>
+                {% endif %}
+            </div>
+
+            {# Comment Body #}
+            <div class="prose prose-sm max-w-none mb-3">
+                {% if comment.is_deleted %}
+                    <p class="text-base-content/50 italic">[deleted]</p>
+                {% else %}
+                    <p class="whitespace-pre-wrap break-words text-sm">{{ comment.body|parse_spoilers }}</p>
+                {% endif %}
+            </div>
+
+            {# Comment Actions #}
+            <div class="flex flex-wrap gap-2 items-center">
+                {# Upvote Button #}
+                <button class="btn btn-ghost btn-xs gap-1 upvote-btn"
+                        data-comment-id="{{ comment.id }}"
+                        {% if comment.user_has_voted %}data-voted="true"{% endif %}
+                        aria-label="Upvote comment">
+                    <svg xmlns="http://www.w3.org/2000/svg"
+                         class="h-4 w-4 {% if comment.user_has_voted %}fill-primary{% else %}fill-current{% endif %}"
+                         viewBox="0 0 20 20">
+                        <path d="M2 10.5a1.5 1.5 0 113 0v6a1.5 1.5 0 01-3 0v-6zM6 10.333v5.43a2 2 0 001.106 1.79l.05.025A4 4 0 008.943 18h5.416a2 2 0 001.962-1.608l1.2-6A2 2 0 0015.56 8H12V4a2 2 0 00-2-2 1 1 0 00-1 1v.667a4 4 0 01-.8 2.4L6.8 7.933a4 4 0 00-.8 2.4z"/>
+                    </svg>
+                    <span class="upvote-count">{{ comment.upvote_count }}</span>
+                </button>
+
+                {# Reply Button #}
+                {% if comment.depth < 10 and not comment.is_deleted %}
+                    <button class="btn btn-ghost btn-xs reply-btn"
+                            data-comment-id="{{ comment.id }}"
+                            aria-label="Reply to comment">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6"/>
+                        </svg>
+                        Reply
+                    </button>
+                {% endif %}
+
+                {# Edit Button - only for comment owner #}
+                {% if comment.can_edit %}
+                    <button class="btn btn-ghost btn-xs edit-btn"
+                            data-comment-id="{{ comment.id }}"
+                            aria-label="Edit comment">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+                        </svg>
+                        Edit
+                    </button>
+                {% endif %}
+
+                {# Delete Button - only for comment owner or admin #}
+                {% if comment.can_delete %}
+                    <button class="btn btn-ghost btn-xs text-error delete-btn"
+                            data-comment-id="{{ comment.id }}"
+                            aria-label="Delete comment">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                        </svg>
+                        Delete
+                    </button>
+                {% endif %}
+
+                {# Report Button - for other users #}
+                {% if not comment.can_edit and not comment.is_deleted %}
+                    {% if comment.user_has_reported %}
+                        <button class="btn btn-ghost btn-xs" disabled aria-label="Already reported">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                            </svg>
+                            Reported
+                        </button>
+                    {% else %}
+                        <button class="btn btn-ghost btn-xs report-btn"
+                                data-comment-id="{{ comment.id }}"
+                                aria-label="Report comment">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 21v-4m0 0V5a2 2 0 012-2h6.5l1 1H21l-3 6 3 6h-8.5l-1-1H5a2 2 0 00-2 2zm9-13.5V9"/>
+                            </svg>
+                            Report
+                        </button>
+                    {% endif %}
+                {% endif %}
+            </div>
+
+            {# Reply Form Placeholder - will be inserted by JS #}
+            <div class="reply-form-container mt-3"></div>
+
+            {# Nested Replies #}
+            {% if comment.replies %}
+                {# Collapsed Indicator - Hidden by default, shown when replies are collapsed #}
+                <div class="hidden mt-2 text-xs text-base-content/60 items-center gap-1 collapsed-indicator" data-indicator-for="{{ comment.id }}">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/>
+                    </svg>
+                    <span>{{ comment.replies|length }} hidden {% if comment.replies|length == 1 %}reply{% else %}replies{% endif %}</span>
+                </div>
+
+                <div class="replies mt-4" data-replies-for="{{ comment.id }}">
+                    {% for reply in comment.replies %}
+                        {% include 'partials/comment.html' with comment=reply %}
+                    {% endfor %}
+                </div>
+
+                {# Load More Replies Button - shown when reply_has_more is true #}
+                {% if comment.reply_has_more %}
+                    <button class="btn btn-ghost btn-sm mt-2 load-more-replies-btn"
+                            data-comment-id="{{ comment.id }}"
+                            data-reply-offset="{{ comment.replies_shown }}"
+                            aria-label="Load more replies">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                        </svg>
+                        Show more replies
+                    </button>
+                {% endif %}
+            {% endif %}
+        </div>
+    </div>
+</div>

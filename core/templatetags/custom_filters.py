@@ -214,10 +214,68 @@ def format_date(value, arg=None):
 def sync_status_display(value):
     if value is None:
         return ''
-    
+
     if value == 'synced':
         return 'Synced!'
     elif value == 'syncing':
         return 'Syncing...'
     else:
         return 'Error'
+
+@register.filter
+def parse_spoilers(text):
+    """
+    Convert Discord-style spoiler tags ||text|| into clickable HTML spoilers.
+
+    Example: ||This is a spoiler|| becomes a clickable spoiler element.
+    """
+    if not text:
+        return text
+
+    import re
+    from django.utils.safestring import mark_safe
+    from django.utils.html import escape
+
+    # First escape the entire text for safety
+    escaped_text = escape(text)
+
+    # Then replace ||spoiler|| tags with HTML
+    # Pattern matches ||anything|| but uses non-greedy matching
+    pattern = r'\|\|(.+?)\|\|'
+
+    def replace_spoiler(match):
+        spoiler_content = match.group(1)
+        # Create a clickable spoiler element with DaisyUI styling
+        return (
+            f'<span class="spoiler inline-block cursor-pointer select-none bg-base-content text-base-content '
+            f'transition-colors duration-200 rounded px-1" '
+            f'onclick="this.classList.toggle(\'bg-base-content\'); this.classList.toggle(\'text-base-content\'); '
+            f'this.classList.toggle(\'bg-base-200\'); this.classList.toggle(\'text-base-content/90\');" '
+            f'title="Click to reveal/hide spoiler">{spoiler_content}</span>'
+        )
+
+    result = re.sub(pattern, replace_spoiler, escaped_text)
+    return mark_safe(result)
+
+@register.filter
+def moderator_display_name(user):
+    """
+    Get display name for a moderator (staff user).
+
+    Returns the linked PSN username if available, otherwise returns the user's username.
+
+    Args:
+        user: CustomUser instance
+
+    Returns:
+        str: Display name for the moderator
+    """
+    if not user:
+        return 'Unknown'
+
+    # Try to get PSN username from linked profile
+    if hasattr(user, 'profile') and user.profile:
+        return user.profile.display_psn_username or user.profile.psn_username
+
+    # Fall back to Django username
+    return user.username or user.email

@@ -42,3 +42,43 @@ SILVER_STAGE_XP = 75   # XP per concept completed at Silver tier
 GOLD_STAGE_XP = 250    # XP per concept completed at Gold tier
 PLAT_STAGE_XP = 75     # XP per concept completed at Platinum tier
 BADGE_TIER_XP = 3000   # XP awarded for completing a full badge tier
+
+# Community Guidelines
+COMMUNITY_GUIDELINES = [
+    {
+        "title": "Be Respectful",
+        "description": "Treat all members with respect. No harassment, hate speech, personal attacks, or discriminatory language of any kind."
+    },
+    {
+        "title": "Keep It Family-Friendly",
+        "description": "Avoid NSFW content, explicit language, and mature themes. We want to maintain a welcoming environment for gamers of all ages."
+    },
+    {
+        "title": "Stay On Topic",
+        "description": "Keep discussions relevant to PlayStation gaming, trophies, and the game being discussed. Avoid off-topic conversations."
+    },
+    {
+        "title": "No Spam or Self-Promotion",
+        "description": "Don't post repetitive content, advertisements, or excessive self-promotion. Share helpful content, not spam."
+    },
+    {
+        "title": "Use Spoiler Tags",
+        "description": "Use spoiler tags ||like this|| when discussing plot points, endings, or major game revelations. Respect others' gaming experiences."
+    },
+    {
+        "title": "Be Helpful and Constructive",
+        "description": "Share tips, strategies, and advice that helps the community. Constructive criticism is welcome, but keep it respectful."
+    },
+    {
+        "title": "Follow Platform Rules",
+        "description": "Adhere to all applicable laws and PlayStation's Terms of Service. Don't share exploits, hacks, or methods to circumvent game systems."
+    },
+    {
+        "title": "Report Don't Retaliate",
+        "description": "If you see rule-breaking content, report it to moderators. Don't engage in arguments or retaliate with similar behavior."
+    },
+    {
+        "title": "Protect Privacy",
+        "description": "Don't share personal information about yourself or others. Keep PSN usernames public but respect privacy otherwise."
+    }
+]

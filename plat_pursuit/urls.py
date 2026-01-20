@@ -30,7 +30,7 @@ sitemaps = {
     'games': GameSitemap,
     'profiles': ProfileSitemap,
 }
-from trophies.views import GamesListView, TrophiesListView, ProfilesListView, SearchView, GameDetailView, ProfileDetailView, TrophyCaseView, ToggleSelectionView, BadgeListView, BadgeDetailView, GuideListView, ProfileSyncStatusView, TriggerSyncView, SearchSyncProfileView, AddSyncStatusView, LinkPSNView, ProfileVerifyView, TokenMonitoringView, BadgeCreationView, BadgeLeaderboardsView, OverallBadgeLeaderboardsView, MilestoneListView
+from trophies.views import GamesListView, TrophiesListView, ProfilesListView, SearchView, GameDetailView, ProfileDetailView, TrophyCaseView, ToggleSelectionView, BadgeListView, BadgeDetailView, GuideListView, ProfileSyncStatusView, TriggerSyncView, SearchSyncProfileView, AddSyncStatusView, LinkPSNView, ProfileVerifyView, TokenMonitoringView, BadgeCreationView, BadgeLeaderboardsView, OverallBadgeLeaderboardsView, MilestoneListView, CommentModerationView, ModerationActionView, ModerationLogView
 from users.views import CustomConfirmEmailView, stripe_webhook, SubscriptionManagementView
 
 urlpatterns = [
@@ -60,6 +60,9 @@ urlpatterns = [
     path('logout/', LogoutView.as_view(next_page='home'), name='logout'),
 
     path('staff/badge-create/', BadgeCreationView.as_view(), name='badge_creation'),
+    path('staff/moderation/', CommentModerationView.as_view(), name='comment_moderation'),
+    path('staff/moderation/action/<int:report_id>/', ModerationActionView.as_view(), name='moderation_action'),
+    path('staff/moderation/log/', ModerationLogView.as_view(), name='moderation_log'),
 
     path('api/profile-verify/', ProfileVerifyView.as_view(), name='profile_verify'),
     path('api/trigger-sync/', TriggerSyncView.as_view(), name='trigger_sync'),

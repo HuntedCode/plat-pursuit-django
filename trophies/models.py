@@ -4,7 +4,7 @@ from users.models import CustomUser
 from django.contrib.postgres.fields import ArrayField
 from django.core.validators import RegexValidator, MinValueValidator, MaxValueValidator
 from django.db import transaction
-from django.db.models import F, Avg, Count, Max, Min
+from django.db.models import F, Max, Min
 from datetime import timedelta
 from tenacity import retry, stop_after_attempt, wait_fixed
 from trophies.util_modules.language import count_unique_game_groups, calculate_trimmed_mean
@@ -16,9 +16,8 @@ from trophies.util_modules.constants import (
 from trophies.util_modules.cache import redis_client
 from trophies.managers import (
     ProfileManager, GameManager, ProfileGameManager,
-    BadgeManager, MilestoneManager
+    BadgeManager, MilestoneManager, CommentManager
 )
-import secrets
 import re
 
 
@@ -102,6 +101,8 @@ class Profile(models.Model):
     selected_background = models.ForeignKey('Concept', on_delete=models.SET_NULL, null=True, blank=True, related_name='selected_by_profiles', help_text='Selected background concept for premium profiles.')
     hide_hiddens = models.BooleanField(default=False, help_text="If true, hide hidden/deleted games from list and totals.")
     hide_zeros = models.BooleanField(default=False, help_text="If true, hide games with no trophies earned.")
+    guidelines_agreed = models.BooleanField(default=False, help_text="True if user has agreed to community guidelines for commenting.")
+    guidelines_agreed_at = models.DateTimeField(null=True, blank=True, help_text="Timestamp when user agreed to community guidelines.")
 
     objects = ProfileManager()
 
@@ -458,6 +459,7 @@ class Concept(models.Model):
     bg_url = models.URLField(null=True, blank=True)
     concept_icon_url = models.URLField(null=True, blank=True)
     guide_slug = models.CharField(max_length=50, blank=True, null=True)
+    comment_count = models.PositiveIntegerField(default=0, help_text="Denormalized count of all comments on this concept")
 
     class Meta:
         indexes = [
@@ -1102,6 +1104,232 @@ class PublisherBlacklist(models.Model):
             models.Index(fields=['name'], name='blacklist_name_idx'),
         ]
 
+
+class Comment(models.Model):
+    """
+    User-generated comment on Concepts or Trophies within Concepts.
+
+    Comments are unified across game stacks:
+    - Concept-level comments (trophy_id=null): Discussion about the game in general
+    - Trophy-level comments (trophy_id=X): Discussion about a specific trophy across all stacks
+
+    Supports threaded replies via parent_id self-referential FK.
+    """
+    # Concept-based relation instead of GenericFK
+    concept = models.ForeignKey(
+        'Concept',
+        on_delete=models.CASCADE,
+        related_name='comments',
+        help_text="The game concept this comment belongs to",
+    )
+    trophy_id = models.IntegerField(
+        null=True,
+        blank=True,
+        help_text="Trophy position within concept (null = concept-level comment)"
+    )
+
+    # Author info
+    profile = models.ForeignKey(
+        Profile,
+        on_delete=models.CASCADE,
+        related_name='comments'
+    )
+
+    # Threading - self-referential for nested replies
+    parent = models.ForeignKey(
+        'self',
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='replies'
+    )
+
+    # Denormalized depth for query efficiency (0 = top-level, 1 = first reply, etc.)
+    depth = models.PositiveIntegerField(default=0)
+
+    # Content
+    body = models.TextField(
+        max_length=2000,
+        help_text="Comment text, max 2000 characters"
+    )
+
+    # Vote count (denormalized for sorting efficiency)
+    upvote_count = models.PositiveIntegerField(default=0)
+
+    # Timestamps
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    # Edit tracking
+    is_edited = models.BooleanField(default=False)
+
+    # Soft delete
+    is_deleted = models.BooleanField(default=False)
+    deleted_at = models.DateTimeField(null=True, blank=True)
+
+    objects = CommentManager()
+
+    class Meta:
+        indexes = [
+            # Primary query: get comments for a concept sorted by upvotes
+            models.Index(fields=['concept', 'trophy_id', '-upvote_count'], name='comment_concept_votes_idx'),
+            # Get replies to a comment
+            models.Index(fields=['parent', '-upvote_count'], name='comment_replies_idx'),
+            # Get all comments by a profile
+            models.Index(fields=['profile', '-created_at'], name='comment_profile_idx'),
+            # Composite for threaded display
+            models.Index(fields=['concept', 'trophy_id', 'depth', '-upvote_count'], name='comment_threaded_idx'),
+            # For moderation queue
+            models.Index(fields=['is_deleted', 'created_at'], name='comment_moderation_idx'),
+        ]
+        ordering = ['-upvote_count', '-created_at']
+
+    def __str__(self):
+        if self.trophy_id is not None:
+            return f"Comment by {self.profile.psn_username} on {self.concept} (Trophy {self.trophy_id})"
+        return f"Comment by {self.profile.psn_username} on {self.concept}"
+
+    def save(self, *args, **kwargs):
+        # Calculate depth based on parent
+        if self.parent:
+            self.depth = self.parent.depth + 1
+        super().save(*args, **kwargs)
+
+    def soft_delete(self, moderator=None, reason="", request=None):
+        """
+        Soft delete preserving thread structure and logging to ModerationLog.
+
+        Args:
+            moderator: CustomUser performing deletion (None = user self-delete)
+            reason: Reason for deletion (for audit trail)
+            request: HttpRequest object to capture IP address
+        """
+        # Preserve original body before deletion
+        original_body = self.body
+
+        # Mark as deleted
+        self.is_deleted = True
+        self.deleted_at = timezone.now()
+        self.body = '[deleted]'
+        self.save(update_fields=['is_deleted', 'deleted_at', 'body'])
+
+        # Log to ModerationLog if moderator action (not user self-delete)
+        if moderator:
+            ip_address = None
+            if request:
+                # Get IP from request
+                x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+                if x_forwarded_for:
+                    ip_address = x_forwarded_for.split(',')[0]
+                else:
+                    ip_address = request.META.get('REMOTE_ADDR')
+
+            ModerationLog.objects.create(
+                moderator=moderator,
+                action_type='delete',
+                comment=self,
+                comment_id_snapshot=self.id,
+                comment_author=self.profile,
+                original_body=original_body,
+                concept=self.concept,
+                trophy_id=self.trophy_id,
+                reason=reason,
+                ip_address=ip_address
+            )
+
+    @property
+    def display_body(self):
+        """Returns '[deleted]' if soft-deleted, else actual body."""
+        return '[deleted]' if self.is_deleted else self.body
+
+
+class CommentVote(models.Model):
+    """
+    Upvote on a comment. One vote per profile per comment.
+    """
+    comment = models.ForeignKey(
+        Comment,
+        on_delete=models.CASCADE,
+        related_name='votes'
+    )
+    profile = models.ForeignKey(
+        Profile,
+        on_delete=models.CASCADE,
+        related_name='comment_votes'
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ['comment', 'profile']
+        indexes = [
+            models.Index(fields=['comment', 'profile'], name='commentvote_unique_idx'),
+            models.Index(fields=['profile'], name='commentvote_profile_idx'),
+        ]
+
+    def __str__(self):
+        return f"{self.profile.psn_username} upvoted comment {self.comment.id}"
+
+
+class CommentReport(models.Model):
+    """
+    User report for moderation review.
+    """
+    REPORT_REASONS = [
+        ('spam', 'Spam'),
+        ('harassment', 'Harassment'),
+        ('inappropriate', 'Inappropriate Content'),
+        ('misinformation', 'Misinformation'),
+        ('other', 'Other'),
+    ]
+    REPORT_STATUS = [
+        ('pending', 'Pending Review'),
+        ('reviewed', 'Reviewed'),
+        ('dismissed', 'Dismissed'),
+        ('action_taken', 'Action Taken'),
+    ]
+
+    comment = models.ForeignKey(
+        Comment,
+        on_delete=models.CASCADE,
+        related_name='reports'
+    )
+    reporter = models.ForeignKey(
+        Profile,
+        on_delete=models.CASCADE,
+        related_name='submitted_reports'
+    )
+    reason = models.CharField(max_length=20, choices=REPORT_REASONS)
+    details = models.TextField(
+        max_length=500,
+        blank=True,
+        help_text="Additional context for the report"
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=REPORT_STATUS,
+        default='pending'
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    reviewed_by = models.ForeignKey(
+        CustomUser,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='reviewed_reports'
+    )
+    admin_notes = models.TextField(blank=True)
+
+    class Meta:
+        unique_together = ['comment', 'reporter']
+        indexes = [
+            models.Index(fields=['status', '-created_at'], name='report_status_idx'),
+            models.Index(fields=['comment'], name='report_comment_idx'),
+        ]
+
+    def __str__(self):
+        return f"Report on comment {self.comment.id} by {self.reporter.psn_username}"
+
 class APIAuditLog(models.Model):
     timestamp = models.DateTimeField(auto_now_add=True)
     token_id = models.CharField(max_length=64)
@@ -1120,3 +1348,99 @@ class APIAuditLog(models.Model):
 
     def __str__(self):
         return f"{self.endpoint} at {self.timestamp}"
+
+
+class ModerationLog(models.Model):
+    """
+    Audit trail for all comment moderation actions.
+
+    Preserves full context including original comment text for accountability
+    and appeal reviews.
+    """
+    ACTION_TYPES = [
+        ('delete', 'Comment Deleted'),
+        ('restore', 'Comment Restored'),
+        ('dismiss_report', 'Report Dismissed'),
+        ('approve_comment', 'Comment Approved'),
+        ('warning_issued', 'Warning Issued'),
+        ('bulk_delete', 'Bulk Delete'),
+        ('report_reviewed', 'Report Reviewed'),
+    ]
+
+    # Core fields
+    timestamp = models.DateTimeField(auto_now_add=True, db_index=True)
+    moderator = models.ForeignKey(
+        CustomUser,
+        on_delete=models.PROTECT,  # Never delete moderator history
+        related_name='moderation_actions'
+    )
+    action_type = models.CharField(max_length=20, choices=ACTION_TYPES, db_index=True)
+
+    # Target comment (preserved even if comment deleted)
+    comment = models.ForeignKey(
+        Comment,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name='moderation_logs'
+    )
+    comment_id_snapshot = models.IntegerField()  # Preserve ID if comment deleted
+    comment_author = models.ForeignKey(
+        Profile,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name='moderated_comments'
+    )
+
+    # Context preservation (CRITICAL for appeals/review)
+    original_body = models.TextField(
+        help_text="Original comment text preserved for context"
+    )
+    concept = models.ForeignKey(
+        'Concept',
+        on_delete=models.SET_NULL,
+        null=True
+    )
+    trophy_id = models.IntegerField(
+        null=True,
+        blank=True,
+        help_text="Trophy ID if comment was on trophy (null = concept-level)"
+    )
+
+    # Moderation context
+    related_report = models.ForeignKey(
+        CommentReport,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='action_logs'
+    )
+    reason = models.TextField(
+        help_text="Moderator's reason for action"
+    )
+    internal_notes = models.TextField(
+        blank=True,
+        help_text="Private staff notes (not shown to user)"
+    )
+
+    # IP tracking (for pattern detection)
+    ip_address = models.GenericIPAddressField(
+        null=True,
+        blank=True,
+        help_text="IP address of comment author at time of action"
+    )
+
+    class Meta:
+        ordering = ['-timestamp']
+        indexes = [
+            models.Index(fields=['-timestamp', 'moderator']),
+            models.Index(fields=['action_type', '-timestamp']),
+            models.Index(fields=['comment_author', '-timestamp']),
+        ]
+
+    def __str__(self):
+        return f"{self.get_action_type_display()} by {self.moderator.username} at {self.timestamp}"
+
+    @property
+    def comment_preview(self):
+        """Return truncated original body for display."""
+        return self.original_body[:100] + '...' if len(self.original_body) > 100 else self.original_body
