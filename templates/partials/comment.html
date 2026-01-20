@@ -47,7 +47,7 @@
                 {# Is Moderator #}
                 {% if comment.is_moderator %}
                     <figure class="w-6 tooltip hover:scale-105" data-tip="Moderator">
-                        <img src="{% static 'images/badges/default.png' %}" class="w-full object-cover" />
+                        <img src="{% static 'images/logo.png' %}" class="w-full object-cover" />
                     </figure>
                 {% endif %}
                 
@@ -170,14 +170,23 @@
 
                 {# Report Button - for other users #}
                 {% if not comment.can_edit and not comment.is_deleted %}
-                    <button class="btn btn-ghost btn-xs report-btn"
-                            data-comment-id="{{ comment.id }}"
-                            aria-label="Report comment">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 21v-4m0 0V5a2 2 0 012-2h6.5l1 1H21l-3 6 3 6h-8.5l-1-1H5a2 2 0 00-2 2zm9-13.5V9"/>
-                        </svg>
-                        Report
-                    </button>
+                    {% if comment.user_has_reported %}
+                        <button class="btn btn-ghost btn-xs" disabled aria-label="Already reported">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                            </svg>
+                            Reported
+                        </button>
+                    {% else %}
+                        <button class="btn btn-ghost btn-xs report-btn"
+                                data-comment-id="{{ comment.id }}"
+                                aria-label="Report comment">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 21v-4m0 0V5a2 2 0 012-2h6.5l1 1H21l-3 6 3 6h-8.5l-1-1H5a2 2 0 00-2 2zm9-13.5V9"/>
+                            </svg>
+                            Report
+                        </button>
+                    {% endif %}
                 {% endif %}
             </div>
 

@@ -1,5 +1,5 @@
 {% extends 'base.html' %}
-{% load static humanize %}
+{% load static humanize custom_filters %}
 
 {% block title %}Moderation Log{% endblock %}
 
@@ -96,7 +96,7 @@
                             {{ log.timestamp|date:"Y-m-d H:i" }}<br>
                             <span class="text-xs text-base-content/60">{{ log.timestamp|naturaltime }}</span>
                         </td>
-                        <td class="font-semibold">{{ log.moderator.profile.display_psn_username }}</td>
+                        <td class="font-semibold">{{ log.moderator|moderator_display_name }}</td>
                         <td>
                             <div class="badge badge-sm
                                 {% if log.action_type == 'delete' %}badge-error
@@ -183,7 +183,7 @@ const logData = {
     {% for log in logs %}
         {{ log.id }}: {
             timestamp: "{{ log.timestamp|date:'Y-m-d H:i:s' }}",
-            moderator: "{{ log.moderator.profile.display_psn_username }}",
+            moderator: "{{ log.moderator|moderator_display_name|escapejs }}",
             action: "{{ log.get_action_type_display }}",
             author: "{{ log.comment_author.psn_username|default:'Unknown' }}",
             original_body: "{{ log.original_body|escapejs }}",

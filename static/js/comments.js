@@ -445,7 +445,8 @@ class CommentSystem {
                 headers: {
                     'X-CSRFToken': this.getCsrfToken(),
                     'Content-Type': 'application/json',
-                }
+                },
+                credentials: 'same-origin'
             });
 
             if (!response.ok) {
@@ -705,6 +706,7 @@ class CommentSystem {
                     'X-CSRFToken': this.getCsrfToken(),
                     'Content-Type': 'application/json',
                 },
+                credentials: 'same-origin',
                 body: JSON.stringify({ body: body.trim() })
             });
 
@@ -746,7 +748,8 @@ class CommentSystem {
                 method: 'DELETE',
                 headers: {
                     'X-CSRFToken': this.getCsrfToken(),
-                }
+                },
+                credentials: 'same-origin'
             });
 
             if (!response.ok) {
@@ -876,6 +879,7 @@ class CommentSystem {
                     'X-CSRFToken': this.getCsrfToken(),
                     'Content-Type': 'application/json',
                 },
+                credentials: 'same-origin',
                 body: JSON.stringify({ reason, details })
             });
 
@@ -890,6 +894,20 @@ class CommentSystem {
             // Close modal
             const modal = document.getElementById('report-comment-modal');
             modal.close();
+
+            // Update the report button to show "Reported" and disable it
+            const reportBtn = document.querySelector(`.report-btn[data-comment-id="${commentId}"]`);
+            if (reportBtn) {
+                reportBtn.disabled = true;
+                reportBtn.classList.remove('report-btn');
+                reportBtn.innerHTML = `
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                    </svg>
+                    Reported
+                `;
+                reportBtn.setAttribute('aria-label', 'Already reported');
+            }
 
         } catch (error) {
             console.error('Failed to submit report:', error);

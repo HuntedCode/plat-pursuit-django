@@ -1,5 +1,5 @@
 {% extends 'base.html' %}
-{% load static humanize %}
+{% load static humanize custom_filters %}
 
 {% block title %}Comment Moderation{% endblock %}
 
@@ -157,7 +157,7 @@
                                 {% if report.reviewed_by %}
                                     <div class="alert alert-info mb-4">
                                         <div class="text-sm">
-                                            <strong>Reviewed by:</strong> {{ report.reviewed_by.profile.display_psn_username }}<br>
+                                            <strong>Reviewed by:</strong> {{ report.reviewed_by|moderator_display_name }}<br>
                                             <strong>At:</strong> {{ report.reviewed_at|naturaltime }}<br>
                                             {% if report.admin_notes %}
                                                 <strong>Notes:</strong> {{ report.admin_notes }}
@@ -229,7 +229,7 @@
                             <div class="text-sm p-2 bg-base-200 rounded">
                                 <div class="font-semibold">{{ log.get_action_type_display }}</div>
                                 <div class="text-xs text-base-content/60">
-                                    by {{ log.moderator.profile.display_psn_username }}<br>
+                                    by {{ log.moderator|moderator_display_name }}<br>
                                     {{ log.timestamp|naturaltime }}
                                 </div>
                             </div>

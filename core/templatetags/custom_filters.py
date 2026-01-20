@@ -256,3 +256,26 @@ def parse_spoilers(text):
 
     result = re.sub(pattern, replace_spoiler, escaped_text)
     return mark_safe(result)
+
+@register.filter
+def moderator_display_name(user):
+    """
+    Get display name for a moderator (staff user).
+
+    Returns the linked PSN username if available, otherwise returns the user's username.
+
+    Args:
+        user: CustomUser instance
+
+    Returns:
+        str: Display name for the moderator
+    """
+    if not user:
+        return 'Unknown'
+
+    # Try to get PSN username from linked profile
+    if hasattr(user, 'profile') and user.profile:
+        return user.profile.display_psn_username or user.profile.psn_username
+
+    # Fall back to Django username
+    return user.username or user.email

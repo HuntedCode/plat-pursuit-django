@@ -363,12 +363,16 @@ class CommentListView(APIView):
 
     def _add_permissions(self, context, comment, viewing_profile, user):
         """Add permission flags to comment context."""
-        from trophies.models import CommentVote
+        from trophies.models import CommentVote, CommentReport
 
         if user.is_authenticated and viewing_profile:
             context['user_has_voted'] = CommentVote.objects.filter(
                 comment=comment,
                 profile=viewing_profile
+            ).exists()
+            context['user_has_reported'] = CommentReport.objects.filter(
+                comment=comment,
+                reporter=viewing_profile
             ).exists()
             context['is_moderator'] = comment.profile.user.is_staff if comment.profile.user else False
             context['can_edit'] = (comment.profile == viewing_profile and not comment.is_deleted)

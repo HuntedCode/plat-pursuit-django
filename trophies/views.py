@@ -8,6 +8,7 @@ from django.core.paginator import Paginator
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.admin.views.decorators import staff_member_required
+from django.views.decorators.csrf import ensure_csrf_cookie
 from django.shortcuts import redirect, render, get_object_or_404
 from django.http import Http404, JsonResponse, HttpResponseRedirect
 from django.views.generic import ListView, View, DetailView, TemplateView
@@ -322,6 +323,7 @@ class SearchView(View):
         else:
             return HttpResponseRedirect(reverse_lazy('home'))
 
+@method_decorator(ensure_csrf_cookie, name='dispatch')
 class GameDetailView(ProfileHotbarMixin, DetailView):
     """
     Display detailed game information including trophies, statistics, and user progress.
