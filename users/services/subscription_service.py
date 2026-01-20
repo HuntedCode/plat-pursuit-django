@@ -238,7 +238,7 @@ class SubscriptionService:
         # Create checkout session
         session = stripe.checkout.Session.create(
             customer=customer.id,
-            payment_method_types=['card', 'us_bank_account', 'amazon_pay', 'cashapp', 'link', 'paypal'],
+            payment_method_types=['card', 'us_bank_account', 'amazon_pay', 'cashapp', 'link'],
             line_items=[{'price': price.id, 'quantity': 1}],
             mode='subscription',
             success_url=success_url,
