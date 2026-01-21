@@ -1,6 +1,5 @@
 {% load custom_filters %}
 {% for item in display_data %}
-{{ item }}
 {% with item.badge as badge %}
     <a href="{% url 'badge_detail' badge.series_slug %}" class="card bg-base-100 border-4 border-base-300 shadow-lg shadow-neutral cursor-pointer transition-all duration-300 hover:scale-105 {% if item.is_earned %}hover:border-{{ badge.tier|badge_color }} hover:shadow-{{ badge.tier|badge_color }}{% endif %} hover:z-10 group">
         <div class="card-body m-0 px-3 py-3 gap-0">
