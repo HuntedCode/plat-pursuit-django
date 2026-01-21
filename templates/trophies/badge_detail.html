@@ -53,20 +53,35 @@
                 <h3 id="{{ i }}-modal-title" class="text-xl text-base-content font-bold italic">{{ i|badge_tier }} Requirements:</h3>
             </div>
             <div class="flex flex-col sm:flex-row gap-4">
-                {% if i in '13' %}
+                {% if badge.badge_type == 'megamix' %}
                     <div class="w-full sm:w-1/7 sm:h-65 sm:max-h-65 flex flex-row sm:flex-col gap-1 sm:gap-4 bg-base-100 border-4 border-base-300 shadow-md shadow-neutral rounded-box items-center justify-center p-4" role="region" aria-label="Earn Platinum Trophy requirement">
                         <p class="text-xs sm:text-sm lg:text-3xl text-base-content font-bold">EARN</p>
-                        <figure class="w-10 sm:w-14 lg:w-30">
-                            <img src="{% static 'images/plat.png' %}" alt="Platinum Trophy" class="w-full" loading="lazy" decoding="async" />
-                        </figure>
+                        <div class="flex flex-row gap-1">
+                            <figure class="w-7 sm:w-10 lg:w-13">
+                                <img src="{% static 'images/plat.png' %}" alt="Platinum Trophy" class="w-full" loading="lazy" decoding="async" />
+                            </figure>
+                            {% with i|add:"0" as i %}
+                                <h3 class="text-2xl sm:text-4xl lg:text-5xl font-bold text-{{ i|badge_color }}">1{{ badge_requirements|dict_get:i }}</h3>
+                            {% endwith %}
+                        </div>
                         <p class="text-xs sm:text-sm lg:text-3xl text-base-content font-bold">IN</p>
                     </div>
                 {% else %}
-                    <div class="w-full sm:w-1/7 sm:h-65 sm:max-h-65 flex flex-row sm:flex-col gap-2 sm:gap-4 bg-base-100 border-4 border-base-300 shadow-md shadow-neutral rounded-box items-center justify-center p-4" role="region" aria-label="Earn 100% completion requirement">
-                        <p class="text-xs sm:text-sm lg:text-3xl text-base-content font-bold">EARN</p>
-                        <p class="text-sm sm:text-base lg:text-4xl text-warning font-bold italic">100%</p>
-                        <p class="text-xs sm:text-sm lg:text-3xl text-base-content font-bold">IN</p>
-                    </div>
+                    {% if i in '13' %}
+                        <div class="w-full sm:w-1/7 sm:h-65 sm:max-h-65 flex flex-row sm:flex-col gap-1 sm:gap-4 bg-base-100 border-4 border-base-300 shadow-md shadow-neutral rounded-box items-center justify-center p-4" role="region" aria-label="Earn Platinum Trophy requirement">
+                            <p class="text-xs sm:text-sm lg:text-3xl text-base-content font-bold">EARN</p>
+                            <figure class="w-10 sm:w-14 lg:w-30">
+                                <img src="{% static 'images/plat.png' %}" alt="Platinum Trophy" class="w-full" loading="lazy" decoding="async" />
+                            </figure>
+                            <p class="text-xs sm:text-sm lg:text-3xl text-base-content font-bold">IN</p>
+                        </div>
+                    {% else %}
+                        <div class="w-full sm:w-1/7 sm:h-65 sm:max-h-65 flex flex-row sm:flex-col gap-2 sm:gap-4 bg-base-100 border-4 border-base-300 shadow-md shadow-neutral rounded-box items-center justify-center p-4" role="region" aria-label="Earn 100% completion requirement">
+                            <p class="text-xs sm:text-sm lg:text-3xl text-base-content font-bold">EARN</p>
+                            <p class="text-sm sm:text-base lg:text-4xl text-warning font-bold italic">100%</p>
+                            <p class="text-xs sm:text-sm lg:text-3xl text-base-content font-bold">IN</p>
+                        </div>
+                    {% endif %}
                 {% endif %}
                 <div class="flex flex-col gap-2 border-4 border-base-300 shadow-lg shadow-neutral rounded-box max-h-65 h-65 w-full overflow-y-scroll overflow-x-visible p-2" role="list" aria-label="Badge stage requirements">
                     {% for data in stage_data %}

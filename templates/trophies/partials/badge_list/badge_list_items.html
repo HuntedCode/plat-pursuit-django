@@ -21,7 +21,7 @@
                     </div>
                     <div class="flex flex-col items-center lg:items-start justify-center">
                         <h3 class="text-lg font-bold line-clamp-1 italic pr-1">{{ badge.effective_display_title }} - {% if item.is_earned %}<span class="text-{{ badge.tier|badge_color }}">{{ badge.tier|badge_tier }}</span>{% else %}Unearned{% endif %}</h3>
-                        <h2 class="text-base text-base-content text-start line-clamp-1 pr-1">{{ badge.effective_display_series }}</h2>
+                        <h2 class="text-base legendary-title text-start italic">{{ badge.badge_type|capfirst }}</h2>
                         <h6 class="text-xs text-base-content/70 text-start italic line-clamp-1 pr-1">{{ badge.effective_description }}</h6>
                         <h5 class="text-xs text-base-content/70 font-semibold italic pr-1">Total games: {{ item.total_games }} | Total Earned: {{ item.tier1_earned_count }}</h5>                  
                     </div>

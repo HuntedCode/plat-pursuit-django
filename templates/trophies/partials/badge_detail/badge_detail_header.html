@@ -58,3 +58,60 @@
     {% endif %}
 </div>
 {% endwith %}
+
+{% if badge.badge_type == 'megamix' %}
+    <div class="card border-4 border-base-300 bg-base-100 shadow-lg shadow-neutral transition-all duration-300 hover:border-primary hover:shadow-primary mb-6 mt-6">
+        <div class="card-body px-4">
+            <h3 class="text-center text-3xl font-semibold legendary-title pr-1 italic mb-4">Megamix Requirements:</h3>
+            <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 xl:divide-x-4 xl:divide-base-300/70">
+                <div class="flex flex-col">
+                    <figure class="w-25 h-25 self-center hover:scale-105 mb-2">
+                        <img src="{% static 'images/badges/backdrops/1_backdrop.png' %}" />
+                    </figure>
+                    <h3 class="text-center text-xl font-semibold pr-1 italic mb-4">Bronze Requirements:</h3>
+                    <div class="flex flex-row items-center justify-center h-25 mb-4">
+                        <img src="{% static 'images/plat.png' %}" class="w-15 h-15 hover:scale-105" />
+                        <span class="text-6xl text-base-content font-bold ml-4"><span class="text-warning">{{ badge_requirements|dict_get:1 }}</span><span class="text-3xl">/{{ stage_count }}</span></span>
+                    </div>
+                    <h3 class="text-center text-xl text-base-content/70 pr-1 italic">+3,000 Badge XP</h3>
+                </div>
+
+                <div class="flex flex-col">
+                    <figure class="w-25 h-25  self-center hover:scale-105 mb-2">
+                        <img src="{% static 'images/badges/backdrops/2_backdrop.png' %}" />
+                    </figure>
+                    <h3 class="text-center text-xl font-semibold pr-1 italic mb-4">Silver Requirements:</h3>
+                    <div class="flex flex-row items-center justify-center h-25 mb-4">
+                        <img src="{% static 'images/plat.png' %}" class="w-15 h-15 hover:scale-105" />
+                        <span class="text-6xl text-base-content font-bold ml-4"><span class="text-secondary">{{ badge_requirements|dict_get:2 }}</span><span class="text-3xl">/{{ stage_count }}</span></span>
+                    </div>
+                    <h3 class="text-center text-xl text-base-content/70 pr-1 italic">+3,000 Badge XP</h3>
+                </div>
+
+                <div class="flex flex-col">
+                    <figure class="w-25 h-25  self-center hover:scale-105 mb-2">
+                        <img src="{% static 'images/badges/backdrops/3_backdrop.png' %}" />
+                    </figure>
+                    <h3 class="text-center text-xl font-semibold pr-1 italic mb-4">Gold Requirements:</h3>
+                    <div class="flex flex-row items-center justify-center h-25 mb-4">
+                        <img src="{% static 'images/plat.png' %}" class="w-15 h-15 hover:scale-105" />
+                        <span class="text-6xl text-base-content font-bold ml-4"><span class="text-error">{{ badge_requirements|dict_get:3 }}</span><span class="text-3xl">/{{ stage_count }}</span></span>
+                    </div>
+                    <h3 class="text-center text-xl text-base-content/70 pr-1 italic">+3,000 Badge XP</h3>
+                </div>
+
+                <div class="flex flex-col">
+                    <figure class="w-25 h-25  self-center hover:scale-105 mb-2">
+                        <img src="{% static 'images/badges/backdrops/4_backdrop.png' %}" />
+                    </figure>
+                    <h3 class="text-center text-xl font-semibold pr-1 italic mb-4">Platinum Requirements:</h3>
+                    <div class="flex flex-row items-center justify-center h-25 mb-4">
+                        <img src="{% static 'images/plat.png' %}" class="w-15 h-15 hover:scale-105" />
+                        <span class="text-6xl text-base-content font-bold ml-4"><span class="text-primary">{{ badge_requirements|dict_get:4 }}</span><span class="text-3xl">/{{ stage_count }}</span></span>
+                    </div>
+                    <h3 class="text-center text-xl text-base-content/70 pr-1 italic">+3,000 Badge XP</h3>
+                </div>
+            </div>
+        </div>
+    </div>
+{% endif %}

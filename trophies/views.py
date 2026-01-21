@@ -1597,6 +1597,7 @@ class BadgeDetailView(ProfileHotbarMixin, DetailView):
         stages = Stage.objects.filter(series_slug=badge.series_slug).order_by('stage_number').prefetch_related(
             Prefetch('concepts__games', queryset=Game.objects.all().order_by('title_name'))
         )
+        context['stage_count'] = stages.count()
         
         today = date.today().isoformat()
         stats_timeout = 3600
@@ -1631,11 +1632,14 @@ class BadgeDetailView(ProfileHotbarMixin, DetailView):
 
         all_badges = Badge.objects.by_series(badge.series_slug)
         badge_completion = {b.tier: b.get_stage_completion(target_profile, b.badge_type) for b in all_badges}
-        print(badge_completion)
+
+        # Add required_stages for each tier (useful for megamix badges)
+        badge_requirements = {b.tier: b.required_stages for b in all_badges}
 
         logger.debug(f"Badge detail loaded {len(structured_data)} stage data entries for {badge.series_slug}")
         context['stage_data'] = structured_data
         context['completion'] = badge_completion
+        context['badge_requirements'] = badge_requirements
         context['is_earned'] = is_earned
 
         context['image_urls'] = {'bg_url': badge.most_recent_concept.bg_url, 'recent_concept_icon_url': badge.most_recent_concept.concept_icon_url}
