@@ -22,10 +22,10 @@ class Command(BaseCommand):
                 updated_count += 1
 
                 if len(updated_items) >= 1000:
-                    Game.objects.bulk_update(updated_items, ['title_name'])
+                    Game.objects.bulk_update(updated_items, ['title_name', 'lock_title'])
                     updated_items = []
         if updated_items:
-            Game.objects.bulk_update(updated_items, ['title_name'])
+            Game.objects.bulk_update(updated_items, ['title_name', 'lock_title'])
             updated_items = []
         self.stdout.write(f"Cleaned {updated_count} games successfully.")
 
