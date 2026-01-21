@@ -17,6 +17,7 @@ class Command(BaseCommand):
             cleaned_title = re.sub('trophies', '', cleaned_title, re.IGNORECASE).strip()
             if cleaned_title != original_title:
                 game.title_name = cleaned_title
+                game.lock_title = True
                 updated_items.append(game)
                 updated_count += 1
 
