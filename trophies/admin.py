@@ -2,7 +2,7 @@ from django.contrib import admin, messages
 from django.contrib.admin import SimpleListFilter
 from django.db import transaction
 from django.db.models import Q
-from .models import Profile, Game, Trophy, EarnedTrophy, ProfileGame, APIAuditLog, FeaturedGame, FeaturedProfile, Event, Concept, TitleID, TrophyGroup, UserTrophySelection, UserConceptRating, Badge, UserBadge, UserBadgeProgress, FeaturedGuide, Stage, PublisherBlacklist, Title, UserTitle, Milestone, UserMilestone, UserMilestoneProgress, Comment, CommentVote, CommentReport, ModerationLog
+from .models import Profile, Game, Trophy, EarnedTrophy, ProfileGame, APIAuditLog, FeaturedGame, FeaturedProfile, Event, Concept, TitleID, TrophyGroup, UserTrophySelection, UserConceptRating, Badge, UserBadge, UserBadgeProgress, FeaturedGuide, Stage, PublisherBlacklist, Title, UserTitle, Milestone, UserMilestone, UserMilestoneProgress, Comment, CommentVote, CommentReport, ModerationLog, BannedWord
 
 
 # Register your models here.
@@ -687,3 +687,52 @@ class ModerationLogAdmin(admin.ModelAdmin):
         """Show truncated original body."""
         return obj.original_body[:50] + '...' if len(obj.original_body) > 50 else obj.original_body
     comment_preview_short.short_description = 'Comment'
+
+
+@admin.register(BannedWord)
+class BannedWordAdmin(admin.ModelAdmin):
+    """Admin interface for managing banned words."""
+    list_display = [
+        'word',
+        'is_active',
+        'use_word_boundaries',
+        'added_by',
+        'added_at',
+    ]
+    list_filter = [
+        'is_active',
+        'use_word_boundaries',
+        'added_at',
+    ]
+    search_fields = [
+        'word',
+        'notes',
+    ]
+    readonly_fields = [
+        'added_by',
+        'added_at',
+    ]
+    ordering = ['word']
+    date_hierarchy = 'added_at'
+
+    def save_model(self, request, obj, form, change):
+        """Automatically set added_by to current user on creation."""
+        if not change:  # Only on creation
+            obj.added_by = request.user
+        super().save_model(request, obj, form, change)
+
+        # Clear the banned words cache when any word is added/modified
+        from django.core.cache import cache
+        cache.delete('banned_words:active')
+
+    def delete_model(self, request, obj):
+        """Clear cache when deleting banned words."""
+        super().delete_model(request, obj)
+        from django.core.cache import cache
+        cache.delete('banned_words:active')
+
+    def delete_queryset(self, request, queryset):
+        """Clear cache when bulk deleting banned words."""
+        super().delete_queryset(request, queryset)
+        from django.core.cache import cache
+        cache.delete('banned_words:active')

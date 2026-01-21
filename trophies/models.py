@@ -788,6 +788,7 @@ class Badge(models.Model):
     BADGE_TYPES = [
         ('series', 'Series'),
         ('collection', 'Collection'),
+        ('megamix', 'Megamix'),
         ('misc', 'Miscellaneous'),
     ]
 
@@ -1444,3 +1445,46 @@ class ModerationLog(models.Model):
     def comment_preview(self):
         """Return truncated original body for display."""
         return self.original_body[:100] + '...' if len(self.original_body) > 100 else self.original_body
+
+
+class BannedWord(models.Model):
+    """
+    Banned words that are automatically blocked in comments.
+
+    Staff can manage this list through the admin interface to filter
+    inappropriate content without code changes.
+    """
+    word = models.CharField(
+        max_length=100,
+        unique=True,
+        help_text="Word or phrase to ban (case-insensitive)"
+    )
+    is_active = models.BooleanField(
+        default=True,
+        help_text="Whether this filter is currently active"
+    )
+    use_word_boundaries = models.BooleanField(
+        default=True,
+        help_text="Match whole words only (recommended to avoid false positives)"
+    )
+    added_by = models.ForeignKey(
+        CustomUser,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name='banned_words_added'
+    )
+    added_at = models.DateTimeField(auto_now_add=True)
+    notes = models.TextField(
+        blank=True,
+        help_text="Internal notes about why this word was banned"
+    )
+
+    class Meta:
+        ordering = ['word']
+        indexes = [
+            models.Index(fields=['is_active', 'word']),
+        ]
+
+    def __str__(self):
+        status = "Active" if self.is_active else "Inactive"
+        return f"{self.word} ({status})"

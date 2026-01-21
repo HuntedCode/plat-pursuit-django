@@ -6,6 +6,7 @@ Follows the RatingService pattern for consistency.
 """
 import logging
 import bleach
+import re
 from django.db import transaction
 from django.db.models import F
 from django.core.cache import cache
@@ -51,6 +52,57 @@ class CommentService:
         )
 
         return clean_text.strip()
+
+    @staticmethod
+    def check_banned_words(text):
+        """
+        Check if text contains any banned words.
+
+        Uses cached banned words list for performance. Checks against
+        database-managed BannedWord entries that staff can update.
+
+        Args:
+            text: Comment text to check
+
+        Returns:
+            tuple: (contains_banned_word: bool, matched_word: str or None)
+        """
+        from trophies.models import BannedWord
+
+        if not text:
+            return False, None
+
+        # Get active banned words from cache (5 minute TTL)
+        cache_key = 'banned_words:active'
+        banned_words_data = cache.get(cache_key)
+
+        if banned_words_data is None:
+            # Load from database
+            banned_words_data = list(
+                BannedWord.objects.filter(is_active=True).values('word', 'use_word_boundaries')
+            )
+            cache.set(cache_key, banned_words_data, 300)  # Cache for 5 minutes
+
+        # Check each banned word
+        text_lower = text.lower()
+        for banned_word_data in banned_words_data:
+            word = banned_word_data['word'].lower()
+            use_boundaries = banned_word_data['use_word_boundaries']
+
+            if use_boundaries:
+                # Match whole words only using word boundaries
+                # This prevents "assassin" from matching "ass", etc.
+                pattern = r'\b' + re.escape(word) + r'\b'
+                if re.search(pattern, text_lower, re.IGNORECASE):
+                    logger.warning(f"Banned word detected: {word}")
+                    return True, banned_word_data['word']  # Return original case
+            else:
+                # Simple substring match
+                if word in text_lower:
+                    logger.warning(f"Banned phrase detected: {word}")
+                    return True, banned_word_data['word']  # Return original case
+
+        return False, None
 
     @staticmethod
     def can_comment(profile):
@@ -107,6 +159,12 @@ class CommentService:
 
         if len(body) == 0:
             return None, "Comment cannot be empty."
+
+        # Check for banned words
+        contains_banned, matched_word = CommentService.check_banned_words(body)
+        if contains_banned:
+            logger.warning(f"Comment blocked for user {profile.psn_username} - banned word: {matched_word}")
+            return None, "Your comment contains inappropriate content and cannot be posted."
 
         # Validate depth for replies
         if parent:
@@ -166,6 +224,12 @@ class CommentService:
 
         if len(new_body) == 0:
             return False, "Comment cannot be empty."
+
+        # Check for banned words
+        contains_banned, matched_word = CommentService.check_banned_words(new_body)
+        if contains_banned:
+            logger.warning(f"Comment edit blocked for user {profile.psn_username} - banned word: {matched_word}")
+            return False, "Your comment contains inappropriate content and cannot be saved."
 
         comment.body = new_body
         comment.is_edited = True

@@ -971,7 +971,70 @@ class CommentSystem {
      * Show toast notification
      */
     showToast(message, type = 'info') {
-        // TODO: Implement toast notifications (could use DaisyUI toast)
+        const container = document.getElementById('toast-container');
+        if (!container) {
+            console.log(`[${type.toUpperCase()}]`, message);
+            return;
+        }
+
+        // Create toast element
+        const toast = document.createElement('div');
+        toast.className = 'alert shadow-lg mb-2 max-w-md';
+
+        // Set alert type styling
+        switch(type) {
+            case 'success':
+                toast.classList.add('alert-success');
+                break;
+            case 'error':
+                toast.classList.add('alert-error');
+                break;
+            case 'warning':
+                toast.classList.add('alert-warning');
+                break;
+            default:
+                toast.classList.add('alert-info');
+        }
+
+        // Create icon based on type
+        let icon = '';
+        switch(type) {
+            case 'success':
+                icon = `<svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>`;
+                break;
+            case 'error':
+                icon = `<svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>`;
+                break;
+            case 'warning':
+                icon = `<svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>`;
+                break;
+            default:
+                icon = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="stroke-current shrink-0 w-6 h-6"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>`;
+        }
+
+        toast.innerHTML = `
+            <div class="flex items-center gap-2">
+                ${icon}
+                <span>${message}</span>
+            </div>
+        `;
+
+        // Add to container
+        container.appendChild(toast);
+
+        // Auto-remove after 5 seconds (longer for errors)
+        const duration = type === 'error' ? 7000 : 5000;
+        setTimeout(() => {
+            toast.style.opacity = '0';
+            toast.style.transition = 'opacity 0.3s';
+            setTimeout(() => {
+                if (toast.parentNode) {
+                    toast.remove();
+                }
+            }, 300);
+        }, duration);
+
+        // Also log to console for debugging
         console.log(`[${type.toUpperCase()}]`, message);
     }
 

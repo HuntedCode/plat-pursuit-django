@@ -82,3 +82,11 @@ COMMUNITY_GUIDELINES = [
         "description": "Don't share personal information about yourself or others. Keep PSN usernames public but respect privacy otherwise."
     }
 ]
+
+# Banned Words - Comments containing these words will be automatically rejected
+# Words are matched case-insensitively with word boundaries to avoid false positives
+# Add variations and common misspellings as needed
+BANNED_WORDS = [
+    # Add your banned words here - this is just a template
+    # Keep this list updated through the Django admin or database
+]
