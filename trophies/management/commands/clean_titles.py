@@ -11,10 +11,10 @@ class Command(BaseCommand):
         for game in Game.objects.all().iterator(chunk_size=1000):
             original_title = game.title_name
             cleaned_title = re.sub(r'[™®]|(\bTM\b)|(\(R\))', '', original_title).strip()
-            cleaned_title = re.sub('- trophy set', '', cleaned_title, re.IGNORECASE).strip()
-            cleaned_title = re.sub('trophy set', '', cleaned_title, re.IGNORECASE).strip()
-            cleaned_title = re.sub('- trophies', '', cleaned_title, re.IGNORECASE).strip()
-            cleaned_title = re.sub('trophies', '', cleaned_title, re.IGNORECASE).strip()
+            cleaned_title = re.sub('- trophy set', '', cleaned_title, flags=re.IGNORECASE).strip()
+            cleaned_title = re.sub('trophy set', '', cleaned_title, flags=re.IGNORECASE).strip()
+            cleaned_title = re.sub('- trophies', '', cleaned_title, flags=re.IGNORECASE).strip()
+            cleaned_title = re.sub('trophies', '', cleaned_title, flags=re.IGNORECASE).strip()
             if cleaned_title != original_title:
                 game.title_name = cleaned_title
                 game.lock_title = True
