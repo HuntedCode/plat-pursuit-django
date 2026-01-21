@@ -810,7 +810,6 @@ class Badge(models.Model):
     most_recent_concept = models.ForeignKey(Concept, on_delete=models.SET_NULL, null=True, blank=True, related_name='most_recent_for_badges', help_text='Concept with the latest release_date')
     created_at = models.DateTimeField(auto_now_add=True)
     earned_count = models.PositiveIntegerField(default=0, help_text="Count of users who have earned this badge tier")
-    required_concepts = models.PositiveIntegerField(default=0, help_text="Denormalized count of required concepts for series badges")
     required_stages = models.PositiveIntegerField(default=0, help_text="Denormalized count of required stages for series badges")
     required_value = models.PositiveIntegerField(default=0, help_text="Denormalized required value for misc badges")
 
@@ -886,7 +885,7 @@ class Badge(models.Model):
 
     def update_required(self):
         from trophies.models import Stage
-        if self.badge_type in ['series', 'collection']:
+        if self.badge_type in ['series', 'collection', 'megamix']:
             stages = Stage.objects.filter(series_slug=self.series_slug)
             required_count = 0
             for stage in stages:
@@ -894,10 +893,18 @@ class Badge(models.Model):
                     continue
                 if stage.applies_to_tier(self.tier):
                     required_count += 1
-            self.required_stages = required_count
+
+            # For megamix badges with requires_all=False, use min_required
+            # Otherwise use the total count of non-zero stages
+            if self.badge_type == 'megamix' and not self.requires_all:
+                self.required_stages = self.min_required
+            else:
+                self.required_stages = required_count
+
             self.save(update_fields=['required_stages'])
 
-    def get_stage_completion(self, profile: Profile) -> dict[int, bool]:
+
+    def get_stage_completion(self, profile: Profile, type: str) -> dict[int, bool]:
         if not profile:
             return {}
         
@@ -905,8 +912,11 @@ class Badge(models.Model):
 
         stages = Stage.objects.filter(Q(series_slug=self.series_slug) & (Q(required_tiers__len=0) | Q(required_tiers__contains=[self.tier]))).prefetch_related('concepts__games')
 
-        is_plat_check = self.tier in [1, 3]
-        is_progress_check = self.tier in [2, 4]
+        if type in ['series', 'collection']:
+            is_plat_check = self.tier in [1, 3]
+            is_progress_check = self.tier in [2, 4]
+        elif type == 'megamix':
+            is_plat_check = True
 
         completion = {}
         for stage in stages:

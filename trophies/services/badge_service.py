@@ -74,6 +74,179 @@ def check_profile_badges(profile, profilegame_ids, skip_notis: bool = False):
     return checked_count
 
 
+def _check_prerequisite_tier(profile, badge):
+    """
+    Check if previous tier badge has been earned (prerequisite check).
+
+    Args:
+        profile: Profile instance
+        badge: Badge instance to check prerequisites for
+
+    Returns:
+        bool: True if prerequisite is met or no prerequisite exists, False otherwise
+    """
+    from trophies.models import UserBadge, Badge
+
+    if badge.tier <= 1:
+        return True
+
+    prev_tier = badge.tier - 1
+    prev_badge = Badge.objects.filter(
+        series_slug=badge.series_slug, tier=prev_tier
+    ).first()
+
+    return prev_badge and UserBadge.objects.filter(
+        profile=profile, badge=prev_badge
+    ).exists()
+
+
+def _update_badge_progress(profile, badge, completed_count):
+    """
+    Update or create UserBadgeProgress for a badge.
+
+    Args:
+        profile: Profile instance
+        badge: Badge instance
+        completed_count: Number of completed stages/concepts
+
+    Returns:
+        UserBadgeProgress: The updated or created progress instance
+    """
+    from trophies.models import UserBadgeProgress
+
+    progress, created = UserBadgeProgress.objects.get_or_create(
+        profile=profile,
+        badge=badge,
+        defaults={'completed_concepts': completed_count}
+    )
+    if not created:
+        progress.completed_concepts = completed_count
+        progress.last_checked = timezone.now()
+        progress.save(update_fields=['completed_concepts', 'last_checked'])
+
+    return progress
+
+
+def _award_badge(profile, badge):
+    """
+    Award a badge to a profile and create associated title if applicable.
+
+    Args:
+        profile: Profile instance
+        badge: Badge instance to award
+
+    Returns:
+        bool: True if badge was newly created, False if already exists
+    """
+    from trophies.models import UserBadge
+
+    user_badge_exists = UserBadge.objects.filter(
+        profile=profile, badge=badge
+    ).exists()
+
+    if user_badge_exists:
+        return False
+
+    UserBadge.objects.create(profile=profile, badge=badge)
+    logger.info(
+        f"Awarded badge {badge.effective_display_title} (tier: {badge.tier}) "
+        f"to {profile.display_psn_username}"
+    )
+
+    # Create UserTitle if badge has an associated title
+    if badge.title:
+        UserTitle.objects.get_or_create(
+            profile=profile,
+            title=badge.title,
+            defaults={
+                'source_type': 'badge',
+                'source_id': badge.id
+            }
+        )
+
+    return True
+
+
+def _revoke_badge(profile, badge):
+    """
+    Revoke a badge from a profile and remove associated title if applicable.
+
+    Args:
+        profile: Profile instance
+        badge: Badge instance to revoke
+    """
+    from trophies.models import UserBadge
+
+    UserBadge.objects.filter(profile=profile, badge=badge).delete()
+    logger.info(
+        f"Revoked badge {badge.effective_display_title} (tier: {badge.tier}) "
+        f"from {profile.display_psn_username}"
+    )
+
+    # Remove UserTitle if badge had an associated title
+    if badge.title:
+        UserTitle.objects.filter(
+            profile=profile,
+            title=badge.title,
+            source_type='badge',
+            source_id=badge.id
+        ).delete()
+
+
+def _process_badge_award_revoke(profile, badge, badge_earned, prev_badge_earned):
+    """
+    Process badge awarding or revoking based on completion status.
+
+    Args:
+        profile: Profile instance
+        badge: Badge instance
+        badge_earned: Whether the badge requirements are met
+        prev_badge_earned: Whether prerequisite tier is met
+
+    Returns:
+        bool: True if badge was newly created, False otherwise
+    """
+    from trophies.models import UserBadge
+
+    user_badge_exists = UserBadge.objects.filter(
+        profile=profile, badge=badge
+    ).exists()
+    badge_created = False
+
+    if prev_badge_earned and badge_earned and not user_badge_exists:
+        badge_created = _award_badge(profile, badge)
+    elif (not badge_earned or not prev_badge_earned) and user_badge_exists:
+        _revoke_badge(profile, badge)
+
+    return badge_created
+
+
+def _handle_discord_notifications(profile, badge, badge_created, add_role_only):
+    """
+    Handle Discord role assignment and notifications for badge earning.
+
+    Args:
+        profile: Profile instance
+        badge: Badge instance
+        badge_created: Whether the badge was newly created
+        add_role_only: If True, only assign roles without sending notifications
+    """
+    from trophies.discord_utils.discord_notifications import notify_new_badge
+
+    if not badge.discord_role_id:
+        return
+
+    if not profile.is_discord_verified or not profile.discord_id:
+        return
+
+    # Assign Discord role
+    notify_bot_role_earned(profile, badge.discord_role_id)
+
+    # Send Discord notification for newly earned badge
+    if not add_role_only and badge_created:
+        notify_new_badge(profile, badge)
+
+
 @transaction.atomic
 def handle_badge(profile, badge, add_role_only=False):
     """
@@ -96,26 +269,15 @@ def handle_badge(profile, badge, add_role_only=False):
     Returns:
         bool: True if badge was newly created, False otherwise
     """
-    from trophies.models import UserBadge, UserBadgeProgress, Badge
-    from trophies.discord_utils.discord_notifications import notify_new_badge
-
     if not profile or not badge:
-        return
+        return False
 
     # Check prerequisite: Previous tier must be earned first
-    prev_badge_earned = True
-    if badge.tier > 1:
-        prev_tier = badge.tier - 1
-        prev_badge = Badge.objects.filter(
-            series_slug=badge.series_slug, tier=prev_tier
-        ).first()
-        prev_badge_earned = prev_badge and UserBadge.objects.filter(
-            profile=profile, badge=prev_badge
-        ).exists()
+    prev_badge_earned = _check_prerequisite_tier(profile, badge)
 
     # Handle series and collection badges (concept-based)
     if badge.badge_type in ['series', 'collection']:
-        stage_completion_dict = badge.get_stage_completion(profile)
+        stage_completion_dict = badge.get_stage_completion(profile, badge.badge_type)
         badge_earned = True
         completed_count = 0
 
@@ -128,66 +290,50 @@ def handle_badge(profile, badge, add_role_only=False):
             completed_count += 1
 
         # Update progress tracking
-        progress, created = UserBadgeProgress.objects.get_or_create(
-            profile=profile,
-            badge=badge,
-            defaults={'completed_concepts': completed_count}
-        )
-        if not created:
-            progress.completed_concepts = completed_count
-            progress.last_checked = timezone.now()
-            progress.save(update_fields=['completed_concepts', 'last_checked'])
+        _update_badge_progress(profile, badge, completed_count)
 
         # Award or revoke badge based on completion
-        user_badge_exists = UserBadge.objects.filter(
-            profile=profile, badge=badge
-        ).exists()
-        badge_created = False
+        badge_created = _process_badge_award_revoke(profile, badge, badge_earned, prev_badge_earned)
 
-        if prev_badge_earned and badge_earned and not user_badge_exists:
-            UserBadge.objects.create(profile=profile, badge=badge)
-            badge_created = True
-            logger.info(
-                f"Awarded badge {badge.effective_display_title} (tier: {badge.tier}) "
-                f"to {profile.display_psn_username}"
-            )
-            # Create UserTitle if badge has an associated title
-            if badge.title:
-                UserTitle.objects.get_or_create(
-                    profile=profile,
-                    title=badge.title,
-                    defaults={
-                        'source_type': 'badge',
-                        'source_id': badge.id
-                    }
-                )
-        elif (not badge_earned or not prev_badge_earned) and user_badge_exists:
-            UserBadge.objects.filter(profile=profile, badge=badge).delete()
-            logger.info(
-                f"Revoked badge {badge.effective_display_title} (tier: {badge.tier}) "
-                f"from {profile.display_psn_username}"
-            )
-            # Remove UserTitle if badge had an associated title
-            if badge.title:
-                UserTitle.objects.filter(
-                    profile=profile,
-                    title=badge.title,
-                    source_type='badge',
-                    source_id=badge.id
-                ).delete()
-
-        if prev_badge_earned:
-            # Handle Discord role assignment
-            if badge_earned and badge.discord_role_id:
-                if profile.is_discord_verified and profile.discord_id:
-                    notify_bot_role_earned(profile, badge.discord_role_id)
-
-            # Send Discord notification for newly earned badge
-            if not add_role_only and badge_created and badge.discord_role_id:
-                if profile.is_discord_verified and profile.discord_id:
-                    notify_new_badge(profile, badge)
+        # Handle Discord notifications
+        if prev_badge_earned and badge_earned:
+            _handle_discord_notifications(profile, badge, badge_created, add_role_only)
 
         return badge_created
+
+    # Handle megamix badges (flexible completion requirements)
+    elif badge.badge_type == 'megamix':
+        stage_completion_dict = badge.get_stage_completion(profile, badge.badge_type)
+        completed_count = 0
+
+        for stage, is_complete in stage_completion_dict.items():
+            if stage == 0:  # Stage 0 is optional/tangential
+                continue
+            if is_complete:
+                completed_count += 1
+
+        # Determine if badge is earned based on requires_all flag
+        if badge.requires_all:
+            # All non-zero stages must be completed
+            required_stages = sum(1 for stage in stage_completion_dict if stage != 0)
+            badge_earned = completed_count >= required_stages
+        else:
+            # At least min_required stages must be completed
+            badge_earned = completed_count >= badge.min_required
+
+        # Update progress tracking
+        _update_badge_progress(profile, badge, completed_count)
+
+        # Award or revoke badge based on completion
+        badge_created = _process_badge_award_revoke(profile, badge, badge_earned, prev_badge_earned)
+
+        # Handle Discord notifications
+        if prev_badge_earned and badge_earned:
+            _handle_discord_notifications(profile, badge, badge_created, add_role_only)
+
+        return badge_created
+
+    return False
 
 
 def notify_bot_role_earned(profile, role_id):

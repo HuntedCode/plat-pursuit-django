@@ -1451,7 +1451,7 @@ class BadgeListView(ProfileHotbarMixin, ListView):
                 # Calculate progress
                 progress = progress_dict.get(progress_badge.id) if progress_badge else None
                 required_stages = progress_badge.required_stages
-                if progress and progress_badge.badge_type in ['series', 'collection']:
+                if progress and progress_badge.badge_type in ['series', 'collection', 'megamix']:
                     completed_concepts = progress.completed_concepts
                     progress_percentage = (completed_concepts / required_stages) * 100 if required_stages > 0 else 0
                 else:
@@ -1630,7 +1630,7 @@ class BadgeDetailView(ProfileHotbarMixin, DetailView):
             })
 
         all_badges = Badge.objects.by_series(badge.series_slug)
-        badge_completion = {b.tier: b.get_stage_completion(target_profile) for b in all_badges}
+        badge_completion = {b.tier: b.get_stage_completion(target_profile, b.badge_type) for b in all_badges}
         print(badge_completion)
 
         logger.debug(f"Badge detail loaded {len(structured_data)} stage data entries for {badge.series_slug}")
