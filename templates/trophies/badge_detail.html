@@ -61,7 +61,7 @@
                                 <img src="{% static 'images/plat.png' %}" alt="Platinum Trophy" class="w-full" loading="lazy" decoding="async" />
                             </figure>
                             {% with i|add:"0" as i %}
-                                <h3 class="text-2xl sm:text-4xl lg:text-5xl font-bold text-{{ i|badge_color }}">1{{ badge_requirements|dict_get:i }}</h3>
+                                <h3 class="text-2xl sm:text-4xl lg:text-5xl font-bold text-{{ i|badge_color }}">{{ badge_requirements|dict_get:i }}</h3>
                             {% endwith %}
                         </div>
                         <p class="text-xs sm:text-sm lg:text-3xl text-base-content font-bold">IN</p>
