@@ -2,6 +2,7 @@ from django.contrib import admin, messages
 from django.contrib.admin import SimpleListFilter
 from django.db import transaction
 from django.db.models import Q
+from datetime import timedelta
 from .models import Profile, Game, Trophy, EarnedTrophy, ProfileGame, APIAuditLog, FeaturedGame, FeaturedProfile, Event, Concept, TitleID, TrophyGroup, UserTrophySelection, UserConceptRating, Badge, UserBadge, UserBadgeProgress, FeaturedGuide, Stage, PublisherBlacklist, Title, UserTitle, Milestone, UserMilestone, UserMilestoneProgress, Comment, CommentVote, CommentReport, ModerationLog, BannedWord
 
 
@@ -31,6 +32,7 @@ class ProfileAdmin(admin.ModelAdmin):
     search_fields = ("psn_username", "account_id", "user__username__iexact", "about_me")
     raw_id_fields = ("user",)
     ordering = ("psn_username",)
+    actions = ['subtract_10_days_and_mark_synced']
     fieldsets = (
         (
             "Core Info",
@@ -46,6 +48,27 @@ class ProfileAdmin(admin.ModelAdmin):
         ),
         ("Sync Info", {"fields": ("extra_data", "last_synced", "last_profile_health_check", "sync_status", "sync_progress_value", "sync_progress_target", "sync_tier")}),
     )
+
+    @admin.action(description="Subtract 10 days from last_synced and set sync_status to synced")
+    def subtract_10_days_and_mark_synced(self, request, queryset):
+        """Subtract 10 days from last_synced and set sync_status to 'synced' for selected profiles."""
+        updated_count = 0
+        with transaction.atomic():
+            for profile in queryset:
+                old_last_synced = profile.last_synced
+                old_sync_status = profile.sync_status
+
+                # Subtract 10 days from last_synced
+                profile.last_synced = profile.last_synced - timedelta(days=10)
+                profile.sync_status = 'synced'
+                profile.save(update_fields=['last_synced', 'sync_status'])
+
+                updated_count += 1
+
+        messages.success(
+            request,
+            f"Successfully updated {updated_count} profile(s): subtracted 10 days from last_synced and set sync_status to 'synced'."
+        )
 
 
 class RegionListFilter(SimpleListFilter):
