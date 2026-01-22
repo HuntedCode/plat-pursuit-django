@@ -262,6 +262,10 @@ class Profile(models.Model):
         self.discord_linked_at = timezone.now()
         self.is_discord_verified = True
         self.save(update_fields=['discord_id', 'discord_linked_at', 'is_discord_verified'])
+
+        # Check for Discord linking milestones
+        from trophies.services.milestone_service import check_all_milestones_for_user
+        check_all_milestones_for_user(self, criteria_type='discord_linked')
     
     def unlink_discord(self):
         self.discord_id = None
@@ -801,7 +805,6 @@ class Badge(models.Model):
     base_badge = models.ForeignKey('self', on_delete=models.SET_NULL, null=True, blank=True, related_name='derived_badges', help_text='Reference a base (Tier 1) badge to inherit its icon')
     display_title = models.CharField(max_length=100, blank=True)
     display_series = models.CharField(max_length=100, blank=True)
-    user_title = models.CharField(max_length=100, blank=True, help_text="Title earned by user upon badge completion.")
     title = models.ForeignKey('Title', on_delete=models.SET_NULL, null=True, blank=True, related_name='badge_title', help_text='Title awarded to user upon earning.')
     discord_role_id = models.BigIntegerField(null=True, blank=True, help_text="Discord role ID to auto assign upon earning the badge (optional).")
     tier = models.IntegerField(choices=TIER_CHOICES, default=1)
@@ -845,10 +848,10 @@ class Badge(models.Model):
     
     @property
     def effective_user_title(self):
-        if self.user_title:
-            return self.user_title
-        elif self.base_badge and self.base_badge.user_title:
-            return self.base_badge.user_title
+        if self.title:
+            return self.title.name
+        elif self.base_badge and self.base_badge.title:
+            return self.base_badge.title.name
         return None
 
     @property
@@ -1039,6 +1042,10 @@ class Milestone(models.Model):
     CRITERIA_TYPES = [
         ('manual', 'Manual Award'),
         ('plat_count', 'Earned Plats'),
+        ('psn_linked', 'PSN Profile Linked'),
+        ('discord_linked', 'Discord Connected'),
+        ('rating_count', 'Games Rated'),
+        ('playtime_hours', 'Total Playtime (Hours)'),
     ]
 
     name = models.CharField(max_length=255, unique=True, help_text="Unique name")

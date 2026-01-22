@@ -100,6 +100,7 @@ class VerificationService:
 
         Sets the profile's user field and marks it as linked.
         Updates premium status based on user's subscription tier.
+        Checks for PSN linking milestones.
 
         Args:
             profile: Profile instance to link
@@ -116,6 +117,10 @@ class VerificationService:
             # Update premium status based on user's tier
             is_premium = user.premium_tier in ['premium_monthly', 'premium_yearly', 'supporter']
             profile.update_profile_premium(is_premium)
+
+            # Check for PSN linking milestones
+            from trophies.services.milestone_service import check_all_milestones_for_user
+            check_all_milestones_for_user(profile, criteria_type='psn_linked')
 
     @staticmethod
     def unlink_profile_from_user(profile):

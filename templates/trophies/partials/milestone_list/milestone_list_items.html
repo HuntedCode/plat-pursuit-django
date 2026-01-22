@@ -1,4 +1,4 @@
-{% load static %}
+{% load static humanize %}
 {% for item in display_data %}
 {% with item.milestone as milestone %}
     <div class="card bg-base-100 border-4 border-base-300 shadow-lg shadow-neutral transition-all duration-300 {% if item.is_earned %}hover:border-success hover:shadow-success{% else %}hover:border-primary hover:shadow-primary{% endif %}">
@@ -55,7 +55,7 @@
                                 {% with item.progress_percentage as percent %}
                                     <div class="flex flex-col gap-0 items-center self-center w-full">
                                         <progress class="progress {% if item.is_earned %}progress-success{% elif percent < 33.0 %}progress-error{% elif percent < 66.0 %}progress-warning{% else %}progress-info{% endif %} w-full" value="{{ percent }}" max="100"></progress>
-                                        <p class="text-base text-base-content">{% if percent < 100 %}{{ item.progress_value }}{% else %}{{ item.required_value }}{% endif %} / {{ item.required_value }} ({{ percent }}%)</p>
+                                        <p class="text-base text-base-content">{% if percent < 100 %}{{ item.progress_value|intcomma }}{% else %}{{ item.required_value|intcomma }}{% endif %} / {{ item.required_value|intcomma }} ({{ percent }}%)</p>
                                     </div>
                                 {% endwith %}
                             {% else %}

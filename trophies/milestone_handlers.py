@@ -30,3 +30,50 @@ def handle_plat_count(profile, milestone):
     current = ProfileGame.objects.filter(profile=profile, has_plat=True, **filter_kwargs).count()
     achieved = current >= target
     return {'achieved': achieved, 'progress': current, 'updated': True}
+
+@register_handler('psn_linked')
+def handle_psn_linked(profile, milestone):
+    """Check if PSN profile is linked to a user account (Profile.is_linked)"""
+    achieved = profile.is_linked
+    progress = 1 if achieved else 0
+    return {'achieved': achieved, 'progress': progress, 'updated': True}
+
+@register_handler('discord_linked')
+def handle_discord_linked(profile, milestone):
+    """Check if Discord is connected (Profile.is_discord_verified and Profile.discord_id)"""
+    achieved = profile.is_discord_verified and profile.discord_id is not None
+    progress = 1 if achieved else 0
+    return {'achieved': achieved, 'progress': progress, 'updated': True}
+
+@register_handler('rating_count')
+def handle_rating_count(profile, milestone):
+    """Check progress for number of games rated (UserConceptRating count)"""
+    from trophies.models import UserConceptRating
+
+    target = milestone.criteria_details.get('target', 0)
+    current = UserConceptRating.objects.filter(profile=profile).count()
+    achieved = current >= target
+    return {'achieved': achieved, 'progress': current, 'updated': True}
+
+@register_handler('playtime_hours')
+def handle_playtime_hours(profile, milestone):
+    """Check progress for total accumulated playtime in hours"""
+    from django.db.models import Sum
+    from datetime import timedelta
+
+    target = milestone.criteria_details.get('target', 0)
+
+    # Sum all play_duration values for the profile
+    total_duration = ProfileGame.objects.filter(
+        profile=profile,
+        play_duration__isnull=False
+    ).aggregate(total=Sum('play_duration'))['total']
+
+    # Convert total duration to hours
+    if total_duration:
+        current_hours = int(total_duration.total_seconds() / 3600)
+    else:
+        current_hours = 0
+
+    achieved = current_hours >= target
+    return {'achieved': achieved, 'progress': current_hours, 'updated': True}

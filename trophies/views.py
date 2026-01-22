@@ -900,6 +900,11 @@ class GameDetailView(ProfileHotbarMixin, DetailView):
                 today = date.today().isoformat()
                 averages_cache_key = f"concept:averages:{concept.concept_id}:{today}"
                 cache.delete(averages_cache_key)
+
+                # Check for rating milestones
+                from trophies.services.milestone_service import check_all_milestones_for_user
+                check_all_milestones_for_user(profile, criteria_type='rating_count')
+
                 messages.success(request, 'Your rating has been submitted!')
             else:
                 messages.error(request, "Invalid form submission.")
@@ -1872,6 +1877,16 @@ class MilestoneListView(ProfileHotbarMixin, ListView):
 
         # Build display data
         display_data = self._build_milestone_display_data(milestones, profile)
+
+        # Sort display data: incomplete milestones first (by progress % descending),
+        # then completed milestones
+        if profile:
+            display_data.sort(
+                key=lambda x: (
+                    x['is_earned'],  # False (0) before True (1) - incomplete first
+                    -x['progress_percentage'] if not x['is_earned'] else 0  # Higher progress first for incomplete
+                )
+            )
 
         context['display_data'] = display_data
 
