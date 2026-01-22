@@ -36,9 +36,9 @@
                 {% endif %}
             </div>
             <div class="">
-                <form id="sync-form" method="post" action="{% url 'search_sync_profile' %}" class="flex-row items-center gap-2 xl:gap-4">
+                <form id="sync-form" method="post" action="{% url 'search_sync_profile' %}" class="flex-row items-center gap-2 xl:gap-4" data-form-type="other">
                     {% csrf_token %}
-                    <input id="add-sync-input" type="text" name="psn_username" placeholder="Enter PSN Username" class="input input-accent input-sm w-30 md:w-50 2xl:w-75 shrink-1" autocomplete="off" required />
+                    <input id="add-sync-input" type="text" name="psn_username" placeholder="Enter PSN Username" class="input input-accent input-sm w-30 md:w-50 2xl:w-75 shrink-1" autocomplete="off" data-form-type="other" required />
                     <button id="add-sync-btn" type="submit" class="btn btn-accent btn-xs xl:btn-sm border-2 border-base-300 shadow-md shadow-neutral ml-2" aria-label="Sync new profile">Sync Profile</button>
                     <a href="" id="add-sync-anchor" class="btn btn-success btn-xs xl:btn-sm border-2 border-base-300 shadow-md shadow-neutral hidden" aria-label="Visit synced profile">Visit Profile</a>
                     <span id="add-sync-load" class="loading loading-spinner loading-lg hidden" role="status" aria-label="Syncing profile"></span>
