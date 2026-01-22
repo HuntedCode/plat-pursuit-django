@@ -1036,6 +1036,15 @@ class TokenKeeper:
         })
         redis_client.set(pending_key, pending_data, ex=7200)
 
+        # If no low/medium priority jobs were assigned, trigger sync_complete immediately
+        # Otherwise it will never fire since _complete_job only checks pending for low/medium queues
+        current_jobs = self._get_current_jobs_for_profile(profile_id)
+        if current_jobs <= 0:
+            logger.info(f"No pending jobs for profile {profile_id}, triggering sync_complete immediately")
+            args = [touched_profilegame_ids, 'medium_priority']
+            PSNManager.assign_job('sync_complete', args, profile_id, priority_override='medium_priority')
+            redis_client.delete(pending_key)
+
     @property
     def stats(self) -> Dict:
         stats = {}
