@@ -77,3 +77,29 @@ def handle_playtime_hours(profile, milestone):
 
     achieved = current_hours >= target
     return {'achieved': achieved, 'progress': current_hours, 'updated': True}
+
+@register_handler('trophy_count')
+def handle_trophy_count(profile, milestone):
+    """Check progress for total trophies earned (Profile.total_trophies)"""
+    target = milestone.criteria_details.get('target', 0)
+    current = profile.total_trophies
+    achieved = current >= target
+    return {'achieved': achieved, 'progress': current, 'updated': True}
+
+@register_handler('comment_upvotes')
+def handle_comment_upvotes(profile, milestone):
+    """Check progress for total comment upvotes received across all user comments"""
+    from django.db.models import Sum
+    from trophies.models import Comment
+
+    target = milestone.criteria_details.get('target', 0)
+
+    # Sum all upvote_count values for the profile's comments
+    total_upvotes = Comment.objects.filter(
+        profile=profile,
+        is_deleted=False
+    ).aggregate(total=Sum('upvote_count'))['total']
+
+    current = total_upvotes if total_upvotes else 0
+    achieved = current >= target
+    return {'achieved': achieved, 'progress': current, 'updated': True}

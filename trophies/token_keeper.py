@@ -641,6 +641,7 @@ class TokenKeeper:
         logger.info(f"ProfileGame Stats updated for {profile_id} successfully! | {len(touched_profilegame_ids)} profilegames updated")
         check_all_milestones_for_user(profile, criteria_type='plat_count')
         check_all_milestones_for_user(profile, criteria_type='playtime_hours')
+        check_all_milestones_for_user(profile, criteria_type='trophy_count')
         logger.info(f"Milestones checked for {profile_id} successfully!")
 
         update_profile_trophy_counts(profile)

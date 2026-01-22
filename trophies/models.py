@@ -1046,6 +1046,8 @@ class Milestone(models.Model):
         ('discord_linked', 'Discord Connected'),
         ('rating_count', 'Games Rated'),
         ('playtime_hours', 'Total Playtime (Hours)'),
+        ('trophy_count', 'Total Trophies Earned'),
+        ('comment_upvotes', 'Comment Upvotes Received'),
     ]
 
     name = models.CharField(max_length=255, unique=True, help_text="Unique name")

@@ -317,6 +317,11 @@ class CommentService:
             comment.upvote_count = F('upvote_count') + 1
             comment.save(update_fields=['upvote_count'])
             comment.refresh_from_db(fields=['upvote_count'])
+
+            # Check for comment upvote milestones for the comment author
+            from trophies.services.milestone_service import check_all_milestones_for_user
+            check_all_milestones_for_user(comment.profile, criteria_type='comment_upvotes')
+
             return True, None
 
     @staticmethod
