@@ -11,6 +11,7 @@ from typing import Optional, Dict
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from django.utils import timezone
+from django.db import connection, transaction
 from django.db.models import Sum
 from django.db.models.functions import Coalesce
 from psnawp_api import PSNAWP as BasePSNAWP
@@ -21,7 +22,7 @@ from psnawp_api.models.trophies.trophy_constants import PlatformType
 from requests import HTTPError
 from requests.exceptions import ConnectionError, Timeout
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type, wait_fixed
-from .models import Profile, Game, TitleID, TrophyGroup, ProfileGame
+from .models import Profile, Game, TitleID, TrophyGroup, ProfileGame, EarnedTrophy
 from .services.psn_api_service import PsnApiService
 from .psn_manager import PSNManager
 from trophies.util_modules.cache import redis_client, log_api_call
@@ -324,6 +325,8 @@ class TokenKeeper:
         while True:
             profile_id = None
             queue_name = None
+            job_start = None
+            job_type = None
             try:
                 queue_b, job_json = redis_client.brpop(['high_priority_jobs', 'medium_priority_jobs', 'low_priority_jobs'])
                 queue_name = queue_b.decode()[:-5] # remove '_jobs'
@@ -331,6 +334,7 @@ class TokenKeeper:
                 job_type = job_data['job_type']
                 args = job_data['args']
                 profile_id = job_data['profile_id']
+                job_start = time.time()
                 logger.info(f"Starting job - {job_type} for profile {profile_id} from queue {queue_name}.")
 
                 if job_type == 'sync_profile_data':
@@ -354,19 +358,28 @@ class TokenKeeper:
                 else:
                     logger.error(f"Unknown job type: {job_type}")
                     raise
-                
-                logger.info(f"Job: {job_type} - Profile: {profile_id} completed successfully!")
+
+                # Log slow jobs for monitoring
+                job_duration = time.time() - job_start
+                if job_duration > 300:  # 5 minutes
+                    logger.warning(f"Slow job: {job_type} for profile {profile_id} took {job_duration:.1f}s")
+
+                logger.info(f"Job: {job_type} - Profile: {profile_id} completed successfully in {job_duration:.1f}s")
                 self._complete_job(profile_id, queue_name)
             except Exception as e:
                 logger.error(f"Error in job worker: {e}")
+                # Reset any instances stuck in busy state for too long
+                self._check_stuck_instances()
             finally:
                 if profile_id and queue_name != 'high_priority':
                     self._complete_job(profile_id, queue_name)
+                # Close stale DB connections to prevent pool exhaustion
+                connection.close()
 
     @retry(stop=stop_after_attempt(5), wait=wait_fixed(0.2))
     def _complete_job(self, profile_id, queue_name):
         """Handle finished job, check for deferred."""
-        if queue_name == 'low_priority' or 'medium_priority':
+        if queue_name in ('low_priority', 'medium_priority'):
 
             counter_key = f"profile_jobs:{profile_id}:{queue_name}"
 
@@ -399,6 +412,17 @@ class TokenKeeper:
         for queue in ['low_priority', 'medium_priority']:
             total += int(redis_client.get(f"profile_jobs:{profile_id}:{queue}") or 0)
         return total
+
+    def _check_stuck_instances(self):
+        """Reset any token instances that have been stuck in busy state for too long."""
+        stuck_threshold = 300  # 5 minutes
+        now = time.time()
+        for group_id, group in self.group_instances.items():
+            for inst_id, inst in group['instances'].items():
+                if inst.is_busy and (now - inst.last_health) > stuck_threshold:
+                    logger.warning(f"Resetting stuck instance {group_id}-{inst_id} (busy for {now - inst.last_health:.1f}s)")
+                    inst.is_busy = False
+                    inst.last_error = f"{datetime.now().isoformat()} Reset due to stuck busy state"
 
     def _get_instance_for_job(self, job_type: str) -> Optional[TokenInstance]:
         """Selects best instance for job, respecting workload and priority."""
@@ -582,12 +606,17 @@ class TokenKeeper:
                 offset += page_size
 
             if len(current_tracked_games) > 0:
-                for pgame in current_tracked_games:
-                    for trophy in profile.earned_trophy_entries.filter(trophy__game=pgame.game):
-                        trophy.user_hidden = True
-                        trophy.save(update_fields=['user_hidden'])
-                    pgame.user_hidden = True
-                    pgame.save(update_fields=['user_hidden'])
+                # Use bulk update instead of individual saves to reduce DB locks
+                hidden_game_ids = [pgame.game_id for pgame in current_tracked_games]
+                with transaction.atomic():
+                    EarnedTrophy.objects.filter(
+                        profile=profile,
+                        trophy__game_id__in=hidden_game_ids
+                    ).update(user_hidden=True)
+                    ProfileGame.objects.filter(
+                        profile=profile,
+                        game_id__in=hidden_game_ids
+                    ).update(user_hidden=True)
 
             if has_mismatch and len(trophy_titles_to_be_updated) > 0:
                 for title in trophy_titles_to_be_updated:
@@ -792,9 +821,10 @@ class TokenKeeper:
 
         logger.info(f"Fetching trophies for profile {profile_id}, game {np_communication_id} on platform {platform}")
         trophies = self._execute_api_call(self._get_instance_for_job(job_type), profile, 'trophies', np_communication_id=np_communication_id, platform=PlatformType(platform), include_progress=True, trophy_group_id='all', page_size=500)
-        for trophy_data in trophies:
-            trophy, _ = PsnApiService.create_or_update_trophy_from_trophy_data(game, trophy_data)
-            PsnApiService.create_or_update_earned_trophy_from_trophy_data(profile, trophy, trophy_data)
+        with transaction.atomic():
+            for trophy_data in trophies:
+                trophy, _ = PsnApiService.create_or_update_trophy_from_trophy_data(game, trophy_data)
+                PsnApiService.create_or_update_earned_trophy_from_trophy_data(profile, trophy, trophy_data)
         profile.increment_sync_progress(value=2)
     
     def _job_sync_title_id(self, profile_id: str, title_id_str: str, np_communication_id: str):

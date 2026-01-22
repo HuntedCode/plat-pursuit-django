@@ -737,6 +737,8 @@ class EarnedTrophy(models.Model):
         indexes = [
             models.Index(fields=["last_updated"], name="earned_trophy_updated_idx"),
             models.Index(fields=['earned_date_time'], name="earned_trophy_earned_time_idx"),
+            # Composite index for trophy type count queries (profile + earned status)
+            models.Index(fields=['profile', 'earned'], name="earnedtrophy_profileearned_idx"),
         ]
 
 class UserTrophySelection(models.Model):

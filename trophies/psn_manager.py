@@ -18,7 +18,7 @@ class PSNManager:
     def assign_job(cls, job_type: str, args: list, profile_id: int, priority_override: str=None):
         """Assign job to queue, respecting priorities."""
         queue_name = priority_override or cls._get_queue_for_job(job_type)
-        if queue_name == "low_priority" or "medium_priority":
+        if queue_name in ("low_priority", "medium_priority"):
             redis_client.incr(f"profile_jobs:{profile_id}:{queue_name}")
             redis_client.sadd("active_profiles", profile_id)
         

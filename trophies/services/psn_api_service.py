@@ -3,7 +3,7 @@ import time
 from datetime import timedelta
 from django.utils import timezone
 from django.db import transaction
-from django.db.models import F, Count, Max
+from django.db.models import F, Count, Max, Q
 from trophies.models import Profile, Game, ProfileGame, Trophy, EarnedTrophy, Concept, TrophyGroup, Badge
 from psnawp_api.models.title_stats import TitleStats
 from psnawp_api.models.trophies import TrophyTitle, TrophyGroupSummary
@@ -304,39 +304,44 @@ class PsnApiService:
 
     @classmethod
     def get_profile_trophy_summary(cls, profile: Profile):
+        """Get trophy counts using a single aggregation query instead of 5 separate queries."""
         try:
-            return {
-                'total': EarnedTrophy.objects.filter(profile=profile, earned=True).count() or 0,
-                'bronze': EarnedTrophy.objects.filter(profile=profile, earned=True, trophy__trophy_type='bronze').count() or 0,
-                'silver': EarnedTrophy.objects.filter(profile=profile, earned=True, trophy__trophy_type='silver').count() or 0,
-                'gold': EarnedTrophy.objects.filter(profile=profile, earned=True, trophy__trophy_type='gold').count() or 0,
-                'platinum': EarnedTrophy.objects.filter(profile=profile, earned=True, trophy__trophy_type='platinum').count() or 0,
-            }
+            result = EarnedTrophy.objects.filter(profile=profile, earned=True).aggregate(
+                total=Count('id'),
+                bronze=Count('id', filter=Q(trophy__trophy_type='bronze')),
+                silver=Count('id', filter=Q(trophy__trophy_type='silver')),
+                gold=Count('id', filter=Q(trophy__trophy_type='gold')),
+                platinum=Count('id', filter=Q(trophy__trophy_type='platinum')),
+            )
+            return result
         except:
             return {
                 'total': 0,
                 'bronze': 0,
                 'silver': 0,
                 'gold': 0,
-                'platinum': 0, 
+                'platinum': 0,
             }
 
     
     @classmethod
     def get_tracked_trophies_for_game(cls, profile: Profile, np_comm_id: str):
+        """Get trophy counts for a game using a single aggregation query."""
         try:
             game = Game.objects.get(np_communication_id=np_comm_id)
         except Game.DoesNotExist:
             logger.error(f"Could not find game {np_comm_id}")
             raise
 
-        trophies = {
-            'total': EarnedTrophy.objects.filter(profile=profile, trophy__game=game, earned=True).count(),
-            'bronze': EarnedTrophy.objects.filter(profile=profile, trophy__game=game, earned=True, trophy__trophy_type='bronze').count(),
-            'silver': EarnedTrophy.objects.filter(profile=profile, trophy__game=game, earned=True, trophy__trophy_type='silver').count(),
-            'gold': EarnedTrophy.objects.filter(profile=profile, trophy__game=game, earned=True, trophy__trophy_type='gold').count(),
-            'platinum': EarnedTrophy.objects.filter(profile=profile, trophy__game=game, earned=True, trophy__trophy_type='platinum').count(),
-        }
+        trophies = EarnedTrophy.objects.filter(
+            profile=profile, trophy__game=game, earned=True
+        ).aggregate(
+            total=Count('id'),
+            bronze=Count('id', filter=Q(trophy__trophy_type='bronze')),
+            silver=Count('id', filter=Q(trophy__trophy_type='silver')),
+            gold=Count('id', filter=Q(trophy__trophy_type='gold')),
+            platinum=Count('id', filter=Q(trophy__trophy_type='platinum')),
+        )
 
         return game, trophies
     

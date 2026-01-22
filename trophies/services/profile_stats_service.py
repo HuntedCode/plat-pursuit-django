@@ -6,7 +6,7 @@ This service manages denormalized profile statistics:
 - Game counts and completion statistics
 - Average progress calculations
 """
-from django.db.models import Sum
+from django.db.models import Sum, Count, Q
 from django.db.models.functions import Coalesce
 
 
@@ -73,21 +73,20 @@ def update_profile_trophy_counts(profile):
     total = total_earned + total_unearned
     avg_progress = (total_earned / total * 100) if total > 0 else 0.0
 
-    # Update trophy counts by type (requires querying EarnedTrophy)
+    # Update trophy counts by type using single aggregation query
+    trophy_counts = EarnedTrophy.objects.filter(profile=profile, earned=True).aggregate(
+        bronze=Count('id', filter=Q(trophy__trophy_type='bronze')),
+        silver=Count('id', filter=Q(trophy__trophy_type='silver')),
+        gold=Count('id', filter=Q(trophy__trophy_type='gold')),
+        platinum=Count('id', filter=Q(trophy__trophy_type='platinum')),
+    )
+
     profile.total_trophies = total_earned
     profile.total_unearned = total_unearned
-    profile.total_bronzes = EarnedTrophy.objects.filter(
-        profile=profile, earned=True, trophy__trophy_type='bronze'
-    ).count()
-    profile.total_silvers = EarnedTrophy.objects.filter(
-        profile=profile, earned=True, trophy__trophy_type='silver'
-    ).count()
-    profile.total_golds = EarnedTrophy.objects.filter(
-        profile=profile, earned=True, trophy__trophy_type='gold'
-    ).count()
-    profile.total_plats = EarnedTrophy.objects.filter(
-        profile=profile, earned=True, trophy__trophy_type='platinum'
-    ).count()
+    profile.total_bronzes = trophy_counts['bronze']
+    profile.total_silvers = trophy_counts['silver']
+    profile.total_golds = trophy_counts['gold']
+    profile.total_plats = trophy_counts['platinum']
     profile.avg_progress = avg_progress
 
     profile.save(update_fields=[
