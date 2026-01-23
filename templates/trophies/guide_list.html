@@ -1,5 +1,6 @@
 {% extends 'base.html' %}
-{% load static%}
+{% load static %}
+{% load query_tags %}
 {% block title %}PPTV{% endblock %}
 {% block content %}
     {% include 'partials/breadcrumb.html' with items=breadcrumb %}
@@ -51,15 +52,15 @@
         <div class="flex flex-col md:flex-row justify-center items-center gap-2 mb-2">
             <div class="btn-group">
                 {% if page_obj.has_previous %}
-                    <a href="?{% querystring exclude='page' %}&page=1#filter-form" class="btn btn-outline btn-xs sm:btn-sm md:btn-md">&laquo; First</a>
-                    <a href="?{% querystring exclude='page' %}&page={{ page_obj.previous_page_number }}#filter-form" class="btn btn-outline btn-xs sm:btn-sm md:btn-md">Previous</a>
+                    <a href="?{% query_transform page=1 %}#filter-form" class="btn btn-outline btn-xs sm:btn-sm md:btn-md">&laquo; First</a>
+                    <a href="?{% query_transform page=page_obj.previous_page_number %}#filter-form" class="btn btn-outline btn-xs sm:btn-sm md:btn-md">Previous</a>
                 {% endif %}
-                
+
                 <span class="btn btn-active btn-xs sm:btn-sm md:btn-md">Page {{ page_obj.number }} of {{ paginator.num_pages }}</span>
-                
+
                 {% if page_obj.has_next %}
-                    <a href="?{% querystring exclude='page' %}&page={{ page_obj.next_page_number }}#filter-form" class="btn btn-outline btn-xs sm:btn-sm md:btn-md">Next</a>
-                    <a href="?{% querystring exclude='page' %}&page={{ paginator.num_pages }}#filter-form" class="btn btn-outline btn-xs sm:btn-sm md:btn-md">Last &raquo;</a>
+                    <a href="?{% query_transform page=page_obj.next_page_number %}#filter-form" class="btn btn-outline btn-xs sm:btn-sm md:btn-md">Next</a>
+                    <a href="?{% query_transform page=paginator.num_pages %}#filter-form" class="btn btn-outline btn-xs sm:btn-sm md:btn-md">Last &raquo;</a>
                 {% endif %}
             </div>
 
@@ -79,15 +80,15 @@
         <div class="flex flex-col md:flex-row justify-center items-center gap-2 mt-6">
             <div class="btn-group">
                 {% if page_obj.has_previous %}
-                    <a href="?{% querystring exclude='page' %}&page=1#filter-form" class="btn btn-outline btn-xs sm:btn-sm md:btn-md">&laquo; First</a>
-                    <a href="?{% querystring exclude='page' %}&page={{ page_obj.previous_page_number }}#filter-form" class="btn btn-outline btn-xs sm:btn-sm md:btn-md">Previous</a>
+                    <a href="?{% query_transform page=1 %}#filter-form" class="btn btn-outline btn-xs sm:btn-sm md:btn-md">&laquo; First</a>
+                    <a href="?{% query_transform page=page_obj.previous_page_number %}#filter-form" class="btn btn-outline btn-xs sm:btn-sm md:btn-md">Previous</a>
                 {% endif %}
-                
+
                 <span class="btn btn-active btn-xs sm:btn-sm md:btn-md">Page {{ page_obj.number }} of {{ paginator.num_pages }}</span>
-                
+
                 {% if page_obj.has_next %}
-                    <a href="?{% querystring exclude='page' %}&page={{ page_obj.next_page_number }}#filter-form" class="btn btn-outline btn-xs sm:btn-sm md:btn-md">Next</a>
-                    <a href="?{% querystring exclude='page' %}&page={{ paginator.num_pages }}#filter-form" class="btn btn-outline btn-xs sm:btn-sm md:btn-md">Last &raquo;</a>
+                    <a href="?{% query_transform page=page_obj.next_page_number %}#filter-form" class="btn btn-outline btn-xs sm:btn-sm md:btn-md">Next</a>
+                    <a href="?{% query_transform page=paginator.num_pages %}#filter-form" class="btn btn-outline btn-xs sm:btn-sm md:btn-md">Last &raquo;</a>
                 {% endif %}
             </div>
         </div>
