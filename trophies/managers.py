@@ -623,3 +623,234 @@ class CommentManager(models.Manager):
             qs = qs.by_top()
 
         return qs
+
+
+class ChecklistQuerySet(models.QuerySet):
+    """Custom queryset for Checklist model."""
+
+    def active(self):
+        """
+        Filter to non-deleted checklists.
+
+        Returns:
+            QuerySet: Checklists that are not soft-deleted
+        """
+        return self.filter(is_deleted=False)
+
+    def published(self):
+        """
+        Filter to published checklists only.
+
+        Returns:
+            QuerySet: Published, non-deleted checklists
+        """
+        return self.filter(status='published', is_deleted=False)
+
+    def drafts(self):
+        """
+        Filter to draft checklists only.
+
+        Returns:
+            QuerySet: Draft, non-deleted checklists
+        """
+        return self.filter(status='draft', is_deleted=False)
+
+    def for_concept(self, concept):
+        """
+        Get all checklists for a concept.
+
+        Args:
+            concept: Concept instance
+
+        Returns:
+            QuerySet: Checklists for the concept
+        """
+        return self.filter(concept=concept)
+
+    def by_author(self, profile):
+        """
+        Get all checklists by an author.
+
+        Args:
+            profile: Profile instance
+
+        Returns:
+            QuerySet: Checklists created by the profile
+        """
+        return self.filter(profile=profile)
+
+    def by_top(self):
+        """
+        Order by upvote count (default sort).
+
+        Returns:
+            QuerySet: Checklists ordered by most upvotes first
+        """
+        return self.order_by('-upvote_count', '-created_at')
+
+    def by_new(self):
+        """
+        Order by creation date descending.
+
+        Returns:
+            QuerySet: Checklists ordered by newest first
+        """
+        return self.order_by('-created_at')
+
+    def by_popular(self):
+        """
+        Order by usage count (most users tracking).
+
+        Returns:
+            QuerySet: Checklists ordered by most tracked first
+        """
+        return self.order_by('-progress_save_count', '-upvote_count')
+
+    def with_author_data(self):
+        """
+        Optimize with profile and user data.
+
+        Returns:
+            QuerySet: Checklists with prefetched author data
+        """
+        return self.select_related('profile', 'profile__user')
+
+    def with_sections(self):
+        """
+        Prefetch sections and items for detail view.
+
+        Returns:
+            QuerySet: Checklists with prefetched sections and items
+        """
+        from django.db.models import Prefetch
+        from trophies.models import ChecklistSection
+
+        return self.prefetch_related(
+            Prefetch(
+                'sections',
+                queryset=ChecklistSection.objects.prefetch_related('items').order_by('order')
+            )
+        )
+
+    def with_vote_check(self, profile):
+        """
+        Annotate whether the given profile has voted on each checklist.
+
+        Args:
+            profile: Profile instance to check votes for
+
+        Returns:
+            QuerySet: Checklists with 'user_has_voted' annotation
+        """
+        if not profile:
+            return self.annotate(user_has_voted=Value(False))
+
+        from trophies.models import ChecklistVote
+
+        return self.annotate(
+            user_has_voted=Exists(
+                ChecklistVote.objects.filter(
+                    checklist=OuterRef('pk'),
+                    profile=profile
+                )
+            )
+        )
+
+    def with_progress_check(self, profile):
+        """
+        Annotate user's progress percentage on each checklist.
+
+        Args:
+            profile: Profile instance to check progress for
+
+        Returns:
+            QuerySet: Checklists with 'user_progress_percentage' annotation
+        """
+        from django.db.models import FloatField, Subquery
+        from django.db.models.functions import Coalesce
+
+        if not profile:
+            return self.annotate(
+                user_progress_percentage=Value(0.0, output_field=FloatField())
+            )
+
+        from trophies.models import UserChecklistProgress
+
+        return self.annotate(
+            user_progress_percentage=Coalesce(
+                Subquery(
+                    UserChecklistProgress.objects.filter(
+                        checklist=OuterRef('pk'),
+                        profile=profile
+                    ).values('progress_percentage')[:1]
+                ),
+                Value(0.0),
+                output_field=FloatField()
+            )
+        )
+
+
+class ChecklistManager(models.Manager):
+    """Custom manager for Checklist model."""
+
+    def get_queryset(self):
+        """Return custom queryset."""
+        return ChecklistQuerySet(self.model, using=self._db)
+
+    def active(self):
+        """Proxy to queryset method."""
+        return self.get_queryset().active()
+
+    def published(self):
+        """Proxy to queryset method."""
+        return self.get_queryset().published()
+
+    def drafts(self):
+        """Proxy to queryset method."""
+        return self.get_queryset().drafts()
+
+    def for_concept(self, concept):
+        """Proxy to queryset method."""
+        return self.get_queryset().for_concept(concept)
+
+    def by_author(self, profile):
+        """Proxy to queryset method."""
+        return self.get_queryset().by_author(profile)
+
+    def by_top(self):
+        """Proxy to queryset method."""
+        return self.get_queryset().by_top()
+
+    def by_new(self):
+        """Proxy to queryset method."""
+        return self.get_queryset().by_new()
+
+    def by_popular(self):
+        """Proxy to queryset method."""
+        return self.get_queryset().by_popular()
+
+    def get_checklists_for_concept(self, concept, profile=None, sort='top'):
+        """
+        Get published checklists for a concept with optimizations.
+
+        Args:
+            concept: Concept instance
+            profile: Optional viewing profile (for vote/progress status)
+            sort: 'top', 'new', or 'popular'
+
+        Returns:
+            QuerySet: Checklists optimized for display
+        """
+        qs = self.published().for_concept(concept).with_author_data()
+
+        if profile:
+            qs = qs.with_vote_check(profile).with_progress_check(profile)
+
+        if sort == 'new':
+            qs = qs.by_new()
+        elif sort == 'popular':
+            qs = qs.by_popular()
+        else:
+            qs = qs.by_top()
+
+        return qs

@@ -3,7 +3,7 @@ from django.contrib.admin import SimpleListFilter
 from django.db import transaction
 from django.db.models import Q
 from datetime import timedelta
-from .models import Profile, Game, Trophy, EarnedTrophy, ProfileGame, APIAuditLog, FeaturedGame, FeaturedProfile, Event, Concept, TitleID, TrophyGroup, UserTrophySelection, UserConceptRating, Badge, UserBadge, UserBadgeProgress, FeaturedGuide, Stage, PublisherBlacklist, Title, UserTitle, Milestone, UserMilestone, UserMilestoneProgress, Comment, CommentVote, CommentReport, ModerationLog, BannedWord
+from .models import Profile, Game, Trophy, EarnedTrophy, ProfileGame, APIAuditLog, FeaturedGame, FeaturedProfile, Event, Concept, TitleID, TrophyGroup, UserTrophySelection, UserConceptRating, Badge, UserBadge, UserBadgeProgress, FeaturedGuide, Stage, PublisherBlacklist, Title, UserTitle, Milestone, UserMilestone, UserMilestoneProgress, Comment, CommentVote, CommentReport, ModerationLog, BannedWord, Checklist, ChecklistSection, ChecklistItem, ChecklistVote, UserChecklistProgress, ChecklistReport
 
 
 # Register your models here.
@@ -759,3 +759,231 @@ class BannedWordAdmin(admin.ModelAdmin):
         super().delete_queryset(request, queryset)
         from django.core.cache import cache
         cache.delete('banned_words:active')
+
+
+# ---------- Checklist Admin ----------
+
+@admin.register(Checklist)
+class ChecklistAdmin(admin.ModelAdmin):
+    """Admin interface for checklist moderation."""
+    list_display = [
+        'id',
+        'title',
+        'profile',
+        'concept',
+        'status',
+        'upvote_count',
+        'progress_save_count',
+        'total_items_display',
+        'is_deleted',
+        'created_at',
+    ]
+    list_filter = [
+        'status',
+        'is_deleted',
+        'created_at',
+    ]
+    search_fields = [
+        'title',
+        'description',
+        'profile__psn_username',
+        'concept__unified_title',
+    ]
+    raw_id_fields = ['profile', 'concept']
+    readonly_fields = [
+        'created_at',
+        'updated_at',
+        'published_at',
+        'deleted_at',
+        'upvote_count',
+        'progress_save_count',
+    ]
+    ordering = ['-created_at']
+    date_hierarchy = 'created_at'
+    actions = ['soft_delete_checklists', 'restore_checklists']
+
+    def total_items_display(self, obj):
+        return obj.total_items
+    total_items_display.short_description = 'Items'
+
+    @admin.action(description='Soft delete selected checklists')
+    def soft_delete_checklists(self, request, queryset):
+        count = 0
+        for checklist in queryset.filter(is_deleted=False):
+            checklist.soft_delete()
+            count += 1
+        messages.success(request, f"Soft-deleted {count} checklist(s).")
+
+    @admin.action(description='Restore soft-deleted checklists')
+    def restore_checklists(self, request, queryset):
+        count = queryset.filter(is_deleted=True).update(is_deleted=False, deleted_at=None)
+        messages.success(request, f"Restored {count} checklist(s).")
+
+
+@admin.register(ChecklistSection)
+class ChecklistSectionAdmin(admin.ModelAdmin):
+    """Admin interface for checklist sections."""
+    list_display = [
+        'id',
+        'subtitle',
+        'checklist',
+        'order',
+        'item_count_display',
+    ]
+    list_filter = [
+        'created_at',
+    ]
+    search_fields = [
+        'subtitle',
+        'checklist__title',
+    ]
+    raw_id_fields = ['checklist']
+    ordering = ['checklist', 'order']
+
+    def item_count_display(self, obj):
+        return obj.item_count
+    item_count_display.short_description = 'Items'
+
+
+@admin.register(ChecklistItem)
+class ChecklistItemAdmin(admin.ModelAdmin):
+    """Admin interface for checklist items."""
+    list_display = [
+        'id',
+        'text_preview',
+        'section',
+        'trophy_id',
+        'order',
+    ]
+    list_filter = [
+        'created_at',
+    ]
+    search_fields = [
+        'text',
+        'section__subtitle',
+        'section__checklist__title',
+    ]
+    raw_id_fields = ['section']
+    ordering = ['section', 'order']
+
+    def text_preview(self, obj):
+        return obj.text[:50] + '...' if len(obj.text) > 50 else obj.text
+    text_preview.short_description = 'Text'
+
+
+@admin.register(ChecklistVote)
+class ChecklistVoteAdmin(admin.ModelAdmin):
+    """Admin interface for checklist votes (read-only tracking)."""
+    list_display = [
+        'id',
+        'checklist',
+        'profile',
+        'created_at',
+    ]
+    list_filter = [
+        'created_at',
+    ]
+    search_fields = [
+        'profile__psn_username',
+        'checklist__title',
+    ]
+    raw_id_fields = ['checklist', 'profile']
+    readonly_fields = ['created_at']
+    ordering = ['-created_at']
+
+
+@admin.register(UserChecklistProgress)
+class UserChecklistProgressAdmin(admin.ModelAdmin):
+    """Admin interface for user checklist progress (read-only tracking)."""
+    list_display = [
+        'id',
+        'profile',
+        'checklist',
+        'items_completed',
+        'total_items',
+        'progress_percentage_display',
+        'last_activity',
+    ]
+    list_filter = [
+        'last_activity',
+    ]
+    search_fields = [
+        'profile__psn_username',
+        'checklist__title',
+    ]
+    raw_id_fields = ['profile', 'checklist']
+    readonly_fields = [
+        'created_at',
+        'updated_at',
+        'last_activity',
+        'completed_items',
+    ]
+    ordering = ['-last_activity']
+
+    def progress_percentage_display(self, obj):
+        return f"{obj.progress_percentage:.1f}%"
+    progress_percentage_display.short_description = 'Progress'
+
+
+@admin.register(ChecklistReport)
+class ChecklistReportAdmin(admin.ModelAdmin):
+    """Admin interface for checklist report moderation queue."""
+    list_display = [
+        'id',
+        'checklist',
+        'reporter',
+        'reason',
+        'status',
+        'created_at',
+        'reviewed_by',
+    ]
+    list_filter = [
+        'status',
+        'reason',
+        'created_at',
+    ]
+    search_fields = [
+        'checklist__title',
+        'reporter__psn_username',
+        'details',
+        'admin_notes',
+    ]
+    raw_id_fields = ['checklist', 'reporter', 'reviewed_by']
+    readonly_fields = ['created_at', 'reviewed_at']
+    ordering = ['-created_at']
+    date_hierarchy = 'created_at'
+    actions = ['mark_as_reviewed', 'mark_as_dismissed', 'take_action_and_delete']
+
+    @admin.action(description='Mark selected reports as reviewed')
+    def mark_as_reviewed(self, request, queryset):
+        from django.utils import timezone
+        count = queryset.filter(status='pending').update(
+            status='reviewed',
+            reviewed_at=timezone.now(),
+            reviewed_by=request.user
+        )
+        messages.success(request, f"Marked {count} report(s) as reviewed.")
+
+    @admin.action(description='Dismiss selected reports')
+    def mark_as_dismissed(self, request, queryset):
+        from django.utils import timezone
+        count = queryset.filter(status='pending').update(
+            status='dismissed',
+            reviewed_at=timezone.now(),
+            reviewed_by=request.user
+        )
+        messages.success(request, f"Dismissed {count} report(s).")
+
+    @admin.action(description='Take action: Soft-delete checklist and mark report')
+    def take_action_and_delete(self, request, queryset):
+        from django.utils import timezone
+        count = 0
+        for report in queryset.filter(status='pending'):
+            if not report.checklist.is_deleted:
+                report.checklist.soft_delete()
+            report.status = 'action_taken'
+            report.reviewed_at = timezone.now()
+            report.reviewed_by = request.user
+            report.save(update_fields=['status', 'reviewed_at', 'reviewed_by'])
+            count += 1
+        messages.success(request, f"Took action on {count} report(s).")
