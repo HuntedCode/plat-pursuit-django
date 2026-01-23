@@ -1812,6 +1812,10 @@ class MilestoneListView(ProfileHotbarMixin, ListView):
         """
         Build display data for milestones with optional progress tracking.
 
+        For authenticated users, filters milestones to show only:
+        - All earned milestones
+        - The next unearned milestone for each criteria_type
+
         Args:
             milestones: QuerySet of Milestone objects
             profile: Profile instance or None
@@ -1839,7 +1843,68 @@ class MilestoneListView(ProfileHotbarMixin, ListView):
             )
             progress_dict = {p.milestone_id: p.progress_value for p in progress_qs}
 
+        # Group milestones by criteria_type
+        milestones_by_type = {}
         for milestone in milestones:
+            criteria_type = milestone.criteria_type
+            if criteria_type not in milestones_by_type:
+                milestones_by_type[criteria_type] = []
+            milestones_by_type[criteria_type].append(milestone)
+
+        # Calculate tier info for each milestone type (total tiers and current tier)
+        tier_info = {}
+        for criteria_type, type_milestones in milestones_by_type.items():
+            # Sort by required_value to ensure proper ordering
+            sorted_milestones = sorted(type_milestones, key=lambda m: m.required_value)
+            total_tiers = len(sorted_milestones)
+
+            # Find current tier (1-indexed) - the tier the user is working on
+            current_tier = 1
+            for idx, m in enumerate(sorted_milestones, start=1):
+                if m.id in earned_milestone_ids:
+                    # User has completed this tier, move to next
+                    current_tier = idx + 1
+                else:
+                    # Found first unearned tier - this is what they're working on
+                    current_tier = idx
+                    break
+
+            # If all tiers are earned, current_tier will be total_tiers + 1
+            # Cap it at total_tiers
+            if current_tier > total_tiers:
+                current_tier = total_tiers
+
+            tier_info[criteria_type] = {
+                'total_tiers': total_tiers,
+                'current_tier': current_tier
+            }
+
+        # Filter to show only earned + next unearned per criteria_type (only for authenticated users)
+        if profile:
+            filtered_milestones = []
+            for criteria_type, type_milestones in milestones_by_type.items():
+                # Sort by required_value to ensure proper ordering
+                type_milestones.sort(key=lambda m: m.required_value)
+
+                # Add all earned milestones and track if we found the next unearned
+                found_next_unearned = False
+                for milestone in type_milestones:
+                    is_earned = milestone.id in earned_milestone_ids
+
+                    if is_earned:
+                        # Include all earned milestones
+                        filtered_milestones.append(milestone)
+                    elif not found_next_unearned:
+                        # Include the first unearned milestone (the next one to work towards)
+                        filtered_milestones.append(milestone)
+                        found_next_unearned = True
+                    # Skip all other unearned milestones
+        else:
+            # For guests, show all milestones
+            filtered_milestones = list(milestones)
+
+        # Build display data for filtered milestones
+        for milestone in filtered_milestones:
             is_earned = milestone.id in earned_milestone_ids
             progress_value = progress_dict.get(milestone.id, 0)
             required_value = milestone.required_value
@@ -1850,6 +1915,10 @@ class MilestoneListView(ProfileHotbarMixin, ListView):
             else:
                 progress_percentage = 100 if is_earned else 0
 
+            # Get tier information for this milestone
+            criteria_type = milestone.criteria_type
+            milestone_tier_info = tier_info.get(criteria_type, {'total_tiers': 1, 'current_tier': 1})
+
             display_data.append({
                 'milestone': milestone,
                 'is_earned': is_earned,
@@ -1857,6 +1926,8 @@ class MilestoneListView(ProfileHotbarMixin, ListView):
                 'required_value': required_value,
                 'progress_percentage': round(progress_percentage, 1),
                 'earned_count': milestone.earned_count,
+                'total_tiers': milestone_tier_info['total_tiers'],
+                'current_tier': milestone_tier_info['current_tier'],
             })
 
         return display_data
@@ -1878,13 +1949,14 @@ class MilestoneListView(ProfileHotbarMixin, ListView):
         # Build display data
         display_data = self._build_milestone_display_data(milestones, profile)
 
-        # Sort display data: incomplete milestones first (by progress % descending),
-        # then completed milestones
+        # Sort display data: unearned milestones first (by progress % descending),
+        # then earned milestones (by required_value ascending)
         if profile:
             display_data.sort(
                 key=lambda x: (
-                    x['is_earned'],  # False (0) before True (1) - incomplete first
-                    -x['progress_percentage'] if not x['is_earned'] else 0  # Higher progress first for incomplete
+                    x['is_earned'],  # False (0) before True (1) - unearned first
+                    -x['progress_percentage'] if not x['is_earned'] else 0,  # Higher progress first for unearned
+                    x['milestone'].required_value if x['is_earned'] else 0  # Lower required_value first for earned
                 )
             )
 
