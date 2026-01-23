@@ -1,10 +1,13 @@
-from django.db import models
+from django.db import models, DatabaseError
 from django.utils import timezone
 from users.models import CustomUser
 from django.contrib.postgres.fields import ArrayField
 from django.core.validators import RegexValidator, MinValueValidator, MaxValueValidator
 from django.db import transaction
 from django.db.models import F, Max, Min
+import logging
+
+logger = logging.getLogger("psn_api")
 from datetime import timedelta
 from tenacity import retry, stop_after_attempt, wait_fixed
 from trophies.util_modules.language import count_unique_game_groups, calculate_trimmed_mean
@@ -16,7 +19,7 @@ from trophies.util_modules.constants import (
 from trophies.util_modules.cache import redis_client
 from trophies.managers import (
     ProfileManager, GameManager, ProfileGameManager,
-    BadgeManager, MilestoneManager, CommentManager
+    BadgeManager, MilestoneManager, CommentManager, ChecklistManager
 )
 import re
 
@@ -289,7 +292,7 @@ class Profile(models.Model):
     def add_to_sync_target(self, value: int):
         if not value:
             return
-        
+
         lock_key = f"sync_target_lock:{self.id}"
 
         @retry(stop=stop_after_attempt(5), wait=wait_fixed(0.2))
@@ -298,19 +301,28 @@ class Profile(models.Model):
             if not lock.acquire(blocking=False):
                 raise ValueError("Could not acquire lock")
             return lock
-        
+
         try:
             lock = acquire_lock()
             try:
                 with transaction.atomic():
-                    locked_self = Profile.objects.select_for_update().get(id=self.id)
+                    # Use nowait=True to fail fast instead of blocking indefinitely
+                    locked_self = Profile.objects.select_for_update(nowait=True).get(id=self.id)
                     locked_self.sync_progress_target = F('sync_progress_target') + value
                     locked_self.save(update_fields=['sync_progress_target'])
                     self.refresh_from_db(fields=['sync_progress_target'])
             finally:
-                lock.release()
+                try:
+                    lock.release()
+                except Exception as release_err:
+                    logger.warning(f"Failed to release Redis lock for profile {self.id}: {release_err}")
+        except Profile.DoesNotExist:
+            logger.error(f"Profile {self.id} not found in add_to_sync_target")
+        except DatabaseError as db_err:
+            # Log database errors (lock timeout, etc.) instead of swallowing
+            logger.warning(f"Database error in add_to_sync_target for profile {self.id}: {db_err}")
         except Exception as e:
-            pass
+            logger.error(f"Unexpected error in add_to_sync_target for profile {self.id}: {e}")
     
     def increment_sync_progress(self, value: int = 1):
         self.sync_progress_value = F('sync_progress_value') + value
@@ -1509,3 +1521,337 @@ class BannedWord(models.Model):
     def __str__(self):
         status = "Active" if self.is_active else "Inactive"
         return f"{self.word} ({status})"
+
+
+class Checklist(models.Model):
+    """
+    User-created checklist for a game Concept.
+
+    Checklists are tied to Concepts and apply to all Games within that concept.
+    Supports draft/published states and soft deletion.
+    """
+    STATUS_CHOICES = [
+        ('draft', 'Draft'),
+        ('published', 'Published'),
+    ]
+
+    # Concept-based relation (like Comment)
+    concept = models.ForeignKey(
+        'Concept',
+        on_delete=models.CASCADE,
+        related_name='checklists',
+        help_text="The game concept this checklist belongs to"
+    )
+
+    # Author info
+    profile = models.ForeignKey(
+        Profile,
+        on_delete=models.CASCADE,
+        related_name='checklists'
+    )
+
+    # Content
+    title = models.CharField(max_length=200, help_text="Checklist title")
+    description = models.TextField(
+        max_length=2000,
+        blank=True,
+        help_text="Checklist description/overview"
+    )
+
+    # Status
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default='draft',
+        db_index=True
+    )
+
+    # Vote count (denormalized for sorting efficiency, like Comment)
+    upvote_count = models.PositiveIntegerField(default=0)
+
+    # Usage tracking
+    progress_save_count = models.PositiveIntegerField(
+        default=0,
+        help_text="Number of users who have saved progress on this checklist"
+    )
+
+    # Timestamps
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    published_at = models.DateTimeField(null=True, blank=True)
+
+    # Soft delete
+    is_deleted = models.BooleanField(default=False)
+    deleted_at = models.DateTimeField(null=True, blank=True)
+
+    objects = ChecklistManager()
+
+    class Meta:
+        indexes = [
+            # Primary query: get checklists for a concept sorted by upvotes
+            models.Index(fields=['concept', 'status', '-upvote_count'], name='checklist_concept_votes_idx'),
+            # Get all checklists by a profile
+            models.Index(fields=['profile', '-created_at'], name='checklist_profile_idx'),
+            # Draft lookup for author
+            models.Index(fields=['profile', 'status'], name='checklist_author_drafts_idx'),
+            # For moderation queue
+            models.Index(fields=['is_deleted', 'created_at'], name='checklist_moderation_idx'),
+        ]
+        ordering = ['-upvote_count', '-created_at']
+
+    def __str__(self):
+        return f"{self.title} by {self.profile.psn_username}"
+
+    def soft_delete(self, moderator=None, reason="", request=None):
+        """Soft delete preserving data for audit trail."""
+        self.is_deleted = True
+        self.deleted_at = timezone.now()
+        self.save(update_fields=['is_deleted', 'deleted_at'])
+
+    @property
+    def total_items(self):
+        """Total number of items across all sections."""
+        return ChecklistItem.objects.filter(section__checklist=self).count()
+
+    @property
+    def is_draft(self):
+        return self.status == 'draft'
+
+    @property
+    def is_published(self):
+        return self.status == 'published'
+
+
+class ChecklistSection(models.Model):
+    """
+    A section within a checklist containing grouped items.
+
+    Sections have subtitles and contain ordered items.
+    No arbitrary limits on number of sections per checklist.
+    """
+    checklist = models.ForeignKey(
+        Checklist,
+        on_delete=models.CASCADE,
+        related_name='sections'
+    )
+
+    subtitle = models.CharField(max_length=200, help_text="Section subtitle/header")
+    description = models.TextField(
+        max_length=1000,
+        blank=True,
+        help_text="Optional section description"
+    )
+
+    # Ordering
+    order = models.PositiveIntegerField(default=0, help_text="Display order within checklist")
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['order', 'id']
+        indexes = [
+            models.Index(fields=['checklist', 'order'], name='section_checklist_order_idx'),
+        ]
+
+    def __str__(self):
+        return f"{self.subtitle} ({self.checklist.title})"
+
+    @property
+    def item_count(self):
+        return self.items.count()
+
+
+class ChecklistItem(models.Model):
+    """
+    Individual item within a checklist section.
+
+    Items can be checked off by users to track progress.
+    No arbitrary limits on number of items per section.
+    """
+    section = models.ForeignKey(
+        ChecklistSection,
+        on_delete=models.CASCADE,
+        related_name='items'
+    )
+
+    text = models.CharField(max_length=500, help_text="Item description/task")
+
+    # Optional: link to specific trophy (for future use)
+    trophy_id = models.IntegerField(
+        null=True,
+        blank=True,
+        help_text="Optional trophy_id if this item relates to a specific trophy"
+    )
+
+    # Ordering
+    order = models.PositiveIntegerField(default=0, help_text="Display order within section")
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['order', 'id']
+        indexes = [
+            models.Index(fields=['section', 'order'], name='item_section_order_idx'),
+        ]
+
+    def __str__(self):
+        return f"{self.text[:50]}... ({self.section.subtitle})" if len(self.text) > 50 else f"{self.text} ({self.section.subtitle})"
+
+
+class ChecklistVote(models.Model):
+    """
+    Upvote on a checklist. One vote per profile per checklist.
+    Following CommentVote pattern.
+    """
+    checklist = models.ForeignKey(
+        Checklist,
+        on_delete=models.CASCADE,
+        related_name='votes'
+    )
+    profile = models.ForeignKey(
+        Profile,
+        on_delete=models.CASCADE,
+        related_name='checklist_votes'
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ['checklist', 'profile']
+        indexes = [
+            models.Index(fields=['checklist', 'profile'], name='checklistvote_unique_idx'),
+            models.Index(fields=['profile'], name='checklistvote_profile_idx'),
+        ]
+
+    def __str__(self):
+        return f"{self.profile.psn_username} upvoted {self.checklist.title}"
+
+
+class UserChecklistProgress(models.Model):
+    """
+    Tracks a user's progress on a checklist.
+
+    Premium users can save progress on any checklist.
+    Non-premium users can only save progress on their OWN checklists.
+    """
+    profile = models.ForeignKey(
+        Profile,
+        on_delete=models.CASCADE,
+        related_name='checklist_progress'
+    )
+    checklist = models.ForeignKey(
+        Checklist,
+        on_delete=models.CASCADE,
+        related_name='user_progress'
+    )
+
+    # Track completed items as JSON array of item IDs
+    completed_items = models.JSONField(
+        default=list,
+        help_text="List of completed ChecklistItem IDs"
+    )
+
+    # Denormalized progress tracking
+    items_completed = models.PositiveIntegerField(default=0)
+    total_items = models.PositiveIntegerField(default=0)
+    progress_percentage = models.FloatField(default=0.0)
+
+    # Timestamps
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    last_activity = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ['profile', 'checklist']
+        indexes = [
+            models.Index(fields=['profile', 'checklist'], name='userprogress_unique_idx'),
+            models.Index(fields=['profile', '-last_activity'], name='userprogress_activity_idx'),
+            models.Index(fields=['checklist', 'progress_percentage'], name='userprogress_completion_idx'),
+        ]
+
+    def __str__(self):
+        return f"{self.profile.psn_username}'s progress on {self.checklist.title}"
+
+    def update_progress(self):
+        """Recalculate progress statistics."""
+        total = self.checklist.total_items
+        completed = len(self.completed_items)
+        self.items_completed = completed
+        self.total_items = total
+        self.progress_percentage = (completed / total * 100) if total > 0 else 0.0
+        self.save(update_fields=['items_completed', 'total_items', 'progress_percentage', 'updated_at', 'last_activity'])
+
+    def mark_item_complete(self, item_id):
+        """Mark an item as complete."""
+        if item_id not in self.completed_items:
+            self.completed_items.append(item_id)
+            self.update_progress()
+
+    def mark_item_incomplete(self, item_id):
+        """Mark an item as incomplete."""
+        if item_id in self.completed_items:
+            self.completed_items.remove(item_id)
+            self.update_progress()
+
+
+class ChecklistReport(models.Model):
+    """
+    User report for checklist moderation review.
+    Following CommentReport pattern.
+    """
+    REPORT_REASONS = [
+        ('spam', 'Spam'),
+        ('inappropriate', 'Inappropriate Content'),
+        ('misinformation', 'Misinformation/Inaccurate'),
+        ('plagiarism', 'Plagiarism'),
+        ('other', 'Other'),
+    ]
+    REPORT_STATUS = [
+        ('pending', 'Pending Review'),
+        ('reviewed', 'Reviewed'),
+        ('dismissed', 'Dismissed'),
+        ('action_taken', 'Action Taken'),
+    ]
+
+    checklist = models.ForeignKey(
+        Checklist,
+        on_delete=models.CASCADE,
+        related_name='reports'
+    )
+    reporter = models.ForeignKey(
+        Profile,
+        on_delete=models.CASCADE,
+        related_name='submitted_checklist_reports'
+    )
+    reason = models.CharField(max_length=20, choices=REPORT_REASONS)
+    details = models.TextField(
+        max_length=500,
+        blank=True,
+        help_text="Additional context for the report"
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=REPORT_STATUS,
+        default='pending'
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    reviewed_by = models.ForeignKey(
+        CustomUser,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='reviewed_checklist_reports'
+    )
+    admin_notes = models.TextField(blank=True)
+
+    class Meta:
+        unique_together = ['checklist', 'reporter']
+        indexes = [
+            models.Index(fields=['status', '-created_at'], name='checklist_report_status_idx'),
+            models.Index(fields=['checklist'], name='checklist_report_checklist_idx'),
+        ]
+
+    def __str__(self):
+        return f"Report on {self.checklist.title} by {self.reporter.psn_username}"

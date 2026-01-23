@@ -11,7 +11,7 @@ from typing import Optional, Dict
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from django.utils import timezone
-from django.db import connection, transaction
+from django.db import connection, transaction, OperationalError
 from django.db.models import Sum
 from django.db.models.functions import Coalesce
 from psnawp_api import PSNAWP as BasePSNAWP
@@ -90,6 +90,7 @@ class TokenInstance:
     last_error: str = None
     outbound_ip: str = None
     proxy_url: str = None
+    job_start_time: float = 0  # Track when current job started for stuck detection
 
     def __post_init__(self):
         if self.user_cache is None:
@@ -226,6 +227,8 @@ class TokenKeeper:
         while True:
             time.sleep(self.health_interval)
             redis_client.set(f"token_keeper:running:{self.machine_id}", "1", ex=3600)
+            # Check for stuck instances on every health loop iteration
+            self._check_stuck_instances()
             for group_id, group in self.group_instances.items():
                 for instance_id, inst in group['instances'].items():
                     self._check_and_refresh(inst)
@@ -299,7 +302,11 @@ class TokenKeeper:
                 inst.update_expiry_times()
                 inst.last_refresh = time.time()
                 self._record_call(inst.token)
-                log_api_call("keeper_refresh", inst.token, None, 200, time.time() - start)
+                # Log API call separately - DB errors here shouldn't mark instance unhealthy
+                try:
+                    log_api_call("keeper_refresh", inst.token, None, 200, time.time() - start)
+                except Exception as log_err:
+                    logger.warning(f"Failed to log API call for instance {inst.instance_id}: {log_err}")
                 logger.info(f"Instance {inst.instance_id} refreshed proactively")
                 try:
                     session = requests.Session()
@@ -312,6 +319,9 @@ class TokenKeeper:
                     logger.warning(f"Failed to fetch IP for instance {inst.instance_id}: {e}")
                     inst.outbound_ip = 'Unknown'
             inst.cleanup_cache()
+        except OperationalError as db_err:
+            # Database lock errors are transient - don't mark instance unhealthy
+            logger.warning(f"Database error in health check for instance {inst.instance_id} (non-fatal): {db_err}")
         except Exception as e:
             logger.error(f"Health check failed for {inst.instance_id}: {e}")
             inst.last_error = f"{datetime.now().isoformat()} Refresh error: {str(e)}"
@@ -419,13 +429,16 @@ class TokenKeeper:
         now = time.time()
         for group_id, group in self.group_instances.items():
             for inst_id, inst in group['instances'].items():
-                if inst.is_busy and (now - inst.last_health) > stuck_threshold:
-                    logger.warning(f"Resetting stuck instance {group_id}-{inst_id} (busy for {now - inst.last_health:.1f}s)")
-                    inst.is_busy = False
-                    inst.last_error = f"{datetime.now().isoformat()} Reset due to stuck busy state"
+                if inst.is_busy:
+                    # Use job_start_time instead of last_health for accurate stuck detection
+                    time_busy = now - inst.job_start_time if inst.job_start_time > 0 else 0
+                    if time_busy > stuck_threshold:
+                        logger.warning(f"Resetting stuck instance {group_id}-{inst_id} (busy for {time_busy:.1f}s)")
+                        self._release_instance(inst)
+                        inst.last_error = f"{datetime.now().isoformat()} Reset due to stuck busy state (job ran for {time_busy:.1f}s)"
 
     def _get_instance_for_job(self, job_type: str) -> Optional[TokenInstance]:
-        """Selects best instance for job, respecting workload and priority."""
+        """Selects best instance for job with atomic acquisition using Redis locks."""
         start = time.time()
         while time.time() - start < self.token_wait_interval:
             instance_scores = {}
@@ -434,18 +447,51 @@ class TokenKeeper:
                     if not inst.is_busy and self._is_healthy(inst) and not inst.last_health == 0:
                         key = (group_id, inst_id)
                         instance_scores[key] = self._get_calls_in_window(inst.token)
-            
+
             if instance_scores:
-                best_key = min(instance_scores, key=instance_scores.get)
-                group_id, inst_id = best_key
-                inst = self.group_instances[group_id]['instances'][inst_id]
-                inst.is_busy = True
-                return inst
+                # Sort by score to try best instances first
+                sorted_instances = sorted(instance_scores.items(), key=lambda x: x[1])
+
+                for (group_id, inst_id), _ in sorted_instances:
+                    lock_key = f"instance_lock:{self.machine_id}:{group_id}:{inst_id}"
+
+                    # Atomic acquisition with Redis lock (expires in 5 min as safety net)
+                    acquired = redis_client.set(lock_key, "1", nx=True, ex=300)
+
+                    if acquired:
+                        inst = self.group_instances[group_id]['instances'][inst_id]
+                        # Double-check after acquiring lock
+                        if not inst.is_busy:
+                            inst.is_busy = True
+                            inst.job_start_time = time.time()
+                            return inst
+                        else:
+                            # Another thread got it, release lock
+                            redis_client.delete(lock_key)
+
             logger.info("Waiting for token...")
             time.sleep(0.1)
         logger.error(f"No token available for use.")
         return None
-    
+
+    def _release_instance(self, instance: TokenInstance):
+        """Safely release a token instance and its Redis lock."""
+        if instance is None:
+            return
+        try:
+            group_id = next((gid for gid, g in self.group_instances.items()
+                            if instance in g['instances'].values()), None)
+            if group_id is not None:
+                lock_key = f"instance_lock:{self.machine_id}:{group_id}:{instance.instance_id}"
+                redis_client.delete(lock_key)
+            instance.is_busy = False
+            instance.job_start_time = 0
+        except Exception as e:
+            logger.error(f"Error releasing instance {instance.instance_id}: {e}")
+            # Still try to mark as not busy even if Redis fails
+            instance.is_busy = False
+            instance.job_start_time = 0
+
     @retry(
         retry=retry_if_exception_type((ConnectionError, Timeout)),
         stop=stop_after_attempt(10),
@@ -519,7 +565,8 @@ class TokenKeeper:
                 self._check_and_refresh(instance)
             raise
         finally:
-            instance.is_busy = False
+            # Release token after each API call so it can be used by other jobs
+            self._release_instance(instance)
 
 
     def _get_calls_in_window(self, token : str) -> int:
@@ -823,10 +870,14 @@ class TokenKeeper:
 
         logger.info(f"Fetching trophies for profile {profile_id}, game {np_communication_id} on platform {platform}")
         trophies = self._execute_api_call(self._get_instance_for_job(job_type), profile, 'trophies', np_communication_id=np_communication_id, platform=PlatformType(platform), include_progress=True, trophy_group_id='all', page_size=500)
-        with transaction.atomic():
-            for trophy_data in trophies:
-                trophy, _ = PsnApiService.create_or_update_trophy_from_trophy_data(game, trophy_data)
-                PsnApiService.create_or_update_earned_trophy_from_trophy_data(profile, trophy, trophy_data)
+        # Process in batches to avoid long-running transactions that block other DB operations
+        batch_size = 50
+        for i in range(0, len(trophies), batch_size):
+            batch = trophies[i:i + batch_size]
+            with transaction.atomic():
+                for trophy_data in batch:
+                    trophy, _ = PsnApiService.create_or_update_trophy_from_trophy_data(game, trophy_data)
+                    PsnApiService.create_or_update_earned_trophy_from_trophy_data(profile, trophy, trophy_data)
         profile.increment_sync_progress(value=2)
     
     def _job_sync_title_id(self, profile_id: str, title_id_str: str, np_communication_id: str):

@@ -199,6 +199,12 @@ if database_url:
     DATABASES = {
         'default': dj_database_url.parse(database_url, conn_max_age=600, conn_health_checks=True)
     }
+    # Add timeout options for production
+    DATABASES['default'].setdefault('OPTIONS', {})
+    DATABASES['default']['OPTIONS'].update({
+        'connect_timeout': 10,
+        'options': '-c statement_timeout=60000 -c lock_timeout=30000',  # 60s statement, 30s lock
+    })
 else:
     DATABASES = {
         "default": {
@@ -208,6 +214,12 @@ else:
             "PASSWORD": os.getenv("DB_PASSWORD", "securepass"),
             "HOST": os.getenv("DB_HOST", "localhost"),
             "PORT": os.getenv("DB_PORT", "5433"),
+            "CONN_MAX_AGE": 600,
+            "CONN_HEALTH_CHECKS": True,
+            "OPTIONS": {
+                'connect_timeout': 10,
+                'options': '-c statement_timeout=60000 -c lock_timeout=30000',  # 60s statement, 30s lock
+            },
         }
     }
 
