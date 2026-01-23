@@ -57,29 +57,27 @@
                             </div>    
                         </div>
                     </div>
-
-                    {# Trophy Comment Toggle Button - Separate Row Below Trophy Info #}
-                    <div class="border-t-2 border-base-300 p-3 flex items-center justify-between bg-base-200 hover:bg-base-200 transition-colors">
-                        <button class="trophy-comment-toggle btn btn-ghost btn-sm gap-2"
-                                data-trophy-id="{{ trophy.trophy_id }}"
-                                aria-label="Toggle trophy comments"
-                                aria-expanded="false">
-                            <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
-                            </svg>
-                            <span class="text-sm font-medium">Comments</span>
-                            <span class="badge badge-sm badge-secondary trophy-comment-count-badge"
-                                  id="trophy-comment-count-badge-{{ trophy.trophy_id }}">{{ trophy.comment_count|default:0 }}</span>
-                            <svg class="h-4 w-4 trophy-toggle-chevron transition-transform duration-200"
-                                 fill="none" viewBox="0 0 24 24" stroke="currentColor"
-                                 style="transform: rotate(-90deg);">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
-                            </svg>
-                        </button>
-                    </div>
-
                     {# Include Trophy Comment Section (Hidden by default) #}
                     {% if game.concept %}
+                        {# Trophy Comment Toggle Button - Separate Row Below Trophy Info #}
+                        <div class="border-t-2 border-base-300 p-3 flex items-center justify-between bg-base-200 hover:bg-base-200 transition-colors">
+                            <button class="trophy-comment-toggle btn btn-ghost btn-sm gap-2"
+                                    data-trophy-id="{{ trophy.trophy_id }}"
+                                    aria-label="Toggle trophy comments"
+                                    aria-expanded="false">
+                                <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
+                                </svg>
+                                <span class="text-sm font-medium">Comments</span>
+                                <span class="badge badge-sm badge-secondary trophy-comment-count-badge"
+                                    id="trophy-comment-count-badge-{{ trophy.trophy_id }}">{{ trophy.comment_count|default:0 }}</span>
+                                <svg class="h-4 w-4 trophy-toggle-chevron transition-transform duration-200"
+                                    fill="none" viewBox="0 0 24 24" stroke="currentColor"
+                                    style="transform: rotate(-90deg);">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                                </svg>
+                            </button>
+                        </div>
                         {% include 'trophies/partials/game_detail/trophy_comment_section.html' %}
                     {% endif %}
                 </div>
