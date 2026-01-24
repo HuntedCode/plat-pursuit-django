@@ -4,6 +4,7 @@ Comment system service layer.
 Handles all business logic for comments, votes, and reports.
 Follows the RatingService pattern for consistency.
 """
+import html
 import logging
 import bleach
 import re
@@ -32,7 +33,8 @@ class CommentService:
         """
         Sanitize user-provided text to prevent XSS attacks.
 
-        Removes all HTML tags and dangerous content while preserving plain text.
+        Removes all HTML tags and dangerous content while preserving
+        special characters like & that users may type.
 
         Args:
             text: Raw user input text
@@ -51,7 +53,8 @@ class CommentService:
             strip=CommentService.STRIP_TAGS
         )
 
-        return clean_text.strip()
+        # Unescape HTML entities (& -> &, etc.) since we're storing plain text
+        return html.unescape(clean_text).strip()
 
     @staticmethod
     def check_banned_words(text):
@@ -103,6 +106,23 @@ class CommentService:
                     return True, banned_word_data['word']  # Return original case
 
         return False, None
+
+    @staticmethod
+    def can_interact(profile):
+        """
+        Check if profile has permission to interact (vote, report).
+
+        Args:
+            profile: Profile instance
+
+        Returns:
+            tuple: (bool can_interact, str reason)
+        """
+        if not profile:
+            return False, "You must be logged in to interact with comments."
+        if not profile.is_linked:
+            return False, "You must link a PSN profile to interact with comments."
+        return True, None
 
     @staticmethod
     def can_comment(profile):
@@ -288,7 +308,7 @@ class CommentService:
         """
         from trophies.models import CommentVote
 
-        can_vote, reason = CommentService.can_comment(profile)
+        can_vote, reason = CommentService.can_interact(profile)
         if not can_vote:
             return None, reason
 
@@ -448,6 +468,11 @@ class CommentService:
             tuple: (CommentReport or None, error_message or None)
         """
         from trophies.models import CommentReport
+
+        # Check permissions to report
+        can_report, error_reason = CommentService.can_interact(reporter)
+        if not can_report:
+            return None, error_reason
 
         if comment.is_deleted:
             return None, "Cannot report deleted comments."
