@@ -229,6 +229,8 @@ class TokenKeeper:
             redis_client.set(f"token_keeper:running:{self.machine_id}", "1", ex=3600)
             # Check for stuck instances on every health loop iteration
             self._check_stuck_instances()
+            # Check for stuck syncing profiles on every health loop iteration
+            self._check_stuck_syncing_profiles()
             for group_id, group in self.group_instances.items():
                 for instance_id, inst in group['instances'].items():
                     self._check_and_refresh(inst)
@@ -437,6 +439,54 @@ class TokenKeeper:
                         self._release_instance(inst)
                         inst.last_error = f"{datetime.now().isoformat()} Reset due to stuck busy state (job ran for {time_busy:.1f}s)"
 
+    def _check_stuck_syncing_profiles(self):
+        """Periodically check for profiles stuck in 'syncing' state with no pending jobs."""
+        try:
+            stuck_profiles = Profile.objects.filter(sync_status='syncing')
+            stuck_count = 0
+
+            for profile in stuck_profiles:
+                # Check if there are any pending jobs for this profile
+                current_jobs = self._get_current_jobs_for_profile(profile.id)
+
+                # Check if a sync_complete job is already in progress for this profile
+                sync_complete_key = f"sync_complete_in_progress:{profile.id}"
+                if redis_client.get(sync_complete_key):
+                    continue
+
+                if current_jobs <= 0:
+                    # No pending jobs, this profile is stuck - assign sync_complete
+                    logger.warning(f"Found stuck syncing profile {profile.id}, assigning sync_complete job")
+                    stuck_count += 1
+
+                    # Mark sync_complete as in progress (expires in 30 minutes as safety net)
+                    redis_client.set(sync_complete_key, "1", ex=1800)
+
+                    # Check for pending sync_complete data in Redis
+                    pending_key = f"pending_sync_complete:{profile.id}"
+                    raw_pending = redis_client.get(pending_key)
+
+                    if raw_pending:
+                        try:
+                            pending_data = json.loads(raw_pending)
+                            touched_profilegame_ids = pending_data.get('touched_profilegame_ids', [])
+                            queue_name = pending_data.get('queue_name', 'low_priority')
+                        except (json.JSONDecodeError, ValueError):
+                            touched_profilegame_ids = []
+                            queue_name = 'low_priority'
+                        redis_client.delete(pending_key)
+                    else:
+                        touched_profilegame_ids = []
+                        queue_name = 'low_priority'
+
+                    args = [touched_profilegame_ids, queue_name]
+                    PSNManager.assign_job('sync_complete', args, profile.id, priority_override='high_priority')
+
+            if stuck_count > 0:
+                logger.info(f"Stuck syncing check complete. Triggered sync_complete for {stuck_count} profiles.")
+        except Exception as e:
+            logger.error(f"Error checking stuck syncing profiles: {e}")
+
     def _get_instance_for_job(self, job_type: str) -> Optional[TokenInstance]:
         """Selects best instance for job with atomic acquisition using Redis locks."""
         start = time.time()
@@ -595,106 +645,112 @@ class TokenKeeper:
     # Job Requests
 
     def _job_sync_complete(self, profile_id: int, touched_profilegame_ids: list[int], queue_name: str):
+        sync_complete_key = f"sync_complete_in_progress:{profile_id}"
         try:
             profile = Profile.objects.get(id=profile_id)
         except Profile.DoesNotExist:
             logger.error(f"Profile {profile_id} does not exist.")
+            redis_client.delete(sync_complete_key)
             return
         job_type = 'sync_complete'
 
-        time.sleep(5)
+        try:
+            time.sleep(5)
 
-        logger.info(f"Starting complete sync job for {profile_id}...")
+            logger.info(f"Starting complete sync job for {profile_id}...")
 
-        # Check profile heatlh
-        logger.info(f"Starting health check for {profile_id}...")
-        summary = self._execute_api_call(self._get_instance_for_job(job_type), profile, 'trophy_summary')
-        tracked_trophies = PsnApiService.get_profile_trophy_summary(profile)
+            # Check profile heatlh
+            logger.info(f"Starting health check for {profile_id}...")
+            summary = self._execute_api_call(self._get_instance_for_job(job_type), profile, 'trophy_summary')
+            tracked_trophies = PsnApiService.get_profile_trophy_summary(profile)
 
-        earned = summary.earned_trophies
-        summary_total = earned.bronze + earned.silver + earned.gold + earned.platinum
-        total_tracked = tracked_trophies['total'] + profile.total_hiddens
-        profilegame_total = ProfileGame.objects.filter(profile=profile).aggregate(earned=Coalesce(Sum('earned_trophies_count'), 0))['earned']
+            earned = summary.earned_trophies
+            summary_total = earned.bronze + earned.silver + earned.gold + earned.platinum
+            total_tracked = tracked_trophies['total'] + profile.total_hiddens
+            profilegame_total = ProfileGame.objects.filter(profile=profile).aggregate(earned=Coalesce(Sum('earned_trophies_count'), 0))['earned']
 
-        logger.info(f"Profile {profile_id} health: Summary: {summary_total} | Tracked: {total_tracked} (Hidden: {profile.total_hiddens}) | Profilegame: {profilegame_total} | {summary_total == total_tracked}")
+            logger.info(f"Profile {profile_id} health: Summary: {summary_total} | Tracked: {total_tracked} (Hidden: {profile.total_hiddens}) | Profilegame: {profilegame_total} | {summary_total == total_tracked}")
 
-        if summary_total != total_tracked or total_tracked != profilegame_total:
-            trophy_titles_to_be_updated = []
-            current_tracked_games = list(ProfileGame.objects.filter(profile=profile))
-            page_size = 400
-            limit = page_size
-            offset = 0
-            is_full = True
-            has_mismatch = False
-            while is_full:
-                titles = self._execute_api_call(self._get_instance_for_job(job_type), profile, 'trophy_titles', limit=limit, offset=offset, page_size=page_size)
-                for title in titles:
-                    try:
-                        game, tracked = PsnApiService.get_tracked_trophies_for_game(profile, title.np_communication_id)
-                    except Game.DoesNotExist:
-                         game, _, _ = PsnApiService.create_or_update_game(title)
-                         
-                    try:
-                        pgame = ProfileGame.objects.get(profile=profile, game=game)
-                    except:
-                        pass
-                    else:
-                        current_tracked_games.remove(pgame)
-                    title_total = title.earned_trophies.bronze + title.earned_trophies.silver + title.earned_trophies.gold + title.earned_trophies.platinum
-                    if tracked['total'] != title_total:
-                        has_mismatch = True
-                        trophy_titles_to_be_updated.append({'title': title, 'game': game})
-                        logger.info(f"Mismatch for profile {profile_id} - {title.np_communication_id}: Tracked: {tracked['total']} | Title: {title_total}")
-                    elif tracked['total'] != pgame.earned_trophies_count and pgame.id not in touched_profilegame_ids:
-                        touched_profilegame_ids.append(pgame.id)
-                        logger.warning(f"ProfileGame/tracked total mismatch, appending {pgame} to be updated. | Tracked: {tracked['total']} | PGame: {pgame.earned_trophies_count}")
-                is_full = len(titles) == page_size
-                limit += page_size
-                offset += page_size
+            if summary_total != total_tracked or total_tracked != profilegame_total:
+                trophy_titles_to_be_updated = []
+                current_tracked_games = list(ProfileGame.objects.filter(profile=profile))
+                page_size = 400
+                limit = page_size
+                offset = 0
+                is_full = True
+                has_mismatch = False
+                while is_full:
+                    titles = self._execute_api_call(self._get_instance_for_job(job_type), profile, 'trophy_titles', limit=limit, offset=offset, page_size=page_size)
+                    for title in titles:
+                        try:
+                            game, tracked = PsnApiService.get_tracked_trophies_for_game(profile, title.np_communication_id)
+                        except Game.DoesNotExist:
+                            game, _, _ = PsnApiService.create_or_update_game(title)
 
-            if len(current_tracked_games) > 0:
-                # Use bulk update instead of individual saves to reduce DB locks
-                hidden_game_ids = [pgame.game_id for pgame in current_tracked_games]
-                with transaction.atomic():
-                    EarnedTrophy.objects.filter(
-                        profile=profile,
-                        trophy__game_id__in=hidden_game_ids
-                    ).update(user_hidden=True)
-                    ProfileGame.objects.filter(
-                        profile=profile,
-                        game_id__in=hidden_game_ids
-                    ).update(user_hidden=True)
+                        try:
+                            pgame = ProfileGame.objects.get(profile=profile, game=game)
+                        except:
+                            pass
+                        else:
+                            current_tracked_games.remove(pgame)
+                        title_total = title.earned_trophies.bronze + title.earned_trophies.silver + title.earned_trophies.gold + title.earned_trophies.platinum
+                        if tracked['total'] != title_total:
+                            has_mismatch = True
+                            trophy_titles_to_be_updated.append({'title': title, 'game': game})
+                            logger.info(f"Mismatch for profile {profile_id} - {title.np_communication_id}: Tracked: {tracked['total']} | Title: {title_total}")
+                        elif tracked['total'] != pgame.earned_trophies_count and pgame.id not in touched_profilegame_ids:
+                            touched_profilegame_ids.append(pgame.id)
+                            logger.warning(f"ProfileGame/tracked total mismatch, appending {pgame} to be updated. | Tracked: {tracked['total']} | PGame: {pgame.earned_trophies_count}")
+                    is_full = len(titles) == page_size
+                    limit += page_size
+                    offset += page_size
 
-            if has_mismatch and len(trophy_titles_to_be_updated) > 0:
-                for title in trophy_titles_to_be_updated:
-                    game = title['game']
-                    args = [game.np_communication_id, game.title_platform[0] if not game.title_platform[0] == 'PSPC' else game.title_platform[1]]
-                    PSNManager.assign_job('sync_trophies', args=args, profile_id=profile.id, priority_override='high_priority')
-            else:
-                profile.total_hiddens = summary_total - total_tracked if summary_total - total_tracked >= 0 else 0
-                profile.save(update_fields=['total_hiddens'])
-                logger.info(f"New total hiddens for profile {profile.id}: {summary_total - total_tracked}")
-            
-            # Check badges
-            profile.last_profile_health_check = timezone.now()
-            profile.save(update_fields=['last_profile_health_check'])
+                if len(current_tracked_games) > 0:
+                    # Use bulk update instead of individual saves to reduce DB locks
+                    hidden_game_ids = [pgame.game_id for pgame in current_tracked_games]
+                    with transaction.atomic():
+                        EarnedTrophy.objects.filter(
+                            profile=profile,
+                            trophy__game_id__in=hidden_game_ids
+                        ).update(user_hidden=True)
+                        ProfileGame.objects.filter(
+                            profile=profile,
+                            game_id__in=hidden_game_ids
+                        ).update(user_hidden=True)
 
-        logger.info(f"Updating plats for {profile_id}...")
-        profile.update_plats()
-        logger.info(f"Updating profilegame stats for {profile_id}...")
-        PsnApiService.update_profilegame_stats(touched_profilegame_ids)
-        logger.info(f"Checking profile badges for {profile_id}...")
-        check_profile_badges(profile, touched_profilegame_ids)
-        logger.info(f"ProfileGame Stats updated for {profile_id} successfully! | {len(touched_profilegame_ids)} profilegames updated")
-        check_all_milestones_for_user(profile, criteria_type='plat_count')
-        check_all_milestones_for_user(profile, criteria_type='playtime_hours')
-        check_all_milestones_for_user(profile, criteria_type='trophy_count')
-        logger.info(f"Milestones checked for {profile_id} successfully!")
+                if has_mismatch and len(trophy_titles_to_be_updated) > 0:
+                    for title in trophy_titles_to_be_updated:
+                        game = title['game']
+                        args = [game.np_communication_id, game.title_platform[0] if not game.title_platform[0] == 'PSPC' else game.title_platform[1]]
+                        PSNManager.assign_job('sync_trophies', args=args, profile_id=profile.id, priority_override='high_priority')
+                else:
+                    profile.total_hiddens = summary_total - total_tracked if summary_total - total_tracked >= 0 else 0
+                    profile.save(update_fields=['total_hiddens'])
+                    logger.info(f"New total hiddens for profile {profile.id}: {summary_total - total_tracked}")
 
-        update_profile_trophy_counts(profile)
-        profile.set_sync_status('synced')
-        logger.info(f"{profile.display_psn_username} account has finished syncing!")
-    
+                # Check badges
+                profile.last_profile_health_check = timezone.now()
+                profile.save(update_fields=['last_profile_health_check'])
+
+            logger.info(f"Updating plats for {profile_id}...")
+            profile.update_plats()
+            logger.info(f"Updating profilegame stats for {profile_id}...")
+            PsnApiService.update_profilegame_stats(touched_profilegame_ids)
+            logger.info(f"Checking profile badges for {profile_id}...")
+            check_profile_badges(profile, touched_profilegame_ids)
+            logger.info(f"ProfileGame Stats updated for {profile_id} successfully! | {len(touched_profilegame_ids)} profilegames updated")
+            check_all_milestones_for_user(profile, criteria_type='plat_count')
+            check_all_milestones_for_user(profile, criteria_type='playtime_hours')
+            check_all_milestones_for_user(profile, criteria_type='trophy_count')
+            logger.info(f"Milestones checked for {profile_id} successfully!")
+
+            update_profile_trophy_counts(profile)
+            profile.set_sync_status('synced')
+            logger.info(f"{profile.display_psn_username} account has finished syncing!")
+        finally:
+            # Always clear the sync_complete in-progress flag, even on error
+            redis_client.delete(sync_complete_key)
+
     def _job_handle_privacy_error(self, profile_id: int):
         try:
             profile = Profile.objects.get(id=profile_id)
