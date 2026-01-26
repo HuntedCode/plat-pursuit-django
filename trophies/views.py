@@ -25,7 +25,8 @@ from random import choice
 from urllib.parse import urlencode
 from trophies.psn_manager import PSNManager
 from trophies.mixins import ProfileHotbarMixin
-from .models import Game, Trophy, Profile, EarnedTrophy, ProfileGame, TrophyGroup, UserTrophySelection, Badge, UserBadge, UserBadgeProgress, Concept, FeaturedGuide, Stage, Milestone, UserMilestone, UserMilestoneProgress, CommentReport, ModerationLog
+from .models import Game, Trophy, Profile, EarnedTrophy, ProfileGame, TrophyGroup, UserTrophySelection, Badge, UserBadge, UserBadgeProgress, Concept, FeaturedGuide, Stage, Milestone, UserMilestone, UserMilestoneProgress, CommentReport, ModerationLog, Checklist
+from trophies.services.checklist_service import ChecklistService
 from .forms import GameSearchForm, TrophySearchForm, ProfileSearchForm, ProfileGamesForm, ProfileTrophiesForm, ProfileBadgesForm, UserConceptRatingForm, BadgeSearchForm, GuideSearchForm, LinkPSNForm, GameDetailForm, BadgeCreationForm
 from trophies.util_modules.cache import redis_client
 from trophies.util_modules.constants import MODERN_PLATFORMS, ALL_PLATFORMS
@@ -83,7 +84,12 @@ class GamesListView(ProfileHotbarMixin, ListView):
             sort_val = form.cleaned_data.get('sort')
 
             if query:
-                qs = qs.filter(Q(title_name__icontains=query))
+                from trophies.util_modules.roman_numerals import expand_numeral_query
+                query_variants = expand_numeral_query(query)
+                q_filter = Q()
+                for variant in query_variants:
+                    q_filter |= Q(title_name__icontains=variant)
+                qs = qs.filter(q_filter)
             if platforms:
                 qs = qs.for_platform(platforms)
             if regions:
@@ -870,6 +876,22 @@ class GameDetailView(ProfileHotbarMixin, DetailView):
         # Build concept-related context (community ratings, badges, other versions)
         concept_context = self._build_concept_context(game)
         context.update(concept_context)
+
+        # Add checklist count for the concept (for initial badge display)
+        if game.concept:
+            context['checklist_count'] = Checklist.objects.active().published().filter(concept=game.concept).count()
+            # Check if user has draft checklists for this concept
+            if user.is_authenticated and hasattr(user, 'profile') and user.profile:
+                context['user_draft_checklists'] = Checklist.objects.active().filter(
+                    concept=game.concept,
+                    profile=user.profile,
+                    status='draft'
+                )
+            else:
+                context['user_draft_checklists'] = []
+        else:
+            context['checklist_count'] = 0
+            context['user_draft_checklists'] = []
 
         # Build user rating context (if earned platinum)
         rating_context = self._build_rating_context(user, game)
@@ -2632,5 +2654,280 @@ class ModerationLogView(ListView):
         context['actions_this_week'] = ModerationLog.objects.filter(
             timestamp__gte=timezone.now() - timedelta(days=7)
         ).count()
+
+        return context
+
+
+# Checklist Views
+
+class ChecklistDetailView(ProfileHotbarMixin, DetailView):
+    """
+    Display checklist detail with sections, items, and progress tracking.
+
+    Shows the full checklist structure with checkboxes for tracking progress.
+    Premium users and checklist authors can save progress; others can view only.
+    Requires user to be authenticated with a linked PSN account.
+    """
+    model = Checklist
+    template_name = 'trophies/checklist_detail.html'
+    context_object_name = 'checklist'
+    pk_url_kwarg = 'checklist_id'
+
+    def dispatch(self, request, *args, **kwargs):
+        """Require authenticated user with linked PSN account."""
+        if not request.user.is_authenticated:
+            messages.info(request, "Please sign in to view and use checklists.")
+            return redirect('account_login')
+
+        profile = getattr(request.user, 'profile', None)
+        if not profile or not profile.is_linked:
+            messages.info(request, "Link your PSN account to view and use checklists.")
+            return redirect('link_psn')
+
+        return super().dispatch(request, *args, **kwargs)
+
+    def get_queryset(self):
+        """Return checklist with optimized prefetches."""
+        return Checklist.objects.active().with_author_data().with_sections()
+
+    def get_object(self, queryset=None):
+        """Get checklist and validate access."""
+        checklist = super().get_object(queryset)
+
+        # Check if checklist is accessible
+        user = self.request.user
+        profile = user.profile if user.is_authenticated and hasattr(user, 'profile') else None
+
+        # Draft checklists are only viewable by their author
+        if checklist.status == 'draft':
+            if not profile or checklist.profile != profile:
+                raise Http404("Checklist not found")
+
+        return checklist
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        checklist = self.object
+        user = self.request.user
+        profile = user.profile if user.is_authenticated and hasattr(user, 'profile') else None
+
+        # Get user's completed items
+        completed_items = []
+        user_progress = None
+        if profile:
+            user_progress = ChecklistService.get_user_progress(checklist, profile)
+            if user_progress:
+                completed_items = user_progress.completed_items
+
+        context['completed_items'] = completed_items
+        context['user_progress'] = user_progress
+
+        # Calculate per-section completion counts and attach to section objects
+        completed_item_ids = set(completed_items)
+        sections = checklist.sections.all()
+        for section in sections:
+            section_item_ids = list(section.items.filter(item_type='item').values_list('id', flat=True))
+            completed_count = sum(1 for item_id in section_item_ids if item_id in completed_item_ids)
+            # Add completion data as attributes to the section object
+            section.completed_count = completed_count
+            section.total_count = len(section_item_ids)
+
+        # Check permissions
+        context['can_edit'] = profile and checklist.profile == profile and not checklist.is_deleted
+        # can_save_progress returns (bool, str reason), we just need the bool
+        can_save, _ = ChecklistService.can_save_progress(checklist, profile) if profile else (False, None)
+        context['can_save_progress'] = can_save
+        context['is_author'] = profile and checklist.profile == profile
+
+        # Get game info from concept
+        context['game'] = checklist.concept.games.first() if checklist.concept else None
+
+        # Check if author has platinum for this game/concept
+        context['author_has_platinum'] = False
+        if checklist.concept and checklist.profile:
+            from trophies.models import ProfileGame
+            pg = ProfileGame.objects.filter(
+                profile=checklist.profile,
+                game__concept=checklist.concept
+            ).order_by('-progress').first()
+            if pg:
+                context['author_has_platinum'] = pg.has_plat
+
+        # Breadcrumbs
+        breadcrumb = [
+            {'text': 'Home', 'url': reverse_lazy('home')},
+            {'text': 'Games', 'url': reverse_lazy('games_list')},
+        ]
+        if context['game']:
+            breadcrumb.append({
+                'text': context['game'].title_name,
+                'url': reverse_lazy('game_detail', kwargs={'np_communication_id': context['game'].np_communication_id})
+            })
+        breadcrumb.append({'text': checklist.title})
+        context['breadcrumb'] = breadcrumb
+
+        return context
+
+
+class ChecklistCreateView(LoginRequiredMixin, ProfileHotbarMixin, View):
+    """
+    Create a new checklist for a concept.
+
+    Redirects to the edit page after creating a draft checklist.
+    """
+    login_url = reverse_lazy('account_login')
+
+    def get(self, request, concept_id):
+        """Create a new draft checklist and redirect to edit."""
+        concept = get_object_or_404(Concept, id=concept_id)
+        profile = request.user.profile if hasattr(request.user, 'profile') else None
+
+        if not profile:
+            messages.error(request, "You need to link your PSN account first.")
+            return redirect('link_psn')
+
+        # Check if user can create checklists
+        can_create, error = ChecklistService.can_create_checklist(profile)
+        if not can_create:
+            messages.error(request, error)
+            game = concept.games.first()
+            if game:
+                return redirect('game_detail', np_communication_id=game.np_communication_id)
+            return redirect('games_list')
+
+        # Create the checklist
+        checklist, error = ChecklistService.create_checklist(
+            profile=profile,
+            concept=concept,
+            title=f"New Checklist for {concept.unified_title}"
+        )
+
+        if error:
+            messages.error(request, error)
+            game = concept.games.first()
+            if game:
+                return redirect('game_detail', np_communication_id=game.np_communication_id)
+            return redirect('games_list')
+
+        messages.success(request, "Checklist created! Start adding sections and items.")
+        return redirect('checklist_edit', checklist_id=checklist.id)
+
+
+class ChecklistEditView(LoginRequiredMixin, ProfileHotbarMixin, DetailView):
+    """
+    Edit a checklist (title, description, sections, items).
+
+    Only the checklist author can access this view.
+    Requires a linked PSN account.
+    """
+    model = Checklist
+    template_name = 'trophies/checklist_edit.html'
+    context_object_name = 'checklist'
+    pk_url_kwarg = 'checklist_id'
+    login_url = reverse_lazy('account_login')
+
+    def dispatch(self, request, *args, **kwargs):
+        """Require linked PSN account."""
+        if request.user.is_authenticated:
+            profile = getattr(request.user, 'profile', None)
+            if not profile or not profile.is_linked:
+                messages.info(request, "Link your PSN account to create and edit checklists.")
+                return redirect('link_psn')
+        return super().dispatch(request, *args, **kwargs)
+
+    def get_queryset(self):
+        """Return checklist with optimized prefetches."""
+        return Checklist.objects.active().with_author_data().with_sections()
+
+    def get_object(self, queryset=None):
+        """Get checklist and verify ownership."""
+        checklist = super().get_object(queryset)
+        user = self.request.user
+        profile = user.profile if hasattr(user, 'profile') else None
+
+        # Only author can edit
+        if not profile or checklist.profile != profile:
+            raise Http404("Checklist not found")
+
+        return checklist
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        checklist = self.object
+
+        # Get game info from concept
+        context['game'] = checklist.concept.games.first() if checklist.concept else None
+
+        # Breadcrumbs
+        breadcrumb = [
+            {'text': 'Home', 'url': reverse_lazy('home')},
+            {'text': 'Games', 'url': reverse_lazy('games_list')},
+        ]
+        if context['game']:
+            breadcrumb.append({
+                'text': context['game'].title_name,
+                'url': reverse_lazy('game_detail', kwargs={'np_communication_id': context['game'].np_communication_id})
+            })
+        breadcrumb.append({
+            'text': checklist.title,
+            'url': reverse_lazy('checklist_detail', kwargs={'checklist_id': checklist.id})
+        })
+        breadcrumb.append({'text': 'Edit'})
+        context['breadcrumb'] = breadcrumb
+
+        return context
+
+
+class MyChecklistsView(LoginRequiredMixin, ProfileHotbarMixin, TemplateView):
+    """
+    Display user's checklists: drafts, published, and in-progress.
+
+    Shows three tabs:
+    1. My Drafts - Checklists user is working on
+    2. My Published - Checklists user has published
+    3. In Progress - Other users' checklists the user is tracking
+
+    Requires a linked PSN account.
+    """
+    template_name = 'trophies/my_checklists.html'
+    login_url = reverse_lazy('account_login')
+
+    def dispatch(self, request, *args, **kwargs):
+        """Require linked PSN account."""
+        if request.user.is_authenticated:
+            profile = getattr(request.user, 'profile', None)
+            if not profile or not profile.is_linked:
+                messages.info(request, "Link your PSN account to use checklists.")
+                return redirect('link_psn')
+        return super().dispatch(request, *args, **kwargs)
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        user = self.request.user
+        profile = user.profile if hasattr(user, 'profile') else None
+
+        if not profile:
+            context['drafts'] = []
+            context['published'] = []
+            context['in_progress'] = []
+            return context
+
+        # Get user's drafts
+        context['drafts'] = ChecklistService.get_user_drafts(profile)
+
+        # Get user's published checklists
+        context['published'] = ChecklistService.get_user_published(profile)
+
+        # Get checklists user is tracking (in progress)
+        context['in_progress'] = ChecklistService.get_user_checklists_in_progress(profile)
+
+        # Breadcrumbs
+        context['breadcrumb'] = [
+            {'text': 'Home', 'url': reverse_lazy('home')},
+            {'text': 'My Checklists'},
+        ]
+
+        # Active tab
+        context['active_tab'] = self.request.GET.get('tab', 'drafts')
 
         return context

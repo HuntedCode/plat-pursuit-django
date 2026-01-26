@@ -1060,6 +1060,7 @@ class Milestone(models.Model):
         ('playtime_hours', 'Total Playtime (Hours)'),
         ('trophy_count', 'Total Trophies Earned'),
         ('comment_upvotes', 'Comment Upvotes Received'),
+        ('checklist_upvotes', 'Checklist Upvotes Received'),
     ]
 
     name = models.CharField(max_length=255, unique=True, help_text="Unique name")
@@ -1557,6 +1558,12 @@ class Checklist(models.Model):
         blank=True,
         help_text="Checklist description/overview"
     )
+    thumbnail = models.ImageField(
+        upload_to='checklists/thumbnails/',
+        blank=True,
+        null=True,
+        help_text='Main thumbnail image (recommended: 800x800px, max 5MB)'
+    )
 
     # Status
     status = models.CharField(
@@ -1610,8 +1617,8 @@ class Checklist(models.Model):
 
     @property
     def total_items(self):
-        """Total number of items across all sections."""
-        return ChecklistItem.objects.filter(section__checklist=self).count()
+        """Total number of trackable items across all sections (excludes sub-headers)."""
+        return ChecklistItem.objects.filter(section__checklist=self, item_type='item').count()
 
     @property
     def is_draft(self):
@@ -1641,6 +1648,12 @@ class ChecklistSection(models.Model):
         blank=True,
         help_text="Optional section description"
     )
+    thumbnail = models.ImageField(
+        upload_to='checklists/sections/',
+        blank=True,
+        null=True,
+        help_text='Section thumbnail (recommended: 400x400px, max 2MB)'
+    )
 
     # Ordering
     order = models.PositiveIntegerField(default=0, help_text="Display order within checklist")
@@ -1659,6 +1672,12 @@ class ChecklistSection(models.Model):
 
     @property
     def item_count(self):
+        """Total count of trackable items (excludes sub-headers)."""
+        return self.items.filter(item_type='item').count()
+
+    @property
+    def total_entry_count(self):
+        """Total count of all entries (items + sub-headers)."""
         return self.items.count()
 
 
@@ -1667,8 +1686,15 @@ class ChecklistItem(models.Model):
     Individual item within a checklist section.
 
     Items can be checked off by users to track progress.
+    Sub-headers are visual separators that cannot be checked off.
     No arbitrary limits on number of items per section.
     """
+    ITEM_TYPE_CHOICES = [
+        ('item', 'Item'),
+        ('sub_header', 'Sub-Header'),
+        ('image', 'Image'),
+    ]
+
     section = models.ForeignKey(
         ChecklistSection,
         on_delete=models.CASCADE,
@@ -1677,11 +1703,26 @@ class ChecklistItem(models.Model):
 
     text = models.CharField(max_length=500, help_text="Item description/task")
 
+    item_type = models.CharField(
+        max_length=20,
+        choices=ITEM_TYPE_CHOICES,
+        default='item',
+        help_text='Type of checklist entry'
+    )
+
     # Optional: link to specific trophy (for future use)
     trophy_id = models.IntegerField(
         null=True,
         blank=True,
         help_text="Optional trophy_id if this item relates to a specific trophy"
+    )
+
+    # Image for image-type items
+    image = models.ImageField(
+        upload_to='checklists/items/',
+        blank=True,
+        null=True,
+        help_text='Image for item_type=image (premium only, max 2MB)'
     )
 
     # Ordering
@@ -1694,10 +1735,41 @@ class ChecklistItem(models.Model):
         ordering = ['order', 'id']
         indexes = [
             models.Index(fields=['section', 'order'], name='item_section_order_idx'),
+            models.Index(fields=['section', 'item_type'], name='item_section_type_idx'),
         ]
 
+    @property
+    def is_sub_header(self):
+        """Check if this is a sub-header."""
+        return self.item_type == 'sub_header'
+
     def __str__(self):
-        return f"{self.text[:50]}... ({self.section.subtitle})" if len(self.text) > 50 else f"{self.text} ({self.section.subtitle})"
+        if self.item_type == 'image':
+            return f"[Image] ({self.section.subtitle})"
+        prefix = "[Header] " if self.item_type == 'sub_header' else ""
+        truncated = f"{self.text[:50]}..." if len(self.text) > 50 else self.text
+        return f"{prefix}{truncated} ({self.section.subtitle})"
+
+    def save(self, *args, **kwargs):
+        """Validate image items before saving."""
+        from django.core.exceptions import ValidationError
+
+        # Validate image items
+        if self.item_type == 'image':
+            if not self.image:
+                raise ValidationError("Image items must have an image.")
+            # Allow optional caption in text field
+        elif self.image:
+            # Clear image field if not image type
+            self.image = None
+
+        super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        """Delete associated image file when item deleted."""
+        if self.image:
+            self.image.delete(save=False)
+        super().delete(*args, **kwargs)
 
 
 class ChecklistVote(models.Model):
@@ -1780,7 +1852,7 @@ class UserChecklistProgress(models.Model):
         self.items_completed = completed
         self.total_items = total
         self.progress_percentage = (completed / total * 100) if total > 0 else 0.0
-        self.save(update_fields=['items_completed', 'total_items', 'progress_percentage', 'updated_at', 'last_activity'])
+        self.save(update_fields=['completed_items', 'items_completed', 'total_items', 'progress_percentage', 'updated_at', 'last_activity'])
 
     def mark_item_complete(self, item_id):
         """Mark an item as complete."""

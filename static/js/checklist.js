@@ -1,0 +1,1816 @@
+/**
+ * Checklist functionality for PlatPursuit
+ * Handles voting, progress tracking, and edit operations
+ */
+
+(function() {
+    'use strict';
+
+    // API base URL
+    const API_BASE = '/api/v1';
+
+    // Get CSRF token from cookie
+    function getCSRFToken() {
+        const name = 'csrftoken';
+        let cookieValue = null;
+        if (document.cookie && document.cookie !== '') {
+            const cookies = document.cookie.split(';');
+            for (let i = 0; i < cookies.length; i++) {
+                const cookie = cookies[i].trim();
+                if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                    break;
+                }
+            }
+        }
+        return cookieValue;
+    }
+
+    // Show toast notification
+    function showToast(message, type = 'info') {
+        const toast = document.createElement('div');
+        toast.className = `alert alert-${type} fixed bottom-4 right-4 w-auto max-w-md z-50 shadow-lg`;
+        toast.innerHTML = `<span>${message}</span>`;
+        document.body.appendChild(toast);
+        setTimeout(() => toast.remove(), 3000);
+    }
+
+    // API helper
+    async function apiRequest(url, method = 'GET', data = null) {
+        const options = {
+            method,
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCSRFToken(),
+            },
+            credentials: 'same-origin',
+        };
+        if (data) {
+            options.body = JSON.stringify(data);
+        }
+        const response = await fetch(url, options);
+        const text = await response.text();
+        let json;
+        try {
+            json = JSON.parse(text);
+        } catch (e) {
+            console.error('API returned non-JSON response:', text.substring(0, 200));
+            throw new Error('Server error - please try again');
+        }
+        if (!response.ok) {
+            throw new Error(json.error || json.detail || 'Request failed');
+        }
+        return json;
+    }
+
+    // Escape HTML for safe DOM insertion
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    // ==========================================
+    // Bulk Upload Functions
+    // ==========================================
+
+    /**
+     * Parse bulk upload textarea into items array.
+     * Rules:
+     * - Split by newlines
+     * - Trim whitespace from each line
+     * - Ignore empty lines
+     * - Lines starting with '#' → item_type: 'sub_header' (strip the #)
+     * - Regular lines → item_type: 'item'
+     * - Max 100 items
+     */
+    function parseBulkInput(textareaValue) {
+        const lines = textareaValue.split('\n');
+        const items = [];
+
+        for (let line of lines) {
+            line = line.trim();
+
+            // Skip empty lines
+            if (!line) continue;
+
+            // Check if sub-header (starts with #)
+            if (line.startsWith('#')) {
+                const text = line.substring(1).trim();
+                if (text) {
+                    items.push({ text, item_type: 'sub_header' });
+                }
+            } else {
+                items.push({ text: line, item_type: 'item' });
+            }
+
+            // Stop at 100 items
+            if (items.length >= 100) break;
+        }
+
+        return items;
+    }
+
+    /**
+     * Update the preview area and item count based on textarea input.
+     */
+    function updateBulkPreview(section) {
+        const textarea = section.querySelector('.bulk-upload-textarea');
+        const countEl = section.querySelector('.bulk-item-count');
+        const previewEl = section.querySelector('.bulk-preview');
+        const previewItemsEl = section.querySelector('.bulk-preview-items');
+        const previewCountEl = section.querySelector('.bulk-preview-count');
+        const uploadBtn = section.querySelector('.bulk-upload-btn');
+
+        if (!textarea || !countEl || !uploadBtn) return;
+
+        const items = parseBulkInput(textarea.value);
+
+        // Update count
+        countEl.textContent = items.length;
+
+        // Enable/disable upload button
+        uploadBtn.disabled = items.length === 0;
+
+        // Show/hide preview
+        if (items.length > 0 && previewEl && previewItemsEl && previewCountEl) {
+            previewEl.classList.remove('hidden');
+            previewCountEl.textContent = `${items.length} items`;
+
+            // Render preview items
+            let previewHtml = items.map((item, index) => {
+                const isSubHeader = item.item_type === 'sub_header';
+                return `
+                    <div class="flex items-center gap-2 text-xs p-1 rounded ${isSubHeader ? 'bg-base-300/50 border-l-2 border-secondary' : 'bg-base-100'}">
+                        <span class="text-base-content/40 font-mono">${index + 1}.</span>
+                        ${isSubHeader
+                            ? `<span class="font-semibold text-secondary">${escapeHtml(item.text)}</span>`
+                            : `<span>${escapeHtml(item.text)}</span>`
+                        }
+                    </div>
+                `;
+            }).join('');
+
+            // Show warning if at limit
+            if (items.length === 100) {
+                previewHtml += `<div class="text-warning text-xs mt-2">⚠️ Showing first 100 items. Additional items will be ignored.</div>`;
+            }
+
+            previewItemsEl.innerHTML = previewHtml;
+        } else if (previewEl) {
+            previewEl.classList.add('hidden');
+        }
+    }
+
+    /**
+     * Display detailed error modal for failed items.
+     */
+    function showBulkUploadErrors(errorResponse) {
+        const { failed_items, summary } = errorResponse;
+
+        const modalHtml = `
+            <dialog id="bulk-error-modal" class="modal modal-open">
+                <div class="modal-box max-w-2xl">
+                    <h3 class="font-bold text-lg text-error">Upload Failed</h3>
+                    <div class="py-4">
+                        <div class="stats stats-horizontal shadow mb-4">
+                            <div class="stat">
+                                <div class="stat-title">Total</div>
+                                <div class="stat-value text-sm">${summary.total_submitted}</div>
+                            </div>
+                            <div class="stat">
+                                <div class="stat-title">Valid</div>
+                                <div class="stat-value text-sm text-success">${summary.valid}</div>
+                            </div>
+                            <div class="stat">
+                                <div class="stat-title">Failed</div>
+                                <div class="stat-value text-sm text-error">${summary.failed}</div>
+                            </div>
+                        </div>
+
+                        <p class="text-sm mb-2">The following items failed validation:</p>
+                        <div class="max-h-64 overflow-y-auto space-y-2">
+                            ${failed_items.map(item => `
+                                <div class="alert alert-error text-xs p-2">
+                                    <div>
+                                        <span class="font-mono">Line ${item.index + 1}:</span>
+                                        <span class="font-semibold">"${escapeHtml(item.text)}"</span>
+                                        <br>
+                                        <span class="text-error-content/70">${escapeHtml(item.error)}</span>
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+
+                        <p class="text-sm mt-4 text-base-content/70">
+                            Please fix the errors and try again. Valid items were not uploaded (all-or-nothing).
+                        </p>
+                    </div>
+                    <div class="modal-action">
+                        <button class="btn btn-sm" onclick="this.closest('dialog').close(); this.closest('dialog').remove();">
+                            Close
+                        </button>
+                    </div>
+                </div>
+            </dialog>
+        `;
+
+        document.body.insertAdjacentHTML('beforeend', modalHtml);
+    }
+
+    /**
+     * Add created item to the DOM (reuse existing addItemToDOM function logic)
+     */
+    function addItemToDOM(section, item) {
+        const itemsContainer = section.querySelector('.section-items');
+        if (!itemsContainer) return;
+
+        const itemTemplate = document.getElementById('item-template');
+        if (!itemTemplate) return;
+
+        const itemEl = itemTemplate.content.cloneNode(true);
+        const itemDiv = itemEl.querySelector('.checklist-item-edit');
+
+        // Set item data
+        itemDiv.dataset.itemId = item.id;
+        itemDiv.dataset.itemOrder = item.order;
+
+        // Set text
+        const textInput = itemDiv.querySelector('.item-text-input');
+        if (textInput) {
+            textInput.value = item.text;
+        }
+
+        // Set item type
+        const typeSelect = itemDiv.querySelector('.item-type-select');
+        if (typeSelect) {
+            typeSelect.value = item.item_type;
+            // Trigger visual update
+            if (item.item_type === 'sub_header') {
+                itemDiv.classList.add('sub-header-item');
+            } else {
+                itemDiv.classList.remove('sub-header-item');
+            }
+        }
+
+        // Append to container
+        itemsContainer.appendChild(itemEl);
+    }
+
+    /**
+     * Submit bulk upload to API and handle response.
+     */
+    async function performBulkUpload(section) {
+        const sectionId = section.dataset.sectionId;
+        const textarea = section.querySelector('.bulk-upload-textarea');
+        const uploadBtn = section.querySelector('.bulk-upload-btn');
+        const progressEl = section.querySelector('.bulk-progress');
+        const progressBar = progressEl ? progressEl.querySelector('.progress') : null;
+        const progressText = progressEl ? progressEl.querySelector('.bulk-progress-text') : null;
+
+        if (!sectionId) {
+            showToast('Please save the section first', 'error');
+            return;
+        }
+
+        const items = parseBulkInput(textarea.value);
+
+        if (items.length === 0) {
+            showToast('No items to upload', 'error');
+            return;
+        }
+
+        try {
+            // Show progress
+            uploadBtn.disabled = true;
+            uploadBtn.classList.add('loading');
+            if (progressEl) {
+                progressEl.classList.remove('hidden');
+                if (progressBar) progressBar.value = 0;
+                if (progressText) progressText.textContent = `Uploading ${items.length} items...`;
+            }
+
+            // Submit to API
+            const result = await apiRequest(
+                `${API_BASE}/checklists/sections/${sectionId}/items/bulk/`,
+                'POST',
+                { items }
+            );
+
+            // Success
+            if (progressBar) progressBar.value = 100;
+            if (progressText) progressText.textContent = `Successfully uploaded ${result.items_created} items!`;
+
+            // Add items to DOM
+            result.items.forEach(item => {
+                addItemToDOM(section, item);
+            });
+
+            // Clear textarea and reset UI
+            textarea.value = '';
+            updateBulkPreview(section);
+
+            // Hide progress after delay
+            setTimeout(() => {
+                if (progressEl) progressEl.classList.add('hidden');
+            }, 2000);
+
+            showToast(`${result.items_created} items added!`, 'success');
+
+        } catch (error) {
+            // Error handling
+            if (progressEl) progressEl.classList.add('hidden');
+
+            if (error.failed_items) {
+                // Validation errors
+                showBulkUploadErrors(error);
+            } else {
+                // Network or other error
+                showToast(error.message || 'Failed to upload items', 'error');
+            }
+        } finally {
+            uploadBtn.disabled = false;
+            uploadBtn.classList.remove('loading');
+        }
+    }
+
+    /**
+     * Initialize bulk upload functionality for all sections.
+     */
+    function initBulkUpload() {
+        document.querySelectorAll('.checklist-section').forEach(section => {
+            const textarea = section.querySelector('.bulk-upload-textarea');
+            const uploadBtn = section.querySelector('.bulk-upload-btn');
+            const clearBtn = section.querySelector('.bulk-clear-btn');
+
+            if (!textarea) return;
+
+            // Update preview on input
+            textarea.addEventListener('input', () => {
+                updateBulkPreview(section);
+            });
+
+            // Upload button
+            if (uploadBtn) {
+                uploadBtn.addEventListener('click', () => {
+                    performBulkUpload(section);
+                });
+            }
+
+            // Clear button
+            if (clearBtn) {
+                clearBtn.addEventListener('click', () => {
+                    textarea.value = '';
+                    updateBulkPreview(section);
+                });
+            }
+        });
+    }
+
+    // ==========================================
+    // Checklist Detail Page Functions
+    // ==========================================
+
+    function initChecklistDetail() {
+        const container = document.getElementById('checklist-detail-container');
+        if (!container) return;
+
+        const checklistId = container.dataset.checklistId;
+        const canSaveProgress = container.dataset.canSaveProgress === 'true';
+        const isPremium = container.dataset.isPremium === 'true';
+
+        // Vote button handlers
+        initVoteButtons(checklistId);
+
+        // Progress tracking checkboxes
+        initProgressCheckboxes(checklistId, canSaveProgress, isPremium);
+
+        // Report button handler
+        initReportButton(checklistId);
+
+        // Table of contents
+        initTableOfContents();
+    }
+
+    function initVoteButtons(checklistId) {
+        document.querySelectorAll('.checklist-vote-btn').forEach(btn => {
+            btn.addEventListener('click', async function() {
+                const targetId = this.dataset.checklistId || checklistId;
+                try {
+                    const result = await apiRequest(`${API_BASE}/checklists/${targetId}/vote/`, 'POST');
+
+                    // Update UI
+                    const voteCount = document.querySelector('.checklist-vote-count');
+                    if (voteCount) {
+                        voteCount.textContent = result.upvote_count;
+                    }
+
+                    // Toggle button state
+                    if (result.voted) {
+                        this.classList.add('text-secondary');
+                        this.querySelector('svg').setAttribute('fill', 'currentColor');
+                    } else {
+                        this.classList.remove('text-secondary');
+                        this.querySelector('svg').setAttribute('fill', 'none');
+                    }
+                } catch (error) {
+                    showToast(error.message || 'Failed to vote', 'error');
+                }
+            });
+        });
+    }
+
+    function initProgressCheckboxes(checklistId, canSaveProgress, isPremium) {
+        // Only attach to regular items, not sub-headers
+        document.querySelectorAll('.checklist-item[data-item-type="item"] .checklist-item-checkbox').forEach(checkbox => {
+            checkbox.addEventListener('change', async function() {
+                const itemId = this.dataset.itemId;
+                const isChecked = this.checked;
+                const textSpan = this.closest('.checklist-item').querySelector('.checklist-item-text');
+
+                // Update visual state immediately
+                if (isChecked) {
+                    textSpan.classList.add('line-through', 'text-base-content/50');
+                } else {
+                    textSpan.classList.remove('line-through', 'text-base-content/50');
+                }
+
+                // If user can't save progress, show premium upsell
+                if (!canSaveProgress) {
+                    // Still allow checking in session, just don't save
+                    updateLocalProgress();
+                    return;
+                }
+
+                // Save to API
+                try {
+                    const result = await apiRequest(
+                        `${API_BASE}/checklists/${checklistId}/progress/toggle/${itemId}/`,
+                        'POST'
+                    );
+
+                    // Update progress display (API returns fields at top level)
+                    updateProgressDisplay({
+                        percentage: result.progress_percentage,
+                        items_completed: result.items_completed,
+                        total_items: result.total_items
+                    });
+                } catch (error) {
+                    // Revert checkbox on error
+                    this.checked = !isChecked;
+                    if (!isChecked) {
+                        textSpan.classList.add('line-through', 'text-base-content/50');
+                    } else {
+                        textSpan.classList.remove('line-through', 'text-base-content/50');
+                    }
+                    showToast(error.message || 'Failed to save progress', 'error');
+                }
+            });
+        });
+    }
+
+    function updateProgressDisplay(progress) {
+        const progressBar = document.getElementById('progress-bar');
+        const progressPercentage = document.getElementById('progress-percentage');
+        const itemsCompleted = document.getElementById('items-completed-count');
+        const itemsTotal = document.getElementById('items-total-count');
+
+        // Get previous percentage to detect transition to 100%
+        const previousPercentage = progressBar ? parseFloat(progressBar.value) : 0;
+
+        if (progressBar) {
+            progressBar.value = progress.percentage;
+        }
+        if (progressPercentage) {
+            progressPercentage.textContent = Math.round(progress.percentage) + '%';
+        }
+        if (itemsCompleted) {
+            itemsCompleted.textContent = progress.items_completed;
+        }
+        if (itemsTotal) {
+            itemsTotal.textContent = progress.total_items;
+        }
+
+        // Update section counts
+        updateSectionCounts();
+
+        // Trigger celebration when reaching 100% (not when already at 100%)
+        if (progress.percentage >= 100 && previousPercentage < 100) {
+            celebrateCompletion();
+        }
+    }
+
+    function celebrateCompletion() {
+        // Check if confetti library is loaded
+        if (typeof confetti !== 'function') return;
+
+        // Fire confetti from both sides
+        const duration = 3000;
+        const end = Date.now() + duration;
+
+        const frame = () => {
+            // Left side burst
+            confetti({
+                particleCount: 3,
+                angle: 60,
+                spread: 55,
+                origin: { x: 0, y: 0.6 },
+                colors: ['#f472b6', '#a855f7', '#3b82f6', '#22c55e', '#eab308']
+            });
+            // Right side burst
+            confetti({
+                particleCount: 3,
+                angle: 120,
+                spread: 55,
+                origin: { x: 1, y: 0.6 },
+                colors: ['#f472b6', '#a855f7', '#3b82f6', '#22c55e', '#eab308']
+            });
+
+            if (Date.now() < end) {
+                requestAnimationFrame(frame);
+            }
+        };
+
+        frame();
+
+        // Show toast message
+        showToast('Checklist complete! Great job!', 'success');
+    }
+
+    function updateLocalProgress() {
+        // Update progress display based on checked checkboxes (for non-premium users)
+        // Only count regular items, not sub-headers
+        const checkboxes = document.querySelectorAll('.checklist-item[data-item-type="item"] .checklist-item-checkbox');
+        const checked = document.querySelectorAll('.checklist-item[data-item-type="item"] .checklist-item-checkbox:checked');
+        const total = checkboxes.length;
+        const completed = checked.length;
+        const percentage = total > 0 ? (completed / total * 100) : 0;
+
+        const progressBar = document.getElementById('progress-bar');
+        const progressPercentage = document.getElementById('progress-percentage');
+        const itemsCompleted = document.getElementById('items-completed-count');
+
+        // Get previous percentage to detect transition to 100%
+        const previousPercentage = progressBar ? parseFloat(progressBar.value) : 0;
+
+        if (progressBar) {
+            progressBar.value = percentage;
+        }
+        if (progressPercentage) {
+            progressPercentage.textContent = Math.round(percentage) + '%';
+        }
+        if (itemsCompleted) {
+            itemsCompleted.textContent = completed;
+        }
+
+        // Update section counts
+        updateSectionCounts();
+
+        // Trigger celebration when reaching 100% (not when already at 100%)
+        if (percentage >= 100 && previousPercentage < 100) {
+            celebrateCompletion();
+        }
+    }
+
+    function updateSectionCounts() {
+        // Update the XX/YY counts for each section in both header and TOC
+        document.querySelectorAll('.checklist-section').forEach(section => {
+            const sectionId = section.dataset.sectionId;
+            if (!sectionId) return;
+
+            // Count completed items in this section
+            const sectionItems = section.querySelectorAll('.checklist-item[data-item-type="item"] .checklist-item-checkbox');
+            const sectionChecked = section.querySelectorAll('.checklist-item[data-item-type="item"] .checklist-item-checkbox:checked');
+            const completedCount = sectionChecked.length;
+            const totalCount = sectionItems.length;
+
+            // Update section header count
+            const sectionHeaderCount = section.querySelector('.section-item-count .completed-count');
+            if (sectionHeaderCount) {
+                sectionHeaderCount.textContent = completedCount;
+            }
+
+            // Update TOC counts (both desktop and mobile)
+            document.querySelectorAll(`.toc-item[data-section-id="${sectionId}"] .toc-section-count .completed-count`).forEach(tocCount => {
+                tocCount.textContent = completedCount;
+            });
+        });
+    }
+
+    function initReportButton(checklistId) {
+        const reportBtn = document.querySelector('.checklist-report-btn');
+        const reportModal = document.getElementById('report-modal');
+        const reportForm = document.getElementById('report-form');
+
+        if (!reportBtn || !reportModal || !reportForm) return;
+
+        reportBtn.addEventListener('click', () => {
+            reportModal.showModal();
+        });
+
+        reportForm.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const formData = new FormData(this);
+            const data = {
+                reason: formData.get('reason'),
+                details: formData.get('details'),
+            };
+
+            try {
+                await apiRequest(`${API_BASE}/checklists/${checklistId}/report/`, 'POST', data);
+                reportModal.close();
+                reportForm.reset();
+                showToast('Report submitted. Thank you!', 'success');
+            } catch (error) {
+                showToast(error.message || 'Failed to submit report', 'error');
+            }
+        });
+    }
+
+    function initTableOfContents() {
+        // Select all TOC lists (both mobile and desktop)
+        const tocLists = document.querySelectorAll('.toc-list');
+        if (tocLists.length === 0) return; // TOC not present on this page
+
+        const sections = document.querySelectorAll('.checklist-section');
+        const tocItems = document.querySelectorAll('.toc-item');
+
+        if (sections.length === 0 || tocItems.length === 0) return;
+
+        // Track currently visible sections
+        let visibleSections = new Set();
+
+        // Create Intersection Observer
+        const observerOptions = {
+            rootMargin: '-80px 0px -60% 0px', // Trigger when section enters top 40% of viewport
+            threshold: 0
+        };
+
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                const sectionId = entry.target.dataset.sectionId;
+
+                if (entry.isIntersecting) {
+                    visibleSections.add(sectionId);
+                } else {
+                    visibleSections.delete(sectionId);
+                }
+            });
+
+            // Update active state - highlight the first visible section
+            updateActiveTocItem();
+        }, observerOptions);
+
+        // Observe all sections
+        sections.forEach(section => observer.observe(section));
+
+        // Update active TOC item based on visible sections
+        function updateActiveTocItem() {
+            // Find the topmost visible section
+            let activeSection = null;
+
+            if (visibleSections.size > 0) {
+                // Convert Set to Array and find the first section in DOM order
+                sections.forEach(section => {
+                    const sectionId = section.dataset.sectionId;
+                    if (visibleSections.has(sectionId) && !activeSection) {
+                        activeSection = sectionId;
+                    }
+                });
+            }
+
+            // Update TOC items
+            tocItems.forEach(item => {
+                const itemSectionId = item.dataset.sectionId;
+
+                if (itemSectionId === activeSection) {
+                    // Add active styling
+                    item.classList.add('bg-secondary/10', 'border-l-4', 'border-secondary', 'font-semibold');
+                    item.classList.remove('hover:bg-base-200');
+                } else {
+                    // Remove active styling
+                    item.classList.remove('bg-secondary/10', 'border-l-4', 'border-secondary', 'font-semibold');
+                    item.classList.add('hover:bg-base-200');
+                }
+            });
+        }
+
+        // Handle TOC item clicks - smooth scroll
+        tocItems.forEach(item => {
+            item.addEventListener('click', (e) => {
+                e.preventDefault();
+
+                const sectionId = item.dataset.sectionId;
+                const targetSection = document.getElementById(`section-${sectionId}`);
+
+                if (targetSection) {
+                    // Smooth scroll to section with offset for fixed header
+                    const yOffset = -100; // Offset for navbar + breathing room
+                    const y = targetSection.getBoundingClientRect().top + window.pageYOffset + yOffset;
+
+                    window.scrollTo({
+                        top: y,
+                        behavior: 'smooth'
+                    });
+                }
+            });
+        });
+
+        // Initialize on page load
+        updateActiveTocItem();
+    }
+
+    // ==========================================
+    // Checklist Edit Page Functions
+    // ==========================================
+
+    function initChecklistEdit() {
+        const container = document.getElementById('checklist-edit-container');
+        if (!container) return;
+
+        const checklistId = container.dataset.checklistId;
+
+        // Save checklist button
+        initSaveChecklist(checklistId);
+
+        // Publish/Unpublish buttons
+        initPublishButtons(checklistId);
+
+        // Delete checklist button
+        initDeleteChecklist(checklistId);
+
+        // Add section button
+        initAddSection(checklistId);
+
+        // Section operations
+        initSectionOperations(checklistId);
+
+        // Item operations
+        initItemOperations(checklistId);
+
+        // Character counters
+        initCharacterCounters();
+
+        // Type selectors
+        initTypeSelectors();
+
+        // Bulk upload
+        initBulkUpload();
+
+        // Image handling
+        initImagePreviews();
+        initImageUploads();
+    }
+
+    function initSaveChecklist(checklistId) {
+        const saveBtn = document.getElementById('save-checklist-btn');
+        if (!saveBtn) return;
+
+        saveBtn.addEventListener('click', async function() {
+            const title = document.getElementById('checklist-title').value.trim();
+            const description = document.getElementById('checklist-description').value.trim();
+
+            if (!title) {
+                showToast('Title is required', 'error');
+                return;
+            }
+
+            try {
+                this.classList.add('loading');
+                await apiRequest(`${API_BASE}/checklists/${checklistId}/`, 'PATCH', {
+                    title,
+                    description,
+                });
+                showToast('Checklist saved!', 'success');
+            } catch (error) {
+                showToast(error.message || 'Failed to save', 'error');
+            } finally {
+                this.classList.remove('loading');
+            }
+        });
+    }
+
+    function initPublishButtons(checklistId) {
+        const publishBtn = document.getElementById('publish-checklist-btn');
+        const unpublishBtn = document.getElementById('unpublish-checklist-btn');
+
+        if (publishBtn) {
+            publishBtn.addEventListener('click', async function() {
+                // Show confirmation dialog before publishing
+                const confirmed = confirm(
+                    `Ready to publish?\n\n` +
+                    `Please double-check your checklist before publishing:\n` +
+                    `• All sections and items are complete\n` +
+                    `• No typos or errors\n` +
+                    `• Items are in the correct order\n\n` +
+                    `Once published, you cannot add, edit, or delete sections and items ` +
+                    `because users may start tracking their progress. ` +
+                    `You can still edit the title and description.\n\n` +
+                    `Publish this checklist?`
+                );
+
+                if (!confirmed) {
+                    return;
+                }
+
+                try {
+                    this.classList.add('loading');
+                    await apiRequest(`${API_BASE}/checklists/${checklistId}/publish/`, 'POST');
+                    showToast('Checklist published!', 'success');
+                    window.location.reload();
+                } catch (error) {
+                    showToast(error.message || 'Failed to publish', 'error');
+                } finally {
+                    this.classList.remove('loading');
+                }
+            });
+        }
+
+        if (unpublishBtn) {
+            unpublishBtn.addEventListener('click', async function() {
+                try {
+                    this.classList.add('loading');
+
+                    // First check how many users are tracking progress
+                    const statusResult = await apiRequest(`${API_BASE}/checklists/${checklistId}/publish/`, 'GET');
+                    const trackerCount = statusResult.tracker_count || 0;
+
+                    // If there are users tracking, show a confirmation dialog
+                    if (trackerCount > 0) {
+                        this.classList.remove('loading');
+                        const userText = trackerCount === 1 ? '1 user is' : `${trackerCount} users are`;
+                        const confirmed = confirm(
+                            `Warning: ${userText} currently tracking progress on this checklist.\n\n` +
+                            `Unpublishing will allow you to make structural changes (add/edit/delete items). ` +
+                            `If you delete items, those items will be automatically removed from users' progress records.\n\n` +
+                            `Are you sure you want to unpublish?`
+                        );
+                        if (!confirmed) {
+                            return;
+                        }
+                        this.classList.add('loading');
+                    }
+
+                    // Proceed with unpublishing
+                    await apiRequest(`${API_BASE}/checklists/${checklistId}/publish/`, 'DELETE');
+                    showToast('Checklist unpublished', 'info');
+                    window.location.reload();
+                } catch (error) {
+                    showToast(error.message || 'Failed to unpublish', 'error');
+                } finally {
+                    this.classList.remove('loading');
+                }
+            });
+        }
+    }
+
+    function initDeleteChecklist(checklistId) {
+        const deleteBtn = document.getElementById('delete-checklist-btn');
+        const confirmBtn = document.getElementById('confirm-delete-btn');
+        const modal = document.getElementById('delete-confirm-modal');
+
+        if (!deleteBtn || !confirmBtn || !modal) return;
+
+        deleteBtn.addEventListener('click', () => {
+            modal.showModal();
+        });
+
+        confirmBtn.addEventListener('click', async function() {
+            try {
+                this.classList.add('loading');
+                await apiRequest(`${API_BASE}/checklists/${checklistId}/`, 'DELETE');
+                showToast('Checklist deleted', 'info');
+                window.location.href = '/my-checklists/';
+            } catch (error) {
+                showToast(error.message || 'Failed to delete', 'error');
+            } finally {
+                this.classList.remove('loading');
+            }
+        });
+    }
+
+    function initAddSection(checklistId) {
+        const addBtn = document.getElementById('add-section-btn');
+        if (!addBtn) return;
+
+        addBtn.addEventListener('click', async function() {
+            try {
+                this.classList.add('loading');
+                const result = await apiRequest(`${API_BASE}/checklists/${checklistId}/sections/`, 'POST', {
+                    subtitle: 'New Section',
+                });
+
+                // Add section to DOM (API returns { success: true, section: {...} })
+                addSectionToDOM(result.section, checklistId);
+
+                // Hide publish requirements if we now have sections
+                const requirements = document.getElementById('publish-requirements');
+                if (requirements) {
+                    requirements.classList.add('hidden');
+                }
+
+                showToast('Section added!', 'success');
+            } catch (error) {
+                showToast(error.message || 'Failed to add section', 'error');
+            } finally {
+                this.classList.remove('loading');
+            }
+        });
+    }
+
+    function addSectionToDOM(section, checklistId) {
+        const template = document.getElementById('section-template');
+        const container = document.getElementById('sections-container');
+        if (!template || !container) return;
+
+        const clone = template.content.cloneNode(true);
+        const sectionEl = clone.querySelector('.checklist-section');
+
+        sectionEl.dataset.sectionId = section.id;
+        sectionEl.dataset.sectionOrder = section.order;
+        sectionEl.querySelector('.section-title-input').value = section.subtitle;
+
+        container.appendChild(clone);
+
+        // Re-init event listeners for new section
+        initSectionOperations(checklistId);
+        initItemOperations(checklistId);
+    }
+
+    function initSectionOperations(checklistId) {
+        // Save section
+        document.querySelectorAll('.section-save-btn').forEach(btn => {
+            // Remove existing listeners
+            btn.replaceWith(btn.cloneNode(true));
+        });
+
+        document.querySelectorAll('.section-save-btn').forEach(btn => {
+            btn.addEventListener('click', async function() {
+                const section = this.closest('.checklist-section');
+                const sectionId = section.dataset.sectionId;
+                const subtitle = section.querySelector('.section-title-input').value.trim();
+                const description = section.querySelector('.section-description-input').value.trim();
+
+                if (!subtitle) {
+                    showToast('Section title is required', 'error');
+                    return;
+                }
+
+                try {
+                    await apiRequest(`${API_BASE}/checklists/${checklistId}/sections/${sectionId}/`, 'PATCH', {
+                        subtitle,
+                        description,
+                    });
+                    showToast('Section saved!', 'success');
+                } catch (error) {
+                    showToast(error.message || 'Failed to save section', 'error');
+                }
+            });
+        });
+
+        // Delete section
+        document.querySelectorAll('.section-delete-btn').forEach(btn => {
+            btn.replaceWith(btn.cloneNode(true));
+        });
+
+        document.querySelectorAll('.section-delete-btn').forEach(btn => {
+            btn.addEventListener('click', async function() {
+                if (!confirm('Delete this section and all its items?')) return;
+
+                const section = this.closest('.checklist-section');
+                const sectionId = section.dataset.sectionId;
+
+                try {
+                    await apiRequest(`${API_BASE}/checklists/${checklistId}/sections/${sectionId}/`, 'DELETE');
+                    section.remove();
+                    showToast('Section deleted', 'info');
+
+                    // Show publish requirements if no sections left
+                    const sections = document.querySelectorAll('.checklist-section');
+                    if (sections.length === 0) {
+                        const requirements = document.getElementById('publish-requirements');
+                        if (requirements) {
+                            requirements.classList.remove('hidden');
+                        }
+                    }
+                } catch (error) {
+                    showToast(error.message || 'Failed to delete section', 'error');
+                }
+            });
+        });
+
+        // Move section up
+        document.querySelectorAll('.section-move-up-btn').forEach(btn => {
+            btn.replaceWith(btn.cloneNode(true));
+        });
+
+        document.querySelectorAll('.section-move-up-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const section = this.closest('.checklist-section');
+                const prev = section.previousElementSibling;
+                if (prev && prev.classList.contains('checklist-section')) {
+                    section.parentNode.insertBefore(section, prev);
+                    reorderSections(checklistId);
+                }
+            });
+        });
+
+        // Move section down
+        document.querySelectorAll('.section-move-down-btn').forEach(btn => {
+            btn.replaceWith(btn.cloneNode(true));
+        });
+
+        document.querySelectorAll('.section-move-down-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const section = this.closest('.checklist-section');
+                const next = section.nextElementSibling;
+                if (next && next.classList.contains('checklist-section')) {
+                    section.parentNode.insertBefore(next, section);
+                    reorderSections(checklistId);
+                }
+            });
+        });
+    }
+
+    async function reorderSections(checklistId) {
+        const sections = document.querySelectorAll('.checklist-section');
+        const ids = Array.from(sections).map(s => parseInt(s.dataset.sectionId));
+
+        try {
+            await apiRequest(`${API_BASE}/checklists/${checklistId}/sections/reorder/`, 'POST', { ids });
+        } catch (error) {
+            showToast('Failed to reorder sections', 'error');
+        }
+    }
+
+    async function reorderItems(section) {
+        const sectionId = section.dataset.sectionId;
+        // Get both regular items and image items in document order
+        const container = section.querySelector('.section-items-container');
+        if (!container) return;
+
+        const allItems = container.querySelectorAll('.checklist-item-edit, .checklist-image-item');
+        const ids = Array.from(allItems).map(i => parseInt(i.dataset.itemId));
+
+        try {
+            await apiRequest(`${API_BASE}/checklists/sections/${sectionId}/items/reorder/`, 'POST', { ids });
+        } catch (error) {
+            showToast('Failed to reorder items', 'error');
+        }
+    }
+
+    function initItemOperations(checklistId) {
+        // Move item up
+        document.querySelectorAll('.item-move-up-btn').forEach(btn => {
+            btn.replaceWith(btn.cloneNode(true));
+        });
+
+        document.querySelectorAll('.item-move-up-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                // Support both regular items and image items
+                const item = this.closest('.checklist-item-edit') || this.closest('.checklist-image-item');
+                if (!item) return;
+
+                const prev = item.previousElementSibling;
+                if (prev && (prev.classList.contains('checklist-item-edit') || prev.classList.contains('checklist-image-item'))) {
+                    item.parentNode.insertBefore(item, prev);
+                    const section = this.closest('.checklist-section');
+                    reorderItems(section);
+                }
+            });
+        });
+
+        // Move item down
+        document.querySelectorAll('.item-move-down-btn').forEach(btn => {
+            btn.replaceWith(btn.cloneNode(true));
+        });
+
+        document.querySelectorAll('.item-move-down-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                // Support both regular items and image items
+                const item = this.closest('.checklist-item-edit') || this.closest('.checklist-image-item');
+                if (!item) return;
+
+                const next = item.nextElementSibling;
+                if (next && (next.classList.contains('checklist-item-edit') || next.classList.contains('checklist-image-item'))) {
+                    item.parentNode.insertBefore(next, item);
+                    const section = this.closest('.checklist-section');
+                    reorderItems(section);
+                }
+            });
+        });
+
+        // Add item
+        document.querySelectorAll('.add-item-btn').forEach(btn => {
+            btn.replaceWith(btn.cloneNode(true));
+        });
+
+        document.querySelectorAll('.add-item-btn').forEach(btn => {
+            btn.addEventListener('click', async function() {
+                const section = this.closest('.checklist-section');
+                const sectionId = section.dataset.sectionId;
+                const input = section.querySelector('.new-item-input');
+                const typeSelect = section.querySelector('.new-item-type-select');
+                const text = input.value.trim();
+                const itemType = typeSelect ? typeSelect.value : 'item';
+
+                if (!text) {
+                    showToast('Item text is required', 'error');
+                    return;
+                }
+
+                if (!sectionId) {
+                    showToast('Please save the section first', 'error');
+                    return;
+                }
+
+                const btn = this;
+                try {
+                    btn.classList.add('loading');
+                    const result = await apiRequest(`${API_BASE}/checklists/sections/${sectionId}/items/`, 'POST', {
+                        text,
+                        item_type: itemType,
+                    });
+
+                    // Add item to DOM (API returns { success: true, item: {...} })
+                    addItemToDOM(section, result.item);
+                    input.value = '';
+
+                    // Reset type selector to default
+                    if (typeSelect) typeSelect.value = 'item';
+
+                    // Reset the new item char counter
+                    const wrapper = input.closest('.mt-3');
+                    const counter = wrapper?.querySelector('.new-item-char-count');
+                    if (counter) counter.textContent = '0';
+
+                    showToast('Item added!', 'success');
+                } catch (error) {
+                    showToast(error.message || 'Failed to add item', 'error');
+                } finally {
+                    // Find the current add button in the section (may have been replaced by initItemOperations)
+                    const currentBtn = section.querySelector('.add-item-btn');
+                    if (currentBtn) currentBtn.classList.remove('loading');
+                }
+            });
+        });
+
+        // Also trigger add on Enter key
+        document.querySelectorAll('.new-item-input').forEach(input => {
+            input.replaceWith(input.cloneNode(true));
+        });
+
+        document.querySelectorAll('.new-item-input').forEach(input => {
+            input.addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    const addBtn = this.closest('.checklist-section').querySelector('.add-item-btn');
+                    addBtn.click();
+                }
+            });
+        });
+
+        // Save item
+        document.querySelectorAll('.item-save-btn').forEach(btn => {
+            btn.replaceWith(btn.cloneNode(true));
+        });
+
+        document.querySelectorAll('.item-save-btn').forEach(btn => {
+            btn.addEventListener('click', async function() {
+                const item = this.closest('.checklist-item-edit');
+                const itemId = item.dataset.itemId;
+                const text = item.querySelector('.item-text-input').value.trim();
+                const typeSelect = item.querySelector('.item-type-select');
+                const itemType = typeSelect ? typeSelect.value : item.dataset.itemType;
+
+                if (!text) {
+                    showToast('Item text is required', 'error');
+                    return;
+                }
+
+                try {
+                    await apiRequest(`${API_BASE}/checklists/items/${itemId}/`, 'PATCH', {
+                        text,
+                        item_type: itemType,
+                    });
+
+                    // Update data attribute
+                    item.dataset.itemType = itemType;
+
+                    // Update visual styling based on type
+                    const textInput = item.querySelector('.item-text-input');
+                    if (itemType === 'sub_header') {
+                        item.classList.add('bg-base-300/50', 'border-l-4', 'border-secondary');
+                        item.classList.remove('bg-base-200');
+                        textInput.classList.add('font-semibold', 'text-secondary');
+                    } else {
+                        item.classList.remove('bg-base-300/50', 'border-l-4', 'border-secondary');
+                        item.classList.add('bg-base-200');
+                        textInput.classList.remove('font-semibold', 'text-secondary');
+                    }
+
+                    showToast('Item saved!', 'success');
+                } catch (error) {
+                    showToast(error.message || 'Failed to save item', 'error');
+                }
+            });
+        });
+
+        // Delete item
+        document.querySelectorAll('.item-delete-btn').forEach(btn => {
+            btn.replaceWith(btn.cloneNode(true));
+        });
+
+        document.querySelectorAll('.item-delete-btn').forEach(btn => {
+            btn.addEventListener('click', async function() {
+                // Support both regular items and image items
+                const item = this.closest('.checklist-item-edit') || this.closest('.checklist-image-item');
+                if (!item) return;
+
+                const itemId = item.dataset.itemId;
+                const section = this.closest('.checklist-section');
+
+                try {
+                    await apiRequest(`${API_BASE}/checklists/items/${itemId}/`, 'DELETE');
+                    item.remove();
+
+                    // Update item count (count both types of items)
+                    const countBadge = section.querySelector('.section-item-count');
+                    const regularItems = section.querySelectorAll('.checklist-item-edit');
+                    const imageItems = section.querySelectorAll('.checklist-image-item');
+                    const totalItems = regularItems.length + imageItems.length;
+                    countBadge.textContent = totalItems + ' items';
+
+                    // Show empty message if no items
+                    if (totalItems === 0) {
+                        const container = section.querySelector('.section-items-container');
+                        container.innerHTML = '<p class="text-base-content/50 italic text-center py-2 empty-items-message">No items yet. Add your first item below.</p>';
+                    }
+
+                    showToast('Item deleted', 'info');
+                } catch (error) {
+                    showToast(error.message || 'Failed to delete item', 'error');
+                }
+            });
+        });
+    }
+
+    function addItemToDOM(section, item) {
+        const template = document.getElementById('item-template');
+        const container = section.querySelector('.section-items-container');
+        if (!template || !container) return;
+
+        // Remove empty message if present
+        const emptyMsg = container.querySelector('.empty-items-message');
+        if (emptyMsg) emptyMsg.remove();
+
+        const clone = template.content.cloneNode(true);
+        const itemEl = clone.querySelector('.checklist-item-edit');
+
+        itemEl.dataset.itemId = item.id;
+        itemEl.dataset.itemOrder = item.order;
+        itemEl.dataset.itemType = item.item_type || 'item';
+        itemEl.querySelector('.item-text-input').value = item.text;
+
+        // Set type selector
+        const typeSelect = itemEl.querySelector('.item-type-select');
+        if (typeSelect) {
+            typeSelect.value = item.item_type || 'item';
+        }
+
+        // Apply styling based on type
+        const textInput = itemEl.querySelector('.item-text-input');
+        if (item.item_type === 'sub_header') {
+            itemEl.classList.add('bg-base-300/50', 'border-l-4', 'border-secondary');
+            itemEl.classList.remove('bg-base-200');
+            textInput.classList.add('font-semibold', 'text-secondary');
+            textInput.placeholder = 'Sub-header text...';
+        } else {
+            textInput.placeholder = 'Item text...';
+        }
+
+        container.appendChild(clone);
+
+        // Update item count
+        const countBadge = section.querySelector('.section-item-count');
+        const items = container.querySelectorAll('.checklist-item-edit');
+        countBadge.textContent = items.length + ' items';
+
+        // Re-init event listeners
+        initItemOperations(section.closest('#checklist-edit-container').dataset.checklistId);
+
+        // Update char count for new item
+        const charCount = itemEl.querySelector('.item-char-count');
+        if (charCount) {
+            charCount.textContent = item.text.length;
+        }
+
+        // Re-init character counters
+        initCharacterCounters();
+    }
+
+    function initCharacterCounters() {
+        // Use event delegation on the container to handle all character counting
+        const container = document.getElementById('checklist-edit-container');
+        if (!container) return;
+
+        // Only attach listener once
+        if (container.dataset.charCountInit) return;
+        container.dataset.charCountInit = 'true';
+
+        container.addEventListener('input', function(e) {
+            const target = e.target;
+
+            // Checklist title
+            if (target.id === 'checklist-title') {
+                const counter = document.querySelector('.char-count[data-target="checklist-title"]');
+                if (counter) counter.textContent = target.value.length;
+            }
+
+            // Checklist description
+            if (target.id === 'checklist-description') {
+                const counter = document.querySelector('.char-count[data-target="checklist-description"]');
+                if (counter) counter.textContent = target.value.length;
+            }
+
+            // Section title
+            if (target.classList.contains('section-title-input')) {
+                const section = target.closest('.checklist-section');
+                const counter = section?.querySelector('.section-title-count');
+                if (counter) counter.textContent = target.value.length;
+            }
+
+            // Section description
+            if (target.classList.contains('section-description-input')) {
+                const section = target.closest('.checklist-section');
+                const counter = section?.querySelector('.section-desc-count');
+                if (counter) counter.textContent = target.value.length;
+            }
+
+            // Item text
+            if (target.classList.contains('item-text-input')) {
+                const item = target.closest('.checklist-item-edit');
+                const counter = item?.querySelector('.item-char-count');
+                if (counter) counter.textContent = target.value.length;
+            }
+
+            // New item input
+            if (target.classList.contains('new-item-input')) {
+                const wrapper = target.closest('.mt-3');
+                const counter = wrapper?.querySelector('.new-item-char-count');
+                if (counter) counter.textContent = target.value.length;
+            }
+        });
+    }
+
+    function initTypeSelectors() {
+        // Use event delegation for type selector changes
+        const container = document.getElementById('checklist-edit-container');
+        if (!container) return;
+
+        // Only attach listener once
+        if (container.dataset.typeSelectInit) return;
+        container.dataset.typeSelectInit = 'true';
+
+        container.addEventListener('change', function(e) {
+            const target = e.target;
+
+            // Item type selector
+            if (target.classList.contains('item-type-select')) {
+                const item = target.closest('.checklist-item-edit');
+                const textInput = item.querySelector('.item-text-input');
+
+                if (target.value === 'sub_header') {
+                    textInput.placeholder = 'Sub-header text...';
+                    textInput.classList.add('font-semibold', 'text-secondary');
+                } else {
+                    textInput.placeholder = 'Item text...';
+                    textInput.classList.remove('font-semibold', 'text-secondary');
+                }
+            }
+
+            // New item type selector
+            if (target.classList.contains('new-item-type-select')) {
+                const section = target.closest('.checklist-section');
+                const input = section.querySelector('.new-item-input');
+
+                if (target.value === 'sub_header') {
+                    input.placeholder = 'Add new sub-header...';
+                } else {
+                    input.placeholder = 'Add new item...';
+                }
+            }
+        });
+    }
+
+    // ==========================================
+    // Checklist Section (Game Detail Page)
+    // ==========================================
+
+    function initChecklistSection() {
+        const section = document.getElementById('checklist-section');
+        if (!section) return;
+
+        const conceptId = section.dataset.conceptId;
+        const container = document.getElementById('checklist-grid');
+        const loadingEl = document.getElementById('checklist-loading');
+        const emptyEl = document.getElementById('checklist-empty');
+        const errorEl = document.getElementById('checklist-error');
+        const sortContainer = document.getElementById('checklist-sort-container');
+        const countBadge = document.getElementById('checklist-count');
+
+        // Toggle section
+        const toggleBtn = document.getElementById('checklist-toggle');
+        const content = document.getElementById('checklist-content');
+        let isExpanded = false;
+        let hasLoaded = false;
+
+        if (toggleBtn && content) {
+            toggleBtn.addEventListener('click', function() {
+                isExpanded = !isExpanded;
+
+                if (isExpanded) {
+                    content.classList.remove('hidden');
+                    content.classList.add('flex');
+                    if (sortContainer) sortContainer.classList.remove('hidden');
+                } else {
+                    content.classList.add('hidden');
+                    content.classList.remove('flex');
+                    if (sortContainer) sortContainer.classList.add('hidden');
+                }
+
+                const icon = document.getElementById('checklist-toggle-icon');
+                if (icon) {
+                    icon.style.transform = isExpanded ? 'rotate(0deg)' : 'rotate(-90deg)';
+                }
+
+                // Load checklists on first expand
+                if (isExpanded && !hasLoaded) {
+                    hasLoaded = true;
+                    loadChecklists(conceptId, container, loadingEl, emptyEl, errorEl, 'top', countBadge);
+                }
+            });
+        }
+
+        // Sort dropdown
+        const sortSelect = document.getElementById('checklist-sort');
+        if (sortSelect) {
+            sortSelect.addEventListener('change', function() {
+                loadChecklists(conceptId, container, loadingEl, emptyEl, errorEl, this.value, countBadge);
+            });
+        }
+    }
+
+    async function loadChecklists(conceptId, container, loadingEl, emptyEl, errorEl, sort = 'top', countBadge = null) {
+        if (!container) return;
+
+        // Show loading
+        if (loadingEl) loadingEl.classList.remove('hidden');
+        if (emptyEl) emptyEl.classList.add('hidden');
+        if (errorEl) errorEl.classList.add('hidden');
+        container.innerHTML = '';
+
+        try {
+            // Request HTML-rendered cards from server
+            const result = await apiRequest(`${API_BASE}/checklists/concept/${conceptId}/?sort=${sort}&output=html`);
+            const cardsHtml = result.cards_html || [];
+
+            if (loadingEl) loadingEl.classList.add('hidden');
+
+            // Update count badge
+            if (countBadge) {
+                countBadge.textContent = result.total_count || cardsHtml.length;
+            }
+
+            if (cardsHtml.length === 0) {
+                if (emptyEl) emptyEl.classList.remove('hidden');
+                return;
+            }
+
+            // Insert server-rendered cards
+            cardsHtml.forEach(cardHtml => {
+                container.insertAdjacentHTML('beforeend', cardHtml);
+            });
+
+            // Init vote buttons for new cards
+            initVoteButtons();
+
+        } catch (error) {
+            if (loadingEl) loadingEl.classList.add('hidden');
+            if (errorEl) errorEl.classList.remove('hidden');
+            console.error('Failed to load checklists:', error);
+        }
+    }
+
+    // ==========================================
+    // Image Handling Functions
+    // ==========================================
+
+    function initImagePreviews() {
+        // Checklist thumbnail preview
+        const checklistInput = document.getElementById('checklist-thumbnail-input');
+        if (checklistInput) {
+            checklistInput.addEventListener('change', function(e) {
+                const file = e.target.files[0];
+                if (file && validateImageFile(file, 5)) {
+                    previewImage(file, 'checklist-thumbnail-preview');
+                }
+            });
+        }
+
+        // Section thumbnail previews (delegated event)
+        document.addEventListener('change', function(e) {
+            if (e.target.classList.contains('section-thumbnail-input')) {
+                const file = e.target.files[0];
+                if (file && validateImageFile(file, 2)) {
+                    const section = e.target.closest('.section-card');
+                    const preview = section ? section.querySelector('.section-thumbnail-preview') : null;
+                    if (preview) {
+                        previewImage(file, preview);
+                    }
+                }
+            }
+        });
+    }
+
+    function validateImageFile(file, maxSizeMB) {
+        const validTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+
+        if (!validTypes.includes(file.type)) {
+            showToast('Invalid format. Use JPG, PNG, WebP, or GIF.', 'error');
+            return false;
+        }
+
+        const maxSize = maxSizeMB * 1024 * 1024;
+        if (file.size > maxSize) {
+            showToast(`Image must be under ${maxSizeMB}MB.`, 'error');
+            return false;
+        }
+
+        return true;
+    }
+
+    function previewImage(file, previewElement) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            if (typeof previewElement === 'string') {
+                previewElement = document.getElementById(previewElement);
+            }
+
+            if (previewElement) {
+                const img = previewElement.querySelector('img');
+                if (img) {
+                    img.src = e.target.result;
+                    previewElement.classList.remove('hidden');
+                }
+            }
+        };
+        reader.readAsDataURL(file);
+    }
+
+    function initImageUploads() {
+        // Checklist thumbnail upload
+        const checklistInput = document.getElementById('checklist-thumbnail-input');
+        if (checklistInput) {
+            checklistInput.addEventListener('change', async function(e) {
+                const file = e.target.files[0];
+                if (!file) return;
+
+                const checklistId = this.dataset.checklistId;
+                await uploadChecklistThumbnail(checklistId, file);
+            });
+        }
+
+        // Checklist thumbnail removal
+        const removeBtn = document.getElementById('remove-checklist-thumbnail-btn');
+        if (removeBtn) {
+            removeBtn.addEventListener('click', async function() {
+                const checklistId = this.dataset.checklistId;
+                await removeChecklistThumbnail(checklistId);
+            });
+        }
+
+        // Section thumbnail uploads (delegated)
+        document.addEventListener('change', async function(e) {
+            if (e.target.classList.contains('section-thumbnail-input')) {
+                const file = e.target.files[0];
+                if (!file) return;
+
+                const sectionId = e.target.dataset.sectionId;
+                await uploadSectionThumbnail(sectionId, file);
+            }
+        });
+
+        // Section thumbnail removal (delegated)
+        document.addEventListener('click', async function(e) {
+            if (e.target.closest('.section-remove-thumbnail-btn')) {
+                const btn = e.target.closest('.section-remove-thumbnail-btn');
+                const sectionId = btn.dataset.sectionId;
+                await removeSectionThumbnail(sectionId);
+            }
+        });
+
+        // Inline image uploads
+        document.addEventListener('click', async function(e) {
+            if (e.target.closest('.add-inline-image-btn')) {
+                const btn = e.target.closest('.add-inline-image-btn');
+                const container = btn.closest('.mt-3');
+                const input = container.querySelector('.inline-image-input');
+                const captionInput = container.querySelector('.inline-image-caption');
+
+                const file = input.files[0];
+                if (!file) {
+                    showToast('Please select an image.', 'error');
+                    return;
+                }
+
+                const sectionId = btn.dataset.sectionId;
+                const caption = captionInput.value.trim();
+
+                await uploadInlineImage(sectionId, file, caption);
+            }
+        });
+    }
+
+    async function uploadChecklistThumbnail(checklistId, file) {
+        const formData = new FormData();
+        formData.append('thumbnail', file);
+
+        try {
+            const response = await fetch(`/api/v1/checklists/${checklistId}/image/`, {
+                method: 'POST',
+                headers: {'X-CSRFToken': getCSRFToken()},
+                body: formData
+            });
+
+            const data = await response.json();
+
+            if (response.ok) {
+                showToast('Thumbnail uploaded!', 'success');
+                location.reload();
+            } else {
+                showToast(data.error || 'Upload failed.', 'error');
+            }
+        } catch (error) {
+            console.error('Upload error:', error);
+            showToast('Network error.', 'error');
+        }
+    }
+
+    async function removeChecklistThumbnail(checklistId) {
+        if (!confirm('Remove checklist thumbnail?')) return;
+
+        try {
+            const response = await fetch(`/api/v1/checklists/${checklistId}/image/`, {
+                method: 'DELETE',
+                headers: {'X-CSRFToken': getCSRFToken()}
+            });
+
+            if (response.ok) {
+                showToast('Thumbnail removed.', 'success');
+                location.reload();
+            } else {
+                const data = await response.json();
+                showToast(data.error || 'Failed to remove.', 'error');
+            }
+        } catch (error) {
+            console.error('Remove error:', error);
+            showToast('Network error.', 'error');
+        }
+    }
+
+    async function uploadSectionThumbnail(sectionId, file) {
+        const formData = new FormData();
+        formData.append('thumbnail', file);
+
+        try {
+            const response = await fetch(`/api/v1/checklists/sections/${sectionId}/image/`, {
+                method: 'POST',
+                headers: {'X-CSRFToken': getCSRFToken()},
+                body: formData
+            });
+
+            const data = await response.json();
+
+            if (response.ok) {
+                showToast('Section thumbnail uploaded!', 'success');
+                location.reload();
+            } else {
+                showToast(data.error || 'Upload failed.', 'error');
+            }
+        } catch (error) {
+            console.error('Upload error:', error);
+            showToast('Network error.', 'error');
+        }
+    }
+
+    async function removeSectionThumbnail(sectionId) {
+        if (!confirm('Remove section thumbnail?')) return;
+
+        try {
+            const response = await fetch(`/api/v1/checklists/sections/${sectionId}/image/`, {
+                method: 'DELETE',
+                headers: {'X-CSRFToken': getCSRFToken()}
+            });
+
+            if (response.ok) {
+                showToast('Section thumbnail removed.', 'success');
+                location.reload();
+            } else {
+                const data = await response.json();
+                showToast(data.error || 'Failed to remove.', 'error');
+            }
+        } catch (error) {
+            console.error('Remove error:', error);
+            showToast('Network error.', 'error');
+        }
+    }
+
+    async function uploadInlineImage(sectionId, file, caption) {
+        const formData = new FormData();
+        formData.append('image', file);
+        if (caption) formData.append('text', caption);
+
+        try {
+            const response = await fetch(`/api/v1/checklists/sections/${sectionId}/items/image/`, {
+                method: 'POST',
+                headers: {'X-CSRFToken': getCSRFToken()},
+                body: formData
+            });
+
+            const data = await response.json();
+
+            if (response.ok) {
+                showToast('Inline image added!', 'success');
+                location.reload();
+            } else {
+                showToast(data.error || 'Upload failed.', 'error');
+            }
+        } catch (error) {
+            console.error('Upload error:', error);
+            showToast('Network error.', 'error');
+        }
+    }
+
+    // ==========================================
+    // Checklist Image Modal
+    // ==========================================
+
+    function initChecklistImageModal() {
+        const imageModal = document.getElementById('checklist-image-modal');
+        const modalImage = document.getElementById('checklist-modal-image');
+        const modalCaption = document.getElementById('checklist-modal-caption');
+
+        if (!imageModal || !modalImage || !modalCaption) return;
+
+        // Add click handlers to all clickable images (delegated event)
+        document.addEventListener('click', function(e) {
+            const clickableImage = e.target.closest('.checklist-image-clickable');
+            if (clickableImage) {
+                e.preventDefault();
+
+                // Get image data from data attributes
+                const imageSrc = clickableImage.dataset.imageSrc;
+                const imageAlt = clickableImage.dataset.imageAlt || 'Checklist image';
+                const imageCaption = clickableImage.dataset.imageCaption;
+
+                // Set modal content
+                modalImage.src = imageSrc;
+                modalImage.alt = imageAlt;
+
+                // Handle caption
+                if (imageCaption) {
+                    const captionText = modalCaption.querySelector('p');
+                    if (captionText) {
+                        captionText.textContent = imageCaption;
+                        modalCaption.classList.remove('hidden');
+                    }
+                } else {
+                    modalCaption.classList.add('hidden');
+                }
+
+                // Show modal
+                imageModal.showModal();
+            }
+        });
+
+        // Keyboard navigation - close on Escape
+        imageModal.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                imageModal.close();
+            }
+        });
+    }
+
+    // ==========================================
+    // Initialize
+    // ==========================================
+
+    document.addEventListener('DOMContentLoaded', function() {
+        initChecklistDetail();
+        initChecklistEdit();
+        initChecklistSection();
+        initChecklistImageModal();
+    });
+
+})();

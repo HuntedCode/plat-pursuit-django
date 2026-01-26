@@ -103,3 +103,21 @@ def handle_comment_upvotes(profile, milestone):
     current = total_upvotes if total_upvotes else 0
     achieved = current >= target
     return {'achieved': achieved, 'progress': current, 'updated': True}
+
+@register_handler('checklist_upvotes')
+def handle_checklist_upvotes(profile, milestone):
+    """Check progress for total checklist upvotes received across all user checklists"""
+    from django.db.models import Sum
+    from trophies.models import Checklist
+
+    target = milestone.criteria_details.get('target', 0)
+
+    # Sum all upvote_count values for the profile's checklists
+    total_upvotes = Checklist.objects.filter(
+        profile=profile,
+        is_deleted=False
+    ).aggregate(total=Sum('upvote_count'))['total']
+
+    current = total_upvotes if total_upvotes else 0
+    achieved = current >= target
+    return {'achieved': achieved, 'progress': current, 'updated': True}

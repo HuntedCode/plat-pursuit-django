@@ -1,5 +1,8 @@
 from rest_framework import serializers
-from trophies.models import Profile, EarnedTrophy, Comment, CommentVote
+from trophies.models import (
+    Profile, EarnedTrophy, Comment, CommentVote,
+    Checklist, ChecklistSection, ChecklistItem, ChecklistVote, UserChecklistProgress
+)
 from django.db.models import F
 from django.utils.translation import gettext_lazy as _
 
@@ -147,3 +150,316 @@ class CommentCreateSerializer(serializers.Serializer):
     """Serializer for comment creation input."""
     body = serializers.CharField(max_length=2000, required=True)
     parent_id = serializers.IntegerField(required=False, allow_null=True)
+
+
+# ---------- Checklist Serializers ----------
+
+class ChecklistAuthorSerializer(serializers.ModelSerializer):
+    """Serializer for checklist author info."""
+    username = serializers.SerializerMethodField()
+    author_has_platinum = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Profile
+        fields = ['id', 'username', 'avatar_url', 'flag', 'user_is_premium', 'author_has_platinum']
+
+    def get_username(self, obj):
+        return obj.display_psn_username or obj.psn_username
+
+    def get_author_has_platinum(self, obj):
+        """Check if author has platinum for the checklist's game/concept."""
+        # Try to get the checklist from context (set by parent serializer)
+        checklist = self.context.get('checklist')
+        if not checklist or not checklist.concept:
+            return False
+
+        from trophies.models import ProfileGame
+        pg = ProfileGame.objects.filter(
+            profile=obj,
+            game__concept=checklist.concept
+        ).order_by('-progress').first()
+
+        return pg.has_plat if pg else False
+
+
+class ChecklistItemSerializer(serializers.ModelSerializer):
+    """Serializer for checklist items."""
+    image_url = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ChecklistItem
+        fields = ['id', 'text', 'item_type', 'trophy_id', 'order', 'image_url']
+        read_only_fields = fields
+
+    def get_image_url(self, obj):
+        """Return absolute URL for image items."""
+        if obj.item_type == 'image' and obj.image:
+            request = self.context.get('request')
+            if request:
+                return request.build_absolute_uri(obj.image.url)
+            return obj.image.url
+        return None
+
+
+class ChecklistSectionSerializer(serializers.ModelSerializer):
+    """Serializer for checklist sections with items."""
+    items = ChecklistItemSerializer(many=True, read_only=True)
+    item_count = serializers.IntegerField(read_only=True)
+    thumbnail_url = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ChecklistSection
+        fields = ['id', 'subtitle', 'description', 'order', 'items', 'item_count', 'thumbnail_url']
+        read_only_fields = fields
+
+    def get_thumbnail_url(self, obj):
+        """Return absolute URL for section thumbnail."""
+        if obj.thumbnail:
+            request = self.context.get('request')
+            if request:
+                return request.build_absolute_uri(obj.thumbnail.url)
+            return obj.thumbnail.url
+        return None
+
+
+class ChecklistSerializer(serializers.ModelSerializer):
+    """Serializer for checklist list view."""
+    author = ChecklistAuthorSerializer(source='profile', read_only=True)
+    total_items = serializers.IntegerField(read_only=True)
+    section_count = serializers.SerializerMethodField()
+    user_has_voted = serializers.SerializerMethodField()
+    user_progress = serializers.SerializerMethodField()
+    can_edit = serializers.SerializerMethodField()
+    can_save_progress = serializers.SerializerMethodField()
+    thumbnail_url = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Checklist
+        fields = [
+            'id', 'title', 'description', 'author', 'status',
+            'upvote_count', 'progress_save_count', 'total_items', 'section_count',
+            'user_has_voted', 'user_progress', 'can_edit', 'can_save_progress',
+            'created_at', 'published_at', 'thumbnail_url'
+        ]
+        read_only_fields = fields
+
+    def get_section_count(self, obj):
+        return obj.sections.count()
+
+    def get_user_has_voted(self, obj):
+        request = self.context.get('request')
+        if not request or not request.user.is_authenticated:
+            return False
+        profile = getattr(request.user, 'profile', None)
+        if not profile:
+            return False
+        # Check if annotated value exists (from queryset optimization)
+        if hasattr(obj, 'user_has_voted'):
+            return obj.user_has_voted
+        return ChecklistVote.objects.filter(checklist=obj, profile=profile).exists()
+
+    def get_user_progress(self, obj):
+        request = self.context.get('request')
+        if not request or not request.user.is_authenticated:
+            return None
+        profile = getattr(request.user, 'profile', None)
+        if not profile:
+            return None
+        # Check if annotated value exists (from queryset optimization)
+        if hasattr(obj, 'user_progress_percentage'):
+            if obj.user_progress_percentage > 0:
+                return {
+                    'percentage': obj.user_progress_percentage
+                }
+            return None
+        try:
+            progress = UserChecklistProgress.objects.get(checklist=obj, profile=profile)
+            return {
+                'items_completed': progress.items_completed,
+                'total_items': progress.total_items,
+                'percentage': progress.progress_percentage
+            }
+        except UserChecklistProgress.DoesNotExist:
+            return None
+
+    def get_can_edit(self, obj):
+        request = self.context.get('request')
+        if not request or not request.user.is_authenticated:
+            return False
+        profile = getattr(request.user, 'profile', None)
+        return profile and obj.profile == profile and not obj.is_deleted
+
+    def get_can_save_progress(self, obj):
+        """Check if user can save progress (premium or author)."""
+        request = self.context.get('request')
+        if not request or not request.user.is_authenticated:
+            return False
+        profile = getattr(request.user, 'profile', None)
+        if not profile:
+            return False
+        # Author can always save
+        if obj.profile == profile:
+            return True
+        # Premium users can save on any checklist
+        return profile.user_is_premium
+
+    def get_thumbnail_url(self, obj):
+        """Return absolute URL for thumbnail."""
+        if obj.thumbnail:
+            request = self.context.get('request')
+            if request:
+                return request.build_absolute_uri(obj.thumbnail.url)
+            return obj.thumbnail.url
+        return None
+
+    def to_representation(self, instance):
+        """Override to pass checklist context to author serializer."""
+        # Add checklist to context for nested serializers
+        self.fields['author'].context.update({'checklist': instance})
+        return super().to_representation(instance)
+
+
+class ChecklistDetailSerializer(ChecklistSerializer):
+    """Serializer for checklist detail with sections and items."""
+    sections = ChecklistSectionSerializer(many=True, read_only=True)
+    user_completed_items = serializers.SerializerMethodField()
+
+    class Meta(ChecklistSerializer.Meta):
+        fields = ChecklistSerializer.Meta.fields + ['sections', 'user_completed_items']
+
+    def get_user_completed_items(self, obj):
+        """Get list of completed item IDs for the viewing user."""
+        request = self.context.get('request')
+        if not request or not request.user.is_authenticated:
+            return []
+        profile = getattr(request.user, 'profile', None)
+        if not profile:
+            return []
+        try:
+            progress = UserChecklistProgress.objects.get(checklist=obj, profile=profile)
+            return progress.completed_items
+        except UserChecklistProgress.DoesNotExist:
+            return []
+
+
+class ChecklistCreateSerializer(serializers.Serializer):
+    """Serializer for checklist creation input."""
+    title = serializers.CharField(max_length=200, required=True)
+    description = serializers.CharField(max_length=2000, required=False, allow_blank=True)
+
+
+class ChecklistUpdateSerializer(serializers.Serializer):
+    """Serializer for checklist update input."""
+    title = serializers.CharField(max_length=200, required=False)
+    description = serializers.CharField(max_length=2000, required=False, allow_blank=True)
+
+
+class ChecklistSectionCreateSerializer(serializers.Serializer):
+    """Serializer for section creation input."""
+    subtitle = serializers.CharField(max_length=200, required=True)
+    description = serializers.CharField(max_length=1000, required=False, allow_blank=True)
+    order = serializers.IntegerField(required=False, min_value=0)
+
+
+class ChecklistSectionUpdateSerializer(serializers.Serializer):
+    """Serializer for section update input."""
+    subtitle = serializers.CharField(max_length=200, required=False)
+    description = serializers.CharField(max_length=1000, required=False, allow_blank=True)
+    order = serializers.IntegerField(required=False, min_value=0)
+
+
+class ChecklistItemCreateSerializer(serializers.Serializer):
+    """Serializer for item creation input."""
+    text = serializers.CharField(max_length=500, required=True)
+    item_type = serializers.ChoiceField(
+        choices=['item', 'sub_header'],
+        default='item',
+        required=False
+    )
+    trophy_id = serializers.IntegerField(required=False, allow_null=True)
+    order = serializers.IntegerField(required=False, min_value=0)
+
+
+class ChecklistItemUpdateSerializer(serializers.Serializer):
+    """Serializer for item update input."""
+    text = serializers.CharField(max_length=500, required=False)
+    item_type = serializers.ChoiceField(
+        choices=['item', 'sub_header'],
+        required=False
+    )
+    trophy_id = serializers.IntegerField(required=False, allow_null=True)
+    order = serializers.IntegerField(required=False, min_value=0)
+
+
+class ChecklistItemBulkItemSerializer(serializers.Serializer):
+    """Serializer for a single item in bulk upload."""
+    text = serializers.CharField(max_length=500, required=True, allow_blank=False)
+    item_type = serializers.ChoiceField(
+        choices=['item', 'sub_header'],
+        default='item',
+        required=False
+    )
+
+
+class ChecklistItemBulkCreateSerializer(serializers.Serializer):
+    """Serializer for bulk item creation input."""
+    items = ChecklistItemBulkItemSerializer(many=True, required=True)
+
+    def validate_items(self, value):
+        if not value:
+            raise serializers.ValidationError("At least one item is required.")
+
+        if len(value) > 100:
+            raise serializers.ValidationError("Bulk upload limited to 100 items at a time.")
+
+        return value
+
+
+class ChecklistReorderSerializer(serializers.Serializer):
+    """Serializer for reordering sections or items."""
+    ids = serializers.ListField(
+        child=serializers.IntegerField(),
+        required=True,
+        min_length=1
+    )
+
+
+class ChecklistReportSerializer(serializers.Serializer):
+    """Serializer for checklist report input."""
+    reason = serializers.ChoiceField(
+        choices=['spam', 'inappropriate', 'misinformation', 'plagiarism', 'other'],
+        required=True
+    )
+    details = serializers.CharField(max_length=500, required=False, allow_blank=True)
+
+
+class ChecklistImageUploadSerializer(serializers.Serializer):
+    """Upload checklist thumbnail."""
+    thumbnail = serializers.ImageField(required=True)
+
+    def validate_thumbnail(self, value):
+        if value.size > 5 * 1024 * 1024:
+            raise serializers.ValidationError("Image must be under 5MB.")
+        return value
+
+
+class SectionImageUploadSerializer(serializers.Serializer):
+    """Upload section thumbnail."""
+    thumbnail = serializers.ImageField(required=True)
+
+    def validate_thumbnail(self, value):
+        if value.size > 2 * 1024 * 1024:
+            raise serializers.ValidationError("Image must be under 2MB.")
+        return value
+
+
+class ItemImageCreateSerializer(serializers.Serializer):
+    """Create inline image item."""
+    image = serializers.ImageField(required=True)
+    text = serializers.CharField(required=False, max_length=500, allow_blank=True)
+    order = serializers.IntegerField(required=False, min_value=0)
+
+    def validate_image(self, value):
+        if value.size > 2 * 1024 * 1024:
+            raise serializers.ValidationError("Image must be under 2MB.")
+        return value

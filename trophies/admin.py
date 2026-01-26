@@ -362,7 +362,7 @@ class BadgeAdmin(admin.ModelAdmin):
 
 @admin.register(Stage)
 class StageAdmin(admin.ModelAdmin):
-    list_display = ('__str__', 'series_slug', 'stage_number', 'title', 'has_online_trophies')
+    list_display = ('__str__', 'series_slug', 'stage_number', 'title', 'required_tiers', 'has_online_trophies')
     list_filter = ('series_slug', 'stage_number')
     search_fields = ('title',)
     autocomplete_fields = ['concepts']

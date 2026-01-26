@@ -1,0 +1,116 @@
+{% load static %}
+{# Checklist card component - used in game detail checklist section #}
+{# Expects checklist object with: id, title, description, author, upvote_count, progress_save_count, total_items, section_count, user_has_voted, user_progress, can_edit #}
+<div class="card bg-base-100 border-2 border-base-300 shadow-md hover:shadow-lg transition-shadow duration-200"
+     data-checklist-id="{{ checklist.id }}">
+    {# Thumbnail Image - Always show (custom or default) #}
+    <figure class="w-full aspect-video bg-base-300 rounded-t-lg overflow-hidden relative">
+        {% if checklist.thumbnail %}
+        <img src="{{ checklist.thumbnail.url }}"
+             alt="{{ checklist.title }}"
+             class="w-full h-full object-cover hover:scale-105 transition-transform duration-200"
+             loading="lazy">
+        {% else %}
+        {# Default placeholder with checklist icon #}
+        <div class="w-full h-full flex items-center justify-center bg-gradient-to-br from-base-200 to-base-300">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-24 w-24 text-base-content/20" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/>
+            </svg>
+        </div>
+        {% endif %}
+    </figure>
+
+    <div class="card-body p-4">
+        {# Header - Title and Vote #}
+        <div class="flex justify-between items-start gap-2">
+            <a href="{% url 'checklist_detail' checklist.id %}" class="flex-1 hover:underline">
+                <h3 class="card-title text-lg line-clamp-2">{{ checklist.title }}</h3>
+            </a>
+            <div class="flex flex-col items-center gap-1">
+                <button class="btn btn-ghost btn-xs checklist-vote-btn {% if checklist.user_has_voted %}text-secondary{% endif %}"
+                        data-checklist-id="{{ checklist.id }}"
+                        title="{% if checklist.user_has_voted %}Remove upvote{% else %}Upvote{% endif %}">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="{% if checklist.user_has_voted %}currentColor{% else %}none{% endif %}" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"/>
+                    </svg>
+                </button>
+                <span class="text-sm font-semibold checklist-vote-count">{{ checklist.upvote_count }}</span>
+            </div>
+        </div>
+
+        {# Description Preview #}
+        {% if checklist.description %}
+        <p class="text-sm text-base-content/70 line-clamp-2 mt-1">{{ checklist.description }}</p>
+        {% endif %}
+
+        {# Author Info #}
+        <div class="flex items-center gap-2 mt-3">
+            <div class="avatar">
+                <div class="w-6 h-6 rounded-full ring-2 ring-primary">
+                    <img src="{{ checklist.author.avatar_url|default:'/static/images/default_avatar.png' }}" alt="{{ checklist.author.username }}">
+                </div>
+            </div>
+            <span class="text-sm text-base-content/70">
+                by <a href="{% url 'profile_detail' checklist.author.username %}" class="font-medium {% if checklist.author.user_is_premium %}legendary-title{% else %}text-secondary{% endif %} hover:link">{{ checklist.author.username }}</a>
+                {% if checklist.author.flag %}
+                <span class="ml-1">{{ checklist.author.flag }}</span>
+                {% endif %}
+            </span>
+            {# Has Plat #}
+            {% if checklist.author.author_has_platinum %}
+                <figure class="w-6 tooltip hover:scale-105 z-50" data-tip="Author Has Plat">
+                    <img src="{% static 'images/plat.png' %}" class="w-full object-cover" />
+                </figure>
+            {% endif %}
+        </div>
+
+        {# Stats Row #}
+        <div class="flex flex-wrap items-center gap-3 mt-3 text-xs text-base-content/60">
+            <div class="flex items-center gap-1" title="Sections">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"/>
+                </svg>
+                <span>{{ checklist.section_count }} sections</span>
+            </div>
+            <div class="flex items-center gap-1" title="Total items">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                </svg>
+                <span>{{ checklist.total_items }} items</span>
+            </div>
+            <div class="flex items-center gap-1" title="Users tracking">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/>
+                </svg>
+                <span>{{ checklist.progress_save_count }} tracking</span>
+            </div>
+        </div>
+
+        {# User Progress Bar (if has progress) #}
+        {% if checklist.user_progress %}
+        <div class="mt-3">
+            <div class="flex justify-between items-center text-xs mb-1">
+                <span class="text-base-content/70">Your progress</span>
+                <span class="font-semibold text-secondary">{{ checklist.user_progress.percentage|floatformat:0 }}%</span>
+            </div>
+            <progress class="progress progress-secondary w-full h-2" value="{{ checklist.user_progress.percentage }}" max="100"></progress>
+        </div>
+        {% endif %}
+
+        {# Actions #}
+        <div class="card-actions justify-end mt-3 pt-3 border-t border-base-300">
+            <a href="{% url 'checklist_detail' checklist.id %}" class="btn btn-secondary btn-sm">
+                {% if checklist.user_progress %}
+                Continue
+                {% else %}
+                View
+                {% endif %}
+            </a>
+            {% if checklist.can_edit %}
+            <a href="{% url 'checklist_edit' checklist.id %}" class="btn btn-ghost btn-sm">
+                Edit
+            </a>
+            {% endif %}
+        </div>
+    </div>
+</div>

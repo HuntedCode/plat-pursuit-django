@@ -30,8 +30,8 @@ sitemaps = {
     'games': GameSitemap,
     'profiles': ProfileSitemap,
 }
-from trophies.views import GamesListView, TrophiesListView, ProfilesListView, SearchView, GameDetailView, ProfileDetailView, TrophyCaseView, ToggleSelectionView, BadgeListView, BadgeDetailView, GuideListView, ProfileSyncStatusView, TriggerSyncView, SearchSyncProfileView, AddSyncStatusView, LinkPSNView, ProfileVerifyView, TokenMonitoringView, BadgeCreationView, BadgeLeaderboardsView, OverallBadgeLeaderboardsView, MilestoneListView, CommentModerationView, ModerationActionView, ModerationLogView
-from users.views import CustomConfirmEmailView, stripe_webhook, SubscriptionManagementView
+from trophies.views import GamesListView, TrophiesListView, ProfilesListView, SearchView, GameDetailView, ProfileDetailView, TrophyCaseView, ToggleSelectionView, BadgeListView, BadgeDetailView, GuideListView, ProfileSyncStatusView, TriggerSyncView, SearchSyncProfileView, AddSyncStatusView, LinkPSNView, ProfileVerifyView, TokenMonitoringView, BadgeCreationView, BadgeLeaderboardsView, OverallBadgeLeaderboardsView, MilestoneListView, CommentModerationView, ModerationActionView, ModerationLogView, ChecklistDetailView, ChecklistCreateView, ChecklistEditView, MyChecklistsView
+from users.views import CustomConfirmEmailView, stripe_webhook
 
 urlpatterns = [
     path("admin/", admin.site.urls),
@@ -52,6 +52,12 @@ urlpatterns = [
     path('leaderboard/badges/<str:series_slug>/', BadgeLeaderboardsView.as_view(), name='badge_leaderboards' ),
 
     path('pptv/', GuideListView.as_view(), name='guides_list'),
+
+    # Checklist URLs
+    path('checklists/<int:checklist_id>/', ChecklistDetailView.as_view(), name='checklist_detail'),
+    path('checklists/<int:checklist_id>/edit/', ChecklistEditView.as_view(), name='checklist_edit'),
+    path('checklists/create/<int:concept_id>/', ChecklistCreateView.as_view(), name='checklist_create'),
+    path('my-checklists/', MyChecklistsView.as_view(), name='my_checklists'),
 
     path('profiles/<str:psn_username>/trophy-case/', TrophyCaseView.as_view(), name='trophy_case'),
     path('toggle-selection/', ToggleSelectionView.as_view(), name='toggle-selection'),
@@ -76,7 +82,6 @@ urlpatterns = [
     path('monitoring/tokens/', TokenMonitoringView.as_view(), name='token_monitoring'),
 
     path("stripe/webhook/", stripe_webhook, name="stripe_webhook"),
-    path('subscription-management/', SubscriptionManagementView.as_view(), name='subscription_management'),
     path('ads.txt', AdsTxtView.as_view(), name='ads_txt'),
     path('robots.txt', RobotsTxtView.as_view(), name='robots_txt'),
     path('sitemap.xml', sitemap, {'sitemaps': sitemaps}, name='sitemap'),
