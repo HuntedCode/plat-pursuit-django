@@ -167,6 +167,15 @@ class TokenKeeper:
         self._health_thread = None
         self._stats_thread = None
         self._job_workers = []
+
+        # Database lock error tracking for automatic recovery
+        self._db_lock_errors = []  # List of timestamps when DB lock errors occurred
+        self._db_lock_threshold = int(os.getenv("DB_LOCK_THRESHOLD", 5))  # Errors before restart
+        self._db_lock_window = int(os.getenv("DB_LOCK_WINDOW", 60))  # Window in seconds
+        self._restart_cooldown = int(os.getenv("DB_LOCK_COOLDOWN", 30))  # Cooldown before restart
+        self._shutdown_requested = False
+        self._db_lock_lock = threading.Lock()  # Thread safety for error tracking
+
         running_key = f"token_keeper:running:{self.machine_id}"
         if redis_client.get(running_key):
             logger.info(f"TokenKeeper already running for machine {self.machine_id}")
@@ -201,7 +210,51 @@ class TokenKeeper:
                 redis_client.delete(f"token_keeper:pending_refresh:{self.machine_id}:{group_id}:{i}")
         logger.info("TokenKeeper Redis state cleaned")
 
-    
+    def _record_db_lock_error(self):
+        """Record a database lock error and trigger restart if threshold exceeded."""
+        with self._db_lock_lock:
+            if self._shutdown_requested:
+                return  # Already shutting down, don't record more errors
+
+            now = time.time()
+            self._db_lock_errors.append(now)
+            # Keep only errors within the tracking window
+            self._db_lock_errors = [t for t in self._db_lock_errors if now - t < self._db_lock_window]
+
+            error_count = len(self._db_lock_errors)
+            logger.warning(f"Database lock error recorded ({error_count}/{self._db_lock_threshold} in {self._db_lock_window}s window)")
+
+            if error_count >= self._db_lock_threshold:
+                self._initiate_restart()
+
+    def _initiate_restart(self):
+        """Gracefully shutdown, wait, and restart the TokenKeeper."""
+        if self._shutdown_requested:
+            return
+        self._shutdown_requested = True
+
+        logger.critical(f"Database lock threshold exceeded! Initiating restart in {self._restart_cooldown}s...")
+
+        # Cleanup current state
+        self._cleanup()
+
+        # Wait for database to recover
+        logger.info(f"Waiting {self._restart_cooldown}s for database to recover...")
+        time.sleep(self._restart_cooldown)
+
+        # Reset shutdown flag and error tracking
+        self._shutdown_requested = False
+        self._db_lock_errors = []
+
+        logger.info("Reinitializing TokenKeeper...")
+        self.initialize_groups()
+        self._start_health_monitor()
+        self._start_stats_publisher()
+        self._start_job_workers()
+        redis_client.set(f"token_keeper:running:{self.machine_id}", "1", ex=3600)
+
+        logger.info("TokenKeeper restarted successfully after database lock recovery")
+
     def _start_health_monitor(self):
         """Start background thread for proactive health checks."""
         self._health_thread = threading.Thread(target=self._health_loop, daemon=True)
@@ -323,7 +376,9 @@ class TokenKeeper:
             inst.cleanup_cache()
         except OperationalError as db_err:
             # Database lock errors are transient - don't mark instance unhealthy
-            logger.warning(f"Database error in health check for instance {inst.instance_id} (non-fatal): {db_err}")
+            logger.warning(f"Database error in health check for instance {inst.instance_id}: {db_err}")
+            if "database is locked" in str(db_err).lower():
+                self._record_db_lock_error()
         except Exception as e:
             logger.error(f"Health check failed for {inst.instance_id}: {e}")
             inst.last_error = f"{datetime.now().isoformat()} Refresh error: {str(e)}"
@@ -378,6 +433,11 @@ class TokenKeeper:
 
                 logger.info(f"Job: {job_type} - Profile: {profile_id} completed successfully in {job_duration:.1f}s")
                 self._complete_job(profile_id, queue_name)
+            except OperationalError as db_err:
+                logger.error(f"Database error in job worker: {db_err}")
+                if "database is locked" in str(db_err).lower():
+                    self._record_db_lock_error()
+                self._check_stuck_instances()
             except Exception as e:
                 logger.error(f"Error in job worker: {e}")
                 # Reset any instances stuck in busy state for too long
