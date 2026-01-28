@@ -2819,7 +2819,7 @@ class ChecklistCreateView(PremiumRequiredMixin, LoginRequiredMixin, ProfileHotba
         checklist, error = ChecklistService.create_checklist(
             profile=profile,
             concept=concept,
-            title=f"New Checklist for {concept.unified_title}"
+            title=f"New Guide for {concept.unified_title}"
         )
 
         if error:
@@ -2830,7 +2830,7 @@ class ChecklistCreateView(PremiumRequiredMixin, LoginRequiredMixin, ProfileHotba
         checklist.selected_game = game
         checklist.save(update_fields=['selected_game', 'updated_at'])
 
-        messages.success(request, "Checklist created! Start adding sections and items.")
+        messages.success(request, "Guide created! Start adding sections and items.")
         return redirect('checklist_edit', checklist_id=checklist.id)
 
 

@@ -464,6 +464,13 @@ class Game(models.Model):
         if not self.title_platform:
             return 'Unknown'
         return ', '.join(self.title_platform)
+    
+    @property
+    def regions_display(self):
+        """Format regions for display"""
+        if not self.is_regional:
+            return 'Global'
+        return ', '.join(self.region)
 
     @property
     def trophy_count_summary(self):

@@ -71,7 +71,7 @@
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
                                     </svg>
                                     {% if checklist.selected_game %}
-                                        <span>{{ checklist.selected_game.title_name }} ({{ checklist.selected_game.platforms_display }}) - {{ checklist.selected_game.trophy_count_summary }}</span>
+                                        <span>{{ checklist.selected_game.title_name }} ({{ checklist.selected_game.platforms_display }} | {{ checklist.selected_game.regions_display }}) - {{ checklist.selected_game.trophy_count_summary }}</span>
                                     {% else %}
                                         <span class="text-base-content/50">No game selected</span>
                                     {% endif %}
@@ -85,7 +85,7 @@
                                     {% for game in concept_games %}
                                     <option value="{{ game.id }}"
                                             {% if checklist.selected_game and checklist.selected_game.id == game.id %}selected{% endif %}>
-                                        {{ game.title_name }} ({{ game.platforms_display }}) - {{ game.trophy_count_summary }}
+                                        {{ game.title_name }} ({{ checklist.selected_game.platforms_display }} | {{ checklist.selected_game.regions_display }}) - {{ game.trophy_count_summary }}
                                     </option>
                                     {% endfor %}
                                 </select>
