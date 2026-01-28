@@ -25,7 +25,7 @@
 
                         {# Title Input #}
                         <div class="form-control w-full">
-                            <label class="label">
+                            <label class="label flex-wrap gap-y-0">
                                 <span class="label-text font-semibold">Title</span>
                                 <span class="label-text-alt text-base-content/50">
                                     <span class="char-count" data-target="checklist-title">{{ checklist.title|length }}</span>/200
@@ -41,7 +41,7 @@
 
                         {# Description Input #}
                         <div class="form-control w-full mt-4">
-                            <label class="label">
+                            <label class="label flex-wrap gap-y-0">
                                 <span class="label-text font-semibold">Description (optional)</span>
                                 <span class="label-text-alt text-base-content/50">
                                     <span class="char-count" data-target="checklist-description">{{ checklist.description|default:''|length }}</span>/2000
@@ -56,7 +56,7 @@
 
                         {# Game Selection #}
                         <div class="form-control w-full mt-4">
-                            <label class="label">
+                            <label class="label flex-wrap gap-y-0">
                                 <span class="label-text font-semibold">Selected Game</span>
                                 {% if checklist.is_published %}
                                 <span class="label-text-alt text-warning">Cannot change after publishing</span>
@@ -79,60 +79,58 @@
                             {% else %}
                                 {# Editable dropdown #}
                                 <select id="checklist-game-selector"
-                                        class="select select-bordered w-full"
+                                        class="select select-bordered w-full text-ellipsis"
                                         data-checklist-id="{{ checklist.id }}">
                                     <option value="">Choose a game...</option>
                                     {% for game in concept_games %}
                                     <option value="{{ game.id }}"
                                             {% if checklist.selected_game and checklist.selected_game.id == game.id %}selected{% endif %}>
-                                        {{ game.title_name }} ({{ checklist.selected_game.platforms_display }} | {{ checklist.selected_game.regions_display }}) - {{ game.trophy_count_summary }}
+                                        {{ game.title_name }} ({{ game.platforms_display }} | {{ game.regions_display }}) - {{ game.trophy_count_summary }}
                                     </option>
                                     {% endfor %}
                                 </select>
-                                <div class="label">
-                                    <span class="label-text-alt">This selection will be locked once the guide is published</span>
+                                <div class="label py-1">
+                                    <span class="label-text-alt text-wrap">Locked after publishing</span>
                                 </div>
                             {% endif %}
                         </div>
 
                         {# Checklist Thumbnail Upload #}
                         <div class="form-control w-full mt-4">
-                            <label class="label">
+                            <label class="label flex-wrap gap-y-0">
                                 <span class="label-text font-semibold">Guide Thumbnail (optional)</span>
-                                <span class="label-text-alt text-base-content/50">Max 5MB • JPG, PNG, WebP, GIF</span>
+                                <span class="label-text-alt text-base-content/50">Max 5MB</span>
                             </label>
-                            <div class="flex items-center gap-4">
-                                {# Preview #}
-                                <figure id="checklist-thumbnail-preview"
-                                        class="w-32 aspect-video bg-base-300 rounded-lg overflow-hidden shrink-0 {% if not checklist.thumbnail %}hidden{% endif %}">
-                                    <img src="{% if checklist.thumbnail %}{{ checklist.thumbnail.url }}{% endif %}"
-                                         alt="Thumbnail preview"
-                                         class="w-full h-full object-cover">
-                                </figure>
 
-                                {# File Input #}
-                                <div class="flex-1">
-                                    <input type="file"
-                                           id="checklist-thumbnail-input"
-                                           class="file-input file-input-bordered w-full"
-                                           accept="image/jpeg,image/png,image/webp,image/gif"
-                                           data-checklist-id="{{ checklist.id }}">
-                                    <div class="label">
-                                        <span class="label-text-alt">Recommended: 1280x720px (16:9)</span>
-                                    </div>
-                                </div>
+                            {# Preview - shown above input on all screens #}
+                            <figure id="checklist-thumbnail-preview"
+                                    class="w-full max-w-xs aspect-video bg-base-300 rounded-lg overflow-hidden mb-3 {% if not checklist.thumbnail %}hidden{% endif %}">
+                                <img src="{% if checklist.thumbnail %}{{ checklist.thumbnail.url }}{% endif %}"
+                                     alt="Thumbnail preview"
+                                     class="w-full h-full object-cover">
+                            </figure>
 
-                                {# Remove Button #}
+                            {# File Input and Remove Button #}
+                            <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                                <input type="file"
+                                       id="checklist-thumbnail-input"
+                                       class="file-input file-input-bordered file-input-sm sm:file-input-md flex-1 min-w-0"
+                                       accept="image/jpeg,image/png,image/webp,image/gif"
+                                       data-checklist-id="{{ checklist.id }}">
                                 {% if checklist.thumbnail %}
                                 <button id="remove-checklist-thumbnail-btn"
-                                        class="btn btn-ghost btn-sm text-error"
+                                        class="btn btn-ghost btn-sm text-error shrink-0"
                                         data-checklist-id="{{ checklist.id }}"
                                         title="Remove thumbnail">
                                     <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
                                     </svg>
+                                    <span class="sm:hidden">Remove</span>
                                 </button>
                                 {% endif %}
+                            </div>
+                            <div class="label py-1">
+                                <span class="label-text-alt">Recommended: 1280x720px (16:9)</span>
                             </div>
                         </div>
                     </div>
@@ -213,7 +211,7 @@
                             <div class="flex-1 w-full">
                                 {# Section Title Input #}
                                 <div class="form-control w-full">
-                                    <label class="label">
+                                    <label class="label flex-wrap gap-y-0">
                                         <span class="label-text font-semibold">Section Title</span>
                                         {% if not checklist.is_published %}
                                         <span class="label-text-alt text-base-content/50">
@@ -231,7 +229,7 @@
 
                                 {# Section Description Input #}
                                 <div class="form-control w-full mt-2">
-                                    <label class="label">
+                                    <label class="label flex-wrap gap-y-0">
                                         <span class="label-text">Section Description (optional)</span>
                                         {% if not checklist.is_published %}
                                         <span class="label-text-alt text-base-content/50">
@@ -248,9 +246,9 @@
 
                                 {# Section Thumbnail Upload #}
                                 <div class="form-control w-full mt-3">
-                                    <label class="label line-clamp-2">
+                                    <label class="label flex-wrap gap-y-0">
                                         <span class="label-text">Section Header Image (optional)</span>
-                                        <span class="label-text-alt text-base-content/50">Max 2MB • Displays full-width above section</span>
+                                        <span class="label-text-alt text-base-content/50">Max 2MB</span>
                                     </label>
 
                                     {# Full-width preview like in detail view #}
@@ -263,13 +261,13 @@
                                     </figure>
                                     {% endif %}
 
-                                    <div class="flex items-center gap-3">
+                                    <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
                                         <input type="file"
-                                               class="file-input file-input-bordered file-input-sm flex-1 section-thumbnail-input"
+                                               class="file-input file-input-bordered file-input-sm flex-1 min-w-0 section-thumbnail-input"
                                                accept="image/jpeg,image/png,image/webp,image/gif"
                                                data-section-id="{{ section.id }}">
                                         {% if section.thumbnail %}
-                                        <button class="btn btn-ghost btn-sm text-error section-remove-thumbnail-btn"
+                                        <button class="btn btn-ghost btn-sm text-error section-remove-thumbnail-btn shrink-0"
                                                 data-section-id="{{ section.id }}"
                                                 title="Remove section image">
                                             <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -727,7 +725,7 @@
                                 </div>
 
                                 <div class="form-control w-full flex flex-col gap-1 items-center">
-                                    <label class="label">
+                                    <label class="label flex-wrap gap-y-0 w-full">
                                         <span class="label-text text-xs">Paste items (one per line)</span>
                                         <span class="label-text-alt text-xs">
                                             <span class="bulk-item-count">0</span> items detected
@@ -736,9 +734,9 @@
                                     <textarea class="textarea textarea-bordered bulk-upload-textarea font-mono text-sm max-w-3xl w-full"
                                               rows="6"
                                               placeholder="Paste your items here, one per line&#10;&#10;Example:&#10;Collect all 10 coins in World 1&#10;# Level 2&#10;Complete all side quests&#10;Defeat the final boss"></textarea>
-                                    <label class="label">
-                                        <span class="label-text-alt text-xs text-base-content/60">
-                                            Max 100 items. Lines starting with '#' are treated as sub-headers.
+                                    <label class="label py-1">
+                                        <span class="label-text-alt text-xs text-base-content/60 text-wrap">
+                                            Max 100 items. '#' = sub-header.
                                         </span>
                                     </label>
                                 </div>
@@ -776,8 +774,8 @@
 
                             {% if request.user.profile.user_is_premium %}
                             <div class="mt-3 p-4 bg-secondary/5 rounded-lg border border-secondary/20">
-                                <div class="flex items-center gap-2 mb-3">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <div class="flex items-center gap-2 mb-3 flex-wrap">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-secondary shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
                                     </svg>
                                     <span class="font-semibold text-secondary">Add Inline Image</span>
@@ -786,11 +784,11 @@
 
                                 <div class="form-control">
                                     <input type="file"
-                                           class="file-input file-input-bordered file-input-secondary inline-image-input"
+                                           class="file-input file-input-bordered file-input-secondary file-input-sm sm:file-input-md w-full inline-image-input"
                                            accept="image/jpeg,image/png,image/webp,image/gif"
                                            data-section-id="{{ section.id }}">
-                                    <div class="label">
-                                        <span class="label-text-alt">Max 2MB • Image displays inline in guide</span>
+                                    <div class="label py-1">
+                                        <span class="label-text-alt">Max 2MB</span>
                                     </div>
                                 </div>
 
