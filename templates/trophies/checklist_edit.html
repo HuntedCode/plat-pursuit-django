@@ -1,0 +1,1060 @@
+{% extends 'base.html' %}
+{% load static custom_filters trophy_tags markdown_filters %}
+{% block title %}Edit: {{ checklist.title }}{% endblock %}
+
+{% block content %}
+<div id="checklist-edit-container"
+     data-checklist-id="{{ checklist.id }}"
+     data-concept-id="{{ checklist.concept.id }}"
+     data-is-published="{% if checklist.is_published %}true{% else %}false{% endif %}">
+
+    <section class="shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 w-full p-0 lg:p-4">
+        {% include 'partials/breadcrumb.html' with items=breadcrumb %}
+
+        {# Header Card #}
+        <div class="card bg-base-100 border-4 border-base-300 shadow-md shadow-neutral">
+            <div class="card-body">
+                <div class="flex flex-col lg:flex-row justify-between items-start gap-4">
+                    <div class="flex-1 w-full">
+                        <div class="flex items-center gap-2 mb-4">
+                            <span class="badge {% if checklist.status == 'draft' %}badge-warning{% else %}badge-success{% endif %}">
+                                {{ checklist.status|title }}
+                            </span>
+                            <span class="text-sm text-base-content/60">Editing Checklist</span>
+                        </div>
+
+                        {# Title Input #}
+                        <div class="form-control w-full">
+                            <label class="label">
+                                <span class="label-text font-semibold">Title</span>
+                                <span class="label-text-alt text-base-content/50">
+                                    <span class="char-count" data-target="checklist-title">{{ checklist.title|length }}</span>/200
+                                </span>
+                            </label>
+                            <input type="text"
+                                   id="checklist-title"
+                                   class="input input-bordered w-full text-xl font-bold char-count-input"
+                                   value="{{ checklist.title }}"
+                                   maxlength="200"
+                                   placeholder="Enter checklist title...">
+                        </div>
+
+                        {# Description Input #}
+                        <div class="form-control w-full mt-4">
+                            <label class="label">
+                                <span class="label-text font-semibold">Description (optional)</span>
+                                <span class="label-text-alt text-base-content/50">
+                                    <span class="char-count" data-target="checklist-description">{{ checklist.description|default:''|length }}</span>/2000
+                                </span>
+                            </label>
+                            <textarea id="checklist-description"
+                                      class="textarea textarea-bordered w-full char-count-input"
+                                      rows="3"
+                                      maxlength="2000"
+                                      placeholder="Describe what this checklist covers...">{{ checklist.description|default:'' }}</textarea>
+                        </div>
+
+                        {# Game Selection #}
+                        <div class="form-control w-full mt-4">
+                            <label class="label">
+                                <span class="label-text font-semibold">Selected Game</span>
+                                {% if checklist.is_published %}
+                                <span class="label-text-alt text-warning">Cannot change after publishing</span>
+                                {% else %}
+                                <span class="label-text-alt text-base-content/50">Choose which game this checklist is for</span>
+                                {% endif %}
+                            </label>
+                            {% if checklist.is_published %}
+                                {# Display only - locked #}
+                                <div class="input input-bordered w-full bg-base-300 flex items-center gap-2">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-warning" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+                                    </svg>
+                                    {% if checklist.selected_game %}
+                                        <span>{{ checklist.selected_game.title_name }} ({{ checklist.selected_game.platforms_display }}) - {{ checklist.selected_game.trophy_count_summary }}</span>
+                                    {% else %}
+                                        <span class="text-base-content/50">No game selected</span>
+                                    {% endif %}
+                                </div>
+                            {% else %}
+                                {# Editable dropdown #}
+                                <select id="checklist-game-selector"
+                                        class="select select-bordered w-full"
+                                        data-checklist-id="{{ checklist.id }}">
+                                    <option value="">Choose a game...</option>
+                                    {% for game in concept_games %}
+                                    <option value="{{ game.id }}"
+                                            {% if checklist.selected_game and checklist.selected_game.id == game.id %}selected{% endif %}>
+                                        {{ game.title_name }} ({{ game.platforms_display }}) - {{ game.trophy_count_summary }}
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                                <div class="label">
+                                    <span class="label-text-alt">This selection will be locked once the checklist is published</span>
+                                </div>
+                            {% endif %}
+                        </div>
+
+                        {# Checklist Thumbnail Upload #}
+                        <div class="form-control w-full mt-4">
+                            <label class="label">
+                                <span class="label-text font-semibold">Checklist Thumbnail (optional)</span>
+                                <span class="label-text-alt text-base-content/50">Max 5MB • JPG, PNG, WebP, GIF</span>
+                            </label>
+                            <div class="flex items-center gap-4">
+                                {# Preview #}
+                                <figure id="checklist-thumbnail-preview"
+                                        class="w-32 h-32 bg-base-300 rounded-lg overflow-hidden shrink-0 {% if not checklist.thumbnail %}hidden{% endif %}">
+                                    <img src="{% if checklist.thumbnail %}{{ checklist.thumbnail.url }}{% endif %}"
+                                         alt="Thumbnail preview"
+                                         class="w-full h-full object-cover">
+                                </figure>
+
+                                {# File Input #}
+                                <div class="flex-1">
+                                    <input type="file"
+                                           id="checklist-thumbnail-input"
+                                           class="file-input file-input-bordered w-full"
+                                           accept="image/jpeg,image/png,image/webp,image/gif"
+                                           data-checklist-id="{{ checklist.id }}">
+                                    <div class="label">
+                                        <span class="label-text-alt">Recommended: 800x800px square</span>
+                                    </div>
+                                </div>
+
+                                {# Remove Button #}
+                                {% if checklist.thumbnail %}
+                                <button id="remove-checklist-thumbnail-btn"
+                                        class="btn btn-ghost btn-sm text-error"
+                                        data-checklist-id="{{ checklist.id }}"
+                                        title="Remove thumbnail">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                                    </svg>
+                                </button>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+
+                    {# Action Buttons #}
+                    <div class="flex flex-col gap-2 lg:min-w-48">
+                        <button id="save-checklist-btn" class="btn btn-primary">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"/>
+                            </svg>
+                            Save Changes
+                        </button>
+                        <a href="{% url 'checklist_detail' checklist.id %}" class="btn btn-ghost">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
+                            </svg>
+                            Preview
+                        </a>
+                        {% if checklist.status == 'draft' %}
+                            <button id="publish-checklist-btn" class="btn btn-success">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                                </svg>
+                                Publish
+                            </button>
+                        {% else %}
+                            <button id="unpublish-checklist-btn" class="btn btn-warning">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"/>
+                                </svg>
+                                Unpublish
+                            </button>
+                        {% endif %}
+                        <button id="delete-checklist-btn" class="btn btn-error btn-outline">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                            </svg>
+                            Delete
+                        </button>
+                    </div>
+                </div>
+
+                {# Publishing Requirements #}
+                <div id="publish-requirements" class="alert alert-info mt-4 {% if checklist.sections.count > 0 %}hidden{% endif %}">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                    </svg>
+                    <span>To publish, your checklist needs at least 1 section with at least 1 item.</span>
+                </div>
+
+                {# Published Checklist Lock Warning #}
+                {% if checklist.is_published %}
+                <div class="alert alert-warning mt-4">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+                    </svg>
+                    <div>
+                        <span class="font-semibold">Structural changes locked</span>
+                        <p class="text-sm">You can edit the title and description, but sections and items cannot be modified because users may be tracking their progress. Unpublish first to make structural changes.</p>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </section>
+
+    {# Sections Container #}
+    <div id="sections-container">
+        {% for section in checklist.sections.all %}
+            <section class="shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 w-full p-0 lg:p-4 mt-6 checklist-section"
+                     data-section-id="{{ section.id }}"
+                     data-section-order="{{ section.order }}">
+                <div class="card bg-base-100 border-4 border-base-300 shadow-md shadow-neutral">
+                    <div class="card-body">
+                        {# Section Header #}
+                        <div class="flex flex-col lg:flex-row justify-between items-start gap-4">
+                            <div class="flex-1 w-full">
+                                {# Section Title Input #}
+                                <div class="form-control w-full">
+                                    <label class="label">
+                                        <span class="label-text font-semibold">Section Title</span>
+                                        {% if not checklist.is_published %}
+                                        <span class="label-text-alt text-base-content/50">
+                                            <span class="section-title-count">{{ section.subtitle|length }}</span>/200
+                                        </span>
+                                        {% endif %}
+                                    </label>
+                                    <input type="text"
+                                           class="input input-bordered w-full font-bold section-title-input {% if checklist.is_published %}input-disabled{% endif %}"
+                                           value="{{ section.subtitle }}"
+                                           maxlength="200"
+                                           placeholder="Enter section title..."
+                                           {% if checklist.is_published %}disabled{% endif %}>
+                                </div>
+
+                                {# Section Description Input #}
+                                <div class="form-control w-full mt-2">
+                                    <label class="label">
+                                        <span class="label-text">Section Description (optional)</span>
+                                        {% if not checklist.is_published %}
+                                        <span class="label-text-alt text-base-content/50">
+                                            <span class="section-desc-count">{{ section.description|default:''|length }}</span>/1000
+                                        </span>
+                                        {% endif %}
+                                    </label>
+                                    <textarea class="textarea textarea-bordered w-full section-description-input {% if checklist.is_published %}textarea-disabled{% endif %}"
+                                              rows="2"
+                                              maxlength="1000"
+                                              placeholder="Describe this section..."
+                                              {% if checklist.is_published %}disabled{% endif %}>{{ section.description|default:'' }}</textarea>
+                                </div>
+
+                                {# Section Thumbnail Upload #}
+                                <div class="form-control w-full mt-3">
+                                    <label class="label">
+                                        <span class="label-text">Section Header Image (optional)</span>
+                                        <span class="label-text-alt text-base-content/50">Max 2MB • Displays full-width above section</span>
+                                    </label>
+
+                                    {# Full-width preview like in detail view #}
+                                    {% if section.thumbnail %}
+                                    <figure class="section-thumbnail-preview w-full max-w-2xl mx-auto rounded-lg overflow-hidden shadow-md bg-base-300 mb-3">
+                                        <img src="{{ section.thumbnail.url }}"
+                                             alt="Section header image"
+                                             class="w-full h-auto object-contain"
+                                             loading="lazy">
+                                    </figure>
+                                    {% endif %}
+
+                                    <div class="flex items-center gap-3">
+                                        <input type="file"
+                                               class="file-input file-input-bordered file-input-sm flex-1 section-thumbnail-input"
+                                               accept="image/jpeg,image/png,image/webp,image/gif"
+                                               data-section-id="{{ section.id }}">
+                                        {% if section.thumbnail %}
+                                        <button class="btn btn-ghost btn-sm text-error section-remove-thumbnail-btn"
+                                                data-section-id="{{ section.id }}"
+                                                title="Remove section image">
+                                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                                            </svg>
+                                            Remove
+                                        </button>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </div>
+
+                            {# Section Actions - Hidden for published checklists #}
+                            {% if not checklist.is_published %}
+                            <div class="flex lg:flex-col gap-2">
+                                <button class="btn btn-ghost btn-sm section-save-btn" title="Save section">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                                    </svg>
+                                </button>
+                                <button class="btn btn-ghost btn-sm section-move-up-btn" title="Move up">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"/>
+                                    </svg>
+                                </button>
+                                <button class="btn btn-ghost btn-sm section-move-down-btn" title="Move down">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                                    </svg>
+                                </button>
+                                <button class="btn btn-ghost btn-sm text-error section-delete-btn" title="Delete section">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                                    </svg>
+                                </button>
+                            </div>
+                            {% endif %}
+                        </div>
+
+                        {# Items List #}
+                        <div class="mt-4 border-t border-base-300 pt-4">
+                            <div class="flex justify-between items-center mb-3">
+                                <h3 class="font-semibold">Items</h3>
+                                <span class="badge badge-ghost section-item-count">{{ section.items.count }} items</span>
+                            </div>
+
+                            <div class="section-items-container space-y-2">
+                                {% for item in section.items.all %}
+                                    {% if checklist.is_published %}
+                                    {# Read-only display for published checklists #}
+                                    {% if item.item_type == 'image' %}
+                                        {# Inline Image Display #}
+                                        <div class="checklist-image-item my-4 p-2 bg-base-200/50 rounded-lg"
+                                             data-item-id="{{ item.id }}"
+                                             data-item-type="image">
+                                            <figure class="w-full max-w-xl mx-auto rounded-lg overflow-hidden shadow-md bg-base-300">
+                                                <img src="{{ item.image.url }}"
+                                                     alt="Checklist image"
+                                                     class="w-full h-auto object-contain"
+                                                     loading="lazy">
+                                            </figure>
+                                            {% if item.text %}
+                                            <p class="text-sm text-base-content/60 text-center mt-2 italic">{{ item.text }}</p>
+                                            {% endif %}
+                                        </div>
+                                    {% elif item.item_type == 'text_area' %}
+                                        {# Text Area Display - Published #}
+                                        <div class="my-4 p-4 bg-info/5 border-2 border-info/20 rounded-lg max-w-2xl mx-auto">
+                                            <div class="flex items-center gap-2 mb-3">
+                                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-info" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                                                </svg>
+                                                <span class="badge badge-info badge-sm">Text Area</span>
+                                            </div>
+                                            <div class="prose prose-sm max-w-none">
+                                                {{ item.text|render_markdown }}
+                                            </div>
+                                        </div>
+                                    {% elif item.item_type == 'trophy' %}
+                                        {# Trophy Item Display - Published #}
+                                        {% get_trophy item.trophy_id as trophy %}
+                                        {% if trophy %}
+                                        <div class="flex items-center gap-3 p-3 bg-base-200/50 rounded-lg border-l-4 border-{{ trophy.trophy_type|default:'bronze' }}">
+                                            <img src="{{ trophy.trophy_icon_url }}" class="w-10 h-10 rounded shrink-0" alt="">
+                                            <div class="flex-1">
+                                                <div class="flex items-center gap-2 flex-wrap mb-1">
+                                                    <span class="font-semibold">{{ item.text }}</span>
+                                                    <span class="badge badge-sm badge-{{ trophy.trophy_type|default:'bronze' }}">
+                                                        {{ trophy.trophy_type|title }}
+                                                    </span>
+                                                    {% if trophy|is_dlc_trophy %}
+                                                        {% get_trophy_group trophy as trophy_group %}
+                                                        {% if trophy_group and trophy_group.trophy_group_name %}
+                                                        <span class="badge badge-sm badge-info">DLC: {{ trophy_group.trophy_group_name }}</span>
+                                                        {% else %}
+                                                        <span class="badge badge-sm badge-info">DLC</span>
+                                                        {% endif %}
+                                                    {% endif %}
+                                                    {% if trophy.trophy_earn_rate %}
+                                                    <span class="badge badge-ghost badge-xs">{{ trophy.trophy_earn_rate|floatformat:1 }}%</span>
+                                                    {% endif %}
+                                                </div>
+                                                {% if trophy.trophy_detail %}
+                                                <p class="text-xs text-base-content/60 line-clamp-2">{{ trophy.trophy_detail }}</p>
+                                                {% endif %}
+                                            </div>
+                                        </div>
+                                        {% endif %}
+                                    {% else %}
+                                        <div class="flex items-center gap-2 p-2 {% if item.item_type == 'sub_header' %}bg-base-300/50 border-l-4 border-secondary{% else %}bg-base-200{% endif %} rounded-lg"
+                                             data-item-id="{{ item.id }}"
+                                             data-item-type="{{ item.item_type|default:'item' }}">
+                                            {% if item.item_type == 'sub_header' %}
+                                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-secondary shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 20l4-16m2 16l4-16M6 9h14M4 15h14"/>
+                                                </svg>
+                                                <span class="flex-1 font-semibold text-secondary text-sm uppercase tracking-wide">{{ item.text }}</span>
+                                            {% else %}
+                                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-base-content/50 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                                                </svg>
+                                                <span class="flex-1">{{ item.text }}</span>
+                                            {% endif %}
+                                        </div>
+                                    {% endif %}
+                                    {% else %}
+                                    {# Editable display for draft checklists #}
+                                    {% if item.item_type == 'image' %}
+                                        {# Inline Image Display - Editable #}
+                                        <div class="checklist-image-item my-4 p-3 bg-secondary/5 border-2 border-secondary/20 rounded-lg"
+                                             data-item-id="{{ item.id }}"
+                                             data-item-order="{{ item.order }}"
+                                             data-item-type="image">
+                                            <div class="flex items-start gap-3">
+                                                <div class="flex flex-col gap-1">
+                                                    <button class="btn btn-ghost btn-xs item-move-up-btn" title="Move up">
+                                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"/>
+                                                        </svg>
+                                                    </button>
+                                                    <button class="btn btn-ghost btn-xs item-move-down-btn" title="Move down">
+                                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                                                        </svg>
+                                                    </button>
+                                                </div>
+                                                <div class="flex-1">
+                                                    <div class="flex items-center gap-2 mb-2">
+                                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                                                        </svg>
+                                                        <span class="badge badge-secondary badge-sm">Inline Image</span>
+                                                    </div>
+                                                    <figure class="w-full max-w-xl mx-auto rounded-lg overflow-hidden shadow-md bg-base-300 mb-2">
+                                                        <img src="{{ item.image.url }}"
+                                                             alt="Checklist image"
+                                                             class="w-full h-auto object-contain"
+                                                             loading="lazy">
+                                                    </figure>
+                                                    <input type="text"
+                                                           class="input input-sm input-bordered w-full item-text-input text-sm italic"
+                                                           value="{{ item.text }}"
+                                                           maxlength="500"
+                                                           placeholder="Optional caption...">
+                                                    <span class="text-xs text-base-content/50 text-right mt-1">
+                                                        <span class="item-char-count">{{ item.text|length }}</span>/500
+                                                    </span>
+                                                </div>
+                                                <div class="flex flex-col gap-1">
+                                                    <button class="btn btn-ghost btn-xs item-save-btn" title="Save caption">
+                                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-success" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                                                        </svg>
+                                                    </button>
+                                                    <button class="btn btn-ghost btn-xs item-delete-btn" title="Delete image">
+                                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-error" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                                                        </svg>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                    {% elif item.item_type == 'text_area' %}
+                                        {# Text Area Display - Editable #}
+                                        <div class="checklist-text-area-edit my-4 p-3 bg-info/5 border-2 border-info/20 rounded-lg"
+                                             data-item-id="{{ item.id }}"
+                                             data-item-order="{{ item.order }}"
+                                             data-item-type="text_area">
+                                            <div class="flex items-start gap-3">
+                                                {# Side controls column #}
+                                                <div class="flex flex-col gap-1">
+                                                    <button class="btn btn-ghost btn-xs item-move-up-btn" title="Move up">
+                                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"/>
+                                                        </svg>
+                                                    </button>
+                                                    <button class="btn btn-ghost btn-xs item-move-down-btn" title="Move down">
+                                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                                                        </svg>
+                                                    </button>
+                                                </div>
+
+                                                {# Main content column #}
+                                                <div class="flex-1">
+                                                    {# Header with badges #}
+                                                    <div class="flex items-center gap-2 mb-2">
+                                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-info" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                                                        </svg>
+                                                        <span class="badge badge-info badge-sm">Text Area</span>
+                                                        <span class="badge badge-ghost badge-xs">Markdown</span>
+                                                    </div>
+
+                                                    {# Character counter #}
+                                                    <div class="flex items-center justify-between mb-2">
+                                                        <span class="text-sm text-base-content/60">Edit content:</span>
+                                                        <span class="label-text-alt text-base-content/50 text-area-edit-count" data-item-id="{{ item.id }}">{{ item.text|length }}/2000</span>
+                                                    </div>
+
+                                                    {# Textarea #}
+                                                    <div class="form-control w-full">
+                                                        <textarea class="textarea textarea-bordered textarea-info item-text-input w-full"
+                                                                  rows="8"
+                                                                  maxlength="2000"
+                                                                  data-item-id="{{ item.id }}"
+                                                                  placeholder="Text area content with markdown support...">{{ item.text }}</textarea>
+                                                    </div>
+
+                                                    {# Preview Toggle #}
+                                                    <div class="mt-2">
+                                                        <button class="btn btn-ghost btn-xs preview-item-markdown-btn"
+                                                                data-item-id="{{ item.id }}">
+                                                            <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                                                            </svg>
+                                                            Preview
+                                                        </button>
+                                                    </div>
+
+                                                    {# Preview Area (hidden by default) #}
+                                                    <div class="hidden mt-3 p-3 bg-base-100 border border-base-300 rounded-lg preview-area"
+                                                         id="preview-{{ item.id }}">
+                                                        <div class="prose prose-sm max-w-none">
+                                                            {# JavaScript will populate this #}
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                {# Right side controls column #}
+                                                <div class="flex flex-col gap-1">
+                                                    <button class="btn btn-ghost btn-xs item-save-btn" title="Save changes">
+                                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-success" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                                                        </svg>
+                                                    </button>
+                                                    <button class="btn btn-ghost btn-xs item-delete-btn" title="Delete text area">
+                                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-error" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                                                        </svg>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                    {% elif item.item_type == 'trophy' %}
+                                        {# Trophy Item Display - Editable #}
+                                        {% get_trophy item.trophy_id as trophy %}
+                                        {% if trophy %}
+                                        <div class="checklist-trophy-item-edit my-2 p-3 bg-warning/5 border-2 border-warning/20 rounded-lg"
+                                             data-item-id="{{ item.id }}"
+                                             data-item-order="{{ item.order }}"
+                                             data-item-type="trophy"
+                                             data-trophy-id="{{ item.trophy_id }}">
+                                            <div class="flex items-start gap-3">
+                                                {# Move buttons #}
+                                                <div class="flex flex-col gap-1">
+                                                    <button class="btn btn-ghost btn-xs item-move-up-btn" title="Move up">
+                                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"/>
+                                                        </svg>
+                                                    </button>
+                                                    <button class="btn btn-ghost btn-xs item-move-down-btn" title="Move down">
+                                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                                                        </svg>
+                                                    </button>
+                                                </div>
+
+                                                {# Trophy display #}
+                                                <div class="flex-1 flex items-center gap-3">
+                                                    <img src="{{ trophy.trophy_icon_url }}" class="w-10 h-10 rounded shrink-0" alt="">
+                                                    <div class="flex-1">
+                                                        <div class="flex items-center gap-2 mb-1 flex-wrap">
+                                                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-warning" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"/>
+                                                            </svg>
+                                                            <span class="badge badge-warning badge-sm">Trophy</span>
+                                                            <span class="badge badge-{{ trophy.trophy_type|default:'bronze' }} badge-sm">
+                                                                {{ trophy.trophy_type|title }}
+                                                            </span>
+                                                            {% if trophy|is_dlc_trophy %}
+                                                                {% get_trophy_group trophy as trophy_group %}
+                                                                {% if trophy_group and trophy_group.trophy_group_name %}
+                                                                <span class="badge badge-sm badge-info">DLC: {{ trophy_group.trophy_group_name }}</span>
+                                                                {% else %}
+                                                                <span class="badge badge-sm badge-info">DLC</span>
+                                                                {% endif %}
+                                                            {% endif %}
+                                                        </div>
+                                                        <p class="font-semibold">{{ item.text }}</p>
+                                                        {% if trophy.trophy_detail %}
+                                                        <p class="text-xs text-base-content/60 line-clamp-2 mt-1">{{ trophy.trophy_detail }}</p>
+                                                        {% endif %}
+                                                    </div>
+                                                </div>
+
+                                                {# Delete button #}
+                                                <button class="btn btn-ghost btn-xs item-delete-btn text-error" title="Remove trophy">
+                                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                                                    </svg>
+                                                </button>
+                                            </div>
+                                        </div>
+                                        {% endif %}
+
+                                    {% else %}
+                                        <div class="flex items-center gap-2 p-2 {% if item.item_type == 'sub_header' %}bg-base-300/50 border-l-4 border-secondary{% else %}bg-base-200{% endif %} rounded-lg checklist-item-edit"
+                                             data-item-id="{{ item.id }}"
+                                             data-item-order="{{ item.order }}"
+                                             data-item-type="{{ item.item_type|default:'item' }}">
+                                            <div class="flex flex-col">
+                                                <button class="btn btn-ghost btn-xs item-move-up-btn" title="Move up">
+                                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"/>
+                                                    </svg>
+                                                </button>
+                                                <button class="btn btn-ghost btn-xs item-move-down-btn" title="Move down">
+                                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                                                    </svg>
+                                                </button>
+                                            </div>
+                                            <div class="flex-1 flex flex-col">
+                                                <div class="flex flex-col sm:flex-row items-center gap-2">
+                                                    <select class="select select-xs select-bordered item-type-select">
+                                                        <option value="item" {% if item.item_type == 'item' or not item.item_type %}selected{% endif %}>Item</option>
+                                                        <option value="sub_header" {% if item.item_type == 'sub_header' %}selected{% endif %}>Sub-header</option>
+                                                    </select>
+                                                    <input type="text"
+                                                           class="input input-sm input-bordered w-full item-text-input {% if item.item_type == 'sub_header' %}font-semibold text-secondary{% endif %}"
+                                                           value="{{ item.text }}"
+                                                           maxlength="500"
+                                                           placeholder="{% if item.item_type == 'sub_header' %}Sub-header text...{% else %}Item text...{% endif %}">
+                                                </div>
+                                                <span class="text-xs text-base-content/50 text-right mt-1">
+                                                    <span class="item-char-count">{{ item.text|length }}</span>/500
+                                                </span>
+                                            </div>
+                                            <button class="btn btn-ghost btn-xs item-save-btn" title="Save">
+                                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-success" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                                                </svg>
+                                            </button>
+                                            <button class="btn btn-ghost btn-xs item-delete-btn" title="Delete">
+                                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-error" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                                                </svg>
+                                            </button>
+                                        </div>
+                                    {% endif %}
+                                    {% endif %}
+                                {% empty %}
+                                    <p class="text-base-content/50 italic text-center py-2 empty-items-message">No items yet.{% if not checklist.is_published %} Add your first item below.{% endif %}</p>
+                                {% endfor %}
+                            </div>
+
+                            {# Add Item Input - Hidden for published checklists #}
+                            {% if not checklist.is_published %}
+                            <div class="mt-3">
+                                <div class="flex items-center gap-2 mb-2">
+                                    <select class="select select-sm select-bordered new-item-type-select">
+                                        <option value="item">Item</option>
+                                        <option value="sub_header">Sub-header</option>
+                                    </select>
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    <input type="text"
+                                           class="input input-bordered flex-1 new-item-input"
+                                           maxlength="500"
+                                           placeholder="Add new item...">
+                                    <button class="btn btn-secondary btn-sm add-item-btn">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                                        </svg>
+                                        Add
+                                    </button>
+                                </div>
+                                <span class="text-xs text-base-content/50 block text-right mt-1">
+                                    <span class="new-item-char-count">0</span>/500
+                                </span>
+                            </div>
+                            {% endif %}
+
+                            {# Add Trophy Section #}
+                            {% if not checklist.is_published %}
+                            <div class="divider divider-neutral text-xs">OR ADD TROPHY</div>
+
+                            <div class="mt-3 p-4 bg-warning/5 rounded-lg border border-warning/20">
+                                <div class="flex items-center gap-2 mb-3">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-warning" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"/>
+                                    </svg>
+                                    <span class="font-semibold text-warning">Add Trophy from Game</span>
+                                </div>
+
+                                {% if not checklist.selected_game %}
+                                <div class="alert alert-info mb-3">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                                    </svg>
+                                    <span>Select a game in the header above before adding trophies.</span>
+                                </div>
+                                {% endif %}
+
+                                <button class="btn btn-warning btn-sm open-trophy-selector-btn"
+                                        data-section-id="{{ section.id }}"
+                                        data-checklist-id="{{ checklist.id }}"
+                                        {% if not checklist.selected_game %}disabled{% endif %}>
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                                    </svg>
+                                    Select Trophy
+                                </button>
+                            </div>
+                            {% endif %}
+
+                            {# Bulk Upload Section #}
+                            {% if not checklist.is_published %}
+                            <div class="divider divider-neutral text-xs">OR</div>
+
+                            <div class="mt-3 bulk-upload-section">
+                                <div class="flex items-center gap-2 mb-2">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
+                                    </svg>
+                                    <span class="font-semibold text-sm">Bulk Upload</span>
+                                    <button type="button" class="btn btn-ghost btn-xs" onclick="document.getElementById('bulk-upload-help-modal').showModal()">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                                        </svg>
+                                    </button>
+                                </div>
+
+                                <div class="form-control w-full flex flex-col gap-1 items-center">
+                                    <label class="label">
+                                        <span class="label-text text-xs">Paste items (one per line)</span>
+                                        <span class="label-text-alt text-xs">
+                                            <span class="bulk-item-count">0</span> items detected
+                                        </span>
+                                    </label>
+                                    <textarea class="textarea textarea-bordered bulk-upload-textarea font-mono text-sm max-w-3xl w-full"
+                                              rows="6"
+                                              placeholder="Paste your items here, one per line&#10;&#10;Example:&#10;Collect all 10 coins in World 1&#10;# Level 2&#10;Complete all side quests&#10;Defeat the final boss"></textarea>
+                                    <label class="label">
+                                        <span class="label-text-alt text-xs text-base-content/60">
+                                            Max 100 items. Lines starting with '#' are treated as sub-headers.
+                                        </span>
+                                    </label>
+                                </div>
+
+                                <div class="flex items-center gap-2 mt-2">
+                                    <button type="button" class="btn btn-primary btn-sm bulk-upload-btn" disabled>
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
+                                        </svg>
+                                        Upload Items
+                                    </button>
+                                    <button type="button" class="btn btn-ghost btn-sm bulk-clear-btn">Clear</button>
+                                </div>
+
+                                {# Preview area #}
+                                <div class="bulk-preview hidden mt-3 p-3 bg-base-200 rounded-lg border border-base-300">
+                                    <div class="flex justify-between items-center mb-2">
+                                        <span class="text-sm font-semibold">Preview</span>
+                                        <span class="text-xs text-base-content/60 bulk-preview-count"></span>
+                                    </div>
+                                    <div class="bulk-preview-items space-y-1 max-h-48 overflow-y-auto">
+                                        {# Preview items rendered here via JS #}
+                                    </div>
+                                </div>
+
+                                {# Progress indicator #}
+                                <div class="bulk-progress hidden mt-3">
+                                    <progress class="progress progress-primary w-full" value="0" max="100"></progress>
+                                    <p class="text-xs text-center mt-1 text-base-content/60 bulk-progress-text">Uploading...</p>
+                                </div>
+                            </div>
+
+                            {# Add Inline Image - Premium Only #}
+                            <div class="divider divider-neutral text-xs">OR ADD IMAGE</div>
+
+                            {% if request.user.profile.user_is_premium %}
+                            <div class="mt-3 p-4 bg-secondary/5 rounded-lg border border-secondary/20">
+                                <div class="flex items-center gap-2 mb-3">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                                    </svg>
+                                    <span class="font-semibold text-secondary">Add Inline Image</span>
+                                    <span class="badge badge-secondary badge-xs">Premium</span>
+                                </div>
+
+                                <div class="form-control">
+                                    <input type="file"
+                                           class="file-input file-input-bordered file-input-secondary inline-image-input"
+                                           accept="image/jpeg,image/png,image/webp,image/gif"
+                                           data-section-id="{{ section.id }}">
+                                    <div class="label">
+                                        <span class="label-text-alt">Max 2MB • Image displays inline in checklist</span>
+                                    </div>
+                                </div>
+
+                                <input type="text"
+                                       class="input input-sm input-bordered w-full mt-2 inline-image-caption"
+                                       placeholder="Optional caption (200 chars max)..."
+                                       maxlength="200">
+
+                                <button class="btn btn-secondary btn-sm mt-2 add-inline-image-btn"
+                                        data-section-id="{{ section.id }}">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                                    </svg>
+                                    Add Image
+                                </button>
+                            </div>
+
+                            {% else %}
+                            <div class="alert alert-info mt-3">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                                </svg>
+                                <span>
+                                    <a href="{% url 'subscribe' %}" class="link link-success font-semibold">Upgrade to Premium</a>
+                                    to add inline images to your checklists!
+                                </span>
+                            </div>
+                            {% endif %}
+
+                            {# Add Text Area - All Users #}
+                            <div class="divider divider-neutral text-xs">OR ADD TEXT AREA</div>
+
+                            <div class="mt-3 p-4 bg-info/5 rounded-lg border border-info/20 max-w-2xl mx-auto">
+                                <div class="flex items-center gap-2 mb-3">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-info" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                                    </svg>
+                                    <span class="font-semibold text-info">Add Text Area</span>
+                                    <span class="badge badge-info badge-xs">Markdown Supported</span>
+                                </div>
+
+                                <div class="form-control w-full">
+                                    <div class="flex items-center justify-between mb-2">
+                                        <span class="label-text">Content (supports markdown formatting)</span>
+                                        <span class="label-text-alt text-base-content/50 text-area-char-count" data-section-id="{{ section.id }}">0/2000</span>
+                                    </div>
+                                    <textarea class="textarea textarea-bordered textarea-info text-area-content-input w-full"
+                                              placeholder="Add detailed instructions, tips, warnings, or context here...&#10;&#10;Supports markdown: **bold**, *italic*, `code`, links, lists, and more!"
+                                              rows="8"
+                                              maxlength="2000"
+                                              data-section-id="{{ section.id }}"></textarea>
+                                </div>
+
+                                <div class="flex items-center gap-2 mt-2">
+                                    <button class="btn btn-info btn-sm add-text-area-btn"
+                                            data-section-id="{{ section.id }}">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                                        </svg>
+                                        Add Text Area
+                                    </button>
+
+                                    <div class="tooltip" data-tip="Preview markdown formatting">
+                                        <button class="btn btn-ghost btn-sm preview-text-area-btn"
+                                                data-section-id="{{ section.id }}">
+                                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
+                                            </svg>
+                                        </button>
+                                    </div>
+                                </div>
+
+                                {# Markdown Help Text #}
+                                <div class="mt-3 text-xs text-base-content/60">
+                                    <details>
+                                        <summary class="cursor-pointer hover:text-base-content">Markdown formatting guide</summary>
+                                        <div class="mt-2 space-y-1 pl-3">
+                                            <div class="font-semibold text-base-content mt-1">Text Formatting:</div>
+                                            <div><code>**bold text**</code> → <strong>bold text</strong></div>
+                                            <div><code>*italic text*</code> → <em>italic text</em></div>
+                                            <div><code>~~strikethrough~~</code> → <del>strikethrough</del></div>
+                                            <div><code>__underline__</code> → <u>underline</u></div>
+                                            <div><code>`code`</code> → <code>code</code></div>
+
+                                            <div class="font-semibold text-base-content mt-2">Lists:</div>
+                                            <div><code>- Item</code> or <code>* Item</code> → Bullet list</div>
+                                            <div><code>1. Item</code> → Numbered list</div>
+
+                                            <div class="font-semibold text-base-content mt-2">Other:</div>
+                                            <div><code>[Link text](url)</code> → <a href="#" class="link">Link text</a></div>
+                                            <div><code>&gt; Quote</code> → Blockquote</div>
+                                            <div>Press <kbd class="kbd kbd-xs">Enter</kbd> once for line breaks</div>
+                                            <div>Press <kbd class="kbd kbd-xs">Enter</kbd> twice for extra spacing</div>
+                                        </div>
+                                    </details>
+                                </div>
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </section>
+        {% endfor %}
+    </div>
+
+    {# Add Section Button - Hidden for published checklists #}
+    {% if not checklist.is_published %}
+    <section class="shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 border-dashed w-full p-4 mt-6">
+        <button id="add-section-btn" class="btn btn-secondary btn-block">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+            </svg>
+            Add New Section
+        </button>
+    </section>
+    {% endif %}
+</div>
+
+{# Delete Confirmation Modal #}
+<dialog id="delete-confirm-modal" class="modal">
+    <div class="modal-box">
+        <h3 class="font-bold text-lg text-error">Delete Checklist</h3>
+        <p class="py-4">Are you sure you want to delete this checklist? This action cannot be undone.</p>
+        <p class="text-sm text-base-content/60">All sections, items, and user progress will be permanently removed.</p>
+        <div class="modal-action">
+            <button type="button" class="btn btn-ghost" onclick="document.getElementById('delete-confirm-modal').close()">Cancel</button>
+            <button type="button" id="confirm-delete-btn" class="btn btn-error">Delete Forever</button>
+        </div>
+    </div>
+    <form method="dialog" class="modal-backdrop">
+        <button>close</button>
+    </form>
+</dialog>
+
+{# Section Template (hidden, for JS cloning) - NOTE: This template is incomplete and will be loaded via page reload #}
+
+{# Item Template (hidden, for JS cloning) #}
+<template id="item-template">
+    <div class="flex items-center gap-2 p-2 bg-base-200 rounded-lg checklist-item-edit"
+         data-item-id=""
+         data-item-order=""
+         data-item-type="item">
+        <div class="flex flex-col">
+            <button class="btn btn-ghost btn-xs item-move-up-btn" title="Move up">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"/>
+                </svg>
+            </button>
+            <button class="btn btn-ghost btn-xs item-move-down-btn" title="Move down">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                </svg>
+            </button>
+        </div>
+        <div class="flex-1 flex flex-col">
+            <div class="flex items-center gap-2">
+                <select class="select select-xs select-bordered item-type-select">
+                    <option value="item">Item</option>
+                    <option value="sub_header">Sub-header</option>
+                </select>
+                <input type="text"
+                       class="input input-sm input-bordered w-full item-text-input"
+                       value=""
+                       maxlength="500"
+                       placeholder="Item text...">
+            </div>
+            <span class="text-xs text-base-content/50 text-right mt-1">
+                <span class="item-char-count">0</span>/500
+            </span>
+        </div>
+        <button class="btn btn-ghost btn-xs item-save-btn" title="Save">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-success" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+            </svg>
+        </button>
+        <button class="btn btn-ghost btn-xs item-delete-btn" title="Delete">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-error" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+        </button>
+    </div>
+</template>
+
+{# Bulk Upload Help Modal #}
+<dialog id="bulk-upload-help-modal" class="modal">
+    <div class="modal-box">
+        <h3 class="font-bold text-lg">Bulk Upload Help</h3>
+        <div class="py-4 space-y-2">
+            <p class="text-sm">Upload multiple items at once by pasting them into the text area.</p>
+            <div class="text-sm">
+                <p class="font-semibold">Format:</p>
+                <ul class="list-disc list-inside ml-2 space-y-1">
+                    <li>One item per line</li>
+                    <li>Lines starting with <code class="bg-base-200 px-1 rounded">#</code> become sub-headers</li>
+                    <li>Empty lines are ignored</li>
+                    <li>Max 100 items per upload</li>
+                    <li>Each item max 500 characters</li>
+                </ul>
+            </div>
+            <div class="text-sm">
+                <p class="font-semibold">Example:</p>
+                <pre class="bg-base-200 p-2 rounded text-xs">Collect all coins
+Find secret area
+# Boss Fight Tips
+Dodge left when he charges
+Use fire attacks</pre>
+            </div>
+        </div>
+        <div class="modal-action">
+            <form method="dialog">
+                <button class="btn btn-sm">Close</button>
+            </form>
+        </div>
+    </div>
+    <form method="dialog" class="modal-backdrop">
+        <button>close</button>
+    </form>
+</dialog>
+
+{# Trophy Selector Modal #}
+<dialog id="trophy-selector-modal" class="modal">
+    <div class="modal-box max-w-4xl">
+        <h3 class="font-bold text-lg mb-4">Select Trophy</h3>
+
+        {# Search/Filter #}
+        <div class="flex flex-col gap-2 mb-4">
+            <input type="text"
+                   id="trophy-search-input"
+                   class="input input-bordered w-full"
+                   placeholder="Search trophies...">
+            <div class="flex gap-2">
+                <select id="trophy-type-filter" class="select select-bordered flex-1">
+                    <option value="">All Types</option>
+                    <option value="bronze">Bronze</option>
+                    <option value="silver">Silver</option>
+                    <option value="gold">Gold</option>
+                    <option value="platinum">Platinum</option>
+                </select>
+                <select id="trophy-group-filter" class="select select-bordered flex-1">
+                    <option value="">All Groups</option>
+                    {# Populated dynamically via JavaScript #}
+                </select>
+            </div>
+        </div>
+
+        {# Trophy List #}
+        <div id="trophy-list-container" class="space-y-2 max-h-96 overflow-y-auto">
+            <div class="text-center py-8">
+                <div class="loading loading-spinner loading-lg"></div>
+                <p class="mt-2 text-base-content/50">Loading trophies...</p>
+            </div>
+        </div>
+
+        <div class="modal-action">
+            <button type="button" class="btn btn-ghost" onclick="this.closest('dialog').close()">Cancel</button>
+        </div>
+    </div>
+    <form method="dialog" class="modal-backdrop">
+        <button>close</button>
+    </form>
+</dialog>
+{% endblock %}
+
+{% block js_scripts %}
+    <script src="{% static 'js/checklist.js' %}"></script>
+{% endblock %}

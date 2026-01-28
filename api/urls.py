@@ -11,7 +11,8 @@ from .checklist_views import (
     ChecklistSectionListView, ChecklistSectionDetailView, ChecklistSectionReorderView,
     ChecklistItemListView, ChecklistItemBulkCreateView, ChecklistItemDetailView, ChecklistItemReorderView,
     UserDraftChecklistsView, UserPublishedChecklistsView, UserChecklistProgressView,
-    ChecklistImageUploadView, SectionImageUploadView, ItemImageCreateView
+    ChecklistImageUploadView, SectionImageUploadView, ItemImageCreateView,
+    MarkdownPreviewView, ChecklistGameSelectView, ChecklistAvailableTrophiesView
 )
 
 app_name = 'api'
@@ -63,8 +64,15 @@ urlpatterns = [
     path('checklists/<int:checklist_id>/image/', ChecklistImageUploadView.as_view(), name='checklist-image-upload'),
     path('checklists/sections/<int:section_id>/image/', SectionImageUploadView.as_view(), name='section-image-upload'),
 
+    # Checklist trophy endpoints
+    path('checklists/<int:checklist_id>/select-game/', ChecklistGameSelectView.as_view(), name='checklist-select-game'),
+    path('checklists/<int:checklist_id>/available-trophies/', ChecklistAvailableTrophiesView.as_view(), name='checklist-available-trophies'),
+
     # User checklist endpoints
     path('checklists/my-drafts/', UserDraftChecklistsView.as_view(), name='checklist-my-drafts'),
     path('checklists/my-published/', UserPublishedChecklistsView.as_view(), name='checklist-my-published'),
     path('checklists/my-progress/', UserChecklistProgressView.as_view(), name='checklist-my-progress'),
+
+    # Markdown preview
+    path('markdown/preview/', MarkdownPreviewView.as_view(), name='markdown-preview'),
 ]

@@ -32,6 +32,11 @@
         {% include 'trophies/partials/game_detail/comment_section.html' %}
     {% endif %}
 
+    <!-- Checklist Section -->
+    {% if game.concept %}
+        {% include 'trophies/partials/game_detail/checklist_section.html' %}
+    {% endif %}
+
     {% if trophies_syncing %}
         <section class="shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 w-full p-0 lg:p-4 mt-8">
             <div class="alert alert-info mb-4" role="status" aria-live="polite">
@@ -93,4 +98,5 @@
     <script src="{% static 'js/submit_shimmer.js' %}"></script>
     <script src="{% static 'js/comments.js' %}"></script>
     <script src="{% static 'js/trophy-comments.js' %}"></script>
+    <script src="{% static 'js/checklist.js' %}"></script>
 {% endblock %}

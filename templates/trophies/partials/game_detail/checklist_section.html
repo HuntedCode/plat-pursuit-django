@@ -1,0 +1,293 @@
+{% load static %}
+{# Checklist section for game detail page - displays community checklists for the concept #}
+<section class="shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 w-full p-4 lg:p-6 mt-8"
+         id="checklist-section"
+         data-concept-id="{{ game.concept.id }}"
+         data-user-premium="{% if user.is_authenticated and user.profile.user_is_premium %}true{% else %}false{% endif %}"
+         data-user-authenticated="{% if user.is_authenticated %}true{% else %}false{% endif %}"
+         data-user-linked="{% if user.is_authenticated and user.profile.is_linked %}true{% else %}false{% endif %}">
+
+    {# Section Header #}
+    <div class="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 mb-6">
+        <div class="flex items-center gap-3">
+            <button id="checklist-toggle" class="btn btn-ghost btn-sm p-1" aria-label="Toggle checklist section">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 transition-transform duration-200" id="checklist-toggle-icon" style="transform: rotate(-90deg);" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                </svg>
+            </button>
+            <h2 class="text-2xl lg:text-3xl font-bold">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 inline-block mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/>
+                </svg>
+                Checklists
+            </h2>
+            <span class="badge badge-lg badge-secondary" id="checklist-count">{{ checklist_count|default:0 }}</span>
+        </div>
+
+        {# Sort Dropdown - Hidden when collapsed #}
+        <div class="form-control w-full lg:w-auto hidden" id="checklist-sort-container">
+            <label for="checklist-sort" class="label">
+                <span class="label-text">Sort by</span>
+            </label>
+            <select id="checklist-sort" class="select select-bordered select-sm w-full lg:w-auto">
+                <option value="top" selected>Top (Most Upvoted)</option>
+                <option value="new">New (Recent First)</option>
+                <option value="popular">Popular (Most Used)</option>
+            </select>
+        </div>
+    </div>
+
+    {# Main Content Area - Starts Hidden #}
+    <div class="flex-col gap-6 hidden" id="checklist-content">
+        {# Loading State #}
+        <div class="flex justify-center items-center py-12" id="checklist-loading">
+            <span class="loading loading-spinner loading-lg text-secondary"></span>
+            <span class="ml-3 text-lg">Loading checklists...</span>
+        </div>
+
+        {# Empty State - Hidden by default #}
+        <div class="hidden text-center py-12" id="checklist-empty">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 mx-auto text-base-content/30 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
+            </svg>
+            <p class="text-lg text-base-content/60 mb-2">No checklists yet</p>
+            <p class="text-sm text-base-content/50 mb-4">Be the first to create a checklist for this game!</p>
+            {% if user.is_authenticated and user.profile.is_linked %}
+                {% if user.profile.guidelines_agreed %}
+                <a href="{% url 'checklist_create' game.concept.id game.np_communication_id %}" class="btn btn-secondary btn-sm">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                    </svg>
+                    Create Checklist
+                </a>
+                {% else %}
+                <button class="btn btn-secondary btn-sm" id="show-guidelines-btn-empty">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                    </svg>
+                    Create Checklist
+                </button>
+                <p class="text-xs text-base-content/50 mt-2">Accept community guidelines first</p>
+                {% endif %}
+            {% endif %}
+        </div>
+
+        {# Error State #}
+        <div class="hidden alert alert-error" id="checklist-error" role="alert">
+            <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+            </svg>
+            <span id="checklist-error-message">Failed to load checklists. Please try again.</span>
+        </div>
+
+        {# Checklists Grid #}
+        <div id="checklist-grid" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4"></div>
+
+        {# Load More Button #}
+        <div class="hidden text-center mt-6" id="checklists-load-more">
+            <button class="btn btn-outline btn-secondary" id="load-more-checklists-btn">
+                Load More Checklists
+            </button>
+        </div>
+
+        {# User's Draft Checklists #}
+        {% if user_draft_checklists %}
+        <div class="mt-6 p-4 bg-base-100 border-2 border-warning/50 rounded-box" id="user-draft-checklists">
+            <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                <div>
+                    <h3 class="font-semibold flex items-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-warning" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+                        </svg>
+                        Your Draft Checklists
+                    </h3>
+                    <p class="text-sm text-base-content/70 mt-1">You have {{ user_draft_checklists|length }} draft checklist{{ user_draft_checklists|length|pluralize }} for this game.</p>
+                </div>
+                <div class="flex flex-wrap gap-2">
+                    {% for draft in user_draft_checklists %}
+                    <a href="{% url 'checklist_edit' draft.id %}" class="btn btn-warning btn-sm">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+                        </svg>
+                        {{ draft.title|truncatechars:25 }}
+                    </a>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        {# Create Checklist CTA (for authenticated users) #}
+        {% if user.is_authenticated and user.profile.is_linked %}
+            {% if not user.profile.guidelines_agreed %}
+            {# Guidelines Not Agreed - Show Banner #}
+            <div class="mt-6 alert alert-warning" id="checklist-guidelines-banner">
+                <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                </svg>
+                <div class="flex-1">
+                    <span class="font-semibold">Community Guidelines Required</span>
+                    <p class="text-sm">You must agree to our community guidelines before creating checklists.</p>
+                </div>
+                <button class="btn btn-sm btn-warning" id="show-guidelines-btn">
+                    Review Guidelines
+                </button>
+            </div>
+
+            {# Create CTA - Disabled #}
+            <div class="mt-6 p-4 bg-base-100 border-2 border-base-300 rounded-box flex flex-col sm:flex-row items-center justify-between gap-4 opacity-50" id="create-checklist-cta">
+                <div class="text-center sm:text-left">
+                    <h3 class="font-semibold">Have a strategy to share?</h3>
+                    <p class="text-sm text-base-content/70">Create your own checklist to help other players!</p>
+                </div>
+                <button class="btn btn-secondary btn-disabled" disabled>
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                    </svg>
+                    Create Checklist
+                </button>
+            </div>
+            {% else %}
+            {# Guidelines Agreed - Normal CTA #}
+            <div class="mt-6 p-4 bg-base-100 border-2 border-base-300 rounded-box flex flex-col sm:flex-row items-center justify-between gap-4" id="create-checklist-cta">
+                <div class="text-center sm:text-left">
+                    <h3 class="font-semibold">Have a strategy to share?</h3>
+                    <p class="text-sm text-base-content/70">Create your own checklist to help other players!</p>
+                </div>
+                <a href="{% url 'checklist_create' game.concept.id game.np_communication_id %}" class="btn btn-secondary">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                    </svg>
+                    Create Checklist
+                </a>
+            </div>
+            {% endif %}
+        {% elif user.is_authenticated and not user.profile.is_linked %}
+        <div class="mt-6 alert alert-warning">
+            <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+            </svg>
+            <span>
+                <a href="{% url 'link_psn' %}" class="link link-hover font-semibold">Link your PSN account</a> to create and save checklist progress.
+            </span>
+        </div>
+        {% elif not user.is_authenticated %}
+        <div class="mt-6 alert alert-info">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="stroke-current shrink-0 w-6 h-6">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+            </svg>
+            <span>
+                <a href="{% url 'account_login' %}" class="link link-hover font-semibold">Sign in</a> to create checklists and save your progress.
+            </span>
+        </div>
+        {% endif %}
+    </div>
+
+    <script>
+    // Checklist guidelines handling
+    (function() {
+        const showGuidelinesBtn = document.getElementById('show-guidelines-btn');
+        const showGuidelinesBtnEmpty = document.getElementById('show-guidelines-btn-empty');
+        const modal = document.getElementById('guidelines-agreement-modal');
+        const guidelinesBanner = document.getElementById('checklist-guidelines-banner');
+        const createCTA = document.getElementById('create-checklist-cta');
+        const confirmBtn = document.getElementById('confirm-guidelines-btn');
+
+        function enableChecklistCreation() {
+            // Hide the guidelines banner
+            if (guidelinesBanner) {
+                guidelinesBanner.style.display = 'none';
+            }
+
+            // Enable the create checklist button
+            if (createCTA) {
+                // Remove opacity and enable button
+                createCTA.classList.remove('opacity-50');
+
+                const disabledBtn = createCTA.querySelector('.btn-disabled');
+                if (disabledBtn) {
+                    // Replace disabled button with active link
+                    const newBtn = document.createElement('a');
+                    newBtn.href = '{% url "checklist_create" game.concept.id game.np_communication_id %}';
+                    newBtn.className = 'btn btn-secondary';
+                    newBtn.innerHTML = `
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                        </svg>
+                        Create Checklist
+                    `;
+                    disabledBtn.parentNode.replaceChild(newBtn, disabledBtn);
+                }
+            }
+
+            // Update hasAgreedToGuidelines if it exists (from comments.js)
+            if (typeof hasAgreedToGuidelines !== 'undefined') {
+                hasAgreedToGuidelines = true;
+            }
+        }
+
+        // Listen for successful guidelines agreement
+        // We'll listen for the modal closing after the confirm button is clicked
+        let checklistPending = false;
+
+        // Handle "Review Guidelines" button click
+        if (showGuidelinesBtn) {
+            showGuidelinesBtn.addEventListener('click', function() {
+                checklistPending = true;
+                if (modal) {
+                    modal.showModal();
+                }
+            });
+        }
+
+        // Handle "Create Checklist" button in empty state
+        if (showGuidelinesBtnEmpty) {
+            showGuidelinesBtnEmpty.addEventListener('click', function() {
+                checklistPending = true;
+                if (modal) {
+                    modal.showModal();
+                }
+            });
+        }
+
+        // Monitor for when the modal closes after agreement
+        if (modal && confirmBtn) {
+            // Create a MutationObserver to watch for when the modal closes
+            const observer = new MutationObserver(function(mutations) {
+                mutations.forEach(function(mutation) {
+                    if (mutation.attributeName === 'open') {
+                        // Modal was closed
+                        if (!modal.hasAttribute('open') && checklistPending) {
+                            // Check if the user agreed
+                            const commentSection = document.getElementById('comment-section');
+                            if (commentSection) {
+                                const agreed = commentSection.dataset.guidelinesAgreed === 'true';
+                                if (agreed || (typeof hasAgreedToGuidelines !== 'undefined' && hasAgreedToGuidelines)) {
+                                    enableChecklistCreation();
+                                    checklistPending = false;
+                                }
+                            }
+                        }
+                    }
+                });
+            });
+
+            observer.observe(modal, { attributes: true });
+        }
+
+        // Also hook into the confirmGuidelines function's success
+        // Store original callback if it exists
+        const originalCallback = window.pendingCommentSubmission;
+
+        // Override it to call our function
+        window.pendingCommentSubmission = function() {
+            if (checklistPending) {
+                enableChecklistCreation();
+                checklistPending = false;
+            } else if (originalCallback && typeof originalCallback === 'function') {
+                originalCallback();
+            }
+        };
+    })();
+    </script>
+</section>

@@ -452,11 +452,32 @@ class Game(models.Model):
 
     def get_total_defined_trophies(self):
         return self.defined_trophies['bronze'] + self.defined_trophies['silver'] + self.defined_trophies['gold'] + self.defined_trophies['platinum']
-    
+
     def get_icon_url(self):
         if self.force_title_icon or not self.title_image:
             return self.title_icon_url
         return self.title_image
+
+    @property
+    def platforms_display(self):
+        """Format platforms for display: 'PS5, PS4' or 'PS5'."""
+        if not self.title_platform:
+            return 'Unknown'
+        return ', '.join(self.title_platform)
+
+    @property
+    def trophy_count_summary(self):
+        """Format trophy counts: '32Total/8B/18S/5G/1P'."""
+        if not self.defined_trophies:
+            return '0 Trophies'
+
+        total = self.get_total_defined_trophies()
+        bronze = self.defined_trophies.get('bronze', 0)
+        silver = self.defined_trophies.get('silver', 0)
+        gold = self.defined_trophies.get('gold', 0)
+        platinum = self.defined_trophies.get('platinum', 0)
+
+        return f"{total}Total/{bronze}B/{silver}S/{gold}G/{platinum}P"
 
     def __str__(self):
         return self.title_name
@@ -1544,6 +1565,16 @@ class Checklist(models.Model):
         help_text="The game concept this checklist belongs to"
     )
 
+    # Selected game for trophy items (optional)
+    selected_game = models.ForeignKey(
+        'Game',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='checklists_using_game',
+        help_text="Selected game for trophy items (from this concept's games)"
+    )
+
     # Author info
     profile = models.ForeignKey(
         Profile,
@@ -1618,7 +1649,7 @@ class Checklist(models.Model):
     @property
     def total_items(self):
         """Total number of trackable items across all sections (excludes sub-headers)."""
-        return ChecklistItem.objects.filter(section__checklist=self, item_type='item').count()
+        return ChecklistItem.objects.filter(section__checklist=self, item_type__in=['item', 'trophy']).count()
 
     @property
     def is_draft(self):
@@ -1673,7 +1704,7 @@ class ChecklistSection(models.Model):
     @property
     def item_count(self):
         """Total count of trackable items (excludes sub-headers)."""
-        return self.items.filter(item_type='item').count()
+        return self.items.filter(item_type__in=['item', 'trophy']).count()
 
     @property
     def total_entry_count(self):
@@ -1693,6 +1724,8 @@ class ChecklistItem(models.Model):
         ('item', 'Item'),
         ('sub_header', 'Sub-Header'),
         ('image', 'Image'),
+        ('text_area', 'Text Area'),
+        ('trophy', 'Trophy'),
     ]
 
     section = models.ForeignKey(
@@ -1701,7 +1734,7 @@ class ChecklistItem(models.Model):
         related_name='items'
     )
 
-    text = models.CharField(max_length=500, help_text="Item description/task")
+    text = models.CharField(max_length=2000, help_text="Item description/task")
 
     item_type = models.CharField(
         max_length=20,
@@ -1746,12 +1779,31 @@ class ChecklistItem(models.Model):
     def __str__(self):
         if self.item_type == 'image':
             return f"[Image] ({self.section.subtitle})"
+        elif self.item_type == 'text_area':
+            return f"[Text Area] ({self.section.subtitle})"
+        elif self.item_type == 'trophy':
+            return f"[Trophy] {self.text} ({self.section.subtitle})"
         prefix = "[Header] " if self.item_type == 'sub_header' else ""
         truncated = f"{self.text[:50]}..." if len(self.text) > 50 else self.text
         return f"{prefix}{truncated} ({self.section.subtitle})"
 
+    def clean(self):
+        """Validate trophy uniqueness across checklist."""
+        from django.core.exceptions import ValidationError
+
+        if self.item_type == 'trophy' and self.trophy_id:
+            # Check if this trophy already exists in the checklist
+            existing = ChecklistItem.objects.filter(
+                section__checklist=self.section.checklist,
+                item_type='trophy',
+                trophy_id=self.trophy_id
+            ).exclude(id=self.id)
+
+            if existing.exists():
+                raise ValidationError("This trophy is already in the checklist.")
+
     def save(self, *args, **kwargs):
-        """Validate image items before saving."""
+        """Validate image, text_area, and trophy items before saving."""
         from django.core.exceptions import ValidationError
 
         # Validate image items
@@ -1762,6 +1814,24 @@ class ChecklistItem(models.Model):
         elif self.image:
             # Clear image field if not image type
             self.image = None
+
+        # Validate text_area items
+        if self.item_type == 'text_area':
+            if not self.text or not self.text.strip():
+                raise ValidationError("Text area items must have content.")
+            if len(self.text) > 2000:
+                raise ValidationError("Text area content too long (max 2000 characters).")
+            # Clear image field for text areas
+            if self.image:
+                self.image = None
+
+        # Validate trophy items
+        if self.item_type == 'trophy':
+            if not self.trophy_id:
+                raise ValidationError("Trophy items must have a trophy_id.")
+            # Clear image field for trophies
+            if self.image:
+                self.image = None
 
         super().save(*args, **kwargs)
 

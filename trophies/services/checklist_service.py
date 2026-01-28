@@ -23,7 +23,7 @@ class ChecklistService:
     MAX_DESCRIPTION_LENGTH = 2000
     MAX_SECTION_SUBTITLE_LENGTH = 200
     MAX_SECTION_DESCRIPTION_LENGTH = 1000
-    MAX_ITEM_TEXT_LENGTH = 500
+    MAX_ITEM_TEXT_LENGTH = 2000  # Increased from 500 for text_area support
 
     # Image size limits (bytes)
     MAX_CHECKLIST_IMAGE_SIZE = 5 * 1024 * 1024  # 5MB
@@ -35,6 +35,25 @@ class ChecklistService:
 
     # Image dimension limits
     MAX_IMAGE_DIMENSION = 2048  # pixels
+
+    # Markdown configuration
+    MARKDOWN_EXTRAS = [
+        'strike',           # ~~strikethrough~~
+        'fenced-code-blocks',  # ```code blocks```
+        'cuddled-lists',    # Lists without blank lines between items
+        'break-on-newline', # Single newline creates <br>
+    ]
+
+    ALLOWED_HTML_TAGS = [
+        'p', 'br', 'strong', 'em', 'u', 'del', 's',
+        'ul', 'ol', 'li', 'blockquote', 'code', 'pre',
+        'a',  # Links
+    ]
+
+    ALLOWED_HTML_ATTRS = {
+        '*': ['class'],
+        'a': ['href', 'title', 'rel', 'target', 'class'],  # Link attributes with class
+    }
 
     # ---------- Permission Checks ----------
 
@@ -201,6 +220,89 @@ class ChecklistService:
         cleaned = bleach.clean(text, tags=[], attributes={}, strip=True)
         # Then unescape HTML entities (& -> &, etc.) since we're storing plain text
         return html.unescape(cleaned).strip()
+
+    @staticmethod
+    def process_markdown(text):
+        """
+        Process markdown text to HTML with sanitization.
+
+        Args:
+            text: Raw markdown string
+
+        Returns:
+            str: Sanitized HTML string
+        """
+        if not text or not text.strip():
+            return ''
+
+        try:
+            import markdown2
+            import re
+
+            # Pre-process: Convert __text__ to <u>text</u> for underline
+            # We need to do this before markdown processing to avoid conflict with __bold__
+            # Match __ at word boundaries, allowing spaces and multiple words
+            text = re.sub(r'(?<![_\w])__([^_\n]+?)__(?![_\w])', r'<u>\1</u>', text)
+
+            # Process markdown
+            html_output = markdown2.markdown(
+                text,
+                extras=ChecklistService.MARKDOWN_EXTRAS
+            )
+
+            # Sanitize HTML to prevent XSS and restrict link protocols
+            clean_html = bleach.clean(
+                html_output,
+                tags=ChecklistService.ALLOWED_HTML_TAGS,
+                attributes=ChecklistService.ALLOWED_HTML_ATTRS,
+                protocols=['http', 'https'],  # Only allow http/https links
+                strip=True
+            )
+
+            # Add security attributes and styling to links (open in new tab, noopener, classes)
+            clean_html = re.sub(
+                r'<a\s+([^>]*?)href="([^"]*)"([^>]*?)>',
+                r'<a \1href="\2"\3 class="link link-primary" target="_blank" rel="noopener noreferrer">',
+                clean_html
+            )
+
+            # Add styling to blockquotes
+            clean_html = re.sub(
+                r'<blockquote>',
+                r'<blockquote class="border-l-4 border-base-300 pl-4 py-2 my-2 italic text-base-content/80 bg-base-200/30">',
+                clean_html
+            )
+
+            # Add styling to unordered lists
+            clean_html = re.sub(
+                r'<ul>',
+                r'<ul class="list-disc list-inside ml-4 my-2 space-y-1">',
+                clean_html
+            )
+
+            # Add styling to ordered lists
+            clean_html = re.sub(
+                r'<ol>',
+                r'<ol class="list-decimal list-inside ml-4 my-2 space-y-1">',
+                clean_html
+            )
+
+            # Add spacing to paragraphs for visual separation
+            clean_html = re.sub(
+                r'<p>',
+                r'<p class="my-2">',
+                clean_html
+            )
+
+            return clean_html
+        except ImportError:
+            logger.error("markdown2 library not installed")
+            # Fallback: return escaped text wrapped in paragraph
+            return f"<p>{html.escape(text)}</p>"
+        except Exception as e:
+            logger.error(f"Markdown processing error: {e}")
+            # Fallback: return escaped text wrapped in paragraph
+            return f"<p>{html.escape(text)}</p>"
 
     @staticmethod
     def _check_banned_words(text):
@@ -733,13 +835,13 @@ class ChecklistService:
     @transaction.atomic
     def add_item(section, profile, text='', item_type='item', trophy_id=None, order=None, image=None):
         """
-        Add an item to a section. Supports regular items, sub-headers, and images.
+        Add an item to a section. Supports regular items, sub-headers, images, and text areas.
 
         Args:
             section: ChecklistSection instance
             profile: Profile adding item
-            text: Item text (required for item/sub_header, optional for image as caption)
-            item_type: 'item', 'sub_header', or 'image' (default: 'item')
+            text: Item text (required for item/sub_header/text_area, optional for image as caption)
+            item_type: 'item', 'sub_header', 'image', or 'text_area' (default: 'item')
             trophy_id: Optional trophy ID link
             order: Display order (defaults to end)
             image: UploadedFile for item_type='image'
@@ -757,7 +859,7 @@ class ChecklistService:
             return None, reason
 
         # Validate item_type
-        if item_type not in ['item', 'sub_header', 'image']:
+        if item_type not in ['item', 'sub_header', 'image', 'text_area']:
             return None, "Invalid item type."
 
         # Special handling for image items
@@ -786,6 +888,25 @@ class ChecklistService:
 
             # text is optional for images (acts as caption)
             text = ChecklistService._sanitize_text(text) if text else ''
+
+        # Handle text_area items
+        elif item_type == 'text_area':
+            text = ChecklistService._sanitize_text(text)
+            if not text or not text.strip():
+                return None, "Text area content cannot be empty."
+
+            # Validate length
+            if len(text) > ChecklistService.MAX_ITEM_TEXT_LENGTH:
+                return None, f"Text area content too long (max {ChecklistService.MAX_ITEM_TEXT_LENGTH} characters)."
+
+            # Check for banned words
+            contains_banned, _ = ChecklistService._check_banned_words(text)
+            if contains_banned:
+                return None, "Your content contains inappropriate language."
+
+            # No trophy linking for text areas
+            trophy_id = None
+            image = None
 
         else:
             # Regular items and sub-headers require text
@@ -821,6 +942,178 @@ class ChecklistService:
 
         logger.info(f"Item {item.id} (type: {item_type}) added to section {section.id}")
         return item, None
+
+    @staticmethod
+    def validate_trophy_for_checklist(checklist, trophy_id, profile):
+        """
+        Validate that a trophy can be added to the checklist.
+
+        Args:
+            checklist: Checklist instance
+            trophy_id: Trophy ID to validate
+            profile: Profile adding the trophy
+
+        Returns:
+            tuple: (is_valid: bool, error_message: str or None)
+        """
+        from trophies.models import Trophy, ChecklistItem
+
+        if not checklist.selected_game:
+            return False, "Checklist must have a selected game before adding trophies."
+
+        try:
+            trophy = Trophy.objects.get(id=trophy_id)
+        except Trophy.DoesNotExist:
+            return False, "Trophy not found."
+
+        if trophy.game != checklist.selected_game:
+            return False, "Trophy does not belong to the selected game."
+
+        # Check for duplicates across all sections
+        existing = ChecklistItem.objects.filter(
+            section__checklist=checklist,
+            item_type='trophy',
+            trophy_id=trophy_id
+        )
+
+        if existing.exists():
+            return False, f"Trophy '{trophy.trophy_name}' is already in this checklist."
+
+        return True, None
+
+    @staticmethod
+    @transaction.atomic
+    def add_trophy_item(section, profile, trophy_id, order=None):
+        """
+        Add a trophy item to a section.
+
+        Args:
+            section: ChecklistSection instance
+            profile: Profile adding the item
+            trophy_id: Trophy ID to add
+            order: Display order (auto-calculated if None)
+
+        Returns:
+            tuple: (ChecklistItem instance or None, error message or None)
+        """
+        from trophies.models import ChecklistItem, Trophy
+
+        checklist = section.checklist
+
+        # Check structure editing permission
+        can_edit, reason = ChecklistService.can_edit_checklist_structure(checklist, profile)
+        if not can_edit:
+            return None, reason
+
+        # Validate trophy
+        is_valid, error = ChecklistService.validate_trophy_for_checklist(
+            checklist, trophy_id, profile
+        )
+        if not is_valid:
+            return None, error
+
+        # Get trophy details
+        trophy = Trophy.objects.get(id=trophy_id)
+
+        if order is None:
+            order = section.items.count()
+
+        # Create item with trophy data
+        item = ChecklistItem.objects.create(
+            section=section,
+            text=trophy.trophy_name,
+            item_type='trophy',
+            trophy_id=trophy_id,
+            order=order
+        )
+
+        logger.info(f"Trophy item {item.id} (trophy_id: {trophy_id}) added to section {section.id}")
+        return item, None
+
+    @staticmethod
+    @transaction.atomic
+    def set_checklist_game(checklist, game_id, profile):
+        """
+        Set the selected game for a checklist.
+
+        Args:
+            checklist: Checklist instance
+            game_id: Game ID to select
+            profile: Profile making the change
+
+        Returns:
+            tuple: (success: bool, error_message or None)
+        """
+        from trophies.models import Game, ChecklistItem
+
+        if checklist.profile != profile:
+            return False, "You don't have permission to edit this checklist."
+
+        if checklist.is_published:
+            return False, "Cannot change game selection for published checklists."
+
+        try:
+            game = Game.objects.get(id=game_id)
+        except Game.DoesNotExist:
+            return False, "Game not found."
+
+        if game.concept != checklist.concept:
+            return False, "Game does not belong to this checklist's concept."
+
+        # Check if checklist already has trophy items with different game
+        existing_trophies = ChecklistItem.objects.filter(
+            section__checklist=checklist,
+            item_type='trophy',
+            trophy_id__isnull=False
+        )
+
+        if existing_trophies.exists() and checklist.selected_game and checklist.selected_game != game:
+            return False, "Cannot change game - checklist already has trophy items."
+
+        # Set game
+        checklist.selected_game = game
+        checklist.save(update_fields=['selected_game', 'updated_at'])
+
+        logger.info(f"Checklist {checklist.id} game set to {game.id}")
+        return True, None
+
+    @staticmethod
+    def get_available_trophies_for_checklist(checklist):
+        """
+        Get trophies that can be added to the checklist.
+
+        Returns list of Trophy objects with 'is_used' and 'is_base_game' annotations,
+        along with trophy group information.
+        """
+        from trophies.models import Trophy, ChecklistItem, TrophyGroup
+        from django.db.models import Exists, OuterRef, Case, When, Value, BooleanField, F
+
+        if not checklist.selected_game:
+            return Trophy.objects.none()
+
+        # Get all trophies for the selected game with group info
+        trophies = Trophy.objects.filter(
+            game=checklist.selected_game
+        ).select_related('game').order_by('trophy_group_id', 'trophy_id')
+
+        # Annotate with usage status
+        used_trophy_ids = ChecklistItem.objects.filter(
+            section__checklist=checklist,
+            item_type='trophy',
+            trophy_id=OuterRef('id')
+        )
+
+        # Annotate with is_used and is_base_game
+        trophies = trophies.annotate(
+            is_used=Exists(used_trophy_ids),
+            is_base_game=Case(
+                When(trophy_group_id='default', then=Value(True)),
+                default=Value(False),
+                output_field=BooleanField()
+            )
+        )
+
+        return trophies
 
     @staticmethod
     @transaction.atomic
@@ -969,27 +1262,29 @@ class ChecklistService:
 
         if text is not None:
             text = ChecklistService._sanitize_text(text)
-            if not text:
+            # Text areas and regular items/sub-headers require text
+            if not text and item.item_type != 'image':
                 return False, "Item text cannot be empty."
             if len(text) > ChecklistService.MAX_ITEM_TEXT_LENGTH:
                 return False, f"Item text must be under {ChecklistService.MAX_ITEM_TEXT_LENGTH} characters."
 
-            # Check for banned words
-            contains_banned, _ = ChecklistService._check_banned_words(text)
-            if contains_banned:
-                return False, "Your content contains inappropriate language."
+            # Check for banned words (skip for images since text is optional caption)
+            if item.item_type != 'image':
+                contains_banned, _ = ChecklistService._check_banned_words(text)
+                if contains_banned:
+                    return False, "Your content contains inappropriate language."
 
             item.text = text
             update_fields.append('text')
 
         if item_type is not None:
-            if item_type not in ['item', 'sub_header']:
+            if item_type not in ['item', 'sub_header', 'text_area']:
                 return False, "Invalid item type."
             item.item_type = item_type
             update_fields.append('item_type')
 
-            # Clear trophy_id when converting to sub_header
-            if item_type == 'sub_header':
+            # Clear trophy_id when converting to sub_header or text_area
+            if item_type in ['sub_header', 'text_area']:
                 item.trophy_id = None
                 update_fields.append('trophy_id')
 

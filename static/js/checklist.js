@@ -421,18 +421,21 @@
     }
 
     function initProgressCheckboxes(checklistId, canSaveProgress, isPremium) {
-        // Only attach to regular items, not sub-headers
-        document.querySelectorAll('.checklist-item[data-item-type="item"] .checklist-item-checkbox').forEach(checkbox => {
+        // Attach to regular items and trophy items, not sub-headers
+        document.querySelectorAll('.checklist-item[data-item-type="item"] .checklist-item-checkbox, .checklist-trophy-item[data-item-type="trophy"] .checklist-item-checkbox').forEach(checkbox => {
             checkbox.addEventListener('change', async function() {
                 const itemId = this.dataset.itemId;
                 const isChecked = this.checked;
-                const textSpan = this.closest('.checklist-item').querySelector('.checklist-item-text');
+                const itemContainer = this.closest('.checklist-item, .checklist-trophy-item');
+                const textSpan = itemContainer ? itemContainer.querySelector('.checklist-item-text') : null;
 
                 // Update visual state immediately
-                if (isChecked) {
-                    textSpan.classList.add('line-through', 'text-base-content/50');
-                } else {
-                    textSpan.classList.remove('line-through', 'text-base-content/50');
+                if (textSpan) {
+                    if (isChecked) {
+                        textSpan.classList.add('line-through', 'text-base-content/50');
+                    } else {
+                        textSpan.classList.remove('line-through', 'text-base-content/50');
+                    }
                 }
 
                 // If user can't save progress, show premium upsell
@@ -539,9 +542,9 @@
 
     function updateLocalProgress() {
         // Update progress display based on checked checkboxes (for non-premium users)
-        // Only count regular items, not sub-headers
-        const checkboxes = document.querySelectorAll('.checklist-item[data-item-type="item"] .checklist-item-checkbox');
-        const checked = document.querySelectorAll('.checklist-item[data-item-type="item"] .checklist-item-checkbox:checked');
+        // Count regular items and trophy items, not sub-headers
+        const checkboxes = document.querySelectorAll('.checklist-item[data-item-type="item"] .checklist-item-checkbox, .checklist-trophy-item[data-item-type="trophy"] .checklist-item-checkbox');
+        const checked = document.querySelectorAll('.checklist-item[data-item-type="item"] .checklist-item-checkbox:checked, .checklist-trophy-item[data-item-type="trophy"] .checklist-item-checkbox:checked');
         const total = checkboxes.length;
         const completed = checked.length;
         const percentage = total > 0 ? (completed / total * 100) : 0;
@@ -578,9 +581,9 @@
             const sectionId = section.dataset.sectionId;
             if (!sectionId) return;
 
-            // Count completed items in this section
-            const sectionItems = section.querySelectorAll('.checklist-item[data-item-type="item"] .checklist-item-checkbox');
-            const sectionChecked = section.querySelectorAll('.checklist-item[data-item-type="item"] .checklist-item-checkbox:checked');
+            // Count completed items in this section (regular items and trophy items)
+            const sectionItems = section.querySelectorAll('.checklist-item[data-item-type="item"] .checklist-item-checkbox, .checklist-trophy-item[data-item-type="trophy"] .checklist-item-checkbox');
+            const sectionChecked = section.querySelectorAll('.checklist-item[data-item-type="item"] .checklist-item-checkbox:checked, .checklist-trophy-item[data-item-type="trophy"] .checklist-item-checkbox:checked');
             const completedCount = sectionChecked.length;
             const totalCount = sectionItems.length;
 
@@ -896,46 +899,21 @@
         addBtn.addEventListener('click', async function() {
             try {
                 this.classList.add('loading');
-                const result = await apiRequest(`${API_BASE}/checklists/${checklistId}/sections/`, 'POST', {
+                await apiRequest(`${API_BASE}/checklists/${checklistId}/sections/`, 'POST', {
                     subtitle: 'New Section',
                 });
 
-                // Add section to DOM (API returns { success: true, section: {...} })
-                addSectionToDOM(result.section, checklistId);
-
-                // Hide publish requirements if we now have sections
-                const requirements = document.getElementById('publish-requirements');
-                if (requirements) {
-                    requirements.classList.add('hidden');
-                }
-
                 showToast('Section added!', 'success');
+
+                // Reload page to show the new section with all features
+                setTimeout(() => location.reload(), 500);
             } catch (error) {
                 showToast(error.message || 'Failed to add section', 'error');
-            } finally {
                 this.classList.remove('loading');
             }
         });
     }
 
-    function addSectionToDOM(section, checklistId) {
-        const template = document.getElementById('section-template');
-        const container = document.getElementById('sections-container');
-        if (!template || !container) return;
-
-        const clone = template.content.cloneNode(true);
-        const sectionEl = clone.querySelector('.checklist-section');
-
-        sectionEl.dataset.sectionId = section.id;
-        sectionEl.dataset.sectionOrder = section.order;
-        sectionEl.querySelector('.section-title-input').value = section.subtitle;
-
-        container.appendChild(clone);
-
-        // Re-init event listeners for new section
-        initSectionOperations(checklistId);
-        initItemOperations(checklistId);
-    }
 
     function initSectionOperations(checklistId) {
         // Save section
@@ -1045,11 +1023,11 @@
 
     async function reorderItems(section) {
         const sectionId = section.dataset.sectionId;
-        // Get both regular items and image items in document order
+        // Get all item types (regular, image, text area, and trophy) in document order
         const container = section.querySelector('.section-items-container');
         if (!container) return;
 
-        const allItems = container.querySelectorAll('.checklist-item-edit, .checklist-image-item');
+        const allItems = container.querySelectorAll('.checklist-item-edit, .checklist-image-item, .checklist-text-area-edit, .checklist-trophy-item-edit');
         const ids = Array.from(allItems).map(i => parseInt(i.dataset.itemId));
 
         try {
@@ -1067,12 +1045,18 @@
 
         document.querySelectorAll('.item-move-up-btn').forEach(btn => {
             btn.addEventListener('click', function() {
-                // Support both regular items and image items
-                const item = this.closest('.checklist-item-edit') || this.closest('.checklist-image-item');
+                // Support regular items, image items, text area items, and trophy items
+                const item = this.closest('.checklist-item-edit') ||
+                            this.closest('.checklist-image-item') ||
+                            this.closest('.checklist-text-area-edit') ||
+                            this.closest('.checklist-trophy-item-edit');
                 if (!item) return;
 
                 const prev = item.previousElementSibling;
-                if (prev && (prev.classList.contains('checklist-item-edit') || prev.classList.contains('checklist-image-item'))) {
+                if (prev && (prev.classList.contains('checklist-item-edit') ||
+                           prev.classList.contains('checklist-image-item') ||
+                           prev.classList.contains('checklist-text-area-edit') ||
+                           prev.classList.contains('checklist-trophy-item-edit'))) {
                     item.parentNode.insertBefore(item, prev);
                     const section = this.closest('.checklist-section');
                     reorderItems(section);
@@ -1087,12 +1071,18 @@
 
         document.querySelectorAll('.item-move-down-btn').forEach(btn => {
             btn.addEventListener('click', function() {
-                // Support both regular items and image items
-                const item = this.closest('.checklist-item-edit') || this.closest('.checklist-image-item');
+                // Support regular items, image items, text area items, and trophy items
+                const item = this.closest('.checklist-item-edit') ||
+                            this.closest('.checklist-image-item') ||
+                            this.closest('.checklist-text-area-edit') ||
+                            this.closest('.checklist-trophy-item-edit');
                 if (!item) return;
 
                 const next = item.nextElementSibling;
-                if (next && (next.classList.contains('checklist-item-edit') || next.classList.contains('checklist-image-item'))) {
+                if (next && (next.classList.contains('checklist-item-edit') ||
+                           next.classList.contains('checklist-image-item') ||
+                           next.classList.contains('checklist-text-area-edit') ||
+                           next.classList.contains('checklist-trophy-item-edit'))) {
                     item.parentNode.insertBefore(next, item);
                     const section = this.closest('.checklist-section');
                     reorderItems(section);
@@ -1177,7 +1167,12 @@
 
         document.querySelectorAll('.item-save-btn').forEach(btn => {
             btn.addEventListener('click', async function() {
-                const item = this.closest('.checklist-item-edit');
+                // Support regular items and text area items
+                const item = this.closest('.checklist-item-edit') ||
+                            this.closest('.checklist-text-area-edit');
+
+                if (!item) return;
+
                 const itemId = item.dataset.itemId;
                 const text = item.querySelector('.item-text-input').value.trim();
                 const typeSelect = item.querySelector('.item-type-select');
@@ -1197,16 +1192,18 @@
                     // Update data attribute
                     item.dataset.itemType = itemType;
 
-                    // Update visual styling based on type
-                    const textInput = item.querySelector('.item-text-input');
-                    if (itemType === 'sub_header') {
-                        item.classList.add('bg-base-300/50', 'border-l-4', 'border-secondary');
-                        item.classList.remove('bg-base-200');
-                        textInput.classList.add('font-semibold', 'text-secondary');
-                    } else {
-                        item.classList.remove('bg-base-300/50', 'border-l-4', 'border-secondary');
-                        item.classList.add('bg-base-200');
-                        textInput.classList.remove('font-semibold', 'text-secondary');
+                    // Update visual styling based on type (only for regular items, not text_area)
+                    if (item.classList.contains('checklist-item-edit')) {
+                        const textInput = item.querySelector('.item-text-input');
+                        if (itemType === 'sub_header') {
+                            item.classList.add('bg-base-300/50', 'border-l-4', 'border-secondary');
+                            item.classList.remove('bg-base-200');
+                            textInput.classList.add('font-semibold', 'text-secondary');
+                        } else {
+                            item.classList.remove('bg-base-300/50', 'border-l-4', 'border-secondary');
+                            item.classList.add('bg-base-200');
+                            textInput.classList.remove('font-semibold', 'text-secondary');
+                        }
                     }
 
                     showToast('Item saved!', 'success');
@@ -1223,8 +1220,11 @@
 
         document.querySelectorAll('.item-delete-btn').forEach(btn => {
             btn.addEventListener('click', async function() {
-                // Support both regular items and image items
-                const item = this.closest('.checklist-item-edit') || this.closest('.checklist-image-item');
+                // Support regular items, image items, text area items, and trophy items
+                const item = this.closest('.checklist-item-edit') ||
+                            this.closest('.checklist-image-item') ||
+                            this.closest('.checklist-text-area-edit') ||
+                            this.closest('.checklist-trophy-item-edit');
                 if (!item) return;
 
                 const itemId = item.dataset.itemId;
@@ -1234,11 +1234,13 @@
                     await apiRequest(`${API_BASE}/checklists/items/${itemId}/`, 'DELETE');
                     item.remove();
 
-                    // Update item count (count both types of items)
+                    // Update item count (count all types of items)
                     const countBadge = section.querySelector('.section-item-count');
                     const regularItems = section.querySelectorAll('.checklist-item-edit');
                     const imageItems = section.querySelectorAll('.checklist-image-item');
-                    const totalItems = regularItems.length + imageItems.length;
+                    const textAreaItems = section.querySelectorAll('.checklist-text-area-edit');
+                    const trophyItems = section.querySelectorAll('.checklist-trophy-item-edit');
+                    const totalItems = regularItems.length + imageItems.length + textAreaItems.length + trophyItems.length;
                     countBadge.textContent = totalItems + ' items';
 
                     // Show empty message if no items
@@ -1753,6 +1755,220 @@
     }
 
     // ==========================================
+    // Text Area Handlers
+    // ==========================================
+
+    function initTextAreaCharCounters() {
+        // Character counter for new text area inputs
+        document.addEventListener('input', function(e) {
+            if (e.target.classList.contains('text-area-content-input')) {
+                const sectionId = e.target.dataset.sectionId;
+                const counter = document.querySelector(`.text-area-char-count[data-section-id="${sectionId}"]`);
+                if (counter) {
+                    const length = e.target.value.length;
+                    counter.textContent = `${length}/2000`;
+
+                    // Warning color when approaching limit
+                    if (length > 1900) {
+                        counter.classList.add('text-warning');
+                    } else {
+                        counter.classList.remove('text-warning');
+                    }
+                }
+            }
+
+            // Character counter for editing existing text areas
+            if (e.target.classList.contains('item-text-input') &&
+                e.target.closest('.checklist-text-area-edit')) {
+                const itemId = e.target.dataset.itemId;
+                const counter = document.querySelector(`.text-area-edit-count[data-item-id="${itemId}"]`);
+                if (counter) {
+                    const length = e.target.value.length;
+                    counter.textContent = `${length}/2000`;
+
+                    if (length > 1900) {
+                        counter.classList.add('text-warning');
+                    } else {
+                        counter.classList.remove('text-warning');
+                    }
+                }
+            }
+        });
+    }
+
+    function initTextAreaHandlers() {
+        // Add text area button
+        document.addEventListener('click', async function(e) {
+            if (e.target.closest('.add-text-area-btn')) {
+                const btn = e.target.closest('.add-text-area-btn');
+                const container = btn.closest('.mt-3');
+                const textarea = container.querySelector('.text-area-content-input');
+                const sectionId = btn.dataset.sectionId;
+
+                const text = textarea.value.trim();
+                if (!text) {
+                    showToast('Please enter some content.', 'error');
+                    return;
+                }
+
+                if (text.length > 2000) {
+                    showToast('Content too long (max 2000 characters).', 'error');
+                    return;
+                }
+
+                // Disable button during request
+                btn.disabled = true;
+                const originalHTML = btn.innerHTML;
+                btn.innerHTML = '<span class="loading loading-spinner loading-xs"></span> Adding...';
+
+                try {
+                    const response = await fetch(`${API_BASE}/checklists/sections/${sectionId}/items/`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRFToken': getCSRFToken()
+                        },
+                        body: JSON.stringify({
+                            text: text,
+                            item_type: 'text_area'
+                        })
+                    });
+
+                    const data = await response.json();
+
+                    if (response.ok) {
+                        showToast('Text area added!', 'success');
+                        textarea.value = '';  // Clear input
+                        // Update character counter
+                        const counter = document.querySelector(`.text-area-char-count[data-section-id="${sectionId}"]`);
+                        if (counter) counter.textContent = '0/2000';
+
+                        // Reload page to show new item
+                        setTimeout(() => location.reload(), 500);
+                    } else {
+                        showToast(data.error || 'Failed to add text area.', 'error');
+                        btn.disabled = false;
+                        btn.innerHTML = originalHTML;
+                    }
+                } catch (error) {
+                    console.error('Add text area error:', error);
+                    showToast('Network error.', 'error');
+                    btn.disabled = false;
+                    btn.innerHTML = originalHTML;
+                }
+            }
+        });
+    }
+
+    function initMarkdownPreview() {
+        // Preview button for new text areas
+        document.addEventListener('click', async function(e) {
+            if (e.target.closest('.preview-text-area-btn')) {
+                const btn = e.target.closest('.preview-text-area-btn');
+                const container = btn.closest('.mt-3');
+                const textarea = container.querySelector('.text-area-content-input');
+                const text = textarea.value.trim();
+
+                if (!text) {
+                    showToast('Enter some content first.', 'warning');
+                    return;
+                }
+
+                await showMarkdownPreviewModal(text);
+            }
+
+            // Preview button for editing text areas
+            if (e.target.closest('.preview-item-markdown-btn')) {
+                const btn = e.target.closest('.preview-item-markdown-btn');
+                const itemId = btn.dataset.itemId;
+                const editContainer = document.querySelector(`[data-item-id="${itemId}"].checklist-text-area-edit`);
+                const textarea = editContainer.querySelector('.item-text-input');
+                const previewArea = document.getElementById(`preview-${itemId}`);
+
+                if (previewArea.classList.contains('hidden')) {
+                    // Show preview
+                    const text = textarea.value.trim();
+                    if (!text) {
+                        showToast('No content to preview.', 'warning');
+                        return;
+                    }
+
+                    // Fetch rendered HTML from server
+                    try {
+                        const response = await fetch(`${API_BASE}/markdown/preview/`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'X-CSRFToken': getCSRFToken()
+                            },
+                            body: JSON.stringify({ text })
+                        });
+
+                        const data = await response.json();
+                        if (response.ok) {
+                            previewArea.querySelector('.prose').innerHTML = data.html;
+                            previewArea.classList.remove('hidden');
+                            btn.textContent = 'Hide Preview';
+                        } else {
+                            showToast(data.error || 'Preview failed.', 'error');
+                        }
+                    } catch (error) {
+                        console.error('Preview error:', error);
+                        showToast('Preview failed.', 'error');
+                    }
+                } else {
+                    // Hide preview
+                    previewArea.classList.add('hidden');
+                    btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg> Preview';
+                }
+            }
+        });
+    }
+
+    async function showMarkdownPreviewModal(text) {
+        // Create modal for preview
+        const modalHTML = `
+            <dialog id="markdown-preview-modal" class="modal modal-open">
+                <div class="modal-box max-w-3xl">
+                    <h3 class="font-bold text-lg mb-4">Markdown Preview</h3>
+                    <div class="prose prose-sm max-w-none preview-content p-4 bg-base-200 rounded-lg">
+                        <!-- Rendered content will go here -->
+                    </div>
+                    <div class="modal-action">
+                        <button class="btn btn-sm" onclick="this.closest('dialog').remove()">Close</button>
+                    </div>
+                </div>
+            </dialog>
+        `;
+
+        // Insert modal into DOM
+        document.body.insertAdjacentHTML('beforeend', modalHTML);
+        const modal = document.getElementById('markdown-preview-modal');
+
+        // Fetch rendered HTML from server
+        try {
+            const response = await fetch(`${API_BASE}/markdown/preview/`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCSRFToken()
+                },
+                body: JSON.stringify({ text })
+            });
+
+            const data = await response.json();
+            if (response.ok) {
+                modal.querySelector('.preview-content').innerHTML = data.html;
+            } else {
+                modal.querySelector('.preview-content').innerHTML = '<p class="text-error">Preview failed.</p>';
+            }
+        } catch (error) {
+            console.error('Preview error:', error);
+            modal.querySelector('.preview-content').innerHTML = '<p class="text-error">Network error.</p>';
+        }
+    }
+
+    // ==========================================
     // Checklist Image Modal
     // ==========================================
 
@@ -1803,6 +2019,384 @@
     }
 
     // ==========================================
+    // Trophy Selection Functions
+    // ==========================================
+
+    /**
+     * Handle game selection for checklist.
+     */
+    function handleGameSelection() {
+        // Handle header game selector
+        const headerSelector = document.getElementById('checklist-game-selector');
+        if (headerSelector) {
+            headerSelector.addEventListener('change', async function() {
+                const checklistId = this.dataset.checklistId;
+                const gameId = this.value;
+
+                if (!gameId) return;
+
+                try {
+                    await apiRequest(
+                        `/api/v1/checklists/${checklistId}/select-game/`,
+                        'POST',
+                        { game_id: parseInt(gameId) }
+                    );
+
+                    showToast('Game selected successfully', 'success');
+
+                    // Enable trophy selector buttons
+                    document.querySelectorAll('.open-trophy-selector-btn').forEach(btn => {
+                        btn.disabled = false;
+                    });
+
+                    // Reload page to update UI
+                    setTimeout(() => location.reload(), 1000);
+                } catch (error) {
+                    showToast(error.message, 'error');
+                }
+            });
+        }
+
+        // Handle legacy per-section selectors (for backwards compatibility)
+        const selectors = document.querySelectorAll('.game-selector');
+        selectors.forEach(selector => {
+            selector.addEventListener('change', async function() {
+                const checklistId = this.dataset.checklistId;
+                const gameId = this.value;
+
+                if (!gameId) return;
+
+                try {
+                    await apiRequest(
+                        `/api/v1/checklists/${checklistId}/select-game/`,
+                        'POST',
+                        { game_id: parseInt(gameId) }
+                    );
+
+                    showToast('Game selected successfully', 'success');
+
+                    // Enable trophy selector buttons
+                    document.querySelectorAll('.open-trophy-selector-btn').forEach(btn => {
+                        btn.disabled = false;
+                    });
+
+                    // Reload page to update UI
+                    setTimeout(() => location.reload(), 1000);
+                } catch (error) {
+                    showToast(error.message, 'error');
+                }
+            });
+        });
+    }
+
+    /**
+     * Open trophy selector modal and load trophies.
+     */
+    async function openTrophySelector(sectionId, checklistId) {
+        const modal = document.getElementById('trophy-selector-modal');
+        const listContainer = document.getElementById('trophy-list-container');
+        const groupFilter = document.getElementById('trophy-group-filter');
+
+        // Store context
+        modal.dataset.sectionId = sectionId;
+        modal.dataset.checklistId = checklistId;
+
+        // Show modal
+        modal.showModal();
+
+        // Load trophies
+        try {
+            const data = await apiRequest(
+                `/api/v1/checklists/${checklistId}/available-trophies/`,
+                'GET'
+            );
+
+            // Store trophies data on modal for filtering
+            modal.dataset.trophies = JSON.stringify(data.trophies);
+
+            // Populate trophy group filter
+            populateTrophyGroupFilter(data.trophy_groups, groupFilter);
+
+            renderTrophyList(data.trophies, listContainer);
+        } catch (error) {
+            listContainer.innerHTML = `
+                <div class="alert alert-error">
+                    <span>${error.message}</span>
+                </div>
+            `;
+        }
+    }
+
+    /**
+     * Render trophy list in selector.
+     */
+    function renderTrophyList(trophies, container) {
+        if (trophies.length === 0) {
+            container.innerHTML = `
+                <div class="text-center py-8 text-base-content/50">
+                    <p>No trophies available.</p>
+                </div>
+            `;
+            return;
+        }
+
+        const html = trophies.map(trophy => {
+            const isDisabled = trophy.is_used ? 'opacity-50 pointer-events-none' : '';
+            const badgeClass = trophy.is_used ? 'badge-ghost' : `badge-${trophy.trophy_type}`;
+
+            // Add DLC badge if not base game
+            const dlcBadge = !trophy.is_base_game && trophy.trophy_group_name
+                ? `<span class="badge badge-sm badge-info">DLC: ${escapeHtml(trophy.trophy_group_name)}</span>`
+                : (!trophy.is_base_game ? '<span class="badge badge-sm badge-info">DLC</span>' : '');
+
+            return `
+                <div class="trophy-select-card flex items-center gap-3 p-3 bg-base-200 rounded-lg hover:bg-base-300 transition-colors cursor-pointer ${isDisabled}"
+                     data-trophy-id="${trophy.id}"
+                     data-trophy-name="${escapeHtml(trophy.trophy_name)}"
+                     data-trophy-type="${trophy.trophy_type}"
+                     data-trophy-group="${trophy.trophy_group_id}"
+                     onclick="${trophy.is_used ? '' : 'selectTrophy(' + trophy.id + ')'}">
+                    <img src="${trophy.trophy_icon_url}"
+                         alt="${escapeHtml(trophy.trophy_name)}"
+                         class="w-12 h-12 rounded shrink-0">
+                    <div class="flex-1 min-w-0">
+                        <div class="flex items-center gap-2 flex-wrap mb-1">
+                            <span class="font-semibold truncate">${escapeHtml(trophy.trophy_name)}</span>
+                            <span class="badge badge-sm ${badgeClass}">
+                                ${trophy.trophy_type.charAt(0).toUpperCase() + trophy.trophy_type.slice(1)}
+                            </span>
+                            ${dlcBadge}
+                            ${trophy.is_used ? '<span class="badge badge-ghost badge-xs">Already Added</span>' : ''}
+                        </div>
+                        <p class="text-xs text-base-content/60 line-clamp-2">
+                            ${escapeHtml(trophy.trophy_detail || '')}
+                        </p>
+                        <div class="flex items-center gap-2 mt-1">
+                            <span class="text-xs text-base-content/50">${trophy.trophy_earn_rate.toFixed(1)}% earned</span>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+        container.innerHTML = html;
+    }
+
+    /**
+     * Select a trophy and add to section.
+     * Exposed globally for onclick handler.
+     */
+    window.selectTrophy = async function(trophyId) {
+        const modal = document.getElementById('trophy-selector-modal');
+        const sectionId = modal.dataset.sectionId;
+
+        try {
+            await apiRequest(
+                `/api/v1/checklists/sections/${sectionId}/items/`,
+                'POST',
+                {
+                    item_type: 'trophy',
+                    trophy_id: trophyId
+                }
+            );
+
+            showToast('Trophy added successfully', 'success');
+            modal.close();
+
+            // Reload page to show new trophy item
+            setTimeout(() => location.reload(), 500);
+        } catch (error) {
+            showToast(error.message, 'error');
+        }
+    }
+
+    /**
+     * Populate trophy group filter dropdown.
+     */
+    function populateTrophyGroupFilter(trophyGroups, selectElement) {
+        if (!selectElement || !trophyGroups) return;
+
+        // Clear existing options except "All Groups"
+        selectElement.innerHTML = '<option value="">All Groups</option>';
+
+        // Sort: Base game first, then DLC groups
+        const sorted = trophyGroups.sort((a, b) => {
+            if (a.is_base_game) return -1;
+            if (b.is_base_game) return 1;
+            return a.trophy_group_name.localeCompare(b.trophy_group_name);
+        });
+
+        sorted.forEach(group => {
+            const option = document.createElement('option');
+            option.value = group.trophy_group_id;
+            option.textContent = group.is_base_game
+                ? 'Base Game'
+                : (group.trophy_group_name || `DLC (${group.trophy_group_id})`);
+            selectElement.appendChild(option);
+        });
+    }
+
+    /**
+     * Filter trophies by search, type, and group.
+     */
+    function filterTrophies() {
+        const searchInput = document.getElementById('trophy-search-input');
+        const typeFilter = document.getElementById('trophy-type-filter');
+        const groupFilter = document.getElementById('trophy-group-filter');
+
+        const searchTerm = searchInput.value.toLowerCase();
+        const selectedType = typeFilter.value.toLowerCase();
+        const selectedGroup = groupFilter.value;
+
+        const cards = document.querySelectorAll('.trophy-select-card');
+
+        cards.forEach(card => {
+            const name = card.dataset.trophyName.toLowerCase();
+            const type = card.dataset.trophyType.toLowerCase();
+            const group = card.dataset.trophyGroup;
+
+            const matchesSearch = name.includes(searchTerm);
+            const matchesType = !selectedType || type === selectedType;
+            const matchesGroup = !selectedGroup || group === selectedGroup;
+
+            card.style.display = (matchesSearch && matchesType && matchesGroup) ? 'flex' : 'none';
+        });
+    }
+
+    /**
+     * Initialize trophy selection handlers.
+     */
+    function initTrophySelection() {
+        // Open modal buttons
+        document.querySelectorAll('.open-trophy-selector-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const sectionId = this.dataset.sectionId;
+                const checklistId = this.dataset.checklistId;
+                openTrophySelector(sectionId, checklistId);
+            });
+        });
+
+        // Search and filter
+        const searchInput = document.getElementById('trophy-search-input');
+        const typeFilter = document.getElementById('trophy-type-filter');
+        const groupFilter = document.getElementById('trophy-group-filter');
+
+        if (searchInput) {
+            searchInput.addEventListener('input', filterTrophies);
+        }
+
+        if (typeFilter) {
+            typeFilter.addEventListener('change', filterTrophies);
+        }
+
+        if (groupFilter) {
+            groupFilter.addEventListener('change', filterTrophies);
+        }
+    }
+
+    // ==========================================
+    // Section Collapse/Expand
+    // ==========================================
+
+    function initSectionCollapse() {
+        document.querySelectorAll('.section-collapse-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const sectionId = this.dataset.sectionId;
+                const section = document.querySelector(`.checklist-section[data-section-id="${sectionId}"]`);
+                if (!section) {
+                    console.error('Section not found:', sectionId);
+                    return;
+                }
+
+                const itemsContent = section.querySelector('.section-items-content');
+                const icon = this.querySelector('.collapse-icon');
+
+                if (!itemsContent) {
+                    console.error('Items content not found');
+                    return;
+                }
+
+                // Toggle collapsed state
+                const isCollapsed = itemsContent.style.display === 'none';
+
+                if (isCollapsed) {
+                    // Expand
+                    itemsContent.style.display = 'block';
+                    icon.style.transform = 'rotate(0deg)';
+                } else {
+                    // Collapse
+                    itemsContent.style.display = 'none';
+                    icon.style.transform = 'rotate(-90deg)';
+                }
+            });
+        });
+    }
+
+    // ==========================================
+    // Check All / Uncheck All
+    // ==========================================
+
+    function initBulkCheckButtons() {
+        // Check All buttons
+        document.querySelectorAll('.section-check-all-btn').forEach(btn => {
+            btn.addEventListener('click', async function() {
+                const sectionId = this.dataset.sectionId;
+                const section = document.querySelector(`.checklist-section[data-section-id="${sectionId}"]`);
+                if (!section) {
+                    console.error('Section not found for check all:', sectionId);
+                    return;
+                }
+
+                const checkboxes = section.querySelectorAll('.checklist-item[data-item-type="item"] .checklist-item-checkbox:not(:checked), .checklist-trophy-item[data-item-type="trophy"] .checklist-item-checkbox:not(:checked)');
+
+                console.log('Found', checkboxes.length, 'unchecked items to check');
+
+                // Check all unchecked boxes
+                for (const checkbox of checkboxes) {
+                    if (!checkbox.checked) {
+                        checkbox.checked = true;
+                        // Trigger change event to save progress
+                        checkbox.dispatchEvent(new Event('change', { bubbles: true }));
+                        // Small delay to avoid overwhelming the API
+                        await new Promise(resolve => setTimeout(resolve, 100));
+                    }
+                }
+
+                showToast('All items checked', 'success');
+            });
+        });
+
+        // Uncheck All buttons
+        document.querySelectorAll('.section-uncheck-all-btn').forEach(btn => {
+            btn.addEventListener('click', async function() {
+                const sectionId = this.dataset.sectionId;
+                const section = document.querySelector(`.checklist-section[data-section-id="${sectionId}"]`);
+                if (!section) {
+                    console.error('Section not found for uncheck all:', sectionId);
+                    return;
+                }
+
+                const checkboxes = section.querySelectorAll('.checklist-item[data-item-type="item"] .checklist-item-checkbox:checked, .checklist-trophy-item[data-item-type="trophy"] .checklist-item-checkbox:checked');
+
+                console.log('Found', checkboxes.length, 'checked items to uncheck');
+
+                // Uncheck all checked boxes
+                for (const checkbox of checkboxes) {
+                    if (checkbox.checked) {
+                        checkbox.checked = false;
+                        // Trigger change event to save progress
+                        checkbox.dispatchEvent(new Event('change', { bubbles: true }));
+                        // Small delay to avoid overwhelming the API
+                        await new Promise(resolve => setTimeout(resolve, 100));
+                    }
+                }
+
+                showToast('All items unchecked', 'success');
+            });
+        });
+    }
+
+    // ==========================================
     // Initialize
     // ==========================================
 
@@ -1811,6 +2405,16 @@
         initChecklistEdit();
         initChecklistSection();
         initChecklistImageModal();
+        // Text area functionality
+        initTextAreaCharCounters();
+        initTextAreaHandlers();
+        initMarkdownPreview();
+        // Trophy functionality
+        handleGameSelection();
+        initTrophySelection();
+        // Section controls
+        initSectionCollapse();
+        initBulkCheckButtons();
     });
 
 })();

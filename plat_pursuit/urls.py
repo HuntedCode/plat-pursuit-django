@@ -56,7 +56,7 @@ urlpatterns = [
     # Checklist URLs
     path('checklists/<int:checklist_id>/', ChecklistDetailView.as_view(), name='checklist_detail'),
     path('checklists/<int:checklist_id>/edit/', ChecklistEditView.as_view(), name='checklist_edit'),
-    path('checklists/create/<int:concept_id>/', ChecklistCreateView.as_view(), name='checklist_create'),
+    path('checklists/create/<int:concept_id>/<str:np_communication_id>/', ChecklistCreateView.as_view(), name='checklist_create'),
     path('my-checklists/', MyChecklistsView.as_view(), name='my_checklists'),
 
     path('profiles/<str:psn_username>/trophy-case/', TrophyCaseView.as_view(), name='trophy_case'),

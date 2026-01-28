@@ -1,0 +1,532 @@
+{% extends 'base.html' %}
+{% load static custom_filters markdown_filters trophy_tags %}
+{% block title %}{{ checklist.title }}{% endblock %}
+
+{% block content %}
+<div id="checklist-detail-container"
+     data-checklist-id="{{ checklist.id }}"
+     data-can-save-progress="{{ can_save_progress|yesno:'true,false' }}"
+     data-is-premium="{{ request.user.profile.user_is_premium|default:False|yesno:'true,false' }}">
+
+    <section class="shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 w-full p-0 lg:p-4">
+        {% include 'partials/breadcrumb.html' with items=breadcrumb %}
+
+        {# Header #}
+        <div class="card bg-base-100 border-4 border-base-300 shadow-md shadow-neutral">
+            <div class="card-body">
+                <div class="flex flex-col lg:flex-row justify-between items-start gap-4">
+                    {# Checklist Thumbnail #}
+                    {% if checklist.thumbnail %}
+                    <figure class="w-full lg:w-40 lg:h-40 aspect-square bg-base-300 rounded-lg overflow-hidden shrink-0 cursor-pointer hover:shadow-xl transition-shadow duration-200 checklist-image-clickable"
+                            data-image-src="{{ checklist.thumbnail.url }}"
+                            data-image-alt="{{ checklist.title }}">
+                        <img src="{{ checklist.thumbnail.url }}"
+                             alt="{{ checklist.title }}"
+                             class="w-full h-full object-cover">
+                    </figure>
+                    {% endif %}
+
+                    {# Title and Description #}
+                    <div class="flex-1">
+                        <div class="flex items-center gap-2 mb-2">
+                            {% if checklist.status == 'draft' %}
+                                <span class="badge badge-warning">Draft</span>
+                            {% endif %}
+                            <h1 class="text-2xl lg:text-3xl font-bold">{{ checklist.title }}</h1>
+                        </div>
+                        {% if checklist.description %}
+                            <p class="text-base-content/70 mt-2">{{ checklist.description }}</p>
+                        {% endif %}
+
+                        {# Author Info #}
+                        <div class="flex items-center gap-2 mt-4">
+                            <div class="avatar">
+                                <div class="w-8 h-8 rounded-full ring-2 ring-primary">
+                                    <img src="{{ checklist.profile.avatar_url|default:'/static/images/default_avatar.png' }}" alt="{{ checklist.profile.display_psn_username }}">
+                                </div>
+                            </div>
+                            <span class="text-sm text-base-content/70">
+                                by <a href="{% url 'profile_detail' checklist.profile.psn_username %}" class="font-medium hover:underline {% if checklist.profile.user_is_premium %}legendary-title{% else %}text-secondary{% endif %}">{{ checklist.profile.display_psn_username }}</a>
+                                {% if checklist.profile.flag %}
+                                    <span class="ml-1">{{ checklist.profile.flag }}</span>
+                                {% endif %}
+                            </span>
+                            {# Has Plat #}
+                            {% if author_has_platinum %}
+                                <figure class="w-6 tooltip hover:scale-105" data-tip="Author Has Plat">
+                                    <img src="{% static 'images/plat.png' %}" class="w-full object-cover" />
+                                </figure>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    {# Stats and Actions #}
+                    <div class="flex flex-col items-end gap-3">
+                        {# Vote Button #}
+                        {% if checklist.status == 'published' %}
+                            <div class="flex items-center gap-2">
+                                <button class="btn btn-ghost btn-sm checklist-vote-btn {% if user_has_voted %}text-secondary{% endif %}"
+                                        data-checklist-id="{{ checklist.id }}"
+                                        title="{% if user_has_voted %}Remove upvote{% else %}Upvote this checklist{% endif %}">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="{% if user_has_voted %}currentColor{% else %}none{% endif %}" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"/>
+                                    </svg>
+                                </button>
+                                <span class="text-lg font-semibold checklist-vote-count">{{ checklist.upvote_count }}</span>
+                                <span class="text-sm text-base-content/60">upvotes</span>
+                            </div>
+                        {% endif %}
+
+                        {# Stats Row #}
+                        <div class="flex flex-wrap items-center gap-4 text-sm text-base-content/60">
+                            <div class="flex items-center gap-1" title="Sections">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"/>
+                                </svg>
+                                <span>{{ checklist.sections.count }} sections</span>
+                            </div>
+                            <div class="flex items-center gap-1" title="Total items">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                                </svg>
+                                <span id="total-items-count">{{ checklist.total_items|default:0 }}</span> items
+                            </div>
+                            {% if checklist.status == 'published' %}
+                                <div class="flex items-center gap-1" title="Users tracking">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/>
+                                    </svg>
+                                    <span>{{ checklist.progress_save_count }} tracking</span>
+                                </div>
+                            {% endif %}
+                        </div>
+
+                        {# Action Buttons #}
+                        <div class="flex gap-2">
+                            {% if can_edit %}
+                                <a href="{% url 'checklist_edit' checklist.id %}" class="btn btn-ghost btn-sm">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+                                    </svg>
+                                    Edit
+                                </a>
+                            {% endif %}
+                            {% if checklist.status == 'published' and not is_author and request.user.is_authenticated %}
+                                <button class="btn btn-ghost btn-sm text-error checklist-report-btn"
+                                        data-checklist-id="{{ checklist.id }}"
+                                        title="Report this checklist">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 21v-4m0 0V5a2 2 0 012-2h6.5l1 1H21l-3 6 3 6h-8.5l-1-1H5a2 2 0 00-2 2zm9-13.5V9"/>
+                                    </svg>
+                                    Report
+                                </button>
+                            {% endif %}
+                            {% if game %}
+                                <a href="{% url 'game_detail' game.np_communication_id %}" class="btn btn-ghost btn-sm">
+                                    Back to Game
+                                </a>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                {# Progress Bar (for all authenticated users - local tracking works for everyone) #}
+                {% if request.user.is_authenticated %}
+                    <div class="mt-6 pt-4 border-t border-base-300">
+                        <div class="flex justify-between items-center text-sm mb-2">
+                            <span class="text-base-content/70">Your progress</span>
+                            <span class="font-semibold text-secondary" id="progress-percentage">
+                                {% if user_progress %}
+                                    {{ user_progress.progress_percentage|floatformat:0 }}%
+                                {% else %}
+                                    0%
+                                {% endif %}
+                            </span>
+                        </div>
+                        <progress class="progress progress-secondary w-full h-3"
+                                  id="progress-bar"
+                                  value="{% if user_progress %}{{ user_progress.progress_percentage }}{% else %}0{% endif %}"
+                                  max="100"></progress>
+                        <div class="flex justify-between text-xs text-base-content/50 mt-1">
+                            <span id="items-completed-count">{% if user_progress %}{{ user_progress.items_completed }}{% else %}0{% endif %}</span>
+                            <span id="items-total-count">{% if user_progress %}{{ user_progress.total_items }}{% else %}{{ checklist.total_items|default:0 }}{% endif %}</span>
+                        </div>
+                    </div>
+                {% endif %}
+
+                {# Premium Upsell Banner (for non-premium, non-authors) #}
+                {% if not can_save_progress and request.user.is_authenticated and not is_author %}
+                    <div class="alert alert-info mt-4">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                        </svg>
+                        <span>You can check items in this session, but progress won't be saved. <a href="{% url 'subscribe' %}" class="link link-success font-semibold">Upgrade to Premium</a> to save your progress on any checklist!</span>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </section>
+
+    {# Sections and Items with Table of Contents #}
+    <div class="xl:grid xl:grid-cols-[1fr_280px] xl:gap-6 xl:items-start mt-6">
+        <div class="space-y-6">
+            {# Mobile/Tablet TOC - shows before content on small screens, hidden on XL+ #}
+            <aside class="xl:hidden" aria-label="Table of Contents">
+                <div class="card bg-base-100 border-4 border-base-300 shadow-md shadow-neutral">
+                    <div class="card-body p-4">
+                        <h2 class="text-lg font-bold mb-3 pb-2 border-b border-base-300">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 inline-block mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"/>
+                            </svg>
+                            Table of Contents
+                        </h2>
+                        <nav class="toc-list space-y-1">
+                            {% for section in checklist.sections.all %}
+                                <a href="#section-{{ section.id }}"
+                                   class="toc-item block px-3 py-2 rounded-lg text-sm hover:bg-base-200 transition-colors"
+                                   data-section-id="{{ section.id }}">
+                                    <div class="flex justify-between items-center gap-2">
+                                        <span class="toc-title flex-1 truncate tooltip tooltip-left" data-tip="{{ section.subtitle }}">
+                                            {{ section.subtitle }}
+                                        </span>
+                                        <span class="badge badge-ghost badge-sm toc-section-count">
+                                            <span class="completed-count">{{ section.completed_count|default:0 }}</span>/<span class="total-count">{{ section.item_count }}</span>
+                                        </span>
+                                    </div>
+                                </a>
+                            {% empty %}
+                                <p class="text-sm text-base-content/50 italic text-center py-4">
+                                    No sections yet
+                                </p>
+                            {% endfor %}
+                        </nav>
+                    </div>
+                </div>
+            </aside>
+
+            {# Sections Loop #}
+            {% for section in checklist.sections.all %}
+                <section id="section-{{ section.id }}"
+                         class="checklist-section shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 w-full p-0 lg:p-4"
+                         data-section-id="{{ section.id }}"
+                         data-section-title="{{ section.subtitle|escapejs }}">
+            <div class="card bg-base-100 border-4 border-base-300 shadow-md shadow-neutral">
+                <div class="card-body">
+                    {# Section Thumbnail - Full Width Header #}
+                    {% if section.thumbnail %}
+                    <figure class="w-full max-w-2xl mx-auto rounded-lg overflow-hidden shadow-md bg-base-300 border-4 border-base-300 mb-4 cursor-pointer hover:shadow-xl transition-shadow duration-200 checklist-image-clickable"
+                            data-image-src="{{ section.thumbnail.url }}"
+                            data-image-alt="{{ section.subtitle }}">
+                        <img src="{{ section.thumbnail.url }}"
+                             alt="{{ section.subtitle }}"
+                             class="w-full h-auto object-contain"
+                             loading="lazy">
+                    </figure>
+                    {% endif %}
+
+                    {# Section Header #}
+                    <div class="flex justify-between items-start gap-3 mb-4">
+                        <div class="flex-1">
+                            <div class="flex items-center gap-2">
+                                <h2 class="text-xl font-bold">{{ section.subtitle }}</h2>
+                                <button class="btn btn-ghost btn-xs section-collapse-btn"
+                                        data-section-id="{{ section.id }}"
+                                        title="Collapse/Expand section">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 transition-transform duration-200 collapse-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                                    </svg>
+                                </button>
+                            </div>
+                            {% if section.description %}
+                                <p class="text-base-content/70 mt-1">{{ section.description }}</p>
+                            {% endif %}
+                        </div>
+                        <div class="flex flex-col items-end gap-2">
+                            <span class="badge badge-ghost section-item-count" data-section-id="{{ section.id }}">
+                                <span class="completed-count">{{ section.completed_count|default:0 }}</span>/<span class="total-count">{{ section.item_count }}</span> items
+                            </span>
+                            {% if request.user.is_authenticated %}
+                            <div class="flex gap-1">
+                                <button class="btn btn-ghost btn-xs section-check-all-btn"
+                                        data-section-id="{{ section.id }}"
+                                        title="Check all items">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                                    </svg>
+                                    All
+                                </button>
+                                <button class="btn btn-ghost btn-xs section-uncheck-all-btn"
+                                        data-section-id="{{ section.id }}"
+                                        title="Uncheck all items">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                                    </svg>
+                                    None
+                                </button>
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    {# Items List #}
+                    <div class="mt-4 space-y-2 section-items-content">
+                        {% for item in section.items.all %}
+                            {% if item.item_type == 'image' %}
+                                {# Inline Image Item #}
+                                <div class="checklist-image-item my-4"
+                                     data-item-id="{{ item.id }}"
+                                     data-item-type="image">
+                                    <figure class="w-full max-w-2xl mx-auto rounded-lg overflow-hidden shadow-md bg-base-300 border-4 border-base-300 cursor-pointer hover:shadow-xl transition-shadow duration-200 checklist-image-clickable"
+                                            data-image-src="{{ item.image.url }}"
+                                            data-image-alt="Checklist image"
+                                            {% if item.text %}data-image-caption="{{ item.text }}"{% endif %}>
+                                        <img src="{{ item.image.url }}"
+                                             alt="Checklist image"
+                                             class="w-full h-auto object-contain"
+                                             loading="lazy">
+                                    </figure>
+                                    {% if item.text %}
+                                    <p class="text-sm text-base-content/60 text-center mt-2 italic">{{ item.text }}</p>
+                                    {% endif %}
+                                </div>
+
+                            {% elif item.item_type == 'text_area' %}
+                                {# Text Area Item #}
+                                <div class="checklist-text-area my-4"
+                                     data-item-id="{{ item.id }}"
+                                     data-item-type="text_area">
+                                    <div class="w-full max-w-2xl mx-auto p-4 bg-info/5 border-l-4 border-info rounded-r-lg">
+                                        <div class="flex items-start gap-3">
+                                            {# Icon #}
+                                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-info mt-1 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                                            </svg>
+
+                                            {# Rendered Markdown Content #}
+                                            <div class="prose prose-sm max-w-none flex-1">
+                                                {{ item.text|render_markdown }}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                            {% elif item.item_type == 'trophy' %}
+                                {# Trophy Item - with checkbox and trophy metadata #}
+                                {% get_trophy item.trophy_id as trophy %}
+                                {% if trophy %}
+                                <div class="flex items-center gap-3 p-3 bg-base-200/50 rounded-lg hover:bg-base-300 transition-colors checklist-item checklist-trophy-item border-l-4 border-{{ trophy.trophy_type|default:'bronze' }}"
+                                     data-item-id="{{ item.id }}"
+                                     data-item-type="trophy"
+                                     data-trophy-id="{{ item.trophy_id }}">
+                                    <label class="flex items-center gap-3 cursor-pointer flex-1">
+                                        <input type="checkbox"
+                                               class="checkbox checkbox-secondary checklist-item-checkbox"
+                                               data-item-id="{{ item.id }}"
+                                               {% if item.id in completed_items %}checked{% endif %}
+                                               {% if not request.user.is_authenticated %}disabled{% endif %}>
+
+                                        {# Trophy Icon #}
+                                        <img src="{{ trophy.trophy_icon_url }}"
+                                             alt="{{ item.text }}"
+                                             class="w-10 h-10 rounded-lg shrink-0"
+                                             loading="lazy">
+
+                                        {# Trophy Details #}
+                                        <div class="flex-1 min-w-0">
+                                            <div class="flex items-center gap-2 flex-wrap">
+                                                <span class="font-semibold {% if item.id in completed_items %}line-through text-base-content/50{% endif %} checklist-item-text">
+                                                    {{ item.text }}
+                                                </span>
+                                                <span class="badge badge-sm badge-{{ trophy.trophy_type|default:'bronze' }}">
+                                                    {{ trophy.trophy_type|title }}
+                                                </span>
+                                                {% if trophy|is_dlc_trophy %}
+                                                    {% get_trophy_group trophy as trophy_group %}
+                                                    {% if trophy_group and trophy_group.trophy_group_name %}
+                                                    <span class="badge badge-sm badge-info">DLC: {{ trophy_group.trophy_group_name }}</span>
+                                                    {% else %}
+                                                    <span class="badge badge-sm badge-info">DLC</span>
+                                                    {% endif %}
+                                                {% endif %}
+                                                {% if trophy.trophy_earn_rate %}
+                                                <span class="badge badge-ghost badge-xs">{{ trophy.trophy_earn_rate|floatformat:1 }}%</span>
+                                                {% endif %}
+                                            </div>
+                                            {% if trophy.trophy_detail %}
+                                            <p class="text-xs text-base-content/60 mt-1 line-clamp-2">{{ trophy.trophy_detail }}</p>
+                                            {% endif %}
+                                        </div>
+                                    </label>
+                                </div>
+                                {% endif %}
+
+                            {% elif item.item_type == 'sub_header' %}
+                                {# Sub-header - no checkbox, distinct styling #}
+                                <div class="checklist-sub-header px-3 py-2 bg-base-300/50 rounded-lg border-l-4 border-secondary"
+                                     data-item-id="{{ item.id }}"
+                                     data-item-type="sub_header">
+                                    <span class="font-semibold text-secondary text-sm uppercase tracking-wide">
+                                        {{ item.text }}
+                                    </span>
+                                </div>
+
+                            {% else %}
+                                {# Regular item - with checkbox #}
+                                <div class="flex items-center gap-3 p-3 bg-base-200 rounded-lg hover:bg-base-300 transition-colors checklist-item"
+                                     data-item-id="{{ item.id }}"
+                                     data-item-type="item">
+                                    <label class="flex items-center gap-3 cursor-pointer flex-1">
+                                        <input type="checkbox"
+                                               class="checkbox checkbox-secondary checklist-item-checkbox"
+                                               data-item-id="{{ item.id }}"
+                                               {% if item.id in completed_items %}checked{% endif %}
+                                               {% if not request.user.is_authenticated %}disabled{% endif %}>
+                                        <span class="{% if item.id in completed_items %}line-through text-base-content/50{% endif %} checklist-item-text">
+                                            {{ item.text }}
+                                        </span>
+                                    </label>
+                                </div>
+                            {% endif %}
+                        {% empty %}
+                            <p class="text-base-content/50 italic text-center py-4">No items in this section yet.</p>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+                </section>
+            {% empty %}
+                <section class="shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 w-full p-0 lg:p-4">
+                    <div class="card bg-base-100 border-4 border-base-300 shadow-md shadow-neutral">
+                        <div class="card-body text-center py-12">
+                            <p class="text-base-content/50 italic">This checklist has no sections yet.</p>
+                            {% if can_edit %}
+                                <a href="{% url 'checklist_edit' checklist.id %}" class="btn btn-secondary btn-sm mt-4 mx-auto">Add Sections</a>
+                            {% endif %}
+                        </div>
+                    </div>
+                </section>
+            {% endfor %}
+        </div>
+
+        {# Desktop Sticky TOC - sticky sidebar on XL+ screens, hidden on mobile/tablet #}
+        <aside class="hidden xl:block xl:self-start xl:sticky xl:top-24" aria-label="Table of Contents">
+                <div class="card bg-base-100 border-4 border-base-300 shadow-md shadow-neutral">
+                    <div class="card-body p-4">
+                        <h2 class="text-lg font-bold mb-3 pb-2 border-b border-base-300">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 inline-block mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"/>
+                            </svg>
+                            Table of Contents
+                        </h2>
+                        <nav class="toc-list space-y-1 xl:max-h-[calc(100vh-200px)] xl:overflow-y-auto xl:pr-2">
+                            {% for section in checklist.sections.all %}
+                                <a href="#section-{{ section.id }}"
+                                   class="toc-item block px-3 py-2 rounded-lg text-sm hover:bg-base-200 transition-colors"
+                                   data-section-id="{{ section.id }}">
+                                    <div class="flex justify-between items-center gap-2">
+                                        <span class="toc-title flex-1 truncate tooltip tooltip-left" data-tip="{{ section.subtitle }}">
+                                            {{ section.subtitle }}
+                                        </span>
+                                        <span class="badge badge-ghost badge-sm toc-section-count">
+                                            <span class="completed-count">{{ section.completed_count|default:0 }}</span>/<span class="total-count">{{ section.item_count }}</span>
+                                        </span>
+                                    </div>
+                                </a>
+                            {% empty %}
+                                <p class="text-sm text-base-content/50 italic text-center py-4">
+                                    No sections yet
+                                </p>
+                            {% endfor %}
+                        </nav>
+                    </div>
+                </div>
+        </aside>
+    </div>
+
+    {# Report Button (for published checklists, non-authors) #}
+    {% if checklist.status == 'published' and not is_author and request.user.is_authenticated %}
+        <div class="flex justify-center mt-6">
+            <button class="btn btn-ghost btn-sm text-error checklist-report-btn"
+                    data-checklist-id="{{ checklist.id }}"
+                    title="Report this checklist">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 21v-4m0 0V5a2 2 0 012-2h6.5l1 1H21l-3 6 3 6h-8.5l-1-1H5a2 2 0 00-2 2zm9-13.5V9"/>
+                </svg>
+                Report Checklist
+            </button>
+        </div>
+    {% endif %}
+</div>
+
+{# Report Modal #}
+<dialog id="report-modal" class="modal">
+    <div class="modal-box">
+        <h3 class="font-bold text-lg">Report Checklist</h3>
+        <form id="report-form" class="mt-4">
+            <div class="form-control">
+                <label class="label">
+                    <span class="label-text">Reason</span>
+                </label>
+                <select name="reason" class="select select-bordered w-full" required>
+                    <option value="">Select a reason...</option>
+                    <option value="spam">Spam</option>
+                    <option value="inappropriate">Inappropriate content</option>
+                    <option value="misinformation">Misinformation</option>
+                    <option value="plagiarism">Plagiarism</option>
+                    <option value="other">Other</option>
+                </select>
+            </div>
+            <div class="form-control mt-4">
+                <label class="label">
+                    <span class="label-text">Details (optional)</span>
+                </label>
+                <textarea name="details" class="textarea textarea-bordered" rows="3" maxlength="500" placeholder="Provide additional details..."></textarea>
+            </div>
+            <div class="modal-action">
+                <button type="button" class="btn btn-ghost" onclick="document.getElementById('report-modal').close()">Cancel</button>
+                <button type="submit" class="btn btn-error">Submit Report</button>
+            </div>
+        </form>
+    </div>
+    <form method="dialog" class="modal-backdrop">
+        <button>close</button>
+    </form>
+</dialog>
+
+{# Checklist Image Modal #}
+<dialog id="checklist-image-modal" class="modal modal-bottom sm:modal-middle backdrop-blur-sm">
+    <div class="modal-box max-w-7xl w-full p-0 bg-transparent shadow-none">
+        <div class="relative">
+            {# Close button #}
+            <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2 z-10 bg-base-100/80 hover:bg-base-100"
+                    onclick="document.getElementById('checklist-image-modal').close()">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+            </button>
+
+            {# Image container - styled to match page images #}
+            <figure class="w-full rounded-lg overflow-hidden shadow-xl bg-base-300 border-4 border-base-300">
+                <img id="checklist-modal-image"
+                     src=""
+                     alt="Enlarged view"
+                     class="w-full h-auto object-contain max-h-[85vh]">
+            </figure>
+
+            {# Caption (if present) #}
+            <div id="checklist-modal-caption" class="hidden">
+                <p class="text-sm text-base-content/60 text-center mt-2 italic bg-base-100/90 backdrop-blur-sm px-4 py-2 rounded-lg inline-block"></p>
+            </div>
+        </div>
+    </div>
+    {# Click outside to close - with blur effect #}
+    <form method="dialog" class="modal-backdrop backdrop-blur-sm">
+        <button>close</button>
+    </form>
+</dialog>
+{% endblock %}
+
+{% block js_scripts %}
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js"></script>
+    <script src="{% static 'js/checklist.js' %}"></script>
+{% endblock %}

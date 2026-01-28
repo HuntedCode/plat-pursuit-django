@@ -1,0 +1,248 @@
+{% extends 'base.html' %}
+{% load static custom_filters %}
+{% block title %}My Checklists{% endblock %}
+
+{% block content %}
+<section class="shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 w-full p-0 lg:p-4">
+    {% include 'partials/breadcrumb.html' with items=breadcrumb %}
+
+    <div class="card bg-base-100 border-4 border-base-300 shadow-md shadow-neutral">
+        <div class="card-body">
+            <h1 class="text-2xl lg:text-3xl font-bold">My Checklists</h1>
+            <p class="text-base-content/70">Manage your checklists and track progress on others.</p>
+        </div>
+    </div>
+</section>
+
+{# Tabs #}
+<section class="shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 w-full p-0 lg:p-4 mt-6">
+    <div class="tabs tabs-boxed bg-base-100 p-2">
+        <a href="?tab=drafts" class="tab tab-lg {% if active_tab == 'drafts' %}tab-active{% endif %}">
+            My Drafts
+            {% if drafts %}
+                <span class="badge badge-sm ml-2">{{ drafts|length }}</span>
+            {% endif %}
+        </a>
+        <a href="?tab=published" class="tab tab-lg {% if active_tab == 'published' %}tab-active{% endif %}">
+            Published
+            {% if published %}
+                <span class="badge badge-sm ml-2">{{ published|length }}</span>
+            {% endif %}
+        </a>
+        <a href="?tab=progress" class="tab tab-lg {% if active_tab == 'progress' %}tab-active{% endif %}">
+            In Progress
+            {% if in_progress %}
+                <span class="badge badge-sm ml-2">{{ in_progress|length }}</span>
+            {% endif %}
+        </a>
+    </div>
+
+    {# Tab Content #}
+    <div class="mt-4">
+        {% if active_tab == 'drafts' %}
+            {# Drafts Tab #}
+            {% if drafts %}
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 p-4">
+                    {% for checklist in drafts %}
+                        <div class="card bg-base-100 border-2 border-base-300 shadow-md hover:shadow-lg transition-shadow duration-200">
+                            <div class="card-body p-4">
+                                <div class="flex justify-between items-start gap-2">
+                                    <div class="flex-1">
+                                        <span class="badge badge-warning badge-sm mb-2">Draft</span>
+                                        <h3 class="card-title text-lg line-clamp-2">{{ checklist.title }}</h3>
+                                    </div>
+                                </div>
+                                {% if checklist.description %}
+                                    <p class="text-sm text-base-content/70 line-clamp-2 mt-1">{{ checklist.description }}</p>
+                                {% endif %}
+
+                                {# Game Info #}
+                                {% with checklist.concept.games.first as game %}
+                                    {% if game %}
+                                        <div class="flex items-center gap-2 mt-3 text-xs text-base-content/60">
+                                            <img src="{{ game.title_icon_url }}" alt="" class="w-6 h-6 rounded">
+                                            <span class="line-clamp-1">{{ game.title_name }}</span>
+                                        </div>
+                                    {% endif %}
+                                {% endwith %}
+
+                                {# Stats #}
+                                <div class="flex flex-wrap items-center gap-3 mt-3 text-xs text-base-content/60">
+                                    <div class="flex items-center gap-1">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"/>
+                                        </svg>
+                                        <span>{{ checklist.sections.count }} sections</span>
+                                    </div>
+                                    <div class="flex items-center gap-1">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                                        </svg>
+                                        <span>{{ checklist.updated_at|timesince }} ago</span>
+                                    </div>
+                                </div>
+
+                                {# Actions #}
+                                <div class="card-actions justify-end mt-3 pt-3 border-t border-base-300">
+                                    <a href="{% url 'checklist_edit' checklist.id %}" class="btn btn-secondary btn-sm">
+                                        Continue Editing
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <div class="text-center py-12">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 mx-auto text-base-content/30" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                    </svg>
+                    <p class="text-base-content/50 mt-4">You don't have any draft checklists.</p>
+                    <p class="text-sm text-base-content/40 mt-2">Create a checklist from any game page to get started!</p>
+                </div>
+            {% endif %}
+
+        {% elif active_tab == 'published' %}
+            {# Published Tab #}
+            {% if published %}
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 p-4">
+                    {% for checklist in published %}
+                        <div class="card bg-base-100 border-2 border-base-300 shadow-md hover:shadow-lg transition-shadow duration-200">
+                            <div class="card-body p-4">
+                                <div class="flex justify-between items-start gap-2">
+                                    <a href="{% url 'checklist_detail' checklist.id %}" class="flex-1 hover:underline">
+                                        <h3 class="card-title text-lg line-clamp-2">{{ checklist.title }}</h3>
+                                    </a>
+                                    <div class="flex flex-col items-center gap-1">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-secondary" fill="currentColor" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"/>
+                                        </svg>
+                                        <span class="text-sm font-semibold">{{ checklist.upvote_count }}</span>
+                                    </div>
+                                </div>
+
+                                {% if checklist.description %}
+                                    <p class="text-sm text-base-content/70 line-clamp-2 mt-1">{{ checklist.description }}</p>
+                                {% endif %}
+
+                                {# Game Info #}
+                                {% with checklist.concept.games.first as game %}
+                                    {% if game %}
+                                        <div class="flex items-center gap-2 mt-3 text-xs text-base-content/60">
+                                            <img src="{{ game.title_icon_url }}" alt="" class="w-6 h-6 rounded">
+                                            <span class="line-clamp-1">{{ game.title_name }}</span>
+                                        </div>
+                                    {% endif %}
+                                {% endwith %}
+
+                                {# Stats #}
+                                <div class="flex flex-wrap items-center gap-3 mt-3 text-xs text-base-content/60">
+                                    <div class="flex items-center gap-1" title="Users tracking">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/>
+                                        </svg>
+                                        <span>{{ checklist.progress_save_count }} tracking</span>
+                                    </div>
+                                    <div class="flex items-center gap-1">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                                        </svg>
+                                        <span>Published {{ checklist.published_at|timesince }} ago</span>
+                                    </div>
+                                </div>
+
+                                {# Actions #}
+                                <div class="card-actions justify-end mt-3 pt-3 border-t border-base-300">
+                                    <a href="{% url 'checklist_detail' checklist.id %}" class="btn btn-ghost btn-sm">View</a>
+                                    <a href="{% url 'checklist_edit' checklist.id %}" class="btn btn-secondary btn-sm">Edit</a>
+                                </div>
+                            </div>
+                        </div>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <div class="text-center py-12">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 mx-auto text-base-content/30" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                    </svg>
+                    <p class="text-base-content/50 mt-4">You haven't published any checklists yet.</p>
+                    <p class="text-sm text-base-content/40 mt-2">Finish editing a draft and publish it to share with the community!</p>
+                </div>
+            {% endif %}
+
+        {% else %}
+            {# In Progress Tab #}
+            {% if in_progress %}
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 p-4">
+                    {% for progress in in_progress %}
+                        {% with progress.checklist as checklist %}
+                            <div class="card bg-base-100 border-2 border-base-300 shadow-md hover:shadow-lg transition-shadow duration-200">
+                                <div class="card-body p-4">
+                                    <a href="{% url 'checklist_detail' checklist.id %}" class="hover:underline">
+                                        <h3 class="card-title text-lg line-clamp-2">{{ checklist.title }}</h3>
+                                    </a>
+
+                                    {# Author Info #}
+                                    <div class="flex items-center gap-2 mt-2">
+                                        <div class="avatar">
+                                            <div class="w-6 h-6 rounded-full">
+                                                <img src="{{ checklist.profile.avatar_url|default:'/static/images/default_avatar.png' }}" alt="">
+                                            </div>
+                                        </div>
+                                        <span class="text-sm text-base-content/70">
+                                            by <span class="font-medium {% if checklist.profile.user_is_premium %}text-secondary{% endif %}">{{ checklist.profile.display_psn_username }}</span>
+                                        </span>
+                                    </div>
+
+                                    {# Game Info #}
+                                    {% with checklist.concept.games.first as game %}
+                                        {% if game %}
+                                            <div class="flex items-center gap-2 mt-3 text-xs text-base-content/60">
+                                                <img src="{{ game.title_icon_url }}" alt="" class="w-6 h-6 rounded">
+                                                <span class="line-clamp-1">{{ game.title_name }}</span>
+                                            </div>
+                                        {% endif %}
+                                    {% endwith %}
+
+                                    {# Progress Bar #}
+                                    <div class="mt-4">
+                                        <div class="flex justify-between items-center text-xs mb-1">
+                                            <span class="text-base-content/70">Your progress</span>
+                                            <span class="font-semibold text-secondary">{{ progress.progress_percentage|floatformat:0 }}%</span>
+                                        </div>
+                                        <progress class="progress progress-secondary w-full h-2" value="{{ progress.progress_percentage }}" max="100"></progress>
+                                        <div class="flex justify-between text-xs text-base-content/50 mt-1">
+                                            <span>{{ progress.items_completed }} completed</span>
+                                            <span>{{ progress.total_items }} total</span>
+                                        </div>
+                                    </div>
+
+                                    {# Last Activity #}
+                                    <div class="text-xs text-base-content/50 mt-3">
+                                        Last activity: {{ progress.last_activity|timesince }} ago
+                                    </div>
+
+                                    {# Actions #}
+                                    <div class="card-actions justify-end mt-3 pt-3 border-t border-base-300">
+                                        <a href="{% url 'checklist_detail' checklist.id %}" class="btn btn-secondary btn-sm">
+                                            Continue
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
+                        {% endwith %}
+                    {% endfor %}
+                </div>
+            {% else %}
+                <div class="text-center py-12">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 mx-auto text-base-content/30" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/>
+                    </svg>
+                    <p class="text-base-content/50 mt-4">You're not tracking any checklists yet.</p>
+                    <p class="text-sm text-base-content/40 mt-2">Find a checklist on a game page and start checking off items!</p>
+                </div>
+            {% endif %}
+        {% endif %}
+    </div>
+</section>
+{% endblock %}

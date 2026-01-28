@@ -20,7 +20,7 @@ from .serializers import (
     ChecklistSectionUpdateSerializer, ChecklistItemSerializer, ChecklistItemCreateSerializer,
     ChecklistItemUpdateSerializer, ChecklistItemBulkItemSerializer, ChecklistItemBulkCreateSerializer,
     ChecklistReorderSerializer, ChecklistReportSerializer, ChecklistImageUploadSerializer,
-    SectionImageUploadSerializer, ItemImageCreateSerializer
+    SectionImageUploadSerializer, ItemImageCreateSerializer, TrophySerializer, GameSelectionSerializer
 )
 import logging
 
@@ -714,14 +714,26 @@ class ChecklistItemListView(APIView):
             if not serializer.is_valid():
                 return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-            item, error = ChecklistService.add_item(
-                section=section,
-                profile=profile,
-                text=serializer.validated_data['text'],
-                item_type=serializer.validated_data.get('item_type', 'item'),
-                trophy_id=serializer.validated_data.get('trophy_id'),
-                order=serializer.validated_data.get('order')
-            )
+            item_type = serializer.validated_data.get('item_type', 'item')
+
+            # Handle trophy items separately
+            if item_type == 'trophy':
+                item, error = ChecklistService.add_trophy_item(
+                    section=section,
+                    profile=profile,
+                    trophy_id=serializer.validated_data['trophy_id'],
+                    order=serializer.validated_data.get('order')
+                )
+            else:
+                # Existing item creation logic
+                item, error = ChecklistService.add_item(
+                    section=section,
+                    profile=profile,
+                    text=serializer.validated_data.get('text', ''),
+                    item_type=item_type,
+                    trophy_id=serializer.validated_data.get('trophy_id'),
+                    order=serializer.validated_data.get('order')
+                )
 
             if error:
                 return Response({'error': error}, status=status.HTTP_400_BAD_REQUEST)
@@ -1137,4 +1149,134 @@ class ItemImageCreateView(APIView):
             return Response({'error': 'Section not found.'}, status=status.HTTP_404_NOT_FOUND)
         except Exception as e:
             logger.error(f"Inline image create error: {e}")
+            return Response({'error': 'Internal error.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class MarkdownPreviewView(APIView):
+    """
+    Preview markdown rendering.
+    POST /api/v1/markdown/preview/
+    """
+    authentication_classes = [SessionAuthentication, TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        """Render markdown to HTML for preview."""
+        text = request.data.get('text', '').strip()
+
+        if not text:
+            return Response({'error': 'No text provided.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if len(text) > 2000:
+            return Response({'error': 'Text too long (max 2000 characters).'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            html = ChecklistService.process_markdown(text)
+            return Response({'html': html})
+        except Exception as e:
+            logger.error(f"Markdown preview error: {e}")
+            return Response({'error': 'Preview failed.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class ChecklistGameSelectView(APIView):
+    """Set the selected game for a checklist."""
+    authentication_classes = [SessionAuthentication, TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, checklist_id):
+        """POST /api/v1/checklists/<checklist_id>/select-game/"""
+        try:
+            try:
+                checklist = Checklist.objects.get(id=checklist_id, is_deleted=False)
+            except Checklist.DoesNotExist:
+                return Response({'error': 'Checklist not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+            profile = getattr(request.user, 'profile', None)
+
+            serializer = GameSelectionSerializer(data=request.data)
+            if not serializer.is_valid():
+                return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+            success, error = ChecklistService.set_checklist_game(
+                checklist=checklist,
+                game_id=serializer.validated_data['game_id'],
+                profile=profile
+            )
+
+            if not success:
+                return Response({'error': error}, status=status.HTTP_400_BAD_REQUEST)
+
+            return Response({'success': True, 'game_id': serializer.validated_data['game_id']})
+
+        except Exception as e:
+            logger.error(f"Game selection error: {e}")
+            return Response({'error': 'Internal error.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class ChecklistAvailableTrophiesView(APIView):
+    """Get available trophies for a checklist."""
+    authentication_classes = [SessionAuthentication, TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, checklist_id):
+        """GET /api/v1/checklists/<checklist_id>/available-trophies/"""
+        try:
+            try:
+                checklist = Checklist.objects.get(id=checklist_id, is_deleted=False)
+            except Checklist.DoesNotExist:
+                return Response({'error': 'Checklist not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+            profile = getattr(request.user, 'profile', None)
+
+            # Only author can view available trophies
+            if checklist.profile != profile:
+                return Response({'error': 'Permission denied.'}, status=status.HTTP_403_FORBIDDEN)
+
+            trophies = ChecklistService.get_available_trophies_for_checklist(checklist)
+
+            # Get trophy group names for the selected game
+            from trophies.models import TrophyGroup
+            trophy_groups = {}
+            if checklist.selected_game:
+                groups = TrophyGroup.objects.filter(game=checklist.selected_game)
+                trophy_groups = {g.trophy_group_id: g.trophy_group_name for g in groups}
+
+            # Build trophy data with group names
+            trophy_data = []
+            for trophy in trophies:
+                data = {
+                    'id': trophy.id,
+                    'trophy_name': trophy.trophy_name,
+                    'trophy_detail': trophy.trophy_detail,
+                    'trophy_icon_url': trophy.trophy_icon_url,
+                    'trophy_type': trophy.trophy_type,
+                    'trophy_rarity': trophy.trophy_rarity,
+                    'trophy_earn_rate': trophy.trophy_earn_rate,
+                    'trophy_group_id': trophy.trophy_group_id,
+                    'trophy_group_name': trophy_groups.get(trophy.trophy_group_id, ''),
+                    'is_base_game': trophy.is_base_game,
+                    'is_used': trophy.is_used,
+                }
+                trophy_data.append(data)
+
+            # Get unique trophy groups for filter dropdown
+            unique_groups = []
+            seen_group_ids = set()
+            for trophy in trophies:
+                if trophy.trophy_group_id not in seen_group_ids:
+                    seen_group_ids.add(trophy.trophy_group_id)
+                    unique_groups.append({
+                        'trophy_group_id': trophy.trophy_group_id,
+                        'trophy_group_name': trophy_groups.get(trophy.trophy_group_id, ''),
+                        'is_base_game': trophy.is_base_game
+                    })
+
+            return Response({
+                'trophies': trophy_data,
+                'trophy_groups': unique_groups,
+                'selected_game_id': checklist.selected_game.id if checklist.selected_game else None
+            })
+
+        except Exception as e:
+            logger.error(f"Available trophies error: {e}")
             return Response({'error': 'Internal error.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

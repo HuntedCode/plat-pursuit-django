@@ -2726,7 +2726,7 @@ class ChecklistDetailView(ProfileHotbarMixin, DetailView):
         completed_item_ids = set(completed_items)
         sections = checklist.sections.all()
         for section in sections:
-            section_item_ids = list(section.items.filter(item_type='item').values_list('id', flat=True))
+            section_item_ids = list(section.items.filter(item_type__in=['item', 'trophy']).values_list('id', flat=True))
             completed_count = sum(1 for item_id in section_item_ids if item_id in completed_item_ids)
             # Add completion data as attributes to the section object
             section.completed_count = completed_count
@@ -2766,6 +2766,10 @@ class ChecklistDetailView(ProfileHotbarMixin, DetailView):
         breadcrumb.append({'text': checklist.title})
         context['breadcrumb'] = breadcrumb
 
+        # Set background image from concept if available
+        if checklist.concept and checklist.concept.bg_url:
+            context['image_urls'] = {'bg_url': checklist.concept.bg_url}
+
         return context
 
 
@@ -2777,9 +2781,12 @@ class ChecklistCreateView(LoginRequiredMixin, ProfileHotbarMixin, View):
     """
     login_url = reverse_lazy('account_login')
 
-    def get(self, request, concept_id):
+    def get(self, request, concept_id, np_communication_id):
         """Create a new draft checklist and redirect to edit."""
+        from trophies.models import Game
+
         concept = get_object_or_404(Concept, id=concept_id)
+        game = get_object_or_404(Game, np_communication_id=np_communication_id, concept=concept)
         profile = request.user.profile if hasattr(request.user, 'profile') else None
 
         if not profile:
@@ -2789,13 +2796,14 @@ class ChecklistCreateView(LoginRequiredMixin, ProfileHotbarMixin, View):
         # Check if user can create checklists
         can_create, error = ChecklistService.can_create_checklist(profile)
         if not can_create:
-            messages.error(request, error)
-            game = concept.games.first()
-            if game:
+            # If the error is about guidelines, redirect with hash to trigger modal
+            if error == "You must agree to the community guidelines.":
+                return redirect(f"{reverse('game_detail', kwargs={'np_communication_id': game.np_communication_id})}#show-guidelines")
+            else:
+                messages.error(request, error)
                 return redirect('game_detail', np_communication_id=game.np_communication_id)
-            return redirect('games_list')
 
-        # Create the checklist
+        # Create the checklist with the selected game
         checklist, error = ChecklistService.create_checklist(
             profile=profile,
             concept=concept,
@@ -2804,10 +2812,11 @@ class ChecklistCreateView(LoginRequiredMixin, ProfileHotbarMixin, View):
 
         if error:
             messages.error(request, error)
-            game = concept.games.first()
-            if game:
-                return redirect('game_detail', np_communication_id=game.np_communication_id)
-            return redirect('games_list')
+            return redirect('game_detail', np_communication_id=game.np_communication_id)
+
+        # Set the selected game (default to the game they came from)
+        checklist.selected_game = game
+        checklist.save(update_fields=['selected_game', 'updated_at'])
 
         messages.success(request, "Checklist created! Start adding sections and items.")
         return redirect('checklist_edit', checklist_id=checklist.id)
@@ -2858,6 +2867,11 @@ class ChecklistEditView(LoginRequiredMixin, ProfileHotbarMixin, DetailView):
         # Get game info from concept
         context['game'] = checklist.concept.games.first() if checklist.concept else None
 
+        # Get all games for concept (for trophy selection)
+        context['concept_games'] = []
+        if checklist.concept:
+            context['concept_games'] = checklist.concept.games.all().order_by('title_name')
+
         # Breadcrumbs
         breadcrumb = [
             {'text': 'Home', 'url': reverse_lazy('home')},
@@ -2874,6 +2888,10 @@ class ChecklistEditView(LoginRequiredMixin, ProfileHotbarMixin, DetailView):
         })
         breadcrumb.append({'text': 'Edit'})
         context['breadcrumb'] = breadcrumb
+
+        # Set background image from concept if available
+        if checklist.concept and checklist.concept.bg_url:
+            context['image_urls'] = {'bg_url': checklist.concept.bg_url}
 
         return context
 

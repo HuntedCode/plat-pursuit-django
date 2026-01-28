@@ -185,10 +185,11 @@ class ChecklistAuthorSerializer(serializers.ModelSerializer):
 class ChecklistItemSerializer(serializers.ModelSerializer):
     """Serializer for checklist items."""
     image_url = serializers.SerializerMethodField()
+    rendered_html = serializers.SerializerMethodField()
 
     class Meta:
         model = ChecklistItem
-        fields = ['id', 'text', 'item_type', 'trophy_id', 'order', 'image_url']
+        fields = ['id', 'text', 'item_type', 'trophy_id', 'order', 'image_url', 'rendered_html']
         read_only_fields = fields
 
     def get_image_url(self, obj):
@@ -198,6 +199,13 @@ class ChecklistItemSerializer(serializers.ModelSerializer):
             if request:
                 return request.build_absolute_uri(obj.image.url)
             return obj.image.url
+        return None
+
+    def get_rendered_html(self, obj):
+        """Return rendered HTML for text_area items."""
+        if obj.item_type == 'text_area' and obj.text:
+            from trophies.services.checklist_service import ChecklistService
+            return ChecklistService.process_markdown(obj.text)
         return None
 
 
@@ -370,21 +378,33 @@ class ChecklistSectionUpdateSerializer(serializers.Serializer):
 
 class ChecklistItemCreateSerializer(serializers.Serializer):
     """Serializer for item creation input."""
-    text = serializers.CharField(max_length=500, required=True)
+    text = serializers.CharField(max_length=2000, required=False)  # Optional for trophies
     item_type = serializers.ChoiceField(
-        choices=['item', 'sub_header'],
+        choices=['item', 'sub_header', 'text_area', 'trophy'],  # Add trophy
         default='item',
         required=False
     )
     trophy_id = serializers.IntegerField(required=False, allow_null=True)
     order = serializers.IntegerField(required=False, min_value=0)
 
+    def validate(self, data):
+        item_type = data.get('item_type', 'item')
+
+        if item_type == 'trophy':
+            if not data.get('trophy_id'):
+                raise serializers.ValidationError("trophy_id is required for trophy items.")
+        elif item_type in ['item', 'sub_header', 'text_area']:
+            if not data.get('text'):
+                raise serializers.ValidationError("text is required for this item type.")
+
+        return data
+
 
 class ChecklistItemUpdateSerializer(serializers.Serializer):
     """Serializer for item update input."""
-    text = serializers.CharField(max_length=500, required=False)
+    text = serializers.CharField(max_length=2000, required=False)
     item_type = serializers.ChoiceField(
-        choices=['item', 'sub_header'],
+        choices=['item', 'sub_header', 'text_area'],
         required=False
     )
     trophy_id = serializers.IntegerField(required=False, allow_null=True)
@@ -431,6 +451,26 @@ class ChecklistReportSerializer(serializers.Serializer):
         required=True
     )
     details = serializers.CharField(max_length=500, required=False, allow_blank=True)
+
+
+class TrophySerializer(serializers.Serializer):
+    """Serializer for Trophy model (for checklist trophy selection)."""
+    id = serializers.IntegerField()
+    trophy_name = serializers.CharField()
+    trophy_detail = serializers.CharField()
+    trophy_icon_url = serializers.URLField()
+    trophy_type = serializers.CharField()
+    trophy_rarity = serializers.IntegerField()
+    trophy_earn_rate = serializers.FloatField()
+    trophy_group_id = serializers.CharField()
+    trophy_group_name = serializers.CharField(required=False, allow_blank=True)
+    is_base_game = serializers.BooleanField(required=False)  # True if group_id == 'default'
+    is_used = serializers.BooleanField(required=False)  # Annotated field
+
+
+class GameSelectionSerializer(serializers.Serializer):
+    """Serializer for setting checklist game."""
+    game_id = serializers.IntegerField(required=True)
 
 
 class ChecklistImageUploadSerializer(serializers.Serializer):
