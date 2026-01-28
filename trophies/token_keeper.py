@@ -7,7 +7,7 @@ import os
 import atexit
 from pyrate_limiter import Duration, Rate
 import requests
-from typing import Optional, Dict
+from typing import Dict
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from django.utils import timezone
@@ -90,6 +90,7 @@ class TokenInstance:
     last_error: str = None
     outbound_ip: str = None
     proxy_url: str = None
+    group_id: int = None
     job_start_time: float = 0  # Track when current job started for stuck detection
 
     def __post_init__(self):
@@ -178,8 +179,7 @@ class TokenKeeper:
 
         running_key = f"token_keeper:running:{self.machine_id}"
         if redis_client.get(running_key):
-            logger.info(f"TokenKeeper already running for machine {self.machine_id}")
-            return None
+            raise RuntimeError(f"TokenKeeper already running for machine {self.machine_id}. Clear Redis key '{running_key}' to force start.")
         self.initialize_groups()
         self._start_health_monitor()
         self._start_stats_publisher()
@@ -188,7 +188,7 @@ class TokenKeeper:
         atexit.register(self._cleanup)
     
     def _publish_stats_loop(self):
-        while True:
+        while not self._shutdown_requested:
             time.sleep(self.stats_interval)
             try:
                 stats = self.stats
@@ -238,6 +238,17 @@ class TokenKeeper:
         # Cleanup current state
         self._cleanup()
 
+        # Wait for old threads to notice the shutdown flag and exit
+        logger.info("Waiting for old threads to exit...")
+        if self._health_thread and self._health_thread.is_alive():
+            self._health_thread.join(timeout=self.health_interval + 5)
+        if self._stats_thread and self._stats_thread.is_alive():
+            self._stats_thread.join(timeout=self.stats_interval + 5)
+        for worker in self._job_workers:
+            if worker.is_alive():
+                worker.join(timeout=5)
+        self._job_workers = []
+
         # Wait for database to recover
         logger.info(f"Waiting {self._restart_cooldown}s for database to recover...")
         time.sleep(self._restart_cooldown)
@@ -257,27 +268,27 @@ class TokenKeeper:
 
     def _start_health_monitor(self):
         """Start background thread for proactive health checks."""
-        self._health_thread = threading.Thread(target=self._health_loop, daemon=True)
+        self._health_thread = threading.Thread(target=self._health_loop, daemon=True, name="tk-health")
         self._health_thread.start()
         logger.info("TokenKeeper health monitor started")
 
     def _start_stats_publisher(self):
-        self._stats_thread = threading.Thread(target=self._publish_stats_loop, daemon=True)
+        self._stats_thread = threading.Thread(target=self._publish_stats_loop, daemon=True, name="tk-stats")
         self._stats_thread.start()
         logger.info("TokenKeeper stats publisher started")
 
     def _start_job_workers(self):
         num_workers_per_group = 3
         total_workers = num_workers_per_group * len(self.token_groups)
-        for _ in range(total_workers):
-            t = threading.Thread(target=self._job_worker_loop, daemon=True)
+        for i in range(total_workers):
+            t = threading.Thread(target=self._job_worker_loop, daemon=True, name=f"tk-worker-{i}")
             t.start()
             self._job_workers.append(t)
         logger.info(f"Started {total_workers} job worker threads")
     
     def _health_loop(self):
         """Infinite loop: Check health every interval."""
-        while True:
+        while not self._shutdown_requested:
             time.sleep(self.health_interval)
             redis_client.set(f"token_keeper:running:{self.machine_id}", "1", ex=3600)
             # Check for stuck instances on every health loop iteration
@@ -305,6 +316,7 @@ class TokenKeeper:
                         client=client,
                         user_cache={},
                         proxy_url=proxy,
+                        group_id=group_id,
                         last_health=time.time()
                     )
                 except Exception as e:
@@ -314,6 +326,7 @@ class TokenKeeper:
                         client=None,
                         user_cache={},
                         proxy_url=proxy,
+                        group_id=group_id,
                         last_health=0
                     )
                     logger.warning(f"Failed to init client for instance {i} | {token}")
@@ -329,7 +342,6 @@ class TokenKeeper:
                     inst.outbound_ip = 'Unknown'
                 instances[i] = inst
                 redis_client.set(f"token_keeper:instance:{self.machine_id}:{group_id}:{i}:token", token)
-                self._record_call(token)
                 logger.info(f"Group {group_id} Instance {i} initialized with live client")
                 log_api_call("client_init", token, None, 200, time.time() - start_time)
             self.group_instances[group_id] = {'instances': instances, 'proxy': proxy}
@@ -343,7 +355,7 @@ class TokenKeeper:
     
     def _check_and_refresh(self, inst : TokenInstance):
         """Refresh token if time remaining less than refresh threshold and clean cache."""
-        group_id = next((gid for gid, g in self.group_instances.items() if inst in g['instances'].values()), None)
+        group_id = inst.group_id
         try:
             if inst.get_access_expiry_in_seconds() < self.refresh_threshold:
                 if inst.is_busy:
@@ -389,7 +401,7 @@ class TokenKeeper:
     # Job Assignment & Handling
 
     def _job_worker_loop(self):
-        while True:
+        while not self._shutdown_requested:
             profile_id = None
             queue_name = None
             job_start = None
@@ -423,8 +435,7 @@ class TokenKeeper:
                 elif job_type == 'handle_privacy_error':
                     self._job_handle_privacy_error(profile_id)
                 else:
-                    logger.error(f"Unknown job type: {job_type}")
-                    raise
+                    raise ValueError(f"Unknown job type: {job_type}")
 
                 # Log slow jobs for monitoring
                 job_duration = time.time() - job_start
@@ -432,7 +443,6 @@ class TokenKeeper:
                     logger.warning(f"Slow job: {job_type} for profile {profile_id} took {job_duration:.1f}s")
 
                 logger.info(f"Job: {job_type} - Profile: {profile_id} completed successfully in {job_duration:.1f}s")
-                self._complete_job(profile_id, queue_name)
             except OperationalError as db_err:
                 logger.error(f"Database error in job worker: {db_err}")
                 if "database is locked" in str(db_err).lower():
@@ -547,7 +557,7 @@ class TokenKeeper:
         except Exception as e:
             logger.error(f"Error checking stuck syncing profiles: {e}")
 
-    def _get_instance_for_job(self, job_type: str) -> Optional[TokenInstance]:
+    def _get_instance_for_job(self, job_type: str) -> TokenInstance:
         """Selects best instance for job with atomic acquisition using Redis locks."""
         start = time.time()
         while time.time() - start < self.token_wait_interval:
@@ -581,16 +591,15 @@ class TokenKeeper:
 
             logger.info("Waiting for token...")
             time.sleep(0.1)
-        logger.error(f"No token available for use.")
-        return None
+        logger.error(f"No token available for job type '{job_type}' after {self.token_wait_interval}s.")
+        raise RuntimeError(f"No token instance available for job type '{job_type}' after {self.token_wait_interval}s timeout")
 
     def _release_instance(self, instance: TokenInstance):
         """Safely release a token instance and its Redis lock."""
         if instance is None:
             return
         try:
-            group_id = next((gid for gid, g in self.group_instances.items()
-                            if instance in g['instances'].values()), None)
+            group_id = instance.group_id
             if group_id is not None:
                 lock_key = f"instance_lock:{self.machine_id}:{group_id}:{instance.instance_id}"
                 redis_client.delete(lock_key)
@@ -647,8 +656,6 @@ class TokenKeeper:
                 raise ValueError(f"Unknown endpoint: {endpoint}")
             
             log_api_call(endpoint, instance.token, profile.id if profile else None, 200, time.time() - start_time)
-            if redis_client.get(f"token_keeper:pending_refresh:{self.machine_id}:{instance.instance_id}"):
-                self._check_and_refresh(instance)
             if endpoint not in ['get_profile_legacy', 'get_region']:
                 profile.set_history_public_flag(True)
             return data
@@ -659,20 +666,14 @@ class TokenKeeper:
                 logger.warning(f"Privacy error for profile {profile.id}.")
             log_api_call(endpoint, instance.token, profile.id if profile else None, 500, time.time() - start_time, str(e))
             self._rollback_call(instance.token)
-            if redis_client.get(f"token_keeper:pending_refresh:{self.machine_id}:{instance.instance_id}"):
-                self._check_and_refresh(instance)
             raise
         except HTTPError as e:
             log_api_call(endpoint, instance.token, profile.id if profile else None, e.response.status_code, time.time() - start_time, str(e))
             self._rollback_call(instance.token)
-            if redis_client.get(f"token_keeper:pending_refresh:{self.machine_id}:{instance.instance_id}"):
-                self._check_and_refresh(instance)
             raise
         except Exception as e:
             log_api_call(endpoint, instance.token, profile.id if profile else None, 500, time.time() - start_time, str(e))
             instance.last_error = f"{datetime.now().isoformat()} Error: {str(e)}"
-            if redis_client.get(f"token_keeper:pending_refresh:{self.machine_id}:{instance.instance_id}"):
-                self._check_and_refresh(instance)
             raise
         finally:
             # Release token after each API call so it can be used by other jobs
@@ -685,15 +686,18 @@ class TokenKeeper:
         redis_client.zremrangebyscore(f"token:{token}:{self.machine_id}:timestamps", 0, now - self.window_seconds)
         return redis_client.zcard(f"token:{token}:{self.machine_id}:timestamps")
     
-    def _record_call(self, token : str):
-        """Record API call timestamp."""
+    def _record_call(self, token : str) -> str:
+        """Record API call timestamp. Returns the member key for potential rollback."""
         now = time.time()
-        redis_client.zadd(f"token:{token}:{self.machine_id}:timestamps", {str(now): now})
+        member = str(now)
+        redis_client.zadd(f"token:{token}:{self.machine_id}:timestamps", {member: now})
+        return member
 
     def _rollback_call(self, token : str):
-        """Rollback API call counter."""
-        now = time.time()
-        redis_client.zremrangebyscore(f"token:{token}:{self.machine_id}:timestamps", now - 1, now)
+        """Rollback the most recent API call counter entry."""
+        key = f"token:{token}:{self.machine_id}:timestamps"
+        # Remove the highest-scored (most recent) entry
+        redis_client.zpopmax(key, count=1)
     
     def _handle_rate_limit(self, instance : TokenInstance):
         """Handle token rate limiting (429 error)."""
@@ -816,6 +820,7 @@ class TokenKeeper:
             profile = Profile.objects.get(id=profile_id)
         except Profile.DoesNotExist:
             logger.error(f"Profile {profile_id} does not exist.")
+            return
         job_type = 'handle_privacy_error'
 
         time.sleep(3)
@@ -829,6 +834,7 @@ class TokenKeeper:
             profile = Profile.objects.get(id=profile_id)
         except Profile.DoesNotExist:
             logger.error(f"Profile {profile_id} does not exist.")
+            return
         job_type = 'sync_profile_data'
 
         try:
@@ -850,6 +856,7 @@ class TokenKeeper:
             profile = Profile.objects.get(id=profile_id)
         except Profile.DoesNotExist:
             logger.error(f"Profile {profile_id} does not exist.")
+            return
         job_type = 'sync_trophy_titles'
         job_counter = 0
 
@@ -865,9 +872,12 @@ class TokenKeeper:
             trophy_titles.extend(result)
             limit += page_size
             offset += page_size
-        
+
+        # FIRST PASS: Create/update games and calculate job count WITHOUT assigning jobs
         touched_profilegame_ids = []
         num_title_stats = 0
+        games_needing_groups = []
+
         for title in trophy_titles:
             game, created, _ = PsnApiService.create_or_update_game(title)
             profile_game, _ = PsnApiService.create_or_update_profile_game(profile, game, title)
@@ -877,26 +887,39 @@ class TokenKeeper:
                     num_title_stats += 1
                     break
             title_defined_trophies_total = title.defined_trophies.bronze + title.defined_trophies.silver + title.defined_trophies.gold + title.defined_trophies.platinum
-            args = [game.np_communication_id, game.title_platform[0] if not game.title_platform[0] == 'PSPC' else game.title_platform[1]]
-            if created or game.get_total_defined_trophies() != title_defined_trophies_total or not TrophyGroup.objects.filter(game=game).exists():
-                PSNManager.assign_job('sync_trophy_groups', args, profile.id)
-                job_counter += 1
-            PSNManager.assign_job('sync_trophies', args, profile.id)
-            job_counter += 2
-        
+
+            # Check if this game needs trophy groups synced
+            needs_groups = created or game.get_total_defined_trophies() != title_defined_trophies_total or not TrophyGroup.objects.filter(game=game).exists()
+            if needs_groups:
+                games_needing_groups.append(game)
+                job_counter += 1  # sync_trophy_groups
+            job_counter += 2  # sync_trophies (includes the +2 for include_progress)
+
+        # Set target BEFORE assigning any jobs to prevent race condition
         profile.add_to_sync_target(job_counter)
+
+        # SECOND PASS: Now assign the jobs
+        for title in trophy_titles:
+            game = Game.objects.get(np_communication_id=title.np_communication_id)
+            args = [game.np_communication_id, game.title_platform[0] if not game.title_platform[0] == 'PSPC' else game.title_platform[1]]
+
+            if game in games_needing_groups:
+                PSNManager.assign_job('sync_trophy_groups', args, profile.id)
+            PSNManager.assign_job('sync_trophies', args, profile.id)
+
         update_profile_games(profile)
 
         # Assign jobs for title_stats
-        page_size = 20
-        limit = page_size
-        offset = 0
-        for i in range(num_title_stats // page_size):
-            args=[limit, offset, page_size, False, force_title_stats]
-            PSNManager.assign_job('sync_title_stats', args, profile_id)
-            limit += page_size
-            offset += page_size
-        else:
+        if num_title_stats > 0:
+            page_size = 20
+            limit = page_size
+            offset = 0
+            for _ in range(num_title_stats // page_size):
+                args=[limit, offset, page_size, False, force_title_stats]
+                PSNManager.assign_job('sync_title_stats', args, profile_id)
+                limit += page_size
+                offset += page_size
+            # Always assign the final page with is_last=True
             args=[limit, offset, page_size, True, force_title_stats]
             PSNManager.assign_job('sync_title_stats', args, profile_id)
         
@@ -913,8 +936,10 @@ class TokenKeeper:
             game = Game.objects.get(np_communication_id=np_communication_id)
         except Profile.DoesNotExist:
             logger.error(f"Profile {profile_id} does not exist.")
+            return
         except Game.DoesNotExist:
             logger.error(f"Game {np_communication_id} does not exist.")
+            return
         job_type='sync_trophy_groups'
         
         trophy_groups_summary = self._execute_api_call(self._get_instance_for_job(job_type), profile, 'trophy_groups_summary', np_communication_id=np_communication_id, platform=PlatformType(platform))
@@ -929,6 +954,7 @@ class TokenKeeper:
             profile = Profile.objects.get(id=profile_id)
         except Profile.DoesNotExist:
             logger.error(f"Profile {profile_id} does not exist.")
+            return
         job_type = 'sync_title_stats'
         job_counter = 1 # Default 1 job for badge checking at the end
 
@@ -965,6 +991,7 @@ class TokenKeeper:
                     game = Game.objects.get(np_communication_id=title.np_communication_id)
                 except Game.DoesNotExist:
                     logger.warning(f"Game with comm id {title.np_communication_id} does not exist.")
+                    continue
                 game.add_title_id(title.np_title_id)
                 args = [title.np_title_id, title.np_communication_id]
                 PSNManager.assign_job('sync_title_id', args=args, profile_id=profile.id, priority_override='medium_priority')
@@ -980,8 +1007,10 @@ class TokenKeeper:
             game = Game.objects.get(np_communication_id=np_communication_id, title_platform__contains=platform)
         except Profile.DoesNotExist:
             logger.error(f"Profile {profile_id} does not exist.")
+            return
         except Game.DoesNotExist:
             logger.error(f"Game {np_communication_id} does not exist.")
+            return
         job_type = 'sync_trophies'
 
         logger.info(f"Fetching trophies for profile {profile_id}, game {np_communication_id} on platform {platform}")
@@ -1000,8 +1029,12 @@ class TokenKeeper:
         try:
             profile = Profile.objects.get(id=profile_id)
             title_id = TitleID.objects.get(title_id=title_id_str)
+        except Profile.DoesNotExist:
+            logger.error(f"Profile {profile_id} does not exist.")
+            return
         except TitleID.DoesNotExist:
             logger.warning(f"Title ID {title_id_str} not in title_id table.")
+            return
         job_type='sync_title_id'
         
         logger.info(f"Beginning sync for {title_id.title_id} | {np_communication_id}")
@@ -1010,7 +1043,9 @@ class TokenKeeper:
                 game = Game.objects.get(np_communication_id=np_communication_id)
             except Game.DoesNotExist:
                 logger.warning(f"Game {title_id.title_id} | {np_communication_id} not in database.")
-            
+                profile.increment_sync_progress()
+                return
+
             game_title = self._execute_api_call(self._get_instance_for_job(job_type), profile, 'game_title', title_id=title_id.title_id, platform=PlatformType(title_id.platform), account_id=profile.account_id, np_communication_id=game.np_communication_id)
             if game_title:
                 details = game_title.get_details()[0]
@@ -1103,6 +1138,7 @@ class TokenKeeper:
             profile = Profile.objects.get(id=profile_id)
         except Profile.DoesNotExist:
             logger.error(f"Profile {profile_id} does not exist.")
+            return
         job_type = 'profile_refresh'
         job_counter = 1 # Default 1 job for badge checking at the end
 
@@ -1126,21 +1162,36 @@ class TokenKeeper:
                     break
             limit += page_size
             offset += page_size
-        
+
+        # FIRST PASS: Create/update games and calculate job count WITHOUT assigning jobs
         touched_profilegame_ids = []
+        games_needing_groups = []
+
         for title in trophy_titles_to_be_updated:
             game, created, _ = PsnApiService.create_or_update_game(title)
             profile_game, _ = PsnApiService.create_or_update_profile_game(profile, game, title)
             touched_profilegame_ids.append(profile_game.id)
             title_defined_trophies_total = title.defined_trophies.bronze + title.defined_trophies.silver + title.defined_trophies.gold + title.defined_trophies.platinum
-            args = [game.np_communication_id, game.title_platform[0] if not game.title_platform[0] == 'PSPC' else game.title_platform[1]]
-            if created or game.get_total_defined_trophies() != title_defined_trophies_total or not TrophyGroup.objects.filter(game=game).exists():
-                PSNManager.assign_job('sync_trophy_groups', args, profile.id)
-                job_counter += 1
-            PSNManager.assign_job('sync_trophies', args, profile.id, priority_override='medium_priority')
-            job_counter += 2
-        
+
+            # Check if this game needs trophy groups synced
+            needs_groups = created or game.get_total_defined_trophies() != title_defined_trophies_total or not TrophyGroup.objects.filter(game=game).exists()
+            if needs_groups:
+                games_needing_groups.append(game)
+                job_counter += 1  # sync_trophy_groups
+            job_counter += 2  # sync_trophies (includes the +2 for include_progress)
+
+        # Set target BEFORE assigning any jobs to prevent race condition
         profile.add_to_sync_target(job_counter)
+
+        # SECOND PASS: Now assign the jobs
+        for title in trophy_titles_to_be_updated:
+            game = Game.objects.get(np_communication_id=title.np_communication_id)
+            args = [game.np_communication_id, game.title_platform[0] if not game.title_platform[0] == 'PSPC' else game.title_platform[1]]
+
+            if game in games_needing_groups:
+                PSNManager.assign_job('sync_trophy_groups', args, profile.id)
+            PSNManager.assign_job('sync_trophies', args, profile.id, priority_override='medium_priority')
+
         update_profile_games(profile)
         job_counter = 0
         
@@ -1189,6 +1240,7 @@ class TokenKeeper:
                     game = Game.objects.get(np_communication_id=title.np_communication_id)
                 except Game.DoesNotExist:
                     logger.warning(f"Game with comm id {title.np_communication_id} does not exist.")
+                    continue
                 game.add_title_id(title.np_title_id)
                 args = [title.np_title_id, title.np_communication_id]
                 PSNManager.assign_job('sync_title_id', args=args, profile_id=profile.id)
@@ -1219,8 +1271,24 @@ class TokenKeeper:
         stats = {}
         for group_id, group in self.group_instances.items():
             for inst_id, inst in group['instances'].items():
-                auth = inst.client.authenticator
                 key = f"{group_id}-{inst_id}"
+                if inst.client is None:
+                    stats[key] = {
+                        "group_id": group_id,
+                        "busy": inst.is_busy,
+                        "healthy": False,
+                        "calls_in_window": 0,
+                        "access_token_expiry_in": -1,
+                        "refresh_token_expiry_in": -1,
+                        "token_scopes": "none",
+                        "npsso_cookie": "missing",
+                        "uptime_seconds": 0,
+                        "last_error": inst.last_error,
+                        "pending_refresh": False,
+                        "outbound_ip": inst.outbound_ip,
+                    }
+                    continue
+                auth = inst.client.authenticator
                 stats[key] = {
                     "group_id": group_id,
                     "busy": inst.is_busy,

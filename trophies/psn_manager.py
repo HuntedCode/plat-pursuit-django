@@ -31,7 +31,7 @@ class PSNManager:
         logger.info(f"Assigned {job_type} for profile {profile_id} to queue {queue_name}")
     
     @classmethod
-    def _get_queue_for_job(self, job_type):
+    def _get_queue_for_job(cls, job_type):
         """Map job type to queue."""
         if job_type in ["sync_profile_data", "sync_trophy_titles", "profile_refresh", "check_profile_health"]:
             return "high_priority"
