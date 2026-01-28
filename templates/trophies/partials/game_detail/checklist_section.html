@@ -10,7 +10,7 @@
     {# Section Header #}
     <div class="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 mb-6">
         <div class="flex items-center gap-3">
-            <button id="checklist-toggle" class="btn btn-ghost btn-sm p-1" aria-label="Toggle checklist section">
+            <button id="checklist-toggle" class="btn btn-ghost btn-sm p-1" aria-label="Toggle guide section">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 transition-transform duration-200" id="checklist-toggle-icon" style="transform: rotate(-90deg);" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
                 </svg>
@@ -19,7 +19,7 @@
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 inline-block mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/>
                 </svg>
-                Checklists
+                Guides
             </h2>
             <span class="badge badge-lg badge-secondary" id="checklist-count">{{ checklist_count|default:0 }}</span>
         </div>
@@ -42,7 +42,7 @@
         {# Loading State #}
         <div class="flex justify-center items-center py-12" id="checklist-loading">
             <span class="loading loading-spinner loading-lg text-secondary"></span>
-            <span class="ml-3 text-lg">Loading checklists...</span>
+            <span class="ml-3 text-lg">Loading guides...</span>
         </div>
 
         {# Empty State - Hidden by default #}
@@ -50,22 +50,22 @@
             <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 mx-auto text-base-content/30 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
             </svg>
-            <p class="text-lg text-base-content/60 mb-2">No checklists yet</p>
-            <p class="text-sm text-base-content/50 mb-4">Be the first to create a checklist for this game!</p>
+            <p class="text-lg text-base-content/60 mb-2">No guides yet</p>
+            <p class="text-sm text-base-content/50 mb-4">Be the first to create a guide for this game!</p>
             {% if user.is_authenticated and user.profile.is_linked %}
                 {% if user.profile.guidelines_agreed %}
                 <a href="{% url 'checklist_create' game.concept.id game.np_communication_id %}" class="btn btn-secondary btn-sm">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
                     </svg>
-                    Create Checklist
+                    Create Guide
                 </a>
                 {% else %}
                 <button class="btn btn-secondary btn-sm" id="show-guidelines-btn-empty">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
                     </svg>
-                    Create Checklist
+                    Create Guide
                 </button>
                 <p class="text-xs text-base-content/50 mt-2">Accept community guidelines first</p>
                 {% endif %}
@@ -77,7 +77,7 @@
             <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"/>
             </svg>
-            <span id="checklist-error-message">Failed to load checklists. Please try again.</span>
+            <span id="guide-error-message">Failed to load guides. Please try again.</span>
         </div>
 
         {# Checklists Grid #}
@@ -86,7 +86,7 @@
         {# Load More Button #}
         <div class="hidden text-center mt-6" id="checklists-load-more">
             <button class="btn btn-outline btn-secondary" id="load-more-checklists-btn">
-                Load More Checklists
+                Load More Guides
             </button>
         </div>
 
@@ -99,7 +99,7 @@
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-warning" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
                         </svg>
-                        Your Draft Checklists
+                        Your Draft Guides
                     </h3>
                     <p class="text-sm text-base-content/70 mt-1">You have {{ user_draft_checklists|length }} draft checklist{{ user_draft_checklists|length|pluralize }} for this game.</p>
                 </div>
@@ -127,7 +127,7 @@
                 </svg>
                 <div class="flex-1">
                     <span class="font-semibold">Community Guidelines Required</span>
-                    <p class="text-sm">You must agree to our community guidelines before creating checklists.</p>
+                    <p class="text-sm">You must agree to our community guidelines before creating guides.</p>
                 </div>
                 <button class="btn btn-sm btn-warning" id="show-guidelines-btn">
                     Review Guidelines
@@ -138,13 +138,13 @@
             <div class="mt-6 p-4 bg-base-100 border-2 border-base-300 rounded-box flex flex-col sm:flex-row items-center justify-between gap-4 opacity-50" id="create-checklist-cta">
                 <div class="text-center sm:text-left">
                     <h3 class="font-semibold">Have a strategy to share?</h3>
-                    <p class="text-sm text-base-content/70">Create your own checklist to help other players!</p>
+                    <p class="text-sm text-base-content/70">Create your own guide to help other players!</p>
                 </div>
                 <button class="btn btn-secondary btn-disabled" disabled>
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
                     </svg>
-                    Create Checklist
+                    Create Guide
                 </button>
             </div>
             {% else %}
@@ -152,13 +152,13 @@
             <div class="mt-6 p-4 bg-base-100 border-2 border-base-300 rounded-box flex flex-col sm:flex-row items-center justify-between gap-4" id="create-checklist-cta">
                 <div class="text-center sm:text-left">
                     <h3 class="font-semibold">Have a strategy to share?</h3>
-                    <p class="text-sm text-base-content/70">Create your own checklist to help other players!</p>
+                    <p class="text-sm text-base-content/70">Create your own guide to help other players!</p>
                 </div>
                 <a href="{% url 'checklist_create' game.concept.id game.np_communication_id %}" class="btn btn-secondary">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
                     </svg>
-                    Create Checklist
+                    Create Guide
                 </a>
             </div>
             {% endif %}
@@ -168,7 +168,7 @@
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
             </svg>
             <span>
-                <a href="{% url 'link_psn' %}" class="link link-hover font-semibold">Link your PSN account</a> to create and save checklist progress.
+                <a href="{% url 'link_psn' %}" class="link link-hover font-semibold">Link your PSN account</a> to create and save guide progress.
             </span>
         </div>
         {% elif not user.is_authenticated %}
@@ -177,7 +177,7 @@
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
             </svg>
             <span>
-                <a href="{% url 'account_login' %}" class="link link-hover font-semibold">Sign in</a> to create checklists and save your progress.
+                <a href="{% url 'account_login' %}" class="link link-hover font-semibold">Sign in</a> to create guides and save your progress.
             </span>
         </div>
         {% endif %}
@@ -214,7 +214,7 @@
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
                         </svg>
-                        Create Checklist
+                        Create Guide
                     `;
                     disabledBtn.parentNode.replaceChild(newBtn, disabledBtn);
                 }

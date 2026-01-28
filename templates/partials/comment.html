@@ -85,6 +85,11 @@
                     </figure>
                 {% endif %}
 
+                {# Checklist Author Badge #}
+                {% if comment.is_checklist_author %}
+                    <span class="badge badge-sm badge-accent">Author</span>
+                {% endif %}
+
                 {% if comment.author_progress %}
                     <div class="tooltip" data-tip="User's Total Progress">
                         <span class="text-base-content text-xs sm:text-sm font-semibold">{{ comment.author_progress }}%</span>
@@ -111,7 +116,7 @@
             {# Comment Body #}
             <div class="prose prose-sm max-w-none mb-3">
                 {% if comment.is_deleted %}
-                    <p class="text-base-content/50 italic">[deleted]</p>
+                    <p class="text-base-content/70 italic text-sm">[message deleted]</p>
                 {% else %}
                     <p class="whitespace-pre-wrap break-words text-sm">{{ comment.body|parse_spoilers }}</p>
                 {% endif %}

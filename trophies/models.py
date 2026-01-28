@@ -1183,6 +1183,11 @@ class Comment(models.Model):
         blank=True,
         help_text="Trophy position within concept (null = concept-level comment)"
     )
+    checklist_id = models.IntegerField(
+        null=True,
+        blank=True,
+        help_text="Checklist ID within concept (null = concept-level comment)"
+    )
 
     # Author info
     profile = models.ForeignKey(
@@ -1237,10 +1242,15 @@ class Comment(models.Model):
             models.Index(fields=['concept', 'trophy_id', 'depth', '-upvote_count'], name='comment_threaded_idx'),
             # For moderation queue
             models.Index(fields=['is_deleted', 'created_at'], name='comment_moderation_idx'),
+            # Checklist comment indexes
+            models.Index(fields=['concept', 'checklist_id', '-upvote_count'], name='comment_checklist_votes_idx'),
+            models.Index(fields=['concept', 'checklist_id', 'depth', '-upvote_count'], name='comment_checklist_threaded_idx'),
         ]
         ordering = ['-upvote_count', '-created_at']
 
     def __str__(self):
+        if self.checklist_id is not None:
+            return f"Comment by {self.profile.psn_username} on {self.concept} (Checklist {self.checklist_id})"
         if self.trophy_id is not None:
             return f"Comment by {self.profile.psn_username} on {self.concept} (Trophy {self.trophy_id})"
         return f"Comment by {self.profile.psn_username} on {self.concept}"
@@ -1250,6 +1260,13 @@ class Comment(models.Model):
         if self.parent:
             self.depth = self.parent.depth + 1
         super().save(*args, **kwargs)
+
+    def clean(self):
+        """Validate that only one of trophy_id or checklist_id is set."""
+        super().clean()
+        if self.trophy_id is not None and self.checklist_id is not None:
+            from django.core.exceptions import ValidationError
+            raise ValidationError("A comment cannot belong to both a trophy and a checklist.")
 
     def soft_delete(self, moderator=None, reason="", request=None):
         """

@@ -495,6 +495,51 @@ class ChecklistProgressView(APIView):
             return Response({'error': 'Internal error.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+class ChecklistSectionBulkProgressView(APIView):
+    """Bulk update all items in a section to checked or unchecked."""
+    authentication_classes = [SessionAuthentication, TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    @method_decorator(ratelimit(key='user', rate='30/m', method='POST', block=True))
+    def post(self, request, checklist_id, section_id):
+        """POST /api/v1/checklists/<checklist_id>/sections/<section_id>/bulk-progress/"""
+        try:
+            try:
+                checklist = Checklist.objects.get(id=checklist_id, is_deleted=False)
+            except Checklist.DoesNotExist:
+                return Response({'error': 'Checklist not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+            profile = getattr(request.user, 'profile', None)
+
+            # Get mark_complete parameter (true/false)
+            mark_complete = request.data.get('mark_complete', True)
+            if isinstance(mark_complete, str):
+                mark_complete = mark_complete.lower() == 'true'
+
+            updated_count, error = ChecklistService.bulk_update_section_progress(
+                checklist, profile, section_id, mark_complete
+            )
+
+            if error:
+                return Response({'error': error}, status=status.HTTP_400_BAD_REQUEST)
+
+            # Get updated progress
+            progress = ChecklistService.get_user_progress(checklist, profile)
+
+            return Response({
+                'success': True,
+                'updated_count': updated_count,
+                'mark_complete': mark_complete,
+                'progress_percentage': progress.progress_percentage if progress else 0,
+                'items_completed': progress.items_completed if progress else 0,
+                'total_items': progress.total_items if progress else checklist.total_items
+            })
+
+        except Exception as e:
+            logger.error(f"Checklist section bulk progress error: {e}")
+            return Response({'error': 'Internal error.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
 # ---------- Section Endpoints ----------
 
 class ChecklistSectionListView(APIView):

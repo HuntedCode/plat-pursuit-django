@@ -2770,6 +2770,18 @@ class ChecklistDetailView(ProfileHotbarMixin, DetailView):
         if checklist.concept and checklist.concept.bg_url:
             context['image_urls'] = {'bg_url': checklist.concept.bg_url}
 
+        # Comment section context
+        context['guidelines_agreed'] = profile.guidelines_agreed if profile else False
+
+        # Get comment count for this checklist
+        from trophies.models import Comment
+        comment_count = Comment.objects.filter(
+            concept=checklist.concept,
+            checklist_id=checklist.id,
+            is_deleted=False
+        ).count()
+        context['comment_count'] = comment_count
+
         return context
 
 

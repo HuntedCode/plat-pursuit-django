@@ -145,9 +145,9 @@ class CommentService:
 
     @staticmethod
     @transaction.atomic
-    def create_comment(profile, concept, body, parent=None, trophy_id=None):
+    def create_comment(profile, concept, body, parent=None, trophy_id=None, checklist_id=None):
         """
-        Create a new comment on a Concept or Trophy within a Concept.
+        Create a new comment on a Concept, Trophy, or Checklist within a Concept.
 
         Args:
             profile: Profile instance (author)
@@ -155,6 +155,7 @@ class CommentService:
             body: Comment text
             parent: Optional parent Comment for replies
             trophy_id: Optional trophy_id for trophy-level comments (None = concept-level)
+            checklist_id: Optional checklist_id for checklist-level comments (None = concept-level)
 
         Returns:
             tuple: (Comment instance, error_message or None)
@@ -190,14 +191,15 @@ class CommentService:
         if parent:
             if parent.depth >= CommentService.MAX_DEPTH:
                 return None, "Maximum reply depth reached."
-            # Ensure parent is for the same concept and trophy_id
-            if parent.concept != concept or parent.trophy_id != trophy_id:
+            # Ensure parent is for the same concept, trophy_id, and checklist_id
+            if parent.concept != concept or parent.trophy_id != trophy_id or parent.checklist_id != checklist_id:
                 return None, "Invalid parent comment."
 
         try:
             comment = Comment.objects.create(
                 concept=concept,
                 trophy_id=trophy_id,
+                checklist_id=checklist_id,
                 profile=profile,
                 parent=parent,
                 body=body.strip()
@@ -206,7 +208,7 @@ class CommentService:
             # Note: comment_count is updated automatically by signal for concept-level comments
 
             # Invalidate cache
-            CommentService.invalidate_cache(concept, trophy_id)
+            CommentService.invalidate_cache(concept, trophy_id, checklist_id)
 
             logger.info(f"Comment {comment.id} created by {profile.psn_username} on concept {concept.id} (trophy_id={trophy_id})")
             return comment, None
@@ -345,21 +347,22 @@ class CommentService:
             return True, None
 
     @staticmethod
-    def get_comments_for_concept(concept, profile=None, sort='top', trophy_id=None):
+    def get_comments_for_concept(concept, profile=None, sort='top', trophy_id=None, checklist_id=None):
         """
-        Get comments for a Concept or Trophy within a Concept.
+        Get comments for a Concept, Trophy, or Checklist within a Concept.
 
         Args:
             concept: Concept instance
             profile: Optional viewing profile (for vote status)
             sort: 'top', 'new', or 'old'
             trophy_id: Optional trophy_id for trophy-level comments (None = concept-level)
+            checklist_id: Optional checklist_id for checklist-level comments (None = concept-level)
 
         Returns:
-            QuerySet: Comments for the concept/trophy
+            QuerySet: Comments for the concept/trophy/checklist
         """
         from trophies.models import Comment
-        return Comment.objects.get_threaded_comments(concept, profile, sort, trophy_id)
+        return Comment.objects.get_threaded_comments(concept, profile, sort, trophy_id, checklist_id)
 
     @staticmethod
     def get_comment_context_for_profile(comment, viewing_profile, game=None):
@@ -377,6 +380,7 @@ class CommentService:
         author_profile = comment.profile
         concept = comment.concept
         trophy_id = comment.trophy_id
+        checklist_id = comment.checklist_id
 
         context = {
             'comment': comment,
@@ -388,28 +392,31 @@ class CommentService:
         }
 
         # Author indicators based on comment type
-        if trophy_id is None:
-            # Concept-level comment: Show author's game completion status
-            # Check across all games in the concept for any completion
-            from trophies.models import ProfileGame
+        from trophies.models import ProfileGame, Checklist, EarnedTrophy, Trophy
 
-            # Get any game in this concept that the author has played
-            pg = ProfileGame.objects.filter(
-                profile=author_profile,
-                game__concept=concept
-            ).order_by('-progress').first()
+        # Always get game progress and platinum status (for all comment types)
+        pg = ProfileGame.objects.filter(
+            profile=author_profile,
+            game__concept=concept
+        ).order_by('-progress').first()
 
-            if pg:
-                context['author_progress'] = pg.progress
-                context['author_has_platinum'] = pg.has_plat
-            else:
-                context['author_progress'] = None
-                context['author_has_platinum'] = False
+        if pg:
+            context['author_progress'] = pg.progress
+            context['author_has_platinum'] = pg.has_plat
         else:
-            # Trophy-level comment: Show if author has earned this trophy
-            # trophy_id is consistent across stacks, check any stack in concept
-            from trophies.models import EarnedTrophy, Trophy
+            context['author_progress'] = None
+            context['author_has_platinum'] = False
 
+        # Checklist-level: Show 'Author' badge if commenter is the checklist creator
+        if checklist_id is not None:
+            try:
+                checklist = Checklist.objects.get(id=checklist_id, concept=concept)
+                context['is_checklist_author'] = (author_profile == checklist.profile)
+            except Checklist.DoesNotExist:
+                context['is_checklist_author'] = False
+
+        # Trophy-level: Show if author has earned this trophy
+        if trophy_id is not None:
             # Find trophy by trophy_id in any game stack of this concept
             trophy = Trophy.objects.filter(
                 game__concept=concept,
@@ -445,9 +452,11 @@ class CommentService:
         concept.refresh_from_db(fields=['comment_count'])
 
     @staticmethod
-    def invalidate_cache(concept, trophy_id=None):
-        """Invalidate cached comments for a concept/trophy."""
-        if trophy_id is not None:
+    def invalidate_cache(concept, trophy_id=None, checklist_id=None):
+        """Invalidate cached comments for a concept/trophy/checklist."""
+        if checklist_id is not None:
+            cache_key = f"comments:concept:{concept.id}:checklist:{checklist_id}"
+        elif trophy_id is not None:
             cache_key = f"comments:concept:{concept.id}:trophy:{trophy_id}"
         else:
             cache_key = f"comments:concept:{concept.id}"

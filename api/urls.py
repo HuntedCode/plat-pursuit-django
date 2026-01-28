@@ -7,7 +7,7 @@ from .views import (
 from .checklist_views import (
     ChecklistListView, ChecklistCreateView, ChecklistDetailView,
     ChecklistPublishView, ChecklistVoteView, ChecklistReportView,
-    ChecklistProgressToggleView, ChecklistProgressView,
+    ChecklistProgressToggleView, ChecklistProgressView, ChecklistSectionBulkProgressView,
     ChecklistSectionListView, ChecklistSectionDetailView, ChecklistSectionReorderView,
     ChecklistItemListView, ChecklistItemBulkCreateView, ChecklistItemDetailView, ChecklistItemReorderView,
     UserDraftChecklistsView, UserPublishedChecklistsView, UserChecklistProgressView,
@@ -29,8 +29,10 @@ urlpatterns = [
     # Comment endpoints - Concept-based
     path('comments/concept/<int:concept_id>/', CommentListView.as_view(), name='comment-list'),
     path('comments/concept/<int:concept_id>/trophy/<int:trophy_id>/', CommentListView.as_view(), name='comment-list-trophy'),
+    path('comments/concept/<int:concept_id>/checklist/<int:checklist_id>/', CommentListView.as_view(), name='comment-list-checklist'),
     path('comments/concept/<int:concept_id>/create/', CommentCreateView.as_view(), name='comment-create'),
     path('comments/concept/<int:concept_id>/trophy/<int:trophy_id>/create/', CommentCreateView.as_view(), name='comment-create-trophy'),
+    path('comments/concept/<int:concept_id>/checklist/<int:checklist_id>/create/', CommentCreateView.as_view(), name='comment-create-checklist'),
     path('comments/<int:comment_id>/', CommentDetailView.as_view(), name='comment-detail'),
     path('comments/<int:comment_id>/vote/', CommentVoteView.as_view(), name='comment-vote'),
     path('comments/<int:comment_id>/report/', CommentReportView.as_view(), name='comment-report'),
@@ -47,6 +49,7 @@ urlpatterns = [
     path('checklists/<int:checklist_id>/report/', ChecklistReportView.as_view(), name='checklist-report'),
     path('checklists/<int:checklist_id>/progress/', ChecklistProgressView.as_view(), name='checklist-progress'),
     path('checklists/<int:checklist_id>/progress/toggle/<int:item_id>/', ChecklistProgressToggleView.as_view(), name='checklist-progress-toggle'),
+    path('checklists/<int:checklist_id>/sections/<int:section_id>/bulk-progress/', ChecklistSectionBulkProgressView.as_view(), name='checklist-section-bulk-progress'),
 
     # Checklist sections
     path('checklists/<int:checklist_id>/sections/', ChecklistSectionListView.as_view(), name='checklist-section-list'),

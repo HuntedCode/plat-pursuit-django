@@ -1516,6 +1516,71 @@ class ChecklistService:
             return True, None
 
     @staticmethod
+    @transaction.atomic
+    def bulk_update_section_progress(checklist, profile, section_id, mark_complete):
+        """
+        Bulk update all items in a section to be complete or incomplete.
+
+        Args:
+            checklist: Checklist instance
+            profile: Profile tracking progress
+            section_id: ID of ChecklistSection to update
+            mark_complete: Boolean - True to check all, False to uncheck all
+
+        Returns:
+            tuple: (updated_count int, error_message or None)
+        """
+        from trophies.models import UserChecklistProgress, ChecklistItem, ChecklistSection
+
+        can_save, reason = ChecklistService.can_save_progress(checklist, profile)
+        if not can_save:
+            return 0, reason
+
+        if checklist.is_deleted:
+            return 0, "Cannot track progress on deleted checklists."
+
+        # Verify section belongs to this checklist
+        try:
+            section = ChecklistSection.objects.get(id=section_id, checklist=checklist)
+        except ChecklistSection.DoesNotExist:
+            return 0, "Section not found."
+
+        # Get all checkable items in the section (exclude sub_headers, images, text_areas)
+        checkable_items = ChecklistItem.objects.filter(
+            section=section,
+            item_type__in=['item', 'trophy']
+        ).values_list('id', flat=True)
+
+        if not checkable_items:
+            return 0, "No checkable items in section."
+
+        # Get or create progress record
+        progress, created = UserChecklistProgress.objects.get_or_create(
+            profile=profile,
+            checklist=checklist,
+            defaults={'total_items': checklist.total_items}
+        )
+
+        if created:
+            # Update checklist's progress_save_count
+            checklist.progress_save_count = F('progress_save_count') + 1
+            checklist.save(update_fields=['progress_save_count'])
+
+        updated_count = 0
+        for item_id in checkable_items:
+            if mark_complete:
+                if item_id not in progress.completed_items:
+                    progress.mark_item_complete(item_id)
+                    updated_count += 1
+            else:
+                if item_id in progress.completed_items:
+                    progress.mark_item_incomplete(item_id)
+                    updated_count += 1
+
+        logger.info(f"Bulk update: {updated_count} items in section {section_id} {'checked' if mark_complete else 'unchecked'} by {profile.psn_username}")
+        return updated_count, None
+
+    @staticmethod
     def get_user_progress(checklist, profile):
         """
         Get user's progress on a checklist.

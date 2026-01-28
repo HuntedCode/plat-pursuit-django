@@ -453,7 +453,7 @@ class CommentQuerySet(models.QuerySet):
 
     def for_concept(self, concept):
         """
-        Get all comments for a concept (concept-level only, no trophy comments).
+        Get all comments for a concept (concept-level only, no trophy or checklist comments).
 
         Args:
             concept: Concept instance
@@ -461,7 +461,7 @@ class CommentQuerySet(models.QuerySet):
         Returns:
             QuerySet: Concept-level comments
         """
-        return self.filter(concept=concept, trophy_id__isnull=True)
+        return self.filter(concept=concept, trophy_id__isnull=True, checklist_id__isnull=True)
 
     def for_trophy(self, concept, trophy_id):
         """
@@ -475,6 +475,19 @@ class CommentQuerySet(models.QuerySet):
             QuerySet: Trophy-level comments
         """
         return self.filter(concept=concept, trophy_id=trophy_id)
+
+    def for_checklist(self, concept, checklist_id):
+        """
+        Get comments for a specific checklist within a concept.
+
+        Args:
+            concept: Concept instance
+            checklist_id: Checklist ID within concept
+
+        Returns:
+            QuerySet: Checklist-level comments
+        """
+        return self.filter(concept=concept, checklist_id=checklist_id)
 
     def top_level(self):
         """
@@ -578,6 +591,10 @@ class CommentManager(models.Manager):
         """Proxy to queryset method."""
         return self.get_queryset().for_trophy(concept, trophy_id)
 
+    def for_checklist(self, concept, checklist_id):
+        """Proxy to queryset method."""
+        return self.get_queryset().for_checklist(concept, checklist_id)
+
     def top_level(self):
         """Proxy to queryset method."""
         return self.get_queryset().top_level()
@@ -594,23 +611,26 @@ class CommentManager(models.Manager):
         """Proxy to queryset method."""
         return self.get_queryset().by_old()
 
-    def get_threaded_comments(self, concept, profile=None, sort='top', trophy_id=None):
+    def get_threaded_comments(self, concept, profile=None, sort='top', trophy_id=None, checklist_id=None):
         """
-        Get all comments for a concept or trophy in threaded structure.
+        Get all comments for a concept, trophy, or checklist in threaded structure.
 
         Args:
             concept: Concept instance
             profile: Optional profile to check votes
             sort: 'top', 'new', or 'old'
             trophy_id: Optional trophy_id for trophy-level comments (None = concept-level)
+            checklist_id: Optional checklist_id for checklist-level comments (None = concept-level)
 
         Returns:
             QuerySet: Comments optimized for display with nested replies
         """
-        if trophy_id is not None:
-            qs = self.for_trophy(concept, trophy_id).active().with_author_data()
+        if checklist_id is not None:
+            qs = self.for_checklist(concept, checklist_id).with_author_data()
+        elif trophy_id is not None:
+            qs = self.for_trophy(concept, trophy_id).with_author_data()
         else:
-            qs = self.for_concept(concept).active().with_author_data()
+            qs = self.for_concept(concept).with_author_data()
 
         if profile:
             qs = qs.with_vote_check(profile)

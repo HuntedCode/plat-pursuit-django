@@ -784,7 +784,7 @@
                     title,
                     description,
                 });
-                showToast('Checklist saved!', 'success');
+                showToast('Guide saved!', 'success');
             } catch (error) {
                 showToast(error.message || 'Failed to save', 'error');
             } finally {
@@ -802,14 +802,14 @@
                 // Show confirmation dialog before publishing
                 const confirmed = confirm(
                     `Ready to publish?\n\n` +
-                    `Please double-check your checklist before publishing:\n` +
+                    `Please double-check your guide before publishing:\n` +
                     `• All sections and items are complete\n` +
                     `• No typos or errors\n` +
                     `• Items are in the correct order\n\n` +
                     `Once published, you cannot add, edit, or delete sections and items ` +
                     `because users may start tracking their progress. ` +
                     `You can still edit the title and description.\n\n` +
-                    `Publish this checklist?`
+                    `Publish this guide?`
                 );
 
                 if (!confirmed) {
@@ -819,7 +819,7 @@
                 try {
                     this.classList.add('loading');
                     await apiRequest(`${API_BASE}/checklists/${checklistId}/publish/`, 'POST');
-                    showToast('Checklist published!', 'success');
+                    showToast('Guide published!', 'success');
                     window.location.reload();
                 } catch (error) {
                     showToast(error.message || 'Failed to publish', 'error');
@@ -856,7 +856,7 @@
 
                     // Proceed with unpublishing
                     await apiRequest(`${API_BASE}/checklists/${checklistId}/publish/`, 'DELETE');
-                    showToast('Checklist unpublished', 'info');
+                    showToast('Guide unpublished', 'info');
                     window.location.reload();
                 } catch (error) {
                     showToast(error.message || 'Failed to unpublish', 'error');
@@ -882,7 +882,7 @@
             try {
                 this.classList.add('loading');
                 await apiRequest(`${API_BASE}/checklists/${checklistId}/`, 'DELETE');
-                showToast('Checklist deleted', 'info');
+                showToast('Guide deleted', 'info');
                 window.location.href = '/my-checklists/';
             } catch (error) {
                 showToast(error.message || 'Failed to delete', 'error');
@@ -1500,7 +1500,7 @@
         } catch (error) {
             if (loadingEl) loadingEl.classList.add('hidden');
             if (errorEl) errorEl.classList.remove('hidden');
-            console.error('Failed to load checklists:', error);
+            console.error('Failed to load guides:', error);
         }
     }
 
@@ -1660,7 +1660,7 @@
     }
 
     async function removeChecklistThumbnail(checklistId) {
-        if (!confirm('Remove checklist thumbnail?')) return;
+        if (!confirm('Remove guide thumbnail?')) return;
 
         try {
             const response = await fetch(`/api/v1/checklists/${checklistId}/image/`, {
@@ -2347,22 +2347,63 @@
                     return;
                 }
 
-                const checkboxes = section.querySelectorAll('.checklist-item[data-item-type="item"] .checklist-item-checkbox:not(:checked), .checklist-trophy-item[data-item-type="trophy"] .checklist-item-checkbox:not(:checked)');
-
-                console.log('Found', checkboxes.length, 'unchecked items to check');
-
-                // Check all unchecked boxes
-                for (const checkbox of checkboxes) {
-                    if (!checkbox.checked) {
-                        checkbox.checked = true;
-                        // Trigger change event to save progress
-                        checkbox.dispatchEvent(new Event('change', { bubbles: true }));
-                        // Small delay to avoid overwhelming the API
-                        await new Promise(resolve => setTimeout(resolve, 100));
-                    }
+                const checklistContainer = document.getElementById('checklist-detail-container');
+                if (!checklistContainer) {
+                    console.error('Checklist container not found');
+                    return;
                 }
 
-                showToast('All items checked', 'success');
+                const checklistId = checklistContainer.dataset.checklistId;
+                const canSaveProgress = checklistContainer.dataset.canSaveProgress === 'true';
+
+                if (!canSaveProgress) {
+                    showToast('Progress cannot be saved for this guide.', 'warning');
+                    return;
+                }
+
+                // Disable button during operation
+                btn.disabled = true;
+
+                try {
+                    // Call bulk update API
+                    const response = await apiRequest(
+                        `${API_BASE}/checklists/${checklistId}/sections/${sectionId}/bulk-progress/`,
+                        'POST',
+                        { mark_complete: true }
+                    );
+
+                    if (response.success) {
+                        // Update all checkboxes in the section
+                        const checkboxes = section.querySelectorAll('.checklist-item[data-item-type="item"] .checklist-item-checkbox, .checklist-trophy-item[data-item-type="trophy"] .checklist-item-checkbox');
+                        checkboxes.forEach(checkbox => {
+                            checkbox.checked = true;
+                            // Update text styling
+                            const itemText = checkbox.closest('label')?.querySelector('.checklist-item-text');
+                            if (itemText) {
+                                itemText.classList.add('line-through', 'text-base-content/50');
+                            }
+                        });
+
+                        // Update progress bar with correct object format
+                        updateProgressDisplay({
+                            percentage: response.progress_percentage,
+                            items_completed: response.items_completed,
+                            total_items: response.total_items
+                        });
+
+                        // Update section counts
+                        updateSectionCounts();
+
+                        showToast(`All items checked (${response.updated_count} items)`, 'success');
+                    } else {
+                        showToast(response.error || 'Failed to check all items', 'error');
+                    }
+                } catch (error) {
+                    console.error('Bulk check error:', error);
+                    showToast('Failed to check all items', 'error');
+                } finally {
+                    btn.disabled = false;
+                }
             });
         });
 
@@ -2376,22 +2417,63 @@
                     return;
                 }
 
-                const checkboxes = section.querySelectorAll('.checklist-item[data-item-type="item"] .checklist-item-checkbox:checked, .checklist-trophy-item[data-item-type="trophy"] .checklist-item-checkbox:checked');
-
-                console.log('Found', checkboxes.length, 'checked items to uncheck');
-
-                // Uncheck all checked boxes
-                for (const checkbox of checkboxes) {
-                    if (checkbox.checked) {
-                        checkbox.checked = false;
-                        // Trigger change event to save progress
-                        checkbox.dispatchEvent(new Event('change', { bubbles: true }));
-                        // Small delay to avoid overwhelming the API
-                        await new Promise(resolve => setTimeout(resolve, 100));
-                    }
+                const checklistContainer = document.getElementById('checklist-detail-container');
+                if (!checklistContainer) {
+                    console.error('Checklist container not found');
+                    return;
                 }
 
-                showToast('All items unchecked', 'success');
+                const checklistId = checklistContainer.dataset.checklistId;
+                const canSaveProgress = checklistContainer.dataset.canSaveProgress === 'true';
+
+                if (!canSaveProgress) {
+                    showToast('Progress cannot be saved for this guide.', 'warning');
+                    return;
+                }
+
+                // Disable button during operation
+                btn.disabled = true;
+
+                try {
+                    // Call bulk update API
+                    const response = await apiRequest(
+                        `${API_BASE}/checklists/${checklistId}/sections/${sectionId}/bulk-progress/`,
+                        'POST',
+                        { mark_complete: false }
+                    );
+
+                    if (response.success) {
+                        // Update all checkboxes in the section
+                        const checkboxes = section.querySelectorAll('.checklist-item[data-item-type="item"] .checklist-item-checkbox, .checklist-trophy-item[data-item-type="trophy"] .checklist-item-checkbox');
+                        checkboxes.forEach(checkbox => {
+                            checkbox.checked = false;
+                            // Update text styling
+                            const itemText = checkbox.closest('label')?.querySelector('.checklist-item-text');
+                            if (itemText) {
+                                itemText.classList.remove('line-through', 'text-base-content/50');
+                            }
+                        });
+
+                        // Update progress bar with correct object format
+                        updateProgressDisplay({
+                            percentage: response.progress_percentage,
+                            items_completed: response.items_completed,
+                            total_items: response.total_items
+                        });
+
+                        // Update section counts
+                        updateSectionCounts();
+
+                        showToast(`All items unchecked (${response.updated_count} items)`, 'success');
+                    } else {
+                        showToast(response.error || 'Failed to uncheck all items', 'error');
+                    }
+                } catch (error) {
+                    console.error('Bulk uncheck error:', error);
+                    showToast('Failed to uncheck all items', 'error');
+                } finally {
+                    btn.disabled = false;
+                }
             });
         });
     }

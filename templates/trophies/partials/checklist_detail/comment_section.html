@@ -1,0 +1,325 @@
+{% load static %}
+{# Comment section for checklist detail page - displays checklist-level comments #}
+<section class="shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 w-full p-4 lg:p-6 mt-8"
+         id="comment-section"
+         data-concept-id="{{ checklist.concept.id }}"
+         data-checklist-id="{{ checklist.id }}"
+         data-trophy-id=""
+         data-guidelines-agreed="{% if user.is_authenticated and user.profile.guidelines_agreed %}true{% else %}false{% endif %}">
+
+    {# Section Header #}
+    <div class="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 mb-6">
+        <div class="flex items-center gap-3">
+            <button id="discussion-toggle" class="btn btn-ghost btn-sm p-1" aria-label="Toggle discussion section">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 transition-transform duration-200" id="discussion-toggle-icon" style="transform: rotate(-90deg);" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                </svg>
+            </button>
+            <h2 class="text-2xl lg:text-3xl font-bold">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 inline-block mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
+                </svg>
+                Discussion
+            </h2>
+            <span class="badge badge-lg badge-primary" id="comment-count">
+                {{ comment_count|default:0 }}
+            </span>
+        </div>
+
+        {# Sort Dropdown - Hidden when collapsed #}
+        <div class="form-control w-full lg:w-auto hidden" id="discussion-sort-container">
+            <label for="comment-sort" class="label">
+                <span class="label-text">Sort by</span>
+            </label>
+            <select id="comment-sort" class="select select-bordered select-sm w-full lg:w-auto">
+                <option value="top" selected>Top (Most Upvoted)</option>
+                <option value="new">New (Recent First)</option>
+                <option value="old">Old (Oldest First)</option>
+            </select>
+        </div>
+    </div>
+
+    {# Main Content Area - Sidebar Layout on Large Screens - Starts Hidden #}
+    <div class="flex-col xl:flex-row gap-6 hidden" id="discussion-content">
+        {# Comments Container - Main Content (Left) #}
+        <div id="comments-container" class="flex-1 space-y-4 max-w-4xl">
+        {# Loading State #}
+        <div class="flex justify-center items-center py-12" id="comments-loading">
+            <span class="loading loading-spinner loading-lg text-primary"></span>
+            <span class="ml-3 text-lg">Loading comments...</span>
+        </div>
+
+        {# Empty State - Hidden by default, shown by JS if no comments #}
+        <div class="hidden text-center py-12" id="comments-empty">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 mx-auto text-base-content/30 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
+            </svg>
+            <p class="text-lg text-base-content/60 mb-2">No comments yet</p>
+            <p class="text-sm text-base-content/50">Be the first to share your thoughts!</p>
+        </div>
+
+        {# Error State - Hidden by default, shown by JS if error #}
+        <div class="hidden alert alert-error" id="comments-error" role="alert">
+            <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+            </svg>
+            <span id="comments-error-message">Failed to load comments. Please try again.</span>
+        </div>
+
+            {# Comments List - Populated by JS #}
+            <div class="bg-base-100 border-4 border-base-300 shadow-lg shadow-neutral rounded-box px-4 pt-8">
+                <div id="comments-list"></div>
+            </div>
+        </div>
+
+        {# Comment Creation Sidebar (Right on Desktop, Bottom on Mobile) #}
+        <aside class="w-full xl:w-96 flex-shrink-0">
+            {% if user.is_authenticated %}
+                {% if user.profile.is_linked %}
+                    <div class="card bg-base-100 border-4 border-base-300 shadow-md shadow-neutral lg:sticky lg:top-20" id="comment-form-card">
+                        <div class="card-body p-4">
+                            <h3 class="text-lg font-semibold mb-3">Share your thoughts</h3>
+                            <form id="comment-create-form" class="space-y-3">
+                                <div class="form-control">
+                                    <textarea id="comment-body"
+                                              name="body"
+                                              class="textarea textarea-bordered h-32 resize-none w-full"
+                                              placeholder="What do you think about this guide? Share tips, feedback, or your experience..."
+                                              maxlength="2000"
+                                              required></textarea>
+                                    <div class="label">
+                                        <span class="label-text-alt text-base-content/60">
+                                            <span id="char-count">0</span>/2000
+                                        </span>
+                                    </div>
+                                </div>
+
+                                <div class="space-y-2">
+                                    <div class="text-xs text-base-content/60 flex items-start gap-1">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                                        </svg>
+                                        <span>Be respectful and follow <a href="#" class="link link-hover" onclick="document.getElementById('guidelines-modal').showModal(); return false;">community guidelines</a></span>
+                                    </div>
+                                    <div class="text-xs text-base-content/60 flex items-start gap-1">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                                        </svg>
+                                        <span>Use <code class="bg-base-200 px-1 rounded">||spoiler tags||</code> for plot reveals</span>
+                                    </div>
+                                </div>
+
+                                <button type="submit"
+                                        class="btn btn-primary btn-sm w-full"
+                                        id="comment-submit-btn">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/>
+                                    </svg>
+                                    Post Comment
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                {% else %}
+                    {# Not Linked Alert #}
+                    <div class="alert alert-warning" role="alert">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                        </svg>
+                        <span>
+                            You must <a href="{% url 'link_psn' %}" class="link link-hover font-semibold">link your PSN account</a> to comment.
+                        </span>
+                    </div>
+                {% endif %}
+            {% else %}
+                {# Not Logged In Alert #}
+                <div class="alert alert-info" role="alert">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="stroke-current shrink-0 w-6 h-6">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                    </svg>
+                    <span>
+                        <a href="{% url 'account_login' %}" class="link link-hover font-semibold">Sign in</a> to join the discussion.
+                    </span>
+                </div>
+            {% endif %}
+        </aside>
+    </div>
+
+    {# Community Guidelines Modal #}
+    <dialog id="guidelines-modal" class="modal">
+        <div class="modal-box max-w-2xl">
+            <h3 class="font-bold text-2xl mb-4">Community Guidelines</h3>
+            <div class="space-y-4">
+                <p class="text-sm text-base-content/70">Please review and follow these guidelines when participating in our community:</p>
+
+                {% load static %}
+                <div class="space-y-3">
+                    <div class="bg-base-200 p-4 rounded-lg">
+                        <h4 class="font-semibold mb-2 flex items-center gap-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+                            </svg>
+                            Be Respectful
+                        </h4>
+                        <p class="text-sm text-base-content/70">Treat all members with respect. No harassment, hate speech, personal attacks, or discriminatory language of any kind.</p>
+                    </div>
+
+                    <div class="bg-base-200 p-4 rounded-lg">
+                        <h4 class="font-semibold mb-2 flex items-center gap-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                            </svg>
+                            Keep It Family-Friendly
+                        </h4>
+                        <p class="text-sm text-base-content/70">Avoid NSFW content, explicit language, and mature themes. We want to maintain a welcoming environment for gamers of all ages.</p>
+                    </div>
+
+                    <div class="bg-base-200 p-4 rounded-lg">
+                        <h4 class="font-semibold mb-2 flex items-center gap-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
+                            </svg>
+                            Stay On Topic
+                        </h4>
+                        <p class="text-sm text-base-content/70">Keep discussions relevant to PlayStation gaming, trophies, and the game being discussed. Avoid off-topic conversations.</p>
+                    </div>
+
+                    <div class="bg-base-200 p-4 rounded-lg">
+                        <h4 class="font-semibold mb-2 flex items-center gap-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+                            </svg>
+                            No Spam or Self-Promotion
+                        </h4>
+                        <p class="text-sm text-base-content/70">Don't post repetitive content, advertisements, or excessive self-promotion. Share helpful content, not spam.</p>
+                    </div>
+
+                    <div class="bg-base-200 p-4 rounded-lg">
+                        <h4 class="font-semibold mb-2 flex items-center gap-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                            </svg>
+                            Use Spoiler Tags
+                        </h4>
+                        <p class="text-sm text-base-content/70">Use spoiler tags ||like this|| when discussing plot points, endings, or major game revelations. Respect others' gaming experiences.</p>
+                    </div>
+
+                    <div class="bg-base-200 p-4 rounded-lg">
+                        <h4 class="font-semibold mb-2 flex items-center gap-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            Be Helpful and Constructive
+                        </h4>
+                        <p class="text-sm text-base-content/70">Share tips, strategies, and advice that helps the community. Constructive criticism is welcome, but keep it respectful.</p>
+                    </div>
+
+                    <div class="bg-base-200 p-4 rounded-lg">
+                        <h4 class="font-semibold mb-2 flex items-center gap-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                            </svg>
+                            Follow Platform Rules
+                        </h4>
+                        <p class="text-sm text-base-content/70">Adhere to all applicable laws and PlayStation's Terms of Service. Don't share exploits, hacks, or methods to circumvent game systems.</p>
+                    </div>
+
+                    <div class="bg-base-200 p-4 rounded-lg">
+                        <h4 class="font-semibold mb-2 flex items-center gap-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 21v-4m0 0V5a2 2 0 012-2h6.5l1 1H21l-3 6 3 6h-8.5l-1-1H5a2 2 0 00-2 2zm9-13.5V9" />
+                            </svg>
+                            Report Don't Retaliate
+                        </h4>
+                        <p class="text-sm text-base-content/70">If you see rule-breaking content, report it to moderators. Don't engage in arguments or retaliate with similar behavior.</p>
+                    </div>
+
+                    <div class="bg-base-200 p-4 rounded-lg">
+                        <h4 class="font-semibold mb-2 flex items-center gap-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                            </svg>
+                            Protect Privacy
+                        </h4>
+                        <p class="text-sm text-base-content/70">Don't share personal information about yourself or others. Keep PSN usernames public but respect privacy otherwise.</p>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-action">
+                <button class="btn" onclick="document.getElementById('guidelines-modal').close()">Close</button>
+            </div>
+        </div>
+        <form method="dialog" class="modal-backdrop">
+            <button>close</button>
+        </form>
+    </dialog>
+
+    {# Guidelines Agreement Modal (first-time commenters) #}
+    <dialog id="guidelines-agreement-modal" class="modal">
+        <div class="modal-box max-w-2xl">
+            <h3 class="font-bold text-2xl mb-4">Welcome to the Community!</h3>
+            <p class="mb-4">Before you post your first comment, please review and agree to our community guidelines:</p>
+
+            <div class="bg-base-200 p-4 rounded-lg mb-4 max-h-96 overflow-y-auto">
+                <div class="space-y-3">
+                    <div class="border-l-4 border-primary pl-3">
+                        <h4 class="font-semibold">Be Respectful</h4>
+                        <p class="text-sm text-base-content/70">Treat all members with respect. No harassment, hate speech, personal attacks, or discriminatory language of any kind.</p>
+                    </div>
+
+                    <div class="border-l-4 border-primary pl-3">
+                        <h4 class="font-semibold">Keep It Family-Friendly</h4>
+                        <p class="text-sm text-base-content/70">Avoid NSFW content, explicit language, and mature themes. We want a welcoming environment for all ages.</p>
+                    </div>
+
+                    <div class="border-l-4 border-primary pl-3">
+                        <h4 class="font-semibold">Stay On Topic</h4>
+                        <p class="text-sm text-base-content/70">Keep discussions relevant to PlayStation gaming, trophies, and the game being discussed.</p>
+                    </div>
+
+                    <div class="border-l-4 border-primary pl-3">
+                        <h4 class="font-semibold">No Spam or Self-Promotion</h4>
+                        <p class="text-sm text-base-content/70">Don't post repetitive content, advertisements, or excessive self-promotion.</p>
+                    </div>
+
+                    <div class="border-l-4 border-primary pl-3">
+                        <h4 class="font-semibold">Use Spoiler Tags</h4>
+                        <p class="text-sm text-base-content/70">Use spoiler tags ||like this|| when discussing plot points, endings, or major revelations.</p>
+                    </div>
+
+                    <div class="border-l-4 border-primary pl-3">
+                        <h4 class="font-semibold">Be Helpful and Constructive</h4>
+                        <p class="text-sm text-base-content/70">Share tips and advice that helps the community. Keep criticism respectful.</p>
+                    </div>
+
+                    <div class="border-l-4 border-primary pl-3">
+                        <h4 class="font-semibold">Follow Platform Rules</h4>
+                        <p class="text-sm text-base-content/70">Adhere to laws and PlayStation's Terms of Service. Don't share exploits or hacks.</p>
+                    </div>
+
+                    <div class="border-l-4 border-primary pl-3">
+                        <h4 class="font-semibold">Report Don't Retaliate</h4>
+                        <p class="text-sm text-base-content/70">Report rule-breaking content to moderators instead of retaliating.</p>
+                    </div>
+
+                    <div class="border-l-4 border-primary pl-3">
+                        <h4 class="font-semibold">Protect Privacy</h4>
+                        <p class="text-sm text-base-content/70">Don't share personal information about yourself or others.</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="form-control mb-4">
+                <label class="label cursor-pointer justify-start gap-3">
+                    <input type="checkbox" id="agree-to-guidelines" class="checkbox checkbox-primary">
+                    <span class="label-text">I have read and agree to follow the community guidelines</span>
+                </label>
+            </div>
+
+            <div class="modal-action">
+                <button class="btn btn-ghost" onclick="document.getElementById('guidelines-agreement-modal').close(); document.getElementById('agree-to-guidelines').checked = false;">Cancel</button>
+                <button class="btn btn-primary" id="confirm-guidelines-btn" disabled onclick="confirmGuidelines()">Agree and Continue</button>
+            </div>
+        </div>
+    </dialog>
+</section>

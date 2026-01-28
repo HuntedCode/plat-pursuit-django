@@ -17,7 +17,7 @@
                 <div class="flex flex-col lg:flex-row justify-between items-start gap-4">
                     {# Checklist Thumbnail #}
                     {% if checklist.thumbnail %}
-                    <figure class="w-full lg:w-40 lg:h-40 aspect-square bg-base-300 rounded-lg overflow-hidden shrink-0 cursor-pointer hover:shadow-xl transition-shadow duration-200 checklist-image-clickable"
+                    <figure class="w-full lg:w-50 aspect-video bg-base-300 rounded-lg overflow-hidden shrink-0 cursor-pointer hover:shadow-xl transition-shadow duration-200 checklist-image-clickable"
                             data-image-src="{{ checklist.thumbnail.url }}"
                             data-image-alt="{{ checklist.title }}">
                         <img src="{{ checklist.thumbnail.url }}"
@@ -166,6 +166,11 @@
             </div>
         </div>
     </section>
+
+    {# Comment Section - Between header and content #}
+    {% if checklist.status == 'published' %}
+        {% include 'trophies/partials/checklist_detail/comment_section.html' %}
+    {% endif %}
 
     {# Sections and Items with Table of Contents #}
     <div class="xl:grid xl:grid-cols-[1fr_280px] xl:gap-6 xl:items-start mt-6">
@@ -529,4 +534,22 @@
 {% block js_scripts %}
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js"></script>
     <script src="{% static 'js/checklist.js' %}"></script>
+    {% if checklist.status == 'published' %}
+        <script src="{% static 'js/comments.js' %}"></script>
+        <script>
+            // Initialize comment system for checklist
+            // Check if already initialized to prevent duplicates
+            if (!window.checklistCommentSystemInitialized) {
+                window.checklistCommentSystemInitialized = true;
+                if (document.readyState === 'loading') {
+                    document.addEventListener('DOMContentLoaded', () => {
+                        new CommentSystem('comment-section');
+                    });
+                } else {
+                    // DOM already loaded
+                    new CommentSystem('comment-section');
+                }
+            }
+        </script>
+    {% endif %}
 {% endblock %}

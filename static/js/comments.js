@@ -13,12 +13,20 @@ class CommentSystem {
             return;
         }
 
+        // Prevent duplicate initialization
+        if (this.section.dataset.commentSystemInitialized === 'true') {
+            return;
+        }
+        this.section.dataset.commentSystemInitialized = 'true';
+
         this.conceptId = this.section.dataset.conceptId;
         this.trophyId = this.section.dataset.trophyId || null;
+        this.checklistId = this.section.dataset.checklistId || null;
         this.currentSort = 'top';
 
-        // Determine if this is a trophy-level comment section
+        // Determine comment section type
         this.isTrophySection = sectionId.startsWith('trophy-comment-section-');
+        this.isChecklistSection = Boolean(this.checklistId);
 
         // DOM elements (scoped to section type)
         if (this.isTrophySection) {
@@ -38,7 +46,7 @@ class CommentSystem {
             this.commentCountBadge = document.getElementById(`trophy-comment-count-badge-${this.trophyId}`);
             this.commentCount = document.getElementById(`trophy-comment-count-${this.trophyId}`);
         } else {
-            // Game-level selectors (original IDs)
+            // Game-level and checklist-level selectors (original IDs)
             this.commentsList = document.getElementById('comments-list');
             this.commentsLoading = document.getElementById('comments-loading');
             this.commentsEmpty = document.getElementById('comments-empty');
@@ -72,11 +80,15 @@ class CommentSystem {
     }
 
     setupEventListeners() {
-        // Discussion section toggle (game-level only)
+        // Discussion section toggle (game-level and checklist sections)
         if (this.discussionToggle && !this.isTrophySection) {
-            this.discussionToggle.addEventListener('click', () => {
+            this.discussionToggle.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
                 this.toggleDiscussionSection();
             });
+        } else if (!this.discussionToggle && !this.isTrophySection) {
+            console.error('Discussion toggle button not found');
         }
 
         // For trophy sections, load comments immediately since there's no toggle
@@ -168,7 +180,9 @@ class CommentSystem {
      */
     getApiUrl() {
         let url = `/api/v1/comments/concept/${this.conceptId}/`;
-        if (this.trophyId) {
+        if (this.checklistId) {
+            url = `/api/v1/comments/concept/${this.conceptId}/checklist/${this.checklistId}/`;
+        } else if (this.trophyId) {
             url = `/api/v1/comments/concept/${this.conceptId}/trophy/${this.trophyId}/`;
         }
         return url;
@@ -1033,34 +1047,44 @@ class CommentSystem {
                 }
             }, 300);
         }, duration);
-
-        // Also log to console for debugging
-        console.log(`[${type.toUpperCase()}]`, message);
     }
 
     /**
      * Toggle discussion section visibility
      */
     toggleDiscussionSection() {
+        if (!this.discussionContent) {
+            console.error('Discussion content element not found');
+            return;
+        }
+
         const isCollapsed = this.discussionContent.classList.contains('hidden');
 
         if (isCollapsed) {
             // Expand
             this.discussionContent.classList.remove('hidden');
             this.discussionContent.classList.add('flex');
-            this.discussionSortContainer.classList.remove('hidden');
-            this.discussionToggleIcon.style.transform = 'rotate(0deg)';
+            if (this.discussionSortContainer) {
+                this.discussionSortContainer.classList.remove('hidden');
+            }
+            if (this.discussionToggleIcon) {
+                this.discussionToggleIcon.style.transform = 'rotate(0deg)';
+            }
 
             // Load comments on first expand if not already loaded
-            if (!this.commentsList.innerHTML.trim()) {
+            if (this.commentsList && !this.commentsList.innerHTML.trim()) {
                 this.loadComments();
             }
         } else {
             // Collapse
             this.discussionContent.classList.add('hidden');
             this.discussionContent.classList.remove('flex');
-            this.discussionSortContainer.classList.add('hidden');
-            this.discussionToggleIcon.style.transform = 'rotate(-90deg)';
+            if (this.discussionSortContainer) {
+                this.discussionSortContainer.classList.add('hidden');
+            }
+            if (this.discussionToggleIcon) {
+                this.discussionToggleIcon.style.transform = 'rotate(-90deg)';
+            }
         }
     }
 
