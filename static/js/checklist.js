@@ -9,6 +9,187 @@
     // API base URL
     const API_BASE = '/api/v1';
 
+    // ==========================================
+    // Form State Preservation
+    // ==========================================
+    // Saves unsaved form data before page reloads so users don't lose work
+
+    const FORM_STATE_KEY = 'checklist_edit_form_state';
+
+    function getChecklistId() {
+        const container = document.getElementById('checklist-edit-container');
+        return container ? container.dataset.checklistId : null;
+    }
+
+    function saveFormState() {
+        const checklistId = getChecklistId();
+        if (!checklistId) return;
+
+        const state = {
+            checklistId: checklistId,
+            timestamp: Date.now(),
+            title: document.getElementById('checklist-title')?.value || '',
+            description: document.getElementById('checklist-description')?.value || '',
+            sections: {}
+        };
+
+        // Save section data
+        document.querySelectorAll('.checklist-section').forEach(section => {
+            const sectionId = section.dataset.sectionId;
+            if (!sectionId) return;
+
+            const titleInput = section.querySelector('.section-title-input');
+            const descInput = section.querySelector('.section-description-input');
+
+            state.sections[sectionId] = {
+                title: titleInput?.value || '',
+                description: descInput?.value || ''
+            };
+
+            // Save unsaved item edits within this section
+            const items = {};
+            section.querySelectorAll('[data-item-id]').forEach(item => {
+                const itemId = item.dataset.itemId;
+                const textInput = item.querySelector('.item-text-input');
+                if (itemId && textInput) {
+                    items[itemId] = textInput.value || '';
+                }
+            });
+            state.sections[sectionId].items = items;
+        });
+
+        sessionStorage.setItem(FORM_STATE_KEY, JSON.stringify(state));
+    }
+
+    function restoreFormState() {
+        const checklistId = getChecklistId();
+        if (!checklistId) return;
+
+        const savedState = sessionStorage.getItem(FORM_STATE_KEY);
+        if (!savedState) return;
+
+        try {
+            const state = JSON.parse(savedState);
+
+            // Only restore if it's for the same checklist and not too old (5 minutes)
+            if (state.checklistId !== checklistId) return;
+            if (Date.now() - state.timestamp > 5 * 60 * 1000) {
+                clearFormState();
+                return;
+            }
+
+            let restoredFields = false;
+
+            // Restore title and description
+            const titleInput = document.getElementById('checklist-title');
+            const descInput = document.getElementById('checklist-description');
+
+            if (titleInput && state.title && titleInput.value !== state.title) {
+                titleInput.value = state.title;
+                restoredFields = true;
+            }
+            if (descInput && state.description && descInput.value !== state.description) {
+                descInput.value = state.description;
+                restoredFields = true;
+            }
+
+            // Restore section data
+            if (state.sections) {
+                Object.keys(state.sections).forEach(sectionId => {
+                    const sectionData = state.sections[sectionId];
+                    const section = document.querySelector(`.checklist-section[data-section-id="${sectionId}"]`);
+                    if (!section) return;
+
+                    const titleInput = section.querySelector('.section-title-input');
+                    const descInput = section.querySelector('.section-description-input');
+
+                    if (titleInput && sectionData.title && titleInput.value !== sectionData.title) {
+                        titleInput.value = sectionData.title;
+                        restoredFields = true;
+                    }
+                    if (descInput && sectionData.description && descInput.value !== sectionData.description) {
+                        descInput.value = sectionData.description;
+                        restoredFields = true;
+                    }
+
+                    // Restore item text
+                    if (sectionData.items) {
+                        Object.keys(sectionData.items).forEach(itemId => {
+                            const item = section.querySelector(`[data-item-id="${itemId}"]`);
+                            const textInput = item?.querySelector('.item-text-input');
+                            if (textInput && sectionData.items[itemId] && textInput.value !== sectionData.items[itemId]) {
+                                textInput.value = sectionData.items[itemId];
+                                restoredFields = true;
+                            }
+                        });
+                    }
+                });
+            }
+
+            // Update character counters after restoration
+            if (restoredFields) {
+                updateAllCharacterCounters();
+                showToast('Your unsaved changes have been restored', 'info');
+            }
+
+            // Clear the saved state after restoration
+            clearFormState();
+        } catch (e) {
+            console.error('Failed to restore form state:', e);
+            clearFormState();
+        }
+    }
+
+    function clearFormState() {
+        sessionStorage.removeItem(FORM_STATE_KEY);
+    }
+
+    function updateAllCharacterCounters() {
+        // Update checklist title counter
+        const titleInput = document.getElementById('checklist-title');
+        if (titleInput) {
+            const counter = document.querySelector('.char-count[data-target="checklist-title"]');
+            if (counter) counter.textContent = titleInput.value.length;
+        }
+
+        // Update checklist description counter
+        const descInput = document.getElementById('checklist-description');
+        if (descInput) {
+            const counter = document.querySelector('.char-count[data-target="checklist-description"]');
+            if (counter) counter.textContent = descInput.value.length;
+        }
+
+        // Update section counters
+        document.querySelectorAll('.checklist-section').forEach(section => {
+            const titleInput = section.querySelector('.section-title-input');
+            const descInput = section.querySelector('.section-description-input');
+
+            if (titleInput) {
+                const counter = section.querySelector('.section-title-count');
+                if (counter) counter.textContent = titleInput.value.length;
+            }
+            if (descInput) {
+                const counter = section.querySelector('.section-desc-count');
+                if (counter) counter.textContent = descInput.value.length;
+            }
+
+            // Update item counters
+            section.querySelectorAll('[data-item-id]').forEach(item => {
+                const textInput = item.querySelector('.item-text-input');
+                const counter = item.querySelector('.item-char-count');
+                if (textInput && counter) {
+                    counter.textContent = textInput.value.length;
+                }
+            });
+        });
+    }
+
+    // Helper to reload page while preserving form state
+    function reloadWithFormState() {
+        saveFormState();
+        location.reload();
+    }
+
     // Get CSRF token from cookie
     function getCSRFToken() {
         const name = 'csrftoken';
@@ -785,6 +966,8 @@
                     description,
                 });
                 showToast('Guide saved!', 'success');
+                // Clear any saved form state since we just saved successfully
+                clearFormState();
             } catch (error) {
                 showToast(error.message || 'Failed to save', 'error');
             } finally {
@@ -820,7 +1003,7 @@
                     this.classList.add('loading');
                     await apiRequest(`${API_BASE}/checklists/${checklistId}/publish/`, 'POST');
                     showToast('Guide published!', 'success');
-                    window.location.reload();
+                    reloadWithFormState();
                 } catch (error) {
                     showToast(error.message || 'Failed to publish', 'error');
                 } finally {
@@ -857,7 +1040,7 @@
                     // Proceed with unpublishing
                     await apiRequest(`${API_BASE}/checklists/${checklistId}/publish/`, 'DELETE');
                     showToast('Guide unpublished', 'info');
-                    window.location.reload();
+                    reloadWithFormState();
                 } catch (error) {
                     showToast(error.message || 'Failed to unpublish', 'error');
                 } finally {
@@ -906,7 +1089,7 @@
                 showToast('Section added!', 'success');
 
                 // Reload page to show the new section with all features
-                setTimeout(() => location.reload(), 500);
+                setTimeout(() => reloadWithFormState(), 500);
             } catch (error) {
                 showToast(error.message || 'Failed to add section', 'error');
                 this.classList.remove('loading');
@@ -940,6 +1123,8 @@
                         description,
                     });
                     showToast('Section saved!', 'success');
+                    // Clear saved form state since we just saved
+                    clearFormState();
                 } catch (error) {
                     showToast(error.message || 'Failed to save section', 'error');
                 }
@@ -1207,6 +1392,8 @@
                     }
 
                     showToast('Item saved!', 'success');
+                    // Clear saved form state since we just saved
+                    clearFormState();
                 } catch (error) {
                     showToast(error.message || 'Failed to save item', 'error');
                 }
@@ -1649,7 +1836,7 @@
 
             if (response.ok) {
                 showToast('Thumbnail uploaded!', 'success');
-                location.reload();
+                reloadWithFormState();
             } else {
                 showToast(data.error || 'Upload failed.', 'error');
             }
@@ -1670,7 +1857,7 @@
 
             if (response.ok) {
                 showToast('Thumbnail removed.', 'success');
-                location.reload();
+                reloadWithFormState();
             } else {
                 const data = await response.json();
                 showToast(data.error || 'Failed to remove.', 'error');
@@ -1696,7 +1883,7 @@
 
             if (response.ok) {
                 showToast('Section thumbnail uploaded!', 'success');
-                location.reload();
+                reloadWithFormState();
             } else {
                 showToast(data.error || 'Upload failed.', 'error');
             }
@@ -1717,7 +1904,7 @@
 
             if (response.ok) {
                 showToast('Section thumbnail removed.', 'success');
-                location.reload();
+                reloadWithFormState();
             } else {
                 const data = await response.json();
                 showToast(data.error || 'Failed to remove.', 'error');
@@ -1744,7 +1931,7 @@
 
             if (response.ok) {
                 showToast('Inline image added!', 'success');
-                location.reload();
+                reloadWithFormState();
             } else {
                 showToast(data.error || 'Upload failed.', 'error');
             }
@@ -1844,7 +2031,7 @@
                         if (counter) counter.textContent = '0/2000';
 
                         // Reload page to show new item
-                        setTimeout(() => location.reload(), 500);
+                        setTimeout(() => reloadWithFormState(), 500);
                     } else {
                         showToast(data.error || 'Failed to add text area.', 'error');
                         btn.disabled = false;
@@ -2050,7 +2237,7 @@
                     });
 
                     // Reload page to update UI
-                    setTimeout(() => location.reload(), 1000);
+                    setTimeout(() => reloadWithFormState(), 1000);
                 } catch (error) {
                     showToast(error.message, 'error');
                 }
@@ -2081,7 +2268,7 @@
                     });
 
                     // Reload page to update UI
-                    setTimeout(() => location.reload(), 1000);
+                    setTimeout(() => reloadWithFormState(), 1000);
                 } catch (error) {
                     showToast(error.message, 'error');
                 }
@@ -2204,7 +2391,7 @@
             modal.close();
 
             // Reload page to show new trophy item
-            setTimeout(() => location.reload(), 500);
+            setTimeout(() => reloadWithFormState(), 500);
         } catch (error) {
             showToast(error.message, 'error');
         }
@@ -2483,6 +2670,9 @@
     // ==========================================
 
     document.addEventListener('DOMContentLoaded', function() {
+        // Restore any unsaved form data from before page reload
+        restoreFormState();
+
         initChecklistDetail();
         initChecklistEdit();
         initChecklistSection();
