@@ -24,7 +24,7 @@ from trophies.services.psn_api_service import PsnApiService
 from random import choice
 from urllib.parse import urlencode
 from trophies.psn_manager import PSNManager
-from trophies.mixins import ProfileHotbarMixin
+from trophies.mixins import ProfileHotbarMixin, PremiumRequiredMixin
 from .models import Game, Trophy, Profile, EarnedTrophy, ProfileGame, TrophyGroup, UserTrophySelection, Badge, UserBadge, UserBadgeProgress, Concept, FeaturedGuide, Stage, Milestone, UserMilestone, UserMilestoneProgress, CommentReport, ModerationLog, Checklist
 from trophies.services.checklist_service import ChecklistService
 from .forms import GameSearchForm, TrophySearchForm, ProfileSearchForm, ProfileGamesForm, ProfileTrophiesForm, ProfileBadgesForm, UserConceptRatingForm, BadgeSearchForm, GuideSearchForm, LinkPSNForm, GameDetailForm, BadgeCreationForm
@@ -2660,7 +2660,7 @@ class ModerationLogView(ListView):
 
 # Checklist Views
 
-class ChecklistDetailView(ProfileHotbarMixin, DetailView):
+class ChecklistDetailView(PremiumRequiredMixin, ProfileHotbarMixin, DetailView):
     """
     Display checklist detail with sections, items, and progress tracking.
 
@@ -2785,7 +2785,7 @@ class ChecklistDetailView(ProfileHotbarMixin, DetailView):
         return context
 
 
-class ChecklistCreateView(LoginRequiredMixin, ProfileHotbarMixin, View):
+class ChecklistCreateView(PremiumRequiredMixin, LoginRequiredMixin, ProfileHotbarMixin, View):
     """
     Create a new checklist for a concept.
 
@@ -2834,7 +2834,7 @@ class ChecklistCreateView(LoginRequiredMixin, ProfileHotbarMixin, View):
         return redirect('checklist_edit', checklist_id=checklist.id)
 
 
-class ChecklistEditView(LoginRequiredMixin, ProfileHotbarMixin, DetailView):
+class ChecklistEditView(PremiumRequiredMixin, LoginRequiredMixin, ProfileHotbarMixin, DetailView):
     """
     Edit a checklist (title, description, sections, items).
 
@@ -2908,7 +2908,7 @@ class ChecklistEditView(LoginRequiredMixin, ProfileHotbarMixin, DetailView):
         return context
 
 
-class MyChecklistsView(LoginRequiredMixin, ProfileHotbarMixin, TemplateView):
+class MyChecklistsView(PremiumRequiredMixin, LoginRequiredMixin, ProfileHotbarMixin, TemplateView):
     """
     Display user's checklists: drafts, published, and in-progress.
 

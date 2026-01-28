@@ -114,7 +114,7 @@
                             {% if checklist.status == 'published' and not is_author and request.user.is_authenticated %}
                                 <button class="btn btn-ghost btn-sm text-error checklist-report-btn"
                                         data-checklist-id="{{ checklist.id }}"
-                                        title="Report this checklist">
+                                        title="Report this guide">
                                     <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 21v-4m0 0V5a2 2 0 012-2h6.5l1 1H21l-3 6 3 6h-8.5l-1-1H5a2 2 0 00-2 2zm9-13.5V9"/>
                                     </svg>
@@ -160,7 +160,7 @@
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
                         </svg>
-                        <span>You can check items in this session, but progress won't be saved. <a href="{% url 'subscribe' %}" class="link link-success font-semibold">Upgrade to Premium</a> to save your progress on any checklist!</span>
+                        <span>You can check items in this session, but progress won't be saved. <a href="{% url 'subscribe' %}" class="link link-success font-semibold">Upgrade to Premium</a> to save your progress on any guide!</span>
                     </div>
                 {% endif %}
             </div>
@@ -286,7 +286,7 @@
                                             data-image-alt="Checklist image"
                                             {% if item.text %}data-image-caption="{{ item.text }}"{% endif %}>
                                         <img src="{{ item.image.url }}"
-                                             alt="Checklist image"
+                                             alt="Guide image"
                                              class="w-full h-auto object-contain"
                                              loading="lazy">
                                     </figure>
@@ -403,7 +403,7 @@
                 <section class="shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 w-full p-0 lg:p-4">
                     <div class="card bg-base-100 border-4 border-base-300 shadow-md shadow-neutral">
                         <div class="card-body text-center py-12">
-                            <p class="text-base-content/50 italic">This checklist has no sections yet.</p>
+                            <p class="text-base-content/50 italic">This guide has no sections yet.</p>
                             {% if can_edit %}
                                 <a href="{% url 'checklist_edit' checklist.id %}" class="btn btn-secondary btn-sm mt-4 mx-auto">Add Sections</a>
                             {% endif %}
@@ -453,11 +453,11 @@
         <div class="flex justify-center mt-6">
             <button class="btn btn-ghost btn-sm text-error checklist-report-btn"
                     data-checklist-id="{{ checklist.id }}"
-                    title="Report this checklist">
+                    title="Report this guide">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 21v-4m0 0V5a2 2 0 012-2h6.5l1 1H21l-3 6 3 6h-8.5l-1-1H5a2 2 0 00-2 2zm9-13.5V9"/>
                 </svg>
-                Report Checklist
+                Report Guide
             </button>
         </div>
     {% endif %}
@@ -466,7 +466,7 @@
 {# Report Modal #}
 <dialog id="report-modal" class="modal">
     <div class="modal-box">
-        <h3 class="font-bold text-lg">Report Checklist</h3>
+        <h3 class="font-bold text-lg">Report Guide</h3>
         <form id="report-form" class="mt-4">
             <div class="form-control">
                 <label class="label">

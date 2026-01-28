@@ -90,6 +90,7 @@ urlpatterns = [
     path('terms/', TermsOfServiceView.as_view(), name='terms'),
     path('about/', AboutView.as_view(), name='about'),
     path('contact/', ContactView.as_view(), name='contact'),
+    path('beta-access/', TemplateView.as_view(template_name='pages/beta_access_required.html'), name='beta_access_required'),
 
     path('users/', include('users.urls')),
     path('accounts/', include('allauth.urls')),

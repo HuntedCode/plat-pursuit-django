@@ -1,4 +1,25 @@
+from django.contrib.auth.mixins import LoginRequiredMixin
+from django.shortcuts import redirect
 from django.views.generic import View
+
+
+class PremiumRequiredMixin(LoginRequiredMixin):
+    """
+    Mixin that requires the user to be a premium member.
+    Redirects non-premium users to the beta access page.
+    """
+    def dispatch(self, request, *args, **kwargs):
+        # First check if user is authenticated (handled by LoginRequiredMixin)
+        if not request.user.is_authenticated:
+            return self.handle_no_permission()
+
+        # Check if user is premium
+        if hasattr(request.user, 'profile') and request.user.profile.user_is_premium:
+            return super().dispatch(request, *args, **kwargs)
+
+        # Redirect non-premium users to beta access page
+        return redirect('beta_access_required')
+
 
 class ProfileHotbarMixin(View):
     def get_context_data(self, **kwargs):

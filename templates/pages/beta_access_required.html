@@ -1,0 +1,27 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Beta Feature{% endblock %}
+{% block content %}
+<div class="container mx-auto p-4 max-w-2xl flex items-center justify-center mt-12">
+    <div class="card bg-base-100 border-4 border-base-300 shadow-lg shadow-neutral text-center">
+        <div class="card-body">
+            <figure class="mb-4">
+                <img src="{% static 'images/logo.png' %}" alt="PlatPursuit logo" class="w-24 mx-auto" loading="lazy" decoding="async" />
+            </figure>
+            <div class="badge badge-warning badge-lg mb-4">Beta Feature</div>
+            <h2 class="card-title text-3xl mb-2 justify-center">Premium Access Required</h2>
+            <p class="text-lg mb-4">
+                The feature you're trying to access is currently in beta testing and is exclusively available to our premium members.
+            </p>
+            <p class="text-base-content/70 mb-6">
+                As a premium member, you'll get early access to new features, help shape the future of Platinum Pursuit, and support the continued development of the platform.
+            </p>
+            <div class="space-y-4">
+                <a href="{% url 'subscribe' %}" class="btn btn-primary w-full">Become a Premium Member</a>
+                <a href="{% url 'home' %}" class="btn btn-ghost w-full">Back to Home</a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

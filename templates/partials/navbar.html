@@ -151,7 +151,7 @@
                         </div>
                     </div>
                 </div>
-                <ul tabindex="0" class="menu menu-sm dropdown-content mt-2 z-50 p-2 shadow-lg bg-base-100 border-2 border-base-200 min-w-28 w-fit">
+                <ul tabindex="0" class="menu menu-sm dropdown-content mt-2 z-50 p-2 shadow-lg bg-base-100 border-2 border-base-200 min-w-40 w-fit">
                     {% if user.profile %}
                         {% if not user.premium_tier %}
                             <div class="indicator">
@@ -161,6 +161,7 @@
                         {% else %}
                             <li><a href="{% url 'subscription_management' %}">My Premium</a></li>
                         {% endif %}
+                        <li><a href="{% url 'my_checklists' %}">My Guides<span class="badge badge-xs badge-warning">BETA</span></a></li>
                         <li><a href="{% url 'profile_detail' user.profile.psn_username %}">Profile</a></li>
                         <li><a href="{% url 'trophy_case' user.profile.psn_username %}">Trophy Case</a></li>
                     {% else %}
