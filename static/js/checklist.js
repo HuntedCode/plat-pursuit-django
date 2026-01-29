@@ -190,6 +190,220 @@
         location.reload();
     }
 
+    // ==========================================
+    // Unsaved Changes Warning
+    // ==========================================
+    // Tracks form changes and warns user before leaving with unsaved work
+
+    let originalFormState = {};
+    let pendingNavigation = null;
+    let isNavigatingAway = false;
+
+    function captureOriginalState() {
+        const checklistId = getChecklistId();
+        if (!checklistId) return;
+
+        originalFormState = {
+            title: document.getElementById('checklist-title')?.value || '',
+            description: document.getElementById('checklist-description')?.value || '',
+            gameSelector: document.getElementById('checklist-game-selector')?.value || '',
+            sections: {}
+        };
+
+        // Capture section data
+        document.querySelectorAll('.checklist-section').forEach(section => {
+            const sectionId = section.dataset.sectionId;
+            if (!sectionId) return;
+
+            const titleInput = section.querySelector('.section-title-input');
+            const descInput = section.querySelector('.section-description-input');
+
+            originalFormState.sections[sectionId] = {
+                title: titleInput?.value || '',
+                description: descInput?.value || '',
+                items: {}
+            };
+
+            // Capture item data
+            section.querySelectorAll('[data-item-id]').forEach(item => {
+                const itemId = item.dataset.itemId;
+                const textInput = item.querySelector('.item-text-input');
+                const typeSelect = item.querySelector('.item-type-select');
+                if (itemId) {
+                    originalFormState.sections[sectionId].items[itemId] = {
+                        text: textInput?.value || '',
+                        type: typeSelect?.value || 'item'
+                    };
+                }
+            });
+        });
+    }
+
+    function hasUnsavedChanges() {
+        const checklistId = getChecklistId();
+        if (!checklistId || Object.keys(originalFormState).length === 0) return false;
+
+        // Check title
+        const currentTitle = document.getElementById('checklist-title')?.value || '';
+        if (currentTitle !== originalFormState.title) return true;
+
+        // Check description
+        const currentDesc = document.getElementById('checklist-description')?.value || '';
+        if (currentDesc !== originalFormState.description) return true;
+
+        // Check game selector
+        const currentGame = document.getElementById('checklist-game-selector')?.value || '';
+        if (currentGame !== originalFormState.gameSelector) return true;
+
+        // Check sections
+        const sections = document.querySelectorAll('.checklist-section');
+        for (const section of sections) {
+            const sectionId = section.dataset.sectionId;
+            if (!sectionId || !originalFormState.sections[sectionId]) continue;
+
+            const origSection = originalFormState.sections[sectionId];
+            const titleInput = section.querySelector('.section-title-input');
+            const descInput = section.querySelector('.section-description-input');
+
+            if ((titleInput?.value || '') !== origSection.title) return true;
+            if ((descInput?.value || '') !== origSection.description) return true;
+
+            // Check items
+            section.querySelectorAll('[data-item-id]').forEach(item => {
+                const itemId = item.dataset.itemId;
+                if (!itemId || !origSection.items[itemId]) return;
+
+                const origItem = origSection.items[itemId];
+                const textInput = item.querySelector('.item-text-input');
+                const typeSelect = item.querySelector('.item-type-select');
+
+                if ((textInput?.value || '') !== origItem.text) return true;
+                if ((typeSelect?.value || 'item') !== origItem.type) return true;
+            });
+        }
+
+        return false;
+    }
+
+    function markFormAsClean() {
+        // Recapture state after a successful save
+        captureOriginalState();
+    }
+
+    function showUnsavedChangesModal(targetUrl) {
+        const modal = document.getElementById('unsaved-changes-modal');
+        if (!modal) {
+            // Fallback if modal doesn't exist
+            if (confirm('You have unsaved changes. Leave anyway?')) {
+                isNavigatingAway = true;
+                window.location.href = targetUrl;
+            }
+            return;
+        }
+
+        pendingNavigation = targetUrl;
+        modal.showModal();
+    }
+
+    function initUnsavedChangesWarning() {
+        const checklistId = getChecklistId();
+        if (!checklistId) return;
+
+        // Capture initial state after DOM is ready
+        captureOriginalState();
+
+        const modal = document.getElementById('unsaved-changes-modal');
+        const stayBtn = document.getElementById('unsaved-stay-btn');
+        const discardBtn = document.getElementById('unsaved-discard-btn');
+        const saveBtn = document.getElementById('unsaved-save-btn');
+
+        if (stayBtn) {
+            stayBtn.addEventListener('click', () => {
+                pendingNavigation = null;
+                modal?.close();
+            });
+        }
+
+        if (discardBtn) {
+            discardBtn.addEventListener('click', () => {
+                isNavigatingAway = true;
+                modal?.close();
+                if (pendingNavigation) {
+                    window.location.href = pendingNavigation;
+                }
+            });
+        }
+
+        if (saveBtn) {
+            saveBtn.addEventListener('click', async () => {
+                const title = document.getElementById('checklist-title')?.value.trim();
+                const description = document.getElementById('checklist-description')?.value.trim();
+
+                if (!title) {
+                    showToast('Title is required', 'error');
+                    return;
+                }
+
+                try {
+                    saveBtn.classList.add('loading');
+                    await apiRequest(`${API_BASE}/checklists/${checklistId}/`, 'PATCH', {
+                        title,
+                        description,
+                    });
+                    showToast('Guide saved!', 'success');
+                    clearFormState();
+                    isNavigatingAway = true;
+                    modal?.close();
+                    if (pendingNavigation) {
+                        window.location.href = pendingNavigation;
+                    }
+                } catch (error) {
+                    showToast(error.message || 'Failed to save', 'error');
+                } finally {
+                    saveBtn.classList.remove('loading');
+                }
+            });
+        }
+
+        // Intercept link clicks
+        document.addEventListener('click', (e) => {
+            const link = e.target.closest('a');
+            if (!link) return;
+
+            // Skip links that open in new tab, have no href, or are anchors
+            const href = link.getAttribute('href');
+            if (!href || href.startsWith('#') || href.startsWith('javascript:')) return;
+            if (link.target === '_blank') return;
+
+            // Skip if already navigating or no unsaved changes
+            if (isNavigatingAway || !hasUnsavedChanges()) return;
+
+            e.preventDefault();
+            showUnsavedChangesModal(href);
+        });
+
+        // Handle browser back/forward and closing tab
+        window.addEventListener('beforeunload', (e) => {
+            if (isNavigatingAway || !hasUnsavedChanges()) return;
+
+            e.preventDefault();
+            e.returnValue = '';
+            return '';
+        });
+
+        // Handle popstate (browser back/forward buttons)
+        window.addEventListener('popstate', () => {
+            if (isNavigatingAway || !hasUnsavedChanges()) return;
+
+            // Push the current state back to prevent navigation
+            history.pushState(null, '', window.location.href);
+            showUnsavedChangesModal(document.referrer || '/');
+        });
+
+        // Push initial state for popstate handling
+        history.pushState(null, '', window.location.href);
+    }
+
     // Get CSRF token from cookie
     function getCSRFToken() {
         const name = 'csrftoken';
@@ -968,6 +1182,8 @@
                 showToast('Guide saved!', 'success');
                 // Clear any saved form state since we just saved successfully
                 clearFormState();
+                // Mark form as clean so unsaved changes warning doesn't trigger
+                markFormAsClean();
             } catch (error) {
                 showToast(error.message || 'Failed to save', 'error');
             } finally {
@@ -1125,6 +1341,7 @@
                     showToast('Section saved!', 'success');
                     // Clear saved form state since we just saved
                     clearFormState();
+                    markFormAsClean();
                 } catch (error) {
                     showToast(error.message || 'Failed to save section', 'error');
                 }
@@ -1394,6 +1611,7 @@
                     showToast('Item saved!', 'success');
                     // Clear saved form state since we just saved
                     clearFormState();
+                    markFormAsClean();
                 } catch (error) {
                     showToast(error.message || 'Failed to save item', 'error');
                 }
@@ -2687,6 +2905,8 @@
         // Section controls
         initSectionCollapse();
         initBulkCheckButtons();
+        // Unsaved changes warning
+        initUnsavedChangesWarning();
     });
 
 })();
