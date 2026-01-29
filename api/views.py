@@ -15,6 +15,7 @@ from django_ratelimit.decorators import ratelimit
 from datetime import timedelta
 from trophies.psn_manager import PSNManager
 from trophies.services.badge_service import initial_badge_check
+from trophies.services.milestone_service import check_all_milestones_for_user
 import time
 import math
 import logging
@@ -83,6 +84,9 @@ class VerifyView(APIView):
                 if profile.verify_code(profile.about_me):
                     profile.link_discord(discord_id)
                     initial_badge_check(profile)
+                    check_all_milestones_for_user(profile, criteria_type='plat_count')
+                    check_all_milestones_for_user(profile, criteria_type='playtime_hours')
+                    check_all_milestones_for_user(profile, criteria_type='trophy_count')
                     return Response({'success': True, 'message': 'Verified and linked successfully!'})
                 else:
                     return Response({'success': False, 'message': 'Verification failed. Check code and try again.'})
