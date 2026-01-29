@@ -750,19 +750,24 @@ class TokenKeeper:
                             game, tracked = PsnApiService.get_tracked_trophies_for_game(profile, title.np_communication_id)
                         except Game.DoesNotExist:
                             game, _, _ = PsnApiService.create_or_update_game(title)
+                            tracked = {'total': 0}  # Initialize tracked if game was just created
 
+                        pgame = None
                         try:
                             pgame = ProfileGame.objects.get(profile=profile, game=game)
-                        except:
-                            pass
-                        else:
                             current_tracked_games.remove(pgame)
+                        except ProfileGame.DoesNotExist:
+                            pass
+                        except ValueError:
+                            # pgame already removed from current_tracked_games
+                            pass
+
                         title_total = title.earned_trophies.bronze + title.earned_trophies.silver + title.earned_trophies.gold + title.earned_trophies.platinum
                         if tracked['total'] != title_total:
                             has_mismatch = True
                             trophy_titles_to_be_updated.append({'title': title, 'game': game})
                             logger.info(f"Mismatch for profile {profile_id} - {title.np_communication_id}: Tracked: {tracked['total']} | Title: {title_total}")
-                        elif tracked['total'] != pgame.earned_trophies_count and pgame.id not in touched_profilegame_ids:
+                        elif pgame and tracked['total'] != pgame.earned_trophies_count and pgame.id not in touched_profilegame_ids:
                             touched_profilegame_ids.append(pgame.id)
                             logger.warning(f"ProfileGame/tracked total mismatch, appending {pgame} to be updated. | Tracked: {tracked['total']} | PGame: {pgame.earned_trophies_count}")
                     is_full = len(titles) == page_size
