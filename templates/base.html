@@ -93,6 +93,8 @@
     <!-- Toast Notification Container -->
     <div id="toast-container" class="toast toast-top toast-end z-50"></div>
 
+    <!-- Load shared utilities first -->
+    <script src="{% static 'js/utils.js' %}"></script>
     <script src="{% static 'js/main.js' %}"></script>
     {% block js_scripts %}{% endblock %}
   </body>

@@ -320,7 +320,7 @@ class CommentSystem {
 
         } catch (error) {
             console.error('Failed to load more replies:', error);
-            this.showToast('Failed to load replies. Please try again.', 'error');
+            PlatPursuit.ToastManager.show('Failed to load replies. Please try again.', 'error');
         }
     }
 
@@ -332,7 +332,7 @@ class CommentSystem {
         const body = this.commentBody.value.trim();
 
         if (!body) {
-            this.showToast('Please enter a comment', 'error');
+            PlatPursuit.ToastManager.show('Please enter a comment', 'error');
             return;
         }
 
@@ -359,7 +359,7 @@ class CommentSystem {
             const response = await fetch(url, {
                 method: 'POST',
                 headers: {
-                    'X-CSRFToken': this.getCsrfToken(),
+                    'X-CSRFToken': PlatPursuit.CSRFToken.get(),
                 },
                 body: formData
             });
@@ -370,7 +370,7 @@ class CommentSystem {
             }
 
             // Success - reload comments (reset to first page to show in correct sort position)
-            this.showToast('Comment posted successfully!', 'success');
+            PlatPursuit.ToastManager.show('Comment posted successfully!', 'success');
             this.commentBody.value = '';
             if (this.charCount) this.charCount.textContent = '0';
             this.currentOffset = 0;  // Reset pagination
@@ -378,7 +378,7 @@ class CommentSystem {
 
         } catch (error) {
             console.error('Failed to create comment:', error);
-            this.showToast(error.message || 'Failed to post comment', 'error');
+            PlatPursuit.ToastManager.show(error.message || 'Failed to post comment', 'error');
         } finally {
             submitBtn.disabled = false;
             submitBtn.innerHTML = `
@@ -457,7 +457,7 @@ class CommentSystem {
             const response = await fetch(`/api/v1/comments/${commentId}/vote/`, {
                 method: 'POST',
                 headers: {
-                    'X-CSRFToken': this.getCsrfToken(),
+                    'X-CSRFToken': PlatPursuit.CSRFToken.get(),
                     'Content-Type': 'application/json',
                 },
                 credentials: 'same-origin'
@@ -488,7 +488,7 @@ class CommentSystem {
 
         } catch (error) {
             console.error('Failed to toggle vote:', error);
-            this.showToast(error.message || 'Failed to vote', 'error');
+            PlatPursuit.ToastManager.show(error.message || 'Failed to vote', 'error');
         }
     }
 
@@ -576,7 +576,7 @@ class CommentSystem {
      */
     async submitReply(parentId, body, submitBtn, formEl) {
         if (!body || body.trim().length === 0) {
-            this.showToast('Reply cannot be empty', 'error');
+            PlatPursuit.ToastManager.show('Reply cannot be empty', 'error');
             return;
         }
 
@@ -592,7 +592,7 @@ class CommentSystem {
             const response = await fetch(url, {
                 method: 'POST',
                 headers: {
-                    'X-CSRFToken': this.getCsrfToken(),
+                    'X-CSRFToken': PlatPursuit.CSRFToken.get(),
                 },
                 body: formData
             });
@@ -603,14 +603,14 @@ class CommentSystem {
             }
 
             // Success - reload comments
-            this.showToast('Reply posted successfully!', 'success');
+            PlatPursuit.ToastManager.show('Reply posted successfully!', 'success');
             formEl.remove();
             this.currentOffset = 0;
             await this.loadComments(false);
 
         } catch (error) {
             console.error('Failed to post reply:', error);
-            this.showToast(error.message || 'Failed to post reply', 'error');
+            PlatPursuit.ToastManager.show(error.message || 'Failed to post reply', 'error');
             submitBtn.disabled = false;
             submitBtn.innerHTML = `
                 <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -712,7 +712,7 @@ class CommentSystem {
      */
     async submitEdit(commentId, body, submitBtn, formEl, bodyDiv) {
         if (!body || body.trim().length === 0) {
-            this.showToast('Comment cannot be empty', 'error');
+            PlatPursuit.ToastManager.show('Comment cannot be empty', 'error');
             return;
         }
 
@@ -723,7 +723,7 @@ class CommentSystem {
             const response = await fetch(`/api/v1/comments/${commentId}/`, {
                 method: 'PUT',
                 headers: {
-                    'X-CSRFToken': this.getCsrfToken(),
+                    'X-CSRFToken': PlatPursuit.CSRFToken.get(),
                     'Content-Type': 'application/json',
                 },
                 credentials: 'same-origin',
@@ -736,7 +736,7 @@ class CommentSystem {
             }
 
             // Success - reload comments to show updated content
-            this.showToast('Comment updated successfully!', 'success');
+            PlatPursuit.ToastManager.show('Comment updated successfully!', 'success');
             formEl.remove();
             bodyDiv.classList.remove('hidden');
             this.currentOffset = 0;
@@ -744,7 +744,7 @@ class CommentSystem {
 
         } catch (error) {
             console.error('Failed to edit comment:', error);
-            this.showToast(error.message || 'Failed to edit comment', 'error');
+            PlatPursuit.ToastManager.show(error.message || 'Failed to edit comment', 'error');
             submitBtn.disabled = false;
             submitBtn.innerHTML = `
                 <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -767,7 +767,7 @@ class CommentSystem {
             const response = await fetch(`/api/v1/comments/${commentId}/`, {
                 method: 'DELETE',
                 headers: {
-                    'X-CSRFToken': this.getCsrfToken(),
+                    'X-CSRFToken': PlatPursuit.CSRFToken.get(),
                 },
                 credentials: 'same-origin'
             });
@@ -777,13 +777,13 @@ class CommentSystem {
                 throw new Error(errorData.error || `HTTP ${response.status}`);
             }
 
-            this.showToast('Comment deleted successfully', 'success');
+            PlatPursuit.ToastManager.show('Comment deleted successfully', 'success');
             this.currentOffset = 0;  // Reset pagination
             await this.loadComments(false);  // Full reload
 
         } catch (error) {
             console.error('Failed to delete comment:', error);
-            this.showToast(error.message || 'Failed to delete comment', 'error');
+            PlatPursuit.ToastManager.show(error.message || 'Failed to delete comment', 'error');
         }
     }
 
@@ -896,7 +896,7 @@ class CommentSystem {
             const response = await fetch(`/api/v1/comments/${commentId}/report/`, {
                 method: 'POST',
                 headers: {
-                    'X-CSRFToken': this.getCsrfToken(),
+                    'X-CSRFToken': PlatPursuit.CSRFToken.get(),
                     'Content-Type': 'application/json',
                 },
                 credentials: 'same-origin',
@@ -909,7 +909,7 @@ class CommentSystem {
             }
 
             // Success
-            this.showToast('Report submitted successfully. Thank you!', 'success');
+            PlatPursuit.ToastManager.show('Report submitted successfully. Thank you!', 'success');
 
             // Close modal
             const modal = document.getElementById('report-comment-modal');
@@ -931,7 +931,7 @@ class CommentSystem {
 
         } catch (error) {
             console.error('Failed to submit report:', error);
-            this.showToast(error.message || 'Failed to submit report', 'error');
+            PlatPursuit.ToastManager.show(error.message || 'Failed to submit report', 'error');
         } finally {
             submitBtn.disabled = false;
             submitBtn.innerHTML = 'Submit Report';
@@ -984,71 +984,6 @@ class CommentSystem {
     /**
      * Show toast notification
      */
-    showToast(message, type = 'info') {
-        const container = document.getElementById('toast-container');
-        if (!container) {
-            console.log(`[${type.toUpperCase()}]`, message);
-            return;
-        }
-
-        // Create toast element
-        const toast = document.createElement('div');
-        toast.className = 'alert shadow-lg mb-2 max-w-md';
-
-        // Set alert type styling
-        switch(type) {
-            case 'success':
-                toast.classList.add('alert-success');
-                break;
-            case 'error':
-                toast.classList.add('alert-error');
-                break;
-            case 'warning':
-                toast.classList.add('alert-warning');
-                break;
-            default:
-                toast.classList.add('alert-info');
-        }
-
-        // Create icon based on type
-        let icon = '';
-        switch(type) {
-            case 'success':
-                icon = `<svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>`;
-                break;
-            case 'error':
-                icon = `<svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>`;
-                break;
-            case 'warning':
-                icon = `<svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>`;
-                break;
-            default:
-                icon = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="stroke-current shrink-0 w-6 h-6"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>`;
-        }
-
-        toast.innerHTML = `
-            <div class="flex items-center gap-2">
-                ${icon}
-                <span>${message}</span>
-            </div>
-        `;
-
-        // Add to container
-        container.appendChild(toast);
-
-        // Auto-remove after 5 seconds (longer for errors)
-        const duration = type === 'error' ? 7000 : 5000;
-        setTimeout(() => {
-            toast.style.opacity = '0';
-            toast.style.transition = 'opacity 0.3s';
-            setTimeout(() => {
-                if (toast.parentNode) {
-                    toast.remove();
-                }
-            }, 300);
-        }, duration);
-    }
-
     /**
      * Toggle discussion section visibility
      */
@@ -1088,13 +1023,6 @@ class CommentSystem {
         }
     }
 
-    /**
-     * Utility functions
-     */
-    getCsrfToken() {
-        return document.querySelector('[name=csrfmiddlewaretoken]')?.value ||
-               document.cookie.split('; ').find(row => row.startsWith('csrftoken='))?.split('=')[1] || '';
-    }
 }
 
 // Community Guidelines handling
@@ -1167,7 +1095,7 @@ async function confirmGuidelines() {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'X-CSRFToken': getCsrfTokenFromPage()
+                'X-CSRFToken': PlatPursuit.CSRFToken.get()
             },
             credentials: 'same-origin'  // Include session cookie for authentication
         });
@@ -1205,7 +1133,7 @@ async function confirmTrophyGuidelines() {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'X-CSRFToken': getCsrfTokenFromPage()
+                'X-CSRFToken': PlatPursuit.CSRFToken.get()
             },
             credentials: 'same-origin'  // Include session cookie for authentication
         });
@@ -1231,11 +1159,6 @@ async function confirmTrophyGuidelines() {
 }
 
 // Helper to get CSRF token
-function getCsrfTokenFromPage() {
-    return document.querySelector('[name=csrfmiddlewaretoken]')?.value ||
-           document.cookie.split('; ').find(row => row.startsWith('csrftoken='))?.split('=')[1] || '';
-}
-
 // Initialize comment system when DOM is ready
 document.addEventListener('DOMContentLoaded', () => {
     new CommentSystem();

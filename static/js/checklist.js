@@ -63,19 +63,19 @@
 
     function restoreFormState() {
         const checklistId = getChecklistId();
-        if (!checklistId) return;
+        if (!checklistId) return false;
 
         const savedState = sessionStorage.getItem(FORM_STATE_KEY);
-        if (!savedState) return;
+        if (!savedState) return false;
 
         try {
             const state = JSON.parse(savedState);
 
             // Only restore if it's for the same checklist and not too old (5 minutes)
-            if (state.checklistId !== checklistId) return;
+            if (state.checklistId !== checklistId) return false;
             if (Date.now() - state.timestamp > 5 * 60 * 1000) {
                 clearFormState();
-                return;
+                return false;
             }
 
             let restoredFields = false;
@@ -129,14 +129,17 @@
             // Update character counters after restoration
             if (restoredFields) {
                 updateAllCharacterCounters();
-                showToast('Your unsaved changes have been restored', 'info');
+                PlatPursuit.ToastManager.show('Your unsaved changes have been restored', 'info');
             }
 
             // Clear the saved state after restoration
             clearFormState();
+
+            return restoredFields;
         } catch (e) {
             console.error('Failed to restore form state:', e);
             clearFormState();
+            return false;
         }
     }
 
@@ -186,6 +189,7 @@
 
     // Helper to reload page while preserving form state
     function reloadWithFormState() {
+        isNavigatingAway = true;  // Bypass unsaved changes warning
         saveFormState();
         location.reload();
     }
@@ -305,12 +309,14 @@
         modal.showModal();
     }
 
-    function initUnsavedChangesWarning() {
+    function initUnsavedChangesWarning(skipCaptureOriginalState = false) {
         const checklistId = getChecklistId();
         if (!checklistId) return;
 
-        // Capture initial state after DOM is ready
-        captureOriginalState();
+        // Capture initial state after DOM is ready (unless we restored form state)
+        if (!skipCaptureOriginalState) {
+            captureOriginalState();
+        }
 
         const modal = document.getElementById('unsaved-changes-modal');
         const stayBtn = document.getElementById('unsaved-stay-btn');
@@ -340,7 +346,7 @@
                 const description = document.getElementById('checklist-description')?.value.trim();
 
                 if (!title) {
-                    showToast('Title is required', 'error');
+                    PlatPursuit.ToastManager.show('Title is required', 'error');
                     return;
                 }
 
@@ -350,7 +356,7 @@
                         title,
                         description,
                     });
-                    showToast('Guide saved!', 'success');
+                    PlatPursuit.ToastManager.show('Guide saved!', 'success');
                     clearFormState();
                     isNavigatingAway = true;
                     modal?.close();
@@ -358,7 +364,7 @@
                         window.location.href = pendingNavigation;
                     }
                 } catch (error) {
-                    showToast(error.message || 'Failed to save', 'error');
+                    PlatPursuit.ToastManager.show(error.message || 'Failed to save', 'error');
                 } finally {
                     saveBtn.classList.remove('loading');
                 }
@@ -405,38 +411,13 @@
     }
 
     // Get CSRF token from cookie
-    function getCSRFToken() {
-        const name = 'csrftoken';
-        let cookieValue = null;
-        if (document.cookie && document.cookie !== '') {
-            const cookies = document.cookie.split(';');
-            for (let i = 0; i < cookies.length; i++) {
-                const cookie = cookies[i].trim();
-                if (cookie.substring(0, name.length + 1) === (name + '=')) {
-                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
-                    break;
-                }
-            }
-        }
-        return cookieValue;
-    }
-
-    // Show toast notification
-    function showToast(message, type = 'info') {
-        const toast = document.createElement('div');
-        toast.className = `alert alert-${type} fixed bottom-4 right-4 w-auto max-w-md z-50 shadow-lg`;
-        toast.innerHTML = `<span>${message}</span>`;
-        document.body.appendChild(toast);
-        setTimeout(() => toast.remove(), 3000);
-    }
-
     // API helper
     async function apiRequest(url, method = 'GET', data = null) {
         const options = {
             method,
             headers: {
                 'Content-Type': 'application/json',
-                'X-CSRFToken': getCSRFToken(),
+                'X-CSRFToken': PlatPursuit.CSRFToken.get(),
             },
             credentials: 'same-origin',
         };
@@ -664,14 +645,14 @@
         const progressText = progressEl ? progressEl.querySelector('.bulk-progress-text') : null;
 
         if (!sectionId) {
-            showToast('Please save the section first', 'error');
+            PlatPursuit.ToastManager.show('Please save the section first', 'error');
             return;
         }
 
         const items = parseBulkInput(textarea.value);
 
         if (items.length === 0) {
-            showToast('No items to upload', 'error');
+            PlatPursuit.ToastManager.show('No items to upload', 'error');
             return;
         }
 
@@ -710,7 +691,7 @@
                 if (progressEl) progressEl.classList.add('hidden');
             }, 2000);
 
-            showToast(`${result.items_created} items added!`, 'success');
+            PlatPursuit.ToastManager.show(`${result.items_created} items added!`, 'success');
 
         } catch (error) {
             // Error handling
@@ -721,7 +702,7 @@
                 showBulkUploadErrors(error);
             } else {
                 // Network or other error
-                showToast(error.message || 'Failed to upload items', 'error');
+                PlatPursuit.ToastManager.show(error.message || 'Failed to upload items', 'error');
             }
         } finally {
             uploadBtn.disabled = false;
@@ -809,7 +790,7 @@
                         this.querySelector('svg').setAttribute('fill', 'none');
                     }
                 } catch (error) {
-                    showToast(error.message || 'Failed to vote', 'error');
+                    PlatPursuit.ToastManager.show(error.message || 'Failed to vote', 'error');
                 }
             });
         });
@@ -867,7 +848,7 @@
                     } else {
                         textSpan.classList.remove('line-through', 'text-base-content/50');
                     }
-                    showToast(error.message || 'Failed to save progress', 'error');
+                    PlatPursuit.ToastManager.show(error.message || 'Failed to save progress', 'error');
                 }
             });
         });
@@ -948,7 +929,7 @@
         frame();
 
         // Show toast message
-        showToast('Checklist complete! Great job!', 'success');
+        PlatPursuit.ToastManager.show('Checklist complete! Great job!', 'success');
     }
 
     function updateLocalProgress() {
@@ -1034,9 +1015,9 @@
                 await apiRequest(`${API_BASE}/checklists/${checklistId}/report/`, 'POST', data);
                 reportModal.close();
                 reportForm.reset();
-                showToast('Report submitted. Thank you!', 'success');
+                PlatPursuit.ToastManager.show('Report submitted. Thank you!', 'success');
             } catch (error) {
-                showToast(error.message || 'Failed to submit report', 'error');
+                PlatPursuit.ToastManager.show(error.message || 'Failed to submit report', 'error');
             }
         });
     }
@@ -1185,7 +1166,7 @@
             const description = document.getElementById('checklist-description').value.trim();
 
             if (!title) {
-                showToast('Title is required', 'error');
+                PlatPursuit.ToastManager.show('Title is required', 'error');
                 return;
             }
 
@@ -1260,11 +1241,11 @@
 
                 // Show appropriate message
                 if (errorCount === 0) {
-                    showToast('All changes saved successfully!', 'success');
+                    PlatPursuit.ToastManager.show('All changes saved successfully!', 'success');
                 } else if (successCount > 0) {
-                    showToast(`Saved with ${errorCount} error(s). Check console for details.`, 'warning');
+                    PlatPursuit.ToastManager.show(`Saved with ${errorCount} error(s). Check console for details.`, 'warning');
                 } else {
-                    showToast('Failed to save changes', 'error');
+                    PlatPursuit.ToastManager.show('Failed to save changes', 'error');
                 }
 
                 // Clear any saved form state since we just saved successfully
@@ -1272,7 +1253,7 @@
                 // Mark form as clean so unsaved changes warning doesn't trigger
                 markFormAsClean();
             } catch (error) {
-                showToast(error.message || 'Failed to save', 'error');
+                PlatPursuit.ToastManager.show(error.message || 'Failed to save', 'error');
             } finally {
                 this.classList.remove('loading');
             }
@@ -1305,10 +1286,10 @@
                 try {
                     this.classList.add('loading');
                     await apiRequest(`${API_BASE}/checklists/${checklistId}/publish/`, 'POST');
-                    showToast('Guide published!', 'success');
+                    PlatPursuit.ToastManager.show('Guide published!', 'success');
                     reloadWithFormState();
                 } catch (error) {
-                    showToast(error.message || 'Failed to publish', 'error');
+                    PlatPursuit.ToastManager.show(error.message || 'Failed to publish', 'error');
                 } finally {
                     this.classList.remove('loading');
                 }
@@ -1342,10 +1323,10 @@
 
                     // Proceed with unpublishing
                     await apiRequest(`${API_BASE}/checklists/${checklistId}/publish/`, 'DELETE');
-                    showToast('Guide unpublished', 'info');
+                    PlatPursuit.ToastManager.show('Guide unpublished', 'info');
                     reloadWithFormState();
                 } catch (error) {
-                    showToast(error.message || 'Failed to unpublish', 'error');
+                    PlatPursuit.ToastManager.show(error.message || 'Failed to unpublish', 'error');
                 } finally {
                     this.classList.remove('loading');
                 }
@@ -1368,10 +1349,10 @@
             try {
                 this.classList.add('loading');
                 await apiRequest(`${API_BASE}/checklists/${checklistId}/`, 'DELETE');
-                showToast('Guide deleted', 'info');
+                PlatPursuit.ToastManager.show('Guide deleted', 'info');
                 window.location.href = '/my-checklists/';
             } catch (error) {
-                showToast(error.message || 'Failed to delete', 'error');
+                PlatPursuit.ToastManager.show(error.message || 'Failed to delete', 'error');
             } finally {
                 this.classList.remove('loading');
             }
@@ -1389,12 +1370,12 @@
                     subtitle: 'New Section',
                 });
 
-                showToast('Section added!', 'success');
+                PlatPursuit.ToastManager.show('Section added!', 'success');
 
                 // Reload page to show the new section with all features
                 setTimeout(() => reloadWithFormState(), 500);
             } catch (error) {
-                showToast(error.message || 'Failed to add section', 'error');
+                PlatPursuit.ToastManager.show(error.message || 'Failed to add section', 'error');
                 this.classList.remove('loading');
             }
         });
@@ -1416,7 +1397,7 @@
                 const description = section.querySelector('.section-description-input').value.trim();
 
                 if (!subtitle) {
-                    showToast('Section title is required', 'error');
+                    PlatPursuit.ToastManager.show('Section title is required', 'error');
                     return;
                 }
 
@@ -1425,12 +1406,12 @@
                         subtitle,
                         description,
                     });
-                    showToast('Section saved!', 'success');
+                    PlatPursuit.ToastManager.show('Section saved!', 'success');
                     // Clear saved form state since we just saved
                     clearFormState();
                     markFormAsClean();
                 } catch (error) {
-                    showToast(error.message || 'Failed to save section', 'error');
+                    PlatPursuit.ToastManager.show(error.message || 'Failed to save section', 'error');
                 }
             });
         });
@@ -1450,7 +1431,7 @@
                 try {
                     await apiRequest(`${API_BASE}/checklists/${checklistId}/sections/${sectionId}/`, 'DELETE');
                     section.remove();
-                    showToast('Section deleted', 'info');
+                    PlatPursuit.ToastManager.show('Section deleted', 'info');
 
                     // Show publish requirements if no sections left
                     const sections = document.querySelectorAll('.checklist-section');
@@ -1461,7 +1442,7 @@
                         }
                     }
                 } catch (error) {
-                    showToast(error.message || 'Failed to delete section', 'error');
+                    PlatPursuit.ToastManager.show(error.message || 'Failed to delete section', 'error');
                 }
             });
         });
@@ -1506,7 +1487,7 @@
         try {
             await apiRequest(`${API_BASE}/checklists/${checklistId}/sections/reorder/`, 'POST', { ids });
         } catch (error) {
-            showToast('Failed to reorder sections', 'error');
+            PlatPursuit.ToastManager.show('Failed to reorder sections', 'error');
         }
     }
 
@@ -1522,7 +1503,7 @@
         try {
             await apiRequest(`${API_BASE}/checklists/sections/${sectionId}/items/reorder/`, 'POST', { ids });
         } catch (error) {
-            showToast('Failed to reorder items', 'error');
+            PlatPursuit.ToastManager.show('Failed to reorder items', 'error');
         }
     }
 
@@ -1594,12 +1575,12 @@
                 const itemType = typeSelect ? typeSelect.value : 'item';
 
                 if (!text) {
-                    showToast('Item text is required', 'error');
+                    PlatPursuit.ToastManager.show('Item text is required', 'error');
                     return;
                 }
 
                 if (!sectionId) {
-                    showToast('Please save the section first', 'error');
+                    PlatPursuit.ToastManager.show('Please save the section first', 'error');
                     return;
                 }
 
@@ -1623,9 +1604,9 @@
                     const counter = wrapper?.querySelector('.new-item-char-count');
                     if (counter) counter.textContent = '0';
 
-                    showToast('Item added!', 'success');
+                    PlatPursuit.ToastManager.show('Item added!', 'success');
                 } catch (error) {
-                    showToast(error.message || 'Failed to add item', 'error');
+                    PlatPursuit.ToastManager.show(error.message || 'Failed to add item', 'error');
                 } finally {
                     // Find the current add button in the section (may have been replaced by initItemOperations)
                     const currentBtn = section.querySelector('.add-item-btn');
@@ -1668,7 +1649,7 @@
                 const itemType = typeSelect ? typeSelect.value : item.dataset.itemType;
 
                 if (!text) {
-                    showToast('Item text is required', 'error');
+                    PlatPursuit.ToastManager.show('Item text is required', 'error');
                     return;
                 }
 
@@ -1695,12 +1676,12 @@
                         }
                     }
 
-                    showToast('Item saved!', 'success');
+                    PlatPursuit.ToastManager.show('Item saved!', 'success');
                     // Clear saved form state since we just saved
                     clearFormState();
                     markFormAsClean();
                 } catch (error) {
-                    showToast(error.message || 'Failed to save item', 'error');
+                    PlatPursuit.ToastManager.show(error.message || 'Failed to save item', 'error');
                 }
             });
         });
@@ -1741,9 +1722,9 @@
                         container.innerHTML = '<p class="text-base-content/50 italic text-center py-2 empty-items-message">No items yet. Add your first item below.</p>';
                     }
 
-                    showToast('Item deleted', 'info');
+                    PlatPursuit.ToastManager.show('Item deleted', 'info');
                 } catch (error) {
-                    showToast(error.message || 'Failed to delete item', 'error');
+                    PlatPursuit.ToastManager.show(error.message || 'Failed to delete item', 'error');
                 }
             });
         });
@@ -2031,13 +2012,13 @@
         const validTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
 
         if (!validTypes.includes(file.type)) {
-            showToast('Invalid format. Use JPG, PNG, WebP, or GIF.', 'error');
+            PlatPursuit.ToastManager.show('Invalid format. Use JPG, PNG, WebP, or GIF.', 'error');
             return false;
         }
 
         const maxSize = maxSizeMB * 1024 * 1024;
         if (file.size > maxSize) {
-            showToast(`Image must be under ${maxSizeMB}MB.`, 'error');
+            PlatPursuit.ToastManager.show(`Image must be under ${maxSizeMB}MB.`, 'error');
             return false;
         }
 
@@ -2114,7 +2095,7 @@
 
                 const file = input.files[0];
                 if (!file) {
-                    showToast('Please select an image.', 'error');
+                    PlatPursuit.ToastManager.show('Please select an image.', 'error');
                     return;
                 }
 
@@ -2133,21 +2114,21 @@
         try {
             const response = await fetch(`/api/v1/checklists/${checklistId}/image/`, {
                 method: 'POST',
-                headers: {'X-CSRFToken': getCSRFToken()},
+                headers: {'X-CSRFToken': PlatPursuit.CSRFToken.get()},
                 body: formData
             });
 
             const data = await response.json();
 
             if (response.ok) {
-                showToast('Thumbnail uploaded!', 'success');
+                PlatPursuit.ToastManager.show('Thumbnail uploaded!', 'success');
                 reloadWithFormState();
             } else {
-                showToast(data.error || 'Upload failed.', 'error');
+                PlatPursuit.ToastManager.show(data.error || 'Upload failed.', 'error');
             }
         } catch (error) {
             console.error('Upload error:', error);
-            showToast('Network error.', 'error');
+            PlatPursuit.ToastManager.show('Network error.', 'error');
         }
     }
 
@@ -2157,19 +2138,19 @@
         try {
             const response = await fetch(`/api/v1/checklists/${checklistId}/image/`, {
                 method: 'DELETE',
-                headers: {'X-CSRFToken': getCSRFToken()}
+                headers: {'X-CSRFToken': PlatPursuit.CSRFToken.get()}
             });
 
             if (response.ok) {
-                showToast('Thumbnail removed.', 'success');
+                PlatPursuit.ToastManager.show('Thumbnail removed.', 'success');
                 reloadWithFormState();
             } else {
                 const data = await response.json();
-                showToast(data.error || 'Failed to remove.', 'error');
+                PlatPursuit.ToastManager.show(data.error || 'Failed to remove.', 'error');
             }
         } catch (error) {
             console.error('Remove error:', error);
-            showToast('Network error.', 'error');
+            PlatPursuit.ToastManager.show('Network error.', 'error');
         }
     }
 
@@ -2180,21 +2161,21 @@
         try {
             const response = await fetch(`/api/v1/checklists/sections/${sectionId}/image/`, {
                 method: 'POST',
-                headers: {'X-CSRFToken': getCSRFToken()},
+                headers: {'X-CSRFToken': PlatPursuit.CSRFToken.get()},
                 body: formData
             });
 
             const data = await response.json();
 
             if (response.ok) {
-                showToast('Section thumbnail uploaded!', 'success');
+                PlatPursuit.ToastManager.show('Section thumbnail uploaded!', 'success');
                 reloadWithFormState();
             } else {
-                showToast(data.error || 'Upload failed.', 'error');
+                PlatPursuit.ToastManager.show(data.error || 'Upload failed.', 'error');
             }
         } catch (error) {
             console.error('Upload error:', error);
-            showToast('Network error.', 'error');
+            PlatPursuit.ToastManager.show('Network error.', 'error');
         }
     }
 
@@ -2204,19 +2185,19 @@
         try {
             const response = await fetch(`/api/v1/checklists/sections/${sectionId}/image/`, {
                 method: 'DELETE',
-                headers: {'X-CSRFToken': getCSRFToken()}
+                headers: {'X-CSRFToken': PlatPursuit.CSRFToken.get()}
             });
 
             if (response.ok) {
-                showToast('Section thumbnail removed.', 'success');
+                PlatPursuit.ToastManager.show('Section thumbnail removed.', 'success');
                 reloadWithFormState();
             } else {
                 const data = await response.json();
-                showToast(data.error || 'Failed to remove.', 'error');
+                PlatPursuit.ToastManager.show(data.error || 'Failed to remove.', 'error');
             }
         } catch (error) {
             console.error('Remove error:', error);
-            showToast('Network error.', 'error');
+            PlatPursuit.ToastManager.show('Network error.', 'error');
         }
     }
 
@@ -2228,21 +2209,21 @@
         try {
             const response = await fetch(`/api/v1/checklists/sections/${sectionId}/items/image/`, {
                 method: 'POST',
-                headers: {'X-CSRFToken': getCSRFToken()},
+                headers: {'X-CSRFToken': PlatPursuit.CSRFToken.get()},
                 body: formData
             });
 
             const data = await response.json();
 
             if (response.ok) {
-                showToast('Inline image added!', 'success');
+                PlatPursuit.ToastManager.show('Inline image added!', 'success');
                 reloadWithFormState();
             } else {
-                showToast(data.error || 'Upload failed.', 'error');
+                PlatPursuit.ToastManager.show(data.error || 'Upload failed.', 'error');
             }
         } catch (error) {
             console.error('Upload error:', error);
-            showToast('Network error.', 'error');
+            PlatPursuit.ToastManager.show('Network error.', 'error');
         }
     }
 
@@ -2299,12 +2280,12 @@
 
                 const text = textarea.value.trim();
                 if (!text) {
-                    showToast('Please enter some content.', 'error');
+                    PlatPursuit.ToastManager.show('Please enter some content.', 'error');
                     return;
                 }
 
                 if (text.length > 2000) {
-                    showToast('Content too long (max 2000 characters).', 'error');
+                    PlatPursuit.ToastManager.show('Content too long (max 2000 characters).', 'error');
                     return;
                 }
 
@@ -2318,7 +2299,7 @@
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
-                            'X-CSRFToken': getCSRFToken()
+                            'X-CSRFToken': PlatPursuit.CSRFToken.get()
                         },
                         body: JSON.stringify({
                             text: text,
@@ -2329,7 +2310,7 @@
                     const data = await response.json();
 
                     if (response.ok) {
-                        showToast('Text area added!', 'success');
+                        PlatPursuit.ToastManager.show('Text area added!', 'success');
                         textarea.value = '';  // Clear input
                         // Update character counter
                         const counter = document.querySelector(`.text-area-char-count[data-section-id="${sectionId}"]`);
@@ -2338,13 +2319,13 @@
                         // Reload page to show new item
                         setTimeout(() => reloadWithFormState(), 500);
                     } else {
-                        showToast(data.error || 'Failed to add text area.', 'error');
+                        PlatPursuit.ToastManager.show(data.error || 'Failed to add text area.', 'error');
                         btn.disabled = false;
                         btn.innerHTML = originalHTML;
                     }
                 } catch (error) {
                     console.error('Add text area error:', error);
-                    showToast('Network error.', 'error');
+                    PlatPursuit.ToastManager.show('Network error.', 'error');
                     btn.disabled = false;
                     btn.innerHTML = originalHTML;
                 }
@@ -2362,7 +2343,7 @@
                 const text = textarea.value.trim();
 
                 if (!text) {
-                    showToast('Enter some content first.', 'warning');
+                    PlatPursuit.ToastManager.show('Enter some content first.', 'warning');
                     return;
                 }
 
@@ -2381,7 +2362,7 @@
                     // Show preview
                     const text = textarea.value.trim();
                     if (!text) {
-                        showToast('No content to preview.', 'warning');
+                        PlatPursuit.ToastManager.show('No content to preview.', 'warning');
                         return;
                     }
 
@@ -2391,7 +2372,7 @@
                             method: 'POST',
                             headers: {
                                 'Content-Type': 'application/json',
-                                'X-CSRFToken': getCSRFToken()
+                                'X-CSRFToken': PlatPursuit.CSRFToken.get()
                             },
                             body: JSON.stringify({ text })
                         });
@@ -2402,11 +2383,11 @@
                             previewArea.classList.remove('hidden');
                             btn.textContent = 'Hide Preview';
                         } else {
-                            showToast(data.error || 'Preview failed.', 'error');
+                            PlatPursuit.ToastManager.show(data.error || 'Preview failed.', 'error');
                         }
                     } catch (error) {
                         console.error('Preview error:', error);
-                        showToast('Preview failed.', 'error');
+                        PlatPursuit.ToastManager.show('Preview failed.', 'error');
                     }
                 } else {
                     // Hide preview
@@ -2443,7 +2424,7 @@
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'X-CSRFToken': getCSRFToken()
+                    'X-CSRFToken': PlatPursuit.CSRFToken.get()
                 },
                 body: JSON.stringify({ text })
             });
@@ -2534,7 +2515,7 @@
                         { game_id: parseInt(gameId) }
                     );
 
-                    showToast('Game selected successfully', 'success');
+                    PlatPursuit.ToastManager.show('Game selected successfully', 'success');
 
                     // Enable trophy selector buttons
                     document.querySelectorAll('.open-trophy-selector-btn').forEach(btn => {
@@ -2544,7 +2525,7 @@
                     // Reload page to update UI
                     setTimeout(() => reloadWithFormState(), 1000);
                 } catch (error) {
-                    showToast(error.message, 'error');
+                    PlatPursuit.ToastManager.show(error.message, 'error');
                 }
             });
         }
@@ -2565,7 +2546,7 @@
                         { game_id: parseInt(gameId) }
                     );
 
-                    showToast('Game selected successfully', 'success');
+                    PlatPursuit.ToastManager.show('Game selected successfully', 'success');
 
                     // Enable trophy selector buttons
                     document.querySelectorAll('.open-trophy-selector-btn').forEach(btn => {
@@ -2575,7 +2556,7 @@
                     // Reload page to update UI
                     setTimeout(() => reloadWithFormState(), 1000);
                 } catch (error) {
-                    showToast(error.message, 'error');
+                    PlatPursuit.ToastManager.show(error.message, 'error');
                 }
             });
         });
@@ -2692,13 +2673,13 @@
                 }
             );
 
-            showToast('Trophy added successfully', 'success');
+            PlatPursuit.ToastManager.show('Trophy added successfully', 'success');
             modal.close();
 
             // Reload page to show new trophy item
             setTimeout(() => reloadWithFormState(), 500);
         } catch (error) {
-            showToast(error.message, 'error');
+            PlatPursuit.ToastManager.show(error.message, 'error');
         }
     }
 
@@ -2849,7 +2830,7 @@
                 const canSaveProgress = checklistContainer.dataset.canSaveProgress === 'true';
 
                 if (!canSaveProgress) {
-                    showToast('Progress cannot be saved for this guide.', 'warning');
+                    PlatPursuit.ToastManager.show('Progress cannot be saved for this guide.', 'warning');
                     return;
                 }
 
@@ -2886,13 +2867,13 @@
                         // Update section counts
                         updateSectionCounts();
 
-                        showToast(`All items checked (${response.updated_count} items)`, 'success');
+                        PlatPursuit.ToastManager.show(`All items checked (${response.updated_count} items)`, 'success');
                     } else {
-                        showToast(response.error || 'Failed to check all items', 'error');
+                        PlatPursuit.ToastManager.show(response.error || 'Failed to check all items', 'error');
                     }
                 } catch (error) {
                     console.error('Bulk check error:', error);
-                    showToast('Failed to check all items', 'error');
+                    PlatPursuit.ToastManager.show('Failed to check all items', 'error');
                 } finally {
                     btn.disabled = false;
                 }
@@ -2919,7 +2900,7 @@
                 const canSaveProgress = checklistContainer.dataset.canSaveProgress === 'true';
 
                 if (!canSaveProgress) {
-                    showToast('Progress cannot be saved for this guide.', 'warning');
+                    PlatPursuit.ToastManager.show('Progress cannot be saved for this guide.', 'warning');
                     return;
                 }
 
@@ -2961,13 +2942,13 @@
                         // Update section counts
                         updateSectionCounts();
 
-                        showToast(`All items unchecked (${response.updated_count} items)`, 'success');
+                        PlatPursuit.ToastManager.show(`All items unchecked (${response.updated_count} items)`, 'success');
                     } else {
-                        showToast(response.error || 'Failed to uncheck all items', 'error');
+                        PlatPursuit.ToastManager.show(response.error || 'Failed to uncheck all items', 'error');
                     }
                 } catch (error) {
                     console.error('Bulk uncheck error:', error);
-                    showToast('Failed to uncheck all items', 'error');
+                    PlatPursuit.ToastManager.show('Failed to uncheck all items', 'error');
                 } finally {
                     btn.disabled = false;
                 }
@@ -2981,7 +2962,7 @@
 
     document.addEventListener('DOMContentLoaded', function() {
         // Restore any unsaved form data from before page reload
-        restoreFormState();
+        const hasRestoredFields = restoreFormState();
 
         initChecklistDetail();
         initChecklistEdit();
@@ -2997,8 +2978,8 @@
         // Section controls
         initSectionCollapse();
         initBulkCheckButtons();
-        // Unsaved changes warning
-        initUnsavedChangesWarning();
+        // Unsaved changes warning - skip capturing original state if we restored unsaved changes
+        initUnsavedChangesWarning(hasRestoredFields);
     });
 
 })();
