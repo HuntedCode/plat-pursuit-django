@@ -2722,15 +2722,60 @@ class ChecklistDetailView(PremiumRequiredMixin, ProfileHotbarMixin, DetailView):
         context['completed_items'] = completed_items
         context['user_progress'] = user_progress
 
+        # Get earned trophy item IDs for this user (auto-check earned trophies)
+        earned_trophy_item_ids = set()
+        if profile and hasattr(profile, 'is_linked') and profile.is_linked:
+            from trophies.models import EarnedTrophy, ChecklistItem
+
+            # Get all trophy items in this checklist
+            trophy_items = ChecklistItem.objects.filter(
+                section__checklist=checklist,
+                item_type='trophy',
+                trophy_id__isnull=False
+            ).values_list('id', 'trophy_id')
+
+            if trophy_items:
+                item_to_trophy = {item_id: trophy_id for item_id, trophy_id in trophy_items}
+                trophy_ids = list(item_to_trophy.values())
+
+                # Query which trophies the user has earned
+                earned_trophy_pks = set(
+                    EarnedTrophy.objects.filter(
+                        profile=profile,
+                        trophy_id__in=trophy_ids,
+                        earned=True
+                    ).values_list('trophy_id', flat=True)
+                )
+
+                # Convert back to ChecklistItem IDs
+                earned_trophy_item_ids = {
+                    item_id for item_id, trophy_pk in item_to_trophy.items()
+                    if trophy_pk in earned_trophy_pks
+                }
+
+        context['earned_trophy_item_ids'] = earned_trophy_item_ids
+
         # Calculate per-section completion counts and attach to section objects
-        completed_item_ids = set(completed_items)
+        # Include both manually completed items AND earned trophies in the count
+        completed_item_ids = set(completed_items) | earned_trophy_item_ids
         sections = checklist.sections.all()
+        total_items_count = 0
+        total_completed_count = 0
         for section in sections:
             section_item_ids = list(section.items.filter(item_type__in=['item', 'trophy']).values_list('id', flat=True))
             completed_count = sum(1 for item_id in section_item_ids if item_id in completed_item_ids)
             # Add completion data as attributes to the section object
             section.completed_count = completed_count
             section.total_count = len(section_item_ids)
+            # Track totals for overall progress
+            total_items_count += len(section_item_ids)
+            total_completed_count += completed_count
+
+        # Calculate adjusted progress that includes earned trophies
+        adjusted_progress_percentage = (total_completed_count / total_items_count * 100) if total_items_count > 0 else 0
+        context['adjusted_items_completed'] = total_completed_count
+        context['adjusted_total_items'] = total_items_count
+        context['adjusted_progress_percentage'] = adjusted_progress_percentage
 
         # Check permissions
         context['can_edit'] = profile and checklist.profile == profile and not checklist.is_deleted

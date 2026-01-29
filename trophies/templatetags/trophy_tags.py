@@ -82,3 +82,16 @@ def is_dlc_trophy(trophy):
     if not trophy or not trophy.trophy_group_id:
         return False
     return trophy.trophy_group_id != 'default'
+
+
+@register.filter
+def in_set(value, the_set):
+    """
+    Check if value is in a set or collection.
+
+    Usage:
+        {% if item.id|in_set:earned_trophy_item_ids %}...{% endif %}
+    """
+    if the_set is None:
+        return False
+    return value in the_set

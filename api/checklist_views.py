@@ -76,13 +76,53 @@ class ChecklistListView(APIView):
                     if profile:
                         user_has_voted = ChecklistVote.objects.filter(checklist=checklist, profile=profile).exists()
                         progress = UserChecklistProgress.objects.filter(checklist=checklist, profile=profile).first()
-                        if progress:
-                            user_progress = {
-                                'percentage': progress.progress_percentage,
-                                'items_completed': progress.items_completed,
-                                'total_items': progress.total_items
-                            }
                         can_edit = checklist.profile == profile
+
+                        # Calculate progress including earned trophies
+                        if progress or (hasattr(profile, 'is_linked') and profile.is_linked):
+                            from trophies.models import ChecklistItem, EarnedTrophy
+
+                            # Get manually completed items
+                            completed_items = set(progress.completed_items) if progress else set()
+
+                            # Get earned trophy item IDs
+                            earned_trophy_item_ids = set()
+                            if hasattr(profile, 'is_linked') and profile.is_linked:
+                                trophy_items = ChecklistItem.objects.filter(
+                                    section__checklist=checklist,
+                                    item_type='trophy',
+                                    trophy_id__isnull=False
+                                ).values_list('id', 'trophy_id')
+
+                                if trophy_items:
+                                    item_to_trophy = {item_id: trophy_id for item_id, trophy_id in trophy_items}
+                                    trophy_ids = list(item_to_trophy.values())
+
+                                    earned_trophy_pks = set(
+                                        EarnedTrophy.objects.filter(
+                                            profile=profile,
+                                            trophy_id__in=trophy_ids,
+                                            earned=True
+                                        ).values_list('trophy_id', flat=True)
+                                    )
+
+                                    earned_trophy_item_ids = {
+                                        item_id for item_id, trophy_pk in item_to_trophy.items()
+                                        if trophy_pk in earned_trophy_pks
+                                    }
+
+                            # Combine completed items with earned trophies
+                            all_completed = completed_items | earned_trophy_item_ids
+                            total_items = checklist.total_items or 0
+                            items_completed = len(all_completed)
+                            percentage = (items_completed / total_items * 100) if total_items > 0 else 0
+
+                            if items_completed > 0:
+                                user_progress = {
+                                    'percentage': percentage,
+                                    'items_completed': items_completed,
+                                    'total_items': total_items
+                                }
 
                     # Check if author has platinum for this game/concept
                     author_has_platinum = False

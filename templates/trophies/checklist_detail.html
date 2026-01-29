@@ -136,20 +136,16 @@
                         <div class="flex justify-between items-center text-sm mb-2">
                             <span class="text-base-content/70">Your progress</span>
                             <span class="font-semibold text-secondary" id="progress-percentage">
-                                {% if user_progress %}
-                                    {{ user_progress.progress_percentage|floatformat:0 }}%
-                                {% else %}
-                                    0%
-                                {% endif %}
+                                {{ adjusted_progress_percentage|floatformat:0 }}%
                             </span>
                         </div>
                         <progress class="progress progress-secondary w-full h-3"
                                   id="progress-bar"
-                                  value="{% if user_progress %}{{ user_progress.progress_percentage }}{% else %}0{% endif %}"
+                                  value="{{ adjusted_progress_percentage }}"
                                   max="100"></progress>
                         <div class="flex justify-between text-xs text-base-content/50 mt-1">
-                            <span id="items-completed-count">{% if user_progress %}{{ user_progress.items_completed }}{% else %}0{% endif %}</span>
-                            <span id="items-total-count">{% if user_progress %}{{ user_progress.total_items }}{% else %}{{ checklist.total_items|default:0 }}{% endif %}</span>
+                            <span id="items-completed-count">{{ adjusted_items_completed }}</span>
+                            <span id="items-total-count">{{ adjusted_total_items }}</span>
                         </div>
                     </div>
                 {% endif %}
@@ -319,16 +315,18 @@
                                 {# Trophy Item - with checkbox and trophy metadata #}
                                 {% get_trophy item.trophy_id as trophy %}
                                 {% if trophy %}
-                                <div class="flex items-center gap-3 p-3 bg-base-200/50 rounded-lg hover:bg-base-300 transition-colors checklist-item checklist-trophy-item border-l-4 border-{{ trophy.trophy_type|default:'bronze' }}"
+                                {% with is_earned=item.id|in_set:earned_trophy_item_ids %}
+                                <div class="flex items-center gap-3 p-3 bg-base-200/50 rounded-lg hover:bg-base-300 transition-colors checklist-item checklist-trophy-item border-l-4 {% if is_earned %}border-success{% else %}border-{{ trophy.trophy_type|default:'bronze' }}{% endif %}"
                                      data-item-id="{{ item.id }}"
                                      data-item-type="trophy"
-                                     data-trophy-id="{{ item.trophy_id }}">
-                                    <label class="flex items-center gap-3 cursor-pointer flex-1">
+                                     data-trophy-id="{{ item.trophy_id }}"
+                                     {% if is_earned %}data-earned="true"{% endif %}>
+                                    <label class="flex items-center gap-3 {% if is_earned %}cursor-not-allowed{% else %}cursor-pointer{% endif %} flex-1">
                                         <input type="checkbox"
-                                               class="checkbox checkbox-secondary checklist-item-checkbox"
+                                               class="checkbox {% if is_earned %}checkbox-success{% else %}checkbox-secondary{% endif %} checklist-item-checkbox"
                                                data-item-id="{{ item.id }}"
-                                               {% if item.id in completed_items %}checked{% endif %}
-                                               {% if not request.user.is_authenticated %}disabled{% endif %}>
+                                               {% if item.id in completed_items or is_earned %}checked{% endif %}
+                                               {% if not request.user.is_authenticated or is_earned %}disabled{% endif %}>
 
                                         {# Trophy Icon #}
                                         <img src="{{ trophy.trophy_icon_url }}"
@@ -339,12 +337,15 @@
                                         {# Trophy Details #}
                                         <div class="flex-1 min-w-0">
                                             <div class="flex items-center gap-2 flex-wrap">
-                                                <span class="font-semibold {% if item.id in completed_items %}line-through text-base-content/50{% endif %} checklist-item-text">
+                                                <span class="font-semibold {% if item.id in completed_items or is_earned %}line-through text-base-content/50{% endif %} checklist-item-text">
                                                     {{ item.text }}
                                                 </span>
                                                 <span class="badge badge-sm badge-{{ trophy.trophy_type|default:'bronze' }}">
                                                     {{ trophy.trophy_type|title }}
                                                 </span>
+                                                {% if is_earned %}
+                                                <span class="badge badge-sm badge-success">Earned</span>
+                                                {% endif %}
                                                 {% if trophy|is_dlc_trophy %}
                                                     {% get_trophy_group trophy as trophy_group %}
                                                     {% if trophy_group and trophy_group.trophy_group_name %}
@@ -363,6 +364,7 @@
                                         </div>
                                     </label>
                                 </div>
+                                {% endwith %}
                                 {% endif %}
 
                             {% elif item.item_type == 'sub_header' %}

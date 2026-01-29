@@ -87,6 +87,9 @@
   [data-theme="plat-pursuit-light"] body {
     background-color: oklch(75% 0.01 252) !important;
   }
+  [data-theme="plat-pursuit-light"] .grayscale {
+    filter: grayscale(100%) brightness(0.7) !important;
+  }
   h1,
   h2,
   h3,
@@ -163,6 +166,15 @@
   }
   .border-platinum {
     border-color: #67d1f8;
+  }
+
+  /* Earned trophy checkbox styling */
+  .checklist-trophy-item[data-earned="true"] {
+    background-color: oklch(86.171% 0.142 166.534 / 0.1);
+  }
+  .checklist-trophy-item[data-earned="true"] .checkbox:disabled {
+    cursor: not-allowed;
+    opacity: 0.9;
   }
 
   .shimmer {

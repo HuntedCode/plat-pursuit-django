@@ -824,6 +824,12 @@
                 const itemContainer = this.closest('.checklist-item, .checklist-trophy-item');
                 const textSpan = itemContainer ? itemContainer.querySelector('.checklist-item-text') : null;
 
+                // Skip API call for earned trophies (they're disabled but defensive check)
+                if (itemContainer && itemContainer.dataset.earned === 'true') {
+                    this.checked = true;
+                    return;
+                }
+
                 // Update visual state immediately
                 if (textSpan) {
                     if (isChecked) {
@@ -876,14 +882,24 @@
         // Get previous percentage to detect transition to 100%
         const previousPercentage = progressBar ? parseFloat(progressBar.value) : 0;
 
+        // Count earned trophies that weren't manually checked (they're auto-checked but API doesn't track them)
+        // We need to add earned trophies to the completed count, but only those not already in completed_items
+        // Since the API's items_completed doesn't include earned trophies, we add the count of earned trophies
+        const earnedTrophyCount = document.querySelectorAll('.checklist-trophy-item[data-earned="true"]').length;
+
+        // Adjust the completed count to include earned trophies
+        // total_items from API already includes trophy items, so we don't adjust that
+        const adjustedCompleted = progress.items_completed + earnedTrophyCount;
+        const adjustedPercentage = progress.total_items > 0 ? (adjustedCompleted / progress.total_items * 100) : 0;
+
         if (progressBar) {
-            progressBar.value = progress.percentage;
+            progressBar.value = adjustedPercentage;
         }
         if (progressPercentage) {
-            progressPercentage.textContent = Math.round(progress.percentage) + '%';
+            progressPercentage.textContent = Math.round(adjustedPercentage) + '%';
         }
         if (itemsCompleted) {
-            itemsCompleted.textContent = progress.items_completed;
+            itemsCompleted.textContent = adjustedCompleted;
         }
         if (itemsTotal) {
             itemsTotal.textContent = progress.total_items;
@@ -893,7 +909,7 @@
         updateSectionCounts();
 
         // Trigger celebration when reaching 100% (not when already at 100%)
-        if (progress.percentage >= 100 && previousPercentage < 100) {
+        if (adjustedPercentage >= 100 && previousPercentage < 100) {
             celebrateCompletion();
         }
     }
@@ -2851,6 +2867,11 @@
                         // Update all checkboxes in the section
                         const checkboxes = section.querySelectorAll('.checklist-item[data-item-type="item"] .checklist-item-checkbox, .checklist-trophy-item[data-item-type="trophy"] .checklist-item-checkbox');
                         checkboxes.forEach(checkbox => {
+                            // Don't uncheck earned trophies - they should stay checked
+                            const itemContainer = checkbox.closest('.checklist-item, .checklist-trophy-item');
+                            if (itemContainer && itemContainer.dataset.earned === 'true') {
+                                return;
+                            }
                             checkbox.checked = false;
                             // Update text styling
                             const itemText = checkbox.closest('label')?.querySelector('.checklist-item-text');
