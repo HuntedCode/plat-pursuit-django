@@ -1191,11 +1191,82 @@
 
             try {
                 this.classList.add('loading');
-                await apiRequest(`${API_BASE}/checklists/${checklistId}/`, 'PATCH', {
-                    title,
-                    description,
-                });
-                showToast('Guide saved!', 'success');
+                let errorCount = 0;
+                let successCount = 0;
+
+                // Save header
+                try {
+                    await apiRequest(`${API_BASE}/checklists/${checklistId}/`, 'PATCH', {
+                        title,
+                        description,
+                    });
+                    successCount++;
+                } catch (error) {
+                    errorCount++;
+                    console.error('Failed to save header:', error);
+                }
+
+                // Save all sections
+                const sections = document.querySelectorAll('.checklist-section');
+                for (const section of sections) {
+                    const sectionId = section.dataset.sectionId;
+                    const subtitle = section.querySelector('.section-title-input')?.value.trim();
+                    const sectionDescription = section.querySelector('.section-description-input')?.value.trim();
+
+                    if (subtitle) {
+                        try {
+                            await apiRequest(`${API_BASE}/checklists/${checklistId}/sections/${sectionId}/`, 'PATCH', {
+                                subtitle,
+                                description: sectionDescription,
+                            });
+                            successCount++;
+                        } catch (error) {
+                            errorCount++;
+                            console.error(`Failed to save section ${sectionId}:`, error);
+                        }
+                    }
+
+                    // Save all items in this section
+                    const items = section.querySelectorAll('.checklist-item-edit, .checklist-text-area-edit, .checklist-image-item');
+                    for (const item of items) {
+                        const itemId = item.dataset.itemId;
+                        const itemType = item.dataset.itemType;
+
+                        // Skip trophy items and image items without captions to edit
+                        if (itemType === 'trophy') continue;
+
+                        const textInput = item.querySelector('.item-text-input');
+                        if (!textInput) continue;
+
+                        const text = textInput.value.trim();
+                        const typeSelect = item.querySelector('.item-type-select');
+                        const finalItemType = typeSelect ? typeSelect.value : itemType;
+
+                        // Only save if there's text (or if it's an image with optional caption)
+                        if (text || itemType === 'image') {
+                            try {
+                                await apiRequest(`${API_BASE}/checklists/items/${itemId}/`, 'PATCH', {
+                                    text: text || '',
+                                    item_type: finalItemType,
+                                });
+                                successCount++;
+                            } catch (error) {
+                                errorCount++;
+                                console.error(`Failed to save item ${itemId}:`, error);
+                            }
+                        }
+                    }
+                }
+
+                // Show appropriate message
+                if (errorCount === 0) {
+                    showToast('All changes saved successfully!', 'success');
+                } else if (successCount > 0) {
+                    showToast(`Saved with ${errorCount} error(s). Check console for details.`, 'warning');
+                } else {
+                    showToast('Failed to save changes', 'error');
+                }
+
                 // Clear any saved form state since we just saved successfully
                 clearFormState();
                 // Mark form as clean so unsaved changes warning doesn't trigger
