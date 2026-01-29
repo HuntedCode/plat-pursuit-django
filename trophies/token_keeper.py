@@ -841,6 +841,7 @@ class TokenKeeper:
             logger.error(f"Profile {profile_id} does not exist.")
             return
         job_type = 'sync_profile_data'
+        original_profile_id = profile.id
 
         try:
             legacy = self._execute_api_call(self._get_instance_for_job(job_type), profile, 'get_profile_legacy')
@@ -848,12 +849,28 @@ class TokenKeeper:
             profile.set_sync_status('error')
             raise
         is_public = not legacy['profile']['trophySummary']['level'] == 0
-        PsnApiService.update_profile_from_legacy(profile, legacy, is_public)
+
+        # This may return a different profile if a merge occurred
+        merged_profile = PsnApiService.update_profile_from_legacy(profile, legacy, is_public)
+
+        # If profile ID changed, a merge occurred - delete the duplicate
+        if merged_profile.id != original_profile_id:
+            logger.info(f"Merge detected: profile {original_profile_id} merged into {merged_profile.id}. Attempting to delete duplicate.")
+
+            # Use the safe deletion method
+            deletion_success = PsnApiService.delete_duplicate_profile(original_profile_id, merged_profile.id)
+
+            if not deletion_success:
+                logger.warning(f"Could not auto-delete duplicate profile {original_profile_id}. It may have data that needs manual review.")
+
+            # Continue sync with the merged profile
+            profile = merged_profile
+
         try:
             region = self._execute_api_call(self._get_instance_for_job(job_type), profile, 'get_region')
         except Exception as e:
             profile.set_sync_status('error')
-            raise    
+            raise
         PsnApiService.update_profile_region(profile, region)
 
     def _job_sync_trophy_titles(self, profile_id: int, force_title_stats:bool=False):

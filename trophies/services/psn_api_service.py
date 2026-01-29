@@ -2,7 +2,7 @@ import logging
 import time
 from datetime import timedelta
 from django.utils import timezone
-from django.db import transaction
+from django.db import transaction, IntegrityError
 from django.db.models import F, Count, Max, Q
 from trophies.models import Profile, Game, ProfileGame, Trophy, EarnedTrophy, Concept, TrophyGroup, Badge
 from psnawp_api.models.title_stats import TitleStats
@@ -17,9 +17,42 @@ class PsnApiService:
     @classmethod
     def update_profile_from_legacy(cls, profile: Profile, legacy: dict, is_public: bool) -> Profile:
         """Update Profile model from PSN legacy profile data."""
-        profile.psn_username = legacy["profile"].get("onlineId").lower()
+        account_id = legacy["profile"].get("accountId")
+        new_psn_username = legacy["profile"].get("onlineId").lower()
+
+        # Check if another profile already has this account_id (duplicate detection)
+        if account_id and profile.account_id != account_id:
+            existing_profile = Profile.objects.filter(account_id=account_id).exclude(id=profile.id).first()
+
+            if existing_profile:
+                # A duplicate exists - automatically merge into the existing profile
+                logger.warning(
+                    f"Duplicate account_id detected: Profile {profile.id} ({profile.psn_username}) "
+                    f"has same account_id {account_id} as Profile {existing_profile.id} ({existing_profile.psn_username}). "
+                    f"Auto-merging: updating existing profile to new username '{new_psn_username}' and deleting duplicate."
+                )
+
+                # Transfer any user linkage from duplicate to existing profile if existing doesn't have one
+                if profile.user and not existing_profile.user:
+                    logger.info(f"Transferring user {profile.user.id} from duplicate profile {profile.id} to existing profile {existing_profile.id}")
+                    existing_profile.user = profile.user
+                    existing_profile.is_linked = profile.is_linked
+
+                # Transfer Discord linkage if duplicate has it but existing doesn't
+                if profile.discord_id and not existing_profile.discord_id:
+                    logger.info(f"Transferring Discord ID {profile.discord_id} from duplicate profile {profile.id} to existing profile {existing_profile.id}")
+                    existing_profile.discord_id = profile.discord_id
+                    existing_profile.discord_linked_at = profile.discord_linked_at
+                    existing_profile.is_discord_verified = profile.is_discord_verified
+
+                # Update the existing profile with new data and continue sync on it
+                profile = existing_profile
+                logger.info(f"Switched to existing profile {profile.id} for sync continuation")
+
+        # Update profile data from PSN
+        profile.psn_username = new_psn_username
         profile.display_psn_username = legacy["profile"].get("onlineId")
-        profile.account_id = legacy["profile"].get("accountId")
+        profile.account_id = account_id
         profile.np_id = legacy["profile"].get("npId")
         profile.avatar_url = (
             legacy["profile"]["avatarUrls"][0]["avatarUrl"]
@@ -36,13 +69,85 @@ class PsnApiService:
             profile.earned_trophy_summary = legacy["profile"]["trophySummary"][
                 "earnedTrophies"
             ]
-        
+
         profile.psn_history_public = is_public
         profile.last_synced = timezone.now()
-        profile.save(update_fields=['display_psn_username', 'account_id', 'np_id', 'avatar_url', 'is_plus', 'about_me', 'languages_used', 'trophy_level', 'progress', 'earned_trophy_summary', 'psn_history_public', 'last_synced'])
+
+        try:
+            profile.save(update_fields=['psn_username', 'display_psn_username', 'account_id', 'np_id', 'avatar_url', 'is_plus', 'about_me', 'languages_used', 'trophy_level', 'progress', 'earned_trophy_summary', 'psn_history_public', 'last_synced', 'user', 'is_linked', 'discord_id', 'discord_linked_at', 'is_discord_verified'])
+        except IntegrityError as e:
+            error_msg = str(e).lower()
+            if 'account_id' in error_msg:
+                # Race condition - another sync just saved the same account_id
+                logger.error(f"Race condition on account_id {account_id} for profile {profile.id}")
+                profile.set_sync_status('error')
+                raise ValueError(f"Race condition: account_id {account_id} already exists")
+            elif 'psn_username' in error_msg:
+                # The username we're trying to update to already exists as another profile
+                # This means we successfully merged into existing but the old duplicate still exists
+                logger.warning(f"Username {new_psn_username} already exists - this is expected during merge cleanup")
+                # Just re-save without updating psn_username since it's already correct on existing profile
+                profile.save(update_fields=['display_psn_username', 'account_id', 'np_id', 'avatar_url', 'is_plus', 'about_me', 'languages_used', 'trophy_level', 'progress', 'earned_trophy_summary', 'psn_history_public', 'last_synced', 'user', 'is_linked', 'discord_id', 'discord_linked_at', 'is_discord_verified'])
+            else:
+                raise
+
         return profile
-    
-    @classmethod 
+
+    @classmethod
+    def delete_duplicate_profile(cls, duplicate_profile_id: int, merged_into_profile_id: int):
+        """
+        Safely delete a duplicate profile after it has been merged into another profile.
+
+        This should only be called after all data has been transferred to the target profile.
+        """
+        try:
+            duplicate = Profile.objects.get(id=duplicate_profile_id)
+
+            # Safety check: ensure this profile doesn't have a user or Discord link that wasn't transferred
+            if duplicate.user:
+                logger.warning(
+                    f"Duplicate profile {duplicate_profile_id} still has user {duplicate.user.id} linked. "
+                    f"Not deleting to prevent data loss. Manual review required."
+                )
+                return False
+
+            if duplicate.discord_id:
+                logger.warning(
+                    f"Duplicate profile {duplicate_profile_id} still has Discord ID {duplicate.discord_id}. "
+                    f"Not deleting to prevent data loss. Manual review required."
+                )
+                return False
+
+            # Check if the duplicate has any trophy data
+            from trophies.models import ProfileGame, EarnedTrophy
+            profilegame_count = ProfileGame.objects.filter(profile=duplicate).count()
+            earned_trophy_count = EarnedTrophy.objects.filter(profile=duplicate).count()
+
+            if profilegame_count > 0 or earned_trophy_count > 0:
+                logger.warning(
+                    f"Duplicate profile {duplicate_profile_id} has trophy data "
+                    f"({profilegame_count} games, {earned_trophy_count} trophies). "
+                    f"Not deleting to prevent data loss. Manual review required."
+                )
+                return False
+
+            # Safe to delete - no important data
+            username = duplicate.psn_username
+            duplicate.delete()
+            logger.info(
+                f"Successfully deleted duplicate profile {duplicate_profile_id} ({username}) "
+                f"which was merged into profile {merged_into_profile_id}"
+            )
+            return True
+
+        except Profile.DoesNotExist:
+            logger.info(f"Duplicate profile {duplicate_profile_id} already deleted")
+            return True
+        except Exception as e:
+            logger.error(f"Error deleting duplicate profile {duplicate_profile_id}: {e}")
+            return False
+
+    @classmethod
     def update_profile_region(cls, profile: Profile, region_data) -> Profile:
         """Update profile with region data from PSN."""
         profile.country = region_data.name if region_data.name else ''
