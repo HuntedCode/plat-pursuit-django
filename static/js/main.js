@@ -1,4 +1,5 @@
 document.addEventListener('DOMContentLoaded', function() {
+    // Back to top button
     const backToTop = document.getElementById('back-to-top');
     if (backToTop) {
         let scrollTimeout;
@@ -23,5 +24,28 @@ document.addEventListener('DOMContentLoaded', function() {
         });
 
         handleScroll();
+    }
+
+    // Theme toggle
+    const themeToggle = document.getElementById('theme-toggle');
+    const sunIcon = document.getElementById('theme-icon-sun');
+    const moonIcon = document.getElementById('theme-icon-moon');
+
+    if (themeToggle && sunIcon && moonIcon) {
+        function updateThemeIcons() {
+            const isDark = document.documentElement.getAttribute('data-theme') === 'plat-pursuit-dark';
+            sunIcon.classList.toggle('hidden', !isDark);
+            moonIcon.classList.toggle('hidden', isDark);
+        }
+
+        themeToggle.addEventListener('click', () => {
+            const currentTheme = document.documentElement.getAttribute('data-theme');
+            const newTheme = currentTheme === 'plat-pursuit-dark' ? 'plat-pursuit-light' : 'plat-pursuit-dark';
+            document.documentElement.setAttribute('data-theme', newTheme);
+            localStorage.setItem('theme', newTheme);
+            updateThemeIcons();
+        });
+
+        updateThemeIcons();
     }
 });

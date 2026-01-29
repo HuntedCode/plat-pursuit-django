@@ -4,7 +4,7 @@
     <div class="navbar-start flex items-center">
         <div class="flex-none dropdown dropdown-start lg:hidden">
             <summary class="btn btn-ghost btn-sm" tabindex="0" role="button" aria-label="Main menu" aria-expanded="false">
-                <svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="oklch(97.807% 0.029 256.847)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" role="img" aria-labelledby="mobile-menu-icon">
+                <svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" role="img" aria-labelledby="mobile-menu-icon">
                     <title id="mobile-menu-icon">Menu</title>
                     <line x1="3" y1="12" x2="21" y2="12"></line>
                     <line x1="3" y1="6" x2="21" y2="6"></line>
@@ -97,6 +97,20 @@
     </div>
 
     <div class="navbar-end flex items-center gap-0 sm:gap-2 sm:mr-2">
+        <button id="theme-toggle" class="btn btn-ghost btn-sm btn-circle" aria-label="Toggle theme">
+            <!-- Sun icon (shown in dark mode - click to switch to light) -->
+            <svg id="theme-icon-sun" class="w-5 h-5 hidden" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <title>Switch to light mode</title>
+                <circle cx="12" cy="12" r="5"/>
+                <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
+            </svg>
+            <!-- Moon icon (shown in light mode - click to switch to dark) -->
+            <svg id="theme-icon-moon" class="w-5 h-5 hidden" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <title>Switch to dark mode</title>
+                <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+            </svg>
+        </button>
+
         <form action="{% url 'search' %}" method="GET" class="join hidden">
             <select name="type" class="select select-sm select-primary join-item">
                 <option value="game">Game</option>
@@ -107,10 +121,10 @@
             <button type="submit" class="btn btn-sm btn-primary join-item">Go</button>
         </form>
 
-        <div class="dropdown dropdown-end">
+        <div class="dropdown dropdown-end hidden sm:block">
             <div tabindex="0" role="button" class="btn btn-ghost btn-sm btn-circle" aria-label="Search" aria-haspopup="true" aria-expanded="false">
                 <div class="w-15 rounded-full flex">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="oklch(97.807% 0.029 256.847)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" role="img" aria-labelledby="search-icon">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" role="img" aria-labelledby="search-icon">
                         <title id="search-icon">Search</title>
                         <circle cx="11" cy="11" r="8"></circle>
                         <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
@@ -142,7 +156,7 @@
                             {% if user.profile %}
                                 <img alt="Profile Picture" src="{{ user.profile.avatar_url }}" loading="lazy" decoding="async" />
                             {% else %}
-                                <svg class="mx-auto my-1" xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="oklch(97.807% 0.029 256.847)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" role="img" aria-labelledby="default-avatar-icon">
+                                <svg class="mx-auto my-1" xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" role="img" aria-labelledby="default-avatar-icon">
                                     <title id="default-avatar-icon">User avatar</title>
                                     <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
                                     <circle cx="12" cy="7" r="4"></circle>
@@ -193,7 +207,7 @@
             <div class="dropdown dropdown-end">
                 <div tabindex="0" role="button" class="btn btn-ghost btn-circle avatar" aria-label="Login menu" aria-haspopup="true" aria-expanded="false">
                     <div class="w-15 rounded-full flex ring-2 ring-primary">
-                        <svg class="mx-auto my-1" xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="oklch(97.807% 0.029 256.847)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" role="img" aria-labelledby="guest-avatar-icon">
+                        <svg class="mx-auto my-1" xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" role="img" aria-labelledby="guest-avatar-icon">
                             <title id="guest-avatar-icon">Guest user</title>
                             <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
                             <circle cx="12" cy="7" r="4"></circle>

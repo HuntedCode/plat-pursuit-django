@@ -47,9 +47,45 @@
   --noise: 0;
 }
 
+@plugin "daisyui/theme" {
+  name: "plat-pursuit-light";
+  color-scheme: "light";
+  --color-base-100: oklch(98% 0.01 252);
+  --color-base-200: oklch(94% 0.012 253);
+  --color-base-300: oklch(90% 0.014 254);
+  --color-base-content: oklch(25% 0.02 256);
+  --color-primary: oklch(55% 0.2 206);
+  --color-primary-content: oklch(98% 0.01 206);
+  --color-secondary: oklch(50% 0.25 277);
+  --color-secondary-content: oklch(98% 0.01 277);
+  --color-accent: oklch(55% 0.2 35);
+  --color-accent-content: oklch(98% 0.01 35);
+  --color-neutral: oklch(30% 0.01 286);
+  --color-neutral-content: oklch(95% 0.005 286);
+  --color-info: oklch(50% 0.25 257);
+  --color-info-content: oklch(98% 0.01 257);
+  --color-success: oklch(55% 0.2 166);
+  --color-success-content: oklch(98% 0.01 166);
+  --color-warning: oklch(65% 0.2 95);
+  --color-warning-content: oklch(20% 0.02 95);
+  --color-error: oklch(55% 0.25 19);
+  --color-error-content: oklch(98% 0.01 19);
+  --radius-selector: 0.25rem;
+  --radius-field: 0.25rem;
+  --radius-box: 0.25rem;
+  --size-selector: 0.25rem;
+  --size-field: 0.25rem;
+  --border: 2px;
+  --depth: 1;
+  --noise: 0;
+}
+
 @layer base {
   body {
     font-family: "Inter", ui-sans-serif, system-ui, sans-serif;
+  }
+  [data-theme="plat-pursuit-light"] body {
+    background-color: oklch(75% 0.01 252) !important;
   }
   h1,
   h2,

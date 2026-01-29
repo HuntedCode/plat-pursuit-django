@@ -2,6 +2,12 @@
 <!doctype html>
 <html lang="en" data-theme="plat-pursuit-dark">
   <head>
+    <script>
+      (function() {
+        const theme = localStorage.getItem('theme') || 'plat-pursuit-dark';
+        document.documentElement.setAttribute('data-theme', theme);
+      })();
+    </script>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>{% block title %}{{ title|default:"Platinum Pursuit" }}{% endblock %} - Platinum Pursuit</title>

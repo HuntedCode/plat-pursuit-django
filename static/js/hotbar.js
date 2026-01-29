@@ -374,13 +374,15 @@ document.addEventListener('DOMContentLoaded', () => {
         const isHidden = getCookie(cookieName) === 'true';
 
         if (isHidden) {
-            hotbarContainer?.classList.remove('-translate-y-[250%]');
+            // Show hotbar
+            hotbarContainer?.classList.remove('-translate-y-[250%]', '-mb-[100px]');
             toggleIcon?.classList.add('rotate-180');
             toggleBtn?.classList.remove('-translate-y-[300%]');
             setCookie(cookieName, 'false', cookieDuration);
             if (toggleBtn) toggleBtn.setAttribute('aria-label', 'Hide hotbar');
         } else {
-            hotbarContainer?.classList.add('-translate-y-[250%]');
+            // Hide hotbar - add negative margin to collapse the space
+            hotbarContainer?.classList.add('-translate-y-[250%]', '-mb-[100px]');
             toggleIcon?.classList.remove('rotate-180');
             toggleBtn?.classList.add('-translate-y-[300%]');
             setCookie(cookieName, 'true', cookieDuration);
@@ -391,13 +393,13 @@ document.addEventListener('DOMContentLoaded', () => {
     // Initialize hotbar toggle state from cookie
     const hiddenCookie = getCookie(cookieName);
     if (hiddenCookie === 'true') {
-        hotbarContainer?.classList.add('-translate-y-[250%]');
+        hotbarContainer?.classList.add('-translate-y-[250%]', '-mb-[100px]');
         toggleIcon?.classList.remove('rotate-180');
         toggleBtn?.classList.add('-translate-y-[300%]');
         if (toggleBtn) toggleBtn.setAttribute('aria-label', 'Show hotbar');
     } else {
         if (hotbarContainer) hotbarContainer.style.display = 'false';
-        hotbarContainer?.classList.remove('-translate-y-[250%]');
+        hotbarContainer?.classList.remove('-translate-y-[250%]', '-mb-[100px]');
         toggleIcon?.classList.add('rotate-180');
         toggleBtn?.classList.remove('-translate-y-[300%]');
         if (toggleBtn) toggleBtn.setAttribute('aria-label', 'Hide hotbar');
