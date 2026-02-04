@@ -6,7 +6,9 @@ from django.db import transaction
 from django.utils import timezone
 from django.contrib.auth import get_user_model
 from django.db.models import Q
+from django.conf import settings
 from notifications.models import Notification, NotificationTemplate
+from notifications.services.notification_cache_service import NotificationCacheService
 
 CustomUser = get_user_model()
 
@@ -54,6 +56,10 @@ class NotificationService:
             metadata=kwargs.get('metadata', {}),
             template=kwargs.get('template', None),
         )
+
+        # Invalidate cache for recipient (if caching enabled)
+        if getattr(settings, 'NOTIFICATION_CACHE_ENABLED', True):
+            NotificationCacheService.invalidate_all_for_user(recipient.id)
 
         return notification
 
@@ -149,6 +155,11 @@ class NotificationService:
         # Bulk create with batch size for performance
         created = Notification.objects.bulk_create(notifications, batch_size=500)
 
+        # Invalidate cache for all recipients (if caching enabled)
+        if getattr(settings, 'NOTIFICATION_CACHE_ENABLED', True):
+            recipient_ids = [recipient.id for recipient in recipients_queryset]
+            NotificationCacheService.invalidate_unread_counts_bulk(recipient_ids)
+
         return len(created)
 
     @staticmethod
@@ -169,6 +180,11 @@ class NotificationService:
                 recipient=user
             )
             notification.mark_as_read()
+
+            # Invalidate unread count cache (if caching enabled)
+            if getattr(settings, 'NOTIFICATION_CACHE_ENABLED', True):
+                NotificationCacheService.invalidate_unread_count(user.id)
+
             return True
         except Notification.DoesNotExist:
             return False
@@ -192,6 +208,10 @@ class NotificationService:
             is_read=True,
             read_at=timezone.now()
         )
+
+        # Invalidate unread count cache (if caching enabled)
+        if getattr(settings, 'NOTIFICATION_CACHE_ENABLED', True):
+            NotificationCacheService.invalidate_unread_count(user.id)
 
         return count
 
@@ -228,7 +248,7 @@ class NotificationService:
     @staticmethod
     def get_unread_count(user):
         """
-        Get count of unread notifications for a user.
+        Get count of unread notifications for a user with caching.
 
         Args:
             user: CustomUser instance
@@ -236,10 +256,28 @@ class NotificationService:
         Returns:
             int: Number of unread notifications
         """
-        return Notification.objects.filter(
-            recipient=user,
-            is_read=False
-        ).count()
+        # Check if caching is enabled
+        if not getattr(settings, 'NOTIFICATION_CACHE_ENABLED', True):
+            # Caching disabled - query database directly
+            return Notification.objects.filter(
+                recipient=user,
+                is_read=False
+            ).count()
+
+        # Try to get from cache first
+        count = NotificationCacheService.get_cached_unread_count(user.id)
+
+        if count is None:
+            # Cache miss - query database
+            count = Notification.objects.filter(
+                recipient=user,
+                is_read=False
+            ).count()
+
+            # Cache the result
+            NotificationCacheService.cache_unread_count(user.id, count)
+
+        return count
 
     @staticmethod
     def get_target_users(target_type, **kwargs):

@@ -268,6 +268,10 @@ CACHES = {
     }
 }
 
+# Notification System Feature Flags
+NOTIFICATION_CACHE_ENABLED = os.getenv('NOTIFICATION_CACHE_ENABLED', 'True') == 'True'
+NOTIFICATION_PUBSUB_ENABLED = os.getenv('NOTIFICATION_PUBSUB_ENABLED', 'False') == 'True'
+
 
 # Internationalization
 # https://docs.djangoproject.com/en/5.2/topics/i18n/
