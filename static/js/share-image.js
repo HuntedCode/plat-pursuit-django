@@ -367,10 +367,12 @@ class ShareImageManager {
             const maxHeight = 437;
             const scale = Math.min(1, maxHeight / height, 575 / width);
 
-            // Insert the HTML
-            container.innerHTML = html;
+            // Set container dimensions BEFORE inserting HTML to prevent flash
             container.style.width = `${width * scale}px`;
             container.style.height = `${height * scale}px`;
+
+            // Insert the HTML
+            container.innerHTML = html;
 
             // Scale the inner content and apply background
             const innerContent = container.querySelector('.share-image-content');

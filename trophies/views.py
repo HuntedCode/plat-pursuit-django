@@ -2666,8 +2666,8 @@ class ChecklistDetailView(ProfileHotbarMixin, DetailView):
     Display checklist detail with sections, items, and progress tracking.
 
     Shows the full checklist structure with checkboxes for tracking progress.
-    Premium users and checklist authors can save progress; others can view only.
-    Requires user to be authenticated with a linked PSN account.
+    Anyone can view guides. Authenticated users with linked PSN accounts can interact
+    with checkboxes. Premium users and checklist authors can save progress.
     """
     model = Checklist
     template_name = 'trophies/checklist_detail.html'
@@ -2675,16 +2675,7 @@ class ChecklistDetailView(ProfileHotbarMixin, DetailView):
     pk_url_kwarg = 'checklist_id'
 
     def dispatch(self, request, *args, **kwargs):
-        """Require authenticated user with linked PSN account."""
-        if not request.user.is_authenticated:
-            messages.info(request, "Please sign in to view and use checklists.")
-            return redirect('account_login')
-
-        profile = getattr(request.user, 'profile', None)
-        if not profile or not profile.is_linked:
-            messages.info(request, "Link your PSN account to view and use checklists.")
-            return redirect('link_psn')
-
+        """Allow anyone to view guides (no authentication required)."""
         return super().dispatch(request, *args, **kwargs)
 
     def get_queryset(self):

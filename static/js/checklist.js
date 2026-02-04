@@ -2713,8 +2713,28 @@
                 const checklistId = checklistContainer.dataset.checklistId;
                 const canSaveProgress = checklistContainer.dataset.canSaveProgress === 'true';
 
+                // If user can't save progress, just update locally
                 if (!canSaveProgress) {
-                    PlatPursuit.ToastManager.show('Progress cannot be saved for this guide.', 'warning');
+                    const checkboxes = section.querySelectorAll('.checklist-item[data-item-type="item"] .checklist-item-checkbox, .checklist-trophy-item[data-item-type="trophy"] .checklist-item-checkbox');
+                    let checkedCount = 0;
+                    checkboxes.forEach(checkbox => {
+                        // Skip earned trophies - they're already checked
+                        const itemContainer = checkbox.closest('.checklist-item, .checklist-trophy-item');
+                        if (itemContainer && itemContainer.dataset.earned === 'true') {
+                            return;
+                        }
+                        if (!checkbox.checked) {
+                            checkbox.checked = true;
+                            checkedCount++;
+                            // Update text styling
+                            const itemText = checkbox.closest('label')?.querySelector('.checklist-item-text');
+                            if (itemText) {
+                                itemText.classList.add('line-through', 'text-base-content/50');
+                            }
+                        }
+                    });
+                    updateLocalProgress();
+                    updateSectionCounts();
                     return;
                 }
 
@@ -2783,8 +2803,28 @@
                 const checklistId = checklistContainer.dataset.checklistId;
                 const canSaveProgress = checklistContainer.dataset.canSaveProgress === 'true';
 
+                // If user can't save progress, just update locally
                 if (!canSaveProgress) {
-                    PlatPursuit.ToastManager.show('Progress cannot be saved for this guide.', 'warning');
+                    const checkboxes = section.querySelectorAll('.checklist-item[data-item-type="item"] .checklist-item-checkbox, .checklist-trophy-item[data-item-type="trophy"] .checklist-item-checkbox');
+                    let uncheckedCount = 0;
+                    checkboxes.forEach(checkbox => {
+                        // Don't uncheck earned trophies - they should stay checked
+                        const itemContainer = checkbox.closest('.checklist-item, .checklist-trophy-item');
+                        if (itemContainer && itemContainer.dataset.earned === 'true') {
+                            return;
+                        }
+                        if (checkbox.checked) {
+                            checkbox.checked = false;
+                            uncheckedCount++;
+                            // Update text styling
+                            const itemText = checkbox.closest('label')?.querySelector('.checklist-item-text');
+                            if (itemText) {
+                                itemText.classList.remove('line-through', 'text-base-content/50');
+                            }
+                        }
+                    });
+                    updateLocalProgress();
+                    updateSectionCounts();
                     return;
                 }
 

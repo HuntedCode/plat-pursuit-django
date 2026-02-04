@@ -90,11 +90,15 @@ class AdminNotificationCenterView(TemplateView):
 
     def post(self, request):
         """Handle form submission for sending/scheduling notifications."""
+        import json
+        from notifications.validators import SectionValidator
+
         action = request.POST.get('action')  # 'send_now' or 'schedule'
         notification_type = request.POST.get('notification_type', 'admin_announcement')
         title = request.POST.get('title', '').strip()
         message_text = request.POST.get('message', '').strip()
         detail = request.POST.get('detail', '').strip()
+        sections_json = request.POST.get('sections', '').strip()
         banner_image = request.FILES.get('banner_image')
         icon = request.POST.get('icon', '📢').strip() or '📢'
         action_url = request.POST.get('action_url', '').strip() or None
@@ -110,6 +114,20 @@ class AdminNotificationCenterView(TemplateView):
                 int(x.strip()) for x in user_ids_str.split(',')
                 if x.strip().isdigit()
             ]
+
+        # Parse and validate sections (if using structured mode)
+        sections = []
+        if sections_json:
+            try:
+                sections = json.loads(sections_json)
+                is_valid, error = SectionValidator.validate_sections(sections)
+                if not is_valid:
+                    messages.error(request, f'Invalid sections: {error}')
+                    return redirect('admin_notification_center')
+            except json.JSONDecodeError:
+                messages.error(request, 'Invalid sections data format.')
+                return redirect('admin_notification_center')
+        # If no sections, use detail (legacy markdown mode)
 
         # Validation
         if not title or not message_text:
@@ -169,6 +187,7 @@ class AdminNotificationCenterView(TemplateView):
                 created_by=request.user,
                 criteria=criteria,
                 detail=detail,
+                sections=sections,
                 banner_image=optimized_banner_image,
                 icon=icon,
                 action_url=action_url,
@@ -191,6 +210,7 @@ class AdminNotificationCenterView(TemplateView):
                 sent_by=request.user,
                 criteria=criteria,
                 detail=detail,
+                sections=sections,
                 banner_image=optimized_banner_image,
                 icon=icon,
                 action_url=action_url,

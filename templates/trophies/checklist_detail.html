@@ -6,7 +6,7 @@
 <div id="checklist-detail-container"
      data-checklist-id="{{ checklist.id }}"
      data-can-save-progress="{{ can_save_progress|yesno:'true,false' }}"
-     data-is-premium="{{ request.user.profile.user_is_premium|default:False|yesno:'true,false' }}">
+     data-is-premium="{% if request.user.is_authenticated and request.user.profile %}{{ request.user.profile.user_is_premium|yesno:'true,false' }}{% else %}false{% endif %}">
 
     <section class="section-container w-full">
         {% include 'partials/breadcrumb.html' with items=breadcrumb %}
@@ -62,8 +62,8 @@
 
                     {# Stats and Actions #}
                     <div class="flex flex-col items-end gap-3">
-                        {# Vote Button #}
-                        {% if checklist.status == 'published' %}
+                        {# Vote Button (only for authenticated users) #}
+                        {% if checklist.status == 'published' and request.user.is_authenticated %}
                             <div class="flex items-center gap-2">
                                 <button class="btn btn-ghost btn-sm checklist-vote-btn {% if user_has_voted %}text-secondary{% endif %}"
                                         data-checklist-id="{{ checklist.id }}"
@@ -73,6 +73,12 @@
                                     </svg>
                                 </button>
                                 <span class="text-lg font-semibold checklist-vote-count">{{ checklist.upvote_count }}</span>
+                                <span class="text-sm text-base-content/60">upvotes</span>
+                            </div>
+                        {# Show upvote count for unauthenticated users without the button #}
+                        {% elif checklist.status == 'published' %}
+                            <div class="flex items-center gap-2">
+                                <span class="text-lg font-semibold">{{ checklist.upvote_count }}</span>
                                 <span class="text-sm text-base-content/60">upvotes</span>
                             </div>
                         {% endif %}
@@ -150,8 +156,16 @@
                     </div>
                 {% endif %}
 
+                {# Sign In Banner (for non-authenticated users) #}
+                {% if not request.user.is_authenticated %}
+                    <div class="alert alert-info mt-4">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                        </svg>
+                        <span><a href="{% url 'account_login' %}" class="link link-primary font-semibold">Sign in</a> and link your PSN account to track your progress on this guide!</span>
+                    </div>
                 {# Premium Upsell Banner (for non-premium, non-authors) #}
-                {% if not can_save_progress and request.user.is_authenticated and not is_author %}
+                {% elif not can_save_progress and not is_author %}
                     <div class="alert alert-info mt-4">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
@@ -246,7 +260,6 @@
                             <span class="badge badge-ghost section-item-count" data-section-id="{{ section.id }}">
                                 <span class="completed-count">{{ section.completed_count|default:0 }}</span>/<span class="total-count">{{ section.item_count }}</span> items
                             </span>
-                            {% if request.user.is_authenticated %}
                             <div class="flex gap-1">
                                 <button class="btn btn-ghost btn-xs section-check-all-btn"
                                         data-section-id="{{ section.id }}"
@@ -265,7 +278,6 @@
                                     None
                                 </button>
                             </div>
-                            {% endif %}
                         </div>
                     </div>
 
@@ -326,7 +338,7 @@
                                                class="checkbox {% if is_earned %}checkbox-success{% else %}checkbox-secondary{% endif %} checklist-item-checkbox"
                                                data-item-id="{{ item.id }}"
                                                {% if item.id in completed_items or is_earned %}checked{% endif %}
-                                               {% if not request.user.is_authenticated or is_earned %}disabled{% endif %}>
+                                               {% if is_earned %}disabled{% endif %}>
 
                                         {# Trophy Icon #}
                                         <img src="{{ trophy.trophy_icon_url }}"
@@ -386,8 +398,7 @@
                                         <input type="checkbox"
                                                class="checkbox checkbox-secondary checklist-item-checkbox"
                                                data-item-id="{{ item.id }}"
-                                               {% if item.id in completed_items %}checked{% endif %}
-                                               {% if not request.user.is_authenticated %}disabled{% endif %}>
+                                               {% if item.id in completed_items %}checked{% endif %}>
                                         <span class="{% if item.id in completed_items %}line-through text-base-content/50{% endif %} checklist-item-text">
                                             {{ item.text }}
                                         </span>

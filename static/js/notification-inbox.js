@@ -392,12 +392,19 @@ class NotificationInboxManager {
                </div>`
             : '';
 
-        // Detail content section (markdown to HTML)
-        const detailHtml = notification.detail
-            ? `<div class="prose prose-sm max-w-none bg-base-200 rounded-lg p-4 mt-4">
-                 ${this.renderMarkdown(notification.detail)}
-               </div>`
-            : '';
+        // Detail content section - check for structured sections or markdown
+        let detailHtml = '';
+        const hasStructuredSections = notification.sections && notification.sections.length > 0;
+
+        if (hasStructuredSections) {
+            // Render structured sections
+            detailHtml = this.renderStructuredSections(notification.sections);
+        } else if (notification.detail) {
+            // Fall back to markdown
+            detailHtml = `<div class="prose prose-sm max-w-none bg-base-200 rounded-lg p-4 mt-4">
+                            ${this.renderMarkdown(notification.detail)}
+                          </div>`;
+        }
 
         // Render type-specific enhanced content
         let enhancedContent = '';
@@ -492,6 +499,79 @@ class NotificationInboxManager {
             div.textContent = markdownText;
             return div.innerHTML.replace(/\n/g, '<br>');
         }
+    }
+
+    renderStructuredSections(sections) {
+        if (!sections || sections.length === 0) return '';
+
+        return sections
+            .sort((a, b) => a.order - b.order)
+            .map(section => {
+                const formatted = this.formatStructuredContent(section.content);
+
+                return `
+                    <div class="bg-base-200 rounded-lg p-4 mt-4 border-l-4 border-primary hover:border-secondary transition-colors">
+                        <div class="flex items-center gap-3 mb-3">
+                            <span class="text-2xl">${this.escapeHtml(section.icon)}</span>
+                            <h3 class="font-semibold text-base">${this.escapeHtml(section.header)}</h3>
+                        </div>
+                        <div class="prose prose-sm max-w-none">${formatted}</div>
+                    </div>
+                `;
+            }).join('');
+    }
+
+    formatStructuredContent(text) {
+        if (!text) return '';
+
+        let formatted = this.escapeHtml(text);
+
+        // Bold: *text*
+        formatted = formatted.replace(/\*([^*]+)\*/g, '<strong>$1</strong>');
+
+        // Italic: _text_
+        formatted = formatted.replace(/_([^_]+)_/g, '<em>$1</em>');
+
+        // Code: `text`
+        formatted = formatted.replace(/`([^`]+)`/g, '<code class="bg-base-100 px-1 rounded">$1</code>');
+
+        // Links: [text](url)
+        formatted = formatted.replace(/\[([^\]]+)\]\(([^)]+)\)/g,
+            '<a href="$2" class="link link-primary">$1</a>');
+
+        // Bullet lists: - item
+        const lines = formatted.split('\n');
+        let result = '';
+        let inList = false;
+
+        for (let line of lines) {
+            const trimmed = line.trim();
+            if (trimmed.startsWith('- ')) {
+                if (!inList) {
+                    result += '<ul class="list-disc list-inside my-1">';
+                    inList = true;
+                }
+                result += `<li>${trimmed.substring(2)}</li>`;
+            } else {
+                if (inList) {
+                    result += '</ul>';
+                    inList = false;
+                }
+                if (trimmed) {
+                    result += `<p class="my-1">${line}</p>`;
+                }
+            }
+        }
+
+        if (inList) result += '</ul>';
+
+        return result;
+    }
+
+    escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
     }
 
     renderPlatinumDetail(metadata) {

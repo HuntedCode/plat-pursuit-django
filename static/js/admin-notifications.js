@@ -46,6 +46,26 @@
         init() {
             if (!this.form) return;
 
+            // Initialize section builder
+            if (window.PlatPursuit && window.PlatPursuit.SectionBuilder) {
+                const sectionsContainer = document.getElementById('sections-list');
+                if (sectionsContainer) {
+                    window.sectionBuilder = new window.PlatPursuit.SectionBuilder('sections-list', 5);
+                    // Trigger initial preview after section builder initializes
+                    setTimeout(() => {
+                        this.updatePreview();
+                    }, 100);
+                }
+            }
+
+            // Legacy mode toggle
+            const legacyToggle = document.getElementById('legacy-mode-toggle');
+            if (legacyToggle) {
+                legacyToggle.addEventListener('change', (e) => {
+                    this.toggleLegacyMode(e.target.checked);
+                });
+            }
+
             // Target type change
             if (this.targetTypeSelect) {
                 this.targetTypeSelect.addEventListener('change', () => {
@@ -152,6 +172,26 @@
             }
         }
 
+        toggleLegacyMode(isLegacy) {
+            const structured = document.getElementById('structured-sections-container');
+            const legacy = document.getElementById('legacy-markdown-container');
+
+            if (structured && legacy) {
+                structured.classList.toggle('hidden', isLegacy);
+                legacy.classList.toggle('hidden', !isLegacy);
+
+                // Clear hidden input if switching to legacy
+                if (isLegacy) {
+                    const sectionsInput = document.getElementById('sections-data-input');
+                    if (sectionsInput) {
+                        sectionsInput.value = '';
+                    }
+                }
+
+                this.updatePreview();
+            }
+        }
+
         updateCharCount(input, countEl, max) {
             if (!input || !countEl) return;
             const len = input.value.length;
@@ -210,7 +250,6 @@
 
             const title = this.titleInput?.value || 'Notification Title';
             const message = this.messageInput?.value || 'Notification message will appear here...';
-            const detail = this.detailInput?.value || '';
             const icon = this.iconInput?.value || '📢';
             const priority = this.priorityInput?.value || 'normal';
 
@@ -221,12 +260,28 @@
                 urgent: 'badge-error'
             }[priority] || 'badge-info';
 
-            // Render detail as markdown if available
-            const detailHtml = detail ? `
-                <div class="prose prose-sm max-w-none bg-base-200 rounded-lg p-3 mt-3">
-                    ${this.renderMarkdown(detail)}
-                </div>
-            ` : '';
+            // Check if we're in legacy mode or structured mode
+            const legacyToggle = document.getElementById('legacy-mode-toggle');
+            const isLegacy = legacyToggle?.checked || false;
+
+            let detailHtml = '';
+            if (isLegacy) {
+                // Legacy markdown mode
+                const detail = this.detailInput?.value || '';
+                if (detail) {
+                    detailHtml = `
+                        <div class="prose prose-sm max-w-none bg-base-200 rounded-lg p-3 mt-3">
+                            ${this.renderMarkdown(detail)}
+                        </div>
+                    `;
+                }
+            } else {
+                // Structured sections mode
+                const sections = window.sectionBuilder?.getSections() || [];
+                if (sections.length > 0) {
+                    detailHtml = this.renderStructuredSections(sections);
+                }
+            }
 
             // Show banner preview if image is loaded
             const bannerHtml = (this.bannerPreviewImg && !this.bannerPreview.classList.contains('hidden')) ? `
@@ -271,6 +326,73 @@
                 console.error('Markdown rendering failed:', e);
                 return this.escapeHtml(text).replace(/\n/g, '<br>');
             }
+        }
+
+        renderStructuredSections(sections) {
+            if (!sections || sections.length === 0) return '';
+
+            return sections
+                .sort((a, b) => a.order - b.order)
+                .map(section => {
+                    const formatted = this.formatStructuredContent(section.content);
+
+                    return `
+                        <div class="bg-base-300 rounded-lg p-3 mt-3 border-l-4 border-primary">
+                            <div class="flex items-center gap-2 mb-2">
+                                <span class="text-xl">${this.escapeHtml(section.icon)}</span>
+                                <h4 class="font-semibold text-sm">${this.escapeHtml(section.header)}</h4>
+                            </div>
+                            <div class="prose prose-sm text-xs">${formatted}</div>
+                        </div>
+                    `;
+                }).join('');
+        }
+
+        formatStructuredContent(text) {
+            if (!text) return '';
+
+            let formatted = this.escapeHtml(text);
+
+            // Bold: *text*
+            formatted = formatted.replace(/\*([^*]+)\*/g, '<strong>$1</strong>');
+
+            // Italic: _text_
+            formatted = formatted.replace(/_([^_]+)_/g, '<em>$1</em>');
+
+            // Code: `text`
+            formatted = formatted.replace(/`([^`]+)`/g, '<code class="bg-base-100 px-1 rounded">$1</code>');
+
+            // Links: [text](url)
+            formatted = formatted.replace(/\[([^\]]+)\]\(([^)]+)\)/g,
+                '<a href="$2" class="link link-primary">$1</a>');
+
+            // Bullet lists: - item
+            const lines = formatted.split('\n');
+            let result = '';
+            let inList = false;
+
+            for (let line of lines) {
+                const trimmed = line.trim();
+                if (trimmed.startsWith('- ')) {
+                    if (!inList) {
+                        result += '<ul class="list-disc list-inside my-1">';
+                        inList = true;
+                    }
+                    result += `<li>${trimmed.substring(2)}</li>`;
+                } else {
+                    if (inList) {
+                        result += '</ul>';
+                        inList = false;
+                    }
+                    if (trimmed) {
+                        result += `<p class="my-1">${line}</p>`;
+                    }
+                }
+            }
+
+            if (inList) result += '</ul>';
+
+            return result;
         }
 
         handleBannerImageChange(e) {
