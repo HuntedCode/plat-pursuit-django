@@ -162,6 +162,16 @@ class NotificationSSEView(View):
 
     @method_decorator(never_cache)
     def get(self, request):
+        # TEMPORARY: Check if SSE is disabled for debugging
+        from django.conf import settings
+        if not getattr(settings, 'NOTIFICATION_SSE_ENABLED', True):
+            # SSE disabled - return minimal response and close immediately
+            return StreamingHttpResponse(
+                "data: {\"type\": \"disabled\", \"message\": \"SSE temporarily disabled\"}\n\n",
+                content_type='text/event-stream',
+                status=200
+            )
+
         # Check authentication
         if not request.user.is_authenticated:
             return StreamingHttpResponse(
