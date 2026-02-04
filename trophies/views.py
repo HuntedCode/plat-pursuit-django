@@ -30,6 +30,7 @@ from trophies.services.checklist_service import ChecklistService
 from .forms import GameSearchForm, TrophySearchForm, ProfileSearchForm, ProfileGamesForm, ProfileTrophiesForm, ProfileBadgesForm, UserConceptRatingForm, BadgeSearchForm, GuideSearchForm, LinkPSNForm, GameDetailForm, BadgeCreationForm
 from trophies.util_modules.cache import redis_client
 from trophies.util_modules.constants import MODERN_PLATFORMS, ALL_PLATFORMS
+from trophies.themes import GRADIENT_THEMES
 
 logger = logging.getLogger("psn_api")
     
@@ -3085,6 +3086,18 @@ class MyShareablesView(LoginRequiredMixin, ProfileHotbarMixin, TemplateView):
 
         # Active tab (for future extensibility)
         context['active_tab'] = self.request.GET.get('tab', 'platinum_images')
+
+        # Add available themes for color grid modal
+        context['available_themes'] = [
+            (key, {
+                'name': data['name'],
+                'description': data['description'],
+                'background_css': data['background'].replace('\n', ' ').replace('  ', ' ').strip(),
+            })
+            for key, data in sorted(GRADIENT_THEMES.items(),
+                                   key=lambda x: (x[0] != 'default', x[1]['name']))
+            if not data.get('requires_game_image')
+        ]
 
         # Breadcrumbs
         context['breadcrumb'] = [

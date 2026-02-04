@@ -97,6 +97,9 @@
         </div>
     </div>
 </div>
+
+{# Color Grid Modal - for background selection in platinum notifications #}
+{% include 'partials/color_grid_modal.html' with available_themes=available_themes %}
 {% endblock %}
 
 {% block js_scripts %}
@@ -111,6 +114,8 @@
 <script>window.GRADIENT_THEMES = {% gradient_themes_json %};</script>
 <!-- Share image manager -->
 <script src="{% static 'js/share-image.js' %}"></script>
+<!-- Color grid modal -->
+<script src="{% static 'js/color-grid-modal.js' %}"></script>
 <!-- Notification inbox -->
 <script src="{% static 'js/notification-inbox.js' %}"></script>
 {% endblock %}

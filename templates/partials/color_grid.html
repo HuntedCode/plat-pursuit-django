@@ -1,0 +1,24 @@
+{# Reusable color grid partial #}
+{% comment %}
+Context variables required:
+- available_themes: List of (key, theme_data) tuples from themes.py
+- selected_theme: Currently selected theme key (optional)
+- grid_id: Unique ID for this grid instance (default: 'theme-grid')
+{% endcomment %}
+
+<div class="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 gap-2"
+     id="{{ grid_id|default:'theme-grid' }}"
+     data-selected="{{ selected_theme|default:'' }}">
+    {% for theme_key, theme_data in available_themes %}
+    <button type="button"
+            class="theme-preview-btn aspect-square rounded-lg border-2 transition-all hover:scale-105 cursor-pointer {% if selected_theme == theme_key %}border-primary ring-2 ring-primary{% else %}border-base-300 hover:border-base-content/50{% endif %}"
+            data-theme-key="{{ theme_key }}"
+            data-theme-name="{{ theme_data.name }}"
+            style="background: {{ theme_data.background_css }};"
+            title="{{ theme_data.name }} - {{ theme_data.description }}">
+        <span class="sr-only">{{ theme_data.name }}</span>
+    </button>
+    {% empty %}
+    <p class="col-span-full text-center text-base-content/50">No themes available</p>
+    {% endfor %}
+</div>

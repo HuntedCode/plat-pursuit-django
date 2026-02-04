@@ -8,6 +8,7 @@ from django.utils import timezone
 from datetime import datetime
 
 from trophies.mixins import ProfileHotbarMixin
+from trophies.themes import GRADIENT_THEMES
 from notifications.models import (
     NotificationTemplate, ScheduledNotification, NotificationLog
 )
@@ -39,6 +40,18 @@ class NotificationInboxView(LoginRequiredMixin, ProfileHotbarMixin, TemplateView
             ('discord_verified', 'Discord Verified'),
             ('admin_announcement', 'Admin Announcement'),
             ('system_alert', 'System Alert'),
+        ]
+
+        # Add available themes for color grid modal (used in platinum notifications)
+        context['available_themes'] = [
+            (key, {
+                'name': data['name'],
+                'description': data['description'],
+                'background_css': data['background'].replace('\n', ' ').replace('  ', ' ').strip(),
+            })
+            for key, data in sorted(GRADIENT_THEMES.items(),
+                                   key=lambda x: (x[0] != 'default', x[1]['name']))
+            if not data.get('requires_game_image')
         ]
 
         return context

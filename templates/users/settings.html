@@ -109,19 +109,8 @@
                                 <p class="text-sm text-base-content/70 mb-3">Select a gradient theme for your site-wide background. This appears on pages without a game background.</p>
 
                                 <!-- Theme Grid Preview -->
-                                <div class="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 gap-2 mb-3 {% if not profile.user_is_premium %}opacity-50 pointer-events-none{% endif %}" id="theme-grid">
-                                    {% for theme_key, theme_data in available_themes %}
-                                    <button type="button"
-                                            class="theme-preview-btn aspect-square rounded-lg border-2 transition-all hover:scale-105 cursor-pointer {% if profile.selected_theme == theme_key %}border-primary ring-2 ring-primary{% else %}border-base-300 hover:border-base-content/50{% endif %}"
-                                            data-theme-key="{{ theme_key }}"
-                                            data-theme-name="{{ theme_data.name }}"
-                                            style="background: {{ theme_data.background_css }};"
-                                            title="{{ theme_data.name }} - {{ theme_data.description }}">
-                                        <span class="sr-only">{{ theme_data.name }}</span>
-                                    </button>
-                                    {% empty %}
-                                    <p class="col-span-full text-center text-base-content/50">No themes available</p>
-                                    {% endfor %}
+                                <div class="mb-3 {% if not profile.user_is_premium %}opacity-50 pointer-events-none{% endif %}">
+                                    {% include 'partials/color_grid.html' with grid_id='theme-grid' selected_theme=profile.selected_theme available_themes=available_themes %}
                                 </div>
 
                                 <!-- Hidden select for form submission -->

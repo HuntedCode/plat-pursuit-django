@@ -73,6 +73,9 @@
         <button>close</button>
     </form>
 </dialog>
+
+{# Color Grid Modal - for background selection #}
+{% include 'partials/color_grid_modal.html' with available_themes=available_themes %}
 {% endblock %}
 
 {% block js_scripts %}
@@ -80,5 +83,6 @@
 <!-- Gradient themes from server (single source of truth) -->
 <script>window.GRADIENT_THEMES = {% gradient_themes_json %};</script>
 <script src="{% static 'js/share-image.js' %}"></script>
+<script src="{% static 'js/color-grid-modal.js' %}"></script>
 <script src="{% static 'js/shareable-manager.js' %}"></script>
 {% endblock %}

@@ -26,15 +26,32 @@ class ShareImageManager {
     }
 
     /**
-     * Build background styles from window.GRADIENT_THEMES or use inline fallback
+     * Build background styles from window.GRADIENT_THEMES
      */
     _buildBackgroundStyles() {
         // Check if themes are loaded from server
         if (window.GRADIENT_THEMES && Object.keys(window.GRADIENT_THEMES).length > 0) {
             return this._buildFromExternalThemes(window.GRADIENT_THEMES);
         }
-        // Fall back to inline definitions
-        return this._getInlineBackgroundStyles();
+
+        // Error: themes should always be provided by server
+        console.error('GRADIENT_THEMES not loaded. Ensure gradient_themes_json template tag is included.');
+
+        // Minimal fallback with just default theme
+        return {
+            'default': {
+                name: 'Default',
+                description: 'Default gradient',
+                accentColor: '#67d1f8',
+                getStyle: () => ({
+                    background: 'linear-gradient(to bottom right, #2a2e34, #32363d, #2a2e34)'
+                }),
+                getBannerStyle: () => ({
+                    background: 'linear-gradient(135deg, rgba(103, 209, 248, 0.15) 0%, rgba(103, 209, 248, 0.05) 100%)',
+                    borderColor: '#67d1f8'
+                })
+            }
+        };
     }
 
     /**
@@ -84,433 +101,6 @@ class ShareImageManager {
     }
 
     /**
-     * Inline background style definitions (fallback if external themes not loaded)
-     */
-    _getInlineBackgroundStyles() {
-        return {
-            apocalypticMoss: {
-                name: 'Apocalyptic Moss',
-                description: 'Post-apocalyptic greens',
-                accentColor: '#4a7c59', // Mossy green
-                getStyle: () => ({
-                    background: `
-                        radial-gradient(ellipse at 20% 30%, rgba(74, 124, 89, 0.3) 0%, transparent 50%),
-                        radial-gradient(ellipse at 80% 70%, rgba(101, 67, 33, 0.25) 0%, transparent 45%),
-                        radial-gradient(ellipse at 50% 80%, rgba(74, 124, 89, 0.2) 0%, transparent 50%),
-                        linear-gradient(to bottom, #0f1512 0%, #1a1f1c 50%, #0f1512 100%)
-                    `.replace(/\s+/g, ' ').trim()
-                }),
-                getBannerStyle: () => ({
-                    background: 'linear-gradient(to right, rgba(74, 124, 89, 0.25), rgba(101, 67, 33, 0.15))',
-                    borderColor: '#4a7c59'
-                })
-            },
-            carbonFiber: {
-                name: 'Carbon Fiber',
-                description: 'Sleek modern subtle',
-                accentColor: '#8ba3b8', // Steel blue
-                getStyle: () => ({
-                    background: `
-                        repeating-linear-gradient(45deg, transparent, transparent 2px, rgba(0, 0, 0, 0.1) 2px, rgba(0, 0, 0, 0.1) 4px),
-                        linear-gradient(135deg, #1a1b1f 0%, #0f1012 50%, #1a1b1f 100%)
-                    `.replace(/\s+/g, ' ').trim()
-                }),
-                getBannerStyle: () => ({
-                    background: 'linear-gradient(to right, rgba(139, 163, 184, 0.15), rgba(139, 163, 184, 0.05))',
-                    borderColor: '#8ba3b8'
-                })
-            },
-            cornerSpotlights: {
-                name: 'Corner Glow',
-                description: 'Glowing corners effect',
-                accentColor: '#67d1f8',
-                getStyle: () => ({
-                    background: `
-                        radial-gradient(ellipse at 0% 0%, rgba(103, 209, 248, 0.4) 0%, transparent 40%),
-                        radial-gradient(ellipse at 100% 100%, rgba(149, 128, 255, 0.4) 0%, transparent 40%),
-                        linear-gradient(135deg, #1a1b1f 0%, #2a2e34 50%, #1a1b1f 100%)
-                    `.replace(/\s+/g, ' ').trim()
-                }),
-                getBannerStyle: () => ({
-                    background: 'linear-gradient(to right, rgba(103, 209, 248, 0.25), rgba(103, 209, 248, 0.1))',
-                    borderColor: '#67d1f8'
-                })
-            },
-            cosmicNebula: {
-                name: 'Cosmic Nebula',
-                description: 'Space galaxy theme',
-                accentColor: '#ff6bdb', // Magenta
-                getStyle: () => ({
-                    background: `
-                        radial-gradient(ellipse at 25% 25%, rgba(149, 128, 255, 0.35) 0%, transparent 45%),
-                        radial-gradient(ellipse at 75% 35%, rgba(255, 107, 219, 0.3) 0%, transparent 50%),
-                        radial-gradient(ellipse at 50% 75%, rgba(103, 209, 248, 0.25) 0%, transparent 55%),
-                        radial-gradient(ellipse at 15% 80%, rgba(149, 128, 255, 0.2) 0%, transparent 40%),
-                        radial-gradient(ellipse at 85% 85%, rgba(255, 107, 219, 0.2) 0%, transparent 45%),
-                        linear-gradient(to bottom, #0a0515 0%, #1a1b2e 50%, #0a0515 100%)
-                    `.replace(/\s+/g, ' ').trim()
-                }),
-                getBannerStyle: () => ({
-                    background: 'linear-gradient(to right, rgba(255, 107, 219, 0.25), rgba(149, 128, 255, 0.15))',
-                    borderColor: '#ff6bdb'
-                })
-            },
-            default: {
-                name: 'Default',
-                description: 'Subtle diagonal gradient',
-                accentColor: '#67d1f8', // Cyan (default platinum color)
-                getStyle: () => ({
-                    background: 'linear-gradient(to bottom right, #2a2e34, #32363d, #2a2e34)'
-                }),
-                getBannerStyle: () => ({
-                    background: 'linear-gradient(to right, rgba(103, 209, 248, 0.15), rgba(103, 209, 248, 0.05))',
-                    borderColor: '#67d1f8'
-                })
-            },
-            dragonFlame: {
-                name: 'Dragon Flame',
-                description: 'Purple dragon fire',
-                accentColor: '#a855f7', // Vibrant purple
-                getStyle: () => ({
-                    background: `
-                        radial-gradient(ellipse at 60% 30%, rgba(168, 85, 247, 0.4) 0%, transparent 50%),
-                        radial-gradient(ellipse at 20% 70%, rgba(255, 170, 92, 0.35) 0%, transparent 45%),
-                        radial-gradient(ellipse at 80% 80%, rgba(168, 85, 247, 0.25) 0%, transparent 50%),
-                        linear-gradient(to bottom, #1a0d2e 0%, #0f0618 50%, #1a0d2e 100%)
-                    `.replace(/\s+/g, ' ').trim()
-                }),
-                getBannerStyle: () => ({
-                    background: 'linear-gradient(to right, rgba(168, 85, 247, 0.3), rgba(255, 170, 92, 0.2))',
-                    borderColor: '#a855f7'
-                })
-            },
-            electricStorm: {
-                name: 'Electric Storm',
-                description: 'High energy dramatic',
-                accentColor: '#67d1f8', // Bright cyan
-                getStyle: () => ({
-                    background: `
-                        radial-gradient(ellipse at 15% 20%, rgba(103, 209, 248, 0.4) 0%, transparent 30%),
-                        radial-gradient(ellipse at 85% 30%, rgba(149, 128, 255, 0.35) 0%, transparent 35%),
-                        radial-gradient(ellipse at 50% 80%, rgba(103, 209, 248, 0.3) 0%, transparent 40%),
-                        radial-gradient(ellipse at 30% 60%, rgba(149, 128, 255, 0.2) 0%, transparent 30%),
-                        linear-gradient(to bottom, #0f0f1a 0%, #1a1b1f 100%)
-                    `.replace(/\s+/g, ' ').trim()
-                }),
-                getBannerStyle: () => ({
-                    background: 'linear-gradient(to right, rgba(103, 209, 248, 0.3), rgba(149, 128, 255, 0.2))',
-                    borderColor: '#67d1f8'
-                })
-            },
-            emeraldMatrix: {
-                name: 'Emerald Matrix',
-                description: 'Digital tech aesthetic',
-                accentColor: '#67f8c8', // Success green
-                getStyle: () => ({
-                    background: `
-                        radial-gradient(ellipse at 10% 30%, rgba(103, 248, 200, 0.25) 0%, transparent 50%),
-                        radial-gradient(ellipse at 90% 70%, rgba(103, 248, 200, 0.15) 0%, transparent 50%),
-                        linear-gradient(180deg, #0a1a14 0%, #050f0a 50%, #0a1a14 100%)
-                    `.replace(/\s+/g, ' ').trim()
-                }),
-                getBannerStyle: () => ({
-                    background: 'linear-gradient(to right, rgba(103, 248, 200, 0.25), rgba(103, 248, 200, 0.08))',
-                    borderColor: '#67f8c8'
-                })
-            },
-            gameArtBlur: {
-                name: 'Game Art',
-                description: 'Blurred game cover background',
-                accentColor: '#67d1f8',
-                getStyle: (gameImage) => {
-                    if (gameImage) {
-                        return {
-                            background: `linear-gradient(rgba(26, 27, 31, 0.85), rgba(26, 27, 31, 0.9)), url("${gameImage}")`,
-                            backgroundSize: 'cover',
-                            backgroundPosition: 'center'
-                        };
-                    }
-                    // Fallback if no game image
-                    return this.backgroundStyles.default.getStyle();
-                },
-                getBannerStyle: () => ({
-                    background: 'linear-gradient(to right, rgba(103, 209, 248, 0.2), rgba(103, 209, 248, 0.08))',
-                    borderColor: '#67d1f8'
-                })
-            },
-            gradientMesh: {
-                name: 'Gradient Mesh',
-                description: 'Colorful overlapping gradients',
-                accentColor: '#67d1f8',
-                getStyle: () => ({
-                    background: `
-                        radial-gradient(ellipse at 20% 20%, rgba(103, 209, 248, 0.3) 0%, transparent 50%),
-                        radial-gradient(ellipse at 80% 80%, rgba(149, 128, 255, 0.3) 0%, transparent 50%),
-                        radial-gradient(ellipse at 80% 20%, rgba(255, 170, 92, 0.15) 0%, transparent 40%),
-                        linear-gradient(to bottom right, #2a2e34, #1a1b1f, #2a2e34)
-                    `.replace(/\s+/g, ' ').trim()
-                }),
-                getBannerStyle: () => ({
-                    background: 'linear-gradient(to right, rgba(103, 209, 248, 0.2), rgba(149, 128, 255, 0.15))',
-                    borderColor: '#67d1f8'
-                })
-            },
-            inferiority: {
-                name: 'Inferiority',
-                description: 'For Xbox sympathizers',
-                accentColor: '#107c10', // Xbox green
-                getStyle: () => ({
-                    background: `
-                        radial-gradient(ellipse at 50% 50%, rgba(16, 124, 16, 0.2) 0%, transparent 60%),
-                        linear-gradient(135deg, #0a0f0a 0%, #1a1f1a 50%, #0a0f0a 100%)
-                    `.replace(/\s+/g, ' ').trim()
-                }),
-                getBannerStyle: () => ({
-                    background: 'linear-gradient(to right, rgba(16, 124, 16, 0.15), rgba(16, 124, 16, 0.05))',
-                    borderColor: '#107c10'
-                })
-            },
-            jungleMarsupial: {
-                name: 'Jungle Marsupial',
-                description: 'Orange jungle energy',
-                accentColor: '#ff8c00', // Dark orange
-                getStyle: () => ({
-                    background: `
-                        radial-gradient(ellipse at 40% 40%, rgba(255, 140, 0, 0.35) 0%, transparent 50%),
-                        radial-gradient(ellipse at 70% 20%, rgba(34, 139, 34, 0.25) 0%, transparent 45%),
-                        radial-gradient(ellipse at 20% 80%, rgba(255, 140, 0, 0.25) 0%, transparent 40%),
-                        linear-gradient(135deg, #1a1510 0%, #0f0f0a 50%, #1a1510 100%)
-                    `.replace(/\s+/g, ' ').trim()
-                }),
-                getBannerStyle: () => ({
-                    background: 'linear-gradient(to right, rgba(255, 140, 0, 0.3), rgba(34, 139, 34, 0.2))',
-                    borderColor: '#ff8c00'
-                })
-            },
-            logoBackdrop: {
-                name: 'Logo Backdrop',
-                description: 'PlatPursuit branding',
-                accentColor: '#67d1f8', // Cyan (brand color)
-                getStyle: () => {
-                    // Use the static logo path with repeating pattern
-                    const logoUrl = '/static/images/logo.png';
-                    return {
-                        background: `
-                            linear-gradient(rgba(26, 27, 31, 0.88), rgba(26, 27, 31, 0.88)),
-                            url("${logoUrl}")
-                        `.replace(/\s+/g, ' ').trim(),
-                        backgroundSize: 'auto, 120px',
-                        backgroundPosition: 'center, center',
-                        backgroundRepeat: 'repeat, repeat'
-                    };
-                },
-                getBannerStyle: () => ({
-                    background: 'linear-gradient(to right, rgba(103, 209, 248, 0.2), rgba(103, 209, 248, 0.08))',
-                    borderColor: '#67d1f8'
-                })
-            },
-            machineHunter: {
-                name: 'Machine Hunter',
-                description: 'Tribal tech sunrise',
-                accentColor: '#ff6b35', // Vibrant orange-red
-                getStyle: () => ({
-                    background: `
-                        radial-gradient(ellipse at 50% 100%, rgba(255, 107, 53, 0.4) 0%, rgba(255, 140, 0, 0.25) 35%, transparent 65%),
-                        radial-gradient(ellipse at 30% 30%, rgba(0, 191, 255, 0.2) 0%, transparent 40%),
-                        linear-gradient(0deg, #2a1810 0%, #1a1520 50%, #0a0f1a 100%)
-                    `.replace(/\s+/g, ' ').trim()
-                }),
-                getBannerStyle: () => ({
-                    background: 'linear-gradient(to right, rgba(255, 107, 53, 0.3), rgba(0, 191, 255, 0.15))',
-                    borderColor: '#ff6b35'
-                })
-            },
-            midnightCrimson: {
-                name: 'Midnight Crimson',
-                description: 'Bold and rare',
-                accentColor: '#ff5757', // Crimson red
-                getStyle: () => ({
-                    background: `
-                        radial-gradient(ellipse at 20% 20%, rgba(255, 87, 87, 0.3) 0%, transparent 50%),
-                        radial-gradient(ellipse at 80% 80%, rgba(200, 50, 50, 0.25) 0%, transparent 50%),
-                        linear-gradient(135deg, #1a0f0f 0%, #2a1a1a 50%, #1a0f0f 100%)
-                    `.replace(/\s+/g, ' ').trim()
-                }),
-                getBannerStyle: () => ({
-                    background: 'linear-gradient(to right, rgba(255, 87, 87, 0.25), rgba(255, 87, 87, 0.08))',
-                    borderColor: '#ff5757'
-                })
-            },
-            minimalDark: {
-                name: 'Minimal Dark',
-                description: 'Clean dark with vignette',
-                accentColor: '#67d1f8',
-                getStyle: () => ({
-                    background: `
-                        radial-gradient(ellipse at center, #2a2e34 0%, #1a1b1f 70%, #0f1012 100%)
-                    `.replace(/\s+/g, ' ').trim()
-                }),
-                getBannerStyle: () => ({
-                    background: 'linear-gradient(to right, rgba(103, 209, 248, 0.12), rgba(103, 209, 248, 0.04))',
-                    borderColor: '#67d1f8'
-                })
-            },
-            neonPurple: {
-                name: 'Neon Purple',
-                description: 'Vibrant purple atmosphere',
-                accentColor: '#9580ff', // Purple accent
-                getStyle: () => ({
-                    background: `
-                        radial-gradient(ellipse at 30% 0%, rgba(149, 128, 255, 0.4) 0%, transparent 50%),
-                        radial-gradient(ellipse at 70% 100%, rgba(103, 209, 248, 0.2) 0%, transparent 50%),
-                        linear-gradient(180deg, #1a1b2e 0%, #0f0f1a 100%)
-                    `.replace(/\s+/g, ' ').trim()
-                }),
-                getBannerStyle: () => ({
-                    background: 'linear-gradient(to right, rgba(149, 128, 255, 0.25), rgba(149, 128, 255, 0.08))',
-                    borderColor: '#9580ff'
-                })
-            },
-            platinumShimmer: {
-                name: 'Platinum Shimmer',
-                description: 'Metallic prestigious',
-                accentColor: '#e8e8e8', // Light platinum
-                getStyle: () => ({
-                    background: `
-                        radial-gradient(ellipse at 50% 30%, rgba(232, 232, 232, 0.15) 0%, transparent 60%),
-                        radial-gradient(ellipse at 30% 70%, rgba(200, 200, 200, 0.12) 0%, transparent 50%),
-                        radial-gradient(ellipse at 70% 60%, rgba(180, 180, 180, 0.1) 0%, transparent 45%),
-                        linear-gradient(135deg, #1a1b1f 0%, #2a2e34 50%, #1a1b1f 100%)
-                    `.replace(/\s+/g, ' ').trim()
-                }),
-                getBannerStyle: () => ({
-                    background: 'linear-gradient(to right, rgba(232, 232, 232, 0.2), rgba(232, 232, 232, 0.08))',
-                    borderColor: '#e8e8e8'
-                })
-            },
-            playstationBlue: {
-                name: 'PlayStation Blue',
-                description: 'Classic blue sweep',
-                accentColor: '#4a9eff', // Brighter blue for PS theme
-                getStyle: () => ({
-                    background: `
-                        linear-gradient(135deg, #0d1b2a 0%, #1b3a5f 30%, #0d1b2a 60%, #1a1b1f 100%)
-                    `.replace(/\s+/g, ' ').trim()
-                }),
-                getBannerStyle: () => ({
-                    background: 'linear-gradient(to right, rgba(74, 158, 255, 0.25), rgba(74, 158, 255, 0.08))',
-                    borderColor: '#4a9eff'
-                })
-            },
-            rainbowRoad: {
-                name: 'Rainbow Road',
-                description: 'Wait wrong console...',
-                accentColor: '#ff6bdb', // Magenta
-                getStyle: () => ({
-                    background: `
-                        linear-gradient(90deg,
-                            rgba(255, 0, 0, 0.15) 0%,
-                            rgba(255, 127, 0, 0.15) 14%,
-                            rgba(255, 255, 0, 0.15) 28%,
-                            rgba(0, 255, 0, 0.15) 42%,
-                            rgba(0, 127, 255, 0.15) 57%,
-                            rgba(139, 0, 255, 0.15) 71%,
-                            rgba(255, 0, 255, 0.15) 85%,
-                            rgba(255, 0, 0, 0.15) 100%
-                        ),
-                        radial-gradient(ellipse at center, #2a2e34 0%, #1a1b1f 70%, #0f1012 100%)
-                    `.replace(/\s+/g, ' ').trim()
-                }),
-                getBannerStyle: () => ({
-                    background: 'linear-gradient(to right, rgba(255, 0, 255, 0.25), rgba(0, 127, 255, 0.2))',
-                    borderColor: '#ff6bdb'
-                })
-            },
-            retroWave: {
-                name: 'Retro Wave',
-                description: 'Synthwave vaporwave',
-                accentColor: '#ff6bdb', // Hot pink
-                getStyle: () => ({
-                    background: `
-                        radial-gradient(ellipse at 50% 120%, rgba(255, 20, 147, 0.5) 0%, rgba(138, 43, 226, 0.3) 40%, transparent 70%),
-                        radial-gradient(ellipse at 50% -20%, rgba(0, 191, 255, 0.4) 0%, rgba(138, 43, 226, 0.2) 40%, transparent 70%),
-                        repeating-linear-gradient(0deg, transparent, transparent 40px, rgba(255, 20, 147, 0.03) 40px, rgba(255, 20, 147, 0.03) 42px),
-                        linear-gradient(180deg, #0d0221 0%, #1a0933 30%, #2d1b4e 50%, #1a0933 70%, #0d0221 100%)
-                    `.replace(/\s+/g, ' ').trim()
-                }),
-                getBannerStyle: () => ({
-                    background: 'linear-gradient(to right, rgba(255, 20, 147, 0.35), rgba(0, 191, 255, 0.25))',
-                    borderColor: '#ff14c8'
-                })
-            },
-            sunsetGold: {
-                name: 'Sunset Gold',
-                description: 'Warm golden tones',
-                accentColor: '#ffaa5c', // Gold/orange accent
-                getStyle: () => ({
-                    background: `
-                        radial-gradient(ellipse at 70% 20%, rgba(255, 170, 92, 0.35) 0%, transparent 50%),
-                        radial-gradient(ellipse at 20% 80%, rgba(255, 136, 51, 0.2) 0%, transparent 50%),
-                        linear-gradient(to bottom, #2a2520 0%, #1a1815 100%)
-                    `.replace(/\s+/g, ' ').trim()
-                }),
-                getBannerStyle: () => ({
-                    background: 'linear-gradient(to right, rgba(255, 170, 92, 0.25), rgba(255, 170, 92, 0.08))',
-                    borderColor: '#ffaa5c'
-                })
-            },
-            treasureMap: {
-                name: 'Treasure Map',
-                description: 'Parchment adventure',
-                accentColor: '#d4a574', // Tan/beige
-                getStyle: () => ({
-                    background: `
-                        radial-gradient(ellipse at 40% 40%, rgba(212, 165, 116, 0.2) 0%, transparent 60%),
-                        radial-gradient(ellipse at 70% 70%, rgba(139, 90, 43, 0.15) 0%, transparent 50%),
-                        linear-gradient(135deg, #1a1510 0%, #2a2015 50%, #1a1510 100%)
-                    `.replace(/\s+/g, ' ').trim()
-                }),
-                getBannerStyle: () => ({
-                    background: 'linear-gradient(to right, rgba(212, 165, 116, 0.25), rgba(139, 90, 43, 0.15))',
-                    borderColor: '#d4a574'
-                })
-            },
-            trophySpotlight: {
-                name: 'Trophy Spotlight',
-                description: 'Center focus effect',
-                accentColor: '#ffe66d', // Bright yellow
-                getStyle: () => ({
-                    background: `
-                        radial-gradient(ellipse at center, rgba(255, 230, 109, 0.25) 0%, rgba(255, 230, 109, 0.1) 30%, transparent 70%),
-                        radial-gradient(ellipse at center, #2a2e34 0%, #1a1b1f 60%, #0f1012 100%)
-                    `.replace(/\s+/g, ' ').trim()
-                }),
-                getBannerStyle: () => ({
-                    background: 'linear-gradient(to right, rgba(255, 230, 109, 0.2), rgba(255, 230, 109, 0.08))',
-                    borderColor: '#ffe66d'
-                })
-            },
-            warriorRage: {
-                name: 'Warrior Rage',
-                description: 'Spartan battle fury',
-                accentColor: '#c41e3a', // Deep red
-                getStyle: () => ({
-                    background: `
-                        radial-gradient(ellipse at 30% 20%, rgba(196, 30, 58, 0.4) 0%, transparent 50%),
-                        radial-gradient(ellipse at 70% 80%, rgba(139, 0, 0, 0.35) 0%, transparent 45%),
-                        radial-gradient(ellipse at 50% 50%, rgba(255, 69, 0, 0.15) 0%, transparent 60%),
-                        linear-gradient(135deg, #1a0a0a 0%, #2a1010 40%, #1a0505 100%)
-                    `.replace(/\s+/g, ' ').trim()
-                }),
-                getBannerStyle: () => ({
-                    background: 'linear-gradient(to right, rgba(196, 30, 58, 0.35), rgba(139, 0, 0, 0.2))',
-                    borderColor: '#c41e3a'
-                })
-            }
-        };
-    }
-
-    /**
      * Render the share section UI
      */
     renderShareSection() {
@@ -540,11 +130,19 @@ class ShareImageManager {
                         </button>
                     </div>
 
-                    <div class="flex items-center gap-2">
-                        <label for="background-select" class="text-sm text-base-content/70">Background:</label>
-                        <select id="background-select" class="select select-sm select-bordered bg-base-200">
-                            ${this.renderBackgroundOptions()}
-                        </select>
+                    <div class="flex flex-col gap-3">
+                        <div class="flex items-center gap-2">
+                            <label for="background-select" class="text-sm text-base-content/70 whitespace-nowrap">Background:</label>
+                            <select id="background-select" class="select select-sm select-bordered bg-base-200 flex-1">
+                                ${this.renderBackgroundOptions()}
+                            </select>
+                            <button type="button" id="open-color-grid" class="btn btn-sm btn-primary btn-square" title="Choose from grid">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+                                </svg>
+                            </button>
+                        </div>
+                        <p class="text-xs text-base-content/50">Select from dropdown or click grid icon for visual picker</p>
                     </div>
                 </div>
 
@@ -691,8 +289,47 @@ class ShareImageManager {
             this.renderPreview();
         });
 
+        // Initialize color grid modal if available
+        if (window.PlatPursuit?.ColorGridModal) {
+            this.colorModal = new window.PlatPursuit.ColorGridModal();
+            this.colorModal.init();
+
+            // Attach modal trigger
+            const modalBtn = document.getElementById('open-color-grid');
+            if (modalBtn) {
+                modalBtn.addEventListener('click', () => {
+                    this.openColorModal();
+                });
+            }
+        }
+
         // Render initial preview
         this.renderPreview();
+    }
+
+    /**
+     * Open color grid modal for visual theme selection
+     */
+    openColorModal() {
+        if (!this.colorModal) {
+            console.warn('ColorGridModal not initialized');
+            return;
+        }
+
+        // Open modal with current background, callback, and format
+        this.colorModal.open(this.currentBackground, (selectedTheme) => {
+            // Update internal state
+            this.currentBackground = selectedTheme;
+
+            // Sync dropdown to match selection
+            const selectElement = document.getElementById('background-select');
+            if (selectElement) {
+                selectElement.value = selectedTheme;
+            }
+
+            // Trigger preview re-render with new background
+            this.renderPreview();
+        }, this.currentFormat);
     }
 
     /**
@@ -726,9 +363,9 @@ class ShareImageManager {
 
             const { width, height } = this.dimensions[this.currentFormat];
 
-            // Calculate scale to fit in preview container (max 400px height)
-            const maxHeight = 380;
-            const scale = Math.min(1, maxHeight / height, 500 / width);
+            // Calculate scale to fit in preview container (increased by 15% for better readability)
+            const maxHeight = 437;
+            const scale = Math.min(1, maxHeight / height, 575 / width);
 
             // Insert the HTML
             container.innerHTML = html;
