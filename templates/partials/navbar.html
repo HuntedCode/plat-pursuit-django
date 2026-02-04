@@ -97,7 +97,7 @@
     </div>
 
     <div class="navbar-end flex items-center gap-0 sm:gap-2 sm:mr-2">
-        <button id="theme-toggle" class="btn btn-ghost btn-sm btn-circle" aria-label="Toggle theme">
+        <button id="theme-toggle" class="hidden sm:flex btn btn-ghost btn-sm btn-circle" aria-label="Toggle theme">
             <!-- Sun icon (shown in dark mode - click to switch to light) -->
             <svg id="theme-icon-sun" class="w-5 h-5 hidden" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <title>Switch to light mode</title>
@@ -110,6 +110,48 @@
                 <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
             </svg>
         </button>
+
+        {% if user.is_authenticated %}
+        <!-- Notification Bell -->
+        <div class="dropdown dropdown-end" id="notification-dropdown">
+            <button
+                tabindex="0"
+                class="btn btn-ghost btn-sm btn-circle relative"
+                aria-label="Notifications"
+                aria-haspopup="true"
+                aria-expanded="false">
+                <!-- Bell SVG icon -->
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <title>Notifications</title>
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                </svg>
+                <!-- Unread badge -->
+                <span id="notification-badge" class="absolute top-0 right-0 badge badge-error badge-sm hidden" aria-live="polite">0</span>
+            </button>
+
+            <div tabindex="0" class="dropdown-content z-[100] card card-compact w-80 sm:w-96 p-4 shadow-2xl bg-base-200 mt-3 border-2 border-base-300">
+                <div class="flex items-center justify-between mb-3">
+                    <h3 class="font-bold text-lg">Notifications</h3>
+                    <button id="mark-all-read-btn" class="btn btn-xs btn-ghost" aria-label="Mark all as read">Mark all read</button>
+                </div>
+
+                <!-- Notification list -->
+                <div id="notification-list" class="space-y-2 max-h-96 overflow-y-auto">
+                    <!-- Loading state -->
+                    <div id="notification-loading" class="flex justify-center p-4">
+                        <span class="loading loading-spinner loading-md"></span>
+                    </div>
+
+                    <!-- Empty state -->
+                    <div id="notification-empty" class="text-center p-4 hidden">
+                        <p class="text-base-content/60">No notifications yet</p>
+                    </div>
+                </div>
+
+                <a href="{% url 'notification_inbox' %}" class="btn btn-primary btn-sm mt-3 w-full">View All</a>
+            </div>
+        </div>
+        {% endif %}
 
         <form action="{% url 'search' %}" method="GET" class="join hidden">
             <select name="type" class="select select-sm select-primary join-item">
@@ -175,7 +217,8 @@
                         {% else %}
                             <li><a href="{% url 'subscription_management' %}">My Premium</a></li>
                         {% endif %}
-                        <li><a href="{% url 'my_checklists' %}">My Guides<span class="badge badge-xs badge-warning">BETA</span></a></li>
+                        <li><a href="{% url 'my_checklists' %}">My Guides</a></li>
+                        <li><a href="{% url 'my_shareables' %}">My Shareables</a></li>
                         <li><a href="{% url 'profile_detail' user.profile.psn_username %}">Profile</a></li>
                         <li><a href="{% url 'trophy_case' user.profile.psn_username %}">Trophy Case</a></li>
                     {% else %}

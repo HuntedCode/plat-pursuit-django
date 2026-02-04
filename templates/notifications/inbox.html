@@ -1,0 +1,116 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block content %}
+{% include 'partials/breadcrumb.html' with items=breadcrumb %}
+
+<div class="flex flex-col gap-4">
+    <!-- Header with filters and bulk actions -->
+    <div class="panel-container p-4">
+        <div class="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
+            <!-- Search -->
+            <div class="form-control w-full lg:w-1/3">
+                <input
+                    type="text"
+                    id="notification-search"
+                    placeholder="Search notifications..."
+                    class="input input-bordered input-primary w-full"
+                />
+            </div>
+
+            <!-- Filters -->
+            <div class="flex flex-wrap gap-2">
+                <select id="filter-type" class="select select-bordered select-primary select-sm">
+                    <option value="">All Types</option>
+                    {% for value, display in notification_types %}
+                    <option value="{{ value }}">{{ display }}</option>
+                    {% endfor %}
+                </select>
+
+                <select id="filter-status" class="select select-bordered select-primary select-sm">
+                    <option value="">All</option>
+                    <option value="unread">Unread</option>
+                    <option value="read">Read</option>
+                </select>
+            </div>
+
+            <!-- Bulk actions -->
+            <div class="flex gap-2">
+                <button id="bulk-mark-read" class="btn btn-sm btn-ghost" disabled>
+                    Mark Read
+                </button>
+                <button id="bulk-delete" class="btn btn-sm btn-error" disabled>
+                    Delete
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Split-pane layout -->
+    <div class="flex flex-col-reverse lg:flex-row gap-4 min-h-[600px]">
+        <!-- Notification List (left pane) -->
+        <div class="w-full lg:w-1/2 xl:w-2/5 panel-container flex flex-col">
+            <!-- List header with select all -->
+            <div class="p-4 border-b border-base-300 flex items-center gap-2">
+                <div class="tooltip tooltip-right" data-tip="Selects all loaded notifications">
+                    <input type="checkbox" id="select-all" class="checkbox checkbox-primary" />
+                </div>
+                <span class="font-semibold">Notifications</span>
+                <span id="notification-count" class="badge badge-primary ml-auto">0</span>
+            </div>
+
+            <!-- Scrollable list -->
+            <div id="notification-list-pane" class="flex-1 overflow-y-auto p-2">
+                <!-- Loading state -->
+                <div id="list-loading" class="flex justify-center p-8">
+                    <span class="loading loading-spinner loading-lg"></span>
+                </div>
+
+                <!-- Empty state -->
+                <div id="list-empty" class="text-center p-8 hidden">
+                    <p class="text-base-content/60">No notifications found</p>
+                </div>
+
+                <!-- Notification items (populated by JS) -->
+                <div id="notification-items" class="space-y-2"></div>
+
+                <!-- Infinite scroll loader -->
+                <div id="scroll-loader" class="flex justify-center p-4 hidden">
+                    <span class="loading loading-spinner loading-md"></span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Detail Pane (right pane, desktop only) -->
+        <div class="flex w-full lg:w-1/2 xl:w-3/5 panel-container flex-col">
+            <!-- Empty state -->
+            <div id="detail-empty" class="flex-1 flex items-center justify-center p-8">
+                <p class="text-base-content/60">Select a notification to view details</p>
+            </div>
+
+            <!-- Detail content (populated by JS) -->
+            <div id="detail-content" class="hidden flex-1 flex flex-col overflow-y-auto">
+                <!-- Detail view will be rendered here by JavaScript -->
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block js_scripts %}
+{% load custom_filters %}
+<!-- html2canvas for client-side share image preview -->
+<script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
+<!-- Markdown parser -->
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<!-- XSS sanitizer -->
+<script src="https://cdn.jsdelivr.net/npm/dompurify/dist/purify.min.js"></script>
+<!-- Gradient themes from server (single source of truth) -->
+<script>window.GRADIENT_THEMES = {% gradient_themes_json %};</script>
+<!-- Share image manager -->
+<script src="{% static 'js/share-image.js' %}"></script>
+<!-- Notification inbox -->
+<script src="{% static 'js/notification-inbox.js' %}"></script>
+{% endblock %}

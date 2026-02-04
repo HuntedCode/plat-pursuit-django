@@ -1,0 +1,112 @@
+{# Platinum trophies grouped by year with share buttons #}
+{% load custom_filters %}
+
+{% if platinums_by_year %}
+    {# Search and Jump to Year controls #}
+    <div class="mb-6 flex flex-col sm:flex-row gap-4">
+        {# Search bar #}
+        <div class="form-control flex-1">
+            <div class="relative">
+                <span class="absolute inset-y-0 left-0 z-10 flex items-center pl-3 pointer-events-none">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <circle cx="11" cy="11" r="8"></circle>
+                        <path stroke-linecap="round" stroke-linejoin="round" d="m21 21-4.35-4.35"/>
+                    </svg>
+                </span>
+                <input type="text"
+                       id="platinum-search"
+                       placeholder="Search your platinums..."
+                       class="input input-bordered w-full pl-10 pr-10 focus:input-primary"
+                       autocomplete="off">
+                <button type="button"
+                        id="clear-search"
+                        class="absolute inset-y-0 right-0 z-20 items-center pr-3 hidden"
+                        aria-label="Clear search">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-base-content/50 hover:text-base-content" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                </button>
+            </div>
+        </div>
+
+        {# Jump to Year dropdown #}
+        <div class="form-control w-full sm:w-auto">
+            <select id="jump-to-year" class="select select-bordered select-primary">
+                <option value="">Jump to year...</option>
+                {% for year, platinums in platinums_by_year.items %}
+                <option value="{{ year }}">{{ year }} ({{ platinums|length }})</option>
+                {% endfor %}
+            </select>
+        </div>
+    </div>
+    <p id="search-results-count" class="text-sm text-base-content/60 mb-4 hidden"></p>
+
+    {% for year, platinums in platinums_by_year.items %}
+    <div class="mb-8 year-group" data-year="{{ year }}">
+        <h3 class="text-xl font-semibold mb-4 flex items-center gap-2 year-header">
+            <span class="badge badge-primary badge-lg">{{ year }}</span>
+            <span class="text-base-content/70 text-sm">({{ platinums|length }} platinum{{ platinums|length|pluralize }})</span>
+        </h3>
+
+        <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-4">
+            {% for et in platinums %}
+            <div class="card bg-base-100 border-4 {% if et.is_milestone %}shimmer{% else %}border-base-300 hover:border-primary{% endif %} shadow-md hover:shadow-primary/20 transition-all duration-200 cursor-pointer group platinum-card"
+                 data-earned-trophy-id="{{ et.id }}"
+                 data-game-name="{{ et.trophy.game.title_name }}"
+                 data-game-image="{{ et.trophy.game.title_image|default:et.trophy.game.title_icon_url }}"
+                 data-search-name="{{ et.trophy.game.title_name|lower }}"
+                 onclick="openShareModal(this)">
+                <figure class="px-3 pt-3">
+                    <div class="relative w-full aspect-square">
+                        <img src="{{ et.trophy.game.title_icon_url }}"
+                             alt="{{ et.trophy.game.title_name }}"
+                             loading="lazy"
+                             decoding="async"
+                             class="rounded-lg w-full h-full object-fill border-2 border-base-300 group-hover:border-primary transition-colors">
+                        {# Milestone number badge (top-left) #}
+                        {% if et.is_milestone %}
+                        <div class="absolute -top-2 -left-2 bg-gradient-to-br from-primary to-secondary text-primary-content rounded-full min-w-8 h-8 flex items-center justify-center text-xs font-bold shadow-lg border-2 border-base-100 z-10">
+                            #{{ et.platinum_number }}
+                        </div>
+                        {% endif %}
+                        {# Platinum badge overlay #}
+                        <div class="absolute -bottom-1 -right-1 bg-base-100 rounded-full p-1 border-2 border-base-300 group-hover:border-primary transition-colors">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="var(--color-trophy-platinum)" viewBox="0 0 24 24">
+                                <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/>
+                            </svg>
+                        </div>
+                    </div>
+                </figure>
+                <div class="card-body p-3">
+                    <h4 class="card-title text-sm line-clamp-2 leading-tight min-h-[2.5rem]">{{ et.trophy.game.title_name }}</h4>
+                    <p class="text-xs text-base-content/60">
+                        {% if et.earned_date_time %}
+                            {{ et.earned_date_time|date:"M d, Y" }}
+                        {% else %}
+                            Unknown date
+                        {% endif %}
+                    </p>
+                    <div class="card-actions justify-center mt-2">
+                        <button class="btn btn-primary btn-sm w-full gap-1 share-btn"
+                                onclick="event.stopPropagation(); openShareModal(this.closest('[data-earned-trophy-id]'))">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"/>
+                            </svg>
+                            Share
+                        </button>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endfor %}
+{% else %}
+    <div class="text-center py-12">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 mx-auto text-base-content/30" fill="var(--color-trophy-platinum)" viewBox="0 0 24 24">
+            <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/>
+        </svg>
+        <p class="text-base-content/50 mt-4 text-lg">You haven't earned any platinum trophies yet.</p>
+        <p class="text-sm text-base-content/40 mt-2">Earn platinum trophies to create shareable images!</p>
+    </div>
+{% endif %}

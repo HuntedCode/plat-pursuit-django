@@ -56,15 +56,20 @@ def check_profile_badges(profile, profilegame_ids, skip_notis: bool = False):
     series_slugs = stages.values_list('series_slug', flat=True).distinct()
     badges = Badge.objects.filter(series_slug__in=series_slugs).distinct().order_by('tier')
 
+    # Use bulk context manager to defer gamification updates until all badges are processed
+    # This prevents N separate ProfileGamification recalculations during sync
+    from trophies.services.xp_service import bulk_gamification_update
+
     checked_count = 0
-    for badge in badges:
-        try:
-            handle_badge(profile, badge, add_role_only=skip_notis)
-            checked_count += 1
-        except Exception as e:
-            logger.error(
-                f"Error checking badge {badge.id} for profile {profile.psn_username}: {e}"
-            )
+    with bulk_gamification_update():
+        for badge in badges:
+            try:
+                handle_badge(profile, badge, add_role_only=skip_notis)
+                checked_count += 1
+            except Exception as e:
+                logger.error(
+                    f"Error checking badge {badge.id} for profile {profile.psn_username}: {e}"
+                )
 
     duration = time.time() - start_time
     logger.info(

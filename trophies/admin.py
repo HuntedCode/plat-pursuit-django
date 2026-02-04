@@ -3,7 +3,7 @@ from django.contrib.admin import SimpleListFilter
 from django.db import transaction
 from django.db.models import Q
 from datetime import timedelta
-from .models import Profile, Game, Trophy, EarnedTrophy, ProfileGame, APIAuditLog, FeaturedGame, FeaturedProfile, Event, Concept, TitleID, TrophyGroup, UserTrophySelection, UserConceptRating, Badge, UserBadge, UserBadgeProgress, FeaturedGuide, Stage, PublisherBlacklist, Title, UserTitle, Milestone, UserMilestone, UserMilestoneProgress, Comment, CommentVote, CommentReport, ModerationLog, BannedWord, Checklist, ChecklistSection, ChecklistItem, ChecklistVote, UserChecklistProgress, ChecklistReport
+from .models import Profile, Game, Trophy, EarnedTrophy, ProfileGame, APIAuditLog, FeaturedGame, FeaturedProfile, Event, Concept, TitleID, TrophyGroup, UserTrophySelection, UserConceptRating, Badge, UserBadge, UserBadgeProgress, FeaturedGuide, Stage, PublisherBlacklist, Title, UserTitle, Milestone, UserMilestone, UserMilestoneProgress, Comment, CommentVote, CommentReport, ModerationLog, BannedWord, Checklist, ChecklistSection, ChecklistItem, ChecklistVote, UserChecklistProgress, ChecklistReport, ProfileGamification, StatType, StageStatValue
 
 
 # Register your models here.
@@ -987,3 +987,55 @@ class ChecklistReportAdmin(admin.ModelAdmin):
             report.save(update_fields=['status', 'reviewed_at', 'reviewed_by'])
             count += 1
         messages.success(request, f"Took action on {count} report(s).")
+
+
+# ---------- Gamification Admin ----------
+
+@admin.register(ProfileGamification)
+class ProfileGamificationAdmin(admin.ModelAdmin):
+    """Admin interface for ProfileGamification stats."""
+    list_display = [
+        'profile',
+        'total_badge_xp',
+        'total_badges_earned',
+        'last_updated',
+    ]
+    search_fields = ['profile__psn_username']
+    readonly_fields = ['last_updated']
+    ordering = ['-total_badge_xp']
+    actions = ['recalculate_selected']
+
+    @admin.action(description='Recalculate XP for selected profiles')
+    def recalculate_selected(self, request, queryset):
+        """Recalculate gamification stats for selected profiles."""
+        from trophies.services.xp_service import update_profile_gamification
+        count = 0
+        for gamification in queryset:
+            update_profile_gamification(gamification.profile)
+            count += 1
+        messages.success(request, f"Recalculated XP for {count} profile(s).")
+
+
+@admin.register(StatType)
+class StatTypeAdmin(admin.ModelAdmin):
+    """Admin interface for gamification stat types."""
+    list_display = ['slug', 'name', 'icon', 'color', 'is_active', 'display_order']
+    list_editable = ['is_active', 'display_order']
+    search_fields = ['slug', 'name']
+    ordering = ['display_order', 'name']
+
+
+@admin.register(StageStatValue)
+class StageStatValueAdmin(admin.ModelAdmin):
+    """Admin interface for stage stat value configuration."""
+    list_display = [
+        'stage',
+        'stat_type',
+        'bronze_value',
+        'silver_value',
+        'gold_value',
+        'platinum_value',
+    ]
+    list_filter = ['stat_type', 'stage__series_slug']
+    search_fields = ['stage__series_slug', 'stage__title']
+    raw_id_fields = ['stage']

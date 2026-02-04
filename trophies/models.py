@@ -102,6 +102,7 @@ class Profile(models.Model):
     recent_plat = models.ForeignKey('EarnedTrophy', on_delete=models.SET_NULL, null=True, blank=True, related_name='recent_for_profiles', help_text='Most recent earned platinum.')
     rarest_plat = models.ForeignKey('EarnedTrophy', on_delete=models.SET_NULL, null=True, blank=True, related_name='rarest_for_profiles', help_text='Rarest earned platinum by earn_rate.')
     selected_background = models.ForeignKey('Concept', on_delete=models.SET_NULL, null=True, blank=True, related_name='selected_by_profiles', help_text='Selected background concept for premium profiles.')
+    selected_theme = models.CharField(max_length=50, blank=True, null=True, help_text='Selected gradient theme key for premium site-wide background.')
     hide_hiddens = models.BooleanField(default=False, help_text="If true, hide hidden/deleted games from list and totals.")
     hide_zeros = models.BooleanField(default=False, help_text="If true, hide games with no trophies earned.")
     guidelines_agreed = models.BooleanField(default=False, help_text="True if user has agreed to community guidelines for commenting.")
@@ -1007,6 +1008,114 @@ class UserBadgeProgress(models.Model):
         indexes = [
             models.Index(fields=['profile', 'badge'], name='userbadgeprogress_idx'),
         ]
+
+
+class ProfileGamification(models.Model):
+    """
+    Denormalized gamification stats for a profile.
+
+    Stores pre-computed totals and per-series breakdowns for badge XP.
+    Updated in real-time via signals when UserBadgeProgress or UserBadge changes.
+    Future stat types (power, luck, agility) will be added via migration when needed.
+    """
+    profile = models.OneToOneField(
+        Profile,
+        on_delete=models.CASCADE,
+        related_name='gamification',
+        primary_key=True
+    )
+
+    # Badge XP (denormalized)
+    total_badge_xp = models.PositiveIntegerField(default=0, db_index=True)
+    series_badge_xp = models.JSONField(default=dict, blank=True, help_text='Per-series XP breakdown: {"resident-evil": 1500, ...}')
+    total_badges_earned = models.PositiveIntegerField(default=0)
+
+    # Tracking
+    last_updated = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Profile Gamification Stats'
+        verbose_name_plural = 'Profile Gamification Stats'
+        indexes = [
+            models.Index(fields=['total_badge_xp'], name='gamification_badge_xp_idx'),
+            models.Index(fields=['total_badges_earned'], name='gamification_badges_idx'),
+        ]
+
+    def __str__(self):
+        return f"Gamification for {self.profile.psn_username}"
+
+
+class StatType(models.Model):
+    """
+    Defines stat types for the gamification system.
+
+    Initially includes 'badge_xp' but designed for future expansion
+    to Power, Luck, Agility, etc.
+    """
+    slug = models.SlugField(max_length=50, unique=True, primary_key=True)
+    name = models.CharField(max_length=100)
+    description = models.TextField(blank=True)
+    icon = models.CharField(max_length=50, blank=True, default='')
+    color = models.CharField(max_length=20, default='#FFD700', help_text='Hex color for UI theming')
+    is_active = models.BooleanField(default=True)
+    display_order = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['display_order', 'name']
+        verbose_name = 'Stat Type'
+        verbose_name_plural = 'Stat Types'
+
+    def __str__(self):
+        return self.name
+
+
+class StageStatValue(models.Model):
+    """
+    Defines stat values for specific stages.
+
+    Allows different stages to grant different amounts of each stat type.
+    For badge_xp, the current logic uses tier-based multipliers,
+    but this model enables per-stage customization for future stats.
+    """
+    stage = models.ForeignKey(
+        'Stage',
+        on_delete=models.CASCADE,
+        related_name='stat_values'
+    )
+    stat_type = models.ForeignKey(
+        StatType,
+        on_delete=models.CASCADE,
+        related_name='stage_values'
+    )
+
+    # Values per tier when completing this stage
+    bronze_value = models.PositiveIntegerField(default=0)
+    silver_value = models.PositiveIntegerField(default=0)
+    gold_value = models.PositiveIntegerField(default=0)
+    platinum_value = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        unique_together = ['stage', 'stat_type']
+        verbose_name = 'Stage Stat Value'
+        verbose_name_plural = 'Stage Stat Values'
+        indexes = [
+            models.Index(fields=['stage', 'stat_type'], name='stage_stat_idx'),
+        ]
+
+    def __str__(self):
+        return f"{self.stage} - {self.stat_type.name}"
+
+    def get_value_for_tier(self, tier: int) -> int:
+        """Return the stat value for a specific tier."""
+        tier_map = {
+            1: self.bronze_value,
+            2: self.silver_value,
+            3: self.gold_value,
+            4: self.platinum_value,
+        }
+        return tier_map.get(tier, 0)
+
 
 class Stage(models.Model):
     series_slug = models.SlugField(max_length=100, db_index=True, help_text="Series slug this stage applies to.")

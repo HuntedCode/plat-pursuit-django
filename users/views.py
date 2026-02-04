@@ -46,12 +46,26 @@ class SettingsView(LoginRequiredMixin, View):
         profile = request.user.profile if hasattr(request.user, 'profile') else None
         premium_form = PremiumSettingsForm(instance=profile) if profile else None
         profile_form = ProfileSettingsForm(instance=profile) if profile else None
+
+        # Build available themes for the template
+        from trophies.themes import GRADIENT_THEMES
+        available_themes = [
+            (key, {
+                'name': data['name'],
+                'description': data['description'],
+                'background_css': data['background'].replace('\n', ' ').replace('  ', ' ').strip(),
+            })
+            for key, data in sorted(GRADIENT_THEMES.items(), key=lambda x: (x[0] != 'default', x[1]['name']))
+            if not data.get('requires_game_image')  # Exclude themes that need a game image
+        ]
+
         context = {
             'user_form': user_form,
             'password_form': password_form,
             'premium_form': premium_form,
             'profile_form': profile_form,
             'profile': profile,
+            'available_themes': available_themes,
         }
         return render(request, self.template_name, context)
     

@@ -66,6 +66,42 @@ def platform_color_str(platform_str):
         return 'secondary'
 
 @register.filter
+def platform_color_hex(platform_str):
+    """
+    Returns hex color for platform badge in share images.
+    Matches DaisyUI theme colors from share_image_card.html template.
+    """
+    if platform_str == "PS5":
+        return '#67d1f8'  # primary
+    elif platform_str == "PS4":
+        return '#ffaa5c'  # accent
+    elif platform_str == "PS3":
+        return '#fbbf24'  # warning (yellow-gold)
+    else:
+        return '#9580ff'  # secondary (PS Vita, etc.)
+
+@register.filter
+def region_color_hex(region_str):
+    """
+    Returns hex color for region badge in share images.
+    Matches DaisyUI theme colors:
+    - NA: primary (blue)
+    - EU: secondary (purple)
+    - JP: accent (orange)
+    - AS: warning (yellow)
+    """
+    if region_str == "NA":
+        return '#67d1f8'  # primary
+    elif region_str == "EU":
+        return '#9580ff'  # secondary
+    elif region_str == "JP":
+        return '#ffaa5c'  # accent
+    elif region_str == "AS":
+        return '#fbbf24'  # warning
+    else:
+        return '#9ca3af'  # neutral gray for unknown regions
+
+@register.filter
 def trophy_color(trophy):
     type = trophy.trophy_type
     if type == 'bronze':
@@ -142,6 +178,46 @@ def psn_rarity(rarity_int):
         return 'Uncommon'
     elif rarity_int == 3:
         return 'Common'
+
+
+@register.filter
+def rarity_color_hex(earn_rate):
+    """
+    Returns a hex color based on trophy earn rate percentage.
+    Used for share image rarity badges with inline styles.
+
+    Rarity thresholds (based on PSN):
+    - Ultra Rare: < 5%
+    - Very Rare: 5-10%
+    - Rare: 10-20%
+    - Uncommon: 20-50%
+    - Common: > 50%
+
+    Returns dict with 'color' (hex) and 'bg' (rgba background).
+    """
+    if earn_rate is None:
+        return {'color': '#67d1f8', 'bg': 'rgba(103, 209, 248, 0.15)'}
+
+    try:
+        rate = float(earn_rate)
+    except (ValueError, TypeError):
+        return {'color': '#67d1f8', 'bg': 'rgba(103, 209, 248, 0.15)'}
+
+    if rate < 5:
+        # Ultra Rare - Pink/Magenta (stands out, prestigious)
+        return {'color': '#f472b6', 'bg': 'rgba(244, 114, 182, 0.15)'}
+    elif rate < 10:
+        # Very Rare - Lavender/Purple
+        return {'color': '#a78bfa', 'bg': 'rgba(167, 139, 250, 0.15)'}
+    elif rate < 20:
+        # Rare - Yellow-Gold
+        return {'color': '#fbbf24', 'bg': 'rgba(251, 191, 36, 0.15)'}
+    elif rate < 50:
+        # Uncommon - Emerald/Green
+        return {'color': '#34d399', 'bg': 'rgba(52, 211, 153, 0.15)'}
+    else:
+        # Common - Slate/Gray
+        return {'color': '#9ca3af', 'bg': 'rgba(156, 163, 175, 0.15)'}
 
 @register.filter
 def dict_get(dict_obj, key):
@@ -279,3 +355,24 @@ def moderator_display_name(user):
 
     # Fall back to Django username
     return user.username or user.email
+
+
+@register.simple_tag
+def gradient_themes_json():
+    """
+    Output the gradient themes registry as JSON for JavaScript consumption.
+
+    Used to provide a single source of truth for theme definitions.
+    JavaScript can access themes via window.GRADIENT_THEMES after including
+    this in a script tag.
+
+    Usage in template:
+        <script>
+            window.GRADIENT_THEMES = {% gradient_themes_json %};
+        </script>
+    """
+    import json
+    from django.utils.safestring import mark_safe
+    from trophies.themes import get_themes_for_js
+
+    return mark_safe(json.dumps(get_themes_for_js()))

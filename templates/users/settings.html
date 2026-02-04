@@ -20,7 +20,7 @@
             <h3 class="text-2xl text-base-content font-semibold italic mb-2">User Settings</h3>
             <div class="flex flex-col border-4 border-base-300 shadow-lg shadow-neutral rounded-box p-4 w-7/8 mx-auto">
                 <h3 class="text-xl font-semibold mb-2 italic">Regional Info</h3>
-                <form method="post" class="space-y-4 w-7/8 mx-auto">
+                <form method="post" class="space-y-4 w-7/8 mx-auto" id="user-settings-form">
                     {% csrf_token %}
                     <input type="hidden" name="action" value="update_user">
                     <div class="form-control">
@@ -48,7 +48,7 @@
                             <div class="alert alert-error mt-1" role="alert">{{ user_form.use_24hr_clock.errors }}</div>
                         {% endif %}
                     </div>
-                    <button type="submit" class="btn btn-primary w-full">Save User Settings</button>
+                    <button type="submit" class="btn btn-primary w-full" id="user-settings-save-btn" disabled>Save User Settings</button>
                 </form>
 
                 <!-- Password Change Section -->
@@ -89,11 +89,11 @@
                     <!-- Premium Settings -->
                     {% if premium_form %}
                         <h3 class="text-xl font-semibold mb-2 italic">Profile Customization</h3>
-                        <form method="post" class="w-7/8 mx-auto">
+                        <form method="post" class="w-7/8 mx-auto" id="premium-settings-form">
                             {% csrf_token %}
                             <input type="hidden" name="action" value="update_premium">
-                            <div class="form-control mb-2" disabled>
-                                <label class="label" for="{{ premium_form.selected_background.id_for_label }}">Selected Background</label>
+                            <div class="form-control mb-2">
+                                <label class="label" for="{{ premium_form.selected_background.id_for_label }}">Profile Background</label>
                                 {{ premium_form.selected_background }}
                                 {% if premium_form.selected_background.errors %}
                                     <div class="alert alert-error mt-1">{{ premium_form.selected_background.errors }}</div>
@@ -101,7 +101,65 @@
                             </div>
                             <p class="text-center text-accent font-bold pr-1 italic mb-4">Earn Plats to unlock more backgrounds!</p>
 
-                            <div class="form-control mb-2" disabled>
+                            <!-- Site Theme Section -->
+                            <div class="form-control mb-4">
+                                <label class="label">
+                                    <span class="label-text text-lg font-semibold">Site Theme</span>
+                                </label>
+                                <p class="text-sm text-base-content/70 mb-3">Select a gradient theme for your site-wide background. This appears on pages without a game background.</p>
+
+                                <!-- Theme Grid Preview -->
+                                <div class="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 gap-2 mb-3 {% if not profile.user_is_premium %}opacity-50 pointer-events-none{% endif %}" id="theme-grid">
+                                    {% for theme_key, theme_data in available_themes %}
+                                    <button type="button"
+                                            class="theme-preview-btn aspect-square rounded-lg border-2 transition-all hover:scale-105 cursor-pointer {% if profile.selected_theme == theme_key %}border-primary ring-2 ring-primary{% else %}border-base-300 hover:border-base-content/50{% endif %}"
+                                            data-theme-key="{{ theme_key }}"
+                                            data-theme-name="{{ theme_data.name }}"
+                                            style="background: {{ theme_data.background_css }};"
+                                            title="{{ theme_data.name }} - {{ theme_data.description }}">
+                                        <span class="sr-only">{{ theme_data.name }}</span>
+                                    </button>
+                                    {% empty %}
+                                    <p class="col-span-full text-center text-base-content/50">No themes available</p>
+                                    {% endfor %}
+                                </div>
+
+                                <!-- Hidden select for form submission -->
+                                <div class="hidden">
+                                    {{ premium_form.selected_theme }}
+                                </div>
+
+                                <!-- Selected theme display -->
+                                <div class="flex items-center gap-2 text-sm">
+                                    <span class="text-base-content/70">Selected:</span>
+                                    <span id="selected-theme-name" class="font-semibold">
+                                        {% if profile.selected_theme %}
+                                            {% for tk, td in available_themes %}{% if tk == profile.selected_theme %}{{ td.name }}{% endif %}{% endfor %}
+                                        {% else %}
+                                            None
+                                        {% endif %}
+                                    </span>
+                                </div>
+
+                                {% if premium_form.selected_theme.errors %}
+                                    <div class="alert alert-error mt-1">{{ premium_form.selected_theme.errors }}</div>
+                                {% endif %}
+                            </div>
+
+                            <!-- Live Preview -->
+                            <div class="form-control mb-4">
+                                <label class="label">
+                                    <span class="label-text">Preview</span>
+                                </label>
+                                <div id="theme-preview-container" class="h-24 rounded-lg border border-base-300 flex items-center justify-center overflow-hidden"
+                                     style="{% if profile.selected_theme %}{% for tk, td in available_themes %}{% if tk == profile.selected_theme %}background: {{ td.background_css }};{% endif %}{% endfor %}{% else %}background: linear-gradient(to bottom right, #2a2e34, #32363d, #2a2e34);{% endif %}">
+                                    <span class="text-white font-bold text-lg drop-shadow-lg">{{ profile.display_psn_username }}</span>
+                                </div>
+                            </div>
+
+                            <div class="divider"></div>
+
+                            <div class="form-control mb-2">
                                 <label class="label" for="{{ premium_form.title.id_for_label }}">Selected Title</label>
                                 {{ premium_form.title }}
                                 {% if premium_form.title.errors %}
@@ -110,7 +168,7 @@
                             </div>
                             <p class="text-center text-accent font-bold pr-1 italic mb-4">Earn Badges to unlock more titles!</p>
 
-                            <button type="submit" class="btn btn-secondary w-full" {% if not profile.user_is_premium %}disabled{% endif %}>Save Premium Settings</button>
+                            <button type="submit" class="btn btn-secondary w-full" id="premium-settings-save-btn" {% if not profile.user_is_premium %}disabled{% endif %}>Save Premium Settings</button>
                         </form>
                     {% endif %}
                 </div>
@@ -137,7 +195,7 @@
                     <div class="divider divider-vertical w-full"></div>
 
                     <h3 class="text-xl font-semibold mb-2 italic">Hide Games From Profile</h3>
-                    <form method="post" class="w-7/8 mx-auto">
+                    <form method="post" class="w-7/8 mx-auto" id="profile-settings-form">
                         {% csrf_token %}
                         <input type="hidden" name="action" value="update_profile">
                         <div class="form-control mb-2" disabled>
@@ -160,7 +218,7 @@
                         </div>
                         <p class="text-center text-secondary font-bold pr-1 italic mb-4">Set to true to hide games you haven't earned a trophy in yet.</p>
 
-                        <button type="submit" class="btn btn-primary w-full" {% if not profile %}disabled{% endif %}>Save Profile Settings</button>
+                        <button type="submit" class="btn btn-primary w-full" id="profile-settings-save-btn" disabled>Save Profile Settings</button>
                     </form>
                     
                     <input type="checkbox" id="unlink-modal" class="modal-toggle" />
@@ -185,4 +243,154 @@
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block js_scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // ==========================================
+    // Theme Grid Handler
+    // ==========================================
+    const themeGrid = document.getElementById('theme-grid');
+    const themeSelect = document.getElementById('selected-theme-select');
+    const previewContainer = document.getElementById('theme-preview-container');
+    const selectedThemeName = document.getElementById('selected-theme-name');
+
+    if (themeGrid && themeSelect) {
+        // Handle theme button clicks
+        themeGrid.addEventListener('click', function(e) {
+            const btn = e.target.closest('.theme-preview-btn');
+            if (!btn) return;
+
+            const themeKey = btn.dataset.themeKey;
+            const themeName = btn.dataset.themeName;
+
+            // Update visual selection
+            themeGrid.querySelectorAll('.theme-preview-btn').forEach(b => {
+                b.classList.remove('border-primary', 'ring-2', 'ring-primary');
+                b.classList.add('border-base-300');
+            });
+            btn.classList.remove('border-base-300');
+            btn.classList.add('border-primary', 'ring-2', 'ring-primary');
+
+            // Update hidden select and trigger change event for save button activation
+            themeSelect.value = themeKey;
+            themeSelect.dispatchEvent(new Event('change', { bubbles: true }));
+
+            // Update preview box
+            if (previewContainer) {
+                previewContainer.style.background = btn.style.background;
+            }
+
+            // Update selected name display
+            if (selectedThemeName) {
+                selectedThemeName.textContent = themeName || 'Default';
+            }
+
+            // Live preview: Update the actual page background
+            const bgStyle = btn.style.background;
+            if (bgStyle) {
+                document.body.style.background = bgStyle;
+                document.body.style.backgroundAttachment = 'fixed';
+            }
+        });
+    }
+
+    // ==========================================
+    // Unsaved Changes Warning & Save Button Activation
+    // ==========================================
+    // Track these forms (password form intentionally excluded)
+    const isPremiumUser = {% if profile and profile.user_is_premium %}true{% else %}false{% endif %};
+    const trackedForms = [
+        { formId: 'user-settings-form', saveBtn: 'user-settings-save-btn', canSave: true },
+        { formId: 'premium-settings-form', saveBtn: 'premium-settings-save-btn', canSave: isPremiumUser },
+        { formId: 'profile-settings-form', saveBtn: 'profile-settings-save-btn', canSave: true }
+    ];
+    const originalValues = {};
+
+    function captureOriginalState() {
+        trackedForms.forEach(({ formId }) => {
+            const form = document.getElementById(formId);
+            if (!form) return;
+
+            form.querySelectorAll('input, select, textarea').forEach(el => {
+                // Skip action hidden inputs and password fields
+                if (el.type === 'hidden' && el.name === 'action') return;
+                if (el.type === 'hidden' && el.name === 'csrfmiddlewaretoken') return;
+                if (el.type === 'password') return;
+
+                const key = `${formId}:${el.name || el.id}`;
+                if (el.type === 'checkbox') {
+                    originalValues[key] = el.checked;
+                } else {
+                    originalValues[key] = el.value;
+                }
+            });
+        });
+    }
+
+    function formHasChanges(formId) {
+        const form = document.getElementById(formId);
+        if (!form) return false;
+
+        const elements = form.querySelectorAll('input, select, textarea');
+        for (const el of elements) {
+            // Skip action hidden inputs and password fields
+            if (el.type === 'hidden' && el.name === 'action') continue;
+            if (el.type === 'hidden' && el.name === 'csrfmiddlewaretoken') continue;
+            if (el.type === 'password') continue;
+
+            const key = `${formId}:${el.name || el.id}`;
+            const currentValue = el.type === 'checkbox' ? el.checked : el.value;
+
+            if (originalValues[key] !== currentValue) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    function hasUnsavedChanges() {
+        return trackedForms.some(({ formId }) => formHasChanges(formId));
+    }
+
+    function updateSaveButtons() {
+        trackedForms.forEach(({ formId, saveBtn, canSave }) => {
+            const btn = document.getElementById(saveBtn);
+            if (!btn) return;
+
+            // Only enable if form has changes AND user has permission
+            const hasChanges = formHasChanges(formId);
+            btn.disabled = !hasChanges || !canSave;
+        });
+    }
+
+    // Attach change listeners to all tracked form elements
+    function setupChangeListeners() {
+        trackedForms.forEach(({ formId }) => {
+            const form = document.getElementById(formId);
+            if (!form) return;
+
+            form.querySelectorAll('input, select, textarea').forEach(el => {
+                // Skip action hidden inputs
+                if (el.type === 'hidden' && el.name === 'action') return;
+                if (el.type === 'hidden' && el.name === 'csrfmiddlewaretoken') return;
+
+                el.addEventListener('change', updateSaveButtons);
+                el.addEventListener('input', updateSaveButtons);
+            });
+        });
+    }
+
+    // Initialize unsaved changes tracking
+    captureOriginalState();
+    setupChangeListeners();
+    updateSaveButtons();  // Set initial button states
+
+    PlatPursuit.UnsavedChangesManager.init({
+        hasUnsavedChanges: hasUnsavedChanges,
+        showSaveButton: false  // POST forms, no API save
+    });
+});
+</script>
 {% endblock %}

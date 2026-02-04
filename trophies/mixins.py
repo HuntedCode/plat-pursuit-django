@@ -38,3 +38,34 @@ class ProfileHotbarMixin(View):
             }
             context['hotbar'] = hotbar_data
         return context
+
+
+class BackgroundContextMixin:
+    """
+    Mixin for views that display page-specific game image backgrounds.
+
+    Provides a consistent way to build the image_urls context that base.html
+    uses to display background images. Page-specific backgrounds (from this mixin)
+    take priority over user's premium theme (from context processor).
+
+    Usage:
+        class MyView(BackgroundContextMixin, TemplateView):
+            def get_context_data(self, **kwargs):
+                context = super().get_context_data(**kwargs)
+                context['image_urls'] = self.get_background_context(concept=my_concept)
+                return context
+    """
+
+    def get_background_context(self, concept=None):
+        """
+        Build image_urls dict for template context.
+
+        Args:
+            concept: A Concept model instance with bg_url field
+
+        Returns:
+            dict: Contains 'bg_url' if concept has a background, empty dict otherwise
+        """
+        if concept and getattr(concept, 'bg_url', None):
+            return {'bg_url': concept.bg_url}
+        return {}

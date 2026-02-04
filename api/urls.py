@@ -14,6 +14,14 @@ from .checklist_views import (
     ChecklistImageUploadView, SectionImageUploadView, ItemImageCreateView,
     MarkdownPreviewView, ChecklistGameSelectView, ChecklistAvailableTrophiesView
 )
+from .notification_views import (
+    NotificationListView, NotificationMarkReadView, NotificationMarkAllReadView,
+    NotificationSSEView, AdminSendNotificationView, NotificationBulkDeleteView,
+    NotificationDeleteView, NotificationShareImageGenerateView, NotificationShareImageView,
+    NotificationShareImageStatusView, NotificationShareImageHTMLView, NotificationRatingView,
+    AdminNotificationPreviewView, AdminTargetCountView, AdminUserSearchView
+)
+from .shareable_views import ShareableImageHTMLView
 
 app_name = 'api'
 
@@ -78,4 +86,30 @@ urlpatterns = [
 
     # Markdown preview
     path('markdown/preview/', MarkdownPreviewView.as_view(), name='markdown-preview'),
+
+    # Notification endpoints
+    path('notifications/', NotificationListView.as_view(), name='notification-list'),
+    path('notifications/sse/', NotificationSSEView.as_view(), name='notification-sse'),
+    path('notifications/mark-all-read/', NotificationMarkAllReadView.as_view(), name='notification-mark-all-read'),
+    path('notifications/bulk-delete/', NotificationBulkDeleteView.as_view(), name='notification-bulk-delete'),
+    path('admin/notifications/send/', AdminSendNotificationView.as_view(), name='admin-send-notification'),
+    path('admin/notifications/preview/', AdminNotificationPreviewView.as_view(), name='admin-notification-preview'),
+    path('admin/notifications/target-count/', AdminTargetCountView.as_view(), name='admin-notification-target-count'),
+    path('admin/notifications/user-search/', AdminUserSearchView.as_view(), name='admin-notification-user-search'),
+
+    # Platinum share image endpoints (must be before generic <int:pk>/ route)
+    path('notifications/<int:pk>/share-image/generate/', NotificationShareImageGenerateView.as_view(), name='notification-share-image-generate'),
+    path('notifications/<int:pk>/share-image/status/', NotificationShareImageStatusView.as_view(), name='notification-share-image-status'),
+    path('notifications/<int:pk>/share-image/html/', NotificationShareImageHTMLView.as_view(), name='notification-share-image-html'),
+    path('notifications/<int:pk>/share-image/<str:format_type>/', NotificationShareImageView.as_view(), name='notification-share-image'),
+
+    # Notification rating endpoint (for platinum notifications)
+    path('notifications/<int:pk>/rating/', NotificationRatingView.as_view(), name='notification-rating'),
+
+    # Generic notification detail routes (must be after more specific routes)
+    path('notifications/<int:pk>/read/', NotificationMarkReadView.as_view(), name='notification-mark-read'),
+    path('notifications/<int:pk>/', NotificationDeleteView.as_view(), name='notification-delete'),
+
+    # Shareable image endpoints (EarnedTrophy-based, for My Shareables page)
+    path('shareables/platinum/<int:earned_trophy_id>/html/', ShareableImageHTMLView.as_view(), name='shareable-platinum-html'),
 ]

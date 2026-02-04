@@ -1,0 +1,461 @@
+{% extends 'base.html' %}
+{% load static humanize %}
+
+{% block title %}Notification Center{% endblock %}
+
+{% block content %}
+<div class="container mx-auto p-4">
+    <div class="flex flex-col lg:flex-row justify-between items-start lg:items-center mb-6">
+        <h1 class="text-3xl font-bold mb-4 lg:mb-0">Notification Center</h1>
+        <div class="flex gap-2">
+            <a href="{% url 'admin_notification_history' %}" class="btn btn-secondary btn-sm">
+                History
+            </a>
+            <a href="{% url 'admin_scheduled_notifications' %}" class="btn btn-secondary btn-sm">
+                Scheduled
+                {% if pending_scheduled %}
+                    <span class="badge badge-primary ml-1">{{ pending_scheduled|length }}</span>
+                {% endif %}
+            </a>
+        </div>
+    </div>
+
+    {% if messages %}
+        {% for message in messages %}
+            <div class="alert {% if message.tags == 'error' %}alert-error{% elif message.tags == 'warning' %}alert-warning{% else %}alert-success{% endif %} mb-4">
+                <span>{{ message }}</span>
+            </div>
+        {% endfor %}
+    {% endif %}
+
+    <div class="flex flex-col xl:flex-row gap-6">
+        <div class="flex-1">
+            <form method="post" enctype="multipart/form-data" class="space-y-6" id="notification-form">
+                {% csrf_token %}
+
+                <div class="card bg-base-100 border-2 border-base-300">
+                    <div class="card-body">
+                        <h2 class="card-title mb-4">Compose Notification</h2>
+
+                        {# Basic Info #}
+                        <div class="space-y-4">
+                            <div class="form-control">
+                                <div class="flex items-center justify-between mb-2">
+                                    <span class="label-text font-semibold">Notification Type</span>
+                                    <span class="badge badge-primary badge-sm">Required</span>
+                                </div>
+                                <select name="notification_type" class="select select-bordered">
+                                    {% for value, label in notification_types %}
+                                        <option value="{{ value }}" {% if value == 'admin_announcement' %}selected{% endif %}>
+                                            {{ label }}
+                                        </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+
+                            <div class="form-control">
+                                <div class="flex items-center justify-between mb-2">
+                                    <span class="label-text font-semibold">Title</span>
+                                    <span class="label-text-alt" id="title-count">0/255</span>
+                                </div>
+                                <input type="text" name="title" id="title-input" maxlength="255"
+                                       class="input input-bordered" required
+                                       placeholder="e.g., New Feature Released, System Maintenance Notice">
+                                <div class="mt-1">
+                                    <span class="label-text-alt text-xs">
+                                        <svg class="w-3 h-3 inline" fill="currentColor" viewBox="0 0 20 20">
+                                            <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/>
+                                        </svg>
+                                        Short, descriptive title that appears in notification list
+                                    </span>
+                                </div>
+                            </div>
+
+                            <div class="form-control">
+                                <div class="flex items-center justify-between mb-2">
+                                    <span class="label-text font-semibold">Message</span>
+                                    <span class="label-text-alt" id="message-count">0/1000</span>
+                                </div>
+                                <textarea name="message" id="message-input" maxlength="1000" rows="4"
+                                          class="textarea textarea-bordered" required
+                                          placeholder="Brief summary of the notification. For longer content, use the Detail Content section below."></textarea>
+                                <div class="mt-1">
+                                    <span class="label-text-alt text-xs">
+                                        <svg class="w-3 h-3 inline" fill="currentColor" viewBox="0 0 20 20">
+                                            <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/>
+                                        </svg>
+                                        Keep it concise - detailed information goes in the Detail section
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="divider">Display Settings</div>
+
+                        {# Display Settings #}
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div class="form-control">
+                                <div class="mb-2">
+                                    <span class="label-text font-semibold">Icon</span>
+                                </div>
+                                <input type="text" name="icon" id="icon-input" value="📢"
+                                       class="input input-bordered" maxlength="50"
+                                       placeholder="📢">
+                                <div class="mt-1">
+                                    <span class="label-text-alt text-xs">Emoji or icon character</span>
+                                </div>
+                            </div>
+                            <div class="form-control">
+                                <div class="mb-2">
+                                    <span class="label-text font-semibold">Priority</span>
+                                </div>
+                                <select name="priority" id="priority-input" class="select select-bordered">
+                                    {% for value, label in priority_choices %}
+                                        <option value="{{ value }}" {% if value == 'normal' %}selected{% endif %}>
+                                            {{ label }}
+                                        </option>
+                                    {% endfor %}
+                                </select>
+                                <div class="mt-1">
+                                    <span class="label-text-alt text-xs">High/Urgent show warning badge</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="divider">Action Button</div>
+
+                        {# Action Button #}
+                        <div class="space-y-4">
+                            <div class="form-control">
+                                <div class="flex items-center justify-between mb-2">
+                                    <span class="label-text font-semibold">Action URL</span>
+                                    <span class="label-text-alt">Optional</span>
+                                </div>
+                                <input type="url" name="action_url" id="action-url-input"
+                                       class="input input-bordered" placeholder="https://example.com/feature">
+                                <div class="mt-1">
+                                    <span class="label-text-alt text-xs">Link users will navigate to when clicking action button</span>
+                                </div>
+                            </div>
+
+                            <div class="form-control">
+                                <div class="flex items-center justify-between mb-2">
+                                    <span class="label-text font-semibold">Button Text</span>
+                                    <span class="label-text-alt">Optional</span>
+                                </div>
+                                <input type="text" name="action_text" id="action-text-input" maxlength="100"
+                                       class="input input-bordered" placeholder="Learn More">
+                                <div class="mt-1">
+                                    <span class="label-text-alt text-xs">Only shows if Action URL is provided</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card bg-base-100 border-2 border-base-300">
+                    <div class="card-body">
+                        <div class="flex items-center justify-between mb-4">
+                            <h2 class="card-title">Content Sections</h2>
+                            <label class="label cursor-pointer gap-2">
+                                <span class="label-text text-sm">Legacy Markdown Mode</span>
+                                <input type="checkbox" id="legacy-mode-toggle" class="toggle toggle-sm" />
+                            </label>
+                        </div>
+
+                        <!-- Structured Sections (default) -->
+                        <div id="structured-sections-container">
+                            <div class="space-y-4" id="sections-list">
+                                <!-- Section cards populated by JS -->
+                            </div>
+
+                            <button type="button" id="add-section-btn" class="btn btn-outline btn-sm mt-4 gap-2">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                                    <path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clip-rule="evenodd"/>
+                                </svg>
+                                Add Section
+                            </button>
+
+                            <div class="alert alert-info text-xs mt-4">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                                    <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/>
+                                </svg>
+                                <div>
+                                    <strong>Formatting:</strong> *bold*, _italic_, [link](url), `code`, - bullets<br>
+                                    <strong>Limits:</strong> 5 sections max, 100 char headers, 800 char content
+                                </div>
+                            </div>
+
+                            <input type="hidden" name="sections" id="sections-data-input" />
+                        </div>
+
+                        <!-- Legacy Markdown (hidden by default) -->
+                        <div id="legacy-markdown-container" class="hidden">
+                            <div class="form-control">
+                                <div class="flex items-center justify-between mb-2">
+                                    <span class="label-text font-semibold">Rich Text Detail</span>
+                                    <span class="label-text-alt" id="detail-count">0/2500</span>
+                                </div>
+                                <textarea name="detail" id="detail-input" maxlength="2500" rows="12"
+                                          class="textarea textarea-bordered font-mono text-sm w-full"
+                                          placeholder="Add detailed content with markdown formatting..."></textarea>
+
+                                {# Markdown Help #}
+                                <div class="mt-2 text-xs text-base-content/60">
+                                    <details>
+                                        <summary class="cursor-pointer hover:text-base-content">📝 Markdown formatting guide</summary>
+                                        <div class="mt-2 space-y-1 pl-3 bg-base-200 p-3 rounded-lg">
+                                            <div class="font-semibold text-base-content text-sm mb-2">Text Formatting:</div>
+                                            <div class="grid grid-cols-1 gap-1">
+                                                <div><code class="text-xs">**bold text**</code> → <strong>bold text</strong></div>
+                                                <div><code class="text-xs">*italic text*</code> → <em>italic text</em></div>
+                                                <div><code class="text-xs">`code`</code> → <code>code</code></div>
+                                            </div>
+
+                                            <div class="font-semibold text-base-content text-sm mt-3 mb-2">Lists & Links:</div>
+                                            <div class="grid grid-cols-1 gap-1">
+                                                <div><code class="text-xs">- Item</code> → Bullet list</div>
+                                                <div><code class="text-xs">[Link text](url)</code> → <a href="#" class="link">Link text</a></div>
+                                            </div>
+                                        </div>
+                                    </details>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="divider">Banner Image</div>
+
+                        <div class="form-control">
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="label-text font-semibold">Upload Banner Image</span>
+                                <span class="label-text-alt">Optional</span>
+                            </div>
+                            <input type="file" name="banner_image" id="banner-image-input"
+                                   accept="image/jpeg,image/png,image/webp,image/gif"
+                                   class="file-input file-input-bordered w-full" />
+                            <div class="mt-1">
+                                <span class="label-text-alt text-xs">
+                                    <svg class="w-3 h-3 inline" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/>
+                                    </svg>
+                                    Max 5MB • JPEG, PNG, WEBP, or GIF • Displayed at top of notification
+                                </span>
+                            </div>
+
+                            <div id="banner-preview" class="hidden mt-3">
+                                <div class="relative">
+                                    <img id="banner-preview-img" class="w-full max-h-48 object-cover rounded-lg border-2 border-base-300" alt="Banner preview" />
+                                    <button type="button" class="btn btn-xs btn-error btn-circle absolute top-2 right-2" id="clear-banner-btn" title="Remove image">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                                        </svg>
+                                    </button>
+                                </div>
+                                <p class="text-xs text-base-content/60 mt-2 text-center">Banner preview</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card bg-base-100 border-2 border-base-300">
+                    <div class="card-body">
+                        <div class="flex items-center gap-2 mb-4">
+                            <h2 class="card-title">Target Audience</h2>
+                            <span class="badge badge-primary badge-sm">Required</span>
+                        </div>
+
+                        <div class="form-control">
+                            <div class="mb-2">
+                                <span class="label-text font-semibold">Who should receive this notification?</span>
+                            </div>
+                            <select name="target_type" id="target-type" class="select select-bordered">
+                                {% for value, label in target_types %}
+                                    <option value="{{ value }}">{{ label }}</option>
+                                {% endfor %}
+                            </select>
+                            <div class="mt-1">
+                                <span class="label-text-alt text-xs">
+                                    <svg class="w-3 h-3 inline" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/>
+                                    </svg>
+                                    Select target audience based on subscription tier or verification status
+                                </span>
+                            </div>
+                        </div>
+
+                        {# Individual User Selection #}
+                        <div id="criteria-individual" class="hidden mt-4">
+                            <div class="divider my-2">Select Individual Users</div>
+                            <div class="form-control">
+                                <div class="mb-2">
+                                    <span class="label-text font-semibold">Search Users</span>
+                                </div>
+                                <div class="relative">
+                                    <input type="text" id="user-search" class="input input-bordered w-full"
+                                           placeholder="Type PSN username or email..."
+                                           autocomplete="off">
+                                    <div id="user-search-dropdown" class="hidden absolute z-50 bg-base-100 border border-base-300 rounded-lg shadow-lg mt-1 w-full max-h-48 overflow-y-auto"></div>
+                                </div>
+                                <div class="mt-1">
+                                    <span class="label-text-alt text-xs">Search and click to add users to recipient list</span>
+                                </div>
+                            </div>
+                            <div id="selected-users" class="flex flex-wrap gap-2 mt-3"></div>
+                            <input type="hidden" name="user_ids" id="user-ids-input">
+                        </div>
+
+                        {# Recipient Count #}
+                        <div class="alert alert-info mt-4">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                            </svg>
+                            <span>
+                                <strong>Estimated recipients:</strong>
+                                <span id="recipient-estimate" class="font-bold text-lg">0</span>
+                            </span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card bg-base-100 border-2 border-base-300">
+                    <div class="card-body">
+                        <h2 class="card-title mb-4">Scheduling</h2>
+
+                        <div class="form-control">
+                            <label class="cursor-pointer label justify-start gap-4 p-4 bg-base-200 rounded-lg hover:bg-base-300 transition-colors">
+                                <input type="checkbox" id="schedule-toggle" class="toggle toggle-primary">
+                                <div>
+                                    <span class="label-text font-semibold">Schedule for later</span>
+                                    <p class="text-xs text-base-content/60 mt-1">Send notification at a specific date and time</p>
+                                </div>
+                            </label>
+                        </div>
+
+                        <div id="schedule-datetime" class="hidden">
+                            <div class="divider my-3">Schedule Details</div>
+                            <div class="form-control">
+                                <div class="flex items-center justify-between mb-2">
+                                    <span class="label-text font-semibold">Send At</span>
+                                    <span class="badge badge-info badge-sm">Future date required</span>
+                                </div>
+                                <input type="datetime-local" name="scheduled_datetime"
+                                       class="input input-bordered">
+                                <div class="mt-1">
+                                    <span class="label-text-alt text-xs">
+                                        <svg class="w-3 h-3 inline" fill="currentColor" viewBox="0 0 20 20">
+                                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clip-rule="evenodd"/>
+                                        </svg>
+                                        Notifications are processed hourly by Render cron job
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex flex-col sm:flex-row gap-3">
+                    <button type="submit" name="action" value="send_now" id="send-btn"
+                            class="btn btn-primary flex-1 gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                        </svg>
+                        Send Now
+                    </button>
+                    <button type="submit" name="action" value="schedule" id="schedule-btn"
+                            class="btn btn-secondary flex-1 gap-2 hidden">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                        </svg>
+                        Schedule Notification
+                    </button>
+                    <button type="button" class="btn btn-ghost gap-2" onclick="document.getElementById('preview-modal').showModal()">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                        </svg>
+                        Preview
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        <aside class="w-full xl:w-96">
+            <div class="card bg-base-100 border-2 border-base-300 xl:sticky xl:top-20">
+                <div class="card-body">
+                    <div class="flex items-center gap-2 mb-3">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                        </svg>
+                        <h3 class="card-title text-lg">Live Preview</h3>
+                    </div>
+                    <div class="bg-base-200/50 rounded-lg p-1 mb-3">
+                        <p class="text-xs text-base-content/60 text-center">Updates as you type</p>
+                    </div>
+                    <div id="notification-preview" class="p-4 bg-base-200 rounded-lg min-h-[120px] border-2 border-base-300">
+                        <p class="text-base-content/60 text-center text-sm">Fill out the form to see preview</p>
+                    </div>
+                </div>
+            </div>
+
+            {% if recent_logs %}
+                <div class="card bg-base-100 border-2 border-base-300 mt-4">
+                    <div class="card-body">
+                        <div class="flex items-center justify-between mb-3">
+                            <div class="flex items-center gap-2">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-success" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                                <h3 class="card-title text-lg">Recent Sends</h3>
+                            </div>
+                            <span class="badge badge-ghost badge-sm">Last 5</span>
+                        </div>
+                        <div class="space-y-2">
+                            {% for log in recent_logs %}
+                                <div class="p-3 bg-base-200 rounded-lg hover:bg-base-300 transition-colors">
+                                    <div class="font-medium text-sm truncate mb-1">{{ log.title }}</div>
+                                    <div class="flex items-center gap-2 text-xs text-base-content/60">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                                        </svg>
+                                        <span>{{ log.recipient_count|intcomma }} recipients</span>
+                                        <span>•</span>
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                        </svg>
+                                        <span>{{ log.sent_at|naturaltime }}</span>
+                                    </div>
+                                </div>
+                            {% endfor %}
+                        </div>
+                        <a href="{% url 'admin_notification_history' %}" class="btn btn-ghost btn-sm btn-block mt-3">
+                            View All History →
+                        </a>
+                    </div>
+                </div>
+            {% endif %}
+        </aside>
+    </div>
+</div>
+
+<dialog id="preview-modal" class="modal">
+    <div class="modal-box max-w-md">
+        <h3 class="font-bold text-lg mb-4">Notification Preview</h3>
+        <div id="modal-preview-content" class="p-4 bg-base-200 rounded-lg">
+        </div>
+        <div class="modal-action">
+            <form method="dialog">
+                <button class="btn">Close</button>
+            </form>
+        </div>
+    </div>
+    <form method="dialog" class="modal-backdrop">
+        <button>close</button>
+    </form>
+</dialog>
+{% endblock %}
+
+{% block js_scripts %}
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<script src="{% static 'js/admin-notifications.js' %}"></script>
+{% endblock %}

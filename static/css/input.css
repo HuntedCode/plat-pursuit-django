@@ -107,6 +107,34 @@
   .card-img-container {
     @apply border-2 border-base-300 group-hover:scale-105 group-focus-within:scale-105 hover:animate-pulse;
   }
+
+  /* Section container - outer page sections */
+  .section-container {
+    @apply shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 p-0 lg:p-4;
+  }
+
+  /* Panel container - sidebars, filter panels, split panes */
+  .panel-container {
+    @apply bg-base-200 rounded-lg shadow-md border-2 border-base-300;
+  }
+
+  /* Interactive card with standard hover effect */
+  .card-interactive {
+    @apply transition-all duration-300 cursor-pointer hover:scale-105;
+  }
+
+  /* Interactive card hover variants */
+  .card-hover-primary {
+    @apply hover:border-primary hover:shadow-primary;
+  }
+
+  .card-hover-accent {
+    @apply hover:border-accent hover:shadow-accent;
+  }
+
+  .card-hover-secondary {
+    @apply hover:border-secondary hover:shadow-secondary;
+  }
   .trophy-card-bronze {
     @apply hover:border-trophy-bronze hover:shadow-trophy-bronze focus-within:border-trophy-bronze focus-within:shadow-trophy-bronze;
   }

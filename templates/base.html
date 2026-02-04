@@ -39,7 +39,7 @@
      crossorigin="anonymous"></script>
     {% block extra_head %}{% endblock %}
   </head>
-  <body class="bg-base-100 text-base-content min-h-screen flex flex-col" {% if image_urls.bg_url %}style="background-image: url('{{ image_urls.bg_url }}'); background-size: cover; background-position: center; background-attachment: fixed;"{% endif %}>
+  <body class="bg-base-100 text-base-content min-h-screen flex flex-col" {% if image_urls.bg_url %}style="background-image: url('{{ image_urls.bg_url }}'); background-size: cover; background-position: center; background-attachment: fixed;"{% elif user_theme_style %}style="{{ user_theme_style }}"{% endif %}>
     <a href="#main-content" class="sr-only focus:not-sr-only focus:absolute focus:top-0 focus:left-0 focus:z-50 focus:p-4 focus:bg-primary focus:text-primary-content focus:outline-none focus:ring-2 focus:ring-primary-focus">
       Skip to main content
     </a>
@@ -93,8 +93,13 @@
     <!-- Toast Notification Container -->
     <div id="toast-container" class="toast toast-top toast-end z-50"></div>
 
+    <!-- Unsaved Changes Modal (shared across pages) -->
+    {% include 'partials/unsaved_changes_modal.html' %}
+
     <!-- Load shared utilities first -->
     <script src="{% static 'js/utils.js' %}"></script>
+    <script src="{% static 'js/celebrations.js' %}"></script>
+    <script src="{% static 'js/notifications.js' %}"></script>
     <script src="{% static 'js/main.js' %}"></script>
     {% block js_scripts %}{% endblock %}
   </body>

@@ -6,22 +6,22 @@
     <div id="game-detail-container"
          data-base-url="{% url 'game_detail' game.np_communication_id %}"
          data-scroll-key="gameDetailScrollPos_{{ game.np_communication_id }}">
-        <section class="shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 w-full p-0 lg:p-4">
+        <section class="section-container w-full">
             {% include 'partials/breadcrumb.html' with items=breadcrumb %}
             {% include 'trophies/partials/game_detail/game_detail_header.html' %}
         </section>
 
     <div class="flex flex-col xl:flex-row gap-4 mt-8 items-start">
         {% if game.concept.guide_slug %}
-            <section class="shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 w-full xl:w-1/3 p-0 lg:p-4 ">
+            <section class="section-container w-full xl:w-1/3">
                 {% include 'trophies/partials/game_detail/community_ratings.html' %}
             </section>
 
-            <section class="shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 w-full xl:w-2/3 p-0 lg:p-4 xl:sticky xl:top-2">
+            <section class="section-container w-full xl:w-2/3 xl:sticky xl:top-2">
                 {% include 'trophies/partials/game_detail/guide_embed.html' %}
             </section>
         {% else %}
-            <section class="flex flex-col lg:flex-row shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 w-auto p-4 mx-auto gap-4 items-center lg:items-start">
+            <section class="flex flex-col lg:flex-row section-container w-auto !p-4 mx-auto gap-4 items-center lg:items-start">
                 {% include 'trophies/partials/game_detail/community_ratings.html' %}
             </section>
         {% endif %}
@@ -38,14 +38,14 @@
     {% endif %}
 
     {% if trophies_syncing %}
-        <section class="shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 w-full p-0 lg:p-4 mt-8">
+        <section class="section-container w-full mt-8">
             <div class="alert alert-info mb-4" role="status" aria-live="polite">
                 <span class="loading loading-spinner" aria-hidden="true"></span>
                 Trophies are syncing—check back in a few moments for full details!
             </div>
         </section>
     {% else %}
-        <section class="shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 w-full p-0 lg:p-4 mt-8 mx-auto">
+        <section class="section-container w-full mt-8 mx-auto">
             <div class="card bg-base-100 border-4 border-base-300 shadow-md shadow-neutral">
                 <div class="card-body px-4 py-2">
                     <form id="filter-form" method="get" class="mb-4">
@@ -82,7 +82,7 @@
         {% for group_id, trophies in grouped_trophies.items %}
             {% with trophy_groups|dict_get:group_id as group %}
                 {% with profile_group_totals|dict_get:group_id as profile_group_total %}
-                    <section class="shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 w-full p-0 lg:p-4 mt-8">
+                    <section class="section-container w-full mt-8">
                         {% include 'trophies/partials/game_detail/trophy_group_card.html' %}
                         {% include 'trophies/partials/game_detail/trophy_list.html' %}
                     </section>

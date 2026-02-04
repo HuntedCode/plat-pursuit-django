@@ -30,3 +30,24 @@ def moderation(request):
     return {
         'pending_reports_count': pending_reports_count
     }
+
+
+def premium_theme_background(request):
+    """
+    Inject premium user's gradient theme as a fallback site-wide background.
+
+    This provides the user_theme_style variable to templates, which is used
+    when no page-specific game background (image_urls.bg_url) is set.
+    """
+    if not request.user.is_authenticated:
+        return {}
+
+    profile = getattr(request.user, 'profile', None)
+    if not profile or not profile.user_is_premium:
+        return {}
+
+    if profile.selected_theme:
+        from trophies.themes import get_theme_style
+        return {'user_theme_style': get_theme_style(profile.selected_theme)}
+
+    return {}

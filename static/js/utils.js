@@ -170,15 +170,19 @@ const API = {
      * @returns {Promise} Response data or throws error
      */
     async request(url, options = {}) {
-        const defaultOptions = {
-            credentials: 'same-origin',
-            headers: {
-                'X-CSRFToken': CSRFToken.get(),
-                ...options.headers
-            }
+        // Merge headers separately to ensure CSRF token is always included
+        const mergedHeaders = {
+            ...options.headers,
+            'X-CSRFToken': CSRFToken.get()
         };
 
-        const response = await fetch(url, { ...defaultOptions, ...options });
+        const finalOptions = {
+            credentials: 'same-origin',
+            ...options,
+            headers: mergedHeaders
+        };
+
+        const response = await fetch(url, finalOptions);
 
         if (!response.ok) {
             const error = new Error(`API request failed: ${response.status}`);
@@ -207,21 +211,25 @@ const API = {
     },
 
     async post(url, data, options = {}) {
-        const headers = { 'Content-Type': 'application/json', ...options.headers };
         return this.request(url, {
             ...options,
             method: 'POST',
-            headers,
+            headers: {
+                'Content-Type': 'application/json',
+                ...options.headers
+            },
             body: JSON.stringify(data)
         });
     },
 
     async put(url, data, options = {}) {
-        const headers = { 'Content-Type': 'application/json', ...options.headers };
         return this.request(url, {
             ...options,
             method: 'PUT',
-            headers,
+            headers: {
+                'Content-Type': 'application/json',
+                ...options.headers
+            },
             body: JSON.stringify(data)
         });
     },
@@ -231,9 +239,242 @@ const API = {
     }
 };
 
+/**
+ * Unsaved Changes Warning Manager
+ * Reusable system for warning users before navigating away with unsaved changes
+ */
+const UnsavedChangesManager = {
+    _config: null,
+    _pendingNavigation: null,
+    _isNavigatingAway: false,
+    _initialized: false,
+    _boundHandlers: null,
+
+    /**
+     * Initialize the unsaved changes warning system
+     * @param {Object} config Configuration object
+     * @param {Function} config.hasUnsavedChanges - REQUIRED: Returns true if there are unsaved changes
+     * @param {Function} config.onSaveAndLeave - OPTIONAL: Async function to save before navigating
+     * @param {boolean} config.showSaveButton - OPTIONAL: Whether to show "Save & Leave" button (default: false)
+     * @param {string} config.modalId - OPTIONAL: Custom modal element ID (default: 'unsaved-changes-modal')
+     */
+    init(config) {
+        if (this._initialized) {
+            this.destroy();
+        }
+
+        if (!config || typeof config.hasUnsavedChanges !== 'function') {
+            console.error('UnsavedChangesManager: hasUnsavedChanges function is required');
+            return;
+        }
+
+        this._config = {
+            hasUnsavedChanges: config.hasUnsavedChanges,
+            onSaveAndLeave: config.onSaveAndLeave || null,
+            showSaveButton: config.showSaveButton || false,
+            modalId: config.modalId || 'unsaved-changes-modal'
+        };
+
+        this._pendingNavigation = null;
+        this._isNavigatingAway = false;
+
+        this._setupModal();
+        this._setupEventListeners();
+        this._initialized = true;
+    },
+
+    /**
+     * Setup modal button handlers
+     */
+    _setupModal() {
+        const modal = document.getElementById(this._config.modalId);
+        if (!modal) return;
+
+        const stayBtn = document.getElementById('unsaved-stay-btn');
+        const discardBtn = document.getElementById('unsaved-discard-btn');
+        const saveBtn = document.getElementById('unsaved-save-btn');
+
+        // Show/hide save button based on config
+        if (saveBtn) {
+            if (this._config.showSaveButton && this._config.onSaveAndLeave) {
+                saveBtn.classList.remove('hidden');
+            } else {
+                saveBtn.classList.add('hidden');
+            }
+        }
+
+        // Store bound handlers for cleanup
+        this._boundHandlers = {
+            stay: () => {
+                this._pendingNavigation = null;
+                modal.close();
+            },
+            discard: () => {
+                this._isNavigatingAway = true;
+                modal.close();
+                if (this._pendingNavigation) {
+                    window.location.href = this._pendingNavigation;
+                }
+            },
+            save: async () => {
+                if (!this._config.onSaveAndLeave) return;
+
+                try {
+                    saveBtn.classList.add('loading');
+                    await this._config.onSaveAndLeave(this._pendingNavigation);
+                    ToastManager.show('Saved!', 'success');
+                    this._isNavigatingAway = true;
+                    modal.close();
+                    if (this._pendingNavigation) {
+                        window.location.href = this._pendingNavigation;
+                    }
+                } catch (error) {
+                    ToastManager.show(error.message || 'Failed to save', 'error');
+                } finally {
+                    saveBtn.classList.remove('loading');
+                }
+            }
+        };
+
+        if (stayBtn) {
+            stayBtn.addEventListener('click', this._boundHandlers.stay);
+        }
+        if (discardBtn) {
+            discardBtn.addEventListener('click', this._boundHandlers.discard);
+        }
+        if (saveBtn && this._config.showSaveButton) {
+            saveBtn.addEventListener('click', this._boundHandlers.save);
+        }
+    },
+
+    /**
+     * Setup navigation event listeners
+     */
+    _setupEventListeners() {
+        // Bound handlers for cleanup
+        this._boundHandlers.click = (e) => {
+            const link = e.target.closest('a');
+            if (!link) return;
+
+            const href = link.getAttribute('href');
+            if (!href || href.startsWith('#') || href.startsWith('javascript:')) return;
+            if (link.target === '_blank') return;
+
+            if (this._isNavigatingAway || !this._config.hasUnsavedChanges()) return;
+
+            e.preventDefault();
+            this._showModal(href);
+        };
+
+        this._boundHandlers.beforeunload = (e) => {
+            if (this._isNavigatingAway || !this._config.hasUnsavedChanges()) return;
+
+            e.preventDefault();
+            e.returnValue = '';
+            return '';
+        };
+
+        this._boundHandlers.popstate = () => {
+            if (this._isNavigatingAway || !this._config.hasUnsavedChanges()) return;
+
+            history.pushState(null, '', window.location.href);
+            this._showModal(document.referrer || '/');
+        };
+
+        // Allow form submissions to proceed without warning
+        this._boundHandlers.submit = () => {
+            this._isNavigatingAway = true;
+        };
+
+        document.addEventListener('click', this._boundHandlers.click);
+        window.addEventListener('beforeunload', this._boundHandlers.beforeunload);
+        window.addEventListener('popstate', this._boundHandlers.popstate);
+        document.addEventListener('submit', this._boundHandlers.submit);
+
+        // Push initial state for popstate handling
+        history.pushState(null, '', window.location.href);
+    },
+
+    /**
+     * Show the unsaved changes modal
+     * @param {string} targetUrl - URL the user is trying to navigate to
+     */
+    _showModal(targetUrl) {
+        const modal = document.getElementById(this._config.modalId);
+        if (!modal) {
+            // Fallback if modal doesn't exist
+            if (confirm('You have unsaved changes. Leave anyway?')) {
+                this._isNavigatingAway = true;
+                window.location.href = targetUrl;
+            }
+            return;
+        }
+
+        this._pendingNavigation = targetUrl;
+        modal.showModal();
+    },
+
+    /**
+     * Mark form as clean (call after successful save)
+     * This allows navigation without warning
+     */
+    markAsClean() {
+        // The hasUnsavedChanges callback should return false after save
+        // This method is a no-op but provides semantic clarity
+    },
+
+    /**
+     * Force navigation without checking for changes
+     * @param {string} url - URL to navigate to
+     */
+    forceNavigate(url) {
+        this._isNavigatingAway = true;
+        window.location.href = url;
+    },
+
+    /**
+     * Check if the manager is currently active
+     * @returns {boolean}
+     */
+    isActive() {
+        return this._initialized;
+    },
+
+    /**
+     * Cleanup and destroy the manager
+     */
+    destroy() {
+        if (!this._initialized) return;
+
+        // Remove event listeners
+        if (this._boundHandlers) {
+            document.removeEventListener('click', this._boundHandlers.click);
+            window.removeEventListener('beforeunload', this._boundHandlers.beforeunload);
+            window.removeEventListener('popstate', this._boundHandlers.popstate);
+            document.removeEventListener('submit', this._boundHandlers.submit);
+
+            // Remove modal button listeners
+            const stayBtn = document.getElementById('unsaved-stay-btn');
+            const discardBtn = document.getElementById('unsaved-discard-btn');
+            const saveBtn = document.getElementById('unsaved-save-btn');
+
+            if (stayBtn) stayBtn.removeEventListener('click', this._boundHandlers.stay);
+            if (discardBtn) discardBtn.removeEventListener('click', this._boundHandlers.discard);
+            if (saveBtn) saveBtn.removeEventListener('click', this._boundHandlers.save);
+        }
+
+        this._config = null;
+        this._pendingNavigation = null;
+        this._isNavigatingAway = false;
+        this._boundHandlers = null;
+        this._initialized = false;
+    }
+};
+
 // Export for use in other modules
 window.PlatPursuit = window.PlatPursuit || {};
 window.PlatPursuit.ToastManager = ToastManager;
 window.PlatPursuit.CSRFToken = CSRFToken;
 window.PlatPursuit.TimeFormatter = TimeFormatter;
 window.PlatPursuit.API = API;
+window.PlatPursuit.UnsavedChangesManager = UnsavedChangesManager;

@@ -33,13 +33,16 @@ document.addEventListener('DOMContentLoaded', function() {
 
     if (themeToggle && sunIcon && moonIcon) {
         function updateThemeIcons() {
-            const isDark = document.documentElement.getAttribute('data-theme') === 'plat-pursuit-dark';
+            // Read from localStorage (source of truth) to avoid race conditions with DOM attribute
+            const theme = localStorage.getItem('theme') || 'plat-pursuit-dark';
+            const isDark = theme === 'plat-pursuit-dark';
             sunIcon.classList.toggle('hidden', !isDark);
             moonIcon.classList.toggle('hidden', isDark);
         }
 
         themeToggle.addEventListener('click', () => {
-            const currentTheme = document.documentElement.getAttribute('data-theme');
+            // Read from localStorage (source of truth) to avoid race conditions
+            const currentTheme = localStorage.getItem('theme') || 'plat-pursuit-dark';
             const newTheme = currentTheme === 'plat-pursuit-dark' ? 'plat-pursuit-light' : 'plat-pursuit-dark';
             document.documentElement.setAttribute('data-theme', newTheme);
             localStorage.setItem('theme', newTheme);

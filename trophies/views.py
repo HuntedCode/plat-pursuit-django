@@ -2660,7 +2660,7 @@ class ModerationLogView(ListView):
 
 # Checklist Views
 
-class ChecklistDetailView(PremiumRequiredMixin, ProfileHotbarMixin, DetailView):
+class ChecklistDetailView(ProfileHotbarMixin, DetailView):
     """
     Display checklist detail with sections, items, and progress tracking.
 
@@ -2830,7 +2830,7 @@ class ChecklistDetailView(PremiumRequiredMixin, ProfileHotbarMixin, DetailView):
         return context
 
 
-class ChecklistCreateView(PremiumRequiredMixin, LoginRequiredMixin, ProfileHotbarMixin, View):
+class ChecklistCreateView(LoginRequiredMixin, ProfileHotbarMixin, View):
     """
     Create a new checklist for a concept.
 
@@ -2879,7 +2879,7 @@ class ChecklistCreateView(PremiumRequiredMixin, LoginRequiredMixin, ProfileHotba
         return redirect('checklist_edit', checklist_id=checklist.id)
 
 
-class ChecklistEditView(PremiumRequiredMixin, LoginRequiredMixin, ProfileHotbarMixin, DetailView):
+class ChecklistEditView(LoginRequiredMixin, ProfileHotbarMixin, DetailView):
     """
     Edit a checklist (title, description, sections, items).
 
@@ -2953,7 +2953,7 @@ class ChecklistEditView(PremiumRequiredMixin, LoginRequiredMixin, ProfileHotbarM
         return context
 
 
-class MyChecklistsView(PremiumRequiredMixin, LoginRequiredMixin, ProfileHotbarMixin, TemplateView):
+class MyChecklistsView(LoginRequiredMixin, ProfileHotbarMixin, TemplateView):
     """
     Display user's checklists: drafts, published, and in-progress.
 
@@ -3004,5 +3004,92 @@ class MyChecklistsView(PremiumRequiredMixin, LoginRequiredMixin, ProfileHotbarMi
 
         # Active tab
         context['active_tab'] = self.request.GET.get('tab', 'drafts')
+
+        return context
+
+
+class MyShareablesView(LoginRequiredMixin, ProfileHotbarMixin, TemplateView):
+    """
+    My Shareables hub - centralized page for all shareable content.
+
+    Allows users to generate share images for any platinum trophy they've earned,
+    not just those that triggered a notification. Designed for extensibility to
+    support future shareable types (trophy cabinet, calendar, etc.).
+
+    Shows platinum trophies grouped by year with "Share" buttons.
+    Requires a linked PSN account.
+    """
+    template_name = 'shareables/my_shareables.html'
+    login_url = reverse_lazy('account_login')
+
+    def dispatch(self, request, *args, **kwargs):
+        """Require linked PSN account."""
+        if request.user.is_authenticated:
+            profile = getattr(request.user, 'profile', None)
+            if not profile or not profile.is_linked:
+                messages.info(request, "Link your PSN account to create shareables.")
+                return redirect('link_psn')
+        return super().dispatch(request, *args, **kwargs)
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        user = self.request.user
+        profile = user.profile if hasattr(user, 'profile') else None
+
+        if not profile:
+            context['platinums_by_year'] = {}
+            context['total_platinums'] = 0
+            return context
+
+        # Get user's platinum trophies (excluding shovelware)
+        earned_platinums = EarnedTrophy.objects.filter(
+            profile=profile,
+            earned=True,
+            trophy__trophy_type='platinum',
+            trophy__game__is_shovelware=False
+        ).select_related(
+            'trophy__game',
+            'trophy__game__concept'
+        ).order_by('-earned_date_time')
+
+        # Calculate platinum number for each trophy (for milestone display)
+        # We need to count platinums earned up to each one's date
+        platinum_list = list(earned_platinums)
+        total_count = len(platinum_list)
+
+        # Since list is ordered by -earned_date_time (newest first),
+        # the newest plat is #total_count, oldest is #1
+        for idx, et in enumerate(platinum_list):
+            # Platinum number = total - index (since newest is first)
+            et.platinum_number = total_count - idx
+            et.is_milestone = et.platinum_number % 10 == 0 and et.platinum_number > 0
+
+        # Group by year for organization
+        platinums_by_year = {}
+        for et in platinum_list:
+            year = et.earned_date_time.year if et.earned_date_time else 'Unknown'
+            if year not in platinums_by_year:
+                platinums_by_year[year] = []
+            platinums_by_year[year].append(et)
+
+        # Sort years descending (most recent first), with 'Unknown' at the end
+        sorted_years = sorted(
+            [y for y in platinums_by_year.keys() if y != 'Unknown'],
+            reverse=True
+        )
+        if 'Unknown' in platinums_by_year:
+            sorted_years.append('Unknown')
+
+        context['platinums_by_year'] = {year: platinums_by_year[year] for year in sorted_years}
+        context['total_platinums'] = earned_platinums.count()
+
+        # Active tab (for future extensibility)
+        context['active_tab'] = self.request.GET.get('tab', 'platinum_images')
+
+        # Breadcrumbs
+        context['breadcrumb'] = [
+            {'text': 'Home', 'url': reverse_lazy('home')},
+            {'text': 'My Shareables'},
+        ]
 
         return context

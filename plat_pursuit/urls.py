@@ -30,8 +30,15 @@ sitemaps = {
     'games': GameSitemap,
     'profiles': ProfileSitemap,
 }
-from trophies.views import GamesListView, TrophiesListView, ProfilesListView, SearchView, GameDetailView, ProfileDetailView, TrophyCaseView, ToggleSelectionView, BadgeListView, BadgeDetailView, GuideListView, ProfileSyncStatusView, TriggerSyncView, SearchSyncProfileView, AddSyncStatusView, LinkPSNView, ProfileVerifyView, TokenMonitoringView, BadgeCreationView, BadgeLeaderboardsView, OverallBadgeLeaderboardsView, MilestoneListView, CommentModerationView, ModerationActionView, ModerationLogView, ChecklistDetailView, ChecklistCreateView, ChecklistEditView, MyChecklistsView
+from trophies.views import GamesListView, TrophiesListView, ProfilesListView, SearchView, GameDetailView, ProfileDetailView, TrophyCaseView, ToggleSelectionView, BadgeListView, BadgeDetailView, GuideListView, ProfileSyncStatusView, TriggerSyncView, SearchSyncProfileView, AddSyncStatusView, LinkPSNView, ProfileVerifyView, TokenMonitoringView, BadgeCreationView, BadgeLeaderboardsView, OverallBadgeLeaderboardsView, MilestoneListView, CommentModerationView, ModerationActionView, ModerationLogView, ChecklistDetailView, ChecklistCreateView, ChecklistEditView, MyChecklistsView, MyShareablesView
 from users.views import CustomConfirmEmailView, stripe_webhook
+from notifications.views import (
+    NotificationInboxView,
+    AdminNotificationCenterView,
+    AdminNotificationHistoryView,
+    AdminScheduledNotificationsView,
+    AdminCancelScheduledView,
+)
 
 urlpatterns = [
     path("admin/", admin.site.urls),
@@ -48,6 +55,8 @@ urlpatterns = [
 
     path('milestones/', MilestoneListView.as_view(), name='milestones_list'),
 
+    path('notifications/', NotificationInboxView.as_view(), name='notification_inbox'),
+
     path('leaderboard/badges/', OverallBadgeLeaderboardsView.as_view(), name='overall_badge_leaderboards'),
     path('leaderboard/badges/<str:series_slug>/', BadgeLeaderboardsView.as_view(), name='badge_leaderboards' ),
 
@@ -58,6 +67,7 @@ urlpatterns = [
     path('checklists/<int:checklist_id>/edit/', ChecklistEditView.as_view(), name='checklist_edit'),
     path('checklists/create/<int:concept_id>/<str:np_communication_id>/', ChecklistCreateView.as_view(), name='checklist_create'),
     path('my-checklists/', MyChecklistsView.as_view(), name='my_checklists'),
+    path('my-shareables/', MyShareablesView.as_view(), name='my_shareables'),
 
     path('profiles/<str:psn_username>/trophy-case/', TrophyCaseView.as_view(), name='trophy_case'),
     path('toggle-selection/', ToggleSelectionView.as_view(), name='toggle-selection'),
@@ -69,6 +79,10 @@ urlpatterns = [
     path('staff/moderation/', CommentModerationView.as_view(), name='comment_moderation'),
     path('staff/moderation/action/<int:report_id>/', ModerationActionView.as_view(), name='moderation_action'),
     path('staff/moderation/log/', ModerationLogView.as_view(), name='moderation_log'),
+    path('staff/notifications/', AdminNotificationCenterView.as_view(), name='admin_notification_center'),
+    path('staff/notifications/history/', AdminNotificationHistoryView.as_view(), name='admin_notification_history'),
+    path('staff/notifications/scheduled/', AdminScheduledNotificationsView.as_view(), name='admin_scheduled_notifications'),
+    path('staff/notifications/scheduled/<int:pk>/cancel/', AdminCancelScheduledView.as_view(), name='admin_cancel_scheduled'),
 
     path('api/profile-verify/', ProfileVerifyView.as_view(), name='profile_verify'),
     path('api/trigger-sync/', TriggerSyncView.as_view(), name='trigger_sync'),

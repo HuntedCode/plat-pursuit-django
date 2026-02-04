@@ -1,0 +1,176 @@
+{% extends 'base.html' %}
+{% load static humanize %}
+
+{% block title %}Scheduled Notifications{% endblock %}
+
+{% block content %}
+<div class="container mx-auto p-4">
+    <div class="flex flex-col lg:flex-row justify-between items-start lg:items-center mb-6">
+        <h1 class="text-3xl font-bold mb-4 lg:mb-0">Scheduled Notifications</h1>
+        <div class="flex gap-2">
+            <a href="{% url 'admin_notification_center' %}" class="btn btn-secondary btn-sm">
+                Notification Center
+            </a>
+            <a href="{% url 'admin_notification_history' %}" class="btn btn-secondary btn-sm">
+                History
+            </a>
+        </div>
+    </div>
+
+    {% if messages %}
+        {% for message in messages %}
+            <div class="alert {% if message.tags == 'error' %}alert-error{% elif message.tags == 'warning' %}alert-warning{% else %}alert-success{% endif %} mb-4">
+                <span>{{ message }}</span>
+            </div>
+        {% endfor %}
+    {% endif %}
+
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
+        <a href="?status=pending" class="stat bg-base-100 border-2 {% if current_status == 'pending' %}border-primary{% else %}border-base-300{% endif %} rounded-box hover:border-primary transition-colors">
+            <div class="stat-title">Pending</div>
+            <div class="stat-value text-warning">{{ status_counts.pending }}</div>
+        </a>
+        <a href="?status=sent" class="stat bg-base-100 border-2 {% if current_status == 'sent' %}border-primary{% else %}border-base-300{% endif %} rounded-box hover:border-primary transition-colors">
+            <div class="stat-title">Sent</div>
+            <div class="stat-value text-success">{{ status_counts.sent }}</div>
+        </a>
+        <a href="?status=cancelled" class="stat bg-base-100 border-2 {% if current_status == 'cancelled' %}border-primary{% else %}border-base-300{% endif %} rounded-box hover:border-primary transition-colors">
+            <div class="stat-title">Cancelled</div>
+            <div class="stat-value text-base-content/60">{{ status_counts.cancelled }}</div>
+        </a>
+        <a href="?status=failed" class="stat bg-base-100 border-2 {% if current_status == 'failed' %}border-primary{% else %}border-base-300{% endif %} rounded-box hover:border-primary transition-colors">
+            <div class="stat-title">Failed</div>
+            <div class="stat-value text-error">{{ status_counts.failed }}</div>
+        </a>
+    </div>
+
+    <div class="mb-4">
+        <a href="?status=all" class="btn btn-ghost btn-sm {% if current_status == 'all' %}btn-active{% endif %}">
+            View All
+        </a>
+    </div>
+
+    <div class="overflow-x-auto">
+        <table class="table table-zebra w-full">
+            <thead>
+                <tr>
+                    <th>Scheduled For</th>
+                    <th>Title</th>
+                    <th>Target</th>
+                    <th>Est. Recipients</th>
+                    <th>Status</th>
+                    <th>Created By</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for scheduled in scheduled_list %}
+                    <tr>
+                        <td class="text-sm">
+                            {{ scheduled.scheduled_at|date:"Y-m-d H:i" }}<br>
+                            <span class="text-xs text-base-content/60">{{ scheduled.scheduled_at|naturaltime }}</span>
+                        </td>
+                        <td class="max-w-xs">
+                            <div class="font-medium truncate" title="{{ scheduled.title }}">{{ scheduled.title }}</div>
+                            <div class="text-xs text-base-content/60 truncate" title="{{ scheduled.message }}">
+                                {{ scheduled.message|truncatewords:10 }}
+                            </div>
+                        </td>
+                        <td>
+                            <span class="badge badge-sm badge-outline">{{ scheduled.get_target_type_display }}</span>
+                        </td>
+                        <td class="font-semibold">{{ scheduled.recipient_count|intcomma }}</td>
+                        <td>
+                            {% if scheduled.status == 'pending' %}
+                                <span class="badge badge-warning">Pending</span>
+                            {% elif scheduled.status == 'processing' %}
+                                <span class="badge badge-info">Processing</span>
+                            {% elif scheduled.status == 'sent' %}
+                                <span class="badge badge-success">Sent</span>
+                            {% elif scheduled.status == 'cancelled' %}
+                                <span class="badge badge-ghost">Cancelled</span>
+                            {% elif scheduled.status == 'failed' %}
+                                <span class="badge badge-error">Failed</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if scheduled.created_by %}
+                                {{ scheduled.created_by.email|truncatechars:20 }}
+                            {% else %}
+                                <span class="text-base-content/60">System</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if scheduled.status == 'pending' %}
+                                <form method="post" action="{% url 'admin_cancel_scheduled' scheduled.pk %}"
+                                      onsubmit="return confirm('Are you sure you want to cancel this scheduled notification?');">
+                                    {% csrf_token %}
+                                    <button type="submit" class="btn btn-ghost btn-xs text-error">
+                                        Cancel
+                                    </button>
+                                </form>
+                            {% elif scheduled.status == 'failed' and scheduled.error_message %}
+                                <button class="btn btn-ghost btn-xs" onclick="showError('{{ scheduled.error_message|escapejs }}')">
+                                    View Error
+                                </button>
+                            {% else %}
+                                <span class="text-base-content/40">-</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                {% empty %}
+                    <tr>
+                        <td colspan="7" class="text-center py-8 text-base-content/60">
+                            No scheduled notifications found
+                        </td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if is_paginated %}
+        <div class="flex justify-center items-center gap-2 mt-6">
+            <div class="btn-group">
+                {% if page_obj.has_previous %}
+                    <a href="?status={{ current_status }}&page=1" class="btn btn-outline btn-sm">&laquo; First</a>
+                    <a href="?status={{ current_status }}&page={{ page_obj.previous_page_number }}" class="btn btn-outline btn-sm">Previous</a>
+                {% endif %}
+
+                <span class="btn btn-active btn-sm">
+                    Page {{ page_obj.number }} of {{ paginator.num_pages }}
+                </span>
+
+                {% if page_obj.has_next %}
+                    <a href="?status={{ current_status }}&page={{ page_obj.next_page_number }}" class="btn btn-outline btn-sm">Next</a>
+                    <a href="?status={{ current_status }}&page={{ paginator.num_pages }}" class="btn btn-outline btn-sm">Last &raquo;</a>
+                {% endif %}
+            </div>
+        </div>
+    {% endif %}
+</div>
+
+<dialog id="error-modal" class="modal">
+    <div class="modal-box">
+        <h3 class="font-bold text-lg mb-4">Error Details</h3>
+        <div id="error-content" class="bg-error/10 text-error p-4 rounded-lg font-mono text-sm whitespace-pre-wrap">
+        </div>
+        <div class="modal-action">
+            <form method="dialog">
+                <button class="btn">Close</button>
+            </form>
+        </div>
+    </div>
+    <form method="dialog" class="modal-backdrop">
+        <button>close</button>
+    </form>
+</dialog>
+
+<script>
+function showError(errorMessage) {
+    const modal = document.getElementById('error-modal');
+    document.getElementById('error-content').textContent = errorMessage;
+    modal.showModal();
+}
+</script>
+{% endblock %}

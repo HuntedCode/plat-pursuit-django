@@ -1,0 +1,95 @@
+{% extends 'base.html' %}
+{% load static humanize %}
+
+{% block title %}Notification History{% endblock %}
+
+{% block content %}
+<div class="container mx-auto p-4">
+    <div class="flex flex-col lg:flex-row justify-between items-start lg:items-center mb-6">
+        <h1 class="text-3xl font-bold mb-4 lg:mb-0">Notification History</h1>
+        <div class="flex gap-2">
+            <a href="{% url 'admin_notification_center' %}" class="btn btn-secondary btn-sm">
+                Notification Center
+            </a>
+            <a href="{% url 'admin_scheduled_notifications' %}" class="btn btn-secondary btn-sm">
+                Scheduled
+            </a>
+        </div>
+    </div>
+
+    <div class="overflow-x-auto">
+        <table class="table table-zebra w-full">
+            <thead>
+                <tr>
+                    <th>Sent At</th>
+                    <th>Title</th>
+                    <th>Target</th>
+                    <th>Recipients</th>
+                    <th>Sent By</th>
+                    <th>Type</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for log in logs %}
+                    <tr>
+                        <td class="text-sm">
+                            {{ log.sent_at|date:"Y-m-d H:i" }}<br>
+                            <span class="text-xs text-base-content/60">{{ log.sent_at|naturaltime }}</span>
+                        </td>
+                        <td class="max-w-xs">
+                            <div class="font-medium truncate" title="{{ log.title }}">{{ log.title }}</div>
+                            <div class="text-xs text-base-content/60 truncate" title="{{ log.message }}">
+                                {{ log.message|truncatewords:10 }}
+                            </div>
+                        </td>
+                        <td>
+                            <span class="badge badge-sm badge-outline">{{ log.target_type }}</span>
+                        </td>
+                        <td class="font-semibold">{{ log.recipient_count|intcomma }}</td>
+                        <td>
+                            {% if log.sent_by %}
+                                {{ log.sent_by.email|truncatechars:20 }}
+                            {% else %}
+                                <span class="text-base-content/60">System</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if log.was_scheduled %}
+                                <span class="badge badge-sm badge-secondary">Scheduled</span>
+                            {% else %}
+                                <span class="badge badge-sm badge-primary">Immediate</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                {% empty %}
+                    <tr>
+                        <td colspan="6" class="text-center py-8 text-base-content/60">
+                            No notifications have been sent yet
+                        </td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if is_paginated %}
+        <div class="flex justify-center items-center gap-2 mt-6">
+            <div class="btn-group">
+                {% if page_obj.has_previous %}
+                    <a href="?page=1" class="btn btn-outline btn-sm">&laquo; First</a>
+                    <a href="?page={{ page_obj.previous_page_number }}" class="btn btn-outline btn-sm">Previous</a>
+                {% endif %}
+
+                <span class="btn btn-active btn-sm">
+                    Page {{ page_obj.number }} of {{ paginator.num_pages }}
+                </span>
+
+                {% if page_obj.has_next %}
+                    <a href="?page={{ page_obj.next_page_number }}" class="btn btn-outline btn-sm">Next</a>
+                    <a href="?page={{ paginator.num_pages }}" class="btn btn-outline btn-sm">Last &raquo;</a>
+                {% endif %}
+            </div>
+        </div>
+    {% endif %}
+</div>
+{% endblock %}

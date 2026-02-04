@@ -1,0 +1,195 @@
+{% load static humanize %}
+
+<!-- Encouraging Message -->
+<div class="alert alert-info shadow-lg mb-4">
+    <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+    </svg>
+    <div>
+        <h3 class="font-bold">Rate Your Platinum Experience!</h3>
+        <p class="text-sm">Help fellow trophy hunters! Community ratings are only useful when many people rate them fairly. Share your experience with difficulty, time investment, and how fun the journey was.</p>
+    </div>
+</div>
+
+<!-- Community Averages Display -->
+{% if community_averages %}
+<div class="card bg-base-300 shadow-md rounded-lg mb-4">
+    <div class="card-body py-3 px-4">
+        <p class="text-base text-center text-base-content italic font-bold">Community Ratings</p>
+        <div class="divider divider-vertical m-0 p-0"></div>
+        <div class="grid grid-cols-2 w-full gap-0 mb-2" role="list">
+            <div class="flex flex-col gap-2 px-2 pb-2 border-r-2 border-b-2 border-base-content/10 border-dashed" role="listitem">
+                <p class="text-sm text-base-content font-bold">Difficulty</p>
+                <div class="flex flex-row justify-between gap-2">
+                    <p class="text-base text-base-content font-bold"><span class="text-xl {% if community_averages.avg_difficulty < 4 %}text-success{% elif community_averages.avg_difficulty < 8 %}text-warning{% else %}text-error{% endif %}">{{ community_averages.avg_difficulty|floatformat:1 }}</span> /10</p>
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="{% if community_averages.avg_difficulty < 4 %}var(--color-success){% elif community_averages.avg_difficulty < 8 %}var(--color-warning){% else %}var(--color-error){% endif %}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M16.2 7.8l-2 6.3-6.4 2.1 2-6.3z"/></svg>
+                </div>
+                <progress class="progress {% if community_averages.avg_difficulty < 4 %}progress-success{% elif community_averages.avg_difficulty < 8 %}progress-warning{% else %}progress-error{% endif %}" value="{{ community_averages.avg_difficulty }}" max="10"></progress>
+            </div>
+            <div class="flex flex-col gap-2 px-2 pb-2 border-b-2 border-base-content/10 border-dashed" role="listitem">
+                <p class="text-sm text-base-content font-bold">Grindiness</p>
+                <div class="flex flex-row justify-between gap-2">
+                    <p class="text-base text-base-content font-bold"><span class="text-xl {% if community_averages.avg_grindiness < 4 %}text-success{% elif community_averages.avg_grindiness < 8 %}text-warning{% else %}text-error{% endif %}">{{ community_averages.avg_grindiness|floatformat:1 }}</span> /10</p>
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="{% if community_averages.avg_grindiness < 4 %}var(--color-success){% elif community_averages.avg_grindiness < 8 %}var(--color-warning){% else %}var(--color-error){% endif %}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 2v6h6M21.5 22v-6h-6"/><path d="M22 11.5A10 10 0 0 0 3.2 7.2M2 12.5a10 10 0 0 0 18.8 4.2"/></svg>
+                </div>
+                <progress class="progress {% if community_averages.avg_grindiness < 4 %}progress-success{% elif community_averages.avg_grindiness < 8 %}progress-warning{% else %}progress-error{% endif %}" value="{{ community_averages.avg_grindiness }}" max="10"></progress>
+            </div>
+            <div class="flex flex-col gap-2 px-2 pb-2 pt-2 border-b-2 border-r-2 border-base-content/10 border-dashed" role="listitem">
+                <p class="text-sm text-base-content font-bold">Hours To Plat</p>
+                <div class="flex flex-row justify-between gap-2">
+                    <p class="text-base text-base-content font-bold"><span class="text-xl {% if community_averages.avg_hours < 25 %}text-success{% elif community_averages.avg_hours < 75 %}text-warning{% elif community_averages.avg_hours < 100 %}text-accent{% else %}text-error{% endif %}">{{ community_averages.avg_hours|floatformat:0|intcomma }}</span></p>
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="{% if community_averages.avg_hours < 25 %}var(--color-success){% elif community_averages.avg_hours < 75 %}var(--color-warning){% elif community_averages.avg_hours < 100 %}var(--color-accent){% else %}var(--color-error){% endif %}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                </div>
+                <progress class="progress {% if community_averages.avg_hours < 25 %}progress-success{% elif community_averages.avg_hours < 75 %}progress-warning{% elif community_averages.avg_hours < 100 %}progress-accent{% else %}progress-error{% endif %}" value="{{ community_averages.avg_hours }}" max="100"></progress>
+            </div>
+            <div class="flex flex-col gap-2 px-2 pb-2 pt-2 border-b-2 border-base-content/10 border-dashed" role="listitem">
+                <p class="text-sm text-base-content font-bold">Fun Ranking</p>
+                <div class="flex flex-row justify-between gap-2">
+                    <p class="text-base text-base-content font-bold"><span class="text-xl {% if community_averages.avg_fun < 4 %}text-error{% elif community_averages.avg_fun < 8 %}text-warning{% else %}text-success{% endif %}">{{ community_averages.avg_fun|floatformat:1 }}</span> /10</p>
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="{% if community_averages.avg_fun < 4 %}var(--color-error){% elif community_averages.avg_fun < 8 %}var(--color-warning){% else %}var(--color-success){% endif %}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>
+                </div>
+                <progress class="progress {% if community_averages.avg_fun < 4 %}progress-error{% elif community_averages.avg_fun < 8 %}progress-warning{% else %}progress-success{% endif %}" value="{{ community_averages.avg_fun }}" max="10"></progress>
+            </div>
+            <div class="flex flex-col col-span-2 gap-2 px-2 pt-2 border-base-content/10 border-dashed" role="listitem">
+                <p class="text-sm text-base-content font-bold">Overall Rating</p>
+                <div class="flex flex-row justify-between gap-2">
+                    <p class="text-base text-base-content font-bold"><span class="text-xl {% if community_averages.avg_rating < 2 %}text-error{% elif community_averages.avg_rating < 4 %}text-warning{% else %}text-success{% endif %}">{{ community_averages.avg_rating|floatformat:1 }}</span> /5</p>
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="{% if community_averages.avg_rating < 2 %}var(--color-error){% elif community_averages.avg_rating < 4 %}var(--color-warning){% else %}var(--color-success){% endif %}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+                </div>
+                <progress class="progress {% if community_averages.avg_rating < 2 %}progress-error{% elif community_averages.avg_rating < 4 %}progress-warning{% else %}progress-success{% endif %}" value="{{ community_averages.avg_rating }}" max="5"></progress>
+            </div>
+        </div>
+        <p class="text-sm text-base-content text-center italic">Based on {{ community_averages.count|intcomma }} community rating{{ community_averages.count|pluralize }}.</p>
+    </div>
+</div>
+{% else %}
+<div class="alert alert-warning shadow-sm mb-4">
+    <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-5 w-5" fill="none" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+    </svg>
+    <span>No community ratings yet. Be the first to rate {{ game_name }}!</span>
+</div>
+{% endif %}
+
+<!-- Rating Status Notice -->
+{% if just_rated %}
+<div class="alert alert-success shadow-sm mb-4">
+    <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-5 w-5" fill="none" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+    </svg>
+    <span>Thanks for rating {{ game_name }}! Your feedback helps the community.</span>
+</div>
+{% elif has_existing_rating %}
+<div class="alert alert-success shadow-sm mb-4">
+    <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-5 w-5" fill="none" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+    </svg>
+    <span>You've already rated this game. Update your rating below if you'd like to change it.</span>
+</div>
+{% endif %}
+
+<!-- Rating Form -->
+<div class="card bg-base-300 shadow-md rounded-lg">
+    <div class="card-body py-3 px-4">
+        <p class="text-base text-center text-base-content italic font-bold">{% if has_existing_rating %}Update Your Rating{% else %}Share Your Plat Experience{% endif %}</p>
+        <div class="divider divider-vertical m-0 p-0"></div>
+        <form id="notification-rating-form" class="space-y-4">
+            <input type="hidden" name="concept_id" value="{{ concept_id }}">
+
+            <!-- Difficulty (Range Slider) -->
+            <div class="form-control">
+                <label class="label" for="id_difficulty">
+                    <span class="label-text text-base-content">Difficulty</span>
+                    <span class="label-text-alt text-base-content/70">How hard was this platinum?</span>
+                </label>
+                <input type="range"
+                    name="difficulty"
+                    id="id_difficulty"
+                    min="1" max="10"
+                    value="{% if existing_rating %}{{ existing_rating.difficulty }}{% else %}5{% endif %}"
+                    class="range range-error w-full"
+                    step="1" />
+                <div class="w-full flex justify-between text-xs px-2">
+                    <span>1</span><span>2</span><span>3</span><span>4</span><span>5</span>
+                    <span>6</span><span>7</span><span>8</span><span>9</span><span>10</span>
+                </div>
+            </div>
+
+            <!-- Grindiness (Range Slider) -->
+            <div class="form-control">
+                <label class="label" for="id_grindiness">
+                    <span class="label-text text-base-content">Grindiness</span>
+                    <span class="label-text-alt text-base-content/70">How repetitive was the grind?</span>
+                </label>
+                <input type="range"
+                    name="grindiness"
+                    id="id_grindiness"
+                    min="1" max="10"
+                    value="{% if existing_rating %}{{ existing_rating.grindiness }}{% else %}5{% endif %}"
+                    class="range range-accent w-full"
+                    step="1" />
+                <div class="w-full flex justify-between text-xs px-2">
+                    <span>1</span><span>2</span><span>3</span><span>4</span><span>5</span>
+                    <span>6</span><span>7</span><span>8</span><span>9</span><span>10</span>
+                </div>
+            </div>
+
+            <!-- Hours to Platinum (Number Input) -->
+            <div class="form-control">
+                <label class="label" for="id_hours_to_platinum">
+                    <span class="label-text text-base-content">Hours to Platinum</span>
+                    <span class="label-text-alt text-base-content/70">Approximate time spent</span>
+                </label>
+                <input type="number"
+                    name="hours_to_platinum"
+                    id="id_hours_to_platinum"
+                    value="{% if existing_rating %}{{ existing_rating.hours_to_platinum }}{% else %}{% endif %}"
+                    min="0"
+                    class="input input-bordered input-secondary w-full"
+                    placeholder="e.g., 20"
+                    required />
+            </div>
+
+            <!-- Fun Ranking (Range Slider) -->
+            <div class="form-control">
+                <label class="label" for="id_fun_ranking">
+                    <span class="label-text text-base-content">Fun Ranking</span>
+                    <span class="label-text-alt text-base-content/70">How enjoyable was it?</span>
+                </label>
+                <input type="range"
+                    name="fun_ranking"
+                    id="id_fun_ranking"
+                    min="1" max="10"
+                    value="{% if existing_rating %}{{ existing_rating.fun_ranking }}{% else %}5{% endif %}"
+                    class="range range-info w-full"
+                    step="1" />
+                <div class="w-full flex justify-between text-xs px-2">
+                    <span>1</span><span>2</span><span>3</span><span>4</span><span>5</span>
+                    <span>6</span><span>7</span><span>8</span><span>9</span><span>10</span>
+                </div>
+            </div>
+
+            <!-- Overall Rating (Range Slider with Stars) -->
+            <div class="form-control">
+                <label class="label" for="id_overall_rating">
+                    <span class="label-text text-base-content">Overall Rating</span>
+                    <span class="label-text-alt text-base-content/70">Your overall game rating</span>
+                </label>
+                <input type="range"
+                    name="overall_rating"
+                    id="id_overall_rating"
+                    min="0.5" max="5.0"
+                    value="{% if existing_rating %}{{ existing_rating.overall_rating }}{% else %}3{% endif %}"
+                    class="range range-warning w-full"
+                    step="0.5" />
+                <div class="w-full flex justify-between text-xs">
+                    <span>0.5</span><span>1</span><span>1.5</span><span>2</span><span>2.5</span><span>3</span><span>3.5</span><span>4</span><span>4.5</span><span>5</span>
+                </div>
+            </div>
+
+            <button type="submit" class="btn btn-primary w-full">
+                {% if has_existing_rating %}Update Rating{% else %}Submit Rating{% endif %}
+            </button>
+        </form>
+    </div>
+</div>

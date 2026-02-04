@@ -189,19 +189,18 @@
 
     // Helper to reload page while preserving form state
     function reloadWithFormState() {
-        isNavigatingAway = true;  // Bypass unsaved changes warning
         saveFormState();
-        location.reload();
+        // Use forceNavigate to bypass unsaved changes warning
+        PlatPursuit.UnsavedChangesManager.forceNavigate(window.location.href);
     }
 
     // ==========================================
     // Unsaved Changes Warning
     // ==========================================
     // Tracks form changes and warns user before leaving with unsaved work
+    // Uses the shared UnsavedChangesManager from utils.js
 
     let originalFormState = {};
-    let pendingNavigation = null;
-    let isNavigatingAway = false;
 
     function captureOriginalState() {
         const checklistId = getChecklistId();
@@ -294,21 +293,6 @@
         captureOriginalState();
     }
 
-    function showUnsavedChangesModal(targetUrl) {
-        const modal = document.getElementById('unsaved-changes-modal');
-        if (!modal) {
-            // Fallback if modal doesn't exist
-            if (confirm('You have unsaved changes. Leave anyway?')) {
-                isNavigatingAway = true;
-                window.location.href = targetUrl;
-            }
-            return;
-        }
-
-        pendingNavigation = targetUrl;
-        modal.showModal();
-    }
-
     function initUnsavedChangesWarning(skipCaptureOriginalState = false) {
         const checklistId = getChecklistId();
         if (!checklistId) return;
@@ -318,96 +302,26 @@
             captureOriginalState();
         }
 
-        const modal = document.getElementById('unsaved-changes-modal');
-        const stayBtn = document.getElementById('unsaved-stay-btn');
-        const discardBtn = document.getElementById('unsaved-discard-btn');
-        const saveBtn = document.getElementById('unsaved-save-btn');
-
-        if (stayBtn) {
-            stayBtn.addEventListener('click', () => {
-                pendingNavigation = null;
-                modal?.close();
-            });
-        }
-
-        if (discardBtn) {
-            discardBtn.addEventListener('click', () => {
-                isNavigatingAway = true;
-                modal?.close();
-                if (pendingNavigation) {
-                    window.location.href = pendingNavigation;
-                }
-            });
-        }
-
-        if (saveBtn) {
-            saveBtn.addEventListener('click', async () => {
+        // Use the shared UnsavedChangesManager
+        PlatPursuit.UnsavedChangesManager.init({
+            hasUnsavedChanges: hasUnsavedChanges,
+            showSaveButton: true,
+            onSaveAndLeave: async () => {
+                // Quick save of title/description before navigating
                 const title = document.getElementById('checklist-title')?.value.trim();
                 const description = document.getElementById('checklist-description')?.value.trim();
 
                 if (!title) {
-                    PlatPursuit.ToastManager.show('Title is required', 'error');
-                    return;
+                    throw new Error('Title is required');
                 }
 
-                try {
-                    saveBtn.classList.add('loading');
-                    await apiRequest(`${API_BASE}/checklists/${checklistId}/`, 'PATCH', {
-                        title,
-                        description,
-                    });
-                    PlatPursuit.ToastManager.show('Guide saved!', 'success');
-                    clearFormState();
-                    isNavigatingAway = true;
-                    modal?.close();
-                    if (pendingNavigation) {
-                        window.location.href = pendingNavigation;
-                    }
-                } catch (error) {
-                    PlatPursuit.ToastManager.show(error.message || 'Failed to save', 'error');
-                } finally {
-                    saveBtn.classList.remove('loading');
-                }
-            });
-        }
-
-        // Intercept link clicks
-        document.addEventListener('click', (e) => {
-            const link = e.target.closest('a');
-            if (!link) return;
-
-            // Skip links that open in new tab, have no href, or are anchors
-            const href = link.getAttribute('href');
-            if (!href || href.startsWith('#') || href.startsWith('javascript:')) return;
-            if (link.target === '_blank') return;
-
-            // Skip if already navigating or no unsaved changes
-            if (isNavigatingAway || !hasUnsavedChanges()) return;
-
-            e.preventDefault();
-            showUnsavedChangesModal(href);
+                await apiRequest(`${API_BASE}/checklists/${checklistId}/`, 'PATCH', {
+                    title,
+                    description,
+                });
+                clearFormState();
+            }
         });
-
-        // Handle browser back/forward and closing tab
-        window.addEventListener('beforeunload', (e) => {
-            if (isNavigatingAway || !hasUnsavedChanges()) return;
-
-            e.preventDefault();
-            e.returnValue = '';
-            return '';
-        });
-
-        // Handle popstate (browser back/forward buttons)
-        window.addEventListener('popstate', () => {
-            if (isNavigatingAway || !hasUnsavedChanges()) return;
-
-            // Push the current state back to prevent navigation
-            history.pushState(null, '', window.location.href);
-            showUnsavedChangesModal(document.referrer || '/');
-        });
-
-        // Push initial state for popstate handling
-        history.pushState(null, '', window.location.href);
     }
 
     // Get CSRF token from cookie
@@ -896,40 +810,10 @@
     }
 
     function celebrateCompletion() {
-        // Check if confetti library is loaded
-        if (typeof confetti !== 'function') return;
-
-        // Fire confetti from both sides
-        const duration = 3000;
-        const end = Date.now() + duration;
-
-        const frame = () => {
-            // Left side burst
-            confetti({
-                particleCount: 3,
-                angle: 60,
-                spread: 55,
-                origin: { x: 0, y: 0.6 },
-                colors: ['#f472b6', '#a855f7', '#3b82f6', '#22c55e', '#eab308']
-            });
-            // Right side burst
-            confetti({
-                particleCount: 3,
-                angle: 120,
-                spread: 55,
-                origin: { x: 1, y: 0.6 },
-                colors: ['#f472b6', '#a855f7', '#3b82f6', '#22c55e', '#eab308']
-            });
-
-            if (Date.now() < end) {
-                requestAnimationFrame(frame);
-            }
-        };
-
-        frame();
-
-        // Show toast message
-        PlatPursuit.ToastManager.show('Checklist complete! Great job!', 'success');
+        // Use shared CelebrationManager (loads confetti dynamically)
+        if (window.PlatPursuit?.CelebrationManager) {
+            PlatPursuit.CelebrationManager.celebrateChecklistComplete();
+        }
     }
 
     function updateLocalProgress() {

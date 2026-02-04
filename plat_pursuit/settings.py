@@ -121,6 +121,7 @@ INSTALLED_APPS = [
     'allauth',
     'allauth.account',
     'djstripe',
+    'notifications.apps.NotificationsConfig',
 ]
 
 AUTHENTICATION_BACKENDS = [
@@ -183,6 +184,7 @@ TEMPLATES = [
                 "django.contrib.messages.context_processors.messages",
                 "plat_pursuit.context_processors.ads",
                 "plat_pursuit.context_processors.moderation",
+                "plat_pursuit.context_processors.premium_theme_background",
             ],
         },
     },
@@ -352,3 +354,7 @@ LOGGING = {
         },
     },
 }
+
+# Notification settings
+NOTIFICATION_RETENTION_DAYS = 90
+NOTIFICATION_SSE_HEARTBEAT_INTERVAL = 30

@@ -220,19 +220,30 @@ class PremiumSettingsForm(forms.ModelForm):
         required=False,
         widget=forms.Select(attrs={'class': 'select w-full'}),
     )
+    selected_theme = forms.ChoiceField(
+        choices=[],  # Populated in __init__
+        label='Site Theme',
+        required=False,
+        widget=forms.Select(attrs={'class': 'select w-full', 'id': 'selected-theme-select'})
+    )
 
     class Meta:
         model = Profile
-        fields = ['selected_background']
+        fields = ['selected_background', 'selected_theme']
     
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+
+        # Import theme choices
+        from trophies.themes import THEME_CHOICES
+        self.fields['selected_theme'].choices = THEME_CHOICES
+
         if self.instance:
             if self.instance.user_is_premium:
                 eligible_games = ProfileGame.objects.filter(profile=self.instance).filter(Q(has_plat=True) | Q(progress=100))
                 eligible_game_ids = eligible_games.values_list('game__id', flat=True)
                 self.fields['selected_background'].queryset = Concept.objects.filter(games__id__in=eligible_game_ids, bg_url__isnull=False).distinct().order_by('unified_title')
-                
+
                 self.fields['title'].queryset = self.instance.get_earned_titles()
 
                 current_title = Title.objects.filter(user_titles__profile=self.instance, user_titles__is_displayed=True).first()

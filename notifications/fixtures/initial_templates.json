@@ -1,0 +1,146 @@
+[
+  {
+    "model": "notifications.notificationtemplate",
+    "pk": 1,
+    "fields": {
+      "name": "platinum_earned",
+      "notification_type": "platinum_earned",
+      "title_template": "🏆 Platinum Unlocked!",
+      "message_template": "Congratulations {username}! You've earned the platinum trophy for {game_name}!",
+      "icon": "🏆",
+      "action_url_template": "/games/{np_communication_id}/",
+      "action_text": "View Game",
+      "auto_trigger_enabled": true,
+      "trigger_event": "platinum_trophy_earned",
+      "priority": "high",
+      "created_at": "2025-01-01T00:00:00Z",
+      "updated_at": "2025-01-01T00:00:00Z"
+    }
+  },
+  {
+    "model": "notifications.notificationtemplate",
+    "pk": 2,
+    "fields": {
+      "name": "badge_awarded",
+      "notification_type": "badge_awarded",
+      "title_template": "🎖️ New Badge Earned!",
+      "message_template": "You've unlocked the {badge_name} badge! Keep up the great work, {username}!",
+      "icon": "🎖️",
+      "action_url_template": "/badges/{series_slug}/",
+      "action_text": "View Badge",
+      "auto_trigger_enabled": true,
+      "trigger_event": "badge_earned",
+      "priority": "normal",
+      "created_at": "2025-01-01T00:00:00Z",
+      "updated_at": "2025-01-01T00:00:00Z"
+    }
+  },
+  {
+    "model": "notifications.notificationtemplate",
+    "pk": 3,
+    "fields": {
+      "name": "milestone_achieved",
+      "notification_type": "milestone_achieved",
+      "title_template": "🎯 Milestone Reached!",
+      "message_template": "Amazing progress, {username}! You've achieved the {milestone_name} milestone!",
+      "icon": "🎯",
+      "action_url_template": "/milestones/",
+      "action_text": "View Milestone",
+      "auto_trigger_enabled": true,
+      "trigger_event": "milestone_completed",
+      "priority": "normal",
+      "created_at": "2025-01-01T00:00:00Z",
+      "updated_at": "2025-01-01T00:00:00Z"
+    }
+  },
+  {
+    "model": "notifications.notificationtemplate",
+    "pk": 4,
+    "fields": {
+      "name": "discord_verified",
+      "notification_type": "discord_verified",
+      "title_template": "✅ Discord Connected!",
+      "message_template": "Your Discord account has been successfully linked to your Plat Pursuit profile!",
+      "icon": "✅",
+      "action_url_template": "/users/settings/",
+      "action_text": "View Settings",
+      "auto_trigger_enabled": true,
+      "trigger_event": "discord_linked",
+      "priority": "normal",
+      "created_at": "2025-01-01T00:00:00Z",
+      "updated_at": "2025-01-01T00:00:00Z"
+    }
+  },
+  {
+    "model": "notifications.notificationtemplate",
+    "pk": 5,
+    "fields": {
+      "name": "subscription_created",
+      "notification_type": "subscription_created",
+      "title_template": "⭐ Premium Activated!",
+      "message_template": "Welcome to Plat Pursuit {tier}! Thank you for your support. Enjoy your premium benefits!",
+      "icon": "⭐",
+      "action_url_template": "/premium/",
+      "action_text": "View Benefits",
+      "auto_trigger_enabled": true,
+      "trigger_event": "subscription_started",
+      "priority": "high",
+      "created_at": "2025-01-01T00:00:00Z",
+      "updated_at": "2025-01-01T00:00:00Z"
+    }
+  },
+  {
+    "model": "notifications.notificationtemplate",
+    "pk": 6,
+    "fields": {
+      "name": "subscription_updated",
+      "notification_type": "subscription_updated",
+      "title_template": "💎 Subscription Updated",
+      "message_template": "Your Plat Pursuit subscription has been updated to {tier}. Thank you for your continued support!",
+      "icon": "💎",
+      "action_url_template": "/premium/",
+      "action_text": "View Subscription",
+      "auto_trigger_enabled": true,
+      "trigger_event": "subscription_changed",
+      "priority": "normal",
+      "created_at": "2025-01-01T00:00:00Z",
+      "updated_at": "2025-01-01T00:00:00Z"
+    }
+  },
+  {
+    "model": "notifications.notificationtemplate",
+    "pk": 7,
+    "fields": {
+      "name": "admin_announcement_template",
+      "notification_type": "admin_announcement",
+      "title_template": "📢 Announcement",
+      "message_template": "This is a default admin announcement template. Update the message when sending.",
+      "icon": "📢",
+      "action_url_template": "",
+      "action_text": "",
+      "auto_trigger_enabled": false,
+      "trigger_event": "",
+      "priority": "normal",
+      "created_at": "2025-01-01T00:00:00Z",
+      "updated_at": "2025-01-01T00:00:00Z"
+    }
+  },
+  {
+    "model": "notifications.notificationtemplate",
+    "pk": 8,
+    "fields": {
+      "name": "system_alert_template",
+      "notification_type": "system_alert",
+      "title_template": "⚠️ System Alert",
+      "message_template": "This is a default system alert template. Update the message when sending.",
+      "icon": "⚠️",
+      "action_url_template": "",
+      "action_text": "",
+      "auto_trigger_enabled": false,
+      "trigger_event": "",
+      "priority": "urgent",
+      "created_at": "2025-01-01T00:00:00Z",
+      "updated_at": "2025-01-01T00:00:00Z"
+    }
+  }
+]

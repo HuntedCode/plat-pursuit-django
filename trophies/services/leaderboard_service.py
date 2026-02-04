@@ -8,13 +8,14 @@ This service manages leaderboard calculations for:
 - Badge XP rankings
 """
 from django.db.models import (
-    Window, Q, Max, F, Count, Sum, When, Value, IntegerField,
-    Case, OuterRef, Exists, Subquery
+    Window, Q, Max, F, Count,OuterRef, Exists
 )
-from django.db.models.functions import RowNumber, Coalesce
+from django.db.models.functions import RowNumber
 
 
 # XP Constants for badge progression
+# Note: Canonical source is trophies/util_modules/constants.py
+# These are kept here for backward compatibility with progress leaderboards
 BRONZE_STAGE_XP = 250
 SILVER_STAGE_XP = 75
 GOLD_STAGE_XP = 250
@@ -268,15 +269,10 @@ def compute_total_progress_leaderboard() -> list[dict]:
 
 def compute_badge_xp_leaderboard() -> list[dict]:
     """
-    Compute badge XP leaderboard.
+    Compute badge XP leaderboard using denormalized ProfileGamification data.
 
-    Calculates total XP for each user based on:
-    1. Progress XP: XP from completed concepts per tier
-       - Bronze tier: 250 XP per concept
-       - Silver tier: 75 XP per concept
-       - Gold tier: 250 XP per concept
-       - Platinum tier: 75 XP per concept
-    2. Badge completion XP: 3000 XP per fully earned badge
+    Reads pre-calculated XP values from ProfileGamification table, which is
+    updated in real-time via signals when badge progress or badges change.
 
     Users are sorted by:
     1. Total XP (descending)
@@ -293,45 +289,25 @@ def compute_badge_xp_leaderboard() -> list[dict]:
             - total_xp: int - Combined progress XP + badge XP
             - total_badges: int - Count of fully earned badges
     """
-    from trophies.models import Profile, UserBadgeProgress
+    from trophies.models import ProfileGamification
 
-    # Check if user has any progress
-    progress_sub = UserBadgeProgress.objects.filter(profile=OuterRef('pk'))
-
-    # Calculate progress XP based on tier multipliers
-    progress_qs = UserBadgeProgress.objects.filter(
-        profile=OuterRef('pk')
-    ).values('profile').annotate(
-        pxp=Sum(
-            Case(
-                When(badge__tier=1, then=F('completed_concepts') * Value(BRONZE_STAGE_XP)),
-                When(badge__tier=2, then=F('completed_concepts') * Value(SILVER_STAGE_XP)),
-                When(badge__tier=3, then=F('completed_concepts') * Value(GOLD_STAGE_XP)),
-                When(badge__tier=4, then=F('completed_concepts') * Value(PLAT_STAGE_XP)),
-                default=Value(0),
-                output_field=IntegerField()
-            )
-        )
-    ).values('pxp')
-
-    earners = Profile.objects.filter(
-        Q(is_linked=True) & Exists(progress_sub)
-    ).annotate(
-        progress_xp=Coalesce(Subquery(progress_qs[:1]), 0),
-        badge_count=Count('badges', distinct=True),
-        total_xp=F('progress_xp') + F('badge_count') * Value(BADGE_TIER_XP)
-    ).filter(
-        total_xp__gt=0
-    ).order_by('-total_xp', '-badge_count', 'display_psn_username')
+    earners = ProfileGamification.objects.filter(
+        total_badge_xp__gt=0,
+        profile__is_linked=True
+    ).select_related('profile').order_by(
+        '-total_badge_xp',
+        '-total_badges_earned',
+        'profile__display_psn_username'
+    )
 
     return [
         {
             'rank': rank + 1,
-            'psn_username': earner.display_psn_username,
-            'flag': earner.flag,
-            'avatar_url': earner.avatar_url,
-            'is_premium': earner.user_is_premium,
-            'total_xp': earner.total_xp,
-            'total_badges': earner.badge_count,
+            'psn_username': earner.profile.display_psn_username,
+            'flag': earner.profile.flag,
+            'avatar_url': earner.profile.avatar_url,
+            'is_premium': earner.profile.user_is_premium,
+            'total_xp': earner.total_badge_xp,
+            'total_badges': earner.total_badges_earned,
         } for rank, earner in enumerate(earners)
     ]

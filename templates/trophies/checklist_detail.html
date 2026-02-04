@@ -8,7 +8,7 @@
      data-can-save-progress="{{ can_save_progress|yesno:'true,false' }}"
      data-is-premium="{{ request.user.profile.user_is_premium|default:False|yesno:'true,false' }}">
 
-    <section class="shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 w-full p-0 lg:p-4">
+    <section class="section-container w-full">
         {% include 'partials/breadcrumb.html' with items=breadcrumb %}
 
         {# Header #}
@@ -402,7 +402,7 @@
             </div>
                 </section>
             {% empty %}
-                <section class="shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 w-full p-0 lg:p-4">
+                <section class="section-container w-full">
                     <div class="card bg-base-100 border-4 border-base-300 shadow-md shadow-neutral">
                         <div class="card-body text-center py-12">
                             <p class="text-base-content/50 italic">This guide has no sections yet.</p>
@@ -534,7 +534,6 @@
 {% endblock %}
 
 {% block js_scripts %}
-    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js"></script>
     <script src="{% static 'js/checklist.js' %}"></script>
     {% if checklist.status == 'published' %}
         <script src="{% static 'js/comments.js' %}"></script>
