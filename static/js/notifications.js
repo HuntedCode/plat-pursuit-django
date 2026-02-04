@@ -28,7 +28,6 @@ class NotificationSystem {
             markAllBtn: !!this.markAllBtn
         });
 
-        this.eventSource = null;
         this.unreadCount = 0;
         this.loaded = false;
 
@@ -37,9 +36,6 @@ class NotificationSystem {
 
     init() {
         console.log('NotificationSystem: init() called');
-
-        // Connect to SSE for real-time notifications
-        this.connectSSE();
 
         // Load notifications when dropdown is opened
         // DaisyUI dropdowns work with focus/blur, not just click
@@ -92,11 +88,6 @@ class NotificationSystem {
 
         // Check for platinum celebration on page load
         this.checkForPlatinumCelebration();
-
-        // Clean up SSE connection when navigating away
-        window.addEventListener('beforeunload', () => {
-            this.destroy();
-        });
     }
 
     async checkForPlatinumCelebration() {
@@ -136,71 +127,6 @@ class NotificationSystem {
     markPlatinumCelebrationPending() {
         // Clear the celebration flag so next page load will check for platinums and celebrate
         sessionStorage.removeItem('platinum_celebrated');
-    }
-
-    connectSSE() {
-        try {
-            this.eventSource = new EventSource('/api/v1/notifications/sse/');
-
-            this.eventSource.onmessage = (event) => {
-                try {
-                    const data = JSON.parse(event.data);
-
-                    if (data.type === 'notification') {
-                        this.handleNewNotification(data);
-                    } else if (data.type === 'connected') {
-                        console.log('Notification stream connected');
-                    }
-                    // Ignore heartbeat messages
-                } catch (e) {
-                    console.error('Error parsing SSE message:', e);
-                }
-            };
-
-            this.eventSource.onerror = (error) => {
-                console.error('SSE connection error:', error);
-                this.eventSource.close();
-
-                // Retry connection after 5 seconds
-                setTimeout(() => {
-                    console.log('Reconnecting to notification stream...');
-                    this.connectSSE();
-                }, 5000);
-            };
-        } catch (error) {
-            console.error('Failed to connect to SSE:', error);
-        }
-    }
-
-    handleNewNotification(notification) {
-        // Increment unread count
-        this.unreadCount++;
-        this.updateBadge();
-
-        // Mark platinum notifications for celebration on next page load
-        if (notification.notification_type === 'platinum_earned') {
-            this.markPlatinumCelebrationPending();
-        }
-
-        // Show toast for all notification types
-        const toastMessage = `
-            <div class="flex items-center gap-2">
-                <span class="text-xl">${notification.icon}</span>
-                <div>
-                    <div class="font-bold">${this.escapeHtml(notification.title)}</div>
-                    <div class="text-xs">${this.escapeHtml(notification.message.substring(0, 100))}${notification.message.length > 100 ? '...' : ''}</div>
-                </div>
-            </div>
-        `;
-
-        // Use appropriate toast type based on priority
-        const toastType = notification.priority === 'urgent' ? 'warning' : 'info';
-        PlatPursuit.ToastManager.show(toastMessage, toastType, 5000);
-
-        // Add to list if dropdown has been opened
-        if (this.loaded) {
-            this.prependNotification(notification);
-        }
     }
 
     async loadNotifications() {
@@ -386,13 +312,6 @@ class NotificationSystem {
         const div = document.createElement('div');
         div.textContent = text;
         return div.innerHTML;
-    }
-
-    destroy() {
-        // Close SSE connection when needed
-        if (this.eventSource) {
-            this.eventSource.close();
-        }
     }
 }
 

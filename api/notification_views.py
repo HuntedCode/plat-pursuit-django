@@ -7,10 +7,7 @@ from rest_framework.response import Response
 from rest_framework import status as http_status
 from rest_framework.permissions import IsAuthenticated, IsAdminUser
 from rest_framework.authentication import SessionAuthentication, TokenAuthentication
-from django.http import StreamingHttpResponse
-from django.views import View
 from django.utils.decorators import method_decorator
-from django.views.decorators.cache import never_cache
 from django.template.loader import render_to_string
 from django_ratelimit.decorators import ratelimit
 from notifications.services.notification_service import NotificationService
@@ -19,7 +16,6 @@ from notifications.services.scheduled_notification_service import ScheduledNotif
 from notifications.models import Notification, NotificationTemplate, ScheduledNotification
 from django.contrib.auth import get_user_model
 import json
-import time
 import logging
 import base64
 import requests
@@ -151,93 +147,6 @@ class NotificationMarkAllReadView(APIView):
                 {'error': 'Failed to mark all notifications as read'},
                 status=http_status.HTTP_500_INTERNAL_SERVER_ERROR
             )
-
-
-class NotificationSSEView(View):
-    """
-    GET /api/v1/notifications/sse/
-    Server-Sent Events endpoint for real-time notifications.
-    Follows pattern from monitoring.js SSE implementation.
-    """
-
-    @method_decorator(never_cache)
-    def get(self, request):
-        # TEMPORARY: Check if SSE is disabled for debugging
-        from django.conf import settings
-        if not getattr(settings, 'NOTIFICATION_SSE_ENABLED', True):
-            # SSE disabled - return minimal response and close immediately
-            return StreamingHttpResponse(
-                "data: {\"type\": \"disabled\", \"message\": \"SSE temporarily disabled\"}\n\n",
-                content_type='text/event-stream',
-                status=200
-            )
-
-        # Check authentication
-        if not request.user.is_authenticated:
-            return StreamingHttpResponse(
-                "event: error\ndata: Unauthorized\n\n",
-                content_type='text/event-stream',
-                status=401
-            )
-
-        def event_stream():
-            """Generator for SSE stream."""
-            # Send initial connection message
-            yield f"data: {json.dumps({'type': 'connected', 'message': 'Notification stream connected'})}\n\n"
-
-            # Track last notification ID to detect new ones
-            # Must order by -id to get the highest ID, not just the most recent by created_at
-            last_notification_id = Notification.objects.filter(
-                recipient=request.user
-            ).order_by('-id').values_list('id', flat=True).first() or 0
-
-            # Keep connection alive with heartbeat
-            heartbeat_interval = 30  # seconds
-            last_check = time.time()
-
-            while True:
-                current_time = time.time()
-
-                # Check for new notifications
-                new_notifications = Notification.objects.filter(
-                    recipient=request.user,
-                    id__gt=last_notification_id
-                ).order_by('id')[:10]  # Limit to 10 new notifications at a time
-
-                for notification in new_notifications:
-                    notification_data = {
-                        'type': 'notification',
-                        'id': notification.id,
-                        'notification_type': notification.notification_type,
-                        'title': notification.title,
-                        'message': notification.message,
-                        'detail': notification.detail,  # Rich text detail with markdown
-                        'banner_image': notification.banner_image.url if notification.banner_image else None,  # Banner image URL
-                        'icon': notification.icon,
-                        'action_url': notification.action_url,
-                        'action_text': notification.action_text,
-                        'priority': notification.priority,
-                        'metadata': notification.metadata,  # Include metadata for enhanced rendering
-                        'created_at': notification.created_at.isoformat(),
-                    }
-                    yield f"data: {json.dumps(notification_data)}\n\n"
-                    last_notification_id = notification.id
-
-                # Send heartbeat to keep connection alive
-                if current_time - last_check > heartbeat_interval:
-                    yield f"data: {json.dumps({'type': 'heartbeat'})}\n\n"
-                    last_check = current_time
-
-                # Sleep briefly before next check
-                time.sleep(2)
-
-        response = StreamingHttpResponse(
-            event_stream(),
-            content_type='text/event-stream'
-        )
-        response['Cache-Control'] = 'no-cache'
-        response['X-Accel-Buffering'] = 'no'
-        return response
 
 
 class AdminSendNotificationView(APIView):

@@ -270,8 +270,6 @@ CACHES = {
 
 # Notification System Feature Flags
 NOTIFICATION_CACHE_ENABLED = os.getenv('NOTIFICATION_CACHE_ENABLED', 'True') == 'True'
-NOTIFICATION_PUBSUB_ENABLED = os.getenv('NOTIFICATION_PUBSUB_ENABLED', 'False') == 'True'
-NOTIFICATION_SSE_ENABLED = os.getenv('NOTIFICATION_SSE_ENABLED', 'False') == 'True'  # Set to False to disable SSE for debugging
 
 
 # Internationalization

@@ -16,7 +16,7 @@ from .checklist_views import (
 )
 from .notification_views import (
     NotificationListView, NotificationMarkReadView, NotificationMarkAllReadView,
-    NotificationSSEView, AdminSendNotificationView, NotificationBulkDeleteView,
+    AdminSendNotificationView, NotificationBulkDeleteView,
     NotificationDeleteView, NotificationShareImageGenerateView, NotificationShareImageView,
     NotificationShareImageStatusView, NotificationShareImageHTMLView, NotificationRatingView,
     AdminNotificationPreviewView, AdminTargetCountView, AdminUserSearchView
@@ -89,7 +89,6 @@ urlpatterns = [
 
     # Notification endpoints
     path('notifications/', NotificationListView.as_view(), name='notification-list'),
-    path('notifications/sse/', NotificationSSEView.as_view(), name='notification-sse'),
     path('notifications/mark-all-read/', NotificationMarkAllReadView.as_view(), name='notification-mark-all-read'),
     path('notifications/bulk-delete/', NotificationBulkDeleteView.as_view(), name='notification-bulk-delete'),
     path('admin/notifications/send/', AdminSendNotificationView.as_view(), name='admin-send-notification'),
