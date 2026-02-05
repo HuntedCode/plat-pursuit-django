@@ -595,9 +595,10 @@ class NotificationShareImageHTMLView(APIView):
         game_image_data = self._fetch_image_as_base64(game_image_url) if game_image_url else ''
         trophy_icon_data = self._fetch_image_as_base64(trophy_icon_url) if trophy_icon_url else ''
 
-        # Extract badge data
-        badge_xp = self._to_int(metadata.get('badge_xp', 0))
-        tier1_badges = metadata.get('tier1_badges', [])
+        # Extract badge data - fetch LIVE from database instead of stale metadata
+        # Badge progress is calculated at end of full sync, so metadata may be outdated
+        badge_xp, tier1_badges = self._get_live_badge_data(request.user.profile, metadata)
+        badge_xp = self._to_int(badge_xp)
 
         # Process badge images - convert to base64 or use default
         processed_badges = self._process_badge_images(tier1_badges)
@@ -713,6 +714,33 @@ class NotificationShareImageHTMLView(APIView):
         except Exception as e:
             logger.warning(f"[SHARE-HTML] Failed to fetch live user rating: {e}")
             return metadata.get('user_rating')  # Fall back to metadata if lookup fails
+
+    @staticmethod
+    def _get_live_badge_data(profile, metadata):
+        """
+        Fetch the user's current badge progress for the game from this notification.
+        Returns live badge_xp and tier1_badges instead of potentially stale metadata.
+
+        Badge progress is calculated at the end of a full sync, so the metadata
+        stored when the notification was created may be outdated.
+        """
+        game_id = metadata.get('game_id')
+        if not game_id:
+            return metadata.get('badge_xp', 0), metadata.get('tier1_badges', [])
+
+        try:
+            from trophies.models import Game
+            game = Game.objects.filter(id=game_id).first()
+            if not game:
+                return metadata.get('badge_xp', 0), metadata.get('tier1_badges', [])
+
+            badge_xp = ShareableDataService.get_badge_xp_for_game(profile, game)
+            tier1_badges = ShareableDataService.get_tier1_badges_for_game(profile, game)
+
+            return badge_xp, tier1_badges
+        except Exception as e:
+            logger.warning(f"[SHARE-HTML] Failed to fetch live badge data: {e}")
+            return metadata.get('badge_xp', 0), metadata.get('tier1_badges', [])
 
     def _process_badge_images(self, badges):
         """

@@ -298,13 +298,10 @@ def notify_platinum_earned(sender, instance, created, **kwargs):
                 earned_date_time__year=earned_year
             ).count()
 
-        # Calculate badge XP earned from this game
-        badge_xp = ShareableDataService.get_badge_xp_for_game(instance.profile, instance.trophy.game)
-
-        # Get tier 1 badge progress for badges this game contributes to
-        tier1_badges = ShareableDataService.get_tier1_badges_for_game(instance.profile, instance.trophy.game)
-
         # Create notification from template with enhanced context
+        # Note: badge_xp and tier1_badges are intentionally NOT stored here
+        # Badge progress is fetched live when the share card is accessed because
+        # UserBadgeProgress is calculated at the end of full sync, not per-game sync
         NotificationService.create_from_template(
             recipient=instance.profile.user,
             template=template,
@@ -342,9 +339,6 @@ def notify_platinum_earned(sender, instance, created, **kwargs):
                 # Yearly platinum stats
                 'yearly_plats': yearly_plats,
                 'earned_year': earned_year if earned_date else None,
-                # Badge system data
-                'badge_xp': badge_xp,
-                'tier1_badges': tier1_badges,
             }
         )
 
