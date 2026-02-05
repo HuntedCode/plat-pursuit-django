@@ -5,7 +5,7 @@ import threading
 import logging
 import os
 import atexit
-from pyrate_limiter import Duration, Rate
+from pyrate_limiter import Duration, Rate, Limiter, InMemoryBucket
 import requests
 from typing import Dict
 from dataclasses import dataclass
@@ -36,7 +36,22 @@ logger = logging.getLogger("psn_api")
 
 class ProxiedRequestBuilder(BaseRequestBuilder):
     def __init__(self, common_headers, rate_limit, proxy_url=None):
-        super().__init__(common_headers, rate_limit)
+        # DO NOT call super().__init__() - it creates an SQLite bucket which causes
+        # "database is locked" errors in multi-threaded environments.
+        # Instead, replicate initialization with thread-safe in-memory bucket.
+
+        from typing import cast
+        self.common_headers = cast("dict[str, str]", common_headers)
+
+        # Create thread-safe limiter with in-memory bucket (not SQLite)
+        bucket = InMemoryBucket([rate_limit])
+        self.limiter = Limiter(bucket, raise_when_fail=False, max_delay=Duration.SECOND * 3)
+
+        # Initialize session (same as base class)
+        self.session = requests.Session()
+        self.session.headers.update(self.common_headers)
+
+        # Add proxy support
         if proxy_url:
             self.session.proxies = {'http': proxy_url, 'https': proxy_url}
 
