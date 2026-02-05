@@ -632,6 +632,8 @@ class NotificationShareImageHTMLView(APIView):
             # Badge system data
             'badge_xp': badge_xp,
             'tier1_badges': processed_badges,
+            # User rating data
+            'user_rating': metadata.get('user_rating'),
         }
 
         # Render the template

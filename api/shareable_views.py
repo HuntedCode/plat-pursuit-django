@@ -140,6 +140,7 @@ class ShareableImageHTMLView(APIView):
             'earned_year': self._to_int(metadata.get('earned_year', 0)),
             'badge_xp': badge_xp,
             'tier1_badges': processed_badges,
+            'user_rating': metadata.get('user_rating'),
         }
 
     @staticmethod

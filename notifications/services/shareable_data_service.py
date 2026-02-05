@@ -2,7 +2,7 @@
 Centralized service for collecting data needed for shareable images.
 Extracts logic from signals.py to be reusable across the application.
 """
-from trophies.models import EarnedTrophy, ProfileGame, Stage, Badge, UserBadgeProgress
+from trophies.models import EarnedTrophy, ProfileGame, Stage, Badge, UserBadgeProgress, UserConceptRating
 import logging
 
 logger = logging.getLogger(__name__)
@@ -127,6 +127,37 @@ class ShareableDataService:
         return tier1_badges
 
     @classmethod
+    def get_user_rating_for_game(cls, profile, game):
+        """
+        Get user's personal rating for a game's concept.
+
+        Args:
+            profile: Profile instance
+            game: Game instance
+
+        Returns:
+            dict or None: Rating data if exists, None otherwise
+        """
+        if not game.concept:
+            return None
+
+        rating = UserConceptRating.objects.filter(
+            profile=profile,
+            concept=game.concept
+        ).first()
+
+        if not rating:
+            return None
+
+        return {
+            'overall_rating': rating.overall_rating,
+            'difficulty': rating.difficulty,
+            'grindiness': rating.grindiness,
+            'fun_ranking': rating.fun_ranking,
+            'hours_to_platinum': rating.hours_to_platinum,
+        }
+
+    @classmethod
     def get_platinum_share_data(cls, earned_trophy):
         """
         Collect all data needed for a platinum share image from an EarnedTrophy.
@@ -184,6 +215,9 @@ class ShareableDataService:
         badge_xp = cls.get_badge_xp_for_game(profile, game)
         tier1_badges = cls.get_tier1_badges_for_game(profile, game)
 
+        # Get user's personal rating for this game
+        user_rating = cls.get_user_rating_for_game(profile, game)
+
         return {
             'username': profile.display_psn_username or profile.psn_username,
             'game_name': game.title_name,
@@ -214,4 +248,5 @@ class ShareableDataService:
             'earned_year': earned_year,
             'badge_xp': badge_xp,
             'tier1_badges': tier1_badges,
+            'user_rating': user_rating,
         }
