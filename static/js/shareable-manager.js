@@ -14,6 +14,7 @@ class ShareableManager extends ShareImageManager {
 
     /**
      * Override fetchCardHTML to use the new shareable endpoint
+     * Also stores base64 background images from response for use in downloads
      */
     async fetchCardHTML(format) {
         const response = await PlatPursuit.API.get(
@@ -21,6 +22,14 @@ class ShareableManager extends ShareImageManager {
         );
 
         if (response && response.html) {
+            // Store base64 background images from API response for download use
+            // These bypass CORS issues since they're fetched server-side
+            if (response.game_image_base64) {
+                this.gameImageBase64 = response.game_image_base64;
+            }
+            if (response.concept_bg_base64) {
+                this.conceptBgBase64 = response.concept_bg_base64;
+            }
             return response.html;
         }
         throw new Error('Failed to fetch card HTML');
@@ -93,7 +102,6 @@ function openShareModal(cardElement) {
 function initPlatinumSearch() {
     const searchInput = document.getElementById('platinum-search');
     const clearBtn = document.getElementById('clear-search');
-    const resultsCount = document.getElementById('search-results-count');
     const jumpToYear = document.getElementById('jump-to-year');
 
     if (!searchInput) return;
@@ -160,63 +168,114 @@ function initPlatinumSearch() {
         e.target.value = '';
     });
 
-    function filterPlatinums(query) {
-        const cards = document.querySelectorAll('.platinum-card');
-        const yearGroups = document.querySelectorAll('.year-group');
-        let visibleCount = 0;
-        let totalCount = cards.length;
+    function filterPlatinums() {
+        // Use combined filter function
+        applyAllFilters();
+    }
+}
 
-        // Show/hide clear button
-        if (clearBtn) {
-            if (query) {
-                clearBtn.classList.remove('hidden');
-                clearBtn.classList.add('flex');
-            } else {
-                clearBtn.classList.add('hidden');
-                clearBtn.classList.remove('flex');
-            }
+/**
+ * Apply all filters (search + shovelware) together
+ */
+function applyAllFilters() {
+    const searchInput = document.getElementById('platinum-search');
+    const clearBtn = document.getElementById('clear-search');
+    const resultsCount = document.getElementById('search-results-count');
+    const shovelwareToggle = document.getElementById('hide-shovelware-toggle');
+
+    const query = searchInput?.value?.trim().toLowerCase() || '';
+    const hideShovelware = shovelwareToggle?.checked || false;
+
+    const cards = document.querySelectorAll('.platinum-card');
+    const yearGroups = document.querySelectorAll('.year-group');
+    let visibleCount = 0;
+    let totalCount = cards.length;
+
+    // Show/hide clear button
+    if (clearBtn) {
+        if (query) {
+            clearBtn.classList.remove('hidden');
+            clearBtn.classList.add('flex');
+        } else {
+            clearBtn.classList.add('hidden');
+            clearBtn.classList.remove('flex');
         }
+    }
 
-        // If no query, show everything
-        if (!query) {
-            cards.forEach(card => card.classList.remove('hidden'));
-            yearGroups.forEach(group => group.classList.remove('hidden'));
-            resultsCount?.classList.add('hidden');
-            return;
-        }
+    // Apply both filters to each card
+    cards.forEach(card => {
+        const gameName = card.dataset.searchName || '';
+        const isShovelware = card.dataset.isShovelware === 'true';
 
-        // Filter cards
-        cards.forEach(card => {
-            const gameName = card.dataset.searchName || '';
-            const matches = gameName.includes(query);
-            card.classList.toggle('hidden', !matches);
-            if (matches) visibleCount++;
-        });
+        const matchesSearch = !query || gameName.includes(query);
+        const matchesShovelware = !hideShovelware || !isShovelware;
 
-        // Hide year groups with no visible cards
-        yearGroups.forEach(group => {
-            const visibleCards = group.querySelectorAll('.platinum-card:not(.hidden)');
-            group.classList.toggle('hidden', visibleCards.length === 0);
-        });
+        const shouldShow = matchesSearch && matchesShovelware;
+        card.classList.toggle('hidden', !shouldShow);
 
-        // Update results count
-        if (resultsCount) {
+        if (shouldShow) visibleCount++;
+    });
+
+    // Hide year groups with no visible cards
+    yearGroups.forEach(group => {
+        const visibleCards = group.querySelectorAll('.platinum-card:not(.hidden)');
+        group.classList.toggle('hidden', visibleCards.length === 0);
+    });
+
+    // Update results count
+    const hasActiveFilter = query || hideShovelware;
+    if (resultsCount) {
+        if (!hasActiveFilter) {
+            resultsCount.classList.add('hidden');
+        } else if (visibleCount === 0) {
             resultsCount.classList.remove('hidden');
-            if (visibleCount === 0) {
+            if (query && hideShovelware) {
+                resultsCount.textContent = `No platinums found matching "${query}" (shovelware hidden)`;
+            } else if (query) {
                 resultsCount.textContent = `No platinums found matching "${query}"`;
-            } else if (visibleCount === totalCount) {
-                resultsCount.classList.add('hidden');
             } else {
-                resultsCount.textContent = `Showing ${visibleCount} of ${totalCount} platinums`;
+                resultsCount.textContent = `All platinums are shovelware (hidden)`;
             }
+        } else if (visibleCount === totalCount) {
+            resultsCount.classList.add('hidden');
+        } else {
+            resultsCount.classList.remove('hidden');
+            resultsCount.textContent = `Showing ${visibleCount} of ${totalCount} platinums`;
         }
     }
 }
 
-// Initialize search on page load
-document.addEventListener('DOMContentLoaded', initPlatinumSearch);
+/**
+ * Initialize shovelware filter toggle
+ */
+function initShovelwareFilter() {
+    const toggle = document.getElementById('hide-shovelware-toggle');
+    if (!toggle) return;
+
+    // Load saved preference from localStorage
+    const savedPref = localStorage.getItem('hideShareableShovelware');
+    if (savedPref === 'true') {
+        toggle.checked = true;
+        // Apply filter after a brief delay to ensure DOM is ready
+        setTimeout(() => applyAllFilters(), 0);
+    }
+
+    toggle.addEventListener('change', (e) => {
+        const hide = e.target.checked;
+        localStorage.setItem('hideShareableShovelware', hide);
+        applyAllFilters();
+    });
+}
+
+// Initialize filters on page load
+document.addEventListener('DOMContentLoaded', () => {
+    initPlatinumSearch();
+    initShovelwareFilter();
+});
 
 // Export for global access
 window.ShareableManager = ShareableManager;
 window.openShareModal = openShareModal;
 window.initPlatinumSearch = initPlatinumSearch;
+window.initShovelwareFilter = initShovelwareFilter;
+window.applyAllFilters = applyAllFilters;

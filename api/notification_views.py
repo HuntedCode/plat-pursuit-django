@@ -13,6 +13,7 @@ from django_ratelimit.decorators import ratelimit
 from notifications.services.notification_service import NotificationService
 from notifications.services.template_service import TemplateService
 from notifications.services.scheduled_notification_service import ScheduledNotificationService
+from notifications.services.shareable_data_service import ShareableDataService
 from notifications.models import Notification, NotificationTemplate, ScheduledNotification
 from django.contrib.auth import get_user_model
 import json
@@ -632,14 +633,30 @@ class NotificationShareImageHTMLView(APIView):
             # Badge system data
             'badge_xp': badge_xp,
             'tier1_badges': processed_badges,
-            # User rating data
-            'user_rating': metadata.get('user_rating'),
+            # User rating data - fetch live from database instead of using stale metadata
+            'user_rating': self._get_live_user_rating(request.user.profile, metadata),
         }
 
         # Render the template
         html = render_to_string('notifications/partials/share_image_card.html', context)
 
-        return Response({'html': html})
+        # Convert background images to base64 for JS to use with game art themes
+        # This avoids CORS issues when downloading share cards
+        concept_bg_url = metadata.get('concept_bg_url', '')
+
+        response_data = {'html': html}
+
+        # Include base64 versions of background images if available
+        # game_image is already converted above, reuse it
+        if game_image_url and game_image_data:
+            response_data['game_image_base64'] = game_image_data
+
+        if concept_bg_url:
+            concept_bg_base64 = self._fetch_image_as_base64(concept_bg_url)
+            if concept_bg_base64:
+                response_data['concept_bg_base64'] = concept_bg_base64
+
+        return Response(response_data)
 
     @staticmethod
     def _to_int(value, default=0):
@@ -670,6 +687,32 @@ class NotificationShareImageHTMLView(APIView):
             return dt.strftime('%b %d, %Y')
         except (ValueError, TypeError):
             return ''
+
+    @staticmethod
+    def _get_live_user_rating(profile, metadata):
+        """
+        Fetch the user's current rating for the game from this notification.
+        Returns the live rating instead of potentially stale metadata.
+        """
+        concept_id = metadata.get('concept_id')
+        if not concept_id:
+            return None
+
+        try:
+            from trophies.models import Concept
+            concept = Concept.objects.filter(id=concept_id).first()
+            if not concept:
+                return None
+
+            from trophies.models import Game
+            game = Game.objects.filter(concept=concept).first()
+            if not game:
+                return None
+
+            return ShareableDataService.get_user_rating_for_game(profile, game)
+        except Exception as e:
+            logger.warning(f"[SHARE-HTML] Failed to fetch live user rating: {e}")
+            return metadata.get('user_rating')  # Fall back to metadata if lookup fails
 
     def _process_badge_images(self, badges):
         """

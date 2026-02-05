@@ -200,13 +200,20 @@ class ShareImageManager {
     /**
      * Render background dropdown options
      * Default is always first, then alphabetically sorted
-     * Game art themes are excluded from dropdown (they're in the color grid)
+     * Game art themes are included only when their required image is available
      */
     renderBackgroundOptions() {
         const entries = Object.entries(this.backgroundStyles);
 
-        // Filter out game art themes - they're now in the color grid
-        const filtered = entries.filter(([key, style]) => !style.gameImageSource);
+        // Filter: include non-game-art themes, and game art themes only if their image is available
+        const filtered = entries.filter(([, style]) => {
+            if (!style.gameImageSource) {
+                return true; // Non-game-art themes always included
+            }
+            // Game art themes: include only if the required image exists
+            const imageUrl = this.metadata[style.gameImageSource];
+            return !!imageUrl;
+        });
 
         // Separate default from others
         const defaultEntry = filtered.find(([key]) => key === 'default');
@@ -226,8 +233,9 @@ class ShareImageManager {
     /**
      * Apply selected background style to an element and its banner
      * @param {HTMLElement} element - The .share-image-content element to style
+     * @param {boolean} useBase64 - If true, use server-provided base64 images for game art (for downloads)
      */
-    applyBackground(element) {
+    async applyBackground(element, useBase64 = false) {
         if (!element) return;
 
         const styleKey = this.currentBackground;
@@ -236,10 +244,21 @@ class ShareImageManager {
         if (!styleDef) return;
 
         // Pass both game images for styles that use them
-        const gameImages = {
+        // For download (useBase64=true), use server-provided base64 versions to avoid CORS
+        let gameImages = {
             game_image: this.metadata.game_image || null,
             concept_bg_url: this.metadata.concept_bg_url || null
         };
+
+        // For download, use base64 versions fetched by the server (avoids CORS)
+        if (useBase64 && styleDef.gameImageSource) {
+            if (styleDef.gameImageSource === 'game_image' && this.gameImageBase64) {
+                gameImages.game_image = this.gameImageBase64;
+            } else if (styleDef.gameImageSource === 'concept_bg_url' && this.conceptBgBase64) {
+                gameImages.concept_bg_url = this.conceptBgBase64;
+            }
+        }
+
         const styles = styleDef.getStyle(gameImages);
 
         // Apply background styles to main element
@@ -405,8 +424,8 @@ class ShareImageManager {
             if (innerContent) {
                 innerContent.style.transform = `scale(${scale})`;
                 innerContent.style.transformOrigin = 'top left';
-                // Apply the selected background style
-                this.applyBackground(innerContent);
+                // Apply the selected background style (no base64 conversion needed for preview)
+                await this.applyBackground(innerContent, false);
             }
         } catch (error) {
             console.error('Failed to render preview:', error);
@@ -418,6 +437,7 @@ class ShareImageManager {
 
     /**
      * Fetch the card HTML from the server
+     * Also stores base64 background images from response for use in downloads
      */
     async fetchCardHTML(format) {
         // Note: Using 'image_format' instead of 'format' because DRF reserves 'format' for content negotiation
@@ -426,6 +446,14 @@ class ShareImageManager {
         );
 
         if (response && response.html) {
+            // Store base64 background images from API response for download use
+            // These bypass CORS issues since they're fetched server-side
+            if (response.game_image_base64) {
+                this.gameImageBase64 = response.game_image_base64;
+            }
+            if (response.concept_bg_base64) {
+                this.conceptBgBase64 = response.concept_bg_base64;
+            }
             return response.html;
         }
         throw new Error('Failed to fetch card HTML');
@@ -573,9 +601,10 @@ class ShareImageManager {
         const wrapper = iframeDoc.body.firstElementChild;
 
         // Apply the selected background style to the wrapper
+        // Use convertToBase64=true to ensure game art backgrounds render correctly in html2canvas
         const shareImageContent = iframeDoc.querySelector('.share-image-content');
         if (shareImageContent) {
-            this.applyBackground(shareImageContent);
+            await this.applyBackground(shareImageContent, true);
         }
 
         // Wait for images to load inside iframe

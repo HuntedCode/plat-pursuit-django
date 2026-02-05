@@ -3032,12 +3032,11 @@ class MyShareablesView(LoginRequiredMixin, ProfileHotbarMixin, TemplateView):
             context['total_platinums'] = 0
             return context
 
-        # Get user's platinum trophies (excluding shovelware)
+        # Get user's platinum trophies (including shovelware - filtered client-side)
         earned_platinums = EarnedTrophy.objects.filter(
             profile=profile,
             earned=True,
             trophy__trophy_type='platinum',
-            trophy__game__is_shovelware=False
         ).select_related(
             'trophy__game',
             'trophy__game__concept'
@@ -3054,6 +3053,10 @@ class MyShareablesView(LoginRequiredMixin, ProfileHotbarMixin, TemplateView):
             # Platinum number = total - index (since newest is first)
             et.platinum_number = total_count - idx
             et.is_milestone = et.platinum_number % 10 == 0 and et.platinum_number > 0
+            et.is_shovelware = et.trophy.game.is_shovelware
+
+        # Count shovelware for filter toggle
+        shovelware_count = sum(1 for et in platinum_list if et.trophy.game.is_shovelware)
 
         # Group by year for organization
         platinums_by_year = {}
@@ -3073,6 +3076,7 @@ class MyShareablesView(LoginRequiredMixin, ProfileHotbarMixin, TemplateView):
 
         context['platinums_by_year'] = {year: platinums_by_year[year] for year in sorted_years}
         context['total_platinums'] = earned_platinums.count()
+        context['shovelware_count'] = shovelware_count
 
         # Active tab (for future extensibility)
         context['active_tab'] = self.request.GET.get('tab', 'platinum_images')

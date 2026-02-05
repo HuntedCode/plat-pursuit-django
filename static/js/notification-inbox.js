@@ -29,6 +29,7 @@ class NotificationInboxManager {
         this.loading = false;
         this.selectedNotification = null;
         this.searchTimeout = null;
+        this.currentShareManager = null;  // Reference to active ShareImageManager for refreshing after rating changes
 
         // Check if elements exist before initializing
         if (!this.listPane) {
@@ -268,12 +269,12 @@ class NotificationInboxManager {
                 // Initialize share image manager
                 const shareContainer = document.getElementById('share-section-container');
                 if (shareContainer && window.PlatPursuit && window.PlatPursuit.ShareImageManager) {
-                    const shareManager = new window.PlatPursuit.ShareImageManager(
+                    this.currentShareManager = new window.PlatPursuit.ShareImageManager(
                         notification.id,
                         notification.metadata
                     );
-                    shareContainer.innerHTML = shareManager.renderShareSection();
-                    shareManager.init();
+                    shareContainer.innerHTML = this.currentShareManager.renderShareSection();
+                    this.currentShareManager.init();
                 }
 
                 // Load rating section if game has a concept
@@ -349,6 +350,11 @@ class NotificationInboxManager {
                 // Reload the rating section, passing whether this was a first-time rating
                 const wasFirstRating = response.message && response.message.includes('submitted');
                 this.loadRatingSection(notificationId, wasFirstRating);
+
+                // Refresh the share image preview with the new rating data
+                if (this.currentShareManager) {
+                    this.currentShareManager.renderPreview();
+                }
             } else {
                 PlatPursuit.ToastManager.error('Failed to submit rating. Please check your input.');
             }

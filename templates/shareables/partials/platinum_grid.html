@@ -38,6 +38,19 @@
                 {% endfor %}
             </select>
         </div>
+
+        {# Hide Shovelware toggle #}
+        {% if shovelware_count > 0 %}
+        <div class="form-control w-full sm:w-auto">
+            <label class="label cursor-pointer gap-2 justify-start sm:justify-end">
+                <span class="label-text text-sm">
+                    <span class="opacity-70">Hide Shovelware</span>
+                    <span class="badge badge-sm badge-ghost ml-1">{{ shovelware_count }}</span>
+                </span>
+                <input type="checkbox" id="hide-shovelware-toggle" class="toggle toggle-sm toggle-primary" />
+            </label>
+        </div>
+        {% endif %}
     </div>
     <p id="search-results-count" class="text-sm text-base-content/60 mb-4 hidden"></p>
 
@@ -56,6 +69,7 @@
                  data-game-image="{{ et.trophy.game.title_image|default:et.trophy.game.title_icon_url }}"
                  data-concept-bg-url="{{ et.trophy.game.concept.bg_url|default:'' }}"
                  data-search-name="{{ et.trophy.game.title_name|lower }}"
+                 data-is-shovelware="{{ et.is_shovelware|yesno:'true,false' }}"
                  onclick="openShareModal(this)">
                 <figure class="px-3 pt-3">
                     <div class="relative w-full aspect-square">
@@ -76,6 +90,14 @@
                                 <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/>
                             </svg>
                         </div>
+                        {# Shovelware indicator #}
+                        {% if et.is_shovelware %}
+                        <div class="absolute top-1 right-1 opacity-60 group-hover:opacity-100 transition-opacity" title="Shovelware">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-warning drop-shadow" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                            </svg>
+                        </div>
+                        {% endif %}
                     </div>
                 </figure>
                 <div class="card-body p-3">

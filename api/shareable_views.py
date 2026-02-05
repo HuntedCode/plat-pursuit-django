@@ -49,13 +49,6 @@ class ShareableImageHTMLView(APIView):
             trophy__trophy_type='platinum'
         )
 
-        # Validate not shovelware
-        if earned_trophy.trophy.game.is_shovelware:
-            return Response(
-                {'error': 'Share images are not available for this game'},
-                status=http_status.HTTP_400_BAD_REQUEST
-            )
-
         # Get format from query params
         format_type = request.query_params.get('image_format', 'landscape')
         if format_type not in ['landscape', 'portrait']:
@@ -73,7 +66,25 @@ class ShareableImageHTMLView(APIView):
         # Render the template
         html = render_to_string('notifications/partials/share_image_card.html', context)
 
-        return Response({'html': html})
+        # Convert background images to base64 for JS to use with game art themes
+        # This avoids CORS issues when downloading share cards
+        game_image_url = metadata.get('game_image', '')
+        concept_bg_url = metadata.get('concept_bg_url', '')
+
+        response_data = {'html': html}
+
+        # Include base64 versions of background images if available
+        if game_image_url:
+            game_image_base64 = self._fetch_image_as_base64(game_image_url)
+            if game_image_base64:
+                response_data['game_image_base64'] = game_image_base64
+
+        if concept_bg_url:
+            concept_bg_base64 = self._fetch_image_as_base64(concept_bg_url)
+            if concept_bg_base64:
+                response_data['concept_bg_base64'] = concept_bg_base64
+
+        return Response(response_data)
 
     def _build_template_context(self, metadata, format_type):
         """Build the context dict for the share image template."""
