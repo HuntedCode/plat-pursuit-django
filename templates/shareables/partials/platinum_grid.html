@@ -54,6 +54,7 @@
                  data-earned-trophy-id="{{ et.id }}"
                  data-game-name="{{ et.trophy.game.title_name }}"
                  data-game-image="{{ et.trophy.game.title_image|default:et.trophy.game.title_icon_url }}"
+                 data-concept-bg-url="{{ et.trophy.game.concept.bg_url|default:'' }}"
                  data-search-name="{{ et.trophy.game.title_name|lower }}"
                  onclick="openShareModal(this)">
                 <figure class="px-3 pt-3">

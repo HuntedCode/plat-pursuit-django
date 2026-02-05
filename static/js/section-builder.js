@@ -1,6 +1,6 @@
 /**
  * SectionBuilder - Visual section builder for structured notifications
- * Provides drag-and-drop interface for creating notification sections
+ * Provides up/down arrow interface for creating and reordering notification sections
  */
 class SectionBuilder {
     constructor(containerId, maxSections = 5) {
@@ -31,7 +31,7 @@ class SectionBuilder {
             });
         }
 
-        this.setupDragAndDrop();
+        this.updateMoveButtonStates();
     }
 
     addSection(data = null) {
@@ -63,6 +63,7 @@ class SectionBuilder {
         // Update hidden input and toggle add button
         this.updateHiddenInput();
         this.toggleAddButton();
+        this.updateMoveButtonStates();
 
         return sectionData;
     }
@@ -75,9 +76,18 @@ class SectionBuilder {
         card.innerHTML = `
             <div class="flex justify-between items-center mb-3">
                 <div class="flex items-center gap-2">
-                    <button type="button" class="drag-handle btn btn-xs btn-ghost cursor-move" title="Drag to reorder">
-                        ⋮⋮
-                    </button>
+                    <div class="flex flex-col gap-0.5">
+                        <button type="button" class="move-up-btn btn btn-xs btn-ghost p-0 h-5 min-h-0" title="Move up">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                                <path fill-rule="evenodd" d="M14.707 12.707a1 1 0 01-1.414 0L10 9.414l-3.293 3.293a1 1 0 01-1.414-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 010 1.414z" clip-rule="evenodd"/>
+                            </svg>
+                        </button>
+                        <button type="button" class="move-down-btn btn btn-xs btn-ghost p-0 h-5 min-h-0" title="Move down">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                                <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd"/>
+                            </svg>
+                        </button>
+                    </div>
                     <span class="badge badge-primary badge-sm">Section ${section.order + 1}</span>
                 </div>
                 <button type="button" class="remove-section-btn btn btn-xs btn-error btn-circle" title="Remove section">
@@ -157,11 +167,25 @@ class SectionBuilder {
 
         iconInput?.addEventListener('input', (e) => {
             this.updateSectionData(sectionId, 'icon', e.target.value);
+            // Trigger preview update
+            if (window.adminNotificationManager) {
+                window.adminNotificationManager.updatePreview();
+            }
         });
 
         // Remove button
         card.querySelector('.remove-section-btn')?.addEventListener('click', () => {
             this.removeSection(sectionId);
+        });
+
+        // Move up button
+        card.querySelector('.move-up-btn')?.addEventListener('click', () => {
+            this.moveSection(sectionId, -1);
+        });
+
+        // Move down button
+        card.querySelector('.move-down-btn')?.addEventListener('click', () => {
+            this.moveSection(sectionId, 1);
         });
 
         // Format buttons
@@ -237,6 +261,7 @@ class SectionBuilder {
         this.reorderSections();
         this.updateHiddenInput();
         this.toggleAddButton();
+        this.updateMoveButtonStates();
     }
 
     updateSectionData(sectionId, field, value) {
@@ -246,59 +271,58 @@ class SectionBuilder {
             this.updateHiddenInput();
 
             // Trigger preview update if available
-            if (window.notificationAdmin) {
-                window.notificationAdmin.updatePreview();
+            if (window.adminNotificationManager) {
+                window.adminNotificationManager.updatePreview();
             }
         }
     }
 
-    setupDragAndDrop() {
-        // Basic drag-and-drop using native API
-        let draggedElement = null;
+    moveSection(sectionId, direction) {
+        const idx = this.sections.findIndex(s => s.id === sectionId);
+        if (idx === -1) return;
 
-        this.container.addEventListener('dragstart', (e) => {
-            const card = e.target.closest('.section-card');
-            if (card && e.target.classList.contains('drag-handle')) {
-                draggedElement = card;
-                card.style.opacity = '0.5';
+        const newIdx = idx + direction;
+        // Check bounds
+        if (newIdx < 0 || newIdx >= this.sections.length) return;
+
+        // Swap in sections array
+        [this.sections[idx], this.sections[newIdx]] = [this.sections[newIdx], this.sections[idx]];
+
+        // Swap in DOM
+        const cards = Array.from(this.container.querySelectorAll('.section-card'));
+        const currentCard = cards[idx];
+        const targetCard = cards[newIdx];
+
+        if (direction === -1) {
+            // Moving up: insert before target
+            this.container.insertBefore(currentCard, targetCard);
+        } else {
+            // Moving down: insert after target
+            this.container.insertBefore(currentCard, targetCard.nextSibling);
+        }
+
+        // Update order and badges
+        this.reorderSections();
+        this.updateMoveButtonStates();
+    }
+
+    updateMoveButtonStates() {
+        const cards = Array.from(this.container.querySelectorAll('.section-card'));
+        cards.forEach((card, index) => {
+            const upBtn = card.querySelector('.move-up-btn');
+            const downBtn = card.querySelector('.move-down-btn');
+
+            // Disable up button for first card
+            if (upBtn) {
+                upBtn.disabled = index === 0;
+                upBtn.classList.toggle('btn-disabled', index === 0);
             }
-        });
 
-        this.container.addEventListener('dragend', (e) => {
-            if (draggedElement) {
-                draggedElement.style.opacity = '1';
-                draggedElement = null;
+            // Disable down button for last card
+            if (downBtn) {
+                downBtn.disabled = index === cards.length - 1;
+                downBtn.classList.toggle('btn-disabled', index === cards.length - 1);
             }
-        });
-
-        this.container.addEventListener('dragover', (e) => {
-            e.preventDefault();
-            const card = e.target.closest('.section-card');
-            if (card && card !== draggedElement) {
-                const rect = card.getBoundingClientRect();
-                const midpoint = rect.top + rect.height / 2;
-                if (e.clientY < midpoint) {
-                    card.parentNode.insertBefore(draggedElement, card);
-                } else {
-                    card.parentNode.insertBefore(draggedElement, card.nextSibling);
-                }
-                this.reorderSections();
-            }
-        });
-
-        // Make drag handles draggable
-        this.container.addEventListener('mousedown', (e) => {
-            if (e.target.classList.contains('drag-handle')) {
-                const card = e.target.closest('.section-card');
-                if (card) {
-                    card.draggable = true;
-                }
-            }
-        });
-
-        this.container.addEventListener('mouseup', (e) => {
-            const cards = this.container.querySelectorAll('.section-card');
-            cards.forEach(card => card.draggable = false);
         });
     }
 
@@ -323,8 +347,8 @@ class SectionBuilder {
         this.updateHiddenInput();
 
         // Trigger preview update
-        if (window.notificationAdmin) {
-            window.notificationAdmin.updatePreview();
+        if (window.adminNotificationManager) {
+            window.adminNotificationManager.updatePreview();
         }
     }
 

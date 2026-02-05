@@ -331,14 +331,14 @@
         renderStructuredSections(sections) {
             if (!sections || sections.length === 0) return '';
 
-            return sections
+            const sectionHtml = sections
                 .sort((a, b) => a.order - b.order)
                 .map(section => {
                     const formatted = this.formatStructuredContent(section.content);
 
                     return `
-                        <div class="bg-base-300 rounded-lg p-3 mt-3 border-l-4 border-primary">
-                            <div class="flex items-center gap-2 mb-2">
+                        <div class="bg-base-300 rounded-lg p-3 border-l-4 border-primary">
+                            <div class="flex items-center gap-2 mb-2 pb-2 border-b border-base-content/10">
                                 <span class="text-xl">${this.escapeHtml(section.icon)}</span>
                                 <h4 class="font-semibold text-sm">${this.escapeHtml(section.header)}</h4>
                             </div>
@@ -346,6 +346,8 @@
                         </div>
                     `;
                 }).join('');
+
+            return `<div class="space-y-3 mt-3">${sectionHtml}</div>`;
         }
 
         formatStructuredContent(text) {

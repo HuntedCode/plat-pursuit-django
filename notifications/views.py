@@ -8,7 +8,6 @@ from django.utils import timezone
 from datetime import datetime
 
 from trophies.mixins import ProfileHotbarMixin
-from trophies.themes import GRADIENT_THEMES
 from notifications.models import (
     NotificationTemplate, ScheduledNotification, NotificationLog
 )
@@ -43,16 +42,9 @@ class NotificationInboxView(LoginRequiredMixin, ProfileHotbarMixin, TemplateView
         ]
 
         # Add available themes for color grid modal (used in platinum notifications)
-        context['available_themes'] = [
-            (key, {
-                'name': data['name'],
-                'description': data['description'],
-                'background_css': data['background'].replace('\n', ' ').replace('  ', ' ').strip(),
-            })
-            for key, data in sorted(GRADIENT_THEMES.items(),
-                                   key=lambda x: (x[0] != 'default', x[1]['name']))
-            if not data.get('requires_game_image')
-        ]
+        # Include game art themes since we have game context in share cards
+        from trophies.themes import get_available_themes_for_grid
+        context['available_themes'] = get_available_themes_for_grid(include_game_art=True)
 
         return context
 

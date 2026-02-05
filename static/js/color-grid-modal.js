@@ -14,6 +14,10 @@ class ColorGridModal {
         this.currentFormat = 'landscape';
         this.callback = null;
         this.themes = window.GRADIENT_THEMES || {};
+        this.gameImages = {
+            game_image: '',
+            concept_bg_url: ''
+        };
     }
 
     init() {
@@ -37,6 +41,9 @@ class ColorGridModal {
             const btn = e.target.closest('.theme-preview-btn');
             if (!btn) return;
 
+            // Don't allow selection of disabled game art buttons
+            if (btn.disabled) return;
+
             const themeKey = btn.dataset.themeKey;
             this.selectTheme(themeKey);
         });
@@ -45,6 +52,37 @@ class ColorGridModal {
         this.applyButton?.addEventListener('click', (e) => {
             e.preventDefault();
             this.applySelection();
+        });
+    }
+
+    /**
+     * Update game art preview images in the grid
+     * @param {string} gameImage - URL to game cover image
+     * @param {string} conceptBgUrl - URL to concept background
+     */
+    updateGameArtPreviews(gameImage, conceptBgUrl) {
+        this.gameImages = {
+            game_image: gameImage || '',
+            concept_bg_url: conceptBgUrl || ''
+        };
+
+        // Update all game art theme buttons
+        this.grid.querySelectorAll('[data-game-art="true"]').forEach(btn => {
+            const source = btn.dataset.gameImageSource;
+            const imageUrl = source === 'concept_bg_url' ? conceptBgUrl : gameImage;
+
+            if (imageUrl) {
+                btn.style.backgroundImage = `linear-gradient(rgba(26, 27, 31, 0.85), rgba(26, 27, 31, 0.9)), url("${imageUrl}")`;
+                btn.style.backgroundSize = 'cover';
+                btn.style.backgroundPosition = 'center';
+                btn.classList.remove('opacity-50', 'cursor-not-allowed');
+                btn.disabled = false;
+            } else {
+                // Disable if no image available
+                btn.style.backgroundImage = 'linear-gradient(rgba(26, 27, 31, 0.9), rgba(26, 27, 31, 0.95))';
+                btn.classList.add('opacity-50', 'cursor-not-allowed');
+                btn.disabled = true;
+            }
         });
     }
 
@@ -68,7 +106,15 @@ class ColorGridModal {
                 : this.previewPortrait;
 
             if (activePreview) {
-                activePreview.style.background = selectedBtn.style.background;
+                // For game art themes, use backgroundImage; for others, use background
+                if (selectedBtn.dataset.gameArt === 'true') {
+                    activePreview.style.backgroundImage = selectedBtn.style.backgroundImage;
+                    activePreview.style.backgroundSize = 'cover';
+                    activePreview.style.backgroundPosition = 'center';
+                } else {
+                    activePreview.style.backgroundImage = '';
+                    activePreview.style.background = selectedBtn.style.background;
+                }
             }
         }
     }
@@ -78,13 +124,19 @@ class ColorGridModal {
      * @param {string} currentTheme - Currently selected theme key
      * @param {function} onApply - Callback function when theme is applied (receives themeKey)
      * @param {string} format - 'landscape' or 'portrait' to match share card dimensions
+     * @param {object} gameImages - { game_image: '...', concept_bg_url: '...' } for game art previews
      */
-    open(currentTheme = 'default', onApply = null, format = 'landscape') {
+    open(currentTheme = 'default', onApply = null, format = 'landscape', gameImages = null) {
         if (!this.modal) return;
 
         this.selectedTheme = currentTheme;
         this.callback = onApply;
         this.currentFormat = format;
+
+        // Update game art previews if provided
+        if (gameImages) {
+            this.updateGameArtPreviews(gameImages.game_image, gameImages.concept_bg_url);
+        }
 
         // Show/hide appropriate preview based on format
         if (this.previewLandscape && this.previewPortrait) {
@@ -117,5 +169,15 @@ class ColorGridModal {
 }
 
 // Export to global namespace for access by other scripts
+// Use singleton pattern to prevent multiple instances causing stale callback issues
 window.PlatPursuit = window.PlatPursuit || {};
 window.PlatPursuit.ColorGridModal = ColorGridModal;
+
+// Singleton instance getter - ensures only one modal instance exists
+window.PlatPursuit.getColorGridModal = function() {
+    if (!window.PlatPursuit._colorGridModalInstance) {
+        window.PlatPursuit._colorGridModalInstance = new ColorGridModal();
+        window.PlatPursuit._colorGridModalInstance.init();
+    }
+    return window.PlatPursuit._colorGridModalInstance;
+};

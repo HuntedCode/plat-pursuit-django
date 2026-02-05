@@ -1,45 +1,47 @@
 {# Color selection modal - include anywhere needing color selection #}
 <dialog id="color-grid-modal" class="modal">
-    <div class="modal-box max-w-2xl bg-base-200">
+    <div class="modal-box max-w-2xl bg-base-200 flex flex-col max-h-[90vh]">
         <form method="dialog">
-            <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2">
+            <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2 z-10">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
                 </svg>
             </button>
         </form>
 
-        <h3 class="font-bold text-lg mb-4">Choose Background Theme</h3>
+        <h3 class="font-bold text-lg mb-2 flex-shrink-0">Choose Background Theme</h3>
 
-        <p class="text-sm text-base-content/70 mb-4">
+        <p class="text-sm text-base-content/70 mb-3 flex-shrink-0">
             Select a gradient theme for your share card background.
         </p>
 
-        {# Include reusable grid #}
-        {% include 'partials/color_grid.html' with grid_id='modal-theme-grid' %}
+        {# Scrollable grid container - expanded to use space saved from smaller preview #}
+        <div class="overflow-y-auto flex-shrink-0 max-h-72 mb-3 pr-1">
+            {% include 'partials/color_grid.html' with grid_id='modal-theme-grid' %}
+        </div>
 
-        {# Live preview of selected theme - scaled to match share card dimensions #}
-        <div class="mt-4">
-            <label class="label">
+        {# Live preview of selected theme - scaled to 50% of original size #}
+        <div class="flex-shrink-0">
+            <label class="label py-1">
                 <span class="label-text text-sm font-semibold">Preview</span>
             </label>
 
-            {# Landscape preview (1200x630 scaled to max 575px width) #}
+            {# Landscape preview (1200x630 scaled to ~288x151 - 50% of previous) #}
             <div id="modal-theme-preview-landscape"
                  class="hidden rounded-lg border-2 border-base-300 items-center justify-center transition-all mx-auto"
-                 style="width: 575px; height: 302px; background: linear-gradient(to bottom right, #2a2e34, #32363d, #2a2e34);">
-                <span class="text-white font-bold text-lg drop-shadow-lg">Theme Preview</span>
+                 style="width: 288px; height: 151px; background: linear-gradient(to bottom right, #2a2e34, #32363d, #2a2e34);">
+                <span class="text-white font-bold text-sm drop-shadow-lg">Theme Preview</span>
             </div>
 
-            {# Portrait preview (1080x1350 scaled to max 437px height) #}
+            {# Portrait preview (1080x1350 scaled to ~175x219 - 50% of previous) #}
             <div id="modal-theme-preview-portrait"
                  class="hidden rounded-lg border-2 border-base-300 items-center justify-center transition-all mx-auto"
-                 style="width: 350px; height: 437px; background: linear-gradient(to bottom right, #2a2e34, #32363d, #2a2e34);">
-                <span class="text-white font-bold text-lg drop-shadow-lg">Theme Preview</span>
+                 style="width: 175px; height: 219px; background: linear-gradient(to bottom right, #2a2e34, #32363d, #2a2e34);">
+                <span class="text-white font-bold text-sm drop-shadow-lg">Theme Preview</span>
             </div>
         </div>
 
-        <div class="modal-action">
+        <div class="modal-action flex-shrink-0 mt-3">
             <form method="dialog">
                 <button type="submit" class="btn btn-ghost">Cancel</button>
                 <button type="button" class="btn btn-primary" id="modal-apply-theme">Apply Theme</button>

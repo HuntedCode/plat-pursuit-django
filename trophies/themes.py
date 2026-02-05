@@ -118,7 +118,18 @@ GRADIENT_THEMES = {
         'background': 'linear-gradient(to bottom right, #2a2e34, #32363d, #2a2e34)',  # Fallback
         'banner_background': 'linear-gradient(to right, rgba(103, 209, 248, 0.2), rgba(103, 209, 248, 0.08))',
         'banner_border_color': '#67d1f8',
-        'requires_game_image': True  # Special flag for JS to handle
+        'requires_game_image': True,  # Special flag for JS to handle
+        'game_image_source': 'game_image'  # Uses game cover image
+    },
+    'gameArtConceptBg': {
+        'name': 'Game Art (Wide)',
+        'description': 'Wide concept background image',
+        'accent_color': '#67d1f8',
+        'background': 'linear-gradient(to bottom right, #2a2e34, #32363d, #2a2e34)',  # Fallback
+        'banner_background': 'linear-gradient(to right, rgba(103, 209, 248, 0.2), rgba(103, 209, 248, 0.08))',
+        'banner_border_color': '#67d1f8',
+        'requires_game_image': True,
+        'game_image_source': 'concept_bg_url'  # Uses concept background image
     },
     'gradientMesh': {
         'name': 'Gradient Mesh',
@@ -439,5 +450,42 @@ def get_themes_for_js():
             js_themes[key]['backgroundRepeat'] = theme['background_repeat']
         if theme.get('requires_game_image'):
             js_themes[key]['requiresGameImage'] = True
+        if theme.get('game_image_source'):
+            js_themes[key]['gameImageSource'] = theme['game_image_source']
 
     return js_themes
+
+
+def get_available_themes_for_grid(include_game_art=False):
+    """
+    Get themes formatted for the color grid template.
+
+    Args:
+        include_game_art: If True, includes themes with requires_game_image=True
+
+    Returns:
+        list: List of (key, theme_data) tuples for template, sorted with default first
+    """
+    themes = []
+    for key, data in sorted(GRADIENT_THEMES.items(),
+                            key=lambda x: (x[0] != 'default', x[1]['name'])):
+        requires_game_image = data.get('requires_game_image', False)
+
+        # Skip game art themes unless explicitly requested
+        if requires_game_image and not include_game_art:
+            continue
+
+        theme_entry = {
+            'name': data['name'],
+            'description': data['description'],
+            'background_css': _clean_css(data['background']),
+        }
+
+        # For game art themes, add extra properties for JS to use
+        if requires_game_image:
+            theme_entry['is_game_art'] = True
+            theme_entry['game_image_source'] = data.get('game_image_source', 'game_image')
+
+        themes.append((key, theme_entry))
+
+    return themes

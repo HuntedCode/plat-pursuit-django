@@ -420,6 +420,9 @@ class NotificationInboxManager {
             case 'milestone_achieved':
                 enhancedContent = this.renderMilestoneDetail(metadata);
                 break;
+            case 'admin_announcement':
+                enhancedContent = this.renderAdminAnnouncementDetail(metadata);
+                break;
             default:
                 enhancedContent = '';
         }
@@ -504,14 +507,14 @@ class NotificationInboxManager {
     renderStructuredSections(sections) {
         if (!sections || sections.length === 0) return '';
 
-        return sections
+        const sectionHtml = sections
             .sort((a, b) => a.order - b.order)
             .map(section => {
                 const formatted = this.formatStructuredContent(section.content);
 
                 return `
-                    <div class="bg-base-200 rounded-lg p-4 mt-4 border-l-4 border-primary hover:border-secondary transition-colors">
-                        <div class="flex items-center gap-3 mb-3">
+                    <div class="bg-base-200 rounded-lg p-4 border-l-4 border-primary hover:border-secondary transition-colors">
+                        <div class="flex items-center gap-3 mb-3 pb-2 border-b border-base-300">
                             <span class="text-2xl">${this.escapeHtml(section.icon)}</span>
                             <h3 class="font-semibold text-base">${this.escapeHtml(section.header)}</h3>
                         </div>
@@ -519,6 +522,8 @@ class NotificationInboxManager {
                     </div>
                 `;
             }).join('');
+
+        return `<div class="space-y-4 mt-4">${sectionHtml}</div>`;
     }
 
     formatStructuredContent(text) {
@@ -1118,6 +1123,45 @@ class NotificationInboxManager {
                         <p class="text-xs text-base-content/60">This is a one-time milestone</p>
                     </div>
                 ` : ''}
+            </div>
+        `;
+    }
+
+    /**
+     * Render admin announcement notification detail.
+     * Admin announcements can have sections, action buttons, and banner images
+     * which are already handled by the base renderNotificationDetail method.
+     * This method handles any additional admin-specific metadata.
+     *
+     * @param {Object} metadata - Notification metadata
+     * @returns {string} HTML for admin announcement content
+     */
+    renderAdminAnnouncementDetail(metadata) {
+        // Admin announcements primarily use sections, banner images, and action buttons
+        // which are already rendered by the main detail method.
+        // This method can render any additional admin-specific content if present.
+        if (!metadata) {
+            return '';
+        }
+
+        // Check for admin-specific fields that might be in metadata
+        const source = metadata.source || null;
+        const category = metadata.category || null;
+
+        // Only show additional info if we have admin-specific metadata
+        if (!source && !category) {
+            return '';
+        }
+
+        return `
+            <div class="bg-base-200 rounded-lg p-3 mt-4">
+                <div class="flex items-center gap-2 text-xs text-base-content/60">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <span>Official Announcement</span>
+                    ${category ? `<span class="badge badge-ghost badge-xs">${this.escapeHtml(category)}</span>` : ''}
+                </div>
             </div>
         `;
     }

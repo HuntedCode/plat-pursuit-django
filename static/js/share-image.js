@@ -65,11 +65,18 @@ class ShareImageManager {
                 name: theme.name,
                 description: theme.description,
                 accentColor: theme.accentColor,
+                gameImageSource: theme.gameImageSource || null,
                 getStyle: theme.requiresGameImage
-                    ? function(gameImage) {
-                        if (gameImage) {
+                    ? function(gameImages) {
+                        // gameImages can be a string (backward compat) or object { game_image, concept_bg_url }
+                        const source = theme.gameImageSource || 'game_image';
+                        const imageUrl = typeof gameImages === 'string'
+                            ? gameImages
+                            : (gameImages?.[source] || gameImages?.game_image);
+
+                        if (imageUrl) {
                             return {
-                                background: `linear-gradient(rgba(26, 27, 31, 0.85), rgba(26, 27, 31, 0.9)), url("${gameImage}")`,
+                                background: `linear-gradient(rgba(26, 27, 31, 0.85), rgba(26, 27, 31, 0.9)), url("${imageUrl}")`,
                                 backgroundSize: 'cover',
                                 backgroundPosition: 'center'
                             };
@@ -193,13 +200,17 @@ class ShareImageManager {
     /**
      * Render background dropdown options
      * Default is always first, then alphabetically sorted
+     * Game art themes are excluded from dropdown (they're in the color grid)
      */
     renderBackgroundOptions() {
         const entries = Object.entries(this.backgroundStyles);
 
+        // Filter out game art themes - they're now in the color grid
+        const filtered = entries.filter(([key, style]) => !style.gameImageSource);
+
         // Separate default from others
-        const defaultEntry = entries.find(([key]) => key === 'default');
-        const otherEntries = entries.filter(([key]) => key !== 'default');
+        const defaultEntry = filtered.find(([key]) => key === 'default');
+        const otherEntries = filtered.filter(([key]) => key !== 'default');
 
         // Sort others alphabetically by name
         otherEntries.sort((a, b) => a[1].name.localeCompare(b[1].name));
@@ -224,9 +235,12 @@ class ShareImageManager {
 
         if (!styleDef) return;
 
-        // Get game image for styles that use it
-        const gameImage = this.metadata.game_image || null;
-        const styles = styleDef.getStyle(gameImage);
+        // Pass both game images for styles that use them
+        const gameImages = {
+            game_image: this.metadata.game_image || null,
+            concept_bg_url: this.metadata.concept_bg_url || null
+        };
+        const styles = styleDef.getStyle(gameImages);
 
         // Apply background styles to main element
         Object.entries(styles).forEach(([prop, value]) => {
@@ -289,10 +303,9 @@ class ShareImageManager {
             this.renderPreview();
         });
 
-        // Initialize color grid modal if available
-        if (window.PlatPursuit?.ColorGridModal) {
-            this.colorModal = new window.PlatPursuit.ColorGridModal();
-            this.colorModal.init();
+        // Get singleton color grid modal if available
+        if (window.PlatPursuit?.getColorGridModal) {
+            this.colorModal = window.PlatPursuit.getColorGridModal();
 
             // Attach modal trigger
             const modalBtn = document.getElementById('open-color-grid');
@@ -316,20 +329,33 @@ class ShareImageManager {
             return;
         }
 
-        // Open modal with current background, callback, and format
+        // Pass game images to modal for preview thumbnails
+        const gameImages = {
+            game_image: this.metadata.game_image || '',
+            concept_bg_url: this.metadata.concept_bg_url || ''
+        };
+
+        // Open modal with current background, callback, format, and game images
         this.colorModal.open(this.currentBackground, (selectedTheme) => {
             // Update internal state
             this.currentBackground = selectedTheme;
 
-            // Sync dropdown to match selection
+            // Sync dropdown to match selection (if theme is in dropdown)
             const selectElement = document.getElementById('background-select');
             if (selectElement) {
-                selectElement.value = selectedTheme;
+                // Check if option exists in dropdown before setting
+                const optionExists = Array.from(selectElement.options).some(opt => opt.value === selectedTheme);
+                if (optionExists) {
+                    selectElement.value = selectedTheme;
+                } else {
+                    // Game art theme selected - reset dropdown to default visual
+                    selectElement.value = 'default';
+                }
             }
 
             // Trigger preview re-render with new background
             this.renderPreview();
-        }, this.currentFormat);
+        }, this.currentFormat, gameImages);
     }
 
     /**

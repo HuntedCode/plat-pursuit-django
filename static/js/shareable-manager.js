@@ -5,9 +5,9 @@
  * Depends on: ShareImageManager (share-image.js), PlatPursuit.API
  */
 class ShareableManager extends ShareImageManager {
-    constructor(earnedTrophyId, gameName, gameImage) {
+    constructor(earnedTrophyId, gameName, gameImage, conceptBgUrl) {
         // Parent constructor expects notificationId, but we'll override fetchCardHTML
-        super(null, { game_name: gameName, game_image: gameImage });
+        super(null, { game_name: gameName, game_image: gameImage, concept_bg_url: conceptBgUrl });
         this.earnedTrophyId = earnedTrophyId;
         this.gameName = gameName;
     }
@@ -48,6 +48,7 @@ function openShareModal(cardElement) {
     const earnedTrophyId = cardElement.dataset.earnedTrophyId;
     const gameName = cardElement.dataset.gameName;
     const gameImage = cardElement.dataset.gameImage;
+    const conceptBgUrl = cardElement.dataset.conceptBgUrl || '';
 
     if (!earnedTrophyId || !gameName) {
         console.error('Missing earned trophy data');
@@ -77,7 +78,7 @@ function openShareModal(cardElement) {
     modal.showModal();
 
     // Create manager and render share section
-    const manager = new ShareableManager(earnedTrophyId, gameName, gameImage);
+    const manager = new ShareableManager(earnedTrophyId, gameName, gameImage, conceptBgUrl);
 
     // Render the share section UI
     modalContent.innerHTML = manager.renderShareSection();

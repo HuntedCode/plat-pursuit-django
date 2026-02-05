@@ -70,6 +70,7 @@ class NotificationListView(APIView):
                     'title': notification.title,
                     'message': notification.message,
                     'detail': notification.detail,  # Rich text detail with markdown
+                    'sections': notification.sections,  # Structured sections for admin announcements
                     'banner_image': notification.banner_image.url if notification.banner_image else None,  # Banner image URL
                     'icon': notification.icon,
                     'action_url': notification.action_url,
