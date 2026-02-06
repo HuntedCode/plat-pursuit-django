@@ -617,7 +617,95 @@ class MonthlyRecapManager {
                     }, 100);
                 }
             }, index * delay);
+
+            // Add click handler for days with platinums
+            if (day.classList.contains('platinum-day')) {
+                console.log('Adding click handler to platinum day:', day.dataset.day);
+                day.addEventListener('click', () => {
+                    console.log('Platinum day clicked!');
+                    this.showPlatinumDetails(day);
+                });
+            }
         });
+    }
+
+    /**
+     * Show platinum trophy details when calendar day is clicked
+     */
+    showPlatinumDetails(dayElement) {
+        console.log('showPlatinumDetails called', dayElement);
+        const platinumsData = dayElement.dataset.platinums;
+        console.log('platinumsData:', platinumsData);
+        if (!platinumsData) {
+            console.log('No platinum data found');
+            return;
+        }
+
+        try {
+            const platinums = JSON.parse(platinumsData);
+            console.log('Parsed platinums:', platinums);
+            const dayNumber = dayElement.dataset.day;
+
+            // Create modal HTML
+            const modalHTML = `
+                <div class="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4" id="platinum-modal">
+                    <div class="card bg-base-300 shadow-2xl max-w-md w-full border border-primary/30">
+                        <div class="card-body">
+                            <div class="flex justify-between items-start mb-4">
+                                <div>
+                                    <h3 class="text-2xl font-bold text-primary">Day ${dayNumber}</h3>
+                                    <p class="text-sm text-base-content/60">${platinums.length} Platinum${platinums.length > 1 ? 's' : ''} Earned</p>
+                                </div>
+                                <button class="btn btn-sm btn-circle btn-ghost" onclick="document.getElementById('platinum-modal').remove()">
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                                    </svg>
+                                </button>
+                            </div>
+                            <div class="space-y-3 max-h-96 overflow-y-auto">
+                                ${platinums.map(plat => `
+                                    <div class="flex items-center gap-3 p-3 bg-base-200 rounded-lg border border-primary/10 hover:border-primary/30 transition-all">
+                                        ${plat.icon_url ? `
+                                            <img src="${plat.icon_url}" alt="${plat.trophy_name}" class="w-12 h-12 rounded-lg flex-shrink-0" />
+                                        ` : ''}
+                                        <div class="flex-1 min-w-0">
+                                            <p class="font-semibold text-base-content line-clamp-2">${plat.game_name}</p>
+                                            <p class="text-sm text-base-content/70 line-clamp-1">${plat.trophy_name}</p>
+                                        </div>
+                                        <svg class="w-6 h-6 text-primary flex-shrink-0" viewBox="0 0 24 24" fill="currentColor">
+                                            <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/>
+                                        </svg>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            // Insert modal
+            document.body.insertAdjacentHTML('beforeend', modalHTML);
+
+            // Close on backdrop click
+            const modal = document.getElementById('platinum-modal');
+            modal.addEventListener('click', (e) => {
+                if (e.target === modal) {
+                    modal.remove();
+                }
+            });
+
+            // Close on escape key
+            const escapeHandler = (e) => {
+                if (e.key === 'Escape') {
+                    modal.remove();
+                    document.removeEventListener('keydown', escapeHandler);
+                }
+            };
+            document.addEventListener('keydown', escapeHandler);
+
+        } catch (error) {
+            console.error('Error parsing platinum data:', error);
+        }
     }
 
     /**

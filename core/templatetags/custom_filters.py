@@ -357,6 +357,27 @@ def moderator_display_name(user):
     return user.username or user.email
 
 
+@register.filter
+def tojson(value):
+    """
+    Convert a Python object to JSON string for use in HTML data attributes.
+
+    Args:
+        value: Any JSON-serializable Python object
+
+    Returns:
+        JSON string suitable for HTML attributes (properly escaped)
+    """
+    import json
+    from django.utils.html import escape
+    try:
+        # Convert to JSON, then escape for safe use in HTML attributes
+        json_string = json.dumps(value)
+        return escape(json_string)
+    except (TypeError, ValueError):
+        return '[]'
+
+
 @register.simple_tag
 def gradient_themes_json():
     """

@@ -388,7 +388,13 @@ class MonthlyRecapService:
 
         Returns:
             dict: {
-                'days': [{day: 1, count: 5, platinum_count: 1, level: 3}, ...],
+                'days': [{
+                    day: 1,
+                    count: 5,
+                    platinum_count: 1,
+                    platinums: [{game_name, trophy_name, icon_url}, ...],
+                    level: 3
+                }, ...],
                 'max_count': int,
                 'total_active_days': int,
                 'first_day_weekday': int (0=Sunday, 6=Saturday),
@@ -402,20 +408,28 @@ class MonthlyRecapService:
         # Convert to dict for easy lookup
         counts_by_day = {item['day'].day: item['count'] for item in daily_counts}
 
-        # Get platinum counts by day
+        # Get platinum trophy details by day
         start_date, end_date = cls.get_month_date_range(year, month)
-        platinum_counts = EarnedTrophy.objects.filter(
+        platinum_trophies = EarnedTrophy.objects.filter(
             profile=profile,
             earned=True,
             earned_date_time__gte=start_date,
             earned_date_time__lt=end_date,
             trophy__trophy_type='platinum'
-        ).annotate(
-            day=TruncDate('earned_date_time')
-        ).values('day').annotate(
-            count=Count('id')
-        )
-        platinums_by_day = {item['day'].day: item['count'] for item in platinum_counts}
+        ).select_related('trophy', 'trophy__game').order_by('earned_date_time')
+
+        # Group platinums by day with details
+        platinums_by_day = {}
+        for et in platinum_trophies:
+            day = et.earned_date_time.day
+            if day not in platinums_by_day:
+                platinums_by_day[day] = []
+
+            platinums_by_day[day].append({
+                'game_name': et.trophy.game.title_name,
+                'trophy_name': et.trophy.trophy_name,
+                'icon_url': et.trophy.trophy_icon_url or '',
+            })
 
         # Calculate calendar metadata
         days_in_month = calendar.monthrange(year, month)[1]
@@ -447,10 +461,12 @@ class MonthlyRecapService:
             else:
                 level = 0
 
+            day_platinums = platinums_by_day.get(day, [])
             days.append({
                 'day': day,
                 'count': count,
-                'platinum_count': platinums_by_day.get(day, 0),
+                'platinum_count': len(day_platinums),
+                'platinums': day_platinums,  # List of platinum details
                 'level': level,
             })
 

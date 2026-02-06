@@ -1,8 +1,10 @@
+{% load static %}
+{% load custom_filters %}
 {% comment %}
 Recap Slide: Activity Calendar
 Variables: days, max_count, total_active_days, first_day_weekday, first_day_offset, days_in_month, month_name, year
 {% endcomment %}
-<div class="flex items-center justify-center w-full h-full">
+<div class="flex items-center justify-center w-full h-full" data-slide-type="activity_calendar">
     <!-- Display Box -->
     <div class="card bg-base-300/50 border border-base-content/10 shadow-xl px-6 py-8 md:px-10 md:py-10 text-center max-w-md">
         <p class="text-lg text-base-content/70 mb-2">Your activity in</p>
@@ -29,9 +31,13 @@ Variables: days, max_count, total_active_days, first_day_weekday, first_day_offs
                 {% endfor %}
 
                 {% for day_data in days %}
-                <div class="w-8 h-8 md:w-10 md:h-10 flex items-center justify-center calendar-day stagger-item tooltip tooltip-top"
+                <div class="w-8 h-8 md:w-10 md:h-10 flex items-center justify-center calendar-day stagger-item tooltip tooltip-top {% if day_data.platinum_count > 0 %}cursor-pointer platinum-day{% endif %}"
                      style="animation-delay: {{ forloop.counter0 }}0ms;"
-                     data-tip="{{ day_data.count }} Trophies | {{ day_data.platinum_count }} Plats">
+                     data-tip="{{ day_data.count }} Trophies | {{ day_data.platinum_count }} Plats"
+                     data-day="{{ day_data.day }}"
+                     {% if day_data.platinum_count > 0 %}
+                     data-platinums="{{ day_data.platinums|tojson }}"
+                     {% endif %}>
                     <div class="activity-dot activity-level-{{ day_data.level }} rounded-full transition-all duration-300"></div>
                 </div>
                 {% endfor %}
@@ -109,5 +115,16 @@ Variables: days, max_count, total_active_days, first_day_weekday, first_day_offs
 
     .calendar-day:hover .activity-dot {
         transform: scale(1.2);
+    }
+
+    /* Platinum days - extra emphasis */
+    .platinum-day .activity-dot {
+        box-shadow: 0 0 12px rgba(103, 209, 248, 0.7);
+        border: 2px solid rgba(103, 209, 248, 0.5);
+    }
+
+    .platinum-day:hover .activity-dot {
+        transform: scale(1.3);
+        cursor: pointer;
     }
 </style>
