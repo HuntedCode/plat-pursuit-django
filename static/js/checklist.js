@@ -348,7 +348,10 @@
             throw new Error('Server error - please try again');
         }
         if (!response.ok) {
-            throw new Error(json.error || json.detail || 'Request failed');
+            const error = new Error(json.error || json.detail || 'Request failed');
+            // Attach full response data for detailed error handling
+            error.responseData = json;
+            throw error;
         }
         return json;
     }
@@ -1071,7 +1074,8 @@
                     console.error('Failed to save header:', error);
                 }
 
-                // Save all sections
+                // Collect all section updates
+                const sectionUpdates = [];
                 const sections = document.querySelectorAll('.checklist-section');
                 for (const section of sections) {
                     const sectionId = section.dataset.sectionId;
@@ -1079,25 +1083,41 @@
                     const sectionDescription = section.querySelector('.section-description-input')?.value.trim();
 
                     if (subtitle) {
-                        try {
-                            await apiRequest(`${API_BASE}/checklists/${checklistId}/sections/${sectionId}/`, 'PATCH', {
-                                subtitle,
-                                description: sectionDescription,
-                            });
-                            successCount++;
-                        } catch (error) {
-                            errorCount++;
-                            console.error(`Failed to save section ${sectionId}:`, error);
-                        }
+                        sectionUpdates.push({
+                            sectionId,
+                            subtitle,
+                            description: sectionDescription
+                        });
                     }
+                }
 
-                    // Save all items in this section
+                // Save sections in parallel (limited concurrency)
+                const sectionPromises = sectionUpdates.map(async (update) => {
+                    try {
+                        await apiRequest(`${API_BASE}/checklists/${checklistId}/sections/${update.sectionId}/`, 'PATCH', {
+                            subtitle: update.subtitle,
+                            description: update.description,
+                        });
+                        return { success: true };
+                    } catch (error) {
+                        console.error(`Failed to save section ${update.sectionId}:`, error);
+                        return { success: false };
+                    }
+                });
+
+                const sectionResults = await Promise.all(sectionPromises);
+                successCount += sectionResults.filter(r => r.success).length;
+                errorCount += sectionResults.filter(r => !r.success).length;
+
+                // Collect all item updates for bulk update
+                const itemUpdates = [];
+                for (const section of sections) {
                     const items = section.querySelectorAll('.checklist-item-edit, .checklist-text-area-edit, .checklist-image-item');
                     for (const item of items) {
                         const itemId = item.dataset.itemId;
                         const itemType = item.dataset.itemType;
 
-                        // Skip trophy items and image items without captions to edit
+                        // Skip trophy items (they can't be edited)
                         if (itemType === 'trophy') continue;
 
                         const textInput = item.querySelector('.item-text-input');
@@ -1107,17 +1127,41 @@
                         const typeSelect = item.querySelector('.item-type-select');
                         const finalItemType = typeSelect ? typeSelect.value : itemType;
 
-                        // Only save if there's text (or if it's an image with optional caption)
+                        // Include all items with text (or images with optional caption)
                         if (text || itemType === 'image') {
-                            try {
-                                await apiRequest(`${API_BASE}/checklists/items/${itemId}/`, 'PATCH', {
-                                    text: text || '',
-                                    item_type: finalItemType,
+                            itemUpdates.push({
+                                id: parseInt(itemId, 10),
+                                text: text || '',
+                                item_type: finalItemType
+                            });
+                        }
+                    }
+                }
+
+                // Bulk update all items in a single request
+                if (itemUpdates.length > 0) {
+                    try {
+                        const result = await apiRequest(
+                            `${API_BASE}/checklists/${checklistId}/items/bulk-update/`,
+                            'POST',
+                            { items: itemUpdates }
+                        );
+                        successCount += result.updated_count || 0;
+                    } catch (error) {
+                        errorCount++;
+                        console.error('Failed to bulk update items:', error);
+
+                        // If bulk update failed, show specific errors if available
+                        const responseData = error.responseData;
+                        if (responseData) {
+                            console.error('Bulk update error details:', responseData);
+                            if (responseData.failed_items) {
+                                responseData.failed_items.forEach(item => {
+                                    console.error(`Item ${item.id} (index ${item.index}): ${item.error}`);
                                 });
-                                successCount++;
-                            } catch (error) {
-                                errorCount++;
-                                console.error(`Failed to save item ${itemId}:`, error);
+                            }
+                            if (responseData.summary) {
+                                console.error('Summary:', responseData.summary);
                             }
                         }
                     }
@@ -1619,6 +1663,12 @@
         const container = section.querySelector('.section-items-container');
         if (!template || !container) return;
 
+        // Auto-expand section if collapsed
+        const sectionId = section.dataset.sectionId;
+        if (sectionId) {
+            expandSectionItems(sectionId);
+        }
+
         // Remove empty message if present
         const emptyMsg = container.querySelector('.empty-items-message');
         if (emptyMsg) emptyMsg.remove();
@@ -1881,7 +1931,7 @@
         document.addEventListener('change', function(e) {
             if (e.target.classList.contains('section-thumbnail-input')) {
                 const file = e.target.files[0];
-                if (file && validateImageFile(file, 2)) {
+                if (file && validateImageFile(file, 5)) {
                     const section = e.target.closest('.section-card');
                     const preview = section ? section.querySelector('.section-thumbnail-preview') : null;
                     if (preview) {
@@ -2512,6 +2562,7 @@
                      data-trophy-name="${escapeHtml(trophy.trophy_name)}"
                      data-trophy-type="${trophy.trophy_type}"
                      data-trophy-group="${trophy.trophy_group_id}"
+                     data-is-used="${trophy.is_used ? 'true' : 'false'}"
                      onclick="${trophy.is_used ? '' : 'selectTrophy(' + trophy.id + ')'}">
                     <img src="${trophy.trophy_icon_url}"
                          alt="${escapeHtml(trophy.trophy_name)}"
@@ -2548,7 +2599,7 @@
         const sectionId = modal.dataset.sectionId;
 
         try {
-            await apiRequest(
+            const result = await apiRequest(
                 `/api/v1/checklists/sections/${sectionId}/items/`,
                 'POST',
                 {
@@ -2560,10 +2611,164 @@
             PlatPursuit.ToastManager.show('Trophy added successfully', 'success');
             modal.close();
 
-            // Reload page to show new trophy item
-            setTimeout(() => reloadWithFormState(), 500);
+            // Get trophy data from modal cache
+            const trophyData = getTrophyFromModalCache(trophyId);
+
+            // Add trophy to DOM without page reload
+            const section = document.querySelector(`.checklist-section[data-section-id="${sectionId}"]`);
+            if (section && result.item) {
+                addTrophyItemToDOM(section, result.item, trophyData);
+            }
+
+            // Mark trophy as used in modal
+            markTrophyAsUsed(trophyId);
         } catch (error) {
             PlatPursuit.ToastManager.show(error.message, 'error');
+        }
+    }
+
+    /**
+     * Get trophy data from modal's cached trophy list.
+     */
+    function getTrophyFromModalCache(trophyId) {
+        const modal = document.getElementById('trophy-selector-modal');
+        if (!modal || !modal.dataset.trophies) return null;
+
+        try {
+            const trophies = JSON.parse(modal.dataset.trophies);
+            return trophies.find(t => t.id === trophyId) || null;
+        } catch (e) {
+            console.error('Failed to get trophy from cache:', e);
+            return null;
+        }
+    }
+
+    /**
+     * Add trophy item to DOM without page reload.
+     */
+    function addTrophyItemToDOM(section, item, trophyData) {
+        const container = section.querySelector('.section-items-container');
+        if (!container) return;
+
+        // Auto-expand section if collapsed
+        const sectionId = section.dataset.sectionId;
+        if (sectionId) {
+            expandSectionItems(sectionId);
+        }
+
+        // Remove empty message if present
+        const emptyMsg = container.querySelector('.empty-items-message');
+        if (emptyMsg) emptyMsg.remove();
+
+        // Get trophy details
+        const trophy = trophyData || {};
+        const trophyType = trophy.trophy_type || 'bronze';
+        const trophyTypeTitle = trophyType.charAt(0).toUpperCase() + trophyType.slice(1);
+
+        // Build DLC badge if applicable
+        let dlcBadge = '';
+        if (!trophy.is_base_game) {
+            if (trophy.trophy_group_name) {
+                dlcBadge = `<span class="badge badge-sm badge-info">DLC: ${escapeHtml(trophy.trophy_group_name)}</span>`;
+            } else {
+                dlcBadge = '<span class="badge badge-sm badge-info">DLC</span>';
+            }
+        }
+
+        // Create trophy element
+        const trophyEl = document.createElement('div');
+        trophyEl.className = 'checklist-trophy-item-edit my-2 p-3 bg-warning/5 border-2 border-warning/20 rounded-lg';
+        trophyEl.dataset.itemId = item.id;
+        trophyEl.dataset.itemOrder = item.order;
+        trophyEl.dataset.itemType = 'trophy';
+        trophyEl.dataset.trophyId = item.trophy_id;
+
+        trophyEl.innerHTML = `
+            <div class="flex items-start gap-3">
+                <div class="flex flex-col gap-1">
+                    <button class="btn btn-ghost btn-xs item-move-up-btn" title="Move up">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"/>
+                        </svg>
+                    </button>
+                    <button class="btn btn-ghost btn-xs item-move-down-btn" title="Move down">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                        </svg>
+                    </button>
+                </div>
+                <div class="flex-1 flex items-center gap-3">
+                    <img src="${trophy.trophy_icon_url || ''}" class="w-10 h-10 rounded shrink-0" alt="">
+                    <div class="flex-1">
+                        <div class="flex items-center gap-2 mb-1 flex-wrap">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-warning" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"/>
+                            </svg>
+                            <span class="badge badge-warning badge-sm">Trophy</span>
+                            <span class="badge badge-${trophyType} badge-sm">${trophyTypeTitle}</span>
+                            ${dlcBadge}
+                        </div>
+                        <p class="font-semibold">${escapeHtml(item.text || trophy.trophy_name || '')}</p>
+                        ${trophy.trophy_detail ? `<p class="text-xs text-base-content/60 line-clamp-2 mt-1">${escapeHtml(trophy.trophy_detail)}</p>` : ''}
+                    </div>
+                </div>
+                <button class="btn btn-ghost btn-xs item-delete-btn text-error" title="Remove trophy">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                </button>
+            </div>
+        `;
+
+        container.appendChild(trophyEl);
+
+        // Update item count
+        const countBadge = section.querySelector('.section-item-count');
+        if (countBadge) {
+            const items = container.querySelectorAll('[data-item-id]');
+            countBadge.textContent = items.length + ' items';
+        }
+
+        // Re-init event listeners for the new item
+        const checklistId = document.getElementById('checklist-edit-container')?.dataset.checklistId;
+        if (checklistId) {
+            initItemOperations(checklistId);
+        }
+    }
+
+    /**
+     * Mark a trophy as used in the modal's cached data.
+     */
+    function markTrophyAsUsed(trophyId) {
+        const modal = document.getElementById('trophy-selector-modal');
+        if (!modal || !modal.dataset.trophies) return;
+
+        try {
+            const trophies = JSON.parse(modal.dataset.trophies);
+            const trophy = trophies.find(t => t.id === trophyId);
+            if (trophy) {
+                trophy.is_used = true;
+                modal.dataset.trophies = JSON.stringify(trophies);
+
+                // Update visual state of the trophy card
+                const card = document.querySelector(`.trophy-select-card[data-trophy-id="${trophyId}"]`);
+                if (card) {
+                    card.classList.add('opacity-50', 'pointer-events-none');
+                    card.dataset.isUsed = 'true';
+                    card.removeAttribute('onclick');
+
+                    // Add "Already Added" badge if not present
+                    const badgeContainer = card.querySelector('.flex-wrap');
+                    if (badgeContainer && !badgeContainer.querySelector('.badge-ghost')) {
+                        const badge = document.createElement('span');
+                        badge.className = 'badge badge-ghost badge-xs';
+                        badge.textContent = 'Already Added';
+                        badgeContainer.appendChild(badge);
+                    }
+                }
+            }
+        } catch (e) {
+            console.error('Failed to mark trophy as used:', e);
         }
     }
 
@@ -2594,16 +2799,18 @@
     }
 
     /**
-     * Filter trophies by search, type, and group.
+     * Filter trophies by search, type, group, and used status.
      */
     function filterTrophies() {
         const searchInput = document.getElementById('trophy-search-input');
         const typeFilter = document.getElementById('trophy-type-filter');
         const groupFilter = document.getElementById('trophy-group-filter');
+        const hideUsedFilter = document.getElementById('trophy-hide-used-filter');
 
         const searchTerm = searchInput.value.toLowerCase();
         const selectedType = typeFilter.value.toLowerCase();
         const selectedGroup = groupFilter.value;
+        const hideUsed = hideUsedFilter?.checked || false;
 
         const cards = document.querySelectorAll('.trophy-select-card');
 
@@ -2611,12 +2818,14 @@
             const name = card.dataset.trophyName.toLowerCase();
             const type = card.dataset.trophyType.toLowerCase();
             const group = card.dataset.trophyGroup;
+            const isUsed = card.dataset.isUsed === 'true';
 
             const matchesSearch = name.includes(searchTerm);
             const matchesType = !selectedType || type === selectedType;
             const matchesGroup = !selectedGroup || group === selectedGroup;
+            const matchesUsed = !hideUsed || !isUsed;
 
-            card.style.display = (matchesSearch && matchesType && matchesGroup) ? 'flex' : 'none';
+            card.style.display = (matchesSearch && matchesType && matchesGroup && matchesUsed) ? 'flex' : 'none';
         });
     }
 
@@ -2637,6 +2846,7 @@
         const searchInput = document.getElementById('trophy-search-input');
         const typeFilter = document.getElementById('trophy-type-filter');
         const groupFilter = document.getElementById('trophy-group-filter');
+        const hideUsedFilter = document.getElementById('trophy-hide-used-filter');
 
         if (searchInput) {
             searchInput.addEventListener('input', filterTrophies);
@@ -2648,6 +2858,10 @@
 
         if (groupFilter) {
             groupFilter.addEventListener('change', filterTrophies);
+        }
+
+        if (hideUsedFilter) {
+            hideUsedFilter.addEventListener('change', filterTrophies);
         }
     }
 
@@ -2687,6 +2901,68 @@
                 }
             });
         });
+    }
+
+    // ==========================================
+    // Section Items Toggle (Edit Page)
+    // ==========================================
+
+    function initSectionItemsToggle() {
+        document.querySelectorAll('.section-items-toggle').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const sectionId = this.dataset.sectionId;
+                const section = this.closest('.checklist-section');
+                if (!section) return;
+
+                const summary = section.querySelector(`.section-items-summary[data-section-id="${sectionId}"]`);
+                const content = section.querySelector(`.section-items-content[data-section-id="${sectionId}"]`);
+                const icon = this.querySelector('.section-toggle-icon');
+
+                const isExpanded = this.getAttribute('aria-expanded') === 'true';
+
+                if (isExpanded) {
+                    // Collapse
+                    if (summary) summary.classList.remove('hidden');
+                    if (content) content.classList.add('hidden');
+                    if (icon) icon.style.transform = 'rotate(0deg)';
+                    this.setAttribute('aria-expanded', 'false');
+                } else {
+                    // Expand
+                    if (summary) summary.classList.add('hidden');
+                    if (content) content.classList.remove('hidden');
+                    if (icon) icon.style.transform = 'rotate(180deg)';
+                    this.setAttribute('aria-expanded', 'true');
+                }
+            });
+        });
+
+        // Also make summary clickable to expand
+        document.querySelectorAll('.section-items-summary').forEach(summary => {
+            summary.addEventListener('click', function() {
+                const sectionId = this.dataset.sectionId;
+                const section = this.closest('.checklist-section');
+                if (!section) return;
+
+                const toggleBtn = section.querySelector(`.section-items-toggle[data-section-id="${sectionId}"]`);
+                if (toggleBtn) {
+                    toggleBtn.click();
+                }
+            });
+            summary.style.cursor = 'pointer';
+        });
+    }
+
+    /**
+     * Expand a section's items view (used when adding items).
+     */
+    function expandSectionItems(sectionId) {
+        const section = document.querySelector(`.checklist-section[data-section-id="${sectionId}"]`);
+        if (!section) return;
+
+        const toggleBtn = section.querySelector(`.section-items-toggle[data-section-id="${sectionId}"]`);
+        if (toggleBtn && toggleBtn.getAttribute('aria-expanded') !== 'true') {
+            toggleBtn.click();
+        }
     }
 
     // ==========================================
@@ -2901,6 +3177,7 @@
         initTrophySelection();
         // Section controls
         initSectionCollapse();
+        initSectionItemsToggle();
         initBulkCheckButtons();
         // Unsaved changes warning - skip capturing original state if we restored unsaved changes
         initUnsavedChangesWarning(hasRestoredFields);

@@ -1,0 +1,35 @@
+{% comment %}
+Recap Slide: Streak Data
+Variables: longest_streak, streak_start, streak_end, total_active_days
+{% endcomment %}
+<div class="flex items-center justify-center w-full h-full">
+    <div class="card bg-base-300/50 border border-base-content/10 shadow-xl px-8 py-10 md:px-12 md:py-12 text-center max-w-md">
+        <p class="text-lg text-base-content/70 mb-4">Your longest streak</p>
+
+        <!-- Flame icon with streak count -->
+        <div class="flex items-center justify-center gap-4 mb-6">
+            <svg class="h-16 w-16 text-warning" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M12 23c-4.14 0-7.5-3.5-7.5-7.75 0-4.08 3.37-6.38 5.5-8.25.68 3.67 2.28 5.5 4.5 5.5 1.93 0 3.5-1.5 3.5-3.5 0-2.83-2.5-4.75-2.5-6.75 0-.5.17-1 .5-1.25 3.5 2.75 5.5 5.75 5.5 10.25 0 6.5-5.36 11.75-9.5 11.75z"/>
+            </svg>
+            <div class="text-6xl md:text-7xl font-bold text-warning count-up">
+                {{ longest_streak }}
+            </div>
+        </div>
+
+        <p class="text-2xl text-base-content mb-2">consecutive days!</p>
+
+        {% if longest_streak > 1 %}
+        <p class="text-base-content/70 mb-6">{{ streak_start }} - {{ streak_end }}</p>
+        {% endif %}
+
+        <div class="badge badge-lg badge-outline gap-2 py-4">
+            <span class="font-bold text-primary">{{ total_active_days }}</span> active days this month
+        </div>
+
+        {% if longest_streak >= 7 %}
+        <p class="text-sm text-warning/80 italic mt-6">A whole week of trophy hunting!</p>
+        {% elif longest_streak >= 3 %}
+        <p class="text-sm text-base-content/50 italic mt-6">Consistency is key!</p>
+        {% endif %}
+    </div>
+</div>

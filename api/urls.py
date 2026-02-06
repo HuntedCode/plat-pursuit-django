@@ -9,7 +9,8 @@ from .checklist_views import (
     ChecklistPublishView, ChecklistVoteView, ChecklistReportView,
     ChecklistProgressToggleView, ChecklistProgressView, ChecklistSectionBulkProgressView,
     ChecklistSectionListView, ChecklistSectionDetailView, ChecklistSectionReorderView,
-    ChecklistItemListView, ChecklistItemBulkCreateView, ChecklistItemDetailView, ChecklistItemReorderView,
+    ChecklistItemListView, ChecklistItemBulkCreateView, ChecklistItemBulkUpdateView,
+    ChecklistItemDetailView, ChecklistItemReorderView,
     UserDraftChecklistsView, UserPublishedChecklistsView, UserChecklistProgressView,
     ChecklistImageUploadView, SectionImageUploadView, ItemImageCreateView,
     MarkdownPreviewView, ChecklistGameSelectView, ChecklistAvailableTrophiesView
@@ -22,6 +23,10 @@ from .notification_views import (
     AdminNotificationPreviewView, AdminTargetCountView, AdminUserSearchView
 )
 from .shareable_views import ShareableImageHTMLView
+from .recap_views import (
+    RecapAvailableView, RecapDetailView, RecapRegenerateView, RecapShareImageHTMLView,
+    RecapSlidePartialView
+)
 
 app_name = 'api'
 
@@ -69,6 +74,7 @@ urlpatterns = [
     path('checklists/sections/<int:section_id>/items/bulk/', ChecklistItemBulkCreateView.as_view(), name='checklist-item-bulk-create'),
     path('checklists/sections/<int:section_id>/items/image/', ItemImageCreateView.as_view(), name='checklist-item-image-create'),
     path('checklists/sections/<int:section_id>/items/reorder/', ChecklistItemReorderView.as_view(), name='checklist-item-reorder'),
+    path('checklists/<int:checklist_id>/items/bulk-update/', ChecklistItemBulkUpdateView.as_view(), name='checklist-item-bulk-update'),
     path('checklists/items/<int:item_id>/', ChecklistItemDetailView.as_view(), name='checklist-item-detail'),
 
     # Checklist image endpoints
@@ -111,4 +117,11 @@ urlpatterns = [
 
     # Shareable image endpoints (EarnedTrophy-based, for My Shareables page)
     path('shareables/platinum/<int:earned_trophy_id>/html/', ShareableImageHTMLView.as_view(), name='shareable-platinum-html'),
+
+    # Monthly recap endpoints
+    path('recap/available/', RecapAvailableView.as_view(), name='recap-available'),
+    path('recap/<int:year>/<int:month>/', RecapDetailView.as_view(), name='recap-detail'),
+    path('recap/<int:year>/<int:month>/regenerate/', RecapRegenerateView.as_view(), name='recap-regenerate'),
+    path('recap/<int:year>/<int:month>/html/', RecapShareImageHTMLView.as_view(), name='recap-share-html'),
+    path('recap/<int:year>/<int:month>/slide/<str:slide_type>/', RecapSlidePartialView.as_view(), name='recap-slide-partial'),
 ]

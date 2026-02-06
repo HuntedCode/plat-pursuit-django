@@ -1,0 +1,55 @@
+{% comment %}
+Recap Slide: Quiz - Which Badge Are You Closest To?
+Variables: correct_badge_id, correct_badge_name, correct_progress_pct, correct_completed, correct_required, options (list of {id, name, series, icon_url})
+{% endcomment %}
+<div class="flex items-center justify-center w-full h-full">
+    <div class="card bg-base-300/50 border border-base-content/10 shadow-xl px-6 py-8 md:px-10 md:py-10 text-center max-w-lg"
+         data-quiz-correct="{{ correct_badge_id }}">
+        <!-- Question Icon -->
+        <div class="text-4xl mb-3">🎖️</div>
+
+        <!-- Question -->
+        <h3 class="text-xl md:text-2xl font-bold text-primary mb-2">Badge Quiz!</h3>
+        <p class="text-base text-base-content/70 mb-6">Which badge are you closest to earning?</p>
+
+        <!-- Badge Options -->
+        <div class="grid grid-cols-2 gap-3">
+            {% for badge in options %}
+            <div data-quiz-option="{{ badge.id }}"
+                 class="card bg-base-200 border border-base-content/10 p-3 cursor-pointer hover:border-primary transition-all">
+                <!-- Badge Icon -->
+                <div class="flex justify-center mb-2">
+                    {% if badge.icon_url %}
+                    <img src="{{ badge.icon_url }}" alt="{{ badge.name }}" class="w-12 h-12 rounded" />
+                    {% else %}
+                    <div class="w-12 h-12 rounded bg-base-300 flex items-center justify-center">
+                        <span class="text-2xl">🎖️</span>
+                    </div>
+                    {% endif %}
+                </div>
+
+                <!-- Badge Name -->
+                <p class="text-sm font-semibold text-base-content line-clamp-2 mb-1">{{ badge.name }}</p>
+
+                <!-- Series Name -->
+                {% if badge.series %}
+                <p class="text-xs text-base-content/50 line-clamp-1">{{ badge.series }}</p>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+
+        <!-- Feedback container (populated by JS) -->
+        <div data-quiz-feedback class="hidden"></div>
+
+        <!-- Answer reveal info (shown after answering) -->
+        <div data-quiz-answer-detail class="hidden mt-4 p-3 bg-base-200 rounded-lg">
+            <p class="text-sm text-base-content/70">
+                You're <span class="font-bold text-primary">{{ correct_progress_pct }}%</span> of the way there!
+            </p>
+            <p class="text-xs text-base-content/50 mt-1">
+                {{ correct_completed }}/{{ correct_required }} concepts completed
+            </p>
+        </div>
+    </div>
+</div>

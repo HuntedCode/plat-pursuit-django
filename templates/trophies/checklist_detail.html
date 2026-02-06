@@ -380,11 +380,11 @@
                                 {% endif %}
 
                             {% elif item.item_type == 'sub_header' %}
-                                {# Sub-header - no checkbox, distinct styling #}
-                                <div class="checklist-sub-header px-3 py-2 bg-base-300/50 rounded-lg border-l-4 border-secondary"
+                                {# Sub-header - no checkbox, distinct styling with visual separation #}
+                                <div class="checklist-sub-header mt-6 first:mt-0 px-4 py-3 bg-gradient-to-r from-secondary/20 to-transparent rounded-lg border-l-4 border-secondary"
                                      data-item-id="{{ item.id }}"
                                      data-item-type="sub_header">
-                                    <span class="font-semibold text-secondary text-sm uppercase tracking-wide">
+                                    <span class="font-bold text-secondary text-base uppercase tracking-wide">
                                         {{ item.text }}
                                     </span>
                                 </div>

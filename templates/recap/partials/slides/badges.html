@@ -1,0 +1,43 @@
+{% load static %}
+{% comment %}
+Recap Slide: Badge Progress
+Variables: xp_earned, badges_count, badges (list of dicts with name, tier, tier_name, series_slug, image_url)
+{% endcomment %}
+<div class="flex items-center justify-center w-full h-full">
+    <!-- Display Box -->
+    <div class="card bg-base-300/50 border border-base-content/10 shadow-xl px-8 py-10 md:px-12 md:py-12 text-center w-full max-w-sm">
+        <p class="text-lg text-base-content/70 mb-6">Badge Progress</p>
+
+        {% if xp_earned > 0 %}
+        <!-- XP Earned -->
+        <div class="text-5xl md:text-6xl font-bold text-warning mb-2 count-up">+{{ xp_earned }}</div>
+        <p class="text-base-content/70 mb-6">Badge XP earned</p>
+        {% endif %}
+
+        {% if badges %}
+        <!-- Badge Count -->
+        <p class="text-sm text-base-content/60 mb-4">{{ badges_count }} badge{{ badges_count|pluralize }} earned</p>
+
+        <!-- Badge Cards -->
+        <div class="flex flex-col gap-3">
+            {% for badge in badges|slice:":3" %}
+            <div class="card card-side bg-base-300 border-4 border-base-300 rounded-box shadow-md shadow-neutral hover:border-warning transition-all duration-300 stagger-item" style="animation-delay: {{ forloop.counter0|add:2 }}00ms;">
+                <figure class="w-16 h-16 p-2">        
+                    <img src="{% if badge.has_image %}{{ badge.image_url }}{% else %}{% static badge.image_url %}{% endif %}" alt="{{ badge.name }}" class="w-full h-full object-contain" loading="lazy" />
+                </figure>
+                <div class="card-body p-3 justify-center">
+                    <h3 class="card-title text-sm">{{ badge.name }}</h3>
+                    <p class="text-xs text-base-content/60">{{ badge.tier_name }} Badge</p>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <p class="text-base-content/60 italic">Keep hunting for badges!</p>
+        {% endif %}
+
+        {% if flavor_text %}
+        <p class="text-sm text-base-content/50 italic mt-6">{{ flavor_text }}</p>
+        {% endif %}
+    </div>
+</div>

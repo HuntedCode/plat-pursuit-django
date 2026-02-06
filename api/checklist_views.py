@@ -912,6 +912,74 @@ class ChecklistItemBulkCreateView(APIView):
             return Response({'error': 'Internal error.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+class ChecklistItemBulkUpdateView(APIView):
+    """Bulk update items in a checklist."""
+    authentication_classes = [SessionAuthentication, TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    @method_decorator(ratelimit(key='user', rate='10/m', method='POST', block=True))
+    def post(self, request, checklist_id):
+        """
+        POST /api/v1/checklists/<checklist_id>/items/bulk-update/
+
+        Request Body:
+        {
+            "items": [
+                {"id": 123, "text": "Updated text", "item_type": "item"},
+                {"id": 124, "text": "Sub-header text", "item_type": "sub_header"}
+            ]
+        }
+
+        Success Response (200):
+        {
+            "success": true,
+            "updated_count": 5
+        }
+
+        Validation Error (400):
+        {
+            "error": "Validation failed for 2 items",
+            "failed_items": [{"index": 0, "id": 123, "error": "..."}],
+            "summary": {"total_submitted": 10, "valid": 8, "failed": 2}
+        }
+        """
+        try:
+            # Get checklist
+            try:
+                checklist = Checklist.objects.get(id=checklist_id, is_deleted=False)
+            except Checklist.DoesNotExist:
+                return Response({'error': 'Checklist not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+            profile = getattr(request.user, 'profile', None)
+
+            # Validate request data
+            items_data = request.data.get('items', [])
+            if not isinstance(items_data, list):
+                return Response({'error': 'Items must be a list.'}, status=status.HTTP_400_BAD_REQUEST)
+
+            if len(items_data) > 200:
+                return Response({'error': 'Maximum 200 items per request.'}, status=status.HTTP_400_BAD_REQUEST)
+
+            # Bulk update
+            updated_count, error = ChecklistService.bulk_update_items(
+                checklist=checklist,
+                profile=profile,
+                items_data=items_data
+            )
+
+            if error:
+                return Response(error, status=status.HTTP_400_BAD_REQUEST)
+
+            return Response({
+                'success': True,
+                'updated_count': updated_count
+            })
+
+        except Exception as e:
+            logger.exception(f"Bulk item update error: {e}")
+            return Response({'error': 'Internal error.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
 class ChecklistItemDetailView(APIView):
     """Update or delete an item."""
     authentication_classes = [SessionAuthentication, TokenAuthentication]

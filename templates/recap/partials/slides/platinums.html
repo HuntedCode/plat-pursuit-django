@@ -1,0 +1,47 @@
+{% comment %}
+Recap Slide: Platinums Earned
+Variables: count, games (list of dicts with game_name, game_image, earned_date, earn_rate)
+{% endcomment %}
+<div class="flex items-center justify-center w-full h-full">
+    <!-- Display Box -->
+    <div class="card bg-base-300/50 border border-base-content/10 shadow-xl px-8 py-10 md:px-12 md:py-12 text-center w-full max-w-2xl">
+        <p class="text-lg text-base-content/70 mb-2">You earned</p>
+
+        <!-- Big Platinum Count -->
+        <div class="text-6xl md:text-7xl font-bold text-primary mb-2 count-up">{{ count }}</div>
+        <p class="text-2xl text-base-content/70 mb-8">platinum{{ count|pluralize }} this month!</p>
+
+        <!-- Game Cards -->
+        {% if games %}
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {% for game in games|slice:":4" %}
+            <div class="card bg-base-300 border-4 border-base-300 rounded-box shadow-md shadow-neutral hover:border-primary hover:shadow-lg hover:shadow-primary/20 transition-all duration-300 stagger-item" style="animation-delay: {{ forloop.counter0|add:1 }}00ms;">
+                {% if game.game_image %}
+                <figure class="relative h-28 md:h-36 overflow-hidden">
+                    <img src="{{ game.game_image }}" alt="{{ game.game_name }}" class="w-full h-full object-cover" loading="lazy" />
+                    <!-- Platinum Trophy Overlay -->
+                    <div class="absolute bottom-1 right-1 bg-base-300/90 rounded-full p-1">
+                        <svg class="w-5 h-5 text-primary" version="1.1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="currentColor">
+                            <path d="M102.49,0c0,27.414,0,104.166,0,137.062c0,112.391,99.33,156.25,153.51,156.25 c54.18,0,153.51-43.859,153.51-156.25c0-32.896,0-109.648,0-137.062H102.49z M256.289,50.551l-68.164,29.768v98.474l-0.049,19.53 c-0.526-0.112-47.274-10.112-47.274-78.391c0-28.17,0-69.6,0-69.6h60.385L256.289,50.551z"></path>
+                            <polygon points="315.473,400.717 291.681,367.482 279.791,318.506 256,322.004 232.209,318.506 220.314,367.482 205.347,388.394 196.527,400.476 196.699,400.476 196.527,400.717"></polygon>
+                            <polygon points="366.93,432.24 366.93,432 145.07,432 145.07,511.598 145.07,511.76 145.07,511.76 145.07,512 366.93,512 366.93,432.402 366.93,432.24"></polygon>
+                            <path d="M511.638,96.668c-0.033-1.268-0.068-2.336-0.068-3.174V45.1h-73.889v38.736h35.152v9.658 c0,1.127,0.037,2.557,0.086,4.258c0.389,13.976,1.303,46.707-21.545,70.203c-5.121,5.266-11.221,9.787-18.219,13.613 c-3.883,17.635-10.109,33.564-18.104,47.814c26.561-6.406,48.026-17.898,64.096-34.422 C513.402,159.734,512.121,113.918,511.638,96.668z"></path>
+                            <path d="M60.625,167.955c-22.848-23.496-21.934-56.227-21.541-70.203c0.047-1.701,0.082-3.131,0.082-4.258v-9.658 h34.842h0.07l0,0h0.24V45.1H0.43v48.394c0,0.838-0.032,1.906-0.068,3.174c-0.482,17.25-1.76,63.066,32.494,98.293 c16.068,16.524,37.531,28.014,64.092,34.422c-7.996-14.25-14.22-30.182-18.103-47.816C71.846,177.74,65.746,173.221,60.625,167.955 z"></path>
+                        </svg>
+                    </div>
+                </figure>
+                {% endif %}
+                <div class="card-body p-3">
+                    <h3 class="card-title text-xs md:text-sm line-clamp-2 justify-center text-base-content">{{ game.game_name }}</h3>
+                    <p class="text-xs text-primary font-medium">{{ game.earned_date }}</p>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        {% if flavor_text %}
+        <p class="text-sm text-base-content/50 italic mt-6">{{ flavor_text }}</p>
+        {% endif %}
+    </div>
+</div>

@@ -3,7 +3,7 @@ from django.contrib.admin import SimpleListFilter
 from django.db import transaction
 from django.db.models import Q
 from datetime import timedelta
-from .models import Profile, Game, Trophy, EarnedTrophy, ProfileGame, APIAuditLog, FeaturedGame, FeaturedProfile, Event, Concept, TitleID, TrophyGroup, UserTrophySelection, UserConceptRating, Badge, UserBadge, UserBadgeProgress, FeaturedGuide, Stage, PublisherBlacklist, Title, UserTitle, Milestone, UserMilestone, UserMilestoneProgress, Comment, CommentVote, CommentReport, ModerationLog, BannedWord, Checklist, ChecklistSection, ChecklistItem, ChecklistVote, UserChecklistProgress, ChecklistReport, ProfileGamification, StatType, StageStatValue
+from .models import Profile, Game, Trophy, EarnedTrophy, ProfileGame, APIAuditLog, FeaturedGame, FeaturedProfile, Event, Concept, TitleID, TrophyGroup, UserTrophySelection, UserConceptRating, Badge, UserBadge, UserBadgeProgress, FeaturedGuide, Stage, PublisherBlacklist, Title, UserTitle, Milestone, UserMilestone, UserMilestoneProgress, Comment, CommentVote, CommentReport, ModerationLog, BannedWord, Checklist, ChecklistSection, ChecklistItem, ChecklistVote, UserChecklistProgress, ChecklistReport, ProfileGamification, StatType, StageStatValue, MonthlyRecap
 
 
 # Register your models here.
@@ -1039,3 +1039,114 @@ class StageStatValueAdmin(admin.ModelAdmin):
     list_filter = ['stat_type', 'stage__series_slug']
     search_fields = ['stage__series_slug', 'stage__title']
     raw_id_fields = ['stage']
+
+
+# ---------- Monthly Recap Admin ----------
+
+@admin.register(MonthlyRecap)
+class MonthlyRecapAdmin(admin.ModelAdmin):
+    """Admin interface for Monthly Recap management."""
+    list_display = [
+        'profile',
+        'year',
+        'month',
+        'total_trophies_earned',
+        'platinums_earned',
+        'games_started',
+        'games_completed',
+        'is_finalized',
+        'generated_at',
+        'updated_at',
+    ]
+    list_filter = [
+        'year',
+        'month',
+        'is_finalized',
+        'generated_at',
+    ]
+    search_fields = [
+        'profile__psn_username',
+    ]
+    raw_id_fields = ['profile']
+    readonly_fields = [
+        'generated_at',
+        'updated_at',
+    ]
+    ordering = ['-year', '-month', '-updated_at']
+    date_hierarchy = 'generated_at'
+    actions = ['finalize_recaps', 'regenerate_recaps']
+
+    fieldsets = (
+        ('Profile & Period', {
+            'fields': ('profile', 'year', 'month', 'is_finalized')
+        }),
+        ('Trophy Stats', {
+            'fields': (
+                'total_trophies_earned',
+                'bronzes_earned',
+                'silvers_earned',
+                'golds_earned',
+                'platinums_earned',
+            )
+        }),
+        ('Game Stats', {
+            'fields': ('games_started', 'games_completed')
+        }),
+        ('Highlights (JSON)', {
+            'fields': (
+                'platinums_data',
+                'rarest_trophy_data',
+                'most_active_day',
+                'activity_calendar',
+                'streak_data',
+                'time_analysis_data',
+            ),
+            'classes': ('collapse',)
+        }),
+        ('Quiz Data (JSON)', {
+            'fields': (
+                'quiz_total_trophies_data',
+                'quiz_rarest_trophy_data',
+                'quiz_active_day_data',
+                'badge_progress_quiz_data',
+            ),
+            'classes': ('collapse',)
+        }),
+        ('Badge Stats', {
+            'fields': ('badge_xp_earned', 'badges_earned_count', 'badges_data'),
+            'classes': ('collapse',)
+        }),
+        ('Comparison Data', {
+            'fields': ('comparison_data',),
+            'classes': ('collapse',)
+        }),
+        ('Timestamps', {
+            'fields': ('generated_at', 'updated_at')
+        }),
+    )
+
+    @admin.action(description='Mark selected recaps as finalized')
+    def finalize_recaps(self, request, queryset):
+        """Mark recaps as finalized (immutable)."""
+        count = queryset.filter(is_finalized=False).update(is_finalized=True)
+        messages.success(request, f"Finalized {count} recap(s).")
+
+    @admin.action(description='Regenerate selected recaps')
+    def regenerate_recaps(self, request, queryset):
+        """Regenerate recap data for selected entries."""
+        from trophies.services.monthly_recap_service import MonthlyRecapService
+        count = 0
+        for recap in queryset:
+            if recap.is_finalized:
+                continue  # Skip finalized recaps
+            try:
+                MonthlyRecapService.get_or_generate_recap(
+                    recap.profile,
+                    recap.year,
+                    recap.month,
+                    force_regenerate=True
+                )
+                count += 1
+            except Exception as e:
+                messages.warning(request, f"Failed to regenerate recap for {recap}: {e}")
+        messages.success(request, f"Regenerated {count} recap(s).")

@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Monthly Recap{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto py-16 px-4 text-center">
+    <div class="mb-8">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-24 w-24 mx-auto text-primary mb-4" fill="currentColor" viewBox="0 0 512 512">
+            <path d="M102.49,0c0,27.414,0,104.166,0,137.062c0,112.391,99.33,156.25,153.51,156.25c54.18,0,153.51-43.859,153.51-156.25c0-32.896,0-109.648,0-137.062H102.49z"/>
+            <polygon points="315.473,400.717 291.681,367.482 279.791,318.506 256,322.004 232.209,318.506 220.314,367.482 205.347,388.394 196.527,400.476 196.699,400.476 196.527,400.717"/>
+            <polygon points="366.93,432.24 366.93,432 145.07,432 145.07,511.598 145.07,511.76 145.07,512 366.93,512 366.93,432.402 366.93,432.24"/>
+        </svg>
+        <h1 class="text-3xl font-bold text-primary mb-2">Monthly Recap</h1>
+        <p class="text-base-content/70">Your trophy hunting highlights, wrapped!</p>
+    </div>
+
+    {% if no_activity %}
+    <div class="card bg-base-200 shadow-xl p-8">
+        <h2 class="text-xl font-semibold mb-4">No Recap Available Yet</h2>
+        <p class="text-base-content/70 mb-6">
+            Earn at least one trophy this month to unlock your monthly recap!
+            Your recap will show your trophy hunting highlights and let you share them with friends.
+        </p>
+        <a href="{% url 'home' %}" class="btn btn-primary">
+            Start Trophy Hunting
+        </a>
+    </div>
+
+    {% elif available_months %}
+    <div class="card bg-base-200 shadow-xl p-8">
+        <h2 class="text-xl font-semibold mb-4">View Your Recaps</h2>
+        <p class="text-base-content/70 mb-6">
+            Select a month to view your trophy hunting highlights.
+        </p>
+        <div class="flex flex-wrap gap-2 justify-center">
+            {% for m in available_months %}
+            <a href="{% url 'recap_view' year=m.year month=m.month %}"
+               class="btn {% if m.is_current %}btn-primary{% else %}btn-outline{% endif %}">
+                {{ m.short_month_name }} {{ m.year }}
+                {% if m.is_premium_required and not is_premium %}
+                <span class="badge badge-warning badge-xs ml-1">PRO</span>
+                {% endif %}
+            </a>
+            {% endfor %}
+        </div>
+
+        {% if not is_premium %}
+        <div class="mt-8 p-4 bg-base-300 rounded-lg">
+            <p class="text-sm text-base-content/70 mb-2">
+                <span class="badge badge-warning badge-sm mr-1">PRO</span>
+                Past recaps are available with Premium
+            </p>
+            <a href="{% url 'account_settings' %}" class="btn btn-sm btn-outline">
+                Upgrade to Premium
+            </a>
+        </div>
+        {% endif %}
+    </div>
+
+    {% else %}
+    <div class="card bg-base-200 shadow-xl p-8">
+        <h2 class="text-xl font-semibold mb-4">No Recaps Yet</h2>
+        <p class="text-base-content/70">
+            Start earning trophies to see your monthly recaps here!
+        </p>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

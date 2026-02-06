@@ -488,8 +488,8 @@ class SectionImageUploadSerializer(serializers.Serializer):
     thumbnail = serializers.ImageField(required=True)
 
     def validate_thumbnail(self, value):
-        if value.size > 2 * 1024 * 1024:
-            raise serializers.ValidationError("Image must be under 2MB.")
+        if value.size > 5 * 1024 * 1024:
+            raise serializers.ValidationError("Image must be under 5MB.")
         return value
 
 
@@ -500,6 +500,6 @@ class ItemImageCreateSerializer(serializers.Serializer):
     order = serializers.IntegerField(required=False, min_value=0)
 
     def validate_image(self, value):
-        if value.size > 2 * 1024 * 1024:
-            raise serializers.ValidationError("Image must be under 2MB.")
+        if value.size > 5 * 1024 * 1024:
+            raise serializers.ValidationError("Image must be under 5MB.")
         return value

@@ -1,0 +1,241 @@
+{% load static %}
+{% comment %}
+Monthly Recap Share Image Card Template
+This partial is used for both preview and final image generation via html2canvas.
+Uses inline styles with hex colors to ensure html2canvas compatibility (no oklch).
+
+Variables available:
+- year: Year (e.g., 2026)
+- month: Month number (1-12)
+- month_name: Full month name (e.g., "January")
+- username: Player's PSN username
+- avatar_url: User's avatar URL
+- total_trophies: Total trophies earned this month
+- bronzes, silvers, golds, platinums: Trophy breakdown
+- games_started, games_completed: Game stats
+- platinums_data: List of platinum dicts [{game_name, game_image, earned_date, earn_rate}]
+- rarest_trophy: Dict {name, game, earn_rate, icon_url, trophy_type}
+- rarest_trophy_icon: Base64 or URL of rarest trophy icon
+- most_active_day: Dict {date, day_name, trophy_count}
+- badge_xp: Badge XP earned
+- badges_count: Number of badges earned
+
+Color reference (converted from oklch):
+- base-100: #3d4047
+- base-200: #32363d
+- base-300: #2a2e34
+- base-content: #f5f7fc
+- primary: #67d1f8
+- secondary: #9580ff
+- accent: #ffaa5c
+- success: #67f8c8
+- neutral: #1a1b1f
+- trophy-bronze: #cd7f32
+- trophy-silver: #c0c0c0
+- trophy-gold: #ffd700
+- trophy-platinum: #67d1f8
+{% endcomment %}
+
+{# Landscape Card: 1200x630 (only format supported) #}
+<div class="share-image-content" style="width: 1200px; height: 630px; background: linear-gradient(to bottom right, #2a2e34, #32363d, #2a2e34); padding: 20px; font-family: system-ui, -apple-system, sans-serif; box-sizing: border-box;">
+    <div style="width: 1160px; height: 590px; border: 3px solid #67d1f8; border-radius: 8px; box-shadow: 0 10px 15px -3px rgba(103, 209, 248, 0.2); overflow: hidden; display: flex; flex-direction: column; box-sizing: border-box;">
+        {# Header with Month/Year and Avatar #}
+        <div data-element="recap-header" style="padding: 16px 28px; background: linear-gradient(to right, rgba(103, 209, 248, 0.15), rgba(103, 209, 248, 0.05)); border-bottom: 2px solid #1a1b1f; display: flex; align-items: center; justify-content: space-between;">
+            <div style="display: flex; align-items: center;">
+                {# Trophy icon #}
+                <svg style="height: 36px; width: 36px; margin-right: 14px;" version="1.1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="#67d1f8"><path d="M102.49,0c0,27.414,0,104.166,0,137.062c0,112.391,99.33,156.25,153.51,156.25 c54.18,0,153.51-43.859,153.51-156.25c0-32.896,0-109.648,0-137.062H102.49z M256.289,50.551l-68.164,29.768v98.474l-0.049,19.53 c-0.526-0.112-47.274-10.112-47.274-78.391c0-28.17,0-69.6,0-69.6h60.385L256.289,50.551z"></path><polygon points="315.473,400.717 291.681,367.482 279.791,318.506 256,322.004 232.209,318.506 220.314,367.482 205.347,388.394 196.527,400.476 196.699,400.476 196.527,400.717"></polygon><polygon points="366.93,432.24 366.93,432 145.07,432 145.07,511.598 145.07,511.76 145.07,511.76 145.07,512 366.93,512 366.93,432.402 366.93,432.24"></polygon><path d="M511.638,96.668c-0.033-1.268-0.068-2.336-0.068-3.174V45.1h-73.889v38.736h35.152v9.658 c0,1.127,0.037,2.557,0.086,4.258c0.389,13.976,1.303,46.707-21.545,70.203c-5.121,5.266-11.221,9.787-18.219,13.613 c-3.883,17.635-10.109,33.564-18.104,47.814c26.561-6.406,48.026-17.898,64.096-34.422 C513.402,159.734,512.121,113.918,511.638,96.668z"></path><path d="M60.625,167.955c-22.848-23.496-21.934-56.227-21.541-70.203c0.047-1.701,0.082-3.131,0.082-4.258v-9.658 h34.842h0.07l0,0h0.24V45.1H0.43v48.394c0,0.838-0.032,1.906-0.068,3.174c-0.482,17.25-1.76,63.066,32.494,98.293 c16.068,16.524,37.531,28.014,64.092,34.422c-7.996-14.25-14.22-30.182-18.103-47.816C71.846,177.74,65.746,173.221,60.625,167.955 z"></path></svg>
+                <div>
+                    <div style="font-size: 26px; font-weight: bold; color: #67d1f8; text-transform: uppercase; letter-spacing: 0.1em;">{{ month_name }} {{ year }}</div>
+                    <div style="font-size: 14px; color: rgba(245, 247, 252, 0.7);">Monthly Recap</div>
+                </div>
+            </div>
+            <div style="display: flex; align-items: center;">
+                {% if avatar_url %}
+                <img src="{{ avatar_url }}" style="width: 44px; height: 44px; border-radius: 50%; border: 2px solid #67d1f8; margin-right: 12px;" />
+                {% endif %}
+                <span style="font-size: 18px; font-weight: 600; color: #67d1f8;">{{ username }}</span>
+            </div>
+        </div>
+
+        {# Main Content #}
+        <div style="flex: 1; display: flex; padding: 20px 28px; gap: 24px;">
+            {# Left Column: Trophy count + Platinums #}
+            <div style="width: 340px; flex-shrink: 0; display: flex; flex-direction: column; gap: 12px;">
+                {# Top: Trophy count + breakdown #}
+                <div style="display: flex; flex-direction: column; justify-content: center; align-items: center; background: rgba(42, 46, 52, 0.4); border-radius: 8px; padding: 16px;">
+                    <div style="font-size: 64px; font-weight: bold; color: #67d1f8; line-height: 1;">{{ total_trophies }}</div>
+                    <div style="font-size: 16px; color: rgba(245, 247, 252, 0.7); margin-bottom: 12px;">Trophies Earned</div>
+
+                    {# Trophy breakdown - horizontal #}
+                    <div style="display: flex; gap: 14px;">
+                        <div style="text-align: center;">
+                            <div style="font-size: 20px; font-weight: bold; color: #cd7f32;">{{ bronzes }}</div>
+                            <div style="font-size: 9px; color: rgba(245, 247, 252, 0.5); text-transform: uppercase;">Bronze</div>
+                        </div>
+                        <div style="text-align: center;">
+                            <div style="font-size: 20px; font-weight: bold; color: #c0c0c0;">{{ silvers }}</div>
+                            <div style="font-size: 9px; color: rgba(245, 247, 252, 0.5); text-transform: uppercase;">Silver</div>
+                        </div>
+                        <div style="text-align: center;">
+                            <div style="font-size: 20px; font-weight: bold; color: #ffd700;">{{ golds }}</div>
+                            <div style="font-size: 9px; color: rgba(245, 247, 252, 0.5); text-transform: uppercase;">Gold</div>
+                        </div>
+                        <div style="text-align: center;">
+                            <div style="font-size: 20px; font-weight: bold; color: #67d1f8;">{{ platinums }}</div>
+                            <div style="font-size: 9px; color: rgba(245, 247, 252, 0.5); text-transform: uppercase;">Platinum</div>
+                        </div>
+                    </div>
+                </div>
+
+                {# Bottom: Platinums earned this month #}
+                {% if platinums_data %}
+                <div style="flex: 1; background: rgba(42, 46, 52, 0.4); border-radius: 8px; padding: 12px; display: flex; flex-direction: column;">
+                    <div style="font-size: 11px; color: #67d1f8; text-transform: uppercase; letter-spacing: 0.05em; font-weight: bold; margin-bottom: 8px;">Platinums Earned</div>
+                    <div style="flex: 1; display: flex; flex-direction: column; gap: 6px;">
+                        {% for plat in platinums_data %}
+                        <div style="display: flex; align-items: center; background: rgba(26, 27, 31, 0.5); border-radius: 6px; padding: 6px 8px; gap: 8px;">
+                            {% if plat.game_image %}
+                            <img src="{{ plat.game_image }}" style="width: 36px; height: 36px; border-radius: 4px; object-fit: cover; flex-shrink: 0;" />
+                            {% endif %}
+                            <div style="flex: 1; min-width: 0;">
+                                <div style="font-size: 12px; font-weight: 600; color: #f5f7fc; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ plat.game_name }}</div>
+                                <div style="font-size: 10px; color: rgba(245, 247, 252, 0.5);">{{ plat.earn_rate }}% earn rate</div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% else %}
+                {# Fallback if no platinums - show some additional info #}
+                <div style="flex: 1; background: rgba(42, 46, 52, 0.4); border-radius: 8px; padding: 16px; display: flex; flex-direction: column; justify-content: center; align-items: center;">
+                    <div style="font-size: 11px; color: rgba(245, 247, 252, 0.5); text-transform: uppercase; letter-spacing: 0.05em; font-weight: bold; margin-bottom: 8px;">Games Played</div>
+                    <div style="font-size: 36px; font-weight: bold; color: #f5f7fc;">{{ games_started }}</div>
+                </div>
+                {% endif %}
+            </div>
+
+            {# Right Column: Stats + Calendar #}
+            <div style="flex: 1; display: flex; flex-direction: column; gap: 12px;">
+                {# Top Stats Row - 4 compact boxes #}
+                <div style="display: flex; gap: 10px;">
+                    {# Platinums #}
+                    <div style="flex: 1; background: rgba(42, 46, 52, 0.8); border: 3px solid #67d1f8; border-radius: 8px; padding: 8px; text-align: center;">
+                        <div style="font-size: 10px; color: #67d1f8; text-transform: uppercase; letter-spacing: 0.05em; font-weight: bold; margin-bottom: 2px;">Platinums</div>
+                        <div style="font-size: 24px; font-weight: bold; color: #f5f7fc;">{{ platinums }}</div>
+                    </div>
+                    {# Games started #}
+                    <div style="flex: 1; background: rgba(42, 46, 52, 0.8); border: 3px solid #1a1b1f; border-radius: 8px; padding: 8px; text-align: center;">
+                        <div style="font-size: 10px; color: #9580ff; text-transform: uppercase; letter-spacing: 0.05em; font-weight: bold; margin-bottom: 2px;">Started</div>
+                        <div style="font-size: 24px; font-weight: bold; color: #f5f7fc;">{{ games_started }}</div>
+                    </div>
+                    {# Games completed #}
+                    <div style="flex: 1; background: rgba(42, 46, 52, 0.8); border: 3px solid #1a1b1f; border-radius: 8px; padding: 8px; text-align: center;">
+                        <div style="font-size: 10px; color: #67f8c8; text-transform: uppercase; letter-spacing: 0.05em; font-weight: bold; margin-bottom: 2px;">Completed</div>
+                        <div style="font-size: 24px; font-weight: bold; color: #f5f7fc;">{{ games_completed }}</div>
+                    </div>
+                    {# Active Days #}
+                    <div style="flex: 1; background: rgba(42, 46, 52, 0.8); border: 3px solid #1a1b1f; border-radius: 8px; padding: 8px; text-align: center;">
+                        <div style="font-size: 10px; color: rgba(245, 247, 252, 0.6); text-transform: uppercase; letter-spacing: 0.05em; font-weight: bold; margin-bottom: 2px;">Active Days</div>
+                        <div style="font-size: 24px; font-weight: bold; color: #f5f7fc;">{{ activity_calendar.total_active_days|default:0 }}</div>
+                    </div>
+                </div>
+
+                {# Rarest trophy (if available) - compact inline #}
+                {% if rarest_trophy %}
+                <div style="background: rgba(42, 46, 52, 0.8); border: 3px solid #ffaa5c; border-radius: 8px; padding: 10px 14px; display: flex; align-items: center; gap: 12px;">
+                    {% if rarest_trophy_icon %}
+                    <img src="{{ rarest_trophy_icon }}" style="width: 40px; height: 40px; border-radius: 6px; flex-shrink: 0;" />
+                    {% endif %}
+                    <div style="flex: 1; min-width: 0;">
+                        <div style="font-size: 11px; color: #ffaa5c; text-transform: uppercase; letter-spacing: 0.05em; font-weight: bold;">Rarest Trophy</div>
+                        <div style="font-size: 14px; font-weight: 600; color: #f5f7fc; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ rarest_trophy.name }}</div>
+                    </div>
+                    <div style="text-align: right; flex-shrink: 0;">
+                        <div style="font-size: 20px; font-weight: bold; color: #ffaa5c;">{{ rarest_trophy.earn_rate }}%</div>
+                        <div style="font-size: 10px; color: rgba(245, 247, 252, 0.5);">earn rate</div>
+                    </div>
+                </div>
+                {% endif %}
+
+                {# Bottom Row: Calendar + Additional Stats #}
+                <div style="flex: 1; display: flex; gap: 12px;">
+                    {# Activity Calendar - Left Side #}
+                    {% if activity_calendar and activity_calendar.days %}
+                    <div style="background: rgba(42, 46, 52, 0.6); border: 3px solid #1a1b1f; border-radius: 8px; padding: 12px 14px; display: flex; flex-direction: column;">
+                        <div style="font-size: 11px; color: rgba(245, 247, 252, 0.6); text-transform: uppercase; letter-spacing: 0.05em; font-weight: bold; margin-bottom: 8px;">Activity</div>
+                        {# Calendar Grid - 7 columns using CSS Grid #}
+                        <div style="display: grid; grid-template-columns: repeat(7, 28px); gap: 3px;">
+                            {# Day labels #}
+                            <div style="font-size: 9px; color: rgba(245, 247, 252, 0.4); text-align: center;">Su</div>
+                            <div style="font-size: 9px; color: rgba(245, 247, 252, 0.4); text-align: center;">Mo</div>
+                            <div style="font-size: 9px; color: rgba(245, 247, 252, 0.4); text-align: center;">Tu</div>
+                            <div style="font-size: 9px; color: rgba(245, 247, 252, 0.4); text-align: center;">We</div>
+                            <div style="font-size: 9px; color: rgba(245, 247, 252, 0.4); text-align: center;">Th</div>
+                            <div style="font-size: 9px; color: rgba(245, 247, 252, 0.4); text-align: center;">Fr</div>
+                            <div style="font-size: 9px; color: rgba(245, 247, 252, 0.4); text-align: center;">Sa</div>
+                            {# Empty cells for offset #}
+                            {% with first_weekday=activity_calendar.first_day_weekday %}
+                            {% for i in "0123456"|make_list %}
+                                {% if forloop.counter0 < first_weekday %}
+                                <div style="height: 28px;"></div>
+                                {% endif %}
+                            {% endfor %}
+                            {% endwith %}
+                            {# Day cells - color scale: gray -> green -> yellow -> orange #}
+                            {% for day in activity_calendar.days %}
+                            <div style="height: 28px; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 600; {% if day.level == 0 %}background: rgba(26, 27, 31, 0.6); color: rgba(245, 247, 252, 0.3);{% elif day.level == 1 %}background: rgba(103, 248, 200, 0.3); color: rgba(103, 248, 200, 0.9);{% elif day.level == 2 %}background: rgba(103, 248, 200, 0.6); color: #1a1b1f;{% elif day.level == 3 %}background: #ffd700; color: #1a1b1f;{% else %}background: #ffaa5c; color: #1a1b1f;{% endif %}">{{ day.day }}</div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    {# Right Side Stats #}
+                    <div style="flex: 1; display: flex; flex-direction: column; gap: 12px;">
+                        {# Most Active Day #}
+                        {% if most_active_day %}
+                        <div style="flex: 1; background: rgba(42, 46, 52, 0.8); border: 3px solid #67d1f8; border-radius: 8px; padding: 14px; display: flex; align-items: center; justify-content: space-between;">
+                            <div>
+                                <div style="font-size: 11px; color: #67d1f8; text-transform: uppercase; letter-spacing: 0.05em; font-weight: bold; margin-bottom: 4px;">Most Active Day</div>
+                                <div style="font-size: 15px; font-weight: 600; color: #f5f7fc;">{{ most_active_day.day_name }}, {{ most_active_day.date }}</div>
+                            </div>
+                            <div style="text-align: right;">
+                                <div style="font-size: 32px; font-weight: bold; color: #67d1f8;">{{ most_active_day.trophy_count }}</div>
+                                <div style="font-size: 10px; color: rgba(245, 247, 252, 0.5);">trophies</div>
+                            </div>
+                        </div>
+                        {% endif %}
+
+                        {# Badge XP (if any) #}
+                        {% if badge_xp > 0 %}
+                        <div style="flex: 1; background: rgba(42, 46, 52, 0.8); border: 3px solid #9580ff; border-radius: 8px; padding: 14px; display: flex; align-items: center; gap: 12px;">
+                            <svg style="width: 32px; height: 32px; flex-shrink: 0;" viewBox="0 0 24 24" fill="none" stroke="#9580ff" stroke-width="2">
+                                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+                            </svg>
+                            <div style="flex: 1;">
+                                <div style="font-size: 11px; color: #9580ff; text-transform: uppercase; letter-spacing: 0.05em; font-weight: bold;">Badge XP Earned</div>
+                                <div style="font-size: 14px; color: rgba(245, 247, 252, 0.6);">{{ badges_count }} badge{{ badges_count|pluralize }} this month</div>
+                            </div>
+                            <div style="font-size: 28px; font-weight: bold; color: #9580ff;">+{{ badge_xp }}</div>
+                        </div>
+                        {% else %}
+                        {# Active Days stat if no badge XP #}
+                        <div style="flex: 1; background: rgba(42, 46, 52, 0.8); border: 3px solid #1a1b1f; border-radius: 8px; padding: 14px; display: flex; align-items: center; justify-content: space-between;">
+                            <div>
+                                <div style="font-size: 11px; color: rgba(245, 247, 252, 0.6); text-transform: uppercase; letter-spacing: 0.05em; font-weight: bold; margin-bottom: 4px;">Active Days</div>
+                                <div style="font-size: 14px; color: rgba(245, 247, 252, 0.5);">Days with trophy activity</div>
+                            </div>
+                            <div style="font-size: 32px; font-weight: bold; color: #f5f7fc;">{{ activity_calendar.total_active_days|default:0 }}</div>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        {# Footer: Branding #}
+        <div style="border-top: 2px solid #1a1b1f; background: rgba(42, 46, 52, 0.5); height: 46px; box-sizing: border-box; line-height: 46px; padding: 0 28px;">
+            <img src="{% static 'images/logo.png' %}" style="display: inline-block; width: 28px; height: 28px; vertical-align: middle; margin-right: 10px;" /><span style="font-size: 16px; color: #67d1f8; font-weight: bold; font-style: italic; vertical-align: middle;">platpursuit.com</span>
+            <span style="float: right; font-size: 12px; color: rgba(245, 247, 252, 0.5); font-style: italic;">No trophy can hide from us</span>
+        </div>
+    </div>
+</div>

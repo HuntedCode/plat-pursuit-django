@@ -2130,3 +2130,141 @@ class ChecklistReport(models.Model):
 
     def __str__(self):
         return f"Report on {self.checklist.title} by {self.reporter.psn_username}"
+
+
+class MonthlyRecap(models.Model):
+    """
+    Stores cached monthly recap data for a profile.
+
+    Follows the same denormalization pattern as ProfileGamification - pre-computing
+    stats to avoid expensive aggregation queries on every view. Recaps become
+    immutable once the month ends (is_finalized=True).
+
+    Access control:
+    - All users can view their current month's recap
+    - Premium users can access previous months' recaps
+    """
+    profile = models.ForeignKey(
+        Profile,
+        on_delete=models.CASCADE,
+        related_name='monthly_recaps'
+    )
+    year = models.PositiveIntegerField()
+    month = models.PositiveIntegerField(
+        validators=[MinValueValidator(1), MaxValueValidator(12)]
+    )
+
+    # Trophy aggregates
+    total_trophies_earned = models.PositiveIntegerField(default=0)
+    bronzes_earned = models.PositiveIntegerField(default=0)
+    silvers_earned = models.PositiveIntegerField(default=0)
+    golds_earned = models.PositiveIntegerField(default=0)
+    platinums_earned = models.PositiveIntegerField(default=0)
+
+    # Game stats
+    games_started = models.PositiveIntegerField(default=0)
+    games_completed = models.PositiveIntegerField(default=0)
+
+    # Highlight data (JSON for flexibility)
+    platinums_data = models.JSONField(
+        default=list,
+        blank=True,
+        help_text='List of platinum dicts: [{game_name, game_image, earned_date, earn_rate}]'
+    )
+    rarest_trophy_data = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text='Rarest trophy: {name, game, earn_rate, icon_url, trophy_type}'
+    )
+    most_active_day = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text='Most active day: {date, day_name, trophy_count}'
+    )
+    activity_calendar = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text='Activity calendar: {days: [{day, count, level}], max_count, total_active_days, first_day_weekday, days_in_month}'
+    )
+    streak_data = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text='Streak data: {longest_streak, streak_start, streak_end, total_active_days}'
+    )
+    time_analysis_data = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text='Time of day analysis: {periods: {morning: N, afternoon: N, evening: N, night: N}, most_active_period, most_active_count}'
+    )
+
+    # Quiz data (denormalized for historical accuracy)
+    quiz_total_trophies_data = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text='Total trophies quiz data: {correct_value, options: [numbers]}'
+    )
+    quiz_rarest_trophy_data = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text='Rarest trophy quiz data: {correct_trophy_id, options: [{id, name, icon_url, game, trophy_type}]}'
+    )
+    quiz_active_day_data = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text='Active day quiz data: {correct_day, correct_day_name, correct_count, day_counts, day_names}'
+    )
+
+    # Badge/XP stats
+    badge_xp_earned = models.PositiveIntegerField(default=0)
+    badges_earned_count = models.PositiveIntegerField(default=0)
+    badges_data = models.JSONField(
+        default=list,
+        blank=True,
+        help_text='List of badges earned: [{name, tier, series_slug, image_url}]'
+    )
+    badge_progress_quiz_data = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text='Badge progress quiz data: {correct_badge_id, correct_badge_name, correct_progress_pct, correct_completed, correct_required, options: [{id, name, series, icon_url}]}'
+    )
+
+    # Comparison data
+    comparison_data = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text='Comparison stats: {vs_prev_month_pct, personal_bests: []}'
+    )
+
+    # Status
+    is_finalized = models.BooleanField(
+        default=False,
+        help_text='True once the month ends and stats are locked'
+    )
+    generated_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ['profile', 'year', 'month']
+        ordering = ['-year', '-month']
+        indexes = [
+            models.Index(fields=['profile', 'year', 'month'], name='monthlyrecap_profile_ym_idx'),
+            models.Index(fields=['year', 'month', 'is_finalized'], name='monthlyrecap_ym_final_idx'),
+            models.Index(fields=['profile', 'is_finalized'], name='monthlyrecap_profile_final_idx'),
+        ]
+        verbose_name = 'Monthly Recap'
+        verbose_name_plural = 'Monthly Recaps'
+
+    def __str__(self):
+        return f"{self.profile.psn_username} - {self.year}/{self.month:02d}"
+
+    @property
+    def month_name(self):
+        """Return the full month name (e.g., 'January')"""
+        import calendar
+        return calendar.month_name[self.month]
+
+    @property
+    def short_month_name(self):
+        """Return abbreviated month name (e.g., 'Jan')"""
+        import calendar
+        return calendar.month_abbr[self.month]

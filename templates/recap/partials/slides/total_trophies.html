@@ -1,0 +1,38 @@
+{% comment %}
+Recap Slide: Total Trophies
+Variables: value, breakdown (dict with bronze, silver, gold, platinum)
+{% endcomment %}
+<div class="flex items-center justify-center w-full h-full">
+    <!-- Display Box -->
+    <div class="card bg-base-300/50 border border-base-content/10 shadow-xl px-8 py-10 md:px-12 md:py-12 text-center">
+        <p class="text-lg text-base-content/70 mb-4">You earned</p>
+
+        <!-- Big Number -->
+        <div class="text-7xl md:text-8xl font-bold text-primary mb-2 count-up">{{ value }}</div>
+        <p class="text-2xl text-base-content/70 mb-8">trophies this month</p>
+
+        <!-- Trophy Breakdown -->
+        <div class="stats stats-horizontal bg-base-300 border-4 border-base-300 rounded-box shadow-md shadow-neutral">
+            <div class="stat place-items-center px-4 md:px-8">
+                <div class="stat-value text-2xl md:text-3xl" style="color: #cd7f32;">{{ breakdown.bronze }}</div>
+                <div class="stat-desc text-xs uppercase tracking-wider">Bronze</div>
+            </div>
+            <div class="stat place-items-center px-4 md:px-8">
+                <div class="stat-value text-2xl md:text-3xl" style="color: #c0c0c0;">{{ breakdown.silver }}</div>
+                <div class="stat-desc text-xs uppercase tracking-wider">Silver</div>
+            </div>
+            <div class="stat place-items-center px-4 md:px-8">
+                <div class="stat-value text-2xl md:text-3xl" style="color: #ffd700;">{{ breakdown.gold }}</div>
+                <div class="stat-desc text-xs uppercase tracking-wider">Gold</div>
+            </div>
+            <div class="stat place-items-center px-4 md:px-8">
+                <div class="stat-value text-2xl md:text-3xl text-primary">{{ breakdown.platinum }}</div>
+                <div class="stat-desc text-xs uppercase tracking-wider">Platinum</div>
+            </div>
+        </div>
+
+        {% if flavor_text %}
+        <p class="text-sm text-base-content/50 italic mt-6">{{ flavor_text }}</p>
+        {% endif %}
+    </div>
+</div>

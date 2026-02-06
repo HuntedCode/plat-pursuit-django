@@ -1,0 +1,50 @@
+{% comment %}
+Recap Slide: Quiz - Which Was Your Rarest Trophy
+Variables: correct_trophy_id, options (list of {id, name, icon_url, game, trophy_type})
+{% endcomment %}
+<div class="flex items-center justify-center w-full h-full">
+    <div class="card bg-base-300/50 border border-base-content/10 shadow-xl px-6 py-8 md:px-10 md:py-10 text-center max-w-lg"
+         data-quiz-correct="{{ correct_trophy_id }}">
+        <!-- Question Icon -->
+        <div class="text-4xl mb-3">💎</div>
+
+        <!-- Question -->
+        <h3 class="text-xl md:text-2xl font-bold text-primary mb-2">Which was your rarest?</h3>
+        <p class="text-base text-base-content/70 mb-6">Tap the trophy with the lowest earn rate</p>
+
+        <!-- Trophy Options -->
+        <div class="grid grid-cols-2 gap-3">
+            {% for trophy in options %}
+            <div data-quiz-option="{{ trophy.id }}"
+                 class="card bg-base-200 border border-base-content/10 p-3 cursor-pointer hover:border-primary transition-all">
+                <!-- Trophy Icon -->
+                <div class="flex justify-center mb-2">
+                    {% if trophy.icon_url %}
+                    <img src="{{ trophy.icon_url }}" alt="{{ trophy.name }}" class="w-12 h-12 rounded" />
+                    {% else %}
+                    <div class="w-12 h-12 rounded bg-base-300 flex items-center justify-center">
+                        <span class="text-2xl">🏆</span>
+                    </div>
+                    {% endif %}
+                </div>
+
+                <!-- Trophy Name -->
+                <p class="text-sm font-semibold text-base-content line-clamp-2 mb-1">{{ trophy.name }}</p>
+
+                <!-- Game Name -->
+                <p class="text-xs text-base-content/50 line-clamp-1">{{ trophy.game }}</p>
+
+                <!-- Trophy Type Badge -->
+                <div class="mt-2">
+                    <span class="badge badge-sm {% if trophy.trophy_type == 'platinum' %}badge-primary{% elif trophy.trophy_type == 'gold' %}badge-warning{% elif trophy.trophy_type == 'silver' %}badge-ghost{% else %}badge-accent{% endif %}">
+                        {{ trophy.trophy_type|title }}
+                    </span>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+
+        <!-- Feedback container (populated by JS) -->
+        <div data-quiz-feedback class="hidden"></div>
+    </div>
+</div>

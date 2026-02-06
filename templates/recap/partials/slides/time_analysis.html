@@ -1,0 +1,45 @@
+{% comment %}
+Recap Slide: Time-of-Day Analysis
+Variables: peak_hour, peak_hour_12, peak_period, persona, periods (dict)
+{% endcomment %}
+<div class="flex items-center justify-center w-full h-full">
+    <div class="card bg-base-300/50 border border-base-content/10 shadow-xl px-8 py-10 md:px-12 md:py-12 text-center max-w-md">
+        <p class="text-lg text-base-content/70 mb-4">You're a</p>
+
+        <!-- Persona Display -->
+        {% if persona == 'early_bird' %}
+        <div class="text-6xl mb-4">🌅</div>
+        <h2 class="text-3xl md:text-4xl font-bold text-warning mb-2">Early Bird</h2>
+        <p class="text-base-content/70 mb-6">Most trophies earned in the <strong class="text-warning">{{ peak_period }}</strong></p>
+        {% elif persona == 'day_hunter' %}
+        <div class="text-6xl mb-4">☀️</div>
+        <h2 class="text-3xl md:text-4xl font-bold text-warning mb-2">Day Hunter</h2>
+        <p class="text-base-content/70 mb-6">Most trophies earned in the <strong class="text-warning">{{ peak_period }}</strong></p>
+        {% else %}
+        <div class="text-6xl mb-4">🌙</div>
+        <h2 class="text-3xl md:text-4xl font-bold text-secondary mb-2">Night Owl</h2>
+        <p class="text-base-content/70 mb-6">Most trophies earned in the <strong class="text-secondary">{{ peak_period }}</strong></p>
+        {% endif %}
+
+        <!-- Period Breakdown -->
+        <div class="flex justify-center gap-1 mb-6">
+            {% for period, count in periods.items %}
+            <div class="flex flex-col items-center">
+                <div class="w-12 bg-base-200 rounded-t overflow-hidden flex flex-col-reverse" style="height: 80px;">
+                    {% if count > 0 %}
+                    <div class="bg-primary w-full transition-all" style="height: {% widthratio count max_period_count 100 %}%;"></div>
+                    {% endif %}
+                </div>
+                <span class="text-xs text-base-content/50 mt-2">
+                    {% if period == 'Morning' %}Morn{% elif period == 'Afternoon' %}Aftn{% elif period == 'Evening' %}Eve{% else %}Late{% endif %}
+                </span>
+            </div>
+            {% endfor %}
+        </div>
+
+        <!-- Peak Hour -->
+        <div class="badge badge-lg badge-outline gap-2 py-4">
+            Peak hour: <span class="font-bold text-primary">{{ peak_hour_12 }}</span>
+        </div>
+    </div>
+</div>

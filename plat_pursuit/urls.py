@@ -31,6 +31,7 @@ sitemaps = {
     'profiles': ProfileSitemap,
 }
 from trophies.views import GamesListView, TrophiesListView, ProfilesListView, SearchView, GameDetailView, ProfileDetailView, TrophyCaseView, ToggleSelectionView, BadgeListView, BadgeDetailView, GuideListView, ProfileSyncStatusView, TriggerSyncView, SearchSyncProfileView, AddSyncStatusView, LinkPSNView, ProfileVerifyView, TokenMonitoringView, BadgeCreationView, BadgeLeaderboardsView, OverallBadgeLeaderboardsView, MilestoneListView, CommentModerationView, ModerationActionView, ModerationLogView, ChecklistDetailView, ChecklistCreateView, ChecklistEditView, MyChecklistsView, MyShareablesView
+from trophies.recap_views import RecapIndexView, RecapSlideView
 from users.views import CustomConfirmEmailView, stripe_webhook
 from notifications.views import (
     NotificationInboxView,
@@ -68,6 +69,10 @@ urlpatterns = [
     path('checklists/create/<int:concept_id>/<str:np_communication_id>/', ChecklistCreateView.as_view(), name='checklist_create'),
     path('my-checklists/', MyChecklistsView.as_view(), name='my_checklists'),
     path('my-shareables/', MyShareablesView.as_view(), name='my_shareables'),
+
+    # Monthly Recap URLs
+    path('recap/', RecapIndexView.as_view(), name='recap_index'),
+    path('recap/<int:year>/<int:month>/', RecapSlideView.as_view(), name='recap_view'),
 
     path('profiles/<str:psn_username>/trophy-case/', TrophyCaseView.as_view(), name='trophy_case'),
     path('toggle-selection/', ToggleSelectionView.as_view(), name='toggle-selection'),

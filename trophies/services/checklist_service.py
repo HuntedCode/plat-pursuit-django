@@ -27,8 +27,8 @@ class ChecklistService:
 
     # Image size limits (bytes)
     MAX_CHECKLIST_IMAGE_SIZE = 5 * 1024 * 1024  # 5MB
-    MAX_SECTION_IMAGE_SIZE = 2 * 1024 * 1024     # 2MB
-    MAX_ITEM_IMAGE_SIZE = 2 * 1024 * 1024        # 2MB
+    MAX_SECTION_IMAGE_SIZE = 5 * 1024 * 1024     # 5MB
+    MAX_ITEM_IMAGE_SIZE = 5 * 1024 * 1024        # 5MB
 
     # Image format whitelist
     ALLOWED_IMAGE_FORMATS = ['JPEG', 'PNG', 'WEBP', 'GIF']
@@ -178,7 +178,7 @@ class ChecklistService:
     def can_add_inline_image(checklist, profile):
         """
         Check if user can add inline image items.
-        Requires: premium status + structure editing permission.
+        Requires: structure editing permission.
 
         Args:
             checklist: Checklist instance
@@ -191,10 +191,6 @@ class ChecklistService:
         can_edit, reason = ChecklistService.can_edit_checklist_structure(checklist, profile)
         if not can_edit:
             return False, reason
-
-        # Premium check
-        if not profile.user_is_premium:
-            return False, "Premium subscription required to add inline images."
 
         return True, None
 
@@ -1299,6 +1295,134 @@ class ChecklistService:
         item.save(update_fields=update_fields)
         logger.info(f"Item {item.id} updated (type: {item.item_type})")
         return True, None
+
+    @staticmethod
+    @transaction.atomic
+    def bulk_update_items(checklist, profile, items_data):
+        """
+        Bulk update multiple items in a single transaction.
+
+        Args:
+            checklist: Checklist instance
+            profile: Profile making updates
+            items_data: List of dicts with 'id', 'text', 'item_type' keys
+
+        Returns:
+            tuple: (updated_count int, error dict or None)
+        """
+        from trophies.models import ChecklistItem
+
+        can_edit, reason = ChecklistService.can_edit_checklist_structure(checklist, profile)
+        if not can_edit:
+            return 0, {'error': reason}
+
+        if not items_data:
+            return 0, None
+
+        # Get all item IDs that belong to this checklist
+        valid_item_ids = set(
+            ChecklistItem.objects.filter(
+                section__checklist=checklist
+            ).values_list('id', flat=True)
+        )
+
+        # Validate all items first
+        errors = []
+        validated_items = []
+
+        for idx, item_data in enumerate(items_data):
+            item_id = item_data.get('id')
+            text = item_data.get('text', '').strip() if item_data.get('text') else ''
+            item_type = item_data.get('item_type')
+
+            # Validate item belongs to this checklist
+            if item_id not in valid_item_ids:
+                errors.append({'index': idx, 'id': item_id, 'error': 'Item not found in this checklist'})
+                continue
+
+            # Sanitize text
+            if text:
+                text = ChecklistService._sanitize_text(text)
+
+            # Validate text length
+            if text and len(text) > ChecklistService.MAX_ITEM_TEXT_LENGTH:
+                errors.append({'index': idx, 'id': item_id, 'error': f'Text exceeds {ChecklistService.MAX_ITEM_TEXT_LENGTH} characters'})
+                continue
+
+            # Check for banned words (skip empty text which might be image captions)
+            if text:
+                contains_banned, _ = ChecklistService._check_banned_words(text)
+                if contains_banned:
+                    errors.append({'index': idx, 'id': item_id, 'error': 'Content contains inappropriate language'})
+                    continue
+
+            # Validate item type (image items can have captions updated)
+            if item_type and item_type not in ['item', 'sub_header', 'text_area', 'image']:
+                errors.append({'index': idx, 'id': item_id, 'error': 'Invalid item type'})
+                continue
+
+            validated_items.append({
+                'id': item_id,
+                'text': text,
+                'item_type': item_type
+            })
+
+        if errors:
+            return 0, {
+                'error': f'Validation failed for {len(errors)} items',
+                'failed_items': errors,
+                'summary': {
+                    'total_submitted': len(items_data),
+                    'valid': len(validated_items),
+                    'failed': len(errors)
+                }
+            }
+
+        # Fetch all items to update
+        items_to_update = ChecklistItem.objects.filter(
+            id__in=[v['id'] for v in validated_items]
+        )
+        items_by_id = {item.id: item for item in items_to_update}
+
+        # Apply updates to item instances
+        updated_items = []
+
+        for item_data in validated_items:
+            item = items_by_id.get(item_data['id'])
+            if not item:
+                continue
+
+            changed = False
+
+            # Handle text update
+            if item_data['text'] is not None:
+                # For non-image items, text is required
+                if not item_data['text'] and item.item_type not in ['image']:
+                    continue  # Skip items that would end up with empty text
+                if item.text != item_data['text']:
+                    item.text = item_data['text']
+                    changed = True
+
+            # Handle item_type update
+            if item_data['item_type'] and item.item_type != item_data['item_type']:
+                item.item_type = item_data['item_type']
+                # Clear trophy_id when converting to sub_header or text_area
+                if item_data['item_type'] in ['sub_header', 'text_area']:
+                    item.trophy_id = None
+                changed = True
+
+            if changed:
+                updated_items.append(item)
+
+        # Perform bulk update
+        if updated_items:
+            ChecklistItem.objects.bulk_update(
+                updated_items,
+                fields=['text', 'item_type', 'trophy_id']
+            )
+            logger.info(f"Bulk updated {len(updated_items)} items in checklist {checklist.id}")
+
+        return len(updated_items), None
 
     @staticmethod
     @transaction.atomic

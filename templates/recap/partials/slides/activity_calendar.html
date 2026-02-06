@@ -1,0 +1,113 @@
+{% comment %}
+Recap Slide: Activity Calendar
+Variables: days, max_count, total_active_days, first_day_weekday, first_day_offset, days_in_month, month_name, year
+{% endcomment %}
+<div class="flex items-center justify-center w-full h-full">
+    <!-- Display Box -->
+    <div class="card bg-base-300/50 border border-base-content/10 shadow-xl px-6 py-8 md:px-10 md:py-10 text-center max-w-md">
+        <p class="text-lg text-base-content/70 mb-2">Your activity in</p>
+        <h3 class="text-2xl md:text-3xl font-bold text-primary mb-6">{{ month_name }} {{ year }}</h3>
+
+        <!-- Calendar Grid -->
+        <div class="mb-6">
+            <!-- Day labels -->
+            <div class="grid grid-cols-7 gap-1 mb-2">
+                <span class="text-xs text-base-content/50">S</span>
+                <span class="text-xs text-base-content/50">M</span>
+                <span class="text-xs text-base-content/50">T</span>
+                <span class="text-xs text-base-content/50">W</span>
+                <span class="text-xs text-base-content/50">T</span>
+                <span class="text-xs text-base-content/50">F</span>
+                <span class="text-xs text-base-content/50">S</span>
+            </div>
+
+            <!-- Calendar days -->
+            <div class="grid grid-cols-7 gap-1">
+                {% comment %}Empty cells before first day{% endcomment %}
+                {% for i in first_day_offset %}
+                <div class="w-8 h-8 md:w-10 md:h-10"></div>
+                {% endfor %}
+
+                {% for day_data in days %}
+                <div class="w-8 h-8 md:w-10 md:h-10 flex items-center justify-center calendar-day stagger-item tooltip tooltip-top"
+                     style="animation-delay: {{ forloop.counter0 }}0ms;"
+                     data-tip="{{ day_data.count }} Trophies | {{ day_data.platinum_count }} Plats">
+                    <div class="activity-dot activity-level-{{ day_data.level }} rounded-full transition-all duration-300"></div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- Legend -->
+        <div class="flex items-center justify-center gap-2 mb-4">
+            <span class="text-xs text-base-content/50">Less</span>
+            <div class="flex items-center gap-1">
+                <div class="w-3 h-3 rounded-full activity-level-0"></div>
+                <div class="w-3 h-3 rounded-full activity-level-1"></div>
+                <div class="w-3 h-3 rounded-full activity-level-2"></div>
+                <div class="w-3 h-3 rounded-full activity-level-3"></div>
+                <div class="w-3 h-3 rounded-full activity-level-4"></div>
+            </div>
+            <span class="text-xs text-base-content/50">More</span>
+        </div>
+
+        <!-- Summary stats -->
+        <div class="text-base-content/70">
+            <span class="font-bold text-primary">{{ total_active_days }}</span> active day{{ total_active_days|pluralize }}
+            {% if max_count > 0 %}
+            <span class="mx-2">|</span>
+            <span class="font-bold text-primary">{{ max_count }}</span> max in a day
+            {% endif %}
+        </div>
+
+        {% if flavor_text %}
+        <p class="text-sm text-base-content/50 italic mt-6">{{ flavor_text }}</p>
+        {% endif %}
+    </div>
+</div>
+
+<style>
+    .activity-dot {
+        transition: all 0.3s ease;
+    }
+
+    /* Level 0: No activity - faint circle */
+    .activity-level-0 {
+        width: 8px;
+        height: 8px;
+        background: rgba(255, 255, 255, 0.15);
+    }
+
+    /* Level 1: Low activity (1-25%) - accent color (orange) */
+    .activity-level-1 {
+        width: 12px;
+        height: 12px;
+        background: rgba(255, 170, 92, 0.8);
+    }
+
+    /* Level 2: Medium-low activity (26-50%) - blend accent toward secondary */
+    .activity-level-2 {
+        width: 16px;
+        height: 16px;
+        background: rgba(186, 128, 178, 0.85);
+    }
+
+    /* Level 3: Medium-high activity (51-75%) - secondary color (purple) */
+    .activity-level-3 {
+        width: 20px;
+        height: 20px;
+        background: rgba(149, 128, 255, 0.9);
+    }
+
+    /* Level 4: Max activity (76-100%) - primary color (blue) */
+    .activity-level-4 {
+        width: 24px;
+        height: 24px;
+        background: rgba(103, 209, 248, 1.0);
+        box-shadow: 0 0 8px rgba(103, 209, 248, 0.5);
+    }
+
+    .calendar-day:hover .activity-dot {
+        transform: scale(1.2);
+    }
+</style>
