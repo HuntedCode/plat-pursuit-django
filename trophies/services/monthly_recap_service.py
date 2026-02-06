@@ -621,6 +621,7 @@ class MonthlyRecapService:
                 'name': opt['name'],
                 'series': opt['series'],
                 'icon_url': opt['icon_url'],
+                'has_image': opt['has_image'],
             })
 
         return {
