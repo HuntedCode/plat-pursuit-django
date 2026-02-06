@@ -1,4 +1,4 @@
-{% load static %}
+{% load static humanize %}
 {% comment %}
 Monthly Recap Share Image Card Template
 This partial is used for both preview and final image generation via html2canvas.
@@ -63,25 +63,25 @@ Color reference (converted from oklch):
             <div style="width: 340px; flex-shrink: 0; display: flex; flex-direction: column; gap: 12px;">
                 {# Top: Trophy count + breakdown #}
                 <div style="display: flex; flex-direction: column; justify-content: center; align-items: center; background: rgba(42, 46, 52, 0.4); border-radius: 8px; padding: 16px;">
-                    <div style="font-size: 64px; font-weight: bold; color: #67d1f8; line-height: 1;">{{ total_trophies }}</div>
+                    <div style="font-size: 64px; font-weight: bold; color: #67d1f8; line-height: 1;">{{ total_trophies|intcomma }}</div>
                     <div style="font-size: 16px; color: rgba(245, 247, 252, 0.7); margin-bottom: 12px;">Trophies Earned</div>
 
                     {# Trophy breakdown - horizontal #}
                     <div style="display: flex; gap: 14px;">
                         <div style="text-align: center;">
-                            <div style="font-size: 20px; font-weight: bold; color: #cd7f32;">{{ bronzes }}</div>
+                            <div style="font-size: 20px; font-weight: bold; color: #cd7f32;">{{ bronzes|intcomma }}</div>
                             <div style="font-size: 9px; color: rgba(245, 247, 252, 0.5); text-transform: uppercase;">Bronze</div>
                         </div>
                         <div style="text-align: center;">
-                            <div style="font-size: 20px; font-weight: bold; color: #c0c0c0;">{{ silvers }}</div>
+                            <div style="font-size: 20px; font-weight: bold; color: #c0c0c0;">{{ silvers|intcomma }}</div>
                             <div style="font-size: 9px; color: rgba(245, 247, 252, 0.5); text-transform: uppercase;">Silver</div>
                         </div>
                         <div style="text-align: center;">
-                            <div style="font-size: 20px; font-weight: bold; color: #ffd700;">{{ golds }}</div>
+                            <div style="font-size: 20px; font-weight: bold; color: #ffd700;">{{ golds|intcomma }}</div>
                             <div style="font-size: 9px; color: rgba(245, 247, 252, 0.5); text-transform: uppercase;">Gold</div>
                         </div>
                         <div style="text-align: center;">
-                            <div style="font-size: 20px; font-weight: bold; color: #67d1f8;">{{ platinums }}</div>
+                            <div style="font-size: 20px; font-weight: bold; color: #67d1f8;">{{ platinums|intcomma }}</div>
                             <div style="font-size: 9px; color: rgba(245, 247, 252, 0.5); text-transform: uppercase;">Platinum</div>
                         </div>
                     </div>
@@ -109,7 +109,7 @@ Color reference (converted from oklch):
                 {# Fallback if no platinums - show some additional info #}
                 <div style="flex: 1; background: rgba(42, 46, 52, 0.4); border-radius: 8px; padding: 16px; display: flex; flex-direction: column; justify-content: center; align-items: center;">
                     <div style="font-size: 11px; color: rgba(245, 247, 252, 0.5); text-transform: uppercase; letter-spacing: 0.05em; font-weight: bold; margin-bottom: 8px;">Games Played</div>
-                    <div style="font-size: 36px; font-weight: bold; color: #f5f7fc;">{{ games_started }}</div>
+                    <div style="font-size: 36px; font-weight: bold; color: #f5f7fc;">{{ games_started|intcomma }}</div>
                 </div>
                 {% endif %}
             </div>
@@ -121,17 +121,17 @@ Color reference (converted from oklch):
                     {# Platinums #}
                     <div style="flex: 1; background: rgba(42, 46, 52, 0.8); border: 3px solid #67d1f8; border-radius: 8px; padding: 8px; text-align: center;">
                         <div style="font-size: 10px; color: #67d1f8; text-transform: uppercase; letter-spacing: 0.05em; font-weight: bold; margin-bottom: 2px;">Platinums</div>
-                        <div style="font-size: 24px; font-weight: bold; color: #f5f7fc;">{{ platinums }}</div>
+                        <div style="font-size: 24px; font-weight: bold; color: #f5f7fc;">{{ platinums|intcomma }}</div>
                     </div>
                     {# Games started #}
                     <div style="flex: 1; background: rgba(42, 46, 52, 0.8); border: 3px solid #1a1b1f; border-radius: 8px; padding: 8px; text-align: center;">
                         <div style="font-size: 10px; color: #9580ff; text-transform: uppercase; letter-spacing: 0.05em; font-weight: bold; margin-bottom: 2px;">Started</div>
-                        <div style="font-size: 24px; font-weight: bold; color: #f5f7fc;">{{ games_started }}</div>
+                        <div style="font-size: 24px; font-weight: bold; color: #f5f7fc;">{{ games_started|intcomma }}</div>
                     </div>
                     {# Games completed #}
                     <div style="flex: 1; background: rgba(42, 46, 52, 0.8); border: 3px solid #1a1b1f; border-radius: 8px; padding: 8px; text-align: center;">
                         <div style="font-size: 10px; color: #67f8c8; text-transform: uppercase; letter-spacing: 0.05em; font-weight: bold; margin-bottom: 2px;">Completed</div>
-                        <div style="font-size: 24px; font-weight: bold; color: #f5f7fc;">{{ games_completed }}</div>
+                        <div style="font-size: 24px; font-weight: bold; color: #f5f7fc;">{{ games_completed|intcomma }}</div>
                     </div>
                     {# Active Days #}
                     <div style="flex: 1; background: rgba(42, 46, 52, 0.8); border: 3px solid #1a1b1f; border-radius: 8px; padding: 8px; text-align: center;">
@@ -199,7 +199,7 @@ Color reference (converted from oklch):
                                 <div style="font-size: 15px; font-weight: 600; color: #f5f7fc;">{{ most_active_day.day_name }}, {{ most_active_day.date }}</div>
                             </div>
                             <div style="text-align: right;">
-                                <div style="font-size: 32px; font-weight: bold; color: #67d1f8;">{{ most_active_day.trophy_count }}</div>
+                                <div style="font-size: 32px; font-weight: bold; color: #67d1f8;">{{ most_active_day.trophy_count|intcomma }}</div>
                                 <div style="font-size: 10px; color: rgba(245, 247, 252, 0.5);">trophies</div>
                             </div>
                         </div>
@@ -215,7 +215,7 @@ Color reference (converted from oklch):
                                 <div style="font-size: 11px; color: #9580ff; text-transform: uppercase; letter-spacing: 0.05em; font-weight: bold;">Badge XP Earned</div>
                                 <div style="font-size: 14px; color: rgba(245, 247, 252, 0.6);">{{ badges_count }} badge{{ badges_count|pluralize }} this month</div>
                             </div>
-                            <div style="font-size: 28px; font-weight: bold; color: #9580ff;">+{{ badge_xp }}</div>
+                            <div style="font-size: 28px; font-weight: bold; color: #9580ff;">+{{ badge_xp|intcomma }}</div>
                         </div>
                         {% else %}
                         {# Active Days stat if no badge XP #}

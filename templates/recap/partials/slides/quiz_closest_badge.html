@@ -1,3 +1,4 @@
+{% load static %}
 {% comment %}
 Recap Slide: Quiz - Which Badge Are You Closest To?
 Variables: correct_badge_id, correct_badge_name, correct_progress_pct, correct_completed, correct_required, options (list of {id, name, series, icon_url})
@@ -19,13 +20,7 @@ Variables: correct_badge_id, correct_badge_name, correct_progress_pct, correct_c
                  class="card bg-base-200 border border-base-content/10 p-3 cursor-pointer hover:border-primary transition-all">
                 <!-- Badge Icon -->
                 <div class="flex justify-center mb-2">
-                    {% if badge.icon_url %}
-                    <img src="{{ badge.icon_url }}" alt="{{ badge.name }}" class="w-12 h-12 rounded" />
-                    {% else %}
-                    <div class="w-12 h-12 rounded bg-base-300 flex items-center justify-center">
-                        <span class="text-2xl">🎖️</span>
-                    </div>
-                    {% endif %}
+                    <img src="{% if badge.has_image %}{{ badge.icon_url }}{% else %}{% static badge.icon_url %}{% endif %}" alt="{{ badge.name }}" class="w-12 h-12 rounded" />
                 </div>
 
                 <!-- Badge Name -->

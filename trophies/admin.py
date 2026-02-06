@@ -1074,7 +1074,7 @@ class MonthlyRecapAdmin(admin.ModelAdmin):
     ]
     ordering = ['-year', '-month', '-updated_at']
     date_hierarchy = 'generated_at'
-    actions = ['finalize_recaps', 'regenerate_recaps']
+    actions = ['finalize_recaps', 'regenerate_recaps', 'audit_badge_xp']
 
     fieldsets = (
         ('Profile & Period', {
@@ -1150,3 +1150,38 @@ class MonthlyRecapAdmin(admin.ModelAdmin):
             except Exception as e:
                 messages.warning(request, f"Failed to regenerate recap for {recap}: {e}")
         messages.success(request, f"Regenerated {count} recap(s).")
+
+    @admin.action(description='Audit badge XP calculations')
+    def audit_badge_xp(self, request, queryset):
+        """Compare stored badge XP against recalculated values."""
+        from trophies.services.monthly_recap_service import MonthlyRecapService
+
+        mismatches = []
+        for recap in queryset:
+            try:
+                recalculated = MonthlyRecapService.get_badge_stats_for_month(
+                    recap.profile, recap.year, recap.month
+                )
+
+                stored_xp = recap.badge_xp_earned
+                calculated_xp = recalculated['xp_earned']
+
+                if stored_xp != calculated_xp:
+                    mismatches.append({
+                        'recap': f"{recap.profile.psn_username} {recap.year}/{recap.month:02d}",
+                        'stored': stored_xp,
+                        'calculated': calculated_xp,
+                        'diff': calculated_xp - stored_xp
+                    })
+            except Exception as e:
+                messages.error(request, f"Error auditing {recap}: {e}")
+
+        if mismatches:
+            msg = f"Found {len(mismatches)} XP discrepancy(s):\n"
+            for m in mismatches[:10]:  # Show first 10
+                msg += f"  {m['recap']}: stored={m['stored']:,}, calculated={m['calculated']:,} (diff={m['diff']:+,})\n"
+            if len(mismatches) > 10:
+                msg += f"  ... and {len(mismatches) - 10} more\n"
+            messages.warning(request, msg)
+        else:
+            messages.success(request, f"All {queryset.count()} recap(s) have correct badge XP.")

@@ -467,10 +467,18 @@ class MonthlyRecapService:
         """
         Get badge XP and badges earned in the month.
 
+        Includes both badge completion bonuses (3000 XP per badge) and
+        stage progress XP (tier-specific XP per concept completed).
+
+        When a badge is earned, we attribute all its accumulated stage
+        progress XP to that month as a reasonable approximation.
+
         Returns:
             dict: {xp_earned, badges_count, badges_data}
         """
         from trophies.models import UserBadge
+        from trophies.services.xp_service import calculate_progress_xp_for_badge
+        from trophies.util_modules.constants import BADGE_TIER_XP
 
         start_date, end_date = cls.get_month_date_range(year, month)
 
@@ -481,9 +489,25 @@ class MonthlyRecapService:
             earned_at__lt=end_date
         ).select_related('badge')
 
+        total_xp = 0
         badges_data = []
+
         for user_badge in badges_earned:
             badge = user_badge.badge
+
+            # Badge completion bonus (3000 XP)
+            completion_xp = BADGE_TIER_XP
+
+            # Stage progress XP (tier-specific: Bronze/Gold=250, Silver/Plat=75)
+            # Uses badge.required_stages as completed concepts count
+            progress_xp = calculate_progress_xp_for_badge(
+                badge,
+                badge.required_stages if badge.required_stages > 0 else 0
+            )
+
+            total_xp += completion_xp + progress_xp
+
+            # Build badge display data
             try:
                 layers = badge.get_badge_layers()
                 image_url = layers.get('main', '')
@@ -499,13 +523,8 @@ class MonthlyRecapService:
                 'image_url': image_url,
             })
 
-        # Calculate XP earned this month
-        # XP is earned from badge completions (3000 XP each)
-        from trophies.util_modules.constants import BADGE_TIER_XP
-        xp_earned = len(badges_earned) * BADGE_TIER_XP
-
         return {
-            'xp_earned': xp_earned,
+            'xp_earned': total_xp,
             'badges_count': len(badges_earned),
             'badges_data': badges_data,
         }
@@ -562,6 +581,7 @@ class MonthlyRecapService:
                     'id': str(badge.id),
                     'name': badge.effective_display_title or badge.name,
                     'series': badge.effective_display_series or '',
+                    'has_image': bool(badge.badge_image or (badge.base_badge and badge.base_badge.badge_image)),
                     'icon_url': badge.get_badge_layers().get('main', ''),
                     'progress_pct': progress_pct,
                     'completed': prog.completed_concepts,
