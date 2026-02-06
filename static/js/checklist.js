@@ -1658,6 +1658,174 @@
         });
     }
 
+    // Helper function to bind event handlers to dynamically added image items
+    function bindItemEventHandlers(itemElement) {
+        // Bind save button
+        const saveBtn = itemElement.querySelector('.item-save-btn');
+        if (saveBtn) {
+            saveBtn.addEventListener('click', async function() {
+                const item = this.closest('.checklist-image-item');
+                if (!item) return;
+
+                const itemId = item.dataset.itemId;
+                const text = item.querySelector('.item-text-input').value.trim();
+
+                try {
+                    await apiRequest(`${API_BASE}/checklists/items/${itemId}/`, 'PATCH', {
+                        text: text
+                    });
+                    PlatPursuit.ToastManager.show('Caption saved!', 'success');
+                    clearFormState();
+                    markFormAsClean();
+                } catch (error) {
+                    PlatPursuit.ToastManager.show(error.message || 'Failed to save caption', 'error');
+                }
+            });
+        }
+
+        // Bind delete button
+        const deleteBtn = itemElement.querySelector('.item-delete-btn');
+        if (deleteBtn) {
+            deleteBtn.addEventListener('click', async function() {
+                const item = this.closest('.checklist-image-item');
+                if (!item) return;
+
+                const itemId = item.dataset.itemId;
+                const section = this.closest('.checklist-section');
+
+                try {
+                    await apiRequest(`${API_BASE}/checklists/items/${itemId}/`, 'DELETE');
+                    item.remove();
+
+                    // Update item count
+                    const countBadge = section.querySelector('.section-item-count');
+                    if (countBadge) {
+                        const items = section.querySelectorAll('[data-item-id]');
+                        countBadge.textContent = `${items.length} item${items.length !== 1 ? 's' : ''}`;
+                    }
+
+                    PlatPursuit.ToastManager.show('Image deleted.', 'success');
+                    clearFormState();
+                    markFormAsClean();
+                } catch (error) {
+                    PlatPursuit.ToastManager.show(error.message || 'Failed to delete image', 'error');
+                }
+            });
+        }
+
+        // Bind move up button
+        const moveUpBtn = itemElement.querySelector('.item-move-up-btn');
+        if (moveUpBtn) {
+            moveUpBtn.addEventListener('click', async function() {
+                const item = this.closest('.checklist-image-item');
+                if (!item) return;
+
+                const itemId = item.dataset.itemId;
+
+                try {
+                    await apiRequest(`${API_BASE}/checklists/items/${itemId}/move-up/`, 'POST');
+                    const prevItem = item.previousElementSibling;
+                    if (prevItem && prevItem.hasAttribute('data-item-id')) {
+                        item.parentNode.insertBefore(item, prevItem);
+                        PlatPursuit.ToastManager.show('Moved up', 'success');
+                    }
+                } catch (error) {
+                    PlatPursuit.ToastManager.show(error.message || 'Failed to move item', 'error');
+                }
+            });
+        }
+
+        // Bind move down button
+        const moveDownBtn = itemElement.querySelector('.item-move-down-btn');
+        if (moveDownBtn) {
+            moveDownBtn.addEventListener('click', async function() {
+                const item = this.closest('.checklist-image-item');
+                if (!item) return;
+
+                const itemId = item.dataset.itemId;
+
+                try {
+                    await apiRequest(`${API_BASE}/checklists/items/${itemId}/move-down/`, 'POST');
+                    const nextItem = item.nextElementSibling;
+                    if (nextItem && nextItem.hasAttribute('data-item-id')) {
+                        item.parentNode.insertBefore(nextItem, item);
+                        PlatPursuit.ToastManager.show('Moved down', 'success');
+                    }
+                } catch (error) {
+                    PlatPursuit.ToastManager.show(error.message || 'Failed to move item', 'error');
+                }
+            });
+        }
+
+        // Bind character counter for caption input
+        const textInput = itemElement.querySelector('.item-text-input');
+        const charCount = itemElement.querySelector('.item-char-count');
+        if (textInput && charCount) {
+            textInput.addEventListener('input', function() {
+                charCount.textContent = this.value.length;
+            });
+        }
+    }
+
+    // Helper function to create inline image DOM element
+    function createInlineImageElement(itemData) {
+        const div = document.createElement('div');
+        div.className = 'checklist-image-item my-4 p-3 bg-secondary/5 border-2 border-secondary/20 rounded-lg';
+        div.setAttribute('data-item-id', itemData.id);
+        div.setAttribute('data-item-order', itemData.order);
+        div.setAttribute('data-item-type', 'image');
+
+        const caption = itemData.text || '';
+        const imageUrl = itemData.image_url || itemData.image?.url || '';
+
+        div.innerHTML = `
+            <div class="flex items-start gap-3">
+                <div class="flex flex-col gap-1">
+                    <button class="btn btn-ghost btn-xs item-move-up-btn" title="Move up">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"/>
+                        </svg>
+                    </button>
+                    <button class="btn btn-ghost btn-xs item-move-down-btn" title="Move down">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                        </svg>
+                    </button>
+                </div>
+                <div class="flex-1">
+                    <div class="flex items-center gap-2 mb-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                        </svg>
+                        <span class="badge badge-secondary badge-sm">Inline Image</span>
+                    </div>
+                    <figure class="w-full max-w-xl mx-auto rounded-lg overflow-hidden shadow-md bg-base-300 mb-2">
+                        <img src="${imageUrl}" alt="Guide image" class="w-full h-auto object-contain" loading="lazy">
+                    </figure>
+                    <input type="text" class="input input-sm input-bordered w-full item-text-input text-sm italic"
+                           value="${caption}" maxlength="500" placeholder="Optional caption...">
+                    <span class="text-xs text-base-content/50 text-right mt-1">
+                        <span class="item-char-count">${caption.length}</span>/500
+                    </span>
+                </div>
+                <div class="flex flex-col gap-1">
+                    <button class="btn btn-ghost btn-xs item-save-btn" title="Save caption">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-success" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                        </svg>
+                    </button>
+                    <button class="btn btn-ghost btn-xs item-delete-btn" title="Delete image">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-error" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+        `;
+
+        return div;
+    }
+
     function addItemToDOM(section, item) {
         const template = document.getElementById('item-template');
         const container = section.querySelector('.section-items-container');
@@ -2056,7 +2224,26 @@
 
             if (response.ok) {
                 PlatPursuit.ToastManager.show('Thumbnail uploaded!', 'success');
-                reloadWithFormState();
+
+                // Update preview with server URL
+                const preview = document.getElementById('checklist-thumbnail-preview');
+                if (preview) {
+                    const img = preview.querySelector('img');
+                    if (img && data.thumbnail_url) {
+                        img.src = data.thumbnail_url;
+                    }
+                    preview.classList.remove('hidden');
+                }
+
+                // Show remove button
+                const removeBtn = document.getElementById('remove-checklist-thumbnail-btn');
+                if (removeBtn) {
+                    removeBtn.classList.remove('hidden');
+                }
+
+                // Clear the file input
+                const input = document.getElementById('checklist-thumbnail-input');
+                if (input) input.value = '';
             } else {
                 PlatPursuit.ToastManager.show(data.error || 'Upload failed.', 'error');
             }
@@ -2077,7 +2264,20 @@
 
             if (response.ok) {
                 PlatPursuit.ToastManager.show('Thumbnail removed.', 'success');
-                reloadWithFormState();
+
+                // Hide preview
+                const preview = document.getElementById('checklist-thumbnail-preview');
+                if (preview) {
+                    preview.classList.add('hidden');
+                    const img = preview.querySelector('img');
+                    if (img) img.src = '';
+                }
+
+                // Hide remove button
+                const removeBtn = document.getElementById('remove-checklist-thumbnail-btn');
+                if (removeBtn) {
+                    removeBtn.classList.add('hidden');
+                }
             } else {
                 const data = await response.json();
                 PlatPursuit.ToastManager.show(data.error || 'Failed to remove.', 'error');
@@ -2103,7 +2303,45 @@
 
             if (response.ok) {
                 PlatPursuit.ToastManager.show('Section thumbnail uploaded!', 'success');
-                reloadWithFormState();
+
+                // Find the section container
+                const section = document.querySelector(`.checklist-section[data-section-id="${sectionId}"]`);
+                if (!section) return;
+
+                // Find or create preview element
+                let preview = section.querySelector('.section-thumbnail-preview');
+                if (preview) {
+                    // Update existing preview
+                    const img = preview.querySelector('img');
+                    if (img && data.thumbnail_url) {
+                        img.src = data.thumbnail_url;
+                    }
+                    preview.classList.remove('hidden');
+                } else {
+                    // Create preview element
+                    const figure = document.createElement('figure');
+                    figure.className = 'section-thumbnail-preview w-full max-w-2xl mx-auto rounded-lg overflow-hidden shadow-md bg-base-300 mb-3';
+                    const img = document.createElement('img');
+                    img.src = data.thumbnail_url;
+                    img.alt = 'Section header image';
+                    img.className = 'w-full h-auto object-contain';
+                    img.loading = 'lazy';
+                    figure.appendChild(img);
+
+                    // Insert before the file input container
+                    const fileInputContainer = section.querySelector('.section-thumbnail-input').closest('.flex');
+                    fileInputContainer.parentElement.insertBefore(figure, fileInputContainer);
+                }
+
+                // Show remove button
+                let removeBtn = section.querySelector('.section-remove-thumbnail-btn');
+                if (removeBtn) {
+                    removeBtn.classList.remove('hidden');
+                }
+
+                // Clear the file input
+                const input = section.querySelector('.section-thumbnail-input');
+                if (input) input.value = '';
             } else {
                 PlatPursuit.ToastManager.show(data.error || 'Upload failed.', 'error');
             }
@@ -2124,7 +2362,24 @@
 
             if (response.ok) {
                 PlatPursuit.ToastManager.show('Section thumbnail removed.', 'success');
-                reloadWithFormState();
+
+                // Find the section
+                const section = document.querySelector(`.checklist-section[data-section-id="${sectionId}"]`);
+                if (!section) return;
+
+                // Hide preview
+                const preview = section.querySelector('.section-thumbnail-preview');
+                if (preview) {
+                    preview.classList.add('hidden');
+                    const img = preview.querySelector('img');
+                    if (img) img.src = '';
+                }
+
+                // Hide remove button
+                const removeBtn = section.querySelector('.section-remove-thumbnail-btn');
+                if (removeBtn) {
+                    removeBtn.classList.add('hidden');
+                }
             } else {
                 const data = await response.json();
                 PlatPursuit.ToastManager.show(data.error || 'Failed to remove.', 'error');
@@ -2151,7 +2406,54 @@
 
             if (response.ok) {
                 PlatPursuit.ToastManager.show('Inline image added!', 'success');
-                reloadWithFormState();
+
+                // Find section container
+                const section = document.querySelector(`.checklist-section[data-section-id="${sectionId}"]`);
+                if (!section) return;
+
+                // Create the new item DOM element
+                const newItemElement = createInlineImageElement(data);
+
+                // Bind event handlers to the new element
+                bindItemEventHandlers(newItemElement);
+
+                // Find items container and insert the new item
+                const itemsContainer = section.querySelector('.section-items-container');
+                if (itemsContainer) {
+                    itemsContainer.appendChild(newItemElement);
+                }
+
+                // Update item count badge
+                const countBadge = section.querySelector('.section-item-count');
+                if (countBadge) {
+                    const items = section.querySelectorAll('[data-item-id]');
+                    countBadge.textContent = `${items.length} item${items.length !== 1 ? 's' : ''}`;
+                }
+
+                // Expand the section if it's collapsed
+                const itemsContent = section.querySelector('.section-items-content');
+                if (itemsContent && itemsContent.classList.contains('hidden')) {
+                    itemsContent.classList.remove('hidden');
+                    // Update toggle icon if needed
+                    const toggleIcon = section.querySelector('.section-toggle-icon');
+                    if (toggleIcon) {
+                        toggleIcon.style.transform = 'rotate(180deg)';
+                    }
+                }
+
+                // Clear the upload form
+                const uploadContainer = section.querySelector('.inline-image-input').closest('.mt-3');
+                if (uploadContainer) {
+                    const input = uploadContainer.querySelector('.inline-image-input');
+                    const captionInput = uploadContainer.querySelector('.inline-image-caption');
+                    if (input) input.value = '';
+                    if (captionInput) captionInput.value = '';
+                }
+
+                // Scroll the new item into view smoothly
+                setTimeout(() => {
+                    newItemElement.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                }, 100);
             } else {
                 PlatPursuit.ToastManager.show(data.error || 'Upload failed.', 'error');
             }
