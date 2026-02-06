@@ -13,10 +13,10 @@ logger = logging.getLogger('psn_api')
 
 
 ALLOWED_IMAGE_FORMATS = ['JPEG', 'PNG', 'WEBP', 'GIF']
-MAX_IMAGE_DIMENSION = 2048
+MAX_IMAGE_DIMENSION = 3840  # 4K resolution
 
 
-def optimize_image(image_file, max_width=2048, max_height=2048, quality=85):
+def optimize_image(image_file, max_width=3840, max_height=3840, quality=85):
     """
     Optimize uploaded image: resize, compress, strip metadata.
 

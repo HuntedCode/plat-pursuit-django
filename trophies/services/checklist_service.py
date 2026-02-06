@@ -34,7 +34,7 @@ class ChecklistService:
     ALLOWED_IMAGE_FORMATS = ['JPEG', 'PNG', 'WEBP', 'GIF']
 
     # Image dimension limits
-    MAX_IMAGE_DIMENSION = 2048  # pixels
+    MAX_IMAGE_DIMENSION = 3840  # pixels (4K resolution)
 
     # Markdown configuration
     MARKDOWN_EXTRAS = [
