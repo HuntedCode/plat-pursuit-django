@@ -362,18 +362,19 @@ def tojson(value):
     """
     Convert a Python object to JSON string for use in HTML data attributes.
 
+    Use with single-quoted attributes: data-attr='{{ value|tojson }}'
+
     Args:
         value: Any JSON-serializable Python object
 
     Returns:
-        JSON string suitable for HTML attributes (properly escaped)
+        JSON string suitable for single-quoted HTML attributes
     """
     import json
-    from django.utils.html import escape
     try:
-        # Convert to JSON, then escape for safe use in HTML attributes
-        json_string = json.dumps(value)
-        return escape(json_string)
+        # Convert to JSON - no escaping needed when used in single-quoted attributes
+        # since JSON uses double quotes internally
+        return json.dumps(value)
     except (TypeError, ValueError):
         return '[]'
 

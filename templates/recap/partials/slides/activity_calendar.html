@@ -36,7 +36,7 @@ Variables: days, max_count, total_active_days, first_day_weekday, first_day_offs
                      data-tip="{{ day_data.count }} Trophies | {{ day_data.platinum_count }} Plats"
                      data-day="{{ day_data.day }}"
                      {% if day_data.platinum_count > 0 %}
-                     data-platinums="{{ day_data.platinums|tojson }}"
+                     data-platinums='{{ day_data.platinums|tojson }}'
                      {% endif %}>
                     <div class="activity-dot activity-level-{{ day_data.level }} rounded-full transition-all duration-300"></div>
                 </div>
