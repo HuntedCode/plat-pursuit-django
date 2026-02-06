@@ -1716,21 +1716,18 @@
         // Bind move up button
         const moveUpBtn = itemElement.querySelector('.item-move-up-btn');
         if (moveUpBtn) {
-            moveUpBtn.addEventListener('click', async function() {
+            moveUpBtn.addEventListener('click', function() {
                 const item = this.closest('.checklist-image-item');
                 if (!item) return;
 
-                const itemId = item.dataset.itemId;
-
-                try {
-                    await apiRequest(`${API_BASE}/checklists/items/${itemId}/move-up/`, 'POST');
-                    const prevItem = item.previousElementSibling;
-                    if (prevItem && prevItem.hasAttribute('data-item-id')) {
-                        item.parentNode.insertBefore(item, prevItem);
-                        PlatPursuit.ToastManager.show('Moved up', 'success');
-                    }
-                } catch (error) {
-                    PlatPursuit.ToastManager.show(error.message || 'Failed to move item', 'error');
+                const prev = item.previousElementSibling;
+                if (prev && (prev.classList.contains('checklist-item-edit') ||
+                           prev.classList.contains('checklist-image-item') ||
+                           prev.classList.contains('checklist-text-area-edit') ||
+                           prev.classList.contains('checklist-trophy-item-edit'))) {
+                    item.parentNode.insertBefore(item, prev);
+                    const section = this.closest('.checklist-section');
+                    reorderItems(section);
                 }
             });
         }
@@ -1738,21 +1735,18 @@
         // Bind move down button
         const moveDownBtn = itemElement.querySelector('.item-move-down-btn');
         if (moveDownBtn) {
-            moveDownBtn.addEventListener('click', async function() {
+            moveDownBtn.addEventListener('click', function() {
                 const item = this.closest('.checklist-image-item');
                 if (!item) return;
 
-                const itemId = item.dataset.itemId;
-
-                try {
-                    await apiRequest(`${API_BASE}/checklists/items/${itemId}/move-down/`, 'POST');
-                    const nextItem = item.nextElementSibling;
-                    if (nextItem && nextItem.hasAttribute('data-item-id')) {
-                        item.parentNode.insertBefore(nextItem, item);
-                        PlatPursuit.ToastManager.show('Moved down', 'success');
-                    }
-                } catch (error) {
-                    PlatPursuit.ToastManager.show(error.message || 'Failed to move item', 'error');
+                const next = item.nextElementSibling;
+                if (next && (next.classList.contains('checklist-item-edit') ||
+                           next.classList.contains('checklist-image-item') ||
+                           next.classList.contains('checklist-text-area-edit') ||
+                           next.classList.contains('checklist-trophy-item-edit'))) {
+                    item.parentNode.insertBefore(next, item);
+                    const section = this.closest('.checklist-section');
+                    reorderItems(section);
                 }
             });
         }
@@ -2827,6 +2821,9 @@
             populateTrophyGroupFilter(data.trophy_groups, groupFilter);
 
             renderTrophyList(data.trophies, listContainer);
+
+            // Apply filters to newly loaded trophies (important for when modal reopens)
+            filterTrophies();
         } catch (error) {
             listContainer.innerHTML = `
                 <div class="alert alert-error">
