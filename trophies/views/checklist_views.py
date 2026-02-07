@@ -6,6 +6,7 @@ from django.db.models import F
 from django.http import Http404
 from django.shortcuts import redirect, get_object_or_404
 from django.urls import reverse_lazy, reverse
+from django.utils import timezone
 from django.views.generic import View, DetailView, TemplateView
 
 from trophies.mixins import ProfileHotbarMixin
@@ -413,10 +414,15 @@ class MyShareablesView(LoginRequiredMixin, ProfileHotbarMixin, TemplateView):
         # Count shovelware for filter toggle
         shovelware_count = sum(1 for et in platinum_list if et.trophy.game.is_shovelware)
 
-        # Group by year for organization
+        # Group by year for organization (using user's local timezone)
+        user_tz = timezone.get_current_timezone()
         platinums_by_year = {}
         for et in platinum_list:
-            year = et.earned_date_time.year if et.earned_date_time else 'Unknown'
+            if et.earned_date_time:
+                local_dt = et.earned_date_time.astimezone(user_tz)
+                year = local_dt.year
+            else:
+                year = 'Unknown'
             if year not in platinums_by_year:
                 platinums_by_year[year] = []
             platinums_by_year[year].append(et)

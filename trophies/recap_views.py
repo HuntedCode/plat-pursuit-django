@@ -14,6 +14,18 @@ from trophies.mixins import ProfileHotbarMixin
 from trophies.themes import get_available_themes_for_grid
 
 
+def _get_user_local_now(request):
+    """Get current time in the authenticated user's timezone."""
+    import pytz
+    now = timezone.now()
+    if request.user.is_authenticated:
+        try:
+            return now.astimezone(pytz.timezone(request.user.user_timezone or 'UTC'))
+        except pytz.exceptions.UnknownTimeZoneError:
+            pass
+    return now
+
+
 class RecapIndexView(LoginRequiredMixin, ProfileHotbarMixin, TemplateView):
     """
     Recap index page - redirects to most recent completed month or shows month picker.
@@ -22,27 +34,27 @@ class RecapIndexView(LoginRequiredMixin, ProfileHotbarMixin, TemplateView):
 
     def get(self, request, *args, **kwargs):
         profile = request.user.profile
-        now = timezone.now()
+        now_local = _get_user_local_now(request)
 
         # Default to the most recent fully completed month
         # A month is "complete" after the 2nd day of the following month
         # This gives time for final syncs and makes the recap more interesting
-        if now.day <= 2:
+        if now_local.day <= 2:
             # We're in the first 2 days of the month, show previous month's recap
-            if now.month == 1:
-                target_year = now.year - 1
+            if now_local.month == 1:
+                target_year = now_local.year - 1
                 target_month = 12
             else:
-                target_year = now.year
-                target_month = now.month - 1
+                target_year = now_local.year
+                target_month = now_local.month - 1
         else:
             # After the 2nd, show the previous month (not current month-in-progress)
-            if now.month == 1:
-                target_year = now.year - 1
+            if now_local.month == 1:
+                target_year = now_local.year - 1
                 target_month = 12
             else:
-                target_year = now.year
-                target_month = now.month - 1
+                target_year = now_local.year
+                target_month = now_local.month - 1
 
         # Try to get the target month's recap
         recap = MonthlyRecapService.get_or_generate_recap(
@@ -55,11 +67,11 @@ class RecapIndexView(LoginRequiredMixin, ProfileHotbarMixin, TemplateView):
 
         # No recap for target month - try current month as fallback
         current_recap = MonthlyRecapService.get_or_generate_recap(
-            profile, now.year, now.month
+            profile, now_local.year, now_local.month
         )
 
         if current_recap:
-            return redirect('recap_view', year=now.year, month=now.month)
+            return redirect('recap_view', year=now_local.year, month=now_local.month)
 
         # No activity at all - show index with available months
         return super().get(request, *args, **kwargs)
@@ -89,20 +101,20 @@ class RecapSlideView(LoginRequiredMixin, ProfileHotbarMixin, TemplateView):
 
     def get(self, request, year, month, *args, **kwargs):
         profile = request.user.profile
-        now = timezone.now()
+        now_local = _get_user_local_now(request)
 
         # Validate month
         if not 1 <= month <= 12:
             raise Http404("Invalid month")
 
         # Check premium gating for past months
-        is_current_month = (year == now.year and month == now.month)
+        is_current_month = (year == now_local.year and month == now_local.month)
         if not is_current_month and not profile.user_is_premium:
             # Redirect to premium upsell or index
             return redirect('recap_index')
 
         # Don't allow future months
-        if (year > now.year) or (year == now.year and month > now.month):
+        if (year > now_local.year) or (year == now_local.year and month > now_local.month):
             raise Http404("Cannot view recap for future months")
 
         return super().get(request, *args, year=year, month=month, **kwargs)
@@ -110,7 +122,7 @@ class RecapSlideView(LoginRequiredMixin, ProfileHotbarMixin, TemplateView):
     def get_context_data(self, year, month, **kwargs):
         context = super().get_context_data(**kwargs)
         profile = self.request.user.profile
-        now = timezone.now()
+        now_local = _get_user_local_now(self.request)
 
         # Get or generate the recap
         recap = MonthlyRecapService.get_or_generate_recap(profile, year, month)
@@ -144,7 +156,7 @@ class RecapSlideView(LoginRequiredMixin, ProfileHotbarMixin, TemplateView):
         context['is_premium'] = profile.user_is_premium
 
         # Get available months for month picker
-        is_current_month = (year == now.year and month == now.month)
+        is_current_month = (year == now_local.year and month == now_local.month)
         available_months = MonthlyRecapService.get_available_months(
             profile,
             include_premium_only=profile.user_is_premium

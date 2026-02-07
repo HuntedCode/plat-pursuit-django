@@ -9,6 +9,7 @@ This service manages the creation of "Spotify Wrapped" style monthly recaps:
 """
 import calendar
 import logging
+import pytz
 from datetime import datetime, timedelta
 from django.db import transaction
 from django.db.models import Count, Min, Q, F
@@ -30,24 +31,51 @@ class MonthlyRecapService:
     CACHE_STALENESS_SECONDS = 3600
 
     @staticmethod
-    def get_month_date_range(year, month):
+    def _resolve_user_tz(profile):
         """
-        Get the start and end datetime for a given month.
+        Resolve a pytz timezone object from a profile's linked user.
+
+        Falls back to UTC if:
+        - Profile has no linked user
+        - User has no timezone set
+        - Timezone string is invalid
+
+        Returns:
+            pytz timezone object
+        """
+        try:
+            tz_name = profile.user.user_timezone if profile.user else 'UTC'
+            return pytz.timezone(tz_name or 'UTC')
+        except (pytz.exceptions.UnknownTimeZoneError, AttributeError):
+            return pytz.UTC
+
+    @staticmethod
+    def get_month_date_range(year, month, user_tz=None):
+        """
+        Get the start and end datetime for a given month in the user's timezone.
 
         Args:
             year: Year (e.g., 2026)
             month: Month (1-12)
+            user_tz: pytz timezone object (defaults to UTC)
 
         Returns:
-            tuple: (start_datetime, end_datetime) where end is first of next month
+            tuple: (start_datetime, end_datetime) where end is first of next month,
+                   both aware datetimes in UTC (converted from user's local midnight)
         """
-        start_date = timezone.make_aware(datetime(year, month, 1))
+        if user_tz is None:
+            user_tz = pytz.UTC
 
-        # Calculate first day of next month
+        # Create midnight boundaries in the user's local timezone
+        start_naive = datetime(year, month, 1)
         if month == 12:
-            end_date = timezone.make_aware(datetime(year + 1, 1, 1))
+            end_naive = datetime(year + 1, 1, 1)
         else:
-            end_date = timezone.make_aware(datetime(year, month + 1, 1))
+            end_naive = datetime(year, month + 1, 1)
+
+        # Localize to user's timezone, then convert to UTC for DB queries
+        start_date = user_tz.localize(start_naive).astimezone(pytz.UTC)
+        end_date = user_tz.localize(end_naive).astimezone(pytz.UTC)
 
         return start_date, end_date
 
@@ -70,8 +98,12 @@ class MonthlyRecapService:
         """
         from trophies.models import MonthlyRecap
 
-        now = timezone.now()
-        is_current_month = (year == now.year and month == now.month)
+        user_tz = cls._resolve_user_tz(profile)
+
+        # Check "current month" in the USER'S local time
+        now_utc = timezone.now()
+        now_local = now_utc.astimezone(user_tz)
+        is_current_month = (year == now_local.year and month == now_local.month)
 
         try:
             recap = MonthlyRecap.objects.get(profile=profile, year=year, month=month)
@@ -82,7 +114,7 @@ class MonthlyRecapService:
 
             # For current month, check staleness
             if is_current_month:
-                time_since_update = (now - recap.updated_at).total_seconds()
+                time_since_update = (now_utc - recap.updated_at).total_seconds()
                 is_stale = time_since_update > cls.CACHE_STALENESS_SECONDS
 
                 if not is_stale and not force_regenerate:
@@ -95,7 +127,7 @@ class MonthlyRecapService:
             recap = None
 
         # Check if there's any activity for this month
-        trophy_count = cls.get_trophy_count_for_month(profile, year, month)
+        trophy_count = cls.get_trophy_count_for_month(profile, year, month, user_tz=user_tz)
         if trophy_count == 0:
             # No activity - don't create a recap
             if recap:
@@ -103,7 +135,7 @@ class MonthlyRecapService:
             return None
 
         # Generate fresh data
-        data = cls.generate_recap_data(profile, year, month)
+        data = cls.generate_recap_data(profile, year, month, user_tz=user_tz)
 
         recap, _ = MonthlyRecap.objects.update_or_create(
             profile=profile,
@@ -120,7 +152,7 @@ class MonthlyRecapService:
         return recap
 
     @classmethod
-    def generate_recap_data(cls, profile, year, month):
+    def generate_recap_data(cls, profile, year, month, user_tz=None):
         """
         Calculate all monthly stats from EarnedTrophy/ProfileGame tables.
 
@@ -128,40 +160,41 @@ class MonthlyRecapService:
             profile: Profile instance
             year: Year
             month: Month (1-12)
+            user_tz: pytz timezone object (defaults to UTC)
 
         Returns:
             dict: Data suitable for MonthlyRecap model fields
         """
         # Get trophy breakdown
-        trophy_counts = cls.get_trophy_counts_for_month(profile, year, month)
+        trophy_counts = cls.get_trophy_counts_for_month(profile, year, month, user_tz=user_tz)
 
         # Get game stats
-        games_started = cls.get_games_started_in_month(profile, year, month)
-        games_completed = cls.get_games_completed_in_month(profile, year, month)
+        games_started = cls.get_games_started_in_month(profile, year, month, user_tz=user_tz)
+        games_completed = cls.get_games_completed_in_month(profile, year, month, user_tz=user_tz)
 
         # Get highlight data
-        platinums_data = cls.get_platinums_data_for_month(profile, year, month)
-        rarest_trophy = cls.get_rarest_trophy_in_month(profile, year, month)
-        most_active = cls.get_most_active_day(profile, year, month)
-        activity_calendar = cls.get_daily_activity_calendar(profile, year, month)
+        platinums_data = cls.get_platinums_data_for_month(profile, year, month, user_tz=user_tz)
+        rarest_trophy = cls.get_rarest_trophy_in_month(profile, year, month, user_tz=user_tz)
+        most_active = cls.get_most_active_day(profile, year, month, user_tz=user_tz)
+        activity_calendar = cls.get_daily_activity_calendar(profile, year, month, user_tz=user_tz)
 
         # Get badge stats
-        badge_stats = cls.get_badge_stats_for_month(profile, year, month)
+        badge_stats = cls.get_badge_stats_for_month(profile, year, month, user_tz=user_tz)
 
         # Get badge progress quiz data (snapshot at time of generation)
-        badge_progress_quiz = cls.get_badge_progress_quiz_snapshot(profile, year, month)
+        badge_progress_quiz = cls.get_badge_progress_quiz_snapshot(profile, year, month, user_tz=user_tz)
 
         # Get streak and time analysis data
-        streak_data = cls.get_streak_data(profile, year, month)
-        time_analysis = cls.get_time_of_day_analysis(profile, year, month)
+        streak_data = cls.get_streak_data(profile, year, month, user_tz=user_tz)
+        time_analysis = cls.get_time_of_day_analysis(profile, year, month, user_tz=user_tz)
 
         # Get quiz data (snapshots for historical accuracy)
-        quiz_total_trophies = cls.get_quiz_total_trophies_options(profile, year, month)
-        quiz_rarest_trophy = cls.get_quiz_rarest_trophy_options(profile, year, month)
-        quiz_active_day = cls.get_quiz_active_day_options(profile, year, month)
+        quiz_total_trophies = cls.get_quiz_total_trophies_options(profile, year, month, user_tz=user_tz)
+        quiz_rarest_trophy = cls.get_quiz_rarest_trophy_options(profile, year, month, user_tz=user_tz)
+        quiz_active_day = cls.get_quiz_active_day_options(profile, year, month, user_tz=user_tz)
 
         # Get comparison data
-        comparison = cls.get_comparison_data(profile, year, month)
+        comparison = cls.get_comparison_data(profile, year, month, user_tz=user_tz)
 
         return {
             'total_trophies_earned': trophy_counts['total'],
@@ -188,11 +221,11 @@ class MonthlyRecapService:
         }
 
     @classmethod
-    def get_trophy_count_for_month(cls, profile, year, month):
+    def get_trophy_count_for_month(cls, profile, year, month, user_tz=None):
         """Get total trophy count for a month (used for activity check)."""
         from trophies.models import EarnedTrophy
 
-        start_date, end_date = cls.get_month_date_range(year, month)
+        start_date, end_date = cls.get_month_date_range(year, month, user_tz)
 
         return EarnedTrophy.objects.filter(
             profile=profile,
@@ -202,7 +235,7 @@ class MonthlyRecapService:
         ).count()
 
     @classmethod
-    def get_trophy_counts_for_month(cls, profile, year, month):
+    def get_trophy_counts_for_month(cls, profile, year, month, user_tz=None):
         """
         Get trophy counts by type for a month.
 
@@ -211,7 +244,7 @@ class MonthlyRecapService:
         """
         from trophies.models import EarnedTrophy
 
-        start_date, end_date = cls.get_month_date_range(year, month)
+        start_date, end_date = cls.get_month_date_range(year, month, user_tz)
 
         counts = EarnedTrophy.objects.filter(
             profile=profile,
@@ -235,11 +268,11 @@ class MonthlyRecapService:
         }
 
     @classmethod
-    def get_games_started_in_month(cls, profile, year, month):
+    def get_games_started_in_month(cls, profile, year, month, user_tz=None):
         """Get count of games first played in this month."""
         from trophies.models import ProfileGame
 
-        start_date, end_date = cls.get_month_date_range(year, month)
+        start_date, end_date = cls.get_month_date_range(year, month, user_tz)
 
         return ProfileGame.objects.filter(
             profile=profile,
@@ -248,7 +281,7 @@ class MonthlyRecapService:
         ).count()
 
     @classmethod
-    def get_games_completed_in_month(cls, profile, year, month):
+    def get_games_completed_in_month(cls, profile, year, month, user_tz=None):
         """
         Get count of games completed (100%) in this month.
 
@@ -257,7 +290,7 @@ class MonthlyRecapService:
         """
         from trophies.models import EarnedTrophy
 
-        start_date, end_date = cls.get_month_date_range(year, month)
+        start_date, end_date = cls.get_month_date_range(year, month, user_tz)
 
         # Count distinct games where platinum was earned this month
         return EarnedTrophy.objects.filter(
@@ -269,7 +302,7 @@ class MonthlyRecapService:
         ).values('trophy__game').distinct().count()
 
     @classmethod
-    def get_platinums_data_for_month(cls, profile, year, month):
+    def get_platinums_data_for_month(cls, profile, year, month, user_tz=None):
         """
         Get detailed data for all platinums earned in the month.
 
@@ -278,7 +311,8 @@ class MonthlyRecapService:
         """
         from trophies.models import EarnedTrophy
 
-        start_date, end_date = cls.get_month_date_range(year, month)
+        tz = user_tz or pytz.UTC
+        start_date, end_date = cls.get_month_date_range(year, month, user_tz)
 
         platinums = EarnedTrophy.objects.filter(
             profile=profile,
@@ -291,17 +325,19 @@ class MonthlyRecapService:
         result = []
         for earned in platinums:
             game = earned.trophy.game
+            # Convert to user's local timezone before formatting
+            local_dt = earned.earned_date_time.astimezone(tz) if earned.earned_date_time else None
             result.append({
                 'game_name': game.title_name,
                 'game_image': game.title_image or game.title_icon_url or '',
-                'earned_date': earned.earned_date_time.strftime('%b %d') if earned.earned_date_time else '',
+                'earned_date': local_dt.strftime('%b %d') if local_dt else '',
                 'earn_rate': earned.trophy.trophy_earn_rate or 0,
             })
 
         return result
 
     @classmethod
-    def get_rarest_trophy_in_month(cls, profile, year, month):
+    def get_rarest_trophy_in_month(cls, profile, year, month, user_tz=None):
         """
         Find the rarest trophy (lowest earn_rate) earned in the month.
 
@@ -310,7 +346,7 @@ class MonthlyRecapService:
         """
         from trophies.models import EarnedTrophy
 
-        start_date, end_date = cls.get_month_date_range(year, month)
+        start_date, end_date = cls.get_month_date_range(year, month, user_tz)
 
         # Get trophy with lowest earn_rate (most rare)
         # Filter out trophies with 0 earn_rate as those may be invalid
@@ -337,7 +373,7 @@ class MonthlyRecapService:
         }
 
     @classmethod
-    def _get_daily_trophy_counts(cls, profile, year, month):
+    def _get_daily_trophy_counts(cls, profile, year, month, user_tz=None):
         """
         Shared helper to get trophy counts by day for a month.
 
@@ -348,7 +384,8 @@ class MonthlyRecapService:
         """
         from trophies.models import EarnedTrophy
 
-        start_date, end_date = cls.get_month_date_range(year, month)
+        tz = user_tz or pytz.UTC
+        start_date, end_date = cls.get_month_date_range(year, month, user_tz)
 
         return EarnedTrophy.objects.filter(
             profile=profile,
@@ -356,20 +393,20 @@ class MonthlyRecapService:
             earned_date_time__gte=start_date,
             earned_date_time__lt=end_date
         ).annotate(
-            day=TruncDate('earned_date_time')
+            day=TruncDate('earned_date_time', tzinfo=tz)
         ).values('day').annotate(
             count=Count('id')
         )
 
     @classmethod
-    def get_most_active_day(cls, profile, year, month):
+    def get_most_active_day(cls, profile, year, month, user_tz=None):
         """
         Find the day with most trophies earned in the month.
 
         Returns:
             dict or None: {date, day_name, trophy_count}
         """
-        daily_counts = cls._get_daily_trophy_counts(profile, year, month).order_by('-count').first()
+        daily_counts = cls._get_daily_trophy_counts(profile, year, month, user_tz=user_tz).order_by('-count').first()
 
         if not daily_counts or not daily_counts['day']:
             return None
@@ -382,7 +419,7 @@ class MonthlyRecapService:
         }
 
     @classmethod
-    def get_daily_activity_calendar(cls, profile, year, month):
+    def get_daily_activity_calendar(cls, profile, year, month, user_tz=None):
         """
         Get daily trophy counts for the entire month in calendar format.
 
@@ -403,13 +440,14 @@ class MonthlyRecapService:
         """
         from trophies.models import EarnedTrophy
 
-        daily_counts = cls._get_daily_trophy_counts(profile, year, month)
+        tz = user_tz or pytz.UTC
+        daily_counts = cls._get_daily_trophy_counts(profile, year, month, user_tz=user_tz)
 
         # Convert to dict for easy lookup
         counts_by_day = {item['day'].day: item['count'] for item in daily_counts}
 
         # Get platinum trophy details by day
-        start_date, end_date = cls.get_month_date_range(year, month)
+        start_date, end_date = cls.get_month_date_range(year, month, user_tz)
         platinum_trophies = EarnedTrophy.objects.filter(
             profile=profile,
             earned=True,
@@ -421,7 +459,9 @@ class MonthlyRecapService:
         # Group platinums by day with details
         platinums_by_day = {}
         for et in platinum_trophies:
-            day = et.earned_date_time.day
+            # Convert to user's local timezone to get the correct day
+            local_dt = et.earned_date_time.astimezone(tz)
+            day = local_dt.day
             if day not in platinums_by_day:
                 platinums_by_day[day] = []
 
@@ -479,7 +519,7 @@ class MonthlyRecapService:
         }
 
     @classmethod
-    def get_badge_stats_for_month(cls, profile, year, month):
+    def get_badge_stats_for_month(cls, profile, year, month, user_tz=None):
         """
         Get badge XP and badges earned in the month.
 
@@ -496,7 +536,7 @@ class MonthlyRecapService:
         from trophies.services.xp_service import calculate_progress_xp_for_badge
         from trophies.util_modules.constants import BADGE_TIER_XP
 
-        start_date, end_date = cls.get_month_date_range(year, month)
+        start_date, end_date = cls.get_month_date_range(year, month, user_tz)
 
         # Get badges earned this month
         badges_earned = UserBadge.objects.filter(
@@ -546,7 +586,7 @@ class MonthlyRecapService:
         }
 
     @classmethod
-    def get_badge_progress_quiz_snapshot(cls, profile, year, month):
+    def get_badge_progress_quiz_snapshot(cls, profile, year, month, user_tz=None):
         """
         Capture a snapshot of badge progress state at the end of a month for quiz.
 
@@ -561,7 +601,7 @@ class MonthlyRecapService:
         from trophies.models import Badge, UserBadge, UserBadgeProgress
 
         # Get date at end of month to capture state at that time
-        _, end_date = cls.get_month_date_range(year, month)
+        _, end_date = cls.get_month_date_range(year, month, user_tz)
 
         # Get badges earned by end of month
         earned_badge_ids = UserBadge.objects.filter(
@@ -650,7 +690,7 @@ class MonthlyRecapService:
         }
 
     @classmethod
-    def get_comparison_data(cls, profile, year, month):
+    def get_comparison_data(cls, profile, year, month, user_tz=None):
         """
         Get comparison stats vs previous month and personal bests.
 
@@ -660,8 +700,8 @@ class MonthlyRecapService:
         from trophies.models import MonthlyRecap
 
         # Get current month stats
-        current_total = cls.get_trophy_count_for_month(profile, year, month)
-        current_plats = cls.get_trophy_counts_for_month(profile, year, month)['platinum']
+        current_total = cls.get_trophy_count_for_month(profile, year, month, user_tz=user_tz)
+        current_plats = cls.get_trophy_counts_for_month(profile, year, month, user_tz=user_tz)['platinum']
 
         # Calculate previous month
         if month == 1:
@@ -669,7 +709,7 @@ class MonthlyRecapService:
         else:
             prev_year, prev_month = year, month - 1
 
-        prev_total = cls.get_trophy_count_for_month(profile, prev_year, prev_month)
+        prev_total = cls.get_trophy_count_for_month(profile, prev_year, prev_month, user_tz=user_tz)
 
         # Calculate percentage change
         if prev_total > 0:
@@ -723,8 +763,9 @@ class MonthlyRecapService:
         """
         from trophies.models import MonthlyRecap
 
-        now = timezone.now()
-        current_year, current_month = now.year, now.month
+        user_tz = cls._resolve_user_tz(profile)
+        now_local = timezone.now().astimezone(user_tz)
+        current_year, current_month = now_local.year, now_local.month
 
         # Get all months with recaps
         recaps = MonthlyRecap.objects.filter(
@@ -791,21 +832,26 @@ class MonthlyRecapService:
         """
         from trophies.models import Profile, EarnedTrophy
 
-        start_date, end_date = cls.get_month_date_range(year, month)
+        # Use a wider window to catch all possible timezones (UTC-12 to UTC+14)
+        utc_start, utc_end = cls.get_month_date_range(year, month, pytz.UTC)
+        # Expand by max timezone offset to catch edge cases
+        search_start = utc_start - timedelta(hours=14)
+        search_end = utc_end + timedelta(hours=14)
 
         # Find profiles with trophy activity this month
         active_profile_ids = EarnedTrophy.objects.filter(
             earned=True,
-            earned_date_time__gte=start_date,
-            earned_date_time__lt=end_date
+            earned_date_time__gte=search_start,
+            earned_date_time__lt=search_end
         ).values_list('profile_id', flat=True).distinct()
 
         # Filter to linked profiles only
+        # Add select_related for user_timezone access
         profiles = Profile.objects.filter(
             id__in=active_profile_ids,
             is_linked=True,
             user__isnull=False
-        )
+        ).select_related('user')
 
         if dry_run:
             return profiles.count()
@@ -817,7 +863,7 @@ class MonthlyRecapService:
                 if recap:
                     count += 1
             except Exception as e:
-                logger.error(f"Error generating recap for {profile.psn_username}: {e}")
+                logger.exception(f"Error generating recap for {profile.psn_username}: {e}")
 
         logger.info(f"Generated {count} monthly recaps for {year}/{month:02d}")
         return count
@@ -833,7 +879,7 @@ class MonthlyRecapService:
     # =========================================================================
 
     @classmethod
-    def get_quiz_total_trophies_options(cls, profile, year, month):
+    def get_quiz_total_trophies_options(cls, profile, year, month, user_tz=None):
         """
         Generate quiz options for "guess your total trophies" quiz.
 
@@ -844,7 +890,7 @@ class MonthlyRecapService:
         """
         import random
 
-        trophy_counts = cls.get_trophy_counts_for_month(profile, year, month)
+        trophy_counts = cls.get_trophy_counts_for_month(profile, year, month, user_tz=user_tz)
         actual = trophy_counts['total']
 
         if actual == 0:
@@ -892,7 +938,7 @@ class MonthlyRecapService:
         }
 
     @classmethod
-    def get_quiz_rarest_trophy_options(cls, profile, year, month):
+    def get_quiz_rarest_trophy_options(cls, profile, year, month, user_tz=None):
         """
         Generate quiz options for "which was your rarest trophy" quiz.
 
@@ -904,7 +950,7 @@ class MonthlyRecapService:
         import random
         from trophies.models import EarnedTrophy
 
-        start_date, end_date = cls.get_month_date_range(year, month)
+        start_date, end_date = cls.get_month_date_range(year, month, user_tz)
 
         # Get all trophies earned this month with earn rates
         earned_trophies = list(EarnedTrophy.objects.filter(
@@ -947,7 +993,7 @@ class MonthlyRecapService:
         }
 
     @classmethod
-    def get_quiz_platinum_options(cls, profile, year, month):
+    def get_quiz_platinum_options(cls, profile, year, month, user_tz=None):
         """
         Generate quiz options for "spot your platinums" quiz.
 
@@ -959,7 +1005,7 @@ class MonthlyRecapService:
         import random
         from trophies.models import EarnedTrophy
 
-        start_date, end_date = cls.get_month_date_range(year, month)
+        start_date, end_date = cls.get_month_date_range(year, month, user_tz)
 
         # Get games platinumed this month
         platinum_games = EarnedTrophy.objects.filter(
@@ -1025,7 +1071,7 @@ class MonthlyRecapService:
         }
 
     @classmethod
-    def get_quiz_active_day_options(cls, profile, year, month):
+    def get_quiz_active_day_options(cls, profile, year, month, user_tz=None):
         """
         Generate quiz data for "guess your most active day of week" quiz.
 
@@ -1037,7 +1083,8 @@ class MonthlyRecapService:
         from trophies.models import EarnedTrophy
         from django.db.models.functions import ExtractWeekDay
 
-        start_date, end_date = cls.get_month_date_range(year, month)
+        tz = user_tz or pytz.UTC
+        start_date, end_date = cls.get_month_date_range(year, month, user_tz)
 
         # Get trophy counts by day of week
         # ExtractWeekDay returns 1=Sunday, 2=Monday, ..., 7=Saturday
@@ -1047,7 +1094,7 @@ class MonthlyRecapService:
             earned_date_time__gte=start_date,
             earned_date_time__lt=end_date
         ).annotate(
-            weekday=ExtractWeekDay('earned_date_time')
+            weekday=ExtractWeekDay('earned_date_time', tzinfo=tz)
         ).values('weekday').annotate(
             count=Count('id')
         )
@@ -1084,7 +1131,7 @@ class MonthlyRecapService:
     # =========================================================================
 
     @classmethod
-    def get_streak_data(cls, profile, year, month):
+    def get_streak_data(cls, profile, year, month, user_tz=None):
         """
         Calculate longest streak of consecutive active days in the month.
 
@@ -1093,7 +1140,8 @@ class MonthlyRecapService:
         """
         from trophies.models import EarnedTrophy
 
-        start_date, end_date = cls.get_month_date_range(year, month)
+        tz = user_tz or pytz.UTC
+        start_date, end_date = cls.get_month_date_range(year, month, user_tz)
 
         # Get unique earning dates in the month
         earning_dates = EarnedTrophy.objects.filter(
@@ -1102,7 +1150,7 @@ class MonthlyRecapService:
             earned_date_time__gte=start_date,
             earned_date_time__lt=end_date
         ).annotate(
-            day=TruncDate('earned_date_time')
+            day=TruncDate('earned_date_time', tzinfo=tz)
         ).values_list('day', flat=True).distinct().order_by('day')
 
         dates = list(earning_dates)
@@ -1136,7 +1184,7 @@ class MonthlyRecapService:
         }
 
     @classmethod
-    def get_time_of_day_analysis(cls, profile, year, month):
+    def get_time_of_day_analysis(cls, profile, year, month, user_tz=None):
         """
         Analyze what time of day the user earns most trophies.
 
@@ -1146,7 +1194,8 @@ class MonthlyRecapService:
         from trophies.models import EarnedTrophy
         from django.db.models.functions import ExtractHour
 
-        start_date, end_date = cls.get_month_date_range(year, month)
+        tz = user_tz or pytz.UTC
+        start_date, end_date = cls.get_month_date_range(year, month, user_tz)
 
         # Group trophies by hour
         hourly_counts = EarnedTrophy.objects.filter(
@@ -1155,7 +1204,7 @@ class MonthlyRecapService:
             earned_date_time__gte=start_date,
             earned_date_time__lt=end_date
         ).annotate(
-            hour=ExtractHour('earned_date_time')
+            hour=ExtractHour('earned_date_time', tzinfo=tz)
         ).values('hour').annotate(
             count=Count('id')
         ).order_by('-count')

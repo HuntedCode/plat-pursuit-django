@@ -24,6 +24,18 @@ from trophies.services.monthly_recap_service import MonthlyRecapService
 
 logger = logging.getLogger(__name__)
 
+
+def _get_user_local_now(request):
+    """Get current time in the authenticated user's timezone."""
+    import pytz
+    now = timezone.now()
+    if request.user.is_authenticated:
+        try:
+            return now.astimezone(pytz.timezone(request.user.user_timezone or 'UTC'))
+        except pytz.exceptions.UnknownTimeZoneError:
+            pass
+    return now
+
 # Flavor text for each slide type (randomly selected)
 SLIDE_FLAVOR_TEXT = {
     'total_trophies': [
@@ -121,7 +133,7 @@ class RecapDetailView(APIView):
     @method_decorator(ratelimit(key='user', rate='60/m', method='GET', block=True))
     def get(self, request, year, month):
         profile = request.user.profile
-        now = timezone.now()
+        now_local = _get_user_local_now(request)
 
         # Validate month
         if not 1 <= month <= 12:
@@ -131,7 +143,7 @@ class RecapDetailView(APIView):
             )
 
         # Check premium gating for past months
-        is_current_month = (year == now.year and month == now.month)
+        is_current_month = (year == now_local.year and month == now_local.month)
         if not is_current_month and not profile.user_is_premium:
             return Response(
                 {
@@ -142,7 +154,7 @@ class RecapDetailView(APIView):
             )
 
         # Don't allow future months
-        if (year > now.year) or (year == now.year and month > now.month):
+        if (year > now_local.year) or (year == now_local.year and month > now_local.month):
             return Response(
                 {'error': 'Cannot view recap for future months.'},
                 status=http_status.HTTP_400_BAD_REQUEST
@@ -190,7 +202,7 @@ class RecapRegenerateView(APIView):
     @method_decorator(ratelimit(key='user', rate='10/m', method='POST', block=True))
     def post(self, request, year, month):
         profile = request.user.profile
-        now = timezone.now()
+        now_local = _get_user_local_now(request)
 
         # Validate month
         if not 1 <= month <= 12:
@@ -200,7 +212,7 @@ class RecapRegenerateView(APIView):
             )
 
         # Only allow regeneration of current month
-        is_current_month = (year == now.year and month == now.month)
+        is_current_month = (year == now_local.year and month == now_local.month)
         if not is_current_month:
             return Response(
                 {'error': 'Can only regenerate current month recap.'},
@@ -251,7 +263,7 @@ class RecapShareImageHTMLView(APIView):
     @method_decorator(ratelimit(key='user', rate='60/m', method='GET', block=True))
     def get(self, request, year, month):
         profile = request.user.profile
-        now = timezone.now()
+        now_local = _get_user_local_now(request)
 
         logger.info(f"[RECAP-HTML] Request for {profile.psn_username} - {year}/{month}")
 
@@ -263,7 +275,7 @@ class RecapShareImageHTMLView(APIView):
             )
 
         # Check premium gating for past months
-        is_current_month = (year == now.year and month == now.month)
+        is_current_month = (year == now_local.year and month == now_local.month)
         if not is_current_month and not profile.user_is_premium:
             return Response(
                 {'error': 'Premium subscription required to share past recaps.'},
@@ -430,7 +442,7 @@ class RecapSlidePartialView(APIView):
 
     def get(self, request, year, month, slide_type):
         profile = request.user.profile
-        now = timezone.now()
+        now_local = _get_user_local_now(request)
 
         # Validate slide type
         if slide_type not in self.SLIDE_TEMPLATES:
@@ -447,7 +459,7 @@ class RecapSlidePartialView(APIView):
             )
 
         # Check premium gating for past months
-        is_current_month = (year == now.year and month == now.month)
+        is_current_month = (year == now_local.year and month == now_local.month)
         if not is_current_month and not profile.user_is_premium:
             return Response(
                 {'error': 'Premium subscription required.'},

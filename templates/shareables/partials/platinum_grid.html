@@ -104,7 +104,7 @@
                     <h4 class="card-title text-sm line-clamp-2 leading-tight min-h-[2.5rem]">{{ et.trophy.game.title_name }}</h4>
                     <p class="text-xs text-base-content/60">
                         {% if et.earned_date_time %}
-                            {{ et.earned_date_time|date:"M d, Y" }}
+                            {{ et.earned_date_time|format_date:"format_short" }}
                         {% else %}
                             Unknown date
                         {% endif %}

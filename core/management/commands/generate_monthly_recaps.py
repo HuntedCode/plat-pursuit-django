@@ -158,16 +158,22 @@ class Command(BaseCommand):
     def _generate_for_all(self, year, month, dry_run, notify):
         """Generate recaps for all active profiles."""
         from trophies.models import Profile, EarnedTrophy
+        from datetime import timedelta
+        import pytz
 
         self.stdout.write(f"\nGenerating recaps for all active profiles...")
 
-        start_date, end_date = MonthlyRecapService.get_month_date_range(year, month)
+        # Use a wider window to catch all possible timezones (UTC-12 to UTC+14)
+        utc_start, utc_end = MonthlyRecapService.get_month_date_range(year, month, pytz.UTC)
+        # Expand by max timezone offset to catch edge cases
+        search_start = utc_start - timedelta(hours=14)
+        search_end = utc_end + timedelta(hours=14)
 
         # Find profiles with activity this month
         active_profile_ids = EarnedTrophy.objects.filter(
             earned=True,
-            earned_date_time__gte=start_date,
-            earned_date_time__lt=end_date
+            earned_date_time__gte=search_start,
+            earned_date_time__lt=search_end
         ).values_list('profile_id', flat=True).distinct()
 
         # Filter to linked profiles only
