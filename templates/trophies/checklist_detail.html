@@ -200,11 +200,11 @@
                                 <a href="#section-{{ section.id }}"
                                    class="toc-item block px-3 py-2 rounded-lg text-sm hover:bg-base-200 transition-colors"
                                    data-section-id="{{ section.id }}">
-                                    <div class="flex justify-between items-center gap-2">
-                                        <span class="toc-title flex-1 truncate tooltip tooltip-left" data-tip="{{ section.subtitle }}">
+                                    <div class="flex flex-wrap justify-between items-center gap-x-2 gap-y-1">
+                                        <span class="toc-title flex-shrink min-w-0 break-words">
                                             {{ section.subtitle }}
                                         </span>
-                                        <span class="badge badge-ghost badge-sm toc-section-count">
+                                        <span class="badge badge-ghost badge-sm toc-section-count flex-shrink-0">
                                             <span class="completed-count">{{ section.completed_count|default:0 }}</span>/<span class="total-count">{{ section.item_count }}</span>
                                         </span>
                                     </div>
@@ -441,11 +441,11 @@
                                 <a href="#section-{{ section.id }}"
                                    class="toc-item block px-3 py-2 rounded-lg text-sm hover:bg-base-200 transition-colors"
                                    data-section-id="{{ section.id }}">
-                                    <div class="flex justify-between items-center gap-2">
-                                        <span class="toc-title flex-1 truncate tooltip tooltip-left" data-tip="{{ section.subtitle }}">
+                                    <div class="flex flex-wrap justify-between items-center gap-x-2 gap-y-1">
+                                        <span class="toc-title flex-shrink min-w-0 break-words">
                                             {{ section.subtitle }}
                                         </span>
-                                        <span class="badge badge-ghost badge-sm toc-section-count">
+                                        <span class="badge badge-ghost badge-sm toc-section-count flex-shrink-0">
                                             <span class="completed-count">{{ section.completed_count|default:0 }}</span>/<span class="total-count">{{ section.item_count }}</span>
                                         </span>
                                     </div>

@@ -30,7 +30,13 @@
             timestamp: Date.now(),
             title: document.getElementById('checklist-title')?.value || '',
             description: document.getElementById('checklist-description')?.value || '',
-            sections: {}
+            sections: {},
+            // Scroll restoration data
+            scrollPosition: window.pageYOffset || document.documentElement.scrollTop,
+            // Optional metadata for enhanced navigation
+            metadata: {
+                scrollToSection: null  // Set when we want to scroll to a specific section
+            }
         };
 
         // Save section data
@@ -132,6 +138,37 @@
                 PlatPursuit.ToastManager.show('Your unsaved changes have been restored', 'info');
             }
 
+            // Restore scroll position or scroll to target section
+            if (state.metadata?.scrollToSection) {
+                // Enhanced navigation: scroll to specific section (e.g., newly added)
+                const targetSection = document.querySelector(`.checklist-section[data-section-id="${state.metadata.scrollToSection}"]`);
+                if (targetSection) {
+                    // Use requestAnimationFrame to ensure DOM is fully rendered
+                    requestAnimationFrame(() => {
+                        const yOffset = -100; // Offset for navbar + breathing room
+                        const y = targetSection.getBoundingClientRect().top + window.pageYOffset + yOffset;
+
+                        window.scrollTo({
+                            top: y,
+                            behavior: 'smooth'  // Smooth scroll to highlight the new section
+                        });
+
+                        // Add brief highlight effect to make section more visible
+                        targetSection.style.transition = 'background-color 0.3s ease';
+                        targetSection.style.backgroundColor = 'rgba(var(--bs-primary-rgb), 0.1)';
+                        setTimeout(() => {
+                            targetSection.style.backgroundColor = '';
+                        }, 2000);
+                    });
+                } else {
+                    // Fallback: restore exact scroll position
+                    restoreScrollPosition(state.scrollPosition);
+                }
+            } else if (state.scrollPosition !== undefined) {
+                // Default: restore exact scroll position
+                restoreScrollPosition(state.scrollPosition);
+            }
+
             // Clear the saved state after restoration
             clearFormState();
 
@@ -141,6 +178,16 @@
             clearFormState();
             return false;
         }
+    }
+
+    function restoreScrollPosition(scrollY) {
+        // Use requestAnimationFrame to ensure DOM is fully rendered before scrolling
+        requestAnimationFrame(() => {
+            window.scrollTo({
+                top: scrollY,
+                behavior: 'auto'  // Instant scroll - less jarring than jumping after visible render
+            });
+        });
     }
 
     function clearFormState() {
@@ -190,6 +237,29 @@
     // Helper to reload page while preserving form state
     function reloadWithFormState() {
         saveFormState();
+        // Use forceNavigate to bypass unsaved changes warning
+        PlatPursuit.UnsavedChangesManager.forceNavigate(window.location.href);
+    }
+
+    // Helper to reload page with scroll metadata (e.g., to scroll to newly added section)
+    function reloadWithScrollTarget(sectionId = null) {
+        saveFormState();
+
+        // Enhance saved state with scroll target
+        const savedState = sessionStorage.getItem(FORM_STATE_KEY);
+        if (savedState) {
+            try {
+                const state = JSON.parse(savedState);
+                if (sectionId) {
+                    state.metadata = state.metadata || {};
+                    state.metadata.scrollToSection = sectionId;
+                }
+                sessionStorage.setItem(FORM_STATE_KEY, JSON.stringify(state));
+            } catch (e) {
+                console.error('Failed to enhance form state:', e);
+            }
+        }
+
         // Use forceNavigate to bypass unsaved changes warning
         PlatPursuit.UnsavedChangesManager.forceNavigate(window.location.href);
     }
@@ -347,6 +417,49 @@
 
     // Escape HTML for safe DOM insertion (delegates to shared utility)
     const escapeHtml = PlatPursuit.HTMLUtils.escape;
+
+    // ==========================================
+    // Batch Trophy Selection State
+    // ==========================================
+
+    /**
+     * Batch selection state manager for trophy multi-select.
+     */
+    const batchSelectionState = {
+        enabled: false,
+        selectedTrophyIds: new Set(),
+
+        toggle(enabled) {
+            this.enabled = enabled;
+            if (!enabled) {
+                this.clear();
+            }
+        },
+
+        add(trophyId) {
+            this.selectedTrophyIds.add(trophyId);
+        },
+
+        remove(trophyId) {
+            this.selectedTrophyIds.delete(trophyId);
+        },
+
+        has(trophyId) {
+            return this.selectedTrophyIds.has(trophyId);
+        },
+
+        clear() {
+            this.selectedTrophyIds.clear();
+        },
+
+        getAll() {
+            return Array.from(this.selectedTrophyIds);
+        },
+
+        count() {
+            return this.selectedTrophyIds.size;
+        }
+    };
 
     // ==========================================
     // Bulk Upload Functions
@@ -962,7 +1075,7 @@
             });
         }
 
-        // Handle TOC item clicks - smooth scroll
+        // Handle TOC item clicks - instant scroll for reliability with lazy images
         tocItems.forEach(item => {
             item.addEventListener('click', (e) => {
                 e.preventDefault();
@@ -971,13 +1084,13 @@
                 const targetSection = document.getElementById(`section-${sectionId}`);
 
                 if (targetSection) {
-                    // Smooth scroll to section with offset for fixed header
+                    // Instant scroll to section with offset for fixed header
                     const yOffset = -100; // Offset for navbar + breathing room
                     const y = targetSection.getBoundingClientRect().top + window.pageYOffset + yOffset;
 
                     window.scrollTo({
                         top: y,
-                        behavior: 'smooth'
+                        behavior: 'auto'  // Instant jump - prevents race with lazy-loaded images
                     });
                 }
             });
@@ -1279,14 +1392,24 @@
         addBtn.addEventListener('click', async function() {
             try {
                 this.classList.add('loading');
-                await apiRequest(`${API_BASE}/checklists/${checklistId}/sections/`, 'POST', {
+                const response = await apiRequest(`${API_BASE}/checklists/${checklistId}/sections/`, 'POST', {
                     subtitle: 'New Section',
                 });
 
                 PlatPursuit.ToastManager.show('Section added!', 'success');
 
-                // Reload page to show the new section with all features
-                setTimeout(() => reloadWithFormState(), 500);
+                // Get the new section ID from the response
+                const newSectionId = response.section?.id;
+
+                // Reload page and scroll to the new section
+                setTimeout(() => {
+                    if (newSectionId) {
+                        reloadWithScrollTarget(newSectionId);
+                    } else {
+                        // Fallback: normal reload with scroll position preservation
+                        reloadWithFormState();
+                    }
+                }, 500);
             } catch (error) {
                 PlatPursuit.ToastManager.show(error.message || 'Failed to add section', 'error');
                 this.classList.remove('loading');
@@ -1782,9 +1905,9 @@
                         <img src="${imageUrl}" alt="Guide image" class="w-full h-auto object-contain" loading="lazy">
                     </figure>
                     <input type="text" class="input input-sm input-bordered w-full item-text-input text-sm italic"
-                           value="${caption}" maxlength="500" placeholder="Optional caption...">
+                           maxlength="500" placeholder="Optional caption...">
                     <span class="text-xs text-base-content/50 text-right mt-1">
-                        <span class="item-char-count">${caption.length}</span>/500
+                        <span class="item-char-count">0</span>/500
                     </span>
                 </div>
                 <div class="flex flex-col gap-1">
@@ -1801,6 +1924,17 @@
                 </div>
             </div>
         `;
+
+        // Set the caption value safely using DOM property (not HTML attribute)
+        // This avoids any HTML escaping issues with quotes or special characters
+        const captionInput = div.querySelector('.item-text-input');
+        const charCount = div.querySelector('.item-char-count');
+        if (captionInput && caption) {
+            captionInput.value = caption;
+            if (charCount) {
+                charCount.textContent = caption.length;
+            }
+        }
 
         return div;
     }
@@ -2189,6 +2323,24 @@
     }
 
     async function uploadChecklistThumbnail(checklistId, file) {
+        // Get the file input element for disabling
+        const fileInput = document.getElementById('checklist-thumbnail-input');
+        const previewContainer = document.querySelector('.thumbnail-upload-area');
+
+        // Disable input and show loading state
+        if (fileInput) fileInput.disabled = true;
+        let loadingIndicator = null;
+        if (previewContainer) {
+            loadingIndicator = document.createElement('div');
+            loadingIndicator.className = 'loading loading-spinner loading-sm';
+            loadingIndicator.style.position = 'absolute';
+            loadingIndicator.style.top = '50%';
+            loadingIndicator.style.left = '50%';
+            loadingIndicator.style.transform = 'translate(-50%, -50%)';
+            previewContainer.style.position = 'relative';
+            previewContainer.appendChild(loadingIndicator);
+        }
+
         const formData = new FormData();
         formData.append('thumbnail', file);
 
@@ -2214,12 +2366,23 @@
             }
 
             // Clear the file input
-            const input = document.getElementById('checklist-thumbnail-input');
-            if (input) input.value = '';
+            if (fileInput) fileInput.value = '';
         } catch (error) {
             let msg = 'Upload failed.';
             try { const errData = await error.response?.json(); msg = errData?.error || msg; } catch {}
             PlatPursuit.ToastManager.show(msg, 'error');
+
+            // Restore state on error
+            if (fileInput) {
+                fileInput.disabled = false;
+                fileInput.value = ''; // Clear the file input
+            }
+        } finally {
+            // Remove loading indicator
+            if (loadingIndicator) {
+                loadingIndicator.remove();
+            }
+            if (fileInput) fileInput.disabled = false;
         }
     }
 
@@ -2252,6 +2415,27 @@
     }
 
     async function uploadSectionThumbnail(sectionId, file) {
+        const section = document.querySelector(`.checklist-section[data-section-id="${sectionId}"]`);
+        if (!section) return;
+
+        // Get the file input for this specific section
+        const fileInput = section.querySelector('.section-thumbnail-input');
+        const previewContainer = section.querySelector('.section-thumbnail-container');
+
+        // Disable input and show loading state
+        if (fileInput) fileInput.disabled = true;
+        let loadingIndicator = null;
+        if (previewContainer) {
+            loadingIndicator = document.createElement('div');
+            loadingIndicator.className = 'loading loading-spinner loading-sm';
+            loadingIndicator.style.position = 'absolute';
+            loadingIndicator.style.top = '50%';
+            loadingIndicator.style.left = '50%';
+            loadingIndicator.style.transform = 'translate(-50%, -50%)';
+            previewContainer.style.position = 'relative';
+            previewContainer.appendChild(loadingIndicator);
+        }
+
         const formData = new FormData();
         formData.append('thumbnail', file);
 
@@ -2259,10 +2443,6 @@
             const data = await PlatPursuit.API.postFormData(`/api/v1/checklists/sections/${sectionId}/image/`, formData);
 
             PlatPursuit.ToastManager.show('Section thumbnail uploaded!', 'success');
-
-            // Find the section container
-            const section = document.querySelector(`.checklist-section[data-section-id="${sectionId}"]`);
-            if (!section) return;
 
             // Find or create preview element
             let preview = section.querySelector('.section-thumbnail-preview');
@@ -2296,12 +2476,23 @@
             }
 
             // Clear the file input
-            const input = section.querySelector('.section-thumbnail-input');
-            if (input) input.value = '';
+            if (fileInput) fileInput.value = '';
         } catch (error) {
             let msg = 'Upload failed.';
             try { const errData = await error.response?.json(); msg = errData?.error || msg; } catch {}
             PlatPursuit.ToastManager.show(msg, 'error');
+
+            // Restore state on error
+            if (fileInput) {
+                fileInput.disabled = false;
+                fileInput.value = ''; // Clear the file input
+            }
+        } finally {
+            // Remove loading indicator
+            if (loadingIndicator) {
+                loadingIndicator.remove();
+            }
+            if (fileInput) fileInput.disabled = false;
         }
     }
 
@@ -2338,6 +2529,24 @@
     }
 
     async function uploadInlineImage(sectionId, file, caption) {
+        const section = document.querySelector(`.checklist-section[data-section-id="${sectionId}"]`);
+        if (!section) return;
+
+        // Get the upload button and disable it with loading state
+        const uploadBtn = section.querySelector('.add-inline-image-btn');
+        const fileInput = section.querySelector('.inline-image-input');
+        const captionInput = section.querySelector('.inline-image-caption');
+
+        // Disable controls and show loading state
+        let originalBtnHTML = '';
+        if (uploadBtn) {
+            uploadBtn.disabled = true;
+            originalBtnHTML = uploadBtn.innerHTML;
+            uploadBtn.innerHTML = '<span class="loading loading-spinner loading-xs"></span> Uploading...';
+        }
+        if (fileInput) fileInput.disabled = true;
+        if (captionInput) captionInput.disabled = true;
+
         const formData = new FormData();
         formData.append('image', file);
         if (caption) formData.append('text', caption);
@@ -2346,10 +2555,6 @@
             const data = await PlatPursuit.API.postFormData(`/api/v1/checklists/sections/${sectionId}/items/image/`, formData);
 
             PlatPursuit.ToastManager.show('Inline image added!', 'success');
-
-            // Find section container
-            const section = document.querySelector(`.checklist-section[data-section-id="${sectionId}"]`);
-            if (!section) return;
 
             // Create the new item DOM element
             const newItemElement = createInlineImageElement(data);
@@ -2382,13 +2587,8 @@
             }
 
             // Clear the upload form
-            const uploadContainer = section.querySelector('.inline-image-input').closest('.mt-3');
-            if (uploadContainer) {
-                const input = uploadContainer.querySelector('.inline-image-input');
-                const captionInput = uploadContainer.querySelector('.inline-image-caption');
-                if (input) input.value = '';
-                if (captionInput) captionInput.value = '';
-            }
+            if (fileInput) fileInput.value = '';
+            if (captionInput) captionInput.value = '';
 
             // Scroll the new item into view smoothly
             setTimeout(() => {
@@ -2398,6 +2598,25 @@
             let msg = 'Upload failed.';
             try { const errData = await error.response?.json(); msg = errData?.error || msg; } catch {}
             PlatPursuit.ToastManager.show(msg, 'error');
+
+            // Restore controls on error
+            if (uploadBtn) {
+                uploadBtn.disabled = false;
+                uploadBtn.innerHTML = originalBtnHTML;
+            }
+            if (fileInput) {
+                fileInput.disabled = false;
+                fileInput.value = ''; // Clear the file input
+            }
+            if (captionInput) captionInput.disabled = false;
+        } finally {
+            // Always restore controls on success (error already handled above)
+            if (uploadBtn && !uploadBtn.disabled) {
+                uploadBtn.disabled = false;
+                uploadBtn.innerHTML = originalBtnHTML || 'Add Image';
+            }
+            if (fileInput && fileInput.disabled) fileInput.disabled = false;
+            if (captionInput && captionInput.disabled) captionInput.disabled = false;
         }
     }
 
@@ -2706,6 +2925,25 @@
         modal.dataset.sectionId = sectionId;
         modal.dataset.checklistId = checklistId;
 
+        // Reset batch selection state
+        batchSelectionState.clear();
+        updateBatchSelectionUI();
+
+        // Reset batch mode toggle (user can re-enable if desired)
+        const batchModeToggle = document.getElementById('batch-selection-mode');
+        if (batchModeToggle) {
+            batchModeToggle.checked = false;
+            batchSelectionState.toggle(false);
+            const batchControls = document.getElementById('batch-selection-controls');
+            const addBtn = document.getElementById('add-selected-trophies-btn');
+            if (batchControls) {
+                batchControls.style.display = 'none';
+            }
+            if (addBtn) {
+                addBtn.style.display = 'none';
+            }
+        }
+
         // Show modal
         modal.showModal();
 
@@ -2751,11 +2989,29 @@
         const html = trophies.map(trophy => {
             const isDisabled = trophy.is_used ? 'opacity-50 pointer-events-none' : '';
             const badgeClass = trophy.is_used ? 'badge-ghost' : `badge-${trophy.trophy_type}`;
+            const isSelected = batchSelectionState.has(trophy.id);
 
             // Add DLC badge if not base game
             const dlcBadge = !trophy.is_base_game && trophy.trophy_group_name
                 ? `<span class="badge badge-sm badge-info">DLC: ${escapeHtml(trophy.trophy_group_name)}</span>`
                 : (!trophy.is_base_game ? '<span class="badge badge-sm badge-info">DLC</span>' : '');
+
+            // Checkbox HTML (only in batch mode and not used)
+            const checkboxHtml = batchSelectionState.enabled && !trophy.is_used
+                ? `<input type="checkbox"
+                          class="checkbox checkbox-primary trophy-batch-checkbox"
+                          data-trophy-id="${trophy.id}"
+                          aria-label="Select ${escapeHtml(trophy.trophy_name)}"
+                          onclick="toggleTrophySelection(${trophy.id}, event);"
+                          ${isSelected ? 'checked' : ''}>`
+                : '';
+
+            // Click handler: batch mode uses checkbox toggle, single mode uses direct select
+            const clickHandler = trophy.is_used
+                ? ''
+                : (batchSelectionState.enabled
+                    ? `onclick="toggleTrophySelection(${trophy.id}, event)"`
+                    : `onclick="selectTrophy(${trophy.id})"`);
 
             return `
                 <div class="trophy-select-card flex items-center gap-3 p-3 bg-base-200 rounded-lg hover:bg-base-300 transition-colors cursor-pointer ${isDisabled}"
@@ -2764,7 +3020,8 @@
                      data-trophy-type="${trophy.trophy_type}"
                      data-trophy-group="${trophy.trophy_group_id}"
                      data-is-used="${trophy.is_used ? 'true' : 'false'}"
-                     onclick="${trophy.is_used ? '' : 'selectTrophy(' + trophy.id + ')'}">
+                     ${clickHandler}>
+                    ${checkboxHtml}
                     <img src="${trophy.trophy_icon_url}"
                          alt="${escapeHtml(trophy.trophy_name)}"
                          class="w-12 h-12 rounded shrink-0">
@@ -2789,6 +3046,77 @@
         }).join('');
 
         container.innerHTML = html;
+    }
+
+    /**
+     * Toggle trophy selection in batch mode.
+     * Exposed globally for onclick handler.
+     */
+    window.toggleTrophySelection = function(trophyId, event) {
+        if (!batchSelectionState.enabled) return;
+
+        const checkbox = document.querySelector(`.trophy-batch-checkbox[data-trophy-id="${trophyId}"]`);
+        if (!checkbox) return;
+
+        // If the checkbox itself was clicked, don't toggle it again (browser already did)
+        // Otherwise toggle it programmatically
+        const isCheckboxClick = event && event.target === checkbox;
+
+        if (!isCheckboxClick) {
+            checkbox.checked = !checkbox.checked;
+        }
+
+        if (checkbox.checked) {
+            batchSelectionState.add(trophyId);
+        } else {
+            batchSelectionState.remove(trophyId);
+        }
+
+        updateBatchSelectionUI();
+    };
+
+    /**
+     * Update batch selection UI (count, button states).
+     */
+    function updateBatchSelectionUI() {
+        const count = batchSelectionState.count();
+        const countBadge = document.getElementById('batch-selection-count');
+        const addBtn = document.getElementById('add-selected-trophies-btn');
+        const addCountSpan = document.getElementById('add-selected-count');
+
+        if (countBadge) {
+            countBadge.textContent = `${count} selected`;
+        }
+
+        if (addBtn && addCountSpan) {
+            addCountSpan.textContent = count;
+            addBtn.disabled = count === 0;
+        }
+    }
+
+    /**
+     * Select all visible (non-used) trophies.
+     */
+    function selectAllTrophies() {
+        const checkboxes = document.querySelectorAll('.trophy-batch-checkbox');
+        checkboxes.forEach(checkbox => {
+            const trophyId = parseInt(checkbox.dataset.trophyId);
+            checkbox.checked = true;
+            batchSelectionState.add(trophyId);
+        });
+        updateBatchSelectionUI();
+    }
+
+    /**
+     * Deselect all trophies.
+     */
+    function deselectAllTrophies() {
+        const checkboxes = document.querySelectorAll('.trophy-batch-checkbox');
+        checkboxes.forEach(checkbox => {
+            checkbox.checked = false;
+        });
+        batchSelectionState.clear();
+        updateBatchSelectionUI();
     }
 
     /**
@@ -2826,6 +3154,122 @@
         } catch (error) {
             PlatPursuit.ToastManager.show(error.message, 'error');
         }
+    }
+
+    /**
+     * Add all selected trophies to the current section.
+     */
+    async function addSelectedTrophies() {
+        const modal = document.getElementById('trophy-selector-modal');
+        const sectionId = modal.dataset.sectionId;
+        const selectedIds = batchSelectionState.getAll();
+
+        if (selectedIds.length === 0) {
+            PlatPursuit.ToastManager.show('No trophies selected', 'warning');
+            return;
+        }
+
+        // Get trophy data from cache and sort by trophy_id (game order)
+        const trophies = JSON.parse(modal.dataset.trophies || '[]');
+        const selectedTrophies = selectedIds
+            .map(id => trophies.find(t => t.id === id))
+            .filter(t => t) // Remove nulls
+            .sort((a, b) => a.trophy_id - b.trophy_id); // Sort by game's trophy_id
+
+        // Disable button during operation
+        const addBtn = document.getElementById('add-selected-trophies-btn');
+        if (addBtn) {
+            addBtn.disabled = true;
+            addBtn.innerHTML = '<span class="loading loading-spinner loading-sm"></span> Adding...';
+        }
+
+        let successCount = 0;
+        let failCount = 0;
+        const errors = [];
+
+        // Add trophies sequentially
+        for (const trophy of selectedTrophies) {
+            try {
+                const result = await apiRequest(
+                    `/api/v1/checklists/sections/${sectionId}/items/`,
+                    'POST',
+                    {
+                        item_type: 'trophy',
+                        trophy_id: trophy.id
+                    }
+                );
+
+                // Add trophy to DOM using existing function
+                const section = document.querySelector(`.checklist-section[data-section-id="${sectionId}"]`);
+                if (section && result.item) {
+                    addTrophyItemToDOM(section, result.item, trophy);
+                }
+
+                // Mark as used in modal cache
+                markTrophyAsUsed(trophy.id);
+
+                // Remove from selection
+                batchSelectionState.remove(trophy.id);
+
+                successCount++;
+
+            } catch (error) {
+                failCount++;
+                let errorMsg = 'Unknown error';
+
+                // Extract error message from response
+                if (error.responseData?.error) {
+                    errorMsg = error.responseData.error;
+                } else if (error.message) {
+                    errorMsg = error.message;
+                }
+
+                errors.push({
+                    trophyName: trophy.trophy_name,
+                    error: errorMsg
+                });
+            }
+        }
+
+        // Re-render trophy list to update checkboxes and "Already Added" badges
+        const listContainer = document.getElementById('trophy-list-container');
+        if (listContainer && trophies.length > 0) {
+            renderTrophyList(trophies, listContainer);
+            filterTrophies(); // Re-apply active filters
+        }
+
+        // Show results
+        if (successCount > 0 && failCount === 0) {
+            PlatPursuit.ToastManager.show(
+                `Successfully added ${successCount} ${successCount === 1 ? 'trophy' : 'trophies'}`,
+                'success'
+            );
+            modal.close();
+            batchSelectionState.clear();
+        } else if (successCount > 0 && failCount > 0) {
+            PlatPursuit.ToastManager.show(
+                `Added ${successCount} trophies, ${failCount} failed. Check console for details.`,
+                'warning',
+                8000
+            );
+            console.warn('Failed trophy additions:', errors);
+            // Don't close modal - let user see what failed
+        } else {
+            PlatPursuit.ToastManager.show(
+                `Failed to add trophies. ${errors[0]?.error || 'Unknown error'}`,
+                'error',
+                8000
+            );
+            console.error('All trophy additions failed:', errors);
+        }
+
+        // Reset button
+        if (addBtn) {
+            addBtn.disabled = batchSelectionState.count() === 0;
+            addBtn.innerHTML = `Add Selected (<span id="add-selected-count">${batchSelectionState.count()}</span>)`;
+        }
+
+        updateBatchSelectionUI();
     }
 
     /**
@@ -3063,6 +3507,56 @@
 
         if (hideUsedFilter) {
             hideUsedFilter.addEventListener('change', filterTrophies);
+        }
+
+        // Batch selection mode toggle
+        const batchModeToggle = document.getElementById('batch-selection-mode');
+        if (batchModeToggle) {
+            batchModeToggle.addEventListener('change', function() {
+                const enabled = this.checked;
+                batchSelectionState.toggle(enabled);
+
+                // Show/hide batch controls
+                const batchControls = document.getElementById('batch-selection-controls');
+                const addBtn = document.getElementById('add-selected-trophies-btn');
+
+                if (batchControls) {
+                    batchControls.style.display = enabled ? 'flex' : 'none';
+                }
+
+                if (addBtn) {
+                    addBtn.style.display = enabled ? 'inline-flex' : 'none';
+                }
+
+                // Re-render trophy list with/without checkboxes
+                const modal = document.getElementById('trophy-selector-modal');
+                const listContainer = document.getElementById('trophy-list-container');
+                if (modal?.dataset.trophies && listContainer) {
+                    const trophies = JSON.parse(modal.dataset.trophies);
+                    renderTrophyList(trophies, listContainer);
+                    filterTrophies();
+                }
+
+                updateBatchSelectionUI();
+            });
+        }
+
+        // Select All button
+        const selectAllBtn = document.getElementById('select-all-trophies-btn');
+        if (selectAllBtn) {
+            selectAllBtn.addEventListener('click', selectAllTrophies);
+        }
+
+        // Deselect All button
+        const deselectAllBtn = document.getElementById('deselect-all-trophies-btn');
+        if (deselectAllBtn) {
+            deselectAllBtn.addEventListener('click', deselectAllTrophies);
+        }
+
+        // Add Selected button
+        const addSelectedBtn = document.getElementById('add-selected-trophies-btn');
+        if (addSelectedBtn) {
+            addSelectedBtn.addEventListener('click', addSelectedTrophies);
         }
     }
 

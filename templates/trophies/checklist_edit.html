@@ -1071,6 +1071,24 @@ Use fire attacks</pre>
             </label>
         </div>
 
+        {# Batch Selection Controls #}
+        <div class="flex items-center justify-between gap-2 mb-3 pb-3 border-b border-base-300">
+            <label class="label cursor-pointer gap-2 py-0">
+                <input type="checkbox" id="batch-selection-mode" class="toggle toggle-primary toggle-sm">
+                <span class="label-text font-semibold">Batch Selection Mode</span>
+            </label>
+
+            <div id="batch-selection-controls" class="flex items-center gap-2" style="display: none;">
+                <span id="batch-selection-count" class="text-sm text-base-content/60" aria-live="polite">0 selected</span>
+                <button type="button" id="select-all-trophies-btn" class="btn btn-ghost btn-xs">
+                    Select All
+                </button>
+                <button type="button" id="deselect-all-trophies-btn" class="btn btn-ghost btn-xs">
+                    Clear
+                </button>
+            </div>
+        </div>
+
         {# Trophy List #}
         <div id="trophy-list-container" class="space-y-2 max-h-96 overflow-y-auto">
             <div class="text-center py-8">
@@ -1080,6 +1098,14 @@ Use fire attacks</pre>
         </div>
 
         <div class="modal-action">
+            {# Batch add button (hidden by default, shown when batch mode enabled) #}
+            <button type="button"
+                    id="add-selected-trophies-btn"
+                    class="btn btn-primary"
+                    style="display: none;"
+                    disabled>
+                Add Selected (<span id="add-selected-count">0</span>)
+            </button>
             <button type="button" class="btn btn-ghost" onclick="this.closest('dialog').close()">Cancel</button>
         </div>
     </div>
