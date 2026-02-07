@@ -3,6 +3,7 @@ import logging
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db.models import F
+from django.db.models.functions import Lower
 from django.http import Http404
 from django.shortcuts import redirect, get_object_or_404
 from django.urls import reverse_lazy, reverse
@@ -274,7 +275,7 @@ class ChecklistEditView(LoginRequiredMixin, ProfileHotbarMixin, DetailView):
         # Get all games for concept (for trophy selection)
         context['concept_games'] = []
         if checklist.concept:
-            context['concept_games'] = checklist.concept.games.all().order_by('title_name')
+            context['concept_games'] = checklist.concept.games.all().order_by(Lower('title_name'))
 
         # Breadcrumbs
         breadcrumb = [

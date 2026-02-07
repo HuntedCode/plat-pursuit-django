@@ -4,6 +4,7 @@ from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.paginator import Paginator
 from django.db.models import Q, F, Prefetch, Max
+from django.db.models.functions import Lower
 from django.http import HttpResponseRedirect, JsonResponse
 from django.shortcuts import redirect, render, get_object_or_404
 from django.urls import reverse, reverse_lazy
@@ -53,7 +54,7 @@ class ProfilesListView(ProfileHotbarMixin, ListView):
     def get_queryset(self):
         qs = super().get_queryset()
         form = ProfileSearchForm(self.request.GET)
-        order = ['psn_username']
+        order = [Lower('psn_username')]
 
         #qs = qs.exclude(psn_history_public=False)
 
@@ -71,15 +72,15 @@ class ProfilesListView(ProfileHotbarMixin, ListView):
             qs = qs.prefetch_related(Prefetch('earned_trophy_entries', queryset=recent_plat_qs, to_attr='recent_platinum'))
 
             if sort_val == 'trophies':
-                order = ['-total_trophies', 'psn_username']
+                order = ['-total_trophies', Lower('psn_username')]
             elif sort_val == 'plats':
-                order = ['-total_plats', 'psn_username']
+                order = ['-total_plats', Lower('psn_username')]
             elif sort_val == 'games':
-                order = ['-total_games', 'psn_username']
+                order = ['-total_games', Lower('psn_username')]
             elif sort_val == 'completes':
-                order = ['-total_completes', 'psn_username']
+                order = ['-total_completes', Lower('psn_username')]
             elif sort_val == 'avg_progress':
-                order = ['-avg_progress', 'psn_username']
+                order = ['-avg_progress', Lower('psn_username')]
 
         return qs.order_by(*order)
 
@@ -236,17 +237,17 @@ class ProfileDetailView(ProfileHotbarMixin, DetailView):
         if sort_val == 'oldest':
             order = ['last_updated_datetime']
         elif sort_val == 'alpha':
-            order = ['game__title_name']
+            order = [Lower('game__title_name')]
         elif sort_val == 'completion':
-            order = ['-progress', 'game__title_name']
+            order = ['-progress', Lower('game__title_name')]
         elif sort_val == 'completion_inv':
-            order = ['progress', 'game__title_name']
+            order = ['progress', Lower('game__title_name')]
         elif sort_val == 'trophies':
-            order = ['-annotated_total_trophies', 'game__title_name']
+            order = ['-annotated_total_trophies', Lower('game__title_name')]
         elif sort_val == 'earned':
-            order = ['-earned_trophies_count', 'game__title_name']
+            order = ['-earned_trophies_count', Lower('game__title_name')]
         elif sort_val == 'unearned':
-            order = ['-unearned_trophies_count', 'game__title_name']
+            order = ['-unearned_trophies_count', Lower('game__title_name')]
 
         games_qs = games_qs.order_by(*order)
 

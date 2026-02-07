@@ -29,6 +29,27 @@
             color: #ffffff;
         }
 
+        .header-logo {
+            width: 80px;
+            height: 80px;
+            margin: 0 auto 15px auto;
+            display: block;
+        }
+
+        .header-brand {
+            font-size: 24px;
+            font-weight: 700;
+            margin: 0 0 5px 0;
+            letter-spacing: 0.5px;
+        }
+
+        .header-subtitle {
+            font-size: 14px;
+            margin: 0 0 20px 0;
+            opacity: 0.9;
+            font-style: italic;
+        }
+
         .header h1 {
             margin: 0 0 10px 0;
             font-size: 28px;
@@ -39,12 +60,6 @@
             margin: 0;
             font-size: 16px;
             opacity: 0.95;
-        }
-
-        /* Trophy icon */
-        .trophy-icon {
-            font-size: 48px;
-            margin-bottom: 15px;
         }
 
         /* Content */
@@ -126,20 +141,22 @@
 
         .cta-button {
             display: inline-block;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: #ffffff;
+            background: #ffffff;
+            color: #667eea;
             text-decoration: none;
             padding: 16px 40px;
             border-radius: 8px;
             font-size: 18px;
-            font-weight: 600;
-            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+            font-weight: 700;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.15);
             transition: transform 0.2s;
+            border: 2px solid #667eea;
         }
 
         .cta-button:hover {
             transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
+            background: #f8f9ff;
         }
 
         /* Teaser list */
@@ -195,6 +212,15 @@
                 font-size: 24px;
             }
 
+            .header-logo {
+                width: 60px;
+                height: 60px;
+            }
+
+            .header-brand {
+                font-size: 20px;
+            }
+
             .content {
                 padding: 30px 20px;
             }
@@ -218,9 +244,11 @@
     <div class="email-container">
         <!-- Header -->
         <div class="header">
-            <div class="trophy-icon">🏆</div>
-            <h1>Your {{ month_name }} {{ year }} Recap is Ready!</h1>
-            <p>See how you dominated the trophy hunt last month</p>
+            <img src="{{ site_url }}/static/images/logo.png" alt="PlatPursuit Logo" class="header-logo">
+            <div class="header-brand">PlatPursuit</div>
+            <div class="header-subtitle">No Trophy Can Hide From Us.</div>
+            <h1>Your {{ month_name }} Monthly Rewind</h1>
+            <p>See how you dominated the trophy hunt in {{ month_name }}</p>
         </div>
 
         <!-- Main Content -->
@@ -237,21 +265,17 @@
                 <h2>Quick Look at Your Month</h2>
                 <div class="stats-grid">
                     <div class="stat-item">
-                        <span class="stat-value">{{ total_trophies }}</span>
+                        <span class="stat-value">{{ active_days }}</span>
+                        <span class="stat-label">Active Day{{ active_days|pluralize }}</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-value">{{ trophy_tier }}+</span>
                         <span class="stat-label">Trophies</span>
                     </div>
-                    {% if platinums_earned > 0 %}
                     <div class="stat-item">
-                        <span class="stat-value">{{ platinums_earned }}</span>
-                        <span class="stat-label">Platinum{{ platinums_earned|pluralize }}</span>
+                        <span class="stat-value">{{ games_started }}</span>
+                        <span class="stat-label">Game{{ games_started|pluralize }} Started</span>
                     </div>
-                    {% endif %}
-                    {% if games_completed > 0 %}
-                    <div class="stat-item">
-                        <span class="stat-value">{{ games_completed }}</span>
-                        <span class="stat-label">100%{{ games_completed|pluralize:" Completion,Completions" }}</span>
-                    </div>
-                    {% endif %}
                 </div>
             </div>
 
@@ -292,7 +316,7 @@
 
         <!-- Footer -->
         <div class="footer">
-            <p><strong>PlatPursuit</strong> - Track, Compare, Conquer</p>
+            <p><strong>PlatPursuit</strong> - No Trophy Can Hide From Us.</p>
             <p>
                 <a href="{{ site_url }}">Visit PlatPursuit</a> •
                 <a href="{{ site_url }}/settings/">Email Preferences</a>

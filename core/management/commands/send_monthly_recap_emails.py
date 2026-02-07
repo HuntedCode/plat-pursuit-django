@@ -27,6 +27,7 @@ Email requirements:
 import calendar
 import logging
 from django.core.management.base import BaseCommand
+from django.db.models.functions import Lower
 from django.utils import timezone
 from django.conf import settings
 from trophies.models import MonthlyRecap
@@ -131,7 +132,7 @@ class Command(BaseCommand):
             queryset = queryset.filter(profile_id=profile_id)
 
         # Order by most recent first
-        queryset = queryset.order_by('-year', '-month', 'profile__psn_username')
+        queryset = queryset.order_by('-year', '-month', Lower('profile__psn_username'))
 
         return queryset
 
@@ -202,6 +203,30 @@ class Command(BaseCommand):
             )
         self.stdout.write(f"Total: {total}")
 
+    def _get_trophy_tier(self, count):
+        """
+        Get rounded-down trophy tier for email display.
+        Returns a string like '10+', '50+', '100+', etc.
+        """
+        if count == 0:
+            return '0'
+        elif count < 10:
+            return str(count)
+        elif count < 25:
+            return '10+'
+        elif count < 50:
+            return '25+'
+        elif count < 100:
+            return '50+'
+        elif count < 250:
+            return '100+'
+        elif count < 500:
+            return '250+'
+        elif count < 1000:
+            return '500+'
+        else:
+            return '1000+'
+
     def _send_recap_email(self, recap):
         """
         Send recap email for a single MonthlyRecap instance.
@@ -212,12 +237,21 @@ class Command(BaseCommand):
         user = recap.profile.user
         profile = recap.profile
 
+        # Get active days from activity calendar or streak data
+        active_days = recap.activity_calendar.get('total_active_days', 0)
+        if not active_days:
+            # Fallback to streak data if activity calendar not available
+            active_days = recap.streak_data.get('total_active_days', 0)
+
         # Build email context
         context = {
             'username': profile.display_psn_username or profile.psn_username,
             'month_name': recap.month_name,
             'year': recap.year,
-            'total_trophies': recap.total_trophies_earned,
+            'active_days': active_days,
+            'trophy_tier': self._get_trophy_tier(recap.total_trophies_earned),
+            'games_started': recap.games_started,
+            'total_trophies': recap.total_trophies_earned,  # Keep for backward compat
             'platinums_earned': recap.platinums_earned,
             'games_completed': recap.games_completed,
             'badges_earned': recap.badges_earned_count,
@@ -227,7 +261,7 @@ class Command(BaseCommand):
         }
 
         # Build subject
-        subject = f"Your {recap.month_name} {recap.year} Recap is Ready! 🏆"
+        subject = f"Your {recap.month_name} Monthly Rewind is Ready! 🏆"
 
         try:
             # Send email using EmailService

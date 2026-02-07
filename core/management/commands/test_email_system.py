@@ -81,7 +81,10 @@ class Command(BaseCommand):
             'username': 'TestUser',
             'month_name': 'January',
             'year': 2026,
-            'total_trophies': 42,
+            'active_days': 15,
+            'trophy_tier': '100+',
+            'games_started': 8,
+            'total_trophies': 142,
             'platinums_earned': 2,
             'games_completed': 3,
             'badges_earned': 5,
@@ -92,7 +95,7 @@ class Command(BaseCommand):
 
         try:
             sent_count = EmailService.send_html_email(
-                subject='[PREVIEW] Your January 2026 Recap is Ready! 🏆',
+                subject='[PREVIEW] Your January Monthly Rewind is Ready! 🏆',
                 to_emails=[recipient_email],
                 template_name='emails/monthly_recap.html',
                 context=context,

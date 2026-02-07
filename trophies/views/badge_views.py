@@ -6,6 +6,7 @@ from datetime import date
 from django.core.cache import cache
 from django.core.paginator import Paginator
 from django.db.models import Q, F, Prefetch, Max
+from django.db.models.functions import Lower
 from django.http import Http404
 from django.shortcuts import get_object_or_404
 from django.urls import reverse_lazy, reverse
@@ -263,7 +264,7 @@ class BadgeDetailView(ProfileHotbarMixin, DetailView):
             context['badge'] = badge
 
         stages = Stage.objects.filter(series_slug=badge.series_slug).order_by('stage_number').prefetch_related(
-            Prefetch('concepts__games', queryset=Game.objects.all().order_by('title_name'))
+            Prefetch('concepts__games', queryset=Game.objects.all().order_by(Lower('title_name')))
         )
         context['stage_count'] = stages.count()
 

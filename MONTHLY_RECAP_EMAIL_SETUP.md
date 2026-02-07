@@ -4,10 +4,11 @@ This document explains the monthly recap email notification system and how to us
 
 ## Overview
 
-The monthly recap email system automatically sends beautiful HTML emails to users when their monthly recap is available. Emails include:
-- Non-spoiler teaser stats (total trophies, platinums, completions)
+The monthly recap email system automatically sends beautiful HTML emails to users when their PlatPursuit Monthly Rewind is available. Emails include:
+- PlatPursuit logo and branding ("No Trophy Can Hide From Us.")
+- Non-spoiler teaser stats (active days, trophy tier, games started)
 - Highlights of what's inside the full recap
-- Call-to-action button linking to the interactive recap
+- High-contrast call-to-action button linking to the interactive recap
 
 ## Architecture
 
@@ -164,7 +165,10 @@ The email template is located at [templates/emails/monthly_recap.html](templates
 - `username` - PSN username (display version)
 - `month_name` - Full month name (e.g., "January")
 - `year` - Year (e.g., 2026)
-- `total_trophies` - Total trophies earned that month
+- `active_days` - Total days with earned trophies (from activity_calendar.total_active_days)
+- `trophy_tier` - Rounded trophy count tier (e.g., "10+", "100+", "250+")
+- `games_started` - Number of games started that month
+- `total_trophies` - Total trophies earned that month (exact count, kept for backward compatibility)
 - `platinums_earned` - Number of platinums earned
 - `games_completed` - Number of 100% completions
 - `badges_earned` - Number of badges earned
@@ -177,9 +181,10 @@ The email template is located at [templates/emails/monthly_recap.html](templates
 The email template follows these principles:
 1. **Non-spoiler**: Shows just enough to entice, not spoil the full experience
 2. **Mobile-first**: Responsive design works on all devices
-3. **Clear CTA**: Prominent button to view full recap
-4. **Brand consistency**: Uses PlatPursuit colors and style
-5. **Accessible**: Plain text fallback for text-only email clients
+3. **Clear CTA**: High-contrast white button on gradient background for maximum visibility
+4. **Brand consistency**: Features PlatPursuit logo, slogan, and "Monthly Rewind" branding
+5. **Rounded stats**: Shows trophy tiers (100+, 250+) instead of exact counts to build intrigue
+6. **Accessible**: Plain text fallback for text-only email clients
 
 ## EmailService Reusability
 

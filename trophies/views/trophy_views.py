@@ -1,6 +1,7 @@
 import logging
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db.models import Q, F
+from django.db.models.functions import Lower
 from django.http import JsonResponse, HttpResponseRedirect
 from django.shortcuts import get_object_or_404
 from django.urls import reverse_lazy, reverse
@@ -45,7 +46,7 @@ class TrophiesListView(ProfileHotbarMixin, ListView):
     def get_queryset(self):
         qs = super().get_queryset()
         form = TrophySearchForm(self.request.GET)
-        order = ['trophy_name']
+        order = [Lower('trophy_name')]
 
         if form.is_valid():
             query = form.cleaned_data.get('query')
@@ -90,17 +91,17 @@ class TrophiesListView(ProfileHotbarMixin, ListView):
 
 
             if sort_val == 'earned':
-                order = ['-earned_count', 'trophy_name']
+                order = ['-earned_count', Lower('trophy_name')]
             elif sort_val == 'earned_inv':
-                order = ['earned_count', 'trophy_name']
+                order = ['earned_count', Lower('trophy_name')]
             elif sort_val == 'rate':
-                order = ['-earn_rate', 'trophy_name']
+                order = ['-earn_rate', Lower('trophy_name')]
             elif sort_val == 'rate_inv':
-                order = ['earn_rate', 'trophy_name']
+                order = ['earn_rate', Lower('trophy_name')]
             elif sort_val == 'psn_rate':
-                order = ['-trophy_earn_rate', 'trophy_name']
+                order = ['-trophy_earn_rate', Lower('trophy_name')]
             elif sort_val == 'psn_rate_inv':
-                order = ['trophy_earn_rate', 'trophy_name']
+                order = ['trophy_earn_rate', Lower('trophy_name')]
 
         return qs.order_by(*order)
 
