@@ -880,27 +880,30 @@
 
         // API now returns the correct adjusted count that includes earned trophies
         // No need for JavaScript to calculate anything
-        const adjustedCompleted = progress.items_completed;
-        const adjustedPercentage = progress.progress_percentage;
+        const adjustedCompleted = progress.items_completed || 0;
+        const adjustedPercentage = progress.progress_percentage || 0;
+
+        // Ensure percentage is finite before setting (avoid NaN/Infinity errors)
+        const safePercentage = Number.isFinite(adjustedPercentage) ? adjustedPercentage : 0;
 
         if (progressBar) {
-            progressBar.value = adjustedPercentage;
+            progressBar.value = safePercentage;
         }
         if (progressPercentage) {
-            progressPercentage.textContent = Math.round(adjustedPercentage) + '%';
+            progressPercentage.textContent = Math.round(safePercentage) + '%';
         }
         if (itemsCompleted) {
             itemsCompleted.textContent = adjustedCompleted;
         }
         if (itemsTotal) {
-            itemsTotal.textContent = progress.total_items;
+            itemsTotal.textContent = progress.total_items || 0;
         }
 
         // Update section counts
         updateSectionCounts();
 
         // Trigger celebration when reaching 100% (not when already at 100%)
-        if (adjustedPercentage >= 100 && previousPercentage < 100) {
+        if (safePercentage >= 100 && previousPercentage < 100) {
             celebrateCompletion();
         }
     }
