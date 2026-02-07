@@ -878,23 +878,10 @@
         // Get previous percentage to detect transition to 100%
         const previousPercentage = progressBar ? parseFloat(progressBar.value) : 0;
 
-        // Count earned trophies that weren't manually checked (they're auto-checked but API doesn't track them)
-        // We need to add earned trophies to the completed count, but only those not already in completed_items
-        // Since the API's items_completed doesn't include earned trophies, we add the count of earned trophies
-        // However, we must exclude earned trophies that were also manually checked (to avoid double-counting)
-        const allEarnedTrophies = document.querySelectorAll('.checklist-trophy-item[data-earned="true"]');
-        const earnedButNotManuallychecked = Array.from(allEarnedTrophies).filter(trophy => {
-            const checkbox = trophy.querySelector('.checklist-item-checkbox');
-            // If checkbox is disabled, it means it's only counted as earned (not manually checked)
-            // If it's both earned AND in completed_items, the checkbox would be checked but NOT disabled
-            return checkbox && checkbox.disabled;
-        });
-        const earnedTrophyCount = earnedButNotManuallychecked.length;
-
-        // Adjust the completed count to include earned trophies
-        // total_items from API already includes trophy items, so we don't adjust that
-        const adjustedCompleted = progress.items_completed + earnedTrophyCount;
-        const adjustedPercentage = progress.total_items > 0 ? (adjustedCompleted / progress.total_items * 100) : 0;
+        // API now returns the correct adjusted count that includes earned trophies
+        // No need for JavaScript to calculate anything
+        const adjustedCompleted = progress.items_completed;
+        const adjustedPercentage = progress.progress_percentage;
 
         if (progressBar) {
             progressBar.value = adjustedPercentage;

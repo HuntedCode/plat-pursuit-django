@@ -491,12 +491,57 @@ class ChecklistProgressToggleView(APIView):
             # Get updated progress
             progress = ChecklistService.get_user_progress(checklist, profile)
 
+            # Calculate adjusted count that includes earned trophies (matching template logic)
+            adjusted_items_completed = progress.items_completed if progress else 0
+            adjusted_percentage = progress.progress_percentage if progress else 0
+
+            if progress and profile:
+                from trophies.models import ChecklistItem, EarnedTrophy
+
+                # Get all trophy items in this checklist
+                trophy_items = list(ChecklistItem.objects.filter(
+                    section__checklist=checklist,
+                    item_type='trophy'
+                ).values_list('id', 'trophy_id'))
+
+                if trophy_items:
+                    # Build mapping of item_id -> trophy_id
+                    item_to_trophy = {item_id: trophy_id for item_id, trophy_id in trophy_items if trophy_id}
+                    trophy_ids = list(item_to_trophy.values())
+
+                    if trophy_ids:
+                        # Get earned trophy IDs
+                        earned_trophy_pks = set(
+                            EarnedTrophy.objects.filter(
+                                profile=profile,
+                                trophy_id__in=trophy_ids,
+                                earned=True
+                            ).values_list('trophy_id', flat=True)
+                        )
+
+                        # Convert back to ChecklistItem IDs and exclude those already in completed_items
+                        completed_set = set(progress.completed_items)
+                        earned_trophy_item_ids = {
+                            item_id for item_id, trophy_pk in item_to_trophy.items()
+                            if trophy_pk in earned_trophy_pks and item_id not in completed_set
+                        }
+
+                        # Add earned (but not manually checked) trophies to the count
+                        earned_count = len(earned_trophy_item_ids)
+                        adjusted_items_completed = progress.items_completed + earned_count
+
+                        # Recalculate percentage
+                        total = progress.total_items or checklist.total_items
+                        if total > 0:
+                            adjusted_percentage = (adjusted_items_completed / total * 100)
+
             return Response({
                 'success': True,
                 'item_completed': completed,
-                'progress_percentage': progress.progress_percentage if progress else 0,
-                'items_completed': progress.items_completed if progress else 0,
-                'total_items': progress.total_items if progress else checklist.total_items
+                'progress_percentage': adjusted_percentage,
+                'items_completed': adjusted_items_completed,
+                'total_items': progress.total_items if progress else checklist.total_items,
+                'completed_items': progress.completed_items if progress else []
             })
 
         except Exception as e:
@@ -573,13 +618,58 @@ class ChecklistSectionBulkProgressView(APIView):
             # Get updated progress
             progress = ChecklistService.get_user_progress(checklist, profile)
 
+            # Calculate adjusted count that includes earned trophies (matching template logic)
+            adjusted_items_completed = progress.items_completed if progress else 0
+            adjusted_percentage = progress.progress_percentage if progress else 0
+
+            if progress and profile:
+                from trophies.models import ChecklistItem, EarnedTrophy
+
+                # Get all trophy items in this checklist
+                trophy_items = list(ChecklistItem.objects.filter(
+                    section__checklist=checklist,
+                    item_type='trophy'
+                ).values_list('id', 'trophy_id'))
+
+                if trophy_items:
+                    # Build mapping of item_id -> trophy_id
+                    item_to_trophy = {item_id: trophy_id for item_id, trophy_id in trophy_items if trophy_id}
+                    trophy_ids = list(item_to_trophy.values())
+
+                    if trophy_ids:
+                        # Get earned trophy IDs
+                        earned_trophy_pks = set(
+                            EarnedTrophy.objects.filter(
+                                profile=profile,
+                                trophy_id__in=trophy_ids,
+                                earned=True
+                            ).values_list('trophy_id', flat=True)
+                        )
+
+                        # Convert back to ChecklistItem IDs and exclude those already in completed_items
+                        completed_set = set(progress.completed_items)
+                        earned_trophy_item_ids = {
+                            item_id for item_id, trophy_pk in item_to_trophy.items()
+                            if trophy_pk in earned_trophy_pks and item_id not in completed_set
+                        }
+
+                        # Add earned (but not manually checked) trophies to the count
+                        earned_count = len(earned_trophy_item_ids)
+                        adjusted_items_completed = progress.items_completed + earned_count
+
+                        # Recalculate percentage
+                        total = progress.total_items or checklist.total_items
+                        if total > 0:
+                            adjusted_percentage = (adjusted_items_completed / total * 100)
+
             return Response({
                 'success': True,
                 'updated_count': updated_count,
                 'mark_complete': mark_complete,
-                'progress_percentage': progress.progress_percentage if progress else 0,
-                'items_completed': progress.items_completed if progress else 0,
-                'total_items': progress.total_items if progress else checklist.total_items
+                'progress_percentage': adjusted_percentage,
+                'items_completed': adjusted_items_completed,
+                'total_items': progress.total_items if progress else checklist.total_items,
+                'completed_items': progress.completed_items if progress else []
             })
 
         except Exception as e:
