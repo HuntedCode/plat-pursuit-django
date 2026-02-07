@@ -17,7 +17,6 @@ const ToastManager = {
     show(message, type = 'info', duration = 5000) {
         const container = document.getElementById('toast-container');
         if (!container) {
-            console.log(`[${type.toUpperCase()}]`, message);
             return;
         }
 

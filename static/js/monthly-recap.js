@@ -620,9 +620,7 @@ class MonthlyRecapManager {
 
             // Add click handler for days with platinums
             if (day.classList.contains('platinum-day')) {
-                console.log('Adding click handler to platinum day:', day.dataset.day);
                 day.addEventListener('click', () => {
-                    console.log('Platinum day clicked!');
                     this.showPlatinumDetails(day);
                 });
             }
@@ -633,17 +631,13 @@ class MonthlyRecapManager {
      * Show platinum trophy details when calendar day is clicked
      */
     showPlatinumDetails(dayElement) {
-        console.log('showPlatinumDetails called', dayElement);
         const platinumsData = dayElement.dataset.platinums;
-        console.log('platinumsData:', platinumsData);
         if (!platinumsData) {
-            console.log('No platinum data found');
             return;
         }
 
         try {
             const platinums = JSON.parse(platinumsData);
-            console.log('Parsed platinums:', platinums);
             const dayNumber = dayElement.dataset.day;
 
             // Create modal HTML

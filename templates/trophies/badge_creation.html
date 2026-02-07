@@ -70,10 +70,7 @@
 
         const nameInput = document.getElementById('id_name');
         const seriesSlugInput = document.getElementById('id_series_slug');
-        console.log(nameInput);
-        console.log(seriesSlugInput)
         nameInput.addEventListener('input', function() {
-            console.log("Input detected...")
             seriesSlugInput.value = slugify(nameInput.value);
         });
     });

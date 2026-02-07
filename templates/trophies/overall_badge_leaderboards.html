@@ -211,16 +211,10 @@
 {% block js_scripts %}
 <script>
     function updatePage(form, paramName) {
-        console.log("Trigger..")
         const input = form.querySelector('input[type="number"]');
         const page = input.value;
-        console.log(page)
-        console.log(input.max)
-        if (page < 1 || page > input.max) return;
 
-        console.log(form)
-        console.log(input)
-        console.log(page)
+        if (page < 1 || page > input.max) return;
 
         const url = new URL(window.location);
         url.searchParams.set(paramName, page);

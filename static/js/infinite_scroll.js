@@ -5,7 +5,6 @@ document.addEventListener('DOMContentLoaded', function() {
     if (!grid || !loading || !sentinel) return;
 
     paginateBy = grid.dataset.paginate;
-    console.log(paginateBy);
 
     let page = 2;
     const baseUrl = window.location.pathname;

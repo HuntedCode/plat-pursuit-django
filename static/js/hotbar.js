@@ -56,8 +56,6 @@ document.addEventListener('DOMContentLoaded', () => {
      * @param {Object} data - Sync status data from server
      */
     function updateHotbar(data) {
-        console.log(data.sync_target);
-
         if (data.sync_status === 'synced') {
             // Update UI for synced status
             syncUser?.classList.remove('hidden', 'xl:block');
@@ -264,8 +262,6 @@ document.addEventListener('DOMContentLoaded', () => {
      * @param {Object} data - Add sync status data from server
      */
     function checkAddSync(data) {
-        console.log(data);
-
         if (data.sync_status === 'error') {
             if (addSyncLoad) addSyncLoad.hidden = true;
             if (addSyncInput) addSyncInput.hidden = true;

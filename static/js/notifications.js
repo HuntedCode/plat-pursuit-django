@@ -4,29 +4,18 @@
  */
 class NotificationSystem {
     constructor() {
-        console.log('NotificationSystem: Constructor called');
         this.dropdown = document.getElementById('notification-dropdown');
 
         // Only initialize if dropdown exists (user is authenticated)
         if (!this.dropdown) {
-            console.log('NotificationSystem: Dropdown not found, user not authenticated');
             return;
         }
 
-        console.log('NotificationSystem: Dropdown found, initializing...');
         this.badge = document.getElementById('notification-badge');
         this.list = document.getElementById('notification-list');
         this.loadingEl = document.getElementById('notification-loading');
         this.emptyEl = document.getElementById('notification-empty');
         this.markAllBtn = document.getElementById('mark-all-read-btn');
-
-        console.log('NotificationSystem: Elements found:', {
-            badge: !!this.badge,
-            list: !!this.list,
-            loadingEl: !!this.loadingEl,
-            emptyEl: !!this.emptyEl,
-            markAllBtn: !!this.markAllBtn
-        });
 
         this.unreadCount = 0;
         this.loaded = false;
@@ -35,21 +24,15 @@ class NotificationSystem {
     }
 
     init() {
-        console.log('NotificationSystem: init() called');
-
         // Load notifications when dropdown is opened
         // DaisyUI dropdowns work with focus/blur, not just click
         const dropdownButton = this.dropdown.querySelector('button');
         const dropdownContent = this.dropdown.querySelector('.dropdown-content');
-        console.log('NotificationSystem: Dropdown button found:', !!dropdownButton);
-        console.log('NotificationSystem: Dropdown content found:', !!dropdownContent);
 
         if (dropdownButton) {
-            console.log('NotificationSystem: Adding focus listener to button');
 
             // Listen for when the dropdown button gets focus (opens dropdown)
             dropdownButton.addEventListener('focus', () => {
-                console.log('NotificationSystem: Button focused (dropdown opened)!');
                 if (!this.loaded) {
                     this.loadNotifications();
                     this.loaded = true;
@@ -60,7 +43,6 @@ class NotificationSystem {
 
             // Also listen for click as backup
             dropdownButton.addEventListener('click', () => {
-                console.log('NotificationSystem: Button clicked!');
                 if (!this.loaded) {
                     this.loadNotifications();
                     this.loaded = true;
@@ -130,13 +112,11 @@ class NotificationSystem {
     }
 
     async loadNotifications() {
-        console.log('Loading notifications...');
         try {
             this.showLoading();
 
             // Use refactored API utility
             const data = await PlatPursuit.API.get('/api/v1/notifications/?limit=10');
-            console.log('Received notifications data:', data);
 
             this.hideLoading();
             this.renderNotifications(data.notifications);
@@ -256,7 +236,6 @@ class NotificationSystem {
 
     async markAllAsRead() {
         try {
-            console.log('Mark all as read - CSRF token:', PlatPursuit.CSRFToken.get());
             // Use refactored API utility (pass empty object for POST data)
             await PlatPursuit.API.post('/api/v1/notifications/mark-all-read/', {});
 
@@ -317,13 +296,10 @@ class NotificationSystem {
 
 // Initialize on DOM ready
 document.addEventListener('DOMContentLoaded', () => {
-    console.log('NotificationSystem: DOMContentLoaded event fired');
     // Check if notification dropdown exists (user is authenticated)
     const dropdown = document.getElementById('notification-dropdown');
-    console.log('NotificationSystem: Dropdown element exists:', !!dropdown);
 
     if (dropdown) {
-        console.log('NotificationSystem: Creating new NotificationSystem instance');
         window.notificationSystem = new NotificationSystem();
     } else {
         console.log('NotificationSystem: No dropdown found, not initializing');

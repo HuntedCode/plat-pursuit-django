@@ -65,8 +65,6 @@ class TrophyCommentManager {
 
         // Store reference
         this.activeCommentSystems.set(trophyId, commentSystem);
-
-        console.log(`Initialized comment system for trophy: ${trophyId}`);
     }
 }
 

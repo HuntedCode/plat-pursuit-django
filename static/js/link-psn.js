@@ -36,7 +36,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const profileDetailUrl = container.dataset.profileDetailUrl;
 
         function pollStatus() {
-            console.log("Polling..");
             const url = `${statusUrl}?profile_id=${profileId}&start_time=${encodeURIComponent(startTime)}`;
 
             fetch(url)
