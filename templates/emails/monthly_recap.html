@@ -98,14 +98,16 @@
 
         .stats-grid {
             display: flex;
-            justify-content: space-around;
+            justify-content: center;
+            align-items: center;
             flex-wrap: wrap;
-            gap: 20px;
+            gap: 40px;
         }
 
         .stat-item {
             text-align: center;
             min-width: 100px;
+            flex: 0 1 auto;
         }
 
         .stat-value {
@@ -269,7 +271,7 @@
                         <span class="stat-label">Active Day{{ active_days|pluralize }}</span>
                     </div>
                     <div class="stat-item">
-                        <span class="stat-value">{{ trophy_tier }}+</span>
+                        <span class="stat-value">{{ trophy_tier }}</span>
                         <span class="stat-label">Trophies</span>
                     </div>
                     <div class="stat-item">
