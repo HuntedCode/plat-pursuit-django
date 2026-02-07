@@ -2611,12 +2611,12 @@
             if (captionInput) captionInput.disabled = false;
         } finally {
             // Always restore controls on success (error already handled above)
-            if (uploadBtn && !uploadBtn.disabled) {
+            if (uploadBtn) {
                 uploadBtn.disabled = false;
                 uploadBtn.innerHTML = originalBtnHTML || 'Add Image';
             }
-            if (fileInput && fileInput.disabled) fileInput.disabled = false;
-            if (captionInput && captionInput.disabled) captionInput.disabled = false;
+            if (fileInput) fileInput.disabled = false;
+            if (captionInput) captionInput.disabled = false;
         }
     }
 
