@@ -1,8 +1,8 @@
 import logging
-from django.db.models.signals import post_save, post_delete
+from django.db.models.signals import post_save, post_delete, m2m_changed
 from django.dispatch import receiver
 from django.db.models import F
-from trophies.models import UserBadge, UserBadgeProgress, Comment
+from trophies.models import UserBadge, UserBadgeProgress, Comment, Stage
 
 logger = logging.getLogger(__name__)
 
@@ -133,4 +133,48 @@ def update_gamification_on_badge_revoked(sender, instance, **kwargs):
         logger.error(
             f"Failed to update gamification after badge revoked: {e}",
             exc_info=True
+        )
+
+
+# --- Stage Icon Auto-Population ---
+
+@receiver(m2m_changed, sender=Stage.concepts.through, dispatch_uid="auto_populate_stage_icon")
+def auto_populate_stage_icon(sender, instance, action, **kwargs):
+    """
+    Auto-populate Stage.stage_icon from first Concept.concept_icon_url.
+
+    Triggers when:
+    - Concepts are added to a Stage (post_add) - syncs icon to first concept
+    - All concepts are cleared from a Stage (post_clear) - clears icon
+
+    Always updates stage_icon to match the first concept, overwriting any manual changes.
+    """
+    try:
+        if action == 'post_add':
+            # Always sync to first concept's icon
+            first_concept = instance.concepts.first()
+            if first_concept and first_concept.concept_icon_url:
+                instance.stage_icon = first_concept.concept_icon_url
+                instance.save(update_fields=['stage_icon'])
+                logger.debug(
+                    f"Auto-populated stage_icon for {instance} from {first_concept}"
+                )
+            elif first_concept and not first_concept.concept_icon_url:
+                # First concept exists but has no icon - clear stage icon
+                instance.stage_icon = None
+                instance.save(update_fields=['stage_icon'])
+                logger.debug(
+                    f"Cleared stage_icon for {instance} (first concept has no icon)"
+                )
+
+        elif action == 'post_clear':
+            # Clear icon when all concepts removed
+            if instance.stage_icon:
+                instance.stage_icon = None
+                instance.save(update_fields=['stage_icon'])
+                logger.debug(f"Cleared stage_icon for {instance} (all concepts removed)")
+
+    except Exception as e:
+        logger.exception(
+            f"Failed to auto-populate stage_icon for {instance}: {e}"
         )
