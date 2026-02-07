@@ -14,6 +14,7 @@ class NotificationTemplate(models.Model):
         ('platinum_earned', 'Platinum Trophy Earned'),
         ('badge_awarded', 'Badge Awarded'),
         ('milestone_achieved', 'Milestone Achieved'),
+        ('monthly_recap', 'Monthly Recap Available'),
         ('subscription_created', 'Subscription Created'),
         ('subscription_updated', 'Subscription Updated'),
         ('discord_verified', 'Discord Verified'),

@@ -2240,6 +2240,15 @@ class MonthlyRecap(models.Model):
         default=False,
         help_text='True once the month ends and stats are locked'
     )
+    email_sent = models.BooleanField(
+        default=False,
+        help_text='True if recap notification email has been sent to user'
+    )
+    email_sent_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text='Timestamp when recap email was sent'
+    )
     generated_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
