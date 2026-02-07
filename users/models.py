@@ -1,4 +1,3 @@
-import time
 from django.db import models
 from django.conf import settings
 from django.contrib.auth.models import AbstractUser, BaseUserManager
@@ -121,16 +120,3 @@ class CustomUser(AbstractUser):
         from users.services.subscription_service import SubscriptionService
         SubscriptionService.update_user_subscription(self, event_type)
 
-class UserSubscription(models.Model):
-    """
-    Tracks user subscription metadata.
-
-    Note: This model is currently unused as djstripe handles subscription
-    tracking. Consider removing in future if not needed.
-    """
-    user = models.OneToOneField(CustomUser, on_delete=models.CASCADE, related_name='subscription')
-    stripe_subscription = models.OneToOneField('djstripe.Subscription', on_delete=models.SET_NULL, null=True, blank=True)
-    start_date = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        verbose_name = "User Subscription"

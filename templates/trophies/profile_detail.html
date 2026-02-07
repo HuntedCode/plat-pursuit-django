@@ -63,5 +63,27 @@
     {% endif %}
 {% endblock %}
 {% block js_scripts %}
-    <script src="{% static 'js\profile_scroller.js' %}"></script>
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const currentTab = new URLSearchParams(window.location.search).get('tab') || 'games';
+        const baseUrl = window.location.pathname;
+
+        // Tab switching via radio buttons
+        document.querySelectorAll('input[name="profile-tabs"]').forEach(radio => {
+            radio.addEventListener('change', () => {
+                window.location.href = `${baseUrl}?tab=${radio.value}`;
+            });
+        });
+
+        // Infinite scroll for the active tab
+        PlatPursuit.InfiniteScroller.create({
+            gridId: `${currentTab}-grid`,
+            sentinelId: `${currentTab}-sentinel`,
+            loadingId: `${currentTab}-loading`,
+            paginateBy: 50,
+            formSelector: `#${currentTab}-form`,
+            scrollKey: 'profileScrollPos'
+        });
+    });
+    </script>
 {% endblock %}

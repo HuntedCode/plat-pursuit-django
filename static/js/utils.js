@@ -235,6 +235,39 @@ const API = {
 
     async delete(url, options = {}) {
         return this.request(url, { ...options, method: 'DELETE' });
+    },
+
+    /**
+     * POST with FormData (for file uploads)
+     * Does NOT set Content-Type - browser sets multipart boundary automatically
+     * @param {string} url - API endpoint URL
+     * @param {FormData} formData - FormData object to send
+     * @param {Object} options - Additional fetch options
+     * @returns {Promise} Response data or throws error
+     */
+    async postFormData(url, formData, options = {}) {
+        return this.request(url, {
+            ...options,
+            method: 'POST',
+            body: formData
+        });
+    },
+
+    /**
+     * Fetch HTML content (for partial templates, infinite scroll, etc.)
+     * @param {string} url - URL to fetch
+     * @param {Object} options - Additional fetch options
+     * @returns {Promise<string>} HTML string
+     */
+    async fetchHTML(url, options = {}) {
+        return this.request(url, {
+            ...options,
+            method: 'GET',
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest',
+                ...options.headers
+            }
+        });
     }
 };
 
@@ -470,6 +503,148 @@ const UnsavedChangesManager = {
     }
 };
 
+/**
+ * HTML Utilities
+ * Safe HTML escaping to prevent XSS in string interpolation
+ */
+const HTMLUtils = {
+    /**
+     * Escape HTML special characters to prevent XSS
+     * @param {string} text - Raw text to escape
+     * @returns {string} HTML-safe string
+     */
+    escape(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+};
+
+/**
+ * Create a debounced version of a function
+ * @param {Function} fn - Function to debounce
+ * @param {number} delay - Delay in milliseconds (default: 300)
+ * @returns {Function} Debounced function
+ */
+function debounce(fn, delay = 300) {
+    let timeout;
+    return function(...args) {
+        clearTimeout(timeout);
+        timeout = setTimeout(() => fn.apply(this, args), delay);
+    };
+}
+
+/**
+ * Infinite Scroller Factory
+ * Creates reusable infinite scroll behavior with IntersectionObserver
+ */
+const InfiniteScroller = {
+    /**
+     * Create an infinite scroller instance
+     * @param {Object} config - Configuration object
+     * @param {string} config.gridId - ID of the grid/container element
+     * @param {string} config.sentinelId - ID of the sentinel element to observe
+     * @param {string} config.loadingId - ID of the loading indicator element
+     * @param {number} config.paginateBy - Number of items per page (used to determine if more pages exist)
+     * @param {string} [config.formSelector] - CSS selector for filter form (resets page on submit)
+     * @param {string} [config.scrollKey] - localStorage key for preserving scroll position
+     * @param {string} [config.cardSelector='.card'] - CSS selector for cards in fetched HTML
+     * @param {Function} [config.onTabChange] - Callback for tab change behavior
+     * @returns {Object} Controller with destroy() method
+     */
+    create(config) {
+        const grid = document.getElementById(config.gridId);
+        const sentinel = document.getElementById(config.sentinelId);
+        const loading = document.getElementById(config.loadingId);
+        if (!grid || !sentinel || !loading) return null;
+
+        const cardSelector = config.cardSelector || '.card';
+        let page = 2;
+        const baseUrl = window.location.pathname;
+        const queryParams = new URLSearchParams(window.location.search);
+        queryParams.delete('page');
+        let nextPageUrl = `${baseUrl}?page=${page}&${queryParams.toString()}`;
+        let isLoading = false;
+
+        const loadMore = async () => {
+            if (!nextPageUrl || isLoading) return;
+            isLoading = true;
+            loading.classList.remove('hidden');
+
+            try {
+                const response = await fetch(nextPageUrl, {
+                    headers: { 'X-Requested-With': 'XMLHttpRequest' }
+                });
+                if (!response.ok) {
+                    if (response.status === 404) {
+                        nextPageUrl = null;
+                    }
+                    return;
+                }
+                const html = await response.text();
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(html, 'text/html');
+                const newCards = doc.querySelectorAll(cardSelector);
+                if (newCards.length === 0) {
+                    nextPageUrl = null;
+                } else {
+                    newCards.forEach(card => grid.appendChild(card.cloneNode(true)));
+                    page++;
+                    nextPageUrl = `${baseUrl}?page=${page}&${queryParams.toString()}`;
+                }
+            } catch (error) {
+                nextPageUrl = null;
+            } finally {
+                isLoading = false;
+                loading.classList.add('hidden');
+            }
+        };
+
+        // Form submit resets pagination
+        if (config.formSelector) {
+            const form = document.querySelector(config.formSelector);
+            if (form) {
+                form.addEventListener('submit', () => {
+                    if (config.scrollKey) {
+                        localStorage.setItem(config.scrollKey, window.scrollY);
+                    }
+                    page = 2;
+                    queryParams.delete('page');
+                    nextPageUrl = `${baseUrl}?page=${page}&${queryParams.toString()}`;
+                    if (!config.scrollKey) {
+                        grid.innerHTML = '';
+                    }
+                });
+            }
+        }
+
+        // Restore scroll position if configured
+        if (config.scrollKey) {
+            const savedScroll = localStorage.getItem(config.scrollKey);
+            if (savedScroll) {
+                window.scrollTo({ top: parseInt(savedScroll), behavior: 'smooth' });
+                localStorage.removeItem(config.scrollKey);
+            }
+        }
+
+        const observer = new IntersectionObserver(entries => {
+            if (entries[0].isIntersecting) {
+                loadMore();
+            }
+        }, { threshold: 1.0 });
+
+        if (grid.children.length >= config.paginateBy) {
+            observer.observe(sentinel);
+        }
+
+        return {
+            destroy() {
+                observer.disconnect();
+            }
+        };
+    }
+};
+
 // Export for use in other modules
 window.PlatPursuit = window.PlatPursuit || {};
 window.PlatPursuit.ToastManager = ToastManager;
@@ -477,3 +652,6 @@ window.PlatPursuit.CSRFToken = CSRFToken;
 window.PlatPursuit.TimeFormatter = TimeFormatter;
 window.PlatPursuit.API = API;
 window.PlatPursuit.UnsavedChangesManager = UnsavedChangesManager;
+window.PlatPursuit.HTMLUtils = HTMLUtils;
+window.PlatPursuit.debounce = debounce;
+window.PlatPursuit.InfiniteScroller = InfiniteScroller;

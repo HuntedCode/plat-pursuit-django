@@ -61,7 +61,7 @@ class ProfileSerializer(serializers.ModelSerializer):
         return obj.played_games.count()
     
     def get_rarest_trophies(self, obj):
-        rarest = obj.earned_trophy_entries.filter(earned=True).select_related('trophy').order_by('trophy__trophy_earn_rate')[:3]
+        rarest = obj.earned_trophy_entries.filter(earned=True).select_related('trophy__game').order_by('trophy__trophy_earn_rate')[:3]
         return [
             {
                 'name': et.trophy.trophy_name,
@@ -71,7 +71,7 @@ class ProfileSerializer(serializers.ModelSerializer):
         ]
     
     def get_recent_platinums(self, obj):
-        platinums = obj.earned_trophy_entries.filter(earned=True, trophy__trophy_type='platinum').select_related('trophy').order_by(F('earned_date_time').desc(nulls_last=True))[:3]
+        platinums = obj.earned_trophy_entries.filter(earned=True, trophy__trophy_type='platinum').select_related('trophy__game').order_by(F('earned_date_time').desc(nulls_last=True))[:3]
         return [
             {
                 'name': et.trophy.trophy_name,

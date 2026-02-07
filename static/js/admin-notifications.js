@@ -208,23 +208,13 @@
             const criteria = this.buildCriteria();
 
             try {
-                const response = await fetch('/api/v1/admin/notifications/target-count/', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRFToken': this.getCsrfToken()
-                    },
-                    body: JSON.stringify({
-                        target_type: targetType,
-                        criteria: criteria
-                    })
+                const data = await PlatPursuit.API.post('/api/v1/admin/notifications/target-count/', {
+                    target_type: targetType,
+                    criteria: criteria
                 });
 
-                if (response.ok) {
-                    const data = await response.json();
-                    if (this.recipientEstimateEl) {
-                        this.recipientEstimateEl.textContent = data.count.toLocaleString();
-                    }
+                if (this.recipientEstimateEl) {
+                    this.recipientEstimateEl.textContent = data.count.toLocaleString();
                 }
             } catch (error) {
                 console.error('Failed to get recipient count:', error);
@@ -450,16 +440,8 @@
             }
 
             try {
-                const response = await fetch(`/api/v1/admin/notifications/user-search/?q=${encodeURIComponent(query)}`, {
-                    headers: {
-                        'X-CSRFToken': this.getCsrfToken()
-                    }
-                });
-
-                if (response.ok) {
-                    const data = await response.json();
-                    this.showSearchResults(data.users);
-                }
+                const data = await PlatPursuit.API.get(`/api/v1/admin/notifications/user-search/?q=${encodeURIComponent(query)}`);
+                this.showSearchResults(data.users);
             } catch (error) {
                 console.error('User search failed:', error);
             }
@@ -549,20 +531,9 @@
         }
 
         escapeHtml(text) {
-            const div = document.createElement('div');
-            div.textContent = text;
-            return div.innerHTML;
+            return PlatPursuit.HTMLUtils.escape(text);
         }
 
-        getCsrfToken() {
-            const cookie = document.cookie.split(';').find(c => c.trim().startsWith('csrftoken='));
-            if (cookie) {
-                return cookie.split('=')[1];
-            }
-            // Fallback to hidden input
-            const input = document.querySelector('[name="csrfmiddlewaretoken"]');
-            return input ? input.value : '';
-        }
     }
 
     // Initialize on DOM ready

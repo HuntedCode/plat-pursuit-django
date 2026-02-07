@@ -27,6 +27,14 @@ import logging
 logger = logging.getLogger('psn_api')
 
 
+def safe_int(value, default=0):
+    """Safely convert a query parameter to int, returning default on failure."""
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
 class ChecklistListView(APIView):
     """Get published checklists for a Concept."""
     authentication_classes = [SessionAuthentication, TokenAuthentication]
@@ -55,8 +63,8 @@ class ChecklistListView(APIView):
             if sort not in ['top', 'new', 'popular']:
                 sort = 'top'
 
-            limit = int(request.query_params.get('limit', 10))
-            offset = int(request.query_params.get('offset', 0))
+            limit = safe_int(request.query_params.get('limit', 10), 10)
+            offset = safe_int(request.query_params.get('offset', 0), 0)
             # Use 'output' instead of 'format' to avoid conflict with DRF's format negotiation
             output_format = request.query_params.get('output', 'json')
 
@@ -184,8 +192,7 @@ class ChecklistListView(APIView):
             })
 
         except Exception as e:
-            import traceback
-            logger.error(f"Checklist list error: {e}\n{traceback.format_exc()}")
+            logger.exception(f"Checklist list error: {e}")
             return Response({'error': 'Internal error.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
@@ -228,7 +235,7 @@ class ChecklistCreateView(APIView):
             }, status=status.HTTP_201_CREATED)
 
         except Exception as e:
-            logger.error(f"Checklist create error: {e}")
+            logger.exception(f"Checklist create error: {e}")
             return Response({'error': 'Internal error.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
@@ -261,7 +268,7 @@ class ChecklistDetailView(APIView):
             return Response(serializer.data)
 
         except Exception as e:
-            logger.error(f"Checklist detail error: {e}")
+            logger.exception(f"Checklist detail error: {e}")
             return Response({'error': 'Internal error.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     def patch(self, request, checklist_id):
@@ -295,7 +302,7 @@ class ChecklistDetailView(APIView):
             })
 
         except Exception as e:
-            logger.error(f"Checklist update error: {e}")
+            logger.exception(f"Checklist update error: {e}")
             return Response({'error': 'Internal error.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     def delete(self, request, checklist_id):
@@ -317,7 +324,7 @@ class ChecklistDetailView(APIView):
             return Response({'success': True})
 
         except Exception as e:
-            logger.error(f"Checklist delete error: {e}")
+            logger.exception(f"Checklist delete error: {e}")
             return Response({'error': 'Internal error.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
@@ -347,7 +354,7 @@ class ChecklistPublishView(APIView):
             })
 
         except Exception as e:
-            logger.error(f"Checklist publish status error: {e}")
+            logger.exception(f"Checklist publish status error: {e}")
             return Response({'error': 'Internal error.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     def post(self, request, checklist_id):
@@ -367,7 +374,7 @@ class ChecklistPublishView(APIView):
             return Response({'success': True, 'status': 'published'})
 
         except Exception as e:
-            logger.error(f"Checklist publish error: {e}")
+            logger.exception(f"Checklist publish error: {e}")
             return Response({'error': 'Internal error.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     def delete(self, request, checklist_id):
@@ -387,7 +394,7 @@ class ChecklistPublishView(APIView):
             return Response({'success': True, 'status': 'draft'})
 
         except Exception as e:
-            logger.error(f"Checklist unpublish error: {e}")
+            logger.exception(f"Checklist unpublish error: {e}")
             return Response({'error': 'Internal error.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
@@ -418,7 +425,7 @@ class ChecklistVoteView(APIView):
             })
 
         except Exception as e:
-            logger.error(f"Checklist vote error: {e}")
+            logger.exception(f"Checklist vote error: {e}")
             return Response({'error': 'Internal error.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
@@ -458,7 +465,7 @@ class ChecklistReportView(APIView):
             return Response({'success': True, 'report_id': report.id})
 
         except Exception as e:
-            logger.error(f"Checklist report error: {e}")
+            logger.exception(f"Checklist report error: {e}")
             return Response({'error': 'Internal error.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
@@ -493,7 +500,7 @@ class ChecklistProgressToggleView(APIView):
             })
 
         except Exception as e:
-            logger.error(f"Checklist progress toggle error: {e}")
+            logger.exception(f"Checklist progress toggle error: {e}")
             return Response({'error': 'Internal error.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
@@ -531,7 +538,7 @@ class ChecklistProgressView(APIView):
             })
 
         except Exception as e:
-            logger.error(f"Checklist progress error: {e}")
+            logger.exception(f"Checklist progress error: {e}")
             return Response({'error': 'Internal error.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
@@ -576,7 +583,7 @@ class ChecklistSectionBulkProgressView(APIView):
             })
 
         except Exception as e:
-            logger.error(f"Checklist section bulk progress error: {e}")
+            logger.exception(f"Checklist section bulk progress error: {e}")
             return Response({'error': 'Internal error.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
@@ -607,7 +614,7 @@ class ChecklistSectionListView(APIView):
             return Response({'sections': serializer.data})
 
         except Exception as e:
-            logger.error(f"Section list error: {e}")
+            logger.exception(f"Section list error: {e}")
             return Response({'error': 'Internal error.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     def post(self, request, checklist_id):
@@ -641,7 +648,7 @@ class ChecklistSectionListView(APIView):
             }, status=status.HTTP_201_CREATED)
 
         except Exception as e:
-            logger.error(f"Section create error: {e}")
+            logger.exception(f"Section create error: {e}")
             return Response({'error': 'Internal error.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
@@ -686,7 +693,7 @@ class ChecklistSectionDetailView(APIView):
             })
 
         except Exception as e:
-            logger.error(f"Section update error: {e}")
+            logger.exception(f"Section update error: {e}")
             return Response({'error': 'Internal error.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     def delete(self, request, checklist_id, section_id):
@@ -710,7 +717,7 @@ class ChecklistSectionDetailView(APIView):
             return Response({'success': True})
 
         except Exception as e:
-            logger.error(f"Section delete error: {e}")
+            logger.exception(f"Section delete error: {e}")
             return Response({'error': 'Internal error.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
@@ -745,7 +752,7 @@ class ChecklistSectionReorderView(APIView):
             return Response({'success': True})
 
         except Exception as e:
-            logger.error(f"Section reorder error: {e}")
+            logger.exception(f"Section reorder error: {e}")
             return Response({'error': 'Internal error.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
@@ -779,7 +786,7 @@ class ChecklistItemListView(APIView):
             return Response({'items': serializer.data})
 
         except Exception as e:
-            logger.error(f"Item list error: {e}")
+            logger.exception(f"Item list error: {e}")
             return Response({'error': 'Internal error.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     def post(self, request, section_id):
@@ -829,7 +836,7 @@ class ChecklistItemListView(APIView):
             }, status=status.HTTP_201_CREATED)
 
         except Exception as e:
-            logger.error(f"Item create error: {e}")
+            logger.exception(f"Item create error: {e}")
             return Response({'error': 'Internal error.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
@@ -908,7 +915,7 @@ class ChecklistItemBulkCreateView(APIView):
             }, status=status.HTTP_201_CREATED)
 
         except Exception as e:
-            logger.error(f"Bulk item create error: {e}")
+            logger.exception(f"Bulk item create error: {e}")
             return Response({'error': 'Internal error.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
@@ -1020,7 +1027,7 @@ class ChecklistItemDetailView(APIView):
             })
 
         except Exception as e:
-            logger.error(f"Item update error: {e}")
+            logger.exception(f"Item update error: {e}")
             return Response({'error': 'Internal error.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     def delete(self, request, item_id):
@@ -1042,7 +1049,7 @@ class ChecklistItemDetailView(APIView):
             return Response({'success': True})
 
         except Exception as e:
-            logger.error(f"Item delete error: {e}")
+            logger.exception(f"Item delete error: {e}")
             return Response({'error': 'Internal error.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
@@ -1080,7 +1087,7 @@ class ChecklistItemReorderView(APIView):
             return Response({'success': True})
 
         except Exception as e:
-            logger.error(f"Item reorder error: {e}")
+            logger.exception(f"Item reorder error: {e}")
             return Response({'error': 'Internal error.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
@@ -1104,7 +1111,7 @@ class UserDraftChecklistsView(APIView):
             return Response({'checklists': serializer.data})
 
         except Exception as e:
-            logger.error(f"User drafts error: {e}")
+            logger.exception(f"User drafts error: {e}")
             return Response({'error': 'Internal error.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
@@ -1126,7 +1133,7 @@ class UserPublishedChecklistsView(APIView):
             return Response({'checklists': serializer.data})
 
         except Exception as e:
-            logger.error(f"User published error: {e}")
+            logger.exception(f"User published error: {e}")
             return Response({'error': 'Internal error.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
@@ -1142,7 +1149,7 @@ class UserChecklistProgressView(APIView):
             if not profile:
                 return Response({'error': 'Profile not found.'}, status=status.HTTP_404_NOT_FOUND)
 
-            limit = int(request.query_params.get('limit', 10))
+            limit = safe_int(request.query_params.get('limit', 10), 10)
             progress_list = ChecklistService.get_user_checklists_in_progress(profile, limit)
 
             result = []
@@ -1158,7 +1165,7 @@ class UserChecklistProgressView(APIView):
             return Response({'in_progress': result})
 
         except Exception as e:
-            logger.error(f"User progress error: {e}")
+            logger.exception(f"User progress error: {e}")
             return Response({'error': 'Internal error.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
@@ -1195,7 +1202,7 @@ class ChecklistImageUploadView(APIView):
         except Checklist.DoesNotExist:
             return Response({'error': 'Checklist not found.'}, status=status.HTTP_404_NOT_FOUND)
         except Exception as e:
-            logger.error(f"Image upload error: {e}")
+            logger.exception(f"Image upload error: {e}")
             return Response({'error': 'Internal error.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     def delete(self, request, checklist_id):
@@ -1247,7 +1254,7 @@ class SectionImageUploadView(APIView):
         except ChecklistSection.DoesNotExist:
             return Response({'error': 'Section not found.'}, status=status.HTTP_404_NOT_FOUND)
         except Exception as e:
-            logger.error(f"Section image upload error: {e}")
+            logger.exception(f"Section image upload error: {e}")
             return Response({'error': 'Internal error.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     def delete(self, request, section_id):
@@ -1301,7 +1308,7 @@ class ItemImageCreateView(APIView):
         except ChecklistSection.DoesNotExist:
             return Response({'error': 'Section not found.'}, status=status.HTTP_404_NOT_FOUND)
         except Exception as e:
-            logger.error(f"Inline image create error: {e}")
+            logger.exception(f"Inline image create error: {e}")
             return Response({'error': 'Internal error.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
@@ -1327,7 +1334,7 @@ class MarkdownPreviewView(APIView):
             html = ChecklistService.process_markdown(text)
             return Response({'html': html})
         except Exception as e:
-            logger.error(f"Markdown preview error: {e}")
+            logger.exception(f"Markdown preview error: {e}")
             return Response({'error': 'Preview failed.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
@@ -1362,7 +1369,7 @@ class ChecklistGameSelectView(APIView):
             return Response({'success': True, 'game_id': serializer.validated_data['game_id']})
 
         except Exception as e:
-            logger.error(f"Game selection error: {e}")
+            logger.exception(f"Game selection error: {e}")
             return Response({'error': 'Internal error.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
@@ -1431,5 +1438,5 @@ class ChecklistAvailableTrophiesView(APIView):
             })
 
         except Exception as e:
-            logger.error(f"Available trophies error: {e}")
+            logger.exception(f"Available trophies error: {e}")
             return Response({'error': 'Internal error.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

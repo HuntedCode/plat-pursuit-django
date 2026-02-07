@@ -174,7 +174,7 @@ def check_all_milestones_for_user(profile, criteria_type=None):
     # Send single notification for highest newly earned milestone
     if new_awards and profile.is_discord_verified and profile.discord_id:
         highest = max(new_awards, key=lambda m: m.required_value)
-        print(f"Notifying for milestone {highest}")
+        logger.debug(f"Notifying for milestone {highest}")
         notify_new_milestone(profile, highest)
 
     return new_awards

@@ -282,5 +282,5 @@ class ShareableImageHTMLView(APIView):
             logger.warning(f"[SHAREABLE-HTML] Failed to fetch image {url}: {e}")
             return ''
         except Exception as e:
-            logger.error(f"[SHAREABLE-HTML] Error encoding image {url}: {e}")
+            logger.exception(f"[SHAREABLE-HTML] Error encoding image {url}: {e}")
             return ''

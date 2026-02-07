@@ -12,7 +12,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const syncStatusUrl = container.dataset.urlSync;
     const triggerSyncUrl = container.dataset.urlTrigger;
     const addSyncStatusUrl = container.dataset.urlAddSync;
-    const csrfToken = container.dataset.csrf;
     const initialStatus = container.dataset.syncStatus;
     const initialSeconds = parseInt(container.dataset.seconds) || 0;
 
@@ -174,8 +173,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function pollSyncStatus() {
         if (!syncStatusUrl) return;
 
-        fetch(syncStatusUrl)
-            .then(response => response.json())
+        PlatPursuit.API.get(syncStatusUrl)
             .then(data => updateHotbar(data))
             .catch(error => console.error('Polling error:', error));
     }
@@ -218,22 +216,9 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         // Make API request to trigger sync
-        fetch(triggerSyncUrl, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRFToken': csrfToken
-            },
-            body: JSON.stringify({})
-        })
-        .then(response => {
-            if (!response.ok) {
-                throw new Error('Sync failed');
-            }
-            startPolling();
-            return response.json();
-        })
+        PlatPursuit.API.post(triggerSyncUrl, {})
         .then(data => {
+            startPolling();
             if (data.error) {
                 console.error(data.error);
                 clearInterval(pollingInterval);
@@ -292,13 +277,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         const url = `${addSyncStatusUrl}?psn_username=${encodeURIComponent(psn_username)}`;
-        fetch(url)
-            .then(response => {
-                if (!response.ok) {
-                    throw new Error(`HTTP error. status: ${response.status}`);
-                }
-                return response.json();
-            })
+        PlatPursuit.API.get(url)
             .then(data => checkAddSync(data))
             .catch(error => console.error('Polling error:', error));
     }
@@ -311,12 +290,7 @@ document.addEventListener('DOMContentLoaded', () => {
             e.preventDefault();
 
             const formData = new FormData(e.target);
-            fetch(e.target.action, {
-                method: 'POST',
-                body: formData,
-                headers: {'X-Requested-With': 'XMLHttpRequest'}
-            })
-            .then(response => response.json())
+            PlatPursuit.API.postFormData(e.target.action, formData)
             .then(data => {
                 if (data.success) {
                     if (addSyncBtn) addSyncBtn.hidden = true;

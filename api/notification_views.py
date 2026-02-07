@@ -11,12 +11,10 @@ from django.utils.decorators import method_decorator
 from django.template.loader import render_to_string
 from django_ratelimit.decorators import ratelimit
 from notifications.services.notification_service import NotificationService
-from notifications.services.template_service import TemplateService
 from notifications.services.scheduled_notification_service import ScheduledNotificationService
 from notifications.services.shareable_data_service import ShareableDataService
-from notifications.models import Notification, NotificationTemplate, ScheduledNotification
+from notifications.models import Notification
 from django.contrib.auth import get_user_model
-import json
 import logging
 import base64
 import requests
@@ -95,7 +93,7 @@ class NotificationListView(APIView):
                 status=http_status.HTTP_400_BAD_REQUEST
             )
         except Exception as e:
-            logger.error(f"Error fetching notifications: {e}")
+            logger.exception(f"Error fetching notifications: {e}")
             return Response(
                 {'error': 'Failed to fetch notifications'},
                 status=http_status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -121,7 +119,7 @@ class NotificationMarkReadView(APIView):
                 )
 
         except Exception as e:
-            logger.error(f"Error marking notification as read: {e}")
+            logger.exception(f"Error marking notification as read: {e}")
             return Response(
                 {'error': 'Failed to mark notification as read'},
                 status=http_status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -144,7 +142,7 @@ class NotificationMarkAllReadView(APIView):
             })
 
         except Exception as e:
-            logger.error(f"Error marking all notifications as read: {e}")
+            logger.exception(f"Error marking all notifications as read: {e}")
             return Response(
                 {'error': 'Failed to mark all notifications as read'},
                 status=http_status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -251,7 +249,7 @@ class AdminSendNotificationView(APIView):
             })
 
         except Exception as e:
-            logger.error(f"Error sending admin notification: {e}")
+            logger.exception(f"Error sending admin notification: {e}")
             return Response(
                 {'error': f'Failed to send notifications: {str(e)}'},
                 status=http_status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -288,7 +286,7 @@ class NotificationBulkDeleteView(APIView):
             })
 
         except Exception as e:
-            logger.error(f"Error bulk deleting notifications: {e}")
+            logger.exception(f"Error bulk deleting notifications: {e}")
             return Response(
                 {'error': 'Failed to delete notifications'},
                 status=http_status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -318,7 +316,7 @@ class NotificationDeleteView(APIView):
                 )
 
         except Exception as e:
-            logger.error(f"Error deleting notification: {e}")
+            logger.exception(f"Error deleting notification: {e}")
             return Response(
                 {'error': 'Failed to delete notification'},
                 status=http_status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -406,7 +404,7 @@ class NotificationShareImageGenerateView(APIView):
                 }
                 logger.info(f"Generated {fmt} share image for notification {pk}")
             except Exception as e:
-                logger.error(f"Failed to generate {fmt} image for notification {pk}: {e}")
+                logger.exception(f"Failed to generate {fmt} image for notification {pk}: {e}")
                 results[fmt] = {'error': str(e)}
 
         return Response({
@@ -887,7 +885,7 @@ class NotificationShareImageHTMLView(APIView):
             logger.warning(f"[SHARE-HTML] Failed to fetch image {url}: {e}")
             return ''
         except Exception as e:
-            logger.error(f"[SHARE-HTML] Error encoding image {url}: {e}")
+            logger.exception(f"[SHARE-HTML] Error encoding image {url}: {e}")
             return ''
 
 
@@ -1127,7 +1125,7 @@ class AdminTargetCountView(APIView):
             )
             return Response({'count': count})
         except Exception as e:
-            logger.error(f"Error getting target count: {e}")
+            logger.exception(f"Error getting target count: {e}")
             return Response(
                 {'error': str(e)},
                 status=http_status.HTTP_400_BAD_REQUEST

@@ -37,7 +37,7 @@ class NotificationSystem {
                     this.loadNotifications();
                     this.loaded = true;
                 } else {
-                    console.log('NotificationSystem: Already loaded, skipping');
+                    // Already loaded, skip re-fetching
                 }
             });
 
@@ -288,9 +288,7 @@ class NotificationSystem {
     }
 
     escapeHtml(text) {
-        const div = document.createElement('div');
-        div.textContent = text;
-        return div.innerHTML;
+        return PlatPursuit.HTMLUtils.escape(text);
     }
 }
 
@@ -302,6 +300,6 @@ document.addEventListener('DOMContentLoaded', () => {
     if (dropdown) {
         window.notificationSystem = new NotificationSystem();
     } else {
-        console.log('NotificationSystem: No dropdown found, not initializing');
+        // No dropdown found, skip initialization
     }
 });

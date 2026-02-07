@@ -305,12 +305,7 @@ class MonthlyRecapManager {
         }
 
         try {
-            const response = await fetch(`/api/v1/recap/${this.year}/${this.month}/slide/${slideType}/`);
-            if (!response.ok) {
-                throw new Error(`Failed to fetch slide: ${response.status}`);
-            }
-
-            const data = await response.json();
+            const data = await PlatPursuit.API.get(`/api/v1/recap/${this.year}/${this.month}/slide/${slideType}/`);
             this.slideCache[cacheKey] = data.html;
             return data.html;
         } catch (error) {
@@ -727,10 +722,7 @@ class MonthlyRecapManager {
 
         try {
             // Fetch landscape preview
-            const response = await fetch(`/api/v1/recap/${this.year}/${this.month}/html/`);
-            if (!response.ok) throw new Error('Failed to fetch share preview');
-
-            const data = await response.json();
+            const data = await PlatPursuit.API.get(`/api/v1/recap/${this.year}/${this.month}/html/`);
 
             // Create preview with background selector and scaled-down share card
             shareContent.innerHTML = `
@@ -904,10 +896,7 @@ class MonthlyRecapManager {
 
         try {
             // Fetch the share image HTML
-            const response = await fetch(`/api/v1/recap/${this.year}/${this.month}/html/`);
-            if (!response.ok) throw new Error('Failed to fetch share image');
-
-            const data = await response.json();
+            const data = await PlatPursuit.API.get(`/api/v1/recap/${this.year}/${this.month}/html/`);
 
             // Use html2canvas to generate image
             await this.generateImage(data.html);

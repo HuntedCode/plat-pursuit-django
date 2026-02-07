@@ -324,44 +324,29 @@
         });
     }
 
-    // Get CSRF token from cookie
-    // API helper
+    // API helper — delegates to PlatPursuit.API with error-message extraction
     async function apiRequest(url, method = 'GET', data = null) {
         const options = {
             method,
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRFToken': PlatPursuit.CSRFToken.get(),
-            },
-            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
         };
         if (data) {
             options.body = JSON.stringify(data);
         }
-        const response = await fetch(url, options);
-        const text = await response.text();
-        let json;
         try {
-            json = JSON.parse(text);
-        } catch (e) {
-            console.error('API returned non-JSON response:', text.substring(0, 200));
-            throw new Error('Server error - please try again');
-        }
-        if (!response.ok) {
-            const error = new Error(json.error || json.detail || 'Request failed');
-            // Attach full response data for detailed error handling
+            return await PlatPursuit.API.request(url, options);
+        } catch (err) {
+            // Extract server error message from response body
+            let json;
+            try { json = await err.response?.json(); } catch {}
+            const error = new Error(json?.error || json?.detail || 'Request failed');
             error.responseData = json;
             throw error;
         }
-        return json;
     }
 
-    // Escape HTML for safe DOM insertion
-    function escapeHtml(text) {
-        const div = document.createElement('div');
-        div.textContent = text;
-        return div.innerHTML;
-    }
+    // Escape HTML for safe DOM insertion (delegates to shared utility)
+    const escapeHtml = PlatPursuit.HTMLUtils.escape;
 
     // ==========================================
     // Bulk Upload Functions
@@ -2208,42 +2193,33 @@
         formData.append('thumbnail', file);
 
         try {
-            const response = await fetch(`/api/v1/checklists/${checklistId}/image/`, {
-                method: 'POST',
-                headers: {'X-CSRFToken': PlatPursuit.CSRFToken.get()},
-                body: formData
-            });
+            const data = await PlatPursuit.API.postFormData(`/api/v1/checklists/${checklistId}/image/`, formData);
 
-            const data = await response.json();
+            PlatPursuit.ToastManager.show('Thumbnail uploaded!', 'success');
 
-            if (response.ok) {
-                PlatPursuit.ToastManager.show('Thumbnail uploaded!', 'success');
-
-                // Update preview with server URL
-                const preview = document.getElementById('checklist-thumbnail-preview');
-                if (preview) {
-                    const img = preview.querySelector('img');
-                    if (img && data.thumbnail_url) {
-                        img.src = data.thumbnail_url;
-                    }
-                    preview.classList.remove('hidden');
+            // Update preview with server URL
+            const preview = document.getElementById('checklist-thumbnail-preview');
+            if (preview) {
+                const img = preview.querySelector('img');
+                if (img && data.thumbnail_url) {
+                    img.src = data.thumbnail_url;
                 }
-
-                // Show remove button
-                const removeBtn = document.getElementById('remove-checklist-thumbnail-btn');
-                if (removeBtn) {
-                    removeBtn.classList.remove('hidden');
-                }
-
-                // Clear the file input
-                const input = document.getElementById('checklist-thumbnail-input');
-                if (input) input.value = '';
-            } else {
-                PlatPursuit.ToastManager.show(data.error || 'Upload failed.', 'error');
+                preview.classList.remove('hidden');
             }
+
+            // Show remove button
+            const removeBtn = document.getElementById('remove-checklist-thumbnail-btn');
+            if (removeBtn) {
+                removeBtn.classList.remove('hidden');
+            }
+
+            // Clear the file input
+            const input = document.getElementById('checklist-thumbnail-input');
+            if (input) input.value = '';
         } catch (error) {
-            console.error('Upload error:', error);
-            PlatPursuit.ToastManager.show('Network error.', 'error');
+            let msg = 'Upload failed.';
+            try { const errData = await error.response?.json(); msg = errData?.error || msg; } catch {}
+            PlatPursuit.ToastManager.show(msg, 'error');
         }
     }
 
@@ -2251,34 +2227,27 @@
         if (!confirm('Remove guide thumbnail?')) return;
 
         try {
-            const response = await fetch(`/api/v1/checklists/${checklistId}/image/`, {
-                method: 'DELETE',
-                headers: {'X-CSRFToken': PlatPursuit.CSRFToken.get()}
-            });
+            await PlatPursuit.API.delete(`/api/v1/checklists/${checklistId}/image/`);
 
-            if (response.ok) {
-                PlatPursuit.ToastManager.show('Thumbnail removed.', 'success');
+            PlatPursuit.ToastManager.show('Thumbnail removed.', 'success');
 
-                // Hide preview
-                const preview = document.getElementById('checklist-thumbnail-preview');
-                if (preview) {
-                    preview.classList.add('hidden');
-                    const img = preview.querySelector('img');
-                    if (img) img.src = '';
-                }
+            // Hide preview
+            const preview = document.getElementById('checklist-thumbnail-preview');
+            if (preview) {
+                preview.classList.add('hidden');
+                const img = preview.querySelector('img');
+                if (img) img.src = '';
+            }
 
-                // Hide remove button
-                const removeBtn = document.getElementById('remove-checklist-thumbnail-btn');
-                if (removeBtn) {
-                    removeBtn.classList.add('hidden');
-                }
-            } else {
-                const data = await response.json();
-                PlatPursuit.ToastManager.show(data.error || 'Failed to remove.', 'error');
+            // Hide remove button
+            const removeBtn = document.getElementById('remove-checklist-thumbnail-btn');
+            if (removeBtn) {
+                removeBtn.classList.add('hidden');
             }
         } catch (error) {
-            console.error('Remove error:', error);
-            PlatPursuit.ToastManager.show('Network error.', 'error');
+            let msg = 'Failed to remove.';
+            try { const errData = await error.response?.json(); msg = errData?.error || msg; } catch {}
+            PlatPursuit.ToastManager.show(msg, 'error');
         }
     }
 
@@ -2287,61 +2256,52 @@
         formData.append('thumbnail', file);
 
         try {
-            const response = await fetch(`/api/v1/checklists/sections/${sectionId}/image/`, {
-                method: 'POST',
-                headers: {'X-CSRFToken': PlatPursuit.CSRFToken.get()},
-                body: formData
-            });
+            const data = await PlatPursuit.API.postFormData(`/api/v1/checklists/sections/${sectionId}/image/`, formData);
 
-            const data = await response.json();
+            PlatPursuit.ToastManager.show('Section thumbnail uploaded!', 'success');
 
-            if (response.ok) {
-                PlatPursuit.ToastManager.show('Section thumbnail uploaded!', 'success');
+            // Find the section container
+            const section = document.querySelector(`.checklist-section[data-section-id="${sectionId}"]`);
+            if (!section) return;
 
-                // Find the section container
-                const section = document.querySelector(`.checklist-section[data-section-id="${sectionId}"]`);
-                if (!section) return;
-
-                // Find or create preview element
-                let preview = section.querySelector('.section-thumbnail-preview');
-                if (preview) {
-                    // Update existing preview
-                    const img = preview.querySelector('img');
-                    if (img && data.thumbnail_url) {
-                        img.src = data.thumbnail_url;
-                    }
-                    preview.classList.remove('hidden');
-                } else {
-                    // Create preview element
-                    const figure = document.createElement('figure');
-                    figure.className = 'section-thumbnail-preview w-full max-w-2xl mx-auto rounded-lg overflow-hidden shadow-md bg-base-300 mb-3';
-                    const img = document.createElement('img');
+            // Find or create preview element
+            let preview = section.querySelector('.section-thumbnail-preview');
+            if (preview) {
+                // Update existing preview
+                const img = preview.querySelector('img');
+                if (img && data.thumbnail_url) {
                     img.src = data.thumbnail_url;
-                    img.alt = 'Section header image';
-                    img.className = 'w-full h-auto object-contain';
-                    img.loading = 'lazy';
-                    figure.appendChild(img);
-
-                    // Insert before the file input container
-                    const fileInputContainer = section.querySelector('.section-thumbnail-input').closest('.flex');
-                    fileInputContainer.parentElement.insertBefore(figure, fileInputContainer);
                 }
-
-                // Show remove button
-                let removeBtn = section.querySelector('.section-remove-thumbnail-btn');
-                if (removeBtn) {
-                    removeBtn.classList.remove('hidden');
-                }
-
-                // Clear the file input
-                const input = section.querySelector('.section-thumbnail-input');
-                if (input) input.value = '';
+                preview.classList.remove('hidden');
             } else {
-                PlatPursuit.ToastManager.show(data.error || 'Upload failed.', 'error');
+                // Create preview element
+                const figure = document.createElement('figure');
+                figure.className = 'section-thumbnail-preview w-full max-w-2xl mx-auto rounded-lg overflow-hidden shadow-md bg-base-300 mb-3';
+                const img = document.createElement('img');
+                img.src = data.thumbnail_url;
+                img.alt = 'Section header image';
+                img.className = 'w-full h-auto object-contain';
+                img.loading = 'lazy';
+                figure.appendChild(img);
+
+                // Insert before the file input container
+                const fileInputContainer = section.querySelector('.section-thumbnail-input').closest('.flex');
+                fileInputContainer.parentElement.insertBefore(figure, fileInputContainer);
             }
+
+            // Show remove button
+            let removeBtn = section.querySelector('.section-remove-thumbnail-btn');
+            if (removeBtn) {
+                removeBtn.classList.remove('hidden');
+            }
+
+            // Clear the file input
+            const input = section.querySelector('.section-thumbnail-input');
+            if (input) input.value = '';
         } catch (error) {
-            console.error('Upload error:', error);
-            PlatPursuit.ToastManager.show('Network error.', 'error');
+            let msg = 'Upload failed.';
+            try { const errData = await error.response?.json(); msg = errData?.error || msg; } catch {}
+            PlatPursuit.ToastManager.show(msg, 'error');
         }
     }
 
@@ -2349,38 +2309,31 @@
         if (!confirm('Remove section thumbnail?')) return;
 
         try {
-            const response = await fetch(`/api/v1/checklists/sections/${sectionId}/image/`, {
-                method: 'DELETE',
-                headers: {'X-CSRFToken': PlatPursuit.CSRFToken.get()}
-            });
+            await PlatPursuit.API.delete(`/api/v1/checklists/sections/${sectionId}/image/`);
 
-            if (response.ok) {
-                PlatPursuit.ToastManager.show('Section thumbnail removed.', 'success');
+            PlatPursuit.ToastManager.show('Section thumbnail removed.', 'success');
 
-                // Find the section
-                const section = document.querySelector(`.checklist-section[data-section-id="${sectionId}"]`);
-                if (!section) return;
+            // Find the section
+            const section = document.querySelector(`.checklist-section[data-section-id="${sectionId}"]`);
+            if (!section) return;
 
-                // Hide preview
-                const preview = section.querySelector('.section-thumbnail-preview');
-                if (preview) {
-                    preview.classList.add('hidden');
-                    const img = preview.querySelector('img');
-                    if (img) img.src = '';
-                }
+            // Hide preview
+            const preview = section.querySelector('.section-thumbnail-preview');
+            if (preview) {
+                preview.classList.add('hidden');
+                const img = preview.querySelector('img');
+                if (img) img.src = '';
+            }
 
-                // Hide remove button
-                const removeBtn = section.querySelector('.section-remove-thumbnail-btn');
-                if (removeBtn) {
-                    removeBtn.classList.add('hidden');
-                }
-            } else {
-                const data = await response.json();
-                PlatPursuit.ToastManager.show(data.error || 'Failed to remove.', 'error');
+            // Hide remove button
+            const removeBtn = section.querySelector('.section-remove-thumbnail-btn');
+            if (removeBtn) {
+                removeBtn.classList.add('hidden');
             }
         } catch (error) {
-            console.error('Remove error:', error);
-            PlatPursuit.ToastManager.show('Network error.', 'error');
+            let msg = 'Failed to remove.';
+            try { const errData = await error.response?.json(); msg = errData?.error || msg; } catch {}
+            PlatPursuit.ToastManager.show(msg, 'error');
         }
     }
 
@@ -2390,70 +2343,61 @@
         if (caption) formData.append('text', caption);
 
         try {
-            const response = await fetch(`/api/v1/checklists/sections/${sectionId}/items/image/`, {
-                method: 'POST',
-                headers: {'X-CSRFToken': PlatPursuit.CSRFToken.get()},
-                body: formData
-            });
+            const data = await PlatPursuit.API.postFormData(`/api/v1/checklists/sections/${sectionId}/items/image/`, formData);
 
-            const data = await response.json();
+            PlatPursuit.ToastManager.show('Inline image added!', 'success');
 
-            if (response.ok) {
-                PlatPursuit.ToastManager.show('Inline image added!', 'success');
+            // Find section container
+            const section = document.querySelector(`.checklist-section[data-section-id="${sectionId}"]`);
+            if (!section) return;
 
-                // Find section container
-                const section = document.querySelector(`.checklist-section[data-section-id="${sectionId}"]`);
-                if (!section) return;
+            // Create the new item DOM element
+            const newItemElement = createInlineImageElement(data);
 
-                // Create the new item DOM element
-                const newItemElement = createInlineImageElement(data);
+            // Bind event handlers to the new element
+            bindItemEventHandlers(newItemElement);
 
-                // Bind event handlers to the new element
-                bindItemEventHandlers(newItemElement);
-
-                // Find items container and insert the new item
-                const itemsContainer = section.querySelector('.section-items-container');
-                if (itemsContainer) {
-                    itemsContainer.appendChild(newItemElement);
-                }
-
-                // Update item count badge
-                const countBadge = section.querySelector('.section-item-count');
-                if (countBadge) {
-                    const items = section.querySelectorAll('[data-item-id]');
-                    countBadge.textContent = `${items.length} item${items.length !== 1 ? 's' : ''}`;
-                }
-
-                // Expand the section if it's collapsed
-                const itemsContent = section.querySelector('.section-items-content');
-                if (itemsContent && itemsContent.classList.contains('hidden')) {
-                    itemsContent.classList.remove('hidden');
-                    // Update toggle icon if needed
-                    const toggleIcon = section.querySelector('.section-toggle-icon');
-                    if (toggleIcon) {
-                        toggleIcon.style.transform = 'rotate(180deg)';
-                    }
-                }
-
-                // Clear the upload form
-                const uploadContainer = section.querySelector('.inline-image-input').closest('.mt-3');
-                if (uploadContainer) {
-                    const input = uploadContainer.querySelector('.inline-image-input');
-                    const captionInput = uploadContainer.querySelector('.inline-image-caption');
-                    if (input) input.value = '';
-                    if (captionInput) captionInput.value = '';
-                }
-
-                // Scroll the new item into view smoothly
-                setTimeout(() => {
-                    newItemElement.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-                }, 100);
-            } else {
-                PlatPursuit.ToastManager.show(data.error || 'Upload failed.', 'error');
+            // Find items container and insert the new item
+            const itemsContainer = section.querySelector('.section-items-container');
+            if (itemsContainer) {
+                itemsContainer.appendChild(newItemElement);
             }
+
+            // Update item count badge
+            const countBadge = section.querySelector('.section-item-count');
+            if (countBadge) {
+                const items = section.querySelectorAll('[data-item-id]');
+                countBadge.textContent = `${items.length} item${items.length !== 1 ? 's' : ''}`;
+            }
+
+            // Expand the section if it's collapsed
+            const itemsContent = section.querySelector('.section-items-content');
+            if (itemsContent && itemsContent.classList.contains('hidden')) {
+                itemsContent.classList.remove('hidden');
+                // Update toggle icon if needed
+                const toggleIcon = section.querySelector('.section-toggle-icon');
+                if (toggleIcon) {
+                    toggleIcon.style.transform = 'rotate(180deg)';
+                }
+            }
+
+            // Clear the upload form
+            const uploadContainer = section.querySelector('.inline-image-input').closest('.mt-3');
+            if (uploadContainer) {
+                const input = uploadContainer.querySelector('.inline-image-input');
+                const captionInput = uploadContainer.querySelector('.inline-image-caption');
+                if (input) input.value = '';
+                if (captionInput) captionInput.value = '';
+            }
+
+            // Scroll the new item into view smoothly
+            setTimeout(() => {
+                newItemElement.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }, 100);
         } catch (error) {
-            console.error('Upload error:', error);
-            PlatPursuit.ToastManager.show('Network error.', 'error');
+            let msg = 'Upload failed.';
+            try { const errData = await error.response?.json(); msg = errData?.error || msg; } catch {}
+            PlatPursuit.ToastManager.show(msg, 'error');
         }
     }
 
@@ -2525,37 +2469,23 @@
                 btn.innerHTML = '<span class="loading loading-spinner loading-xs"></span> Adding...';
 
                 try {
-                    const response = await fetch(`${API_BASE}/checklists/sections/${sectionId}/items/`, {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'X-CSRFToken': PlatPursuit.CSRFToken.get()
-                        },
-                        body: JSON.stringify({
-                            text: text,
-                            item_type: 'text_area'
-                        })
+                    await PlatPursuit.API.post(`${API_BASE}/checklists/sections/${sectionId}/items/`, {
+                        text: text,
+                        item_type: 'text_area'
                     });
 
-                    const data = await response.json();
+                    PlatPursuit.ToastManager.show('Text area added!', 'success');
+                    textarea.value = '';  // Clear input
+                    // Update character counter
+                    const counter = document.querySelector(`.text-area-char-count[data-section-id="${sectionId}"]`);
+                    if (counter) counter.textContent = '0/2000';
 
-                    if (response.ok) {
-                        PlatPursuit.ToastManager.show('Text area added!', 'success');
-                        textarea.value = '';  // Clear input
-                        // Update character counter
-                        const counter = document.querySelector(`.text-area-char-count[data-section-id="${sectionId}"]`);
-                        if (counter) counter.textContent = '0/2000';
-
-                        // Reload page to show new item
-                        setTimeout(() => reloadWithFormState(), 500);
-                    } else {
-                        PlatPursuit.ToastManager.show(data.error || 'Failed to add text area.', 'error');
-                        btn.disabled = false;
-                        btn.innerHTML = originalHTML;
-                    }
+                    // Reload page to show new item
+                    setTimeout(() => reloadWithFormState(), 500);
                 } catch (error) {
-                    console.error('Add text area error:', error);
-                    PlatPursuit.ToastManager.show('Network error.', 'error');
+                    let msg = 'Failed to add text area.';
+                    try { const errData = await error.response?.json(); msg = errData?.error || msg; } catch {}
+                    PlatPursuit.ToastManager.show(msg, 'error');
                     btn.disabled = false;
                     btn.innerHTML = originalHTML;
                 }
@@ -2598,25 +2528,11 @@
 
                     // Fetch rendered HTML from server
                     try {
-                        const response = await fetch(`${API_BASE}/markdown/preview/`, {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
-                                'X-CSRFToken': PlatPursuit.CSRFToken.get()
-                            },
-                            body: JSON.stringify({ text })
-                        });
-
-                        const data = await response.json();
-                        if (response.ok) {
-                            previewArea.querySelector('.prose').innerHTML = data.html;
-                            previewArea.classList.remove('hidden');
-                            btn.textContent = 'Hide Preview';
-                        } else {
-                            PlatPursuit.ToastManager.show(data.error || 'Preview failed.', 'error');
-                        }
+                        const data = await PlatPursuit.API.post(`${API_BASE}/markdown/preview/`, { text });
+                        previewArea.querySelector('.prose').innerHTML = data.html;
+                        previewArea.classList.remove('hidden');
+                        btn.textContent = 'Hide Preview';
                     } catch (error) {
-                        console.error('Preview error:', error);
                         PlatPursuit.ToastManager.show('Preview failed.', 'error');
                     }
                 } else {
@@ -2650,24 +2566,10 @@
 
         // Fetch rendered HTML from server
         try {
-            const response = await fetch(`${API_BASE}/markdown/preview/`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRFToken': PlatPursuit.CSRFToken.get()
-                },
-                body: JSON.stringify({ text })
-            });
-
-            const data = await response.json();
-            if (response.ok) {
-                modal.querySelector('.preview-content').innerHTML = data.html;
-            } else {
-                modal.querySelector('.preview-content').innerHTML = '<p class="text-error">Preview failed.</p>';
-            }
+            const data = await PlatPursuit.API.post(`${API_BASE}/markdown/preview/`, { text });
+            modal.querySelector('.preview-content').innerHTML = data.html;
         } catch (error) {
-            console.error('Preview error:', error);
-            modal.querySelector('.preview-content').innerHTML = '<p class="text-error">Network error.</p>';
+            modal.querySelector('.preview-content').innerHTML = '<p class="text-error">Preview failed.</p>';
         }
     }
 

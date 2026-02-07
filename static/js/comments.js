@@ -200,17 +200,7 @@ class CommentSystem {
 
         try {
             const url = `${this.getApiUrl()}?sort=${this.currentSort}&response_format=html&limit=5&offset=${this.currentOffset}`;
-            const response = await fetch(url, {
-                headers: {
-                    'Accept': 'application/json',
-                }
-            });
-
-            if (!response.ok) {
-                throw new Error(`HTTP ${response.status}`);
-            }
-
-            const data = await response.json();
+            const data = await PlatPursuit.API.get(url);
 
             if (append) {
                 // Append new comments to existing list
@@ -286,13 +276,7 @@ class CommentSystem {
     async loadMoreReplies(commentId, currentOffset) {
         try {
             const url = `${this.getApiUrl()}?response_format=html&parent_id=${commentId}&reply_offset=${currentOffset}&reply_limit=3&sort=${this.currentSort}`;
-            const response = await fetch(url, {
-                headers: { 'Accept': 'application/json' }
-            });
-
-            if (!response.ok) throw new Error(`HTTP ${response.status}`);
-
-            const data = await response.json();
+            const data = await PlatPursuit.API.get(url);
 
             // Find the replies container for this comment
             const repliesContainer = document.querySelector(`.replies[data-replies-for="${commentId}"]`);
@@ -356,18 +340,7 @@ class CommentSystem {
 
         try {
             let url = `${this.getApiUrl()}create/`;
-            const response = await fetch(url, {
-                method: 'POST',
-                headers: {
-                    'X-CSRFToken': PlatPursuit.CSRFToken.get(),
-                },
-                body: formData
-            });
-
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.error || `HTTP ${response.status}`);
-            }
+            await PlatPursuit.API.postFormData(url, formData);
 
             // Success - reload comments (reset to first page to show in correct sort position)
             PlatPursuit.ToastManager.show('Comment posted successfully!', 'success');
@@ -377,8 +350,9 @@ class CommentSystem {
             await this.loadComments(false);  // Full reload, not append
 
         } catch (error) {
-            console.error('Failed to create comment:', error);
-            PlatPursuit.ToastManager.show(error.message || 'Failed to post comment', 'error');
+            let msg = 'Failed to post comment';
+            try { const errData = await error.response?.json(); msg = errData?.error || msg; } catch {}
+            PlatPursuit.ToastManager.show(msg, 'error');
         } finally {
             submitBtn.disabled = false;
             submitBtn.innerHTML = `
@@ -454,21 +428,7 @@ class CommentSystem {
         if (!btn) return;
 
         try {
-            const response = await fetch(`/api/v1/comments/${commentId}/vote/`, {
-                method: 'POST',
-                headers: {
-                    'X-CSRFToken': PlatPursuit.CSRFToken.get(),
-                    'Content-Type': 'application/json',
-                },
-                credentials: 'same-origin'
-            });
-
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.error || `HTTP ${response.status}`);
-            }
-
-            const data = await response.json();
+            const data = await PlatPursuit.API.post(`/api/v1/comments/${commentId}/vote/`, {});
 
             // Update UI
             const svg = btn.querySelector('svg');
@@ -487,8 +447,9 @@ class CommentSystem {
             countSpan.textContent = data.upvote_count;
 
         } catch (error) {
-            console.error('Failed to toggle vote:', error);
-            PlatPursuit.ToastManager.show(error.message || 'Failed to vote', 'error');
+            let msg = 'Failed to vote';
+            try { const errData = await error.response?.json(); msg = errData?.error || msg; } catch {}
+            PlatPursuit.ToastManager.show(msg, 'error');
         }
     }
 
@@ -589,18 +550,7 @@ class CommentSystem {
             formData.append('parent_id', parentId);
 
             const url = `${this.getApiUrl()}create/`;
-            const response = await fetch(url, {
-                method: 'POST',
-                headers: {
-                    'X-CSRFToken': PlatPursuit.CSRFToken.get(),
-                },
-                body: formData
-            });
-
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.error || `HTTP ${response.status}`);
-            }
+            await PlatPursuit.API.postFormData(url, formData);
 
             // Success - reload comments
             PlatPursuit.ToastManager.show('Reply posted successfully!', 'success');
@@ -609,8 +559,9 @@ class CommentSystem {
             await this.loadComments(false);
 
         } catch (error) {
-            console.error('Failed to post reply:', error);
-            PlatPursuit.ToastManager.show(error.message || 'Failed to post reply', 'error');
+            let msg = 'Failed to post reply';
+            try { const errData = await error.response?.json(); msg = errData?.error || msg; } catch {}
+            PlatPursuit.ToastManager.show(msg, 'error');
             submitBtn.disabled = false;
             submitBtn.innerHTML = `
                 <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -720,20 +671,7 @@ class CommentSystem {
         submitBtn.innerHTML = '<span class="loading loading-spinner loading-sm"></span> Saving...';
 
         try {
-            const response = await fetch(`/api/v1/comments/${commentId}/`, {
-                method: 'PUT',
-                headers: {
-                    'X-CSRFToken': PlatPursuit.CSRFToken.get(),
-                    'Content-Type': 'application/json',
-                },
-                credentials: 'same-origin',
-                body: JSON.stringify({ body: body.trim() })
-            });
-
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.error || `HTTP ${response.status}`);
-            }
+            await PlatPursuit.API.put(`/api/v1/comments/${commentId}/`, { body: body.trim() });
 
             // Success - reload comments to show updated content
             PlatPursuit.ToastManager.show('Comment updated successfully!', 'success');
@@ -743,8 +681,9 @@ class CommentSystem {
             await this.loadComments(false);
 
         } catch (error) {
-            console.error('Failed to edit comment:', error);
-            PlatPursuit.ToastManager.show(error.message || 'Failed to edit comment', 'error');
+            let msg = 'Failed to edit comment';
+            try { const errData = await error.response?.json(); msg = errData?.error || msg; } catch {}
+            PlatPursuit.ToastManager.show(msg, 'error');
             submitBtn.disabled = false;
             submitBtn.innerHTML = `
                 <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -764,26 +703,16 @@ class CommentSystem {
         }
 
         try {
-            const response = await fetch(`/api/v1/comments/${commentId}/`, {
-                method: 'DELETE',
-                headers: {
-                    'X-CSRFToken': PlatPursuit.CSRFToken.get(),
-                },
-                credentials: 'same-origin'
-            });
-
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.error || `HTTP ${response.status}`);
-            }
+            await PlatPursuit.API.delete(`/api/v1/comments/${commentId}/`);
 
             PlatPursuit.ToastManager.show('Comment deleted successfully', 'success');
             this.currentOffset = 0;  // Reset pagination
             await this.loadComments(false);  // Full reload
 
         } catch (error) {
-            console.error('Failed to delete comment:', error);
-            PlatPursuit.ToastManager.show(error.message || 'Failed to delete comment', 'error');
+            let msg = 'Failed to delete comment';
+            try { const errData = await error.response?.json(); msg = errData?.error || msg; } catch {}
+            PlatPursuit.ToastManager.show(msg, 'error');
         }
     }
 
@@ -893,20 +822,7 @@ class CommentSystem {
         submitBtn.innerHTML = '<span class="loading loading-spinner loading-sm"></span> Submitting...';
 
         try {
-            const response = await fetch(`/api/v1/comments/${commentId}/report/`, {
-                method: 'POST',
-                headers: {
-                    'X-CSRFToken': PlatPursuit.CSRFToken.get(),
-                    'Content-Type': 'application/json',
-                },
-                credentials: 'same-origin',
-                body: JSON.stringify({ reason, details })
-            });
-
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.error || `HTTP ${response.status}`);
-            }
+            await PlatPursuit.API.post(`/api/v1/comments/${commentId}/report/`, { reason, details });
 
             // Success
             PlatPursuit.ToastManager.show('Report submitted successfully. Thank you!', 'success');
@@ -930,8 +846,9 @@ class CommentSystem {
             }
 
         } catch (error) {
-            console.error('Failed to submit report:', error);
-            PlatPursuit.ToastManager.show(error.message || 'Failed to submit report', 'error');
+            let msg = 'Failed to submit report';
+            try { const errData = await error.response?.json(); msg = errData?.error || msg; } catch {}
+            PlatPursuit.ToastManager.show(msg, 'error');
         } finally {
             submitBtn.disabled = false;
             submitBtn.innerHTML = 'Submit Report';
@@ -1091,16 +1008,7 @@ async function confirmGuidelines() {
 
     try {
         // Send agreement to backend
-        const response = await fetch('/api/v1/guidelines/agree/', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRFToken': PlatPursuit.CSRFToken.get()
-            },
-            credentials: 'same-origin'  // Include session cookie for authentication
-        });
-
-        const data = await response.json();
+        const data = await PlatPursuit.API.post('/api/v1/guidelines/agree/', {});
 
         if (data.success) {
             hasAgreedToGuidelines = true;
@@ -1129,16 +1037,7 @@ async function confirmTrophyGuidelines() {
     }
 
     try {
-        const response = await fetch('/api/v1/guidelines/agree/', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRFToken': PlatPursuit.CSRFToken.get()
-            },
-            credentials: 'same-origin'  // Include session cookie for authentication
-        });
-
-        const data = await response.json();
+        const data = await PlatPursuit.API.post('/api/v1/guidelines/agree/', {});
 
         if (data.success) {
             hasAgreedToGuidelines = true;
@@ -1158,8 +1057,64 @@ async function confirmTrophyGuidelines() {
     }
 }
 
-// Helper to get CSRF token
+/**
+ * Trophy Comment Manager
+ * Handles trophy-level comment sections on game detail page
+ * Instantiates CommentSystem for each trophy on demand
+ */
+class TrophyCommentManager {
+    constructor() {
+        this.activeCommentSystems = new Map(); // trophy_id -> CommentSystem instance
+        this.setupToggleListeners();
+    }
+
+    setupToggleListeners() {
+        // Event delegation for trophy comment toggle buttons
+        document.addEventListener('click', (e) => {
+            const toggleBtn = e.target.closest('.trophy-comment-toggle');
+            if (!toggleBtn) return;
+
+            e.preventDefault();
+            const trophyId = toggleBtn.dataset.trophyId;
+            this.toggleTrophyComments(trophyId);
+        });
+    }
+
+    toggleTrophyComments(trophyId) {
+        const section = document.getElementById(`trophy-comment-section-${trophyId}`);
+        const toggleBtn = document.querySelector(`.trophy-comment-toggle[data-trophy-id="${trophyId}"]`);
+        const chevron = toggleBtn.querySelector('.trophy-toggle-chevron');
+
+        if (!section) return;
+
+        const isHidden = section.classList.contains('hidden');
+
+        if (isHidden) {
+            // Expand
+            section.classList.remove('hidden');
+            toggleBtn.setAttribute('aria-expanded', 'true');
+            chevron.style.transform = 'rotate(0deg)';
+
+            // Initialize CommentSystem for this trophy if not already done
+            if (!this.activeCommentSystems.has(trophyId)) {
+                const commentSystem = new CommentSystem(`trophy-comment-section-${trophyId}`);
+                this.activeCommentSystems.set(trophyId, commentSystem);
+            }
+        } else {
+            // Collapse
+            section.classList.add('hidden');
+            toggleBtn.setAttribute('aria-expanded', 'false');
+            chevron.style.transform = 'rotate(-90deg)';
+        }
+    }
+}
+
 // Initialize comment system when DOM is ready
 document.addEventListener('DOMContentLoaded', () => {
     new CommentSystem();
+
+    // Initialize trophy comment manager if trophy comment toggles exist
+    if (document.querySelector('.trophy-comment-toggle')) {
+        new TrophyCommentManager();
+    }
 });

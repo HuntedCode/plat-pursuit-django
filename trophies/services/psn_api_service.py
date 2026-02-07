@@ -537,12 +537,19 @@ class PsnApiService:
     @classmethod
     def create_badge_group_from_form(cls, form_data: dict):
         name = form_data['name']
+        type = form_data['badge_type'].capitalize()
+        if type == 'Collection':
+            title = 'Collector'
+        elif type == 'Megamix':
+            title = 'Mega Master'
+        else:
+            title = 'Series Master'
         base_badge = Badge.objects.create(
             name=name + ' Bronze',
             series_slug=form_data['series_slug'] or '',
-            description=f"Earn plats in the {form_data['name']} series!",
-            display_title=name + ' Series Master',
-            display_series=name + ' Series',
+            description=f"Earn plats in the {name} {type}!",
+            display_title=f"{name} {title}",
+            display_series=f"{name} {type}",
             tier=1,
             badge_type = form_data['badge_type'],
         )

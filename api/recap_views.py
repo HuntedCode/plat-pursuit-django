@@ -392,7 +392,7 @@ class RecapShareImageHTMLView(APIView):
             logger.warning(f"[RECAP-HTML] Failed to fetch image {url}: {e}")
             return ''
         except Exception as e:
-            logger.error(f"[RECAP-HTML] Error encoding image {url}: {e}")
+            logger.exception(f"[RECAP-HTML] Error encoding image {url}: {e}")
             return ''
 
 

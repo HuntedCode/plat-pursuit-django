@@ -22,6 +22,13 @@ import logging
 
 logger = logging.getLogger('psn_api')
 
+def safe_int(value, default=0):
+    """Safely convert a query parameter to int, returning default on failure."""
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
 class GenerateCodeView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -109,7 +116,7 @@ class CheckLinkedView(APIView):
         except Profile.DoesNotExist:
             return Response({'linked': False, 'message': 'No linked profile found.'})
         except Exception as e:
-            logger.error(f"Check linked error: {e}")
+            logger.exception(f"Check linked error: {e}")
             return Response({'error': 'Internal error.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 class UnlinkView(APIView):
@@ -127,7 +134,7 @@ class UnlinkView(APIView):
         except Profile.DoesNotExist:
             return Response({'success': False, 'message': 'No linked profile found.'})
         except Exception as e:
-            logger.error(f"Unlink error: {e}")
+            logger.exception(f"Unlink error: {e}")
             return Response({'error': 'Internal error.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 class RefreshView(APIView):
@@ -169,7 +176,7 @@ class RefreshView(APIView):
         except Profile.DoesNotExist:
             return Response({'linked': False, 'message': 'No linked profile found.'})
         except Exception as e:
-            logger.error(f"Refresh error: {e}")
+            logger.exception(f"Refresh error: {e}")
             return Response({'error': 'Internal error.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 class SummaryView(APIView):
@@ -177,7 +184,7 @@ class SummaryView(APIView):
     
     def get(self, request):
         discord_id = request.query_params.get('discord_id')
-        print(f"Profile request for {discord_id}")
+        logger.debug(f"Profile request for {discord_id}")
         if not discord_id:
             return Response({'error': 'discord_id required.'}, status=status.HTTP_400_BAD_REQUEST)
         
@@ -188,7 +195,7 @@ class SummaryView(APIView):
         except Profile.DoesNotExist:
             return Response({'linked': False, 'message': 'No linked PSN profile found.'})
         except Exception as e:
-            logger.error(f"Trophies fetch error: {e}")
+            logger.exception(f"Trophies fetch error: {e}")
             return Response({'error': 'Internal error.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 class TrophyCaseView(APIView):
@@ -196,8 +203,8 @@ class TrophyCaseView(APIView):
 
     def get(self, request):
         discord_id = request.query_params.get('discord_id')
-        page = int(request.query_params.get('page', 1))
-        per_page = int(request.query_params.get('per_page', 10))
+        page = safe_int(request.query_params.get('page', 1), 1)
+        per_page = safe_int(request.query_params.get('per_page', 10), 10)
         if not discord_id:
             return Response({'error', 'discord_id required.'}, status=status.HTTP_400_BAD_REQUEST)
         
@@ -218,7 +225,7 @@ class TrophyCaseView(APIView):
         except Profile.DoesNotExist:
             return Response({'linked': False, 'message': 'No linked profile found.'})
         except Exception as e:
-            logger.error(f"Trophy case error: {e}")
+            logger.exception(f"Trophy case error: {e}")
             return Response({'error': 'Internal error.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
@@ -259,9 +266,9 @@ class CommentListView(APIView):
                 sort = 'top'
 
             # Get pagination parameters
-            limit = int(request.query_params.get('limit', 5))
-            offset = int(request.query_params.get('offset', 0))
-            reply_limit = int(request.query_params.get('reply_limit', 3))
+            limit = safe_int(request.query_params.get('limit', 5), 5)
+            offset = safe_int(request.query_params.get('offset', 0), 0)
+            reply_limit = safe_int(request.query_params.get('reply_limit', 3), 3)
             parent_id = request.query_params.get('parent_id', None)
 
             # Get comments using service
@@ -294,7 +301,6 @@ class CommentListView(APIView):
                 # Render comments as HTML using template
                 from django.template.loader import render_to_string
                 from trophies.models import CommentVote
-                import traceback
 
                 try:
                     comments_html = []
@@ -317,8 +323,7 @@ class CommentListView(APIView):
                         'checklist_id': checklist_id
                     })
                 except Exception as html_error:
-                    logger.error(f"HTML rendering error: {html_error}")
-                    logger.error(traceback.format_exc())
+                    logger.exception(f"HTML rendering error: {html_error}")
                     return Response({'error': f'Template rendering failed: {str(html_error)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
             else:
                 # Return JSON (original behavior with pagination)
@@ -339,7 +344,7 @@ class CommentListView(APIView):
                 })
 
         except Exception as e:
-            logger.error(f"Comment list error: {e}")
+            logger.exception(f"Comment list error: {e}")
             return Response({'error': 'Internal error.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     def _get_comment_base_context(self, comment, depth=None, parent_id=None):
@@ -477,7 +482,6 @@ class CommentListView(APIView):
     def _handle_reply_pagination(self, parent_id, comments, profile, user, sort, trophy_id, checklist_id=None):
         """Handle loading more replies for a specific comment."""
         from django.template.loader import render_to_string
-        import traceback
 
         try:
             # Get the parent comment
@@ -486,8 +490,8 @@ class CommentListView(APIView):
                 return Response({'error': 'Comment not found.'}, status=status.HTTP_404_NOT_FOUND)
 
             # Get pagination parameters
-            reply_offset = int(self.request.query_params.get('reply_offset', 0))
-            reply_limit = int(self.request.query_params.get('reply_limit', 3))
+            reply_offset = safe_int(self.request.query_params.get('reply_offset', 0), 0)
+            reply_limit = safe_int(self.request.query_params.get('reply_limit', 3), 3)
 
             # Build flattened replies with pagination
             all_descendants = self._get_all_descendants(parent_comment)
@@ -518,8 +522,7 @@ class CommentListView(APIView):
             })
 
         except Exception as e:
-            logger.error(f"Reply pagination error: {e}")
-            logger.error(traceback.format_exc())
+            logger.exception(f"Reply pagination error: {e}")
             return Response({'error': 'Failed to load replies.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
@@ -591,7 +594,7 @@ class CommentCreateView(APIView):
             return Response(comment_serializer.data, status=status.HTTP_201_CREATED)
 
         except Exception as e:
-            logger.error(f"Comment create error: {e}")
+            logger.exception(f"Comment create error: {e}")
             return Response({'error': 'Internal error.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
@@ -636,7 +639,7 @@ class CommentDetailView(APIView):
             return Response(serializer.data)
 
         except Exception as e:
-            logger.error(f"Comment edit error: {e}")
+            logger.exception(f"Comment edit error: {e}")
             return Response({'error': 'Internal error.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     def delete(self, request, comment_id):
@@ -669,7 +672,7 @@ class CommentDetailView(APIView):
             return Response({'success': True, 'message': 'Comment deleted.'})
 
         except Exception as e:
-            logger.error(f"Comment delete error: {e}")
+            logger.exception(f"Comment delete error: {e}")
             return Response({'error': 'Internal error.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
@@ -709,7 +712,7 @@ class CommentVoteView(APIView):
             })
 
         except Exception as e:
-            logger.error(f"Comment vote error: {e}")
+            logger.exception(f"Comment vote error: {e}")
             return Response({'error': 'Internal error.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
@@ -762,7 +765,7 @@ class CommentReportView(APIView):
             return Response({'success': True, 'message': 'Comment reported successfully.'})
 
         except Exception as e:
-            logger.error(f"Comment report error: {e}")
+            logger.exception(f"Comment report error: {e}")
             return Response({'error': 'Internal error.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
@@ -812,7 +815,7 @@ class AgreeToGuidelinesView(APIView):
             })
 
         except Exception as e:
-            logger.error(f"Guidelines agreement error: {e}")
+            logger.exception(f"Guidelines agreement error: {e}")
             return Response(
                 {'error': 'Internal error.'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR

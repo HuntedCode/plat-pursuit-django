@@ -38,13 +38,7 @@ document.addEventListener('DOMContentLoaded', () => {
         function pollStatus() {
             const url = `${statusUrl}?profile_id=${profileId}&start_time=${encodeURIComponent(startTime)}`;
 
-            fetch(url)
-                .then(response => {
-                    if (!response.ok) {
-                        throw new Error('HTTP error ' + response.status);
-                    }
-                    return response.json();
-                })
+            PlatPursuit.API.get(url)
                 .then(data => {
                     if (data.error) {
                         clearInterval(pollInterval);
@@ -64,7 +58,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 })
                 .catch(error => {
                     clearInterval(pollInterval);
-                    alert("Error checking status: " + error.message);
+                    alert("Error checking status: " + (error.message || 'Unknown error'));
                     window.location.href = linkPsnUrl;
                 });
 

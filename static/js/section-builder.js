@@ -380,9 +380,7 @@ class SectionBuilder {
     }
 
     escapeHtml(text) {
-        const div = document.createElement('div');
-        div.textContent = text;
-        return div.innerHTML;
+        return PlatPursuit.HTMLUtils.escape(text);
     }
 }
 

@@ -28,7 +28,7 @@ class NotificationInboxManager {
         this.hasMore = true;
         this.loading = false;
         this.selectedNotification = null;
-        this.searchTimeout = null;
+        this.debouncedSearch = PlatPursuit.debounce((value) => this.handleSearch(value), 300);
         this.currentShareManager = null;  // Reference to active ShareImageManager for refreshing after rating changes
 
         // Check if elements exist before initializing
@@ -86,10 +86,7 @@ class NotificationInboxManager {
     attachEventListeners() {
         // Search with 300ms debounce
         this.searchInput.addEventListener('input', (e) => {
-            clearTimeout(this.searchTimeout);
-            this.searchTimeout = setTimeout(() => {
-                this.handleSearch(e.target.value);
-            }, 300);
+            this.debouncedSearch(e.target.value);
         });
 
         // Filter changes
@@ -580,9 +577,7 @@ class NotificationInboxManager {
     }
 
     escapeHtml(text) {
-        const div = document.createElement('div');
-        div.textContent = text;
-        return div.innerHTML;
+        return PlatPursuit.HTMLUtils.escape(text);
     }
 
     renderPlatinumDetail(metadata) {
