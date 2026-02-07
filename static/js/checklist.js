@@ -881,7 +881,15 @@
         // Count earned trophies that weren't manually checked (they're auto-checked but API doesn't track them)
         // We need to add earned trophies to the completed count, but only those not already in completed_items
         // Since the API's items_completed doesn't include earned trophies, we add the count of earned trophies
-        const earnedTrophyCount = document.querySelectorAll('.checklist-trophy-item[data-earned="true"]').length;
+        // However, we must exclude earned trophies that were also manually checked (to avoid double-counting)
+        const allEarnedTrophies = document.querySelectorAll('.checklist-trophy-item[data-earned="true"]');
+        const earnedButNotManuallychecked = Array.from(allEarnedTrophies).filter(trophy => {
+            const checkbox = trophy.querySelector('.checklist-item-checkbox');
+            // If checkbox is disabled, it means it's only counted as earned (not manually checked)
+            // If it's both earned AND in completed_items, the checkbox would be checked but NOT disabled
+            return checkbox && checkbox.disabled;
+        });
+        const earnedTrophyCount = earnedButNotManuallychecked.length;
 
         // Adjust the completed count to include earned trophies
         // total_items from API already includes trophy items, so we don't adjust that
