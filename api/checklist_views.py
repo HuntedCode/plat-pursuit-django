@@ -493,7 +493,7 @@ class ChecklistProgressToggleView(APIView):
 
             # Calculate adjusted count that includes earned trophies (matching template logic)
             adjusted_items_completed = progress.items_completed if progress else 0
-            adjusted_percentage = progress.progress_percentage if progress else 0
+            earned_count = 0
 
             if progress and profile:
                 from trophies.models import ChecklistItem, EarnedTrophy
@@ -526,21 +526,20 @@ class ChecklistProgressToggleView(APIView):
                             if trophy_pk in earned_trophy_pks and item_id not in completed_set
                         }
 
-                        # Add earned (but not manually checked) trophies to the count
+                        # Count earned (but not manually checked) trophies
                         earned_count = len(earned_trophy_item_ids)
-                        adjusted_items_completed = progress.items_completed + earned_count
 
-                        # Recalculate percentage
-                        total = progress.total_items or checklist.total_items
-                        if total > 0:
-                            adjusted_percentage = (adjusted_items_completed / total * 100)
+            # Always add earned count and recalculate percentage
+            adjusted_items_completed = adjusted_items_completed + earned_count
+            total = progress.total_items if progress else checklist.total_items
+            adjusted_percentage = (adjusted_items_completed / total * 100) if total > 0 else 0
 
             return Response({
                 'success': True,
                 'item_completed': completed,
                 'progress_percentage': adjusted_percentage,
                 'items_completed': adjusted_items_completed,
-                'total_items': progress.total_items if progress else checklist.total_items,
+                'total_items': total,
                 'completed_items': progress.completed_items if progress else []
             })
 
@@ -620,7 +619,7 @@ class ChecklistSectionBulkProgressView(APIView):
 
             # Calculate adjusted count that includes earned trophies (matching template logic)
             adjusted_items_completed = progress.items_completed if progress else 0
-            adjusted_percentage = progress.progress_percentage if progress else 0
+            earned_count = 0
 
             if progress and profile:
                 from trophies.models import ChecklistItem, EarnedTrophy
@@ -653,14 +652,13 @@ class ChecklistSectionBulkProgressView(APIView):
                             if trophy_pk in earned_trophy_pks and item_id not in completed_set
                         }
 
-                        # Add earned (but not manually checked) trophies to the count
+                        # Count earned (but not manually checked) trophies
                         earned_count = len(earned_trophy_item_ids)
-                        adjusted_items_completed = progress.items_completed + earned_count
 
-                        # Recalculate percentage
-                        total = progress.total_items or checklist.total_items
-                        if total > 0:
-                            adjusted_percentage = (adjusted_items_completed / total * 100)
+            # Always add earned count and recalculate percentage
+            adjusted_items_completed = adjusted_items_completed + earned_count
+            total = progress.total_items if progress else checklist.total_items
+            adjusted_percentage = (adjusted_items_completed / total * 100) if total > 0 else 0
 
             return Response({
                 'success': True,
@@ -668,7 +666,7 @@ class ChecklistSectionBulkProgressView(APIView):
                 'mark_complete': mark_complete,
                 'progress_percentage': adjusted_percentage,
                 'items_completed': adjusted_items_completed,
-                'total_items': progress.total_items if progress else checklist.total_items,
+                'total_items': total,
                 'completed_items': progress.completed_items if progress else []
             })
 

@@ -850,11 +850,7 @@
                     );
 
                     // Update progress display (API returns fields at top level)
-                    updateProgressDisplay({
-                        percentage: result.progress_percentage,
-                        items_completed: result.items_completed,
-                        total_items: result.total_items
-                    });
+                    updateProgressDisplay(result);
                 } catch (error) {
                     // Revert checkbox on error
                     this.checked = !isChecked;
@@ -3731,11 +3727,7 @@
                         });
 
                         // Update progress bar with correct object format
-                        updateProgressDisplay({
-                            percentage: response.progress_percentage,
-                            items_completed: response.items_completed,
-                            total_items: response.total_items
-                        });
+                        updateProgressDisplay(response);
 
                         // Update section counts
                         updateSectionCounts();
@@ -3826,11 +3818,7 @@
                         });
 
                         // Update progress bar with correct object format
-                        updateProgressDisplay({
-                            percentage: response.progress_percentage,
-                            items_completed: response.items_completed,
-                            total_items: response.total_items
-                        });
+                        updateProgressDisplay(response);
 
                         // Update section counts
                         updateSectionCounts();
