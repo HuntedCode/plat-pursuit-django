@@ -1055,6 +1055,7 @@ class MonthlyRecapAdmin(admin.ModelAdmin):
         'games_started',
         'games_completed',
         'is_finalized',
+        'email_sent',
         'generated_at',
         'updated_at',
     ]
@@ -1062,7 +1063,9 @@ class MonthlyRecapAdmin(admin.ModelAdmin):
         'year',
         'month',
         'is_finalized',
+        'email_sent',
         'generated_at',
+        'email_sent_at',
     ]
     search_fields = [
         'profile__psn_username',
@@ -1071,14 +1074,19 @@ class MonthlyRecapAdmin(admin.ModelAdmin):
     readonly_fields = [
         'generated_at',
         'updated_at',
+        'email_sent_at',
     ]
     ordering = ['-year', '-month', '-updated_at']
     date_hierarchy = 'generated_at'
-    actions = ['finalize_recaps', 'regenerate_recaps', 'audit_badge_xp']
+    actions = ['finalize_recaps', 'regenerate_recaps', 'send_recap_emails', 'audit_badge_xp']
 
     fieldsets = (
         ('Profile & Period', {
             'fields': ('profile', 'year', 'month', 'is_finalized')
+        }),
+        ('Email Status', {
+            'fields': ('email_sent', 'email_sent_at'),
+            'description': 'Email notification tracking for monthly recap availability'
         }),
         ('Trophy Stats', {
             'fields': (
@@ -1150,6 +1158,118 @@ class MonthlyRecapAdmin(admin.ModelAdmin):
             except Exception as e:
                 messages.warning(request, f"Failed to regenerate recap for {recap}: {e}")
         messages.success(request, f"Regenerated {count} recap(s).")
+
+    @admin.action(description='Send recap emails to selected users')
+    def send_recap_emails(self, request, queryset):
+        """Send (or resend) recap emails for selected monthly recaps."""
+        from core.services.email_service import EmailService
+        from django.conf import settings
+        from django.utils import timezone
+
+        # Filter to only finalized recaps with linked users
+        valid_recaps = queryset.filter(
+            is_finalized=True,
+            profile__is_linked=True,
+            profile__user__isnull=False,
+            profile__user__email__isnull=False,
+        ).exclude(
+            profile__user__email=''
+        )
+
+        if not valid_recaps.exists():
+            messages.warning(request, "No valid recaps to email (must be finalized with linked user and email).")
+            return
+
+        sent = 0
+        failed = 0
+        already_sent = []
+
+        for recap in valid_recaps:
+            # Warn if email was already sent
+            if recap.email_sent:
+                already_sent.append(f"{recap.profile.psn_username} ({recap.month_name} {recap.year})")
+
+            try:
+                user = recap.profile.user
+                profile = recap.profile
+
+                # Get active days from activity calendar or streak data
+                active_days = recap.activity_calendar.get('total_active_days', 0)
+                if not active_days:
+                    active_days = recap.streak_data.get('total_active_days', 0)
+
+                # Calculate trophy tier
+                count = recap.total_trophies_earned
+                if count == 0:
+                    trophy_tier = '0'
+                elif count < 10:
+                    trophy_tier = str(count)
+                elif count < 25:
+                    trophy_tier = '10+'
+                elif count < 50:
+                    trophy_tier = '25+'
+                elif count < 100:
+                    trophy_tier = '50+'
+                elif count < 250:
+                    trophy_tier = '100+'
+                elif count < 500:
+                    trophy_tier = '250+'
+                elif count < 1000:
+                    trophy_tier = '500+'
+                else:
+                    trophy_tier = '1000+'
+
+                context = {
+                    'username': profile.display_psn_username or profile.psn_username,
+                    'month_name': recap.month_name,
+                    'year': recap.year,
+                    'active_days': active_days,
+                    'trophy_tier': trophy_tier,
+                    'games_started': recap.games_started,
+                    'total_trophies': recap.total_trophies_earned,
+                    'platinums_earned': recap.platinums_earned,
+                    'games_completed': recap.games_completed,
+                    'badges_earned': recap.badges_earned_count,
+                    'has_streak': bool(recap.streak_data.get('longest_streak', 0) > 1),
+                    'recap_url': f"{settings.SITE_URL}/recap/{recap.year}/{recap.month}/",
+                    'site_url': settings.SITE_URL,
+                }
+
+                subject = f"Your {recap.month_name} Monthly Rewind is Ready! 🏆"
+
+                sent_count = EmailService.send_html_email(
+                    subject=subject,
+                    to_emails=[user.email],
+                    template_name='emails/monthly_recap.html',
+                    context=context,
+                    fail_silently=False,
+                )
+
+                if sent_count > 0:
+                    recap.email_sent = True
+                    recap.email_sent_at = timezone.now()
+                    recap.save(update_fields=['email_sent', 'email_sent_at'])
+                    sent += 1
+                else:
+                    failed += 1
+
+            except Exception as e:
+                failed += 1
+                messages.error(request, f"Failed to send email for {recap}: {e}")
+
+        # Build success message
+        msg_parts = []
+        if sent > 0:
+            msg_parts.append(f"Sent {sent} email(s)")
+        if failed > 0:
+            msg_parts.append(f"{failed} failed")
+        if already_sent:
+            msg_parts.append(f"Resent to {len(already_sent)} user(s) who already received emails")
+
+        if sent > 0:
+            messages.success(request, " • ".join(msg_parts))
+        else:
+            messages.warning(request, " • ".join(msg_parts))
 
     @admin.action(description='Audit badge XP calculations')
     def audit_badge_xp(self, request, queryset):
