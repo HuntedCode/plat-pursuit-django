@@ -792,6 +792,138 @@ class MonthlyRecapService:
         return result
 
     @classmethod
+    def get_available_months_by_year(cls, profile, include_premium_only=True):
+        """
+        Get available months grouped by year for calendar display.
+
+        Returns year-grouped structure with month metadata for rendering
+        a calendar-style month selector.
+
+        Args:
+            profile: Profile instance
+            include_premium_only: If False, marks old months as premium-required
+
+        Returns:
+            {
+                'years': [
+                    {
+                        'year': 2026,
+                        'months': [
+                            {
+                                'month': 1,
+                                'month_name': 'January',
+                                'short_month_name': 'Jan',
+                                'has_data': True,
+                                'is_current': False,
+                                'is_recent': True,  # Most recent completed month
+                                'is_premium_required': False,
+                                'is_future': False
+                            },
+                            # ... 11 more months
+                        ]
+                    },
+                    # ... more years back to earliest_year
+                ],
+                'earliest_year': 2024,
+                'current_year': 2026,
+                'current_month': 2,
+                'recent_year': 2026,
+                'recent_month': 1
+            }
+        """
+        from trophies.models import MonthlyRecap
+
+        # Get user timezone and current datetime
+        user_tz = cls._resolve_user_tz(profile)
+        now_local = timezone.now().astimezone(user_tz)
+        current_year = now_local.year
+        current_month = now_local.month
+
+        # Calculate most recent completed month (previous calendar month)
+        if current_month == 1:
+            recent_year, recent_month = current_year - 1, 12
+        else:
+            recent_year, recent_month = current_year, current_month - 1
+
+        # Get all existing recaps for this profile
+        existing_recaps = MonthlyRecap.objects.filter(
+            profile=profile
+        ).values_list('year', 'month')
+        existing_set = set(existing_recaps)
+
+        # Determine earliest year based on user's first earned trophy
+        # This allows premium users to generate recaps for any month since they started earning trophies
+        from trophies.models import EarnedTrophy
+
+        first_trophy = EarnedTrophy.objects.filter(
+            profile=profile,
+            earned=True,
+            earned_date_time__isnull=False
+        ).order_by('earned_date_time').first()
+
+        if first_trophy and first_trophy.earned_date_time:
+            earliest_year = first_trophy.earned_date_time.year
+            earliest_month = first_trophy.earned_date_time.month
+        else:
+            # Fallback: use profile creation date or current year
+            if profile.created_at:
+                earliest_year = profile.created_at.year
+                earliest_month = profile.created_at.month
+            else:
+                earliest_year = current_year
+                earliest_month = 1
+
+        # Build year-by-year structure
+        years_data = []
+        month_names = [calendar.month_name[i] for i in range(1, 13)]
+        short_month_names = [calendar.month_abbr[i] for i in range(1, 13)]
+
+        for year in range(current_year, earliest_year - 1, -1):
+            months = []
+            for month in range(1, 13):
+                has_data = (year, month) in existing_set
+                is_current = (year == current_year and month == current_month)
+                is_recent = (year == recent_year and month == recent_month)
+                is_future = (year > current_year or
+                            (year == current_year and month > current_month))
+
+                # Check if month is before first earned trophy
+                is_before_first_trophy = (year == earliest_year and month < earliest_month)
+
+                # Premium gating logic
+                is_free_month = is_current or is_recent
+                is_premium_required = (has_data and
+                                      not is_free_month and
+                                      not include_premium_only)
+
+                months.append({
+                    'month': month,
+                    'month_name': month_names[month - 1],
+                    'short_month_name': short_month_names[month - 1],
+                    'has_data': has_data,
+                    'is_current': is_current,
+                    'is_recent': is_recent,
+                    'is_premium_required': is_premium_required,
+                    'is_future': is_future,
+                    'is_before_first_trophy': is_before_first_trophy,
+                })
+
+            years_data.append({
+                'year': year,
+                'months': months,
+            })
+
+        return {
+            'years': years_data,
+            'earliest_year': earliest_year,
+            'earliest_month': earliest_month,
+            'current_year': current_year,
+            'current_month': current_month,
+            'recent_year': recent_year,
+            'recent_month': recent_month,
+        }
+
+    @classmethod
     @transaction.atomic
     def finalize_month_recaps(cls, year, month):
         """

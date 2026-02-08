@@ -341,9 +341,20 @@
   background-clip: text;
   -webkit-background-clip: text;
   color: transparent;
-  text-shadow: 
+  text-shadow:
     0 0 1px rgba(255, 255, 255, 0.4),
     0 0 2px #ff3,
     0 0 4px #f90,
     0 0 6px #c33;
+}
+
+/* Premium-locked month button hover effect for recap calendar */
+.premium-locked:hover {
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.premium-locked.btn-ghost {
+  background-color: rgba(255, 193, 7, 0.1);
+  border: 1px dashed rgba(255, 193, 7, 0.5);
 }

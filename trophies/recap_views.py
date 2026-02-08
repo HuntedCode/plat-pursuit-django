@@ -134,16 +134,19 @@ class RecapSlideView(LoginRequiredMixin, RecapSyncGateMixin, ProfileHotbarMixin,
         if not 1 <= month <= 12:
             raise Http404("Invalid month")
 
+        # Block access to current month (in-progress) for all users
+        # Recaps are only for completed months
+        is_current_month = (year == now_local.year and month == now_local.month)
+        if is_current_month:
+            raise Http404("Cannot view recap for current month (in-progress)")
+
         # Check premium gating for past months
-        # Non-premium users can access the most recent completed month + literal current month
+        # Non-premium users can access the most recent completed month only
         # Anything older requires premium
         recent_year, recent_month = _get_most_recent_completed_month(now_local)
-        is_recent_or_current = (
-            (year == now_local.year and month == now_local.month) or  # Current calendar month
-            (year == recent_year and month == recent_month)           # Most recent completed month
-        )
+        is_recent = (year == recent_year and month == recent_month)  # Most recent completed month only
 
-        if not is_recent_or_current and not profile.user_is_premium:
+        if not is_recent and not profile.user_is_premium:
             # Trying to access older month without premium
             return redirect('recap_index')
 
@@ -192,7 +195,16 @@ class RecapSlideView(LoginRequiredMixin, RecapSyncGateMixin, ProfileHotbarMixin,
         context['recap_json'] = json.dumps(recap_data)
         context['is_premium'] = profile.user_is_premium
 
-        # Get available months for month picker
+        # Get available months for calendar month selector
+        calendar_data = MonthlyRecapService.get_available_months_by_year(
+            profile,
+            include_premium_only=profile.user_is_premium
+        )
+        # JSON-encode the years data to ensure proper boolean conversion for JavaScript
+        calendar_data['years_json'] = json.dumps(calendar_data['years'])
+        context['calendar_data'] = calendar_data
+
+        # Get available months for bottom month picker (backward compatibility)
         is_current_month = (year == now_local.year and month == now_local.month)
         available_months = MonthlyRecapService.get_available_months(
             profile,
