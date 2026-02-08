@@ -1,5 +1,5 @@
 {% extends 'base.html' %}
-{% load static custom_filters markdown_filters trophy_tags %}
+{% load static humanize custom_filters markdown_filters trophy_tags %}
 {% block title %}{{ checklist.title }}{% endblock %}
 
 {% block content %}
@@ -9,7 +9,7 @@
      data-is-premium="{% if request.user.is_authenticated and request.user.profile %}{{ request.user.profile.user_is_premium|yesno:'true,false' }}{% else %}false{% endif %}">
 
     <section class="section-container w-full">
-        {% include 'partials/breadcrumb.html' with items=breadcrumb %}
+        {% include 'partials/breadcrumb.html' with items=breadcrumb view_count=view_count %}
 
         {# Header #}
         <div class="card bg-base-100 border-4 border-base-300 shadow-md shadow-neutral">

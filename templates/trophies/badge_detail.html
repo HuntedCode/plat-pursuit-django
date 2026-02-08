@@ -5,7 +5,7 @@
 {% block content %}
 {% with target_profile as profile %}
     <section class="shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 w-full p-0 lg:p-4">
-        {% include 'partials/breadcrumb.html' with items=breadcrumb %}
+        {% include 'partials/breadcrumb.html' with items=breadcrumb view_count=view_count %}
         {% include 'trophies/partials/badge_detail/badge_detail_header.html' %}
         <div class="w-full flex flex-col justify-center items-center mt-6">
             <a href="{% url 'badge_leaderboards' badge.series_slug %}" class="btn btn-success w-7/8">View Badge Leaderboards</a>

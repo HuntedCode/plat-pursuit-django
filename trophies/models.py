@@ -107,6 +107,7 @@ class Profile(models.Model):
     hide_zeros = models.BooleanField(default=False, help_text="If true, hide games with no trophies earned.")
     guidelines_agreed = models.BooleanField(default=False, help_text="True if user has agreed to community guidelines for commenting.")
     guidelines_agreed_at = models.DateTimeField(null=True, blank=True, help_text="Timestamp when user agreed to community guidelines.")
+    view_count = models.PositiveIntegerField(default=0, help_text="Denormalized total page view count.")
 
     objects = ProfileManager()
 
@@ -384,6 +385,7 @@ class Game(models.Model):
     title_ids = models.JSONField(default=list, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     played_count = models.PositiveIntegerField(default=0, help_text="Denormalized count of profiles that have played the game (PP-specific).")
+    view_count = models.PositiveIntegerField(default=0, help_text="Denormalized total page view count.")
     is_regional = models.BooleanField(default=False)
     region_lock = models.BooleanField(default=False, help_text="Admin region override lock - won't be automatically updated.")
     is_shovelware = models.BooleanField(default=False)
@@ -856,6 +858,7 @@ class Badge(models.Model):
     most_recent_concept = models.ForeignKey(Concept, on_delete=models.SET_NULL, null=True, blank=True, related_name='most_recent_for_badges', help_text='Concept with the latest release_date')
     created_at = models.DateTimeField(auto_now_add=True)
     earned_count = models.PositiveIntegerField(default=0, help_text="Count of users who have earned this badge tier")
+    view_count = models.PositiveIntegerField(default=0, help_text="Denormalized total page view count (only tracked on tier=1 badge rows).")
     required_stages = models.PositiveIntegerField(default=0, help_text="Denormalized count of required stages for series badges")
     required_value = models.PositiveIntegerField(default=0, help_text="Denormalized required value for misc badges")
 
@@ -1745,6 +1748,7 @@ class Checklist(models.Model):
         default=0,
         help_text="Number of users who have saved progress on this checklist"
     )
+    view_count = models.PositiveIntegerField(default=0, help_text="Denormalized total page view count.")
 
     # Timestamps
     created_at = models.DateTimeField(auto_now_add=True)

@@ -3,7 +3,7 @@
 {% block title %}{{ profile.display_psn_username }}{% endblock %}
 
 {% block content %}
-    {% include 'partials/breadcrumb.html' with items=breadcrumb %}
+    {% include 'partials/breadcrumb.html' with items=breadcrumb view_count=view_count %}
 
     {% include 'trophies/partials/profile_detail/profile_detail_header.html' %}
 

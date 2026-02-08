@@ -1,6 +1,8 @@
 import json
 import logging
 import math
+
+from core.services.tracking import track_page_view, track_site_event
 from datetime import datetime, timedelta, date
 from django.core.cache import cache
 from django.contrib import messages
@@ -699,6 +701,9 @@ class GameDetailView(ProfileHotbarMixin, DetailView):
         # Build breadcrumbs
         context['breadcrumb'] = self._build_breadcrumbs(game, target_profile)
 
+        track_page_view('game', game.id, self.request)
+        context['view_count'] = game.view_count
+
         return context
 
     def post(self, request, *args, **kwargs):
@@ -805,5 +810,7 @@ class GuideListView(ProfileHotbarMixin, ListView):
         context['featured_concept'] = featured_concept
         context['form'] = GuideSearchForm(self.request.GET)
         context['is_paginated'] = self.object_list.count() > self.paginate_by
+
+        track_site_event('guide_visit', 'list', self.request)
 
         return context

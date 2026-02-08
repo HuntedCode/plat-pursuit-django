@@ -47,6 +47,52 @@ class ShareableManager extends ShareImageManager {
             .substring(0, 50);
         return `platinum_${safeName}_${format}.png`;
     }
+
+    /**
+     * Override to track earned trophy ID instead of notification ID
+     */
+    async generateAndDownload(format) {
+        const btn = document.getElementById('generate-image-btn');
+        const bothBtn = document.getElementById('generate-both-btn');
+        const errorEl = document.getElementById('share-error');
+        const renderContainer = document.getElementById('share-render-container');
+
+        if (!renderContainer) return;
+
+        try {
+            errorEl?.classList.add('hidden');
+            btn.classList.add('loading');
+            btn.disabled = true;
+            bothBtn.disabled = true;
+
+            const formats = format === 'both' ? ['landscape', 'portrait'] : [format];
+
+            for (const fmt of formats) {
+                await this.generateSingleImage(fmt, renderContainer);
+            }
+
+            // Track download after successful image generation (using earnedTrophyId)
+            try {
+                await PlatPursuit.API.post('/api/v1/tracking/site-event/', {
+                    event_type: 'share_card_download',
+                    object_id: String(this.earnedTrophyId)
+                });
+            } catch (trackError) {
+                console.warn('Failed to track download:', trackError);
+            }
+
+            PlatPursuit.ToastManager.success('Image downloaded successfully!');
+        } catch (error) {
+            console.error('Image generation failed:', error);
+            this.showError(error.message || 'Failed to generate image. Please try again.');
+            PlatPursuit.ToastManager.error('Failed to generate image');
+        } finally {
+            btn.classList.remove('loading');
+            btn.disabled = false;
+            bothBtn.disabled = false;
+            renderContainer.innerHTML = '';
+        }
+    }
 }
 
 /**

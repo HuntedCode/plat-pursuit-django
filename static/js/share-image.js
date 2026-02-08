@@ -482,6 +482,16 @@ class ShareImageManager {
                 await this.generateSingleImage(fmt, renderContainer);
             }
 
+            // Track download after successful image generation
+            try {
+                await PlatPursuit.API.post('/api/v1/tracking/site-event/', {
+                    event_type: 'share_card_download',
+                    object_id: String(this.notificationId || 'unknown')
+                });
+            } catch (trackError) {
+                console.warn('Failed to track download:', trackError);
+            }
+
             PlatPursuit.ToastManager.success('Image downloaded successfully!');
         } catch (error) {
             console.error('Image generation failed:', error);

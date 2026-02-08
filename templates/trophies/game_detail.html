@@ -7,7 +7,7 @@
          data-base-url="{% url 'game_detail' game.np_communication_id %}"
          data-scroll-key="gameDetailScrollPos_{{ game.np_communication_id }}">
         <section class="section-container w-full">
-            {% include 'partials/breadcrumb.html' with items=breadcrumb %}
+            {% include 'partials/breadcrumb.html' with items=breadcrumb view_count=view_count %}
             {% include 'trophies/partials/game_detail/game_detail_header.html' %}
         </section>
 

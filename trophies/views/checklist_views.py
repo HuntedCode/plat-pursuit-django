@@ -1,5 +1,6 @@
 import logging
 
+from core.services.tracking import track_page_view
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db.models import F
@@ -174,6 +175,10 @@ class ChecklistDetailView(ProfileHotbarMixin, DetailView):
             is_deleted=False
         ).count()
         context['comment_count'] = comment_count
+
+        if checklist.status == 'published':
+            track_page_view('checklist', checklist.id, self.request)
+        context['view_count'] = checklist.view_count if checklist.status == 'published' else None
 
         return context
 

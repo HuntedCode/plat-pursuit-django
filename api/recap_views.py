@@ -17,6 +17,7 @@ from rest_framework.authentication import SessionAuthentication, TokenAuthentica
 from django.template.loader import render_to_string
 from django.utils.decorators import method_decorator
 from django.utils import timezone
+from core.services.tracking import track_site_event
 from django_ratelimit.decorators import ratelimit
 
 from trophies.models import MonthlyRecap
@@ -51,6 +52,26 @@ def _get_user_local_now(request):
         except pytz.exceptions.UnknownTimeZoneError:
             pass
     return now
+
+
+def _get_most_recent_completed_month(now_local):
+    """
+    Get the (year, month) tuple for the most recent completed month.
+
+    Matches RecapIndexView logic: The previous calendar month is
+    always considered the "featured" recap for non-premium users.
+
+    Args:
+        now_local: datetime in user's local timezone
+
+    Returns:
+        tuple: (year, month)
+    """
+    # Previous month is always the featured/accessible recap
+    if now_local.month == 1:
+        return (now_local.year - 1, 12)
+    else:
+        return (now_local.year, now_local.month - 1)
 
 # Flavor text for each slide type (randomly selected)
 SLIDE_FLAVOR_TEXT = {
@@ -165,8 +186,15 @@ class RecapDetailView(APIView):
             )
 
         # Check premium gating for past months
-        is_current_month = (year == now_local.year and month == now_local.month)
-        if not is_current_month and not profile.user_is_premium:
+        # Non-premium users can access the most recent completed month + literal current month
+        # Anything older requires premium
+        recent_year, recent_month = _get_most_recent_completed_month(now_local)
+        is_recent_or_current = (
+            (year == now_local.year and month == now_local.month) or  # Current calendar month
+            (year == recent_year and month == recent_month)           # Most recent completed month
+        )
+
+        if not is_recent_or_current and not profile.user_is_premium:
             return Response(
                 {
                     'error': 'Premium subscription required to view past recaps.',
@@ -204,7 +232,7 @@ class RecapDetailView(APIView):
             'username': profile.display_psn_username or profile.psn_username,
             'avatar_url': profile.avatar_url or '',
             'is_finalized': recap.is_finalized,
-            'is_premium_required': not is_current_month,
+            'is_premium_required': not is_recent_or_current,
             'slides': slides,
             'generated_at': recap.generated_at.isoformat() if recap.generated_at else None,
             'updated_at': recap.updated_at.isoformat() if recap.updated_at else None,
@@ -303,8 +331,15 @@ class RecapShareImageHTMLView(APIView):
             )
 
         # Check premium gating for past months
-        is_current_month = (year == now_local.year and month == now_local.month)
-        if not is_current_month and not profile.user_is_premium:
+        # Non-premium users can access the most recent completed month + literal current month
+        # Anything older requires premium
+        recent_year, recent_month = _get_most_recent_completed_month(now_local)
+        is_recent_or_current = (
+            (year == now_local.year and month == now_local.month) or  # Current calendar month
+            (year == recent_year and month == recent_month)           # Most recent completed month
+        )
+
+        if not is_recent_or_current and not profile.user_is_premium:
             return Response(
                 {'error': 'Premium subscription required to share past recaps.'},
                 status=http_status.HTTP_403_FORBIDDEN
@@ -326,6 +361,8 @@ class RecapShareImageHTMLView(APIView):
                 {'error': 'No activity found for this month.'},
                 status=http_status.HTTP_404_NOT_FOUND
             )
+
+        track_site_event('recap_share_generate', f"{year}-{month:02d}", request)
 
         # Build template context
         context = self._build_template_context(recap, profile, format_type)
@@ -490,8 +527,15 @@ class RecapSlidePartialView(APIView):
             )
 
         # Check premium gating for past months
-        is_current_month = (year == now_local.year and month == now_local.month)
-        if not is_current_month and not profile.user_is_premium:
+        # Non-premium users can access the most recent completed month + literal current month
+        # Anything older requires premium
+        recent_year, recent_month = _get_most_recent_completed_month(now_local)
+        is_recent_or_current = (
+            (year == now_local.year and month == now_local.month) or  # Current calendar month
+            (year == recent_year and month == recent_month)           # Most recent completed month
+        )
+
+        if not is_recent_or_current and not profile.user_is_premium:
             return Response(
                 {'error': 'Premium subscription required.'},
                 status=http_status.HTTP_403_FORBIDDEN
@@ -505,6 +549,12 @@ class RecapSlidePartialView(APIView):
                 {'error': 'No activity found for this month.'},
                 status=http_status.HTTP_404_NOT_FOUND
             )
+
+        # Track intro and summary slide views
+        if slide_type == 'intro':
+            track_site_event('recap_intro_view', f"{year}-{month:02d}", request)
+        elif slide_type == 'summary':
+            track_site_event('recap_summary_view', f"{year}-{month:02d}", request)
 
         # Build context for this specific slide type
         context = self._build_slide_context(slide_type, recap, profile, year, month)

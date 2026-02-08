@@ -27,6 +27,7 @@ from .recap_views import (
     RecapAvailableView, RecapDetailView, RecapRegenerateView, RecapShareImageHTMLView,
     RecapSlidePartialView
 )
+from .tracking_views import TrackSiteEventView
 
 app_name = 'api'
 
@@ -124,4 +125,7 @@ urlpatterns = [
     path('recap/<int:year>/<int:month>/regenerate/', RecapRegenerateView.as_view(), name='recap-regenerate'),
     path('recap/<int:year>/<int:month>/html/', RecapShareImageHTMLView.as_view(), name='recap-share-html'),
     path('recap/<int:year>/<int:month>/slide/<str:slide_type>/', RecapSlidePartialView.as_view(), name='recap-slide-partial'),
+
+    # Tracking endpoints
+    path('tracking/site-event/', TrackSiteEventView.as_view(), name='tracking-site-event'),
 ]

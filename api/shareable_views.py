@@ -11,6 +11,7 @@ from django.template.loader import render_to_string
 from django.shortcuts import get_object_or_404
 from django.utils.decorators import method_decorator
 from django_ratelimit.decorators import ratelimit
+from core.services.tracking import track_site_event
 from trophies.models import EarnedTrophy
 from notifications.services.shareable_data_service import ShareableDataService
 import base64

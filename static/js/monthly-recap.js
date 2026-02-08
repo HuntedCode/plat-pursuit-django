@@ -1007,6 +1007,14 @@ class MonthlyRecapManager {
             a.click();
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
+
+            // Track download after successful image generation
+            PlatPursuit.API.post('/api/v1/tracking/site-event/', {
+                event_type: 'recap_image_download',
+                object_id: `${this.year}-${String(this.month).padStart(2, '0')}`
+            }).catch(err => {
+                console.warn('Failed to track download:', err);
+            });
         }, 'image/png');
 
         // Cleanup

@@ -1,5 +1,6 @@
 import logging
 
+from core.services.tracking import track_page_view
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.paginator import Paginator
@@ -443,6 +444,9 @@ class ProfileDetailView(ProfileHotbarMixin, DetailView):
         # Add premium background if applicable
         if profile.user_is_premium and profile.selected_background:
             context['image_urls'] = {'bg_url': profile.selected_background.bg_url}
+
+        track_page_view('profile', profile.id, self.request)
+        context['view_count'] = profile.view_count
 
         return context
 

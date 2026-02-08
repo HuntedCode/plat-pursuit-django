@@ -1,6 +1,8 @@
 import json
 import logging
 from collections import defaultdict
+
+from core.services.tracking import track_page_view
 from datetime import date
 
 from django.core.cache import cache
@@ -319,6 +321,11 @@ class BadgeDetailView(ProfileHotbarMixin, DetailView):
             {'text': 'Badges', 'url': reverse_lazy('badges_list')},
             {'text': context['badge'].effective_display_series},
         ]
+
+        series_slug = self.kwargs['series_slug']
+        track_page_view('badge', series_slug, self.request)
+        tier1_badge = series_badges.filter(tier=1).first()
+        context['view_count'] = tier1_badge.view_count if tier1_badge else 0
 
         return context
 
