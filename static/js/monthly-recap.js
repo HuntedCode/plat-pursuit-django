@@ -186,6 +186,14 @@ class MonthlyRecapManager {
         // Set up swipe support for mobile
         this.setupSwipeSupport();
 
+        // Track page view
+        PlatPursuit.API.post('/api/v1/tracking/site-event/', {
+            event_type: 'recap_page_view',
+            object_id: `${this.year}-${String(this.month).padStart(2, '0')}`
+        }).catch(err => {
+            console.warn('Failed to track page view:', err);
+        });
+
         // Show first slide
         this.goToSlide(0);
     }
@@ -820,7 +828,18 @@ class MonthlyRecapManager {
         // Download button
         const downloadBtn = document.getElementById('download-recap-image');
         if (downloadBtn && !downloadBtn._hasListener) {
-            downloadBtn.addEventListener('click', () => this.downloadShareImage());
+            downloadBtn.addEventListener('click', () => {
+                // Track download intent immediately when button is clicked
+                PlatPursuit.API.post('/api/v1/tracking/site-event/', {
+                    event_type: 'recap_image_download',
+                    object_id: `${this.year}-${String(this.month).padStart(2, '0')}`
+                }).catch(err => {
+                    console.error('[RECAP] Failed to track download:', err);
+                });
+
+                // Proceed with download
+                this.downloadShareImage();
+            });
             downloadBtn._hasListener = true;
         }
 
@@ -999,6 +1018,11 @@ class MonthlyRecapManager {
 
         // Download
         canvas.toBlob(blob => {
+            if (!blob) {
+                console.error('Failed to create blob from canvas');
+                return;
+            }
+
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
@@ -1007,14 +1031,6 @@ class MonthlyRecapManager {
             a.click();
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
-
-            // Track download after successful image generation
-            PlatPursuit.API.post('/api/v1/tracking/site-event/', {
-                event_type: 'recap_image_download',
-                object_id: `${this.year}-${String(this.month).padStart(2, '0')}`
-            }).catch(err => {
-                console.warn('Failed to track download:', err);
-            });
         }, 'image/png');
 
         // Cleanup

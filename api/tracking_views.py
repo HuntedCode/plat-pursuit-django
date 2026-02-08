@@ -46,9 +46,8 @@ class TrackSiteEventView(APIView):
         # Validate event types
         valid_event_types = [
             'share_card_download',
+            'recap_page_view',
             'recap_share_generate',
-            'recap_intro_view',
-            'recap_summary_view',
             'recap_image_download',
             'guide_visit',
         ]

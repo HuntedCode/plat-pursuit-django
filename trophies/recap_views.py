@@ -9,6 +9,7 @@ from django.http import Http404
 from django.utils import timezone
 from django.shortcuts import redirect
 
+from core.services.tracking import track_site_event
 from trophies.services.monthly_recap_service import MonthlyRecapService
 from trophies.mixins import ProfileHotbarMixin, RecapSyncGateMixin
 from trophies.themes import get_available_themes_for_grid
@@ -167,6 +168,9 @@ class RecapSlideView(LoginRequiredMixin, RecapSyncGateMixin, ProfileHotbarMixin,
             context['month_name'] = calendar.month_name[month]
             context['recap_json'] = json.dumps({'slides': []})
             return context
+
+        # Track page view
+        track_site_event('recap_page_view', f"{year}-{month:02d}", self.request)
 
         # Build slides response
         slides = MonthlyRecapService.build_slides_response(recap)

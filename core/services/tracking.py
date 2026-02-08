@@ -71,6 +71,9 @@ def _increment_parent_view_count(page_type, object_id):
             from trophies.models import Badge
             # Only increment the tier=1 badge (canonical series entry)
             Badge.objects.filter(series_slug=object_id, tier=1).update(view_count=F('view_count') + 1)
+        elif page_type == 'index':
+            from core.models import SiteSettings
+            SiteSettings.objects.filter(id=1).update(index_page_view_count=F('index_page_view_count') + 1)
     except Exception:
         logger.exception("Failed to increment view_count: page_type=%s, object_id=%s", page_type, object_id)
 
@@ -84,8 +87,8 @@ def track_page_view(page_type, object_id, request):
     - Anonymous users identified by IP address
 
     Args:
-        page_type: One of 'profile', 'game', 'checklist', 'badge'
-        object_id: The object's identifier (int PK for profile/game/checklist, series_slug str for badge)
+        page_type: One of 'profile', 'game', 'checklist', 'badge', 'index'
+        object_id: The object's identifier (int PK for profile/game/checklist, series_slug str for badge, 'home' for index)
         request: Django HttpRequest object
     """
     try:
@@ -122,9 +125,8 @@ def track_site_event(event_type, object_id, request):
         event_type: One of:
             - 'guide_visit' - User visits a guide page
             - 'share_card_download' - User downloads a platinum share card image
-            - 'recap_share_generate' - User generates a recap share image (legacy - preview load)
-            - 'recap_intro_view' - User views intro slide of monthly recap
-            - 'recap_summary_view' - User views summary slide of monthly recap
+            - 'recap_page_view' - User visits a monthly recap page
+            - 'recap_share_generate' - User views the monthly recap share card on summary slide
             - 'recap_image_download' - User downloads monthly recap share image
         object_id: Related object identifier (guide_slug, earned_trophy_id, 'YYYY-MM')
         request: Django HttpRequest object

@@ -12,6 +12,7 @@ class PageView(models.Model):
         ('game', 'Game'),
         ('checklist', 'Checklist'),
         ('badge', 'Badge Series'),
+        ('index', 'Index Page'),
     ]
 
     page_type = models.CharField(max_length=20, choices=PAGE_TYPE_CHOICES, db_index=True)
@@ -47,9 +48,8 @@ class SiteEvent(models.Model):
     EVENT_TYPE_CHOICES = [
         ('guide_visit', 'Guide Visit'),
         ('share_card_download', 'Platinum Share Card Download'),
-        ('recap_share_generate', 'Recap Share Card Generate (Legacy)'),
-        ('recap_intro_view', 'Recap Intro Slide View'),
-        ('recap_summary_view', 'Recap Summary Slide View'),
+        ('recap_page_view', 'Monthly Recap Page View'),
+        ('recap_share_generate', 'Monthly Recap Share Card View'),
         ('recap_image_download', 'Recap Image Download'),
     ]
 
@@ -71,3 +71,35 @@ class SiteEvent(models.Model):
 
     def __str__(self):
         return f"{self.event_type}:{self.object_id} at {self.occurred_at:%Y-%m-%d %H:%M}"
+
+
+class SiteSettings(models.Model):
+    """
+    Singleton model for site-wide settings and metrics.
+    Should only ever have one row (id=1).
+    """
+    id = models.IntegerField(primary_key=True, default=1, editable=False)
+
+    # Denormalized metrics
+    index_page_view_count = models.PositiveIntegerField(
+        default=0,
+        help_text="Total view count for the index/home page (deduplicated via PageView tracking)."
+    )
+
+    class Meta:
+        verbose_name = "Site Settings"
+        verbose_name_plural = "Site Settings"
+
+    def __str__(self):
+        return "Site Settings"
+
+    def save(self, *args, **kwargs):
+        # Enforce singleton - always use id=1
+        self.id = 1
+        super().save(*args, **kwargs)
+
+    @classmethod
+    def get_settings(cls):
+        """Get or create the singleton settings instance."""
+        obj, created = cls.objects.get_or_create(id=1)
+        return obj

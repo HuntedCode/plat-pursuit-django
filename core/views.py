@@ -13,6 +13,7 @@ from .services.playing_now import get_playing_now
 from .services.featured_profile import get_featured_profile
 from .services.events import get_upcoming_events
 from .services.featured_guide import get_featured_guide
+from .services.tracking import track_page_view
 from trophies.models import Concept
 from trophies.mixins import ProfileHotbarMixin
 
@@ -41,6 +42,12 @@ class IndexView(ProfileHotbarMixin, TemplateView):
         context = super().get_context_data(**kwargs)
         today_utc = timezone.now().date().isoformat()
         now_utc = timezone.now()
+
+        # Track page view
+        from core.models import SiteSettings
+        track_page_view('index', 'home', self.request)
+        settings = SiteSettings.get_settings()
+        context['view_count'] = settings.index_page_view_count
 
         # Breadcrumb
         context['breadcrumb'] = [

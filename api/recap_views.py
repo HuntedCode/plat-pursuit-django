@@ -550,12 +550,6 @@ class RecapSlidePartialView(APIView):
                 status=http_status.HTTP_404_NOT_FOUND
             )
 
-        # Track intro and summary slide views
-        if slide_type == 'intro':
-            track_site_event('recap_intro_view', f"{year}-{month:02d}", request)
-        elif slide_type == 'summary':
-            track_site_event('recap_summary_view', f"{year}-{month:02d}", request)
-
         # Build context for this specific slide type
         context = self._build_slide_context(slide_type, recap, profile, year, month)
 
