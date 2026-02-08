@@ -138,12 +138,25 @@ class Command(BaseCommand):
 
     def _preview_emails(self, queryset):
         """Preview what emails would be sent in dry-run mode."""
+        from users.services.email_preference_service import EmailPreferenceService
+
         self.stdout.write("\nEmails that would be sent:")
         self.stdout.write("-" * 70)
 
+        skipped = 0
         for recap in queryset:
             user = recap.profile.user
             month_name = calendar.month_name[recap.month]
+
+            # Check if user has opted out
+            if not EmailPreferenceService.should_send_email(user, 'monthly_recap'):
+                self.stdout.write(
+                    self.style.WARNING(
+                        f"  ⊘ {user.email} ({recap.profile.psn_username}) - opted out"
+                    )
+                )
+                skipped += 1
+                continue
 
             self.stdout.write(
                 f"  • {user.email} ({recap.profile.psn_username})\n"
@@ -152,7 +165,9 @@ class Command(BaseCommand):
             )
 
         self.stdout.write("-" * 70)
-        self.stdout.write(f"\nTotal: {queryset.count()} email(s)")
+        self.stdout.write(f"\nTotal: {queryset.count() - skipped} email(s) would be sent")
+        if skipped > 0:
+            self.stdout.write(self.style.WARNING(f"Skipped: {skipped} (opted out)"))
 
     def _send_emails(self, queryset, batch_size):
         """Send emails to all recaps in queryset."""
@@ -234,14 +249,25 @@ class Command(BaseCommand):
         Returns:
             bool: True if email sent successfully, False otherwise
         """
+        from users.services.email_preference_service import EmailPreferenceService
+
         user = recap.profile.user
         profile = recap.profile
+
+        # Check email preferences - skip if user opted out
+        if not EmailPreferenceService.should_send_email(user, 'monthly_recap'):
+            logger.info(f"Skipping recap email for {user.email} - opted out of monthly recaps")
+            return False
 
         # Get active days from activity calendar or streak data
         active_days = recap.activity_calendar.get('total_active_days', 0)
         if not active_days:
             # Fallback to streak data if activity calendar not available
             active_days = recap.streak_data.get('total_active_days', 0)
+
+        # Generate preference token for email footer
+        preference_token = EmailPreferenceService.generate_preference_token(user.id)
+        preference_url = f"{settings.SITE_URL}/users/email-preferences/?token={preference_token}"
 
         # Build email context
         context = {
@@ -258,6 +284,7 @@ class Command(BaseCommand):
             'has_streak': bool(recap.streak_data.get('longest_streak', 0) > 1),
             'recap_url': f"{settings.SITE_URL}/recap/{recap.year}/{recap.month}/",
             'site_url': settings.SITE_URL,
+            'preference_url': preference_url,
         }
 
         # Build subject

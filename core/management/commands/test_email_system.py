@@ -9,6 +9,8 @@ This sends a test email using the EmailService to verify:
 Usage:
     python manage.py test_email_system your.email@example.com
     python manage.py test_email_system your.email@example.com --recap-preview
+    python manage.py test_email_system your.email@example.com --verification-preview
+    python manage.py test_email_system your.email@example.com --password-reset-preview
 """
 from django.core.management.base import BaseCommand, CommandError
 from django.conf import settings
@@ -29,10 +31,22 @@ class Command(BaseCommand):
             action='store_true',
             help='Send a preview of the monthly recap email template'
         )
+        parser.add_argument(
+            '--verification-preview',
+            action='store_true',
+            help='Send a preview of the email verification template'
+        )
+        parser.add_argument(
+            '--password-reset-preview',
+            action='store_true',
+            help='Send a preview of the password reset template'
+        )
 
     def handle(self, *args, **options):
         recipient_email = options['recipient_email']
         recap_preview = options.get('recap_preview', False)
+        verification_preview = options.get('verification_preview', False)
+        password_reset_preview = options.get('password_reset_preview', False)
 
         self.stdout.write("=" * 70)
         self.stdout.write("Email System Test")
@@ -43,6 +57,10 @@ class Command(BaseCommand):
 
         if recap_preview:
             self._send_recap_preview(recipient_email)
+        elif verification_preview:
+            self._send_verification_preview(recipient_email)
+        elif password_reset_preview:
+            self._send_password_reset_preview(recipient_email)
         else:
             self._send_simple_test(recipient_email)
 
@@ -74,7 +92,15 @@ class Command(BaseCommand):
 
     def _send_recap_preview(self, recipient_email):
         """Send a preview of the monthly recap email template."""
+        from users.services.email_preference_service import EmailPreferenceService
+
         self.stdout.write("\nSending monthly recap email preview...")
+
+        # Generate a sample preference token (using a dummy user ID for preview)
+        # In real emails, this would be the actual user's ID
+        sample_user_id = 1
+        preference_token = EmailPreferenceService.generate_preference_token(sample_user_id)
+        preference_url = f"{settings.SITE_URL}/users/email-preferences/?token={preference_token}"
 
         # Sample context data for preview
         context = {
@@ -91,6 +117,7 @@ class Command(BaseCommand):
             'has_streak': True,
             'recap_url': f'{settings.SITE_URL}/recap/2026/1/',
             'site_url': settings.SITE_URL,
+            'preference_url': preference_url,
         }
 
         try:
@@ -116,5 +143,92 @@ class Command(BaseCommand):
         except Exception as e:
             self.stdout.write(
                 self.style.ERROR(f'✗ Failed to send preview email: {e}')
+            )
+            raise CommandError(f'Email sending failed: {e}')
+
+    def _send_verification_preview(self, recipient_email):
+        """Send a preview of the email verification template."""
+        from users.services.email_preference_service import EmailPreferenceService
+
+        self.stdout.write("\nSending email verification preview...")
+
+        # Sample data
+        sample_user_id = 1
+        preference_token = EmailPreferenceService.generate_preference_token(sample_user_id)
+        preference_url = f"{settings.SITE_URL}/users/email-preferences/?token={preference_token}"
+
+        context = {
+            'username': 'TestUser',
+            'activate_url': f'{settings.SITE_URL}/accounts/confirm-email/sample-key-abc123/',
+            'site_url': settings.SITE_URL,
+            'preference_url': preference_url,
+            'expiration_days': settings.ACCOUNT_EMAIL_CONFIRMATION_EXPIRE_DAYS,
+        }
+
+        try:
+            sent_count = EmailService.send_html_email(
+                subject='[PREVIEW] Welcome! Please Confirm Your Email Address',
+                to_emails=[recipient_email],
+                template_name='emails/email_verification.html',
+                context=context,
+                fail_silently=False,
+            )
+
+            if sent_count > 0:
+                self.stdout.write(
+                    self.style.SUCCESS('✓ Verification preview sent successfully!')
+                )
+                self.stdout.write('\nCheck your inbox to see how the email verification email looks.')
+            else:
+                self.stdout.write(
+                    self.style.ERROR('✗ Email was not sent (no errors but send count is 0)')
+                )
+
+        except Exception as e:
+            self.stdout.write(
+                self.style.ERROR(f'✗ Failed to send verification preview: {e}')
+            )
+            raise CommandError(f'Email sending failed: {e}')
+
+    def _send_password_reset_preview(self, recipient_email):
+        """Send a preview of the password reset template."""
+        from users.services.email_preference_service import EmailPreferenceService
+
+        self.stdout.write("\nSending password reset preview...")
+
+        # Sample data
+        sample_user_id = 1
+        preference_token = EmailPreferenceService.generate_preference_token(sample_user_id)
+        preference_url = f"{settings.SITE_URL}/users/email-preferences/?token={preference_token}"
+
+        context = {
+            'username': 'TestUser',
+            'password_reset_url': f'{settings.SITE_URL}/accounts/password/reset/key/sample-uid-abc123-set-password/',
+            'site_url': settings.SITE_URL,
+            'preference_url': preference_url,
+        }
+
+        try:
+            sent_count = EmailService.send_html_email(
+                subject='[PREVIEW] Reset Your Password',
+                to_emails=[recipient_email],
+                template_name='emails/password_reset.html',
+                context=context,
+                fail_silently=False,
+            )
+
+            if sent_count > 0:
+                self.stdout.write(
+                    self.style.SUCCESS('✓ Password reset preview sent successfully!')
+                )
+                self.stdout.write('\nCheck your inbox to see how the password reset email looks.')
+            else:
+                self.stdout.write(
+                    self.style.ERROR('✗ Email was not sent (no errors but send count is 0)')
+                )
+
+        except Exception as e:
+            self.stdout.write(
+                self.style.ERROR(f'✗ Failed to send password reset preview: {e}')
             )
             raise CommandError(f'Email sending failed: {e}')

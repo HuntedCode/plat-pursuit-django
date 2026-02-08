@@ -1,0 +1,45 @@
+{% extends "emails/base_email.html" %}
+
+{% block title %}Welcome! Please Confirm Your Email Address{% endblock %}
+
+{% block header_content %}
+    <h1>Welcome to PlatPursuit!</h1>
+    <p>Let's confirm your email address</p>
+{% endblock %}
+
+{% block content %}
+    <p class="greeting">Hey {{ username }}!</p>
+
+    <p class="intro">
+        Thanks for signing up! We're excited to have you join the trophy hunting community.
+        To get started, please confirm your email address by clicking the button below.
+    </p>
+
+    <!-- CTA Button -->
+    <div class="cta-container">
+        <a href="{{ activate_url }}" class="cta-button">Confirm Email Address →</a>
+    </div>
+
+    <p class="intro" style="margin-top: 30px; text-align: center; font-size: 14px; color: #777777;">
+        This link will expire in {{ expiration_days }} days.
+    </p>
+
+    <!-- Manual link fallback -->
+    <div style="margin-top: 20px; padding: 15px; background-color: #f8f9fa; border-radius: 8px;">
+        <p style="font-size: 13px; color: #555; margin: 0;">
+            If the button doesn't work, copy and paste this link into your browser:
+        </p>
+        <p style="font-size: 12px; color: #667eea; word-break: break-all; margin: 10px 0 0 0;">
+            {{ activate_url }}
+        </p>
+    </div>
+
+    <p class="intro" style="margin-top: 25px; text-align: center; font-size: 13px; color: #999;">
+        If you didn't create an account on PlatPursuit, you can safely ignore this email.
+    </p>
+{% endblock %}
+
+{% block footer_note %}
+    You're receiving this email because someone signed up for PlatPursuit with this email address.<br>
+    <a href="{{ preference_url }}" style="color: #999999; text-decoration: underline;">Manage your email preferences</a>.
+{% endblock %}

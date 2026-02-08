@@ -70,6 +70,7 @@ class CustomUser(AbstractUser):
     use_24hr_clock = models.BooleanField(default=False, help_text="Use 24-hour time format (23:00) instead of 12-hour AM/PM format (11:00 PM)")
     stripe_customer_id = models.CharField(max_length=255, blank=True, null=True, help_text="Stripe Customer ID for this user.")
     premium_tier = models.CharField(max_length=50, blank=True, null=True, choices=PREMIUM_TIER_CHOICES, help_text="User's subscription tier.")
+    email_preferences = models.JSONField(default=dict, blank=True, help_text="User's email notification preferences")
 
     USERNAME_FIELD = "email"
     REQUIRED_FIELDS = []

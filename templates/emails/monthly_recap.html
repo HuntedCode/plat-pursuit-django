@@ -1,87 +1,10 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Your {{ month_name }} {{ year }} Recap is Ready!</title>
+{% extends "emails/base_email.html" %}
+
+{% block extra_styles %}
     <style>
-        /* Reset styles */
-        body {
-            margin: 0;
-            padding: 0;
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-            background-color: #f5f5f5;
-            line-height: 1.6;
-        }
-
-        /* Container */
-        .email-container {
-            max-width: 600px;
-            margin: 0 auto;
-            background-color: #ffffff;
-        }
-
-        /* Header */
-        .header {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            padding: 40px 20px;
-            text-align: center;
-            color: #ffffff;
-        }
-
-        .header-logo {
-            width: 80px;
-            height: 80px;
-            margin: 0 auto 15px auto;
-            display: block;
-        }
-
-        .header-brand {
-            font-size: 24px;
-            font-weight: 700;
-            margin: 0 0 5px 0;
-            letter-spacing: 0.5px;
-        }
-
-        .header-subtitle {
-            font-size: 14px;
-            margin: 0 0 20px 0;
-            opacity: 0.9;
-            font-style: italic;
-        }
-
-        .header h1 {
-            margin: 0 0 10px 0;
-            font-size: 28px;
-            font-weight: 700;
-        }
-
-        .header p {
-            margin: 0;
-            font-size: 16px;
-            opacity: 0.95;
-        }
-
-        /* Content */
-        .content {
-            padding: 40px 30px;
-            color: #333333;
-        }
-
-        .greeting {
-            font-size: 18px;
-            margin-bottom: 20px;
-        }
-
-        .intro {
-            font-size: 16px;
-            color: #555555;
-            margin-bottom: 30px;
-            line-height: 1.7;
-        }
-
         /* Stats preview box */
         .stats-preview {
+            background-color: #667eea;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             border-radius: 12px;
             padding: 30px;
@@ -122,7 +45,7 @@
             letter-spacing: 0.5px;
         }
 
-        /* Platinum badge (if applicable) */
+        /* Platinum badge */
         .platinum-badge {
             background: linear-gradient(135deg, #67d1f8 0%, #4da8e8 100%);
             border-radius: 8px;
@@ -131,32 +54,6 @@
             text-align: center;
             font-size: 16px;
             font-weight: 600;
-        }
-
-        /* CTA Button */
-        .cta-container {
-            text-align: center;
-            margin: 35px 0;
-        }
-
-        .cta-button {
-            display: inline-block;
-            background: #ffffff;
-            color: #667eea;
-            text-decoration: none;
-            padding: 16px 40px;
-            border-radius: 8px;
-            font-size: 18px;
-            font-weight: 700;
-            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.15);
-            transition: transform 0.2s;
-            border: 2px solid #667eea;
-        }
-
-        .cta-button:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
-            background: #f8f9ff;
         }
 
         /* Teaser list */
@@ -184,47 +81,8 @@
             font-size: 15px;
         }
 
-        /* Footer */
-        .footer {
-            background-color: #f8f9fa;
-            padding: 30px 20px;
-            text-align: center;
-            color: #777777;
-            font-size: 14px;
-        }
-
-        .footer p {
-            margin: 5px 0;
-        }
-
-        .footer a {
-            color: #667eea;
-            text-decoration: none;
-        }
-
-        .footer a:hover {
-            text-decoration: underline;
-        }
-
-        /* Responsive */
+        /* Responsive - monthly recap specific */
         @media only screen and (max-width: 600px) {
-            .header h1 {
-                font-size: 24px;
-            }
-
-            .header-logo {
-                width: 60px;
-                height: 60px;
-            }
-
-            .header-brand {
-                font-size: 20px;
-            }
-
-            .content {
-                padding: 30px 20px;
-            }
-
             .stats-preview {
                 padding: 20px;
             }
@@ -232,101 +90,82 @@
             .stat-value {
                 font-size: 28px;
             }
-
-            .cta-button {
-                padding: 14px 30px;
-                font-size: 16px;
-            }
         }
     </style>
-</head>
-<body>
-    <div class="email-container">
-        <!-- Header -->
-        <div class="header">
-            <img src="{{ site_url }}/static/images/logo.png" alt="PlatPursuit Logo" class="header-logo">
-            <div class="header-brand">PlatPursuit</div>
-            <div class="header-subtitle">No Trophy Can Hide From Us.</div>
-            <h1>Your {{ month_name }} Monthly Rewind</h1>
-            <p>See how you dominated the trophy hunt in {{ month_name }}</p>
-        </div>
+{% endblock %}
 
-        <!-- Main Content -->
-        <div class="content">
-            <p class="greeting">Hey {{ username }}!</p>
+{% block title %}Your {{ month_name }} {{ year }} Recap is Ready!{% endblock %}
 
-            <p class="intro">
-                Your {{ month_name }} trophy hunting journey has been wrapped up and your personalized recap is waiting for you!
-                We've analyzed your achievements, found your rarest trophies, and discovered some surprises along the way.
-            </p>
+{% block header_content %}
+    <h1>Your {{ month_name }} Monthly Rewind</h1>
+    <p>See how you dominated the trophy hunt in {{ month_name }}</p>
+{% endblock %}
 
-            <!-- Stats Preview -->
-            <div class="stats-preview">
-                <h2>Quick Look at Your Month</h2>
-                <table class="stats-grid" role="presentation" cellpadding="0" cellspacing="0" align="center">
-                    <tr>
-                        <td class="stat-item">
-                            <span class="stat-value">{{ active_days }}</span>
-                            <span class="stat-label">Active Day{{ active_days|pluralize }}</span>
-                        </td>
-                        <td class="stat-item">
-                            <span class="stat-value">{{ trophy_tier }}</span>
-                            <span class="stat-label">Trophies</span>
-                        </td>
-                        <td class="stat-item">
-                            <span class="stat-value">{{ games_started }}</span>
-                            <span class="stat-label">Game{{ games_started|pluralize }} Started</span>
-                        </td>
-                    </tr>
-                </table>
-            </div>
+{% block content %}
+    <p class="greeting">Hey {{ username }}!</p>
 
-            <!-- Platinum Badge (if user earned platinums) -->
-            {% if platinums_earned > 0 %}
-            <div class="platinum-badge">
-                💎 You earned {{ platinums_earned }} platinum{{ platinums_earned|pluralize }} this month!
-            </div>
-            {% endif %}
+    <p class="intro">
+        Your {{ month_name }} trophy hunting journey has been wrapped up and your personalized recap is waiting for you!
+        We've analyzed your achievements, found your rarest trophies, and discovered some surprises along the way.
+    </p>
 
-            <!-- Teaser (what's inside) -->
-            <div class="teaser-list">
-                <h3>🎁 Inside your recap, you'll discover:</h3>
-                <ul>
-                    <li>Your rarest trophy of the month (it might surprise you!)</li>
-                    <li>Your most active gaming day and hunting patterns</li>
-                    {% if has_streak %}
-                    <li>Your longest trophy hunting streak</li>
-                    {% endif %}
-                    {% if badges_earned > 0 %}
-                    <li>{{ badges_earned }} new badge{{ badges_earned|pluralize }} you unlocked</li>
-                    {% endif %}
-                    <li>Fun quizzes to test your memory of the month</li>
-                    <li>How you compared to your previous months</li>
-                    <li>A shareable recap card to show off your achievements</li>
-                </ul>
-            </div>
-
-            <!-- CTA Button -->
-            <div class="cta-container">
-                <a href="{{ recap_url }}" class="cta-button">View Your Full Recap →</a>
-            </div>
-
-            <p class="intro" style="margin-top: 30px; text-align: center; font-size: 14px; color: #777777;">
-                Your recap is interactive and full of surprises. Don't miss it!
-            </p>
-        </div>
-
-        <!-- Footer -->
-        <div class="footer">
-            <p><strong>PlatPursuit</strong> - No Trophy Can Hide From Us.</p>
-            <p>
-                <a href="{{ site_url }}">Visit PlatPursuit</a> •
-                <a href="{{ site_url }}/settings/">Email Preferences</a>
-            </p>
-            <p style="margin-top: 15px; font-size: 12px; color: #999999;">
-                You're receiving this because you earned trophies in {{ month_name }} {{ year }}.
-            </p>
-        </div>
+    <!-- Stats Preview -->
+    <div class="stats-preview">
+        <h2>Quick Look at Your Month</h2>
+        <table class="stats-grid" role="presentation" cellpadding="0" cellspacing="0" align="center">
+            <tr>
+                <td class="stat-item">
+                    <span class="stat-value">{{ active_days }}</span>
+                    <span class="stat-label">Active Day{{ active_days|pluralize }}</span>
+                </td>
+                <td class="stat-item">
+                    <span class="stat-value">{{ trophy_tier }}</span>
+                    <span class="stat-label">Earned Trophies</span>
+                </td>
+                <td class="stat-item">
+                    <span class="stat-value">{{ games_started }}</span>
+                    <span class="stat-label">Game{{ games_started|pluralize }} Started</span>
+                </td>
+            </tr>
+        </table>
     </div>
-</body>
-</html>
+
+    <!-- Platinum Badge (if user earned platinums) -->
+    {% if platinums_earned > 0 %}
+    <div class="platinum-badge">
+        💎 You earned {{ platinums_earned }} platinum{{ platinums_earned|pluralize }} this month!
+    </div>
+    {% endif %}
+
+    <!-- Teaser (what's inside) -->
+    <div class="teaser-list">
+        <h3>🎁 Inside your recap, you'll discover:</h3>
+        <ul>
+            <li>Your rarest trophy of the month (it might surprise you!)</li>
+            <li>Your most active gaming day and hunting patterns</li>
+            {% if has_streak %}
+            <li>Your longest trophy hunting streak</li>
+            {% endif %}
+            {% if badges_earned > 0 %}
+            <li>{{ badges_earned }} new badge{{ badges_earned|pluralize }} you unlocked</li>
+            {% endif %}
+            <li>Fun quizzes to test your memory of the month</li>
+            <li>How you compared to your previous months</li>
+            <li>A shareable recap card to show off your achievements</li>
+        </ul>
+    </div>
+
+    <!-- CTA Button -->
+    <div class="cta-container">
+        <a href="{{ recap_url }}" class="cta-button">View Your Full Recap →</a>
+    </div>
+
+    <p class="intro" style="margin-top: 30px; text-align: center; font-size: 14px; color: #777777;">
+        Your recap is interactive and full of surprises. Don't miss it!
+    </p>
+{% endblock %}
+
+{% block footer_note %}
+    You're receiving this because you earned trophies in {{ month_name }} {{ year }}.<br>
+    <a href="{{ preference_url }}" style="color: #999999; text-decoration: underline;">Manage your email preferences</a> or <a href="{{ preference_url }}" style="color: #999999; text-decoration: underline;">unsubscribe</a>.
+{% endblock %}

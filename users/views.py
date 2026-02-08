@@ -265,3 +265,120 @@ class SubscriptionManagementView(LoginRequiredMixin, TemplateView):
             context['status'] = 'Inactive' if sub else 'No Subscription'
         context['is_live'] = is_live
         return context
+
+
+class EmailPreferencesView(View):
+    """
+    Standalone view for managing email preferences via token-based authentication.
+
+    Users can access this page from email links without logging in.
+    Token validation ensures security while providing a frictionless experience.
+    """
+    template_name = 'users/email_preferences.html'
+
+    def get(self, request):
+        """
+        Display email preferences form.
+
+        Validates token from URL parameter and pre-fills form with user's current preferences.
+        """
+        from django.core import signing
+        from users.services.email_preference_service import EmailPreferenceService
+
+        token = request.GET.get('token')
+        context = {
+            'site_url': settings.SITE_URL,
+            'error_message': None,
+            'form': None,
+            'saved': False,
+        }
+
+        # Validate token
+        if not token:
+            context['error_message'] = 'No preference token provided. Please use the link from your email.'
+            return render(request, self.template_name, context)
+
+        try:
+            user_id = EmailPreferenceService.validate_preference_token(token)
+            user = CustomUser.objects.get(id=user_id)
+        except signing.SignatureExpired:
+            context['error_message'] = 'This link has expired. Links are valid for 90 days. Please use a newer email or log in to update your preferences.'
+            return render(request, self.template_name, context)
+        except (signing.BadSignature, ValueError):
+            context['error_message'] = 'This link is invalid or has been tampered with. Please use the link from your email.'
+            return render(request, self.template_name, context)
+        except CustomUser.DoesNotExist:
+            context['error_message'] = 'User not found. This link may be invalid.'
+            return render(request, self.template_name, context)
+
+        # Get user's current preferences
+        preferences = EmailPreferenceService.get_user_preferences(user)
+
+        # Pre-fill form with current preferences
+        from users.forms import EmailPreferencesForm
+        form = EmailPreferencesForm(initial=preferences)
+
+        context['form'] = form
+        context['user_email'] = user.email
+        return render(request, self.template_name, context)
+
+    def post(self, request):
+        """
+        Save updated email preferences.
+
+        Validates token, processes form data, and updates user preferences.
+        """
+        from django.core import signing
+        from users.services.email_preference_service import EmailPreferenceService
+        from users.forms import EmailPreferencesForm
+
+        token = request.GET.get('token')
+        context = {
+            'site_url': settings.SITE_URL,
+            'error_message': None,
+            'form': None,
+            'saved': False,
+        }
+
+        # Validate token (same as GET)
+        if not token:
+            context['error_message'] = 'No preference token provided.'
+            return render(request, self.template_name, context)
+
+        try:
+            user_id = EmailPreferenceService.validate_preference_token(token)
+            user = CustomUser.objects.get(id=user_id)
+        except signing.SignatureExpired:
+            context['error_message'] = 'This link has expired. Please use a newer email.'
+            return render(request, self.template_name, context)
+        except (signing.BadSignature, ValueError):
+            context['error_message'] = 'This link is invalid.'
+            return render(request, self.template_name, context)
+        except CustomUser.DoesNotExist:
+            context['error_message'] = 'User not found.'
+            return render(request, self.template_name, context)
+
+        # Process form
+        form = EmailPreferencesForm(request.POST)
+        if form.is_valid():
+            # Update preferences
+            preferences = {
+                'monthly_recap': form.cleaned_data.get('monthly_recap', False),
+                'badge_notifications': form.cleaned_data.get('badge_notifications', False),
+                'milestone_notifications': form.cleaned_data.get('milestone_notifications', False),
+                'admin_announcements': form.cleaned_data.get('admin_announcements', False),
+                'global_unsubscribe': form.cleaned_data.get('global_unsubscribe', False),
+            }
+
+            EmailPreferenceService.update_user_preferences(user, preferences)
+
+            # Show success message and re-render form with updated values
+            context['saved'] = True
+            context['form'] = EmailPreferencesForm(initial=preferences)
+            context['user_email'] = user.email
+            return render(request, self.template_name, context)
+        else:
+            # Form validation failed, re-display with errors
+            context['form'] = form
+            context['user_email'] = user.email
+            return render(request, self.template_name, context)
