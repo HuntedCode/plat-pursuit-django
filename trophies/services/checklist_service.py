@@ -490,7 +490,8 @@ class ChecklistService:
                 profile=profile,
                 title=title,
                 description=description,
-                status='draft'
+                status='draft',
+                view_count=0
             )
             logger.info(f"Checklist {checklist.id} created by {profile.psn_username}")
             return checklist, None

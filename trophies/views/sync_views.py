@@ -71,7 +71,8 @@ class SearchSyncProfileView(View):
             profile = Profile.objects.get(psn_username__iexact=psn_username)
         except Profile.DoesNotExist:
             profile = Profile.objects.create(
-                psn_username=psn_username.lower()
+                psn_username=psn_username.lower(),
+                view_count=0
             )
             is_new = True
 

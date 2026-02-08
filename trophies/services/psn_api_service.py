@@ -177,6 +177,7 @@ class PsnApiService:
                     "platinum": trophy_title.defined_trophies.platinum
                 },
                 "played_count": 0,
+                "view_count": 0,
                 "is_regional": False,
                 "is_shovelware": False,
                 "is_obtainable": True,
@@ -552,6 +553,7 @@ class PsnApiService:
             display_series=f"{name} {type}",
             tier=1,
             badge_type = form_data['badge_type'],
+            view_count=0,
         )
         base_badge.save()
         base_badge.update_most_recent_concept()
@@ -563,4 +565,5 @@ class PsnApiService:
                 base_badge=base_badge,
                 tier=i + 2,
                 badge_type = form_data['badge_type'],
+                view_count=0,
             )

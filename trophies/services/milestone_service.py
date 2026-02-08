@@ -77,13 +77,13 @@ def check_and_award_milestone(profile, milestone, notify=True):
 
     # Skip premium-only milestones for non-premium users
     if milestone.premium_only and not profile.user_is_premium:
-        return False
+        return {'awarded': False, 'created': False}
 
     # Get the appropriate handler for this milestone type
     handler = MILESTONE_HANDLERS.get(milestone.criteria_type)
     if not handler:
         logger.warning(f"No handler for criteria_type: {milestone.criteria_type}")
-        return False
+        return {'awarded': False, 'created': False}
 
     # Execute handler to get current progress
     result = handler(profile, milestone)
