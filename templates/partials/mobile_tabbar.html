@@ -1,0 +1,217 @@
+{% load static %}
+
+<!-- Mobile Search Overlay -->
+<div id="mobile-search-overlay" class="mobile-search-overlay lg:hidden" aria-hidden="true">
+    <div class="flex items-center gap-2">
+        <form action="{% url 'search' %}" method="GET" class="join flex-1">
+            <select name="type" class="select select-sm select-primary join-item w-auto">
+                <option value="game">Game</option>
+                <option value="trophy">Trophy</option>
+                <option value="user">Profile</option>
+            </select>
+            <input id="mobile-search-input" type="text" name="query" placeholder="Search..." class="input input-primary input-sm join-item flex-1" />
+            <button type="submit" class="btn btn-sm btn-primary join-item">Go</button>
+        </form>
+        <button id="mobile-search-close" class="btn btn-ghost btn-sm btn-circle" aria-label="Close search">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+        </button>
+    </div>
+</div>
+
+<!-- More Drawer Backdrop -->
+<div id="more-drawer-backdrop" class="more-drawer-backdrop hidden lg:!hidden" aria-hidden="true"></div>
+
+<!-- More Drawer (Bottom Sheet) -->
+<div id="more-drawer" class="more-drawer lg:!hidden" role="dialog" aria-label="Navigation menu" aria-hidden="true">
+    <div class="more-drawer-handle"></div>
+
+    <!-- Browse -->
+    <div class="more-drawer-section-title">Browse</div>
+    <ul class="menu menu-sm px-2">
+        <li><a href="{% url 'trophies_list' %}">Trophies</a></li>
+        <li><a href="{% url 'games_list' %}">Games</a></li>
+        <li><a href="{% url 'profiles_list' %}">Profiles</a></li>
+    </ul>
+
+    <!-- Earn -->
+    <div class="more-drawer-section-title">Earn</div>
+    <ul class="menu menu-sm px-2">
+        <li><a href="{% url 'badges_list' %}">Badges</a></li>
+        <li><a href="{% url 'milestones_list' %}">Milestones</a></li>
+        <li><a href="{% url 'overall_badge_leaderboards' %}">Leaderboards</a></li>
+        {% if user.is_authenticated and user.profile %}
+            <li><a href="{% url 'trophy_case' user.profile.psn_username %}">Trophy Case</a></li>
+        {% endif %}
+    </ul>
+
+    <!-- Create -->
+    <div class="more-drawer-section-title">Create</div>
+    <ul class="menu menu-sm px-2">
+        <li>
+            <a href="{% url 'guides_list' %}">
+                <span class="flex flex-row gap-2 items-center">
+                    PPTV Guides
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="var(--color-error)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="2" y="7" width="20" height="15" rx="2" ry="2"></rect>
+                        <polyline points="17 2 12 7 7 2"></polyline>
+                    </svg>
+                </span>
+            </a>
+        </li>
+        {% if user.is_authenticated and user.profile %}
+            <li><a href="{% url 'my_checklists' %}">My Guides</a></li>
+        {% endif %}
+    </ul>
+
+    <!-- Community -->
+    <div class="more-drawer-section-title">Community</div>
+    <ul class="menu menu-sm px-2">
+        <li><a href="https://discord.gg/platpursuit" target="_blank" rel="noopener noreferrer">Discord</a></li>
+        {% if user.is_authenticated and user.profile %}
+            <li><a href="{% url 'my_shareables' %}">My Shareables</a></li>
+        {% endif %}
+    </ul>
+
+    <!-- Account -->
+    <div class="more-drawer-section-title">Account</div>
+    <ul class="menu menu-sm px-2">
+        {% if user.is_authenticated %}
+            <li>
+                <a href="{% url 'recap_index' %}">Monthly Recap</a>
+            </li>
+            {% if user.profile %}
+                <li><a href="{% url 'profile_detail' user.profile.psn_username %}">Profile</a></li>
+                <li><a href="{% url 'trophy_case' user.profile.psn_username %}">Trophy Case</a></li>
+                {% if not user.premium_tier %}
+                    <li><a href="{% url 'subscribe' %}">PP Premium</a></li>
+                {% else %}
+                    <li><a href="{% url 'subscription_management' %}">My Premium</a></li>
+                {% endif %}
+            {% else %}
+                <li><a href="{% url 'link_psn' %}">Link PSN</a></li>
+            {% endif %}
+            <li><a href="{% url 'settings' %}">Settings</a></li>
+            {% if user.is_staff %}
+                <li>
+                    <a href="{% url 'comment_moderation' %}" class="flex items-center">
+                        <span>Moderation</span>
+                        {% if pending_reports_count > 0 %}
+                            <span class="text-error ml-1">({{ pending_reports_count }})</span>
+                        {% endif %}
+                    </a>
+                </li>
+            {% endif %}
+            <li>
+                <button id="more-drawer-theme-toggle" type="button" class="flex items-center gap-2 w-full">
+                    <svg id="drawer-theme-icon-sun" class="w-4 h-4 hidden" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="5"/>
+                        <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
+                    </svg>
+                    <svg id="drawer-theme-icon-moon" class="w-4 h-4 hidden" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+                    </svg>
+                    <span id="drawer-theme-toggle-label">Dark Mode</span>
+                </button>
+            </li>
+            <div class="divider my-0"></div>
+            <li>
+                <form method="post" action="{% url 'logout' %}">
+                    {% csrf_token %}
+                    <button type="submit" class="w-full text-left">Logout</button>
+                </form>
+            </li>
+        {% else %}
+            <li><a href="{% url 'account_login' %}">Login</a></li>
+            <li><a href="{% url 'account_signup' %}">Register</a></li>
+            <li>
+                <button id="more-drawer-theme-toggle" type="button" class="flex items-center gap-2 w-full">
+                    <svg id="drawer-theme-icon-sun-guest" class="w-4 h-4 hidden" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="5"/>
+                        <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
+                    </svg>
+                    <svg id="drawer-theme-icon-moon-guest" class="w-4 h-4 hidden" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+                    </svg>
+                    <span id="drawer-theme-toggle-label-guest">Dark Mode</span>
+                </button>
+            </li>
+        {% endif %}
+    </ul>
+
+    <!-- Footer links -->
+    <div class="flex items-center justify-center gap-4 text-xs text-base-content/40 py-4 px-4">
+        <a href="{% url 'privacy' %}" class="hover:text-base-content/70">Privacy</a>
+        <span>&middot;</span>
+        <a href="{% url 'terms' %}" class="hover:text-base-content/70">Terms</a>
+        <span>&middot;</span>
+        <a href="{% url 'about' %}" class="hover:text-base-content/70">About</a>
+    </div>
+</div>
+
+<!-- Bottom Tab Bar -->
+<nav class="mobile-tabbar lg:hidden" role="navigation" aria-label="Mobile navigation">
+    <div class="mobile-tabbar-inner">
+        <!-- Home -->
+        <a href="/" class="mobile-tabbar-item" aria-label="Home">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+                <polyline points="9 22 9 12 15 12 15 22"></polyline>
+            </svg>
+            <span>Home</span>
+        </a>
+
+        <!-- Games -->
+        <a href="{% url 'games_list' %}" class="mobile-tabbar-item" aria-label="Games">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="2" y="6" width="20" height="12" rx="2"></rect>
+                <line x1="6" y1="12" x2="6" y2="12"></line>
+                <line x1="10" y1="12" x2="10" y2="12"></line>
+                <circle cx="17" cy="10" r="1"></circle>
+                <circle cx="15" cy="13" r="1"></circle>
+            </svg>
+            <span>Games</span>
+        </a>
+
+        <!-- Search -->
+        <button id="mobile-search-btn" class="mobile-tabbar-item" aria-label="Search">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="11" cy="11" r="8"></circle>
+                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+            </svg>
+            <span>Search</span>
+        </button>
+
+        <!-- Notifications (auth) / Login (guest) -->
+        {% if user.is_authenticated %}
+        <a href="{% url 'notification_inbox' %}" class="mobile-tabbar-item relative" aria-label="Notifications">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+                <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+            </svg>
+            <span id="mobile-notification-badge" class="absolute top-0 right-1/4 badge badge-error badge-xs hidden" aria-live="polite">0</span>
+            <span>Notifs</span>
+        </a>
+        {% else %}
+        <a href="{% url 'account_login' %}" class="mobile-tabbar-item" aria-label="Login">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                <circle cx="12" cy="7" r="4"></circle>
+            </svg>
+            <span>Login</span>
+        </a>
+        {% endif %}
+
+        <!-- More -->
+        <button id="mobile-more-btn" class="mobile-tabbar-item" aria-label="More menu">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="3" y1="12" x2="21" y2="12"></line>
+                <line x1="3" y1="6" x2="21" y2="6"></line>
+                <line x1="3" y1="18" x2="21" y2="18"></line>
+            </svg>
+            <span>More</span>
+        </button>
+    </div>
+</nav>

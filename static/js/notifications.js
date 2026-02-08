@@ -254,11 +254,25 @@ class NotificationSystem {
     }
 
     updateBadge() {
+        const displayCount = this.unreadCount > 99 ? '99+' : this.unreadCount;
+
+        // Desktop notification badge
         if (this.unreadCount > 0) {
-            this.badge.textContent = this.unreadCount > 99 ? '99+' : this.unreadCount;
+            this.badge.textContent = displayCount;
             this.badge.classList.remove('hidden');
         } else {
             this.badge.classList.add('hidden');
+        }
+
+        // Mobile tab bar notification badge
+        const mobileBadge = document.getElementById('mobile-notification-badge');
+        if (mobileBadge) {
+            if (this.unreadCount > 0) {
+                mobileBadge.textContent = displayCount;
+                mobileBadge.classList.remove('hidden');
+            } else {
+                mobileBadge.classList.add('hidden');
+            }
         }
     }
 

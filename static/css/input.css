@@ -240,6 +240,91 @@
     30%, 50%, 70% { transform: translate3d(-4px, 0, 0); }
     40%, 60% { transform: translate3d(4px, 0, 0); }
   }
+
+  /* ===== Mobile Bottom Tab Bar ===== */
+  .mobile-tabbar {
+    @apply fixed bottom-0 left-0 right-0 z-40 bg-base-200 border-t-2 border-base-300 shadow-lg;
+    padding-bottom: env(safe-area-inset-bottom, 0);
+  }
+  .mobile-tabbar-inner {
+    @apply flex items-center justify-around h-14;
+  }
+  .mobile-tabbar-item {
+    @apply flex flex-col items-center justify-center gap-0.5 text-xs text-base-content/60 bg-transparent border-none cursor-pointer transition-colors duration-200 px-2 py-1 min-w-0;
+  }
+  .mobile-tabbar-item:hover,
+  .mobile-tabbar-item.active {
+    @apply text-primary;
+  }
+  .mobile-tabbar-item svg {
+    @apply w-5 h-5;
+  }
+
+  /* ===== Expandable Search Bar ===== */
+  .search-expandable {
+    max-width: 0;
+    opacity: 0;
+    overflow: hidden;
+    transition: max-width 300ms ease, opacity 300ms ease;
+  }
+  .search-expandable.active {
+    max-width: 320px;
+    opacity: 1;
+  }
+  @media (min-width: 1280px) {
+    .search-expandable.active {
+      max-width: 400px;
+    }
+  }
+
+  /* ===== Mega Menu Dropdown Content ===== */
+  .mega-menu-content {
+    @apply min-w-48 bg-base-100 border-2 border-base-200 shadow-lg p-2;
+    z-index: 60;
+  }
+
+  /* ===== Mobile More Drawer ===== */
+  .more-drawer-backdrop {
+    @apply fixed inset-0 bg-black/50 z-40 transition-opacity duration-300;
+  }
+  .more-drawer-backdrop.hidden {
+    opacity: 0;
+    pointer-events: none;
+  }
+  .more-drawer {
+    @apply fixed bottom-0 left-0 right-0 z-50 bg-base-200 border-t-2 border-base-300 rounded-t-2xl shadow-2xl;
+    max-height: 85vh;
+    overflow-y: auto;
+    transform: translateY(100%);
+    transition: transform 300ms ease;
+    padding-bottom: env(safe-area-inset-bottom, 0);
+  }
+  .more-drawer.open {
+    transform: translateY(0);
+  }
+  .more-drawer-handle {
+    @apply w-10 h-1 bg-base-content/30 rounded-full mx-auto mt-3 mb-2;
+  }
+  .more-drawer-section-title {
+    @apply text-xs uppercase tracking-wider text-base-content/50 font-bold px-4 pt-4 pb-1;
+  }
+
+  /* ===== Mobile Search Overlay ===== */
+  .mobile-search-overlay {
+    @apply fixed top-0 left-0 right-0 z-50 bg-base-200 border-b-2 border-base-300 shadow-lg p-3;
+    transform: translateY(-100%);
+    transition: transform 300ms ease;
+  }
+  .mobile-search-overlay.open {
+    transform: translateY(0);
+  }
+
+  /* Bottom padding for body on mobile to prevent content behind tab bar */
+  @media (max-width: 1023px) {
+    body {
+      padding-bottom: 3.5rem;
+    }
+  }
 }
 .legendary-title {
   font-family: 'Montserrat', sans-serif; /* e.g., Montserrat for epic feel */
