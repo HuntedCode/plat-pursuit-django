@@ -1,14 +1,14 @@
 """
-Management command to send monthly recap emails to users.
+Management command to send monthly recap emails and in-app notifications to users.
 
-This command finds all finalized recaps that haven't had emails sent yet,
-and sends personalized HTML emails to users with links to their full recap.
+This command finds all finalized recaps that haven't had emails/notifications sent yet,
+and sends personalized HTML emails and in-app notifications to users with links to their full recap.
 
 Designed to run via Render cron on the 2nd-3rd of each month after recaps
 have been generated and finalized.
 
 Usage:
-    python manage.py send_monthly_recap_emails                      # Send all pending emails
+    python manage.py send_monthly_recap_emails                      # Send all pending emails & notifications
     python manage.py send_monthly_recap_emails --dry-run            # Preview what would be sent
     python manage.py send_monthly_recap_emails --year 2026 --month 1  # Specific month only
     python manage.py send_monthly_recap_emails --profile-id 123     # Specific user only
@@ -18,11 +18,14 @@ Recommended cron schedule:
     - Run on 3rd of month at 06:00 UTC (after generate_monthly_recaps runs)
     - python manage.py send_monthly_recap_emails
 
-Email requirements:
+Requirements:
     - User must have a linked PSN account (is_linked=True)
     - User must have an email address
     - Recap must be finalized (is_finalized=True)
     - Email hasn't been sent yet (email_sent=False) unless --force is used
+    - User hasn't opted out of monthly_recap emails (checked via EmailPreferenceService)
+
+Note: In-app notifications are sent to ALL users regardless of email preferences.
 """
 import calendar
 import logging
@@ -32,12 +35,14 @@ from django.utils import timezone
 from django.conf import settings
 from trophies.models import MonthlyRecap
 from core.services.email_service import EmailService
+from core.services.monthly_recap_message_service import MonthlyRecapMessageService
+from notifications.services.notification_service import NotificationService
 
 logger = logging.getLogger(__name__)
 
 
 class Command(BaseCommand):
-    help = 'Send monthly recap notification emails to users'
+    help = 'Send monthly recap emails and in-app notifications to users'
 
     def add_arguments(self, parser):
         parser.add_argument(
@@ -190,6 +195,16 @@ class Command(BaseCommand):
                             f"  [{i}/{total}] ✓ Sent to {recap.profile.psn_username}"
                         )
                     )
+
+                    # Try to send notification (independent of email)
+                    try:
+                        notification_sent = self._send_recap_notification(recap)
+                        if notification_sent:
+                            logger.debug(f"Notification sent for recap {recap.id}")
+                    except Exception as e:
+                        # Don't fail the whole batch if notification fails
+                        logger.exception(f"Failed to send notification for recap {recap.id}: {e}")
+
                 else:
                     failed += 1
                     self.stdout.write(
@@ -197,6 +212,14 @@ class Command(BaseCommand):
                             f"  [{i}/{total}] ✗ Failed to send to {recap.profile.psn_username}"
                         )
                     )
+
+                    # Still try to send notification even if email failed
+                    try:
+                        notification_sent = self._send_recap_notification(recap)
+                        if notification_sent:
+                            logger.debug(f"Notification sent for recap {recap.id} (email failed)")
+                    except Exception as e:
+                        logger.exception(f"Failed to send notification for recap {recap.id}: {e}")
 
             except Exception as e:
                 failed += 1
@@ -221,26 +244,11 @@ class Command(BaseCommand):
     def _get_trophy_tier(self, count):
         """
         Get rounded-down trophy tier for email display.
-        Returns a string like '10+', '50+', '100+', etc.
+
+        DEPRECATED: Use MonthlyRecapMessageService.get_trophy_tier() instead.
+        Kept for backward compatibility.
         """
-        if count == 0:
-            return '0'
-        elif count < 10:
-            return str(count)
-        elif count < 25:
-            return '10+'
-        elif count < 50:
-            return '25+'
-        elif count < 100:
-            return '50+'
-        elif count < 250:
-            return '100+'
-        elif count < 500:
-            return '250+'
-        elif count < 1000:
-            return '500+'
-        else:
-            return '1000+'
+        return MonthlyRecapMessageService.get_trophy_tier(count)
 
     def _send_recap_email(self, recap):
         """
@@ -259,39 +267,8 @@ class Command(BaseCommand):
             logger.info(f"Skipping recap email for {user.email} - opted out of monthly recaps")
             return False
 
-        # Get active days from activity calendar or streak data
-        active_days = recap.activity_calendar.get('total_active_days', 0)
-        if not active_days:
-            # Fallback to streak data if activity calendar not available
-            active_days = recap.streak_data.get('total_active_days', 0)
-
-        # Generate preference token for email footer
-        try:
-            preference_token = EmailPreferenceService.generate_preference_token(user.id)
-            preference_url = f"{settings.SITE_URL}/users/email-preferences/?token={preference_token}"
-            logger.debug(f"Generated preference_url for user {user.id}: {preference_url}")
-        except Exception as e:
-            logger.exception(f"Failed to generate preference_url for user {user.id}: {e}")
-            # Fallback to a generic preferences page (no token)
-            preference_url = f"{settings.SITE_URL}/users/email-preferences/"
-
-        # Build email context
-        context = {
-            'username': profile.display_psn_username or profile.psn_username,
-            'month_name': recap.month_name,
-            'year': recap.year,
-            'active_days': active_days,
-            'trophy_tier': self._get_trophy_tier(recap.total_trophies_earned),
-            'games_started': recap.games_started,
-            'total_trophies': recap.total_trophies_earned,  # Keep for backward compat
-            'platinums_earned': recap.platinums_earned,
-            'games_completed': recap.games_completed,
-            'badges_earned': recap.badges_earned_count,
-            'has_streak': bool(recap.streak_data.get('longest_streak', 0) > 1),
-            'recap_url': f"{settings.SITE_URL}/recap/{recap.year}/{recap.month}/",
-            'site_url': settings.SITE_URL,
-            'preference_url': preference_url,
-        }
+        # Build email context using shared service
+        context = MonthlyRecapMessageService.build_email_context(recap)
 
         # Build subject
         subject = f"Your {recap.month_name} Monthly Rewind is Ready! 🏆"
@@ -317,4 +294,50 @@ class Command(BaseCommand):
 
         except Exception as e:
             logger.exception(f"Failed to send recap email for recap {recap.id}: {e}")
+            return False
+
+    def _send_recap_notification(self, recap):
+        """
+        Send in-app notification for a single MonthlyRecap instance.
+
+        Notifications are sent independently of emails - failure here should
+        not block email delivery. ALL users receive notifications regardless
+        of email opt-out preferences.
+
+        Args:
+            recap: MonthlyRecap instance
+
+        Returns:
+            bool: True if notification sent successfully, False otherwise
+        """
+        user = recap.profile.user
+
+        # Build notification context (teaser only needs base fields)
+        context = MonthlyRecapMessageService.build_base_context(recap)
+        title = f"Your {context['month_name']} Recap is Ready! 🏆"
+        message = MonthlyRecapMessageService.build_notification_message(recap)
+
+        try:
+            # Create notification with rich metadata
+            NotificationService.create_notification(
+                recipient=user,
+                notification_type='monthly_recap',
+                title=title,
+                message=message,
+                action_url=context['recap_url'],
+                action_text='View Recap',
+                icon='🏆',
+                priority='normal',
+                metadata=context,  # Store full context for potential future use
+            )
+
+            # Mark notification as sent
+            recap.notification_sent = True
+            recap.notification_sent_at = timezone.now()
+            recap.save(update_fields=['notification_sent', 'notification_sent_at'])
+
+            return True
+
+        except Exception as e:
+            logger.exception(f"Failed to send recap notification for recap {recap.id}: {e}")
             return False

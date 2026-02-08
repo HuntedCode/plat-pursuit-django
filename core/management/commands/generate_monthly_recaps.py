@@ -5,18 +5,19 @@ Run via Render cron a few days into each new month (to allow syncs to complete).
 By default, targets the PREVIOUS month (not current), since recaps are most useful
 after a month has fully completed and users have synced their trophy data.
 
+Note: Notifications and emails are now sent separately via send_monthly_recap_emails.py
+
 Usage:
     python manage.py generate_monthly_recaps                    # Generate for previous month
     python manage.py generate_monthly_recaps --finalize         # Generate and mark as finalized
-    python manage.py generate_monthly_recaps --notify           # Generate and send notifications
-    python manage.py generate_monthly_recaps --finalize --notify
     python manage.py generate_monthly_recaps --dry-run
     python manage.py generate_monthly_recaps --profile-id 123
     python manage.py generate_monthly_recaps --year 2026 --month 1  # Override target month
     python manage.py generate_monthly_recaps --current-month    # Target current month instead
 
 Cron schedule recommendation:
-    - 3rd of month at 00:05 UTC: --finalize --notify
+    - 3rd of month at 00:05 UTC: --finalize
+    - 3rd of month at 06:00 UTC: send_monthly_recap_emails (emails + notifications)
 """
 from django.core.management.base import BaseCommand
 from django.utils import timezone
@@ -37,11 +38,6 @@ class Command(BaseCommand):
             '--finalize',
             action='store_true',
             help='Mark generated recaps as finalized (immutable)'
-        )
-        parser.add_argument(
-            '--notify',
-            action='store_true',
-            help='Send notifications to users when their recap is ready'
         )
         parser.add_argument(
             '--profile-id',
@@ -67,7 +63,6 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         dry_run = options.get('dry_run', False)
         finalize = options.get('finalize', False)
-        notify = options.get('notify', False)
         profile_id = options.get('profile_id')
         year_override = options.get('year')
         month_override = options.get('month')
@@ -96,9 +91,9 @@ class Command(BaseCommand):
 
         # Step 1: Generate recaps
         if profile_id:
-            self._generate_for_profile(profile_id, year, month, dry_run, notify)
+            self._generate_for_profile(profile_id, year, month, dry_run)
         else:
-            self._generate_for_all(year, month, dry_run, notify)
+            self._generate_for_all(year, month, dry_run)
 
         # Step 2: Finalize if requested
         if finalize and not dry_run:
@@ -108,7 +103,7 @@ class Command(BaseCommand):
                 self.style.SUCCESS(f"  Finalized {count} recap(s)")
             )
 
-    def _generate_for_profile(self, profile_id, year, month, dry_run, notify):
+    def _generate_for_profile(self, profile_id, year, month, dry_run):
         """Generate recap for a specific profile."""
         from trophies.models import Profile
 
@@ -148,14 +143,12 @@ class Command(BaseCommand):
                 )
             )
 
-            if notify and profile.user:
-                self._send_notification(profile, year, month)
         else:
             self.stdout.write(
                 f"  {profile.psn_username} has no activity - skipping"
             )
 
-    def _generate_for_all(self, year, month, dry_run, notify):
+    def _generate_for_all(self, year, month, dry_run):
         """Generate recaps for all active profiles."""
         from trophies.models import Profile, EarnedTrophy
         from datetime import timedelta
@@ -192,17 +185,12 @@ class Command(BaseCommand):
 
         generated = 0
         failed = 0
-        notified = 0
 
         for profile in profiles:
             try:
                 recap = MonthlyRecapService.get_or_generate_recap(profile, year, month)
                 if recap:
                     generated += 1
-
-                    if notify and profile.user:
-                        self._send_notification(profile, year, month)
-                        notified += 1
 
             except Exception as e:
                 failed += 1
@@ -217,29 +205,3 @@ class Command(BaseCommand):
                 f"  Generated {generated} recap(s), {failed} failed"
             )
         )
-
-        if notify:
-            self.stdout.write(f"  Sent {notified} notification(s)")
-
-    def _send_notification(self, profile, year, month):
-        """Send notification to user that their recap is ready."""
-        import calendar
-        from notifications.services.notification_service import NotificationService
-
-        month_name = calendar.month_name[month]
-
-        try:
-            NotificationService.create_notification(
-                user=profile.user,
-                notification_type='monthly_recap',
-                title=f"Your {month_name} Recap is Ready!",
-                message=f"See your trophy hunting highlights from {month_name} {year}.",
-                action_url=f"/recap/{year}/{month}/",
-                icon='trophy',
-            )
-        except Exception as e:
-            self.stdout.write(
-                self.style.WARNING(
-                    f"  Failed to send notification to {profile.psn_username}: {e}"
-                )
-            )

@@ -1056,6 +1056,7 @@ class MonthlyRecapAdmin(admin.ModelAdmin):
         'games_completed',
         'is_finalized',
         'email_sent',
+        'notification_sent',
         'generated_at',
         'updated_at',
     ]
@@ -1064,8 +1065,10 @@ class MonthlyRecapAdmin(admin.ModelAdmin):
         'month',
         'is_finalized',
         'email_sent',
+        'notification_sent',
         'generated_at',
         'email_sent_at',
+        'notification_sent_at',
     ]
     search_fields = [
         'profile__psn_username',
@@ -1075,6 +1078,7 @@ class MonthlyRecapAdmin(admin.ModelAdmin):
         'generated_at',
         'updated_at',
         'email_sent_at',
+        'notification_sent_at',
     ]
     ordering = ['-year', '-month', '-updated_at']
     date_hierarchy = 'generated_at'
@@ -1087,6 +1091,10 @@ class MonthlyRecapAdmin(admin.ModelAdmin):
         ('Email Status', {
             'fields': ('email_sent', 'email_sent_at'),
             'description': 'Email notification tracking for monthly recap availability'
+        }),
+        ('In-App Notification Status', {
+            'fields': ('notification_sent', 'notification_sent_at'),
+            'description': 'In-app notification tracking for monthly recap availability'
         }),
         ('Trophy Stats', {
             'fields': (

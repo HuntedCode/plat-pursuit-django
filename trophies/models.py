@@ -2249,6 +2249,15 @@ class MonthlyRecap(models.Model):
         blank=True,
         help_text='Timestamp when recap email was sent'
     )
+    notification_sent = models.BooleanField(
+        default=False,
+        help_text='True if recap in-app notification has been sent to user'
+    )
+    notification_sent_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text='Timestamp when recap notification was sent'
+    )
     generated_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

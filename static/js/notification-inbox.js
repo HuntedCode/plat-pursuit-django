@@ -426,6 +426,9 @@ class NotificationInboxManager {
             case 'admin_announcement':
                 enhancedContent = this.renderAdminAnnouncementDetail(metadata);
                 break;
+            case 'monthly_recap':
+                enhancedContent = this.renderMonthlyRecapDetail(metadata);
+                break;
             default:
                 enhancedContent = '';
         }
@@ -1163,6 +1166,103 @@ class NotificationInboxManager {
                     <span>Official Announcement</span>
                     ${category ? `<span class="badge badge-ghost badge-xs">${this.escapeHtml(category)}</span>` : ''}
                 </div>
+            </div>
+        `;
+    }
+
+    /**
+     * Render monthly recap notification detail as a teaser that entices
+     * the user to view their full recap, mirroring the email template approach.
+     * Shows rounded stats, a platinum highlight, and a "discover" list.
+     */
+    renderMonthlyRecapDetail(metadata) {
+        if (!metadata) {
+            return '';
+        }
+
+        const monthName = this.escapeHtml(metadata.month_name || 'Monthly');
+        const activeDays = metadata.active_days || 0;
+        const trophyTier = metadata.trophy_tier || (metadata.total_trophies ? metadata.total_trophies.toLocaleString() : '0');
+        const gamesStarted = metadata.games_started || 0;
+        const platinumsEarned = metadata.platinums_earned || 0;
+        const badgesEarned = metadata.badges_earned || 0;
+        const hasStreak = metadata.has_streak || false;
+
+        // Platinum highlight (conditional)
+        const platinumHtml = platinumsEarned > 0 ? `
+            <div class="bg-info/10 border border-info/20 rounded-lg p-3 mt-3 text-center">
+                <span class="font-semibold text-info">
+                    &#128142; You earned ${platinumsEarned} platinum${platinumsEarned !== 1 ? 's' : ''} this month!
+                </span>
+            </div>
+        ` : '';
+
+        // Teaser list items (mirrors email template)
+        const teaserItems = [
+            'Your rarest trophy of the month (it might surprise you!)',
+            'Your most active gaming day and hunting patterns',
+        ];
+        if (hasStreak) {
+            teaserItems.push('Your longest trophy hunting streak');
+        }
+        if (badgesEarned > 0) {
+            teaserItems.push(`${badgesEarned} new badge${badgesEarned !== 1 ? 's' : ''} you unlocked`);
+        }
+        teaserItems.push(
+            'Fun quizzes to test your memory',
+            'How you compared to your previous months',
+            'A shareable recap card to show off your achievements',
+        );
+
+        const teaserListHtml = teaserItems.map(item => `
+            <li class="flex items-start gap-2">
+                <span class="text-primary mt-0.5 flex-shrink-0">&#8226;</span>
+                <span>${item}</span>
+            </li>
+        `).join('');
+
+        return `
+            <div class="bg-base-300 rounded-lg p-4">
+                <h3 class="text-lg font-semibold mb-3 flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                        <line x1="16" y1="2" x2="16" y2="6"></line>
+                        <line x1="8" y1="2" x2="8" y2="6"></line>
+                        <line x1="3" y1="10" x2="21" y2="10"></line>
+                    </svg>
+                    Quick Look at Your ${monthName}
+                </h3>
+                <div class="grid grid-cols-3 gap-3">
+                    <div class="bg-base-100 rounded-lg p-3 text-center">
+                        <div class="text-xs text-base-content/60 uppercase tracking-wide">Active Days</div>
+                        <div class="text-lg font-bold">${activeDays}</div>
+                    </div>
+                    <div class="bg-base-100 rounded-lg p-3 text-center">
+                        <div class="text-xs text-base-content/60 uppercase tracking-wide">Trophies</div>
+                        <div class="text-lg font-bold text-primary">${this.escapeHtml(String(trophyTier))}</div>
+                    </div>
+                    <div class="bg-base-100 rounded-lg p-3 text-center">
+                        <div class="text-xs text-base-content/60 uppercase tracking-wide">Games Started</div>
+                        <div class="text-lg font-bold">${gamesStarted}</div>
+                    </div>
+                </div>
+                ${platinumHtml}
+            </div>
+
+            <div class="bg-base-300 rounded-lg p-4 mt-4">
+                <h3 class="text-lg font-semibold mb-3 flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="20 12 20 22 4 22 4 12"></polyline>
+                        <rect x="2" y="7" width="20" height="5"></rect>
+                        <line x1="12" y1="22" x2="12" y2="7"></line>
+                        <path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"></path>
+                        <path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"></path>
+                    </svg>
+                    Inside your recap, you'll discover:
+                </h3>
+                <ul class="space-y-2 text-sm text-base-content/80 list-none pl-0 m-0">
+                    ${teaserListHtml}
+                </ul>
             </div>
         `;
     }
