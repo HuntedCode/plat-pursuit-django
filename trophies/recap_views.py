@@ -26,6 +26,26 @@ def _get_user_local_now(request):
     return now
 
 
+def _get_most_recent_completed_month(now_local):
+    """
+    Get the (year, month) tuple for the most recent completed month.
+
+    Matches RecapIndexView logic (lines 45-60): The previous calendar month is
+    always considered the "featured" recap for non-premium users.
+
+    Args:
+        now_local: datetime in user's local timezone
+
+    Returns:
+        tuple: (year, month)
+    """
+    # Previous month is always the featured/accessible recap
+    if now_local.month == 1:
+        return (now_local.year - 1, 12)
+    else:
+        return (now_local.year, now_local.month - 1)
+
+
 class RecapIndexView(LoginRequiredMixin, RecapSyncGateMixin, ProfileHotbarMixin, TemplateView):
     """
     Recap index page - redirects to most recent completed month or shows month picker.
@@ -114,9 +134,16 @@ class RecapSlideView(LoginRequiredMixin, RecapSyncGateMixin, ProfileHotbarMixin,
             raise Http404("Invalid month")
 
         # Check premium gating for past months
-        is_current_month = (year == now_local.year and month == now_local.month)
-        if not is_current_month and not profile.user_is_premium:
-            # Redirect to premium upsell or index
+        # Non-premium users can access the most recent completed month + literal current month
+        # Anything older requires premium
+        recent_year, recent_month = _get_most_recent_completed_month(now_local)
+        is_recent_or_current = (
+            (year == now_local.year and month == now_local.month) or  # Current calendar month
+            (year == recent_year and month == recent_month)           # Most recent completed month
+        )
+
+        if not is_recent_or_current and not profile.user_is_premium:
+            # Trying to access older month without premium
             return redirect('recap_index')
 
         # Don't allow future months
