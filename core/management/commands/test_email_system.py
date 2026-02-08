@@ -99,8 +99,12 @@ class Command(BaseCommand):
         # Generate a sample preference token (using a dummy user ID for preview)
         # In real emails, this would be the actual user's ID
         sample_user_id = 1
-        preference_token = EmailPreferenceService.generate_preference_token(sample_user_id)
-        preference_url = f"{settings.SITE_URL}/users/email-preferences/?token={preference_token}"
+        try:
+            preference_token = EmailPreferenceService.generate_preference_token(sample_user_id)
+            preference_url = f"{settings.SITE_URL}/users/email-preferences/?token={preference_token}"
+        except Exception as e:
+            self.stdout.write(self.style.WARNING(f"Failed to generate preference token: {e}"))
+            preference_url = f"{settings.SITE_URL}/users/email-preferences/"
 
         # Sample context data for preview
         context = {
@@ -154,8 +158,12 @@ class Command(BaseCommand):
 
         # Sample data
         sample_user_id = 1
-        preference_token = EmailPreferenceService.generate_preference_token(sample_user_id)
-        preference_url = f"{settings.SITE_URL}/users/email-preferences/?token={preference_token}"
+        try:
+            preference_token = EmailPreferenceService.generate_preference_token(sample_user_id)
+            preference_url = f"{settings.SITE_URL}/users/email-preferences/?token={preference_token}"
+        except Exception as e:
+            self.stdout.write(self.style.WARNING(f"Failed to generate preference token: {e}"))
+            preference_url = f"{settings.SITE_URL}/users/email-preferences/"
 
         context = {
             'username': 'TestUser',
@@ -198,8 +206,12 @@ class Command(BaseCommand):
 
         # Sample data
         sample_user_id = 1
-        preference_token = EmailPreferenceService.generate_preference_token(sample_user_id)
-        preference_url = f"{settings.SITE_URL}/users/email-preferences/?token={preference_token}"
+        try:
+            preference_token = EmailPreferenceService.generate_preference_token(sample_user_id)
+            preference_url = f"{settings.SITE_URL}/users/email-preferences/?token={preference_token}"
+        except Exception as e:
+            self.stdout.write(self.style.WARNING(f"Failed to generate preference token: {e}"))
+            preference_url = f"{settings.SITE_URL}/users/email-preferences/"
 
         context = {
             'username': 'TestUser',

@@ -24,9 +24,13 @@ class CustomAccountAdapter(DefaultAccountAdapter):
         # Generate activation URL using allauth's built-in method
         activate_url = self.get_email_confirmation_url(request, emailconfirmation)
 
-        # Generate email preferences token (same pattern as monthly recap)
-        preference_token = EmailPreferenceService.generate_preference_token(user.id)
-        preference_url = f"{settings.SITE_URL}/users/email-preferences/?token={preference_token}"
+        # Generate email preferences token
+        try:
+            preference_token = EmailPreferenceService.generate_preference_token(user.id)
+            preference_url = f"{settings.SITE_URL}/users/email-preferences/?token={preference_token}"
+        except Exception as e:
+            logger.exception(f"Failed to generate preference_url for user {user.id}: {e}")
+            preference_url = f"{settings.SITE_URL}/users/email-preferences/"
 
         # Build template context
         context = {
@@ -62,8 +66,12 @@ class CustomAccountAdapter(DefaultAccountAdapter):
         email = user.email
 
         # Generate email preferences token
-        preference_token = EmailPreferenceService.generate_preference_token(user.id)
-        preference_url = f"{settings.SITE_URL}/users/email-preferences/?token={preference_token}"
+        try:
+            preference_token = EmailPreferenceService.generate_preference_token(user.id)
+            preference_url = f"{settings.SITE_URL}/users/email-preferences/?token={preference_token}"
+        except Exception as e:
+            logger.exception(f"Failed to generate preference_url for user {user.id}: {e}")
+            preference_url = f"{settings.SITE_URL}/users/email-preferences/"
 
         # Build template context
         context = {

@@ -266,8 +266,14 @@ class Command(BaseCommand):
             active_days = recap.streak_data.get('total_active_days', 0)
 
         # Generate preference token for email footer
-        preference_token = EmailPreferenceService.generate_preference_token(user.id)
-        preference_url = f"{settings.SITE_URL}/users/email-preferences/?token={preference_token}"
+        try:
+            preference_token = EmailPreferenceService.generate_preference_token(user.id)
+            preference_url = f"{settings.SITE_URL}/users/email-preferences/?token={preference_token}"
+            logger.debug(f"Generated preference_url for user {user.id}: {preference_url}")
+        except Exception as e:
+            logger.exception(f"Failed to generate preference_url for user {user.id}: {e}")
+            # Fallback to a generic preferences page (no token)
+            preference_url = f"{settings.SITE_URL}/users/email-preferences/"
 
         # Build email context
         context = {
