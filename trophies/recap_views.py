@@ -10,7 +10,7 @@ from django.utils import timezone
 from django.shortcuts import redirect
 
 from trophies.services.monthly_recap_service import MonthlyRecapService
-from trophies.mixins import ProfileHotbarMixin
+from trophies.mixins import ProfileHotbarMixin, RecapSyncGateMixin
 from trophies.themes import get_available_themes_for_grid
 
 
@@ -26,13 +26,16 @@ def _get_user_local_now(request):
     return now
 
 
-class RecapIndexView(LoginRequiredMixin, ProfileHotbarMixin, TemplateView):
+class RecapIndexView(LoginRequiredMixin, RecapSyncGateMixin, ProfileHotbarMixin, TemplateView):
     """
     Recap index page - redirects to most recent completed month or shows month picker.
     """
     template_name = 'recap/recap_index.html'
 
     def get(self, request, *args, **kwargs):
+        gate = self._get_sync_gate_response(request)
+        if gate:
+            return gate
         profile = request.user.profile
         now_local = _get_user_local_now(request)
 
@@ -93,13 +96,16 @@ class RecapIndexView(LoginRequiredMixin, ProfileHotbarMixin, TemplateView):
         return context
 
 
-class RecapSlideView(LoginRequiredMixin, ProfileHotbarMixin, TemplateView):
+class RecapSlideView(LoginRequiredMixin, RecapSyncGateMixin, ProfileHotbarMixin, TemplateView):
     """
     Main recap slide presentation view.
     """
     template_name = 'recap/monthly_recap.html'
 
     def get(self, request, year, month, *args, **kwargs):
+        gate = self._get_sync_gate_response(request)
+        if gate:
+            return gate
         profile = request.user.profile
         now_local = _get_user_local_now(request)
 

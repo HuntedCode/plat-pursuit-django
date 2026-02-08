@@ -25,6 +25,22 @@ from trophies.services.monthly_recap_service import MonthlyRecapService
 logger = logging.getLogger(__name__)
 
 
+def _check_profile_synced(request):
+    """Returns a 403 Response if the user has no linked profile or hasn't finished syncing."""
+    profile = getattr(request.user, 'profile', None)
+    if not profile:
+        return Response(
+            {'error': 'No PSN profile linked.', 'sync_gate': 'no_profile'},
+            status=http_status.HTTP_403_FORBIDDEN,
+        )
+    if profile.sync_status != 'synced':
+        return Response(
+            {'error': 'Profile sync not complete.', 'sync_gate': profile.sync_status},
+            status=http_status.HTTP_403_FORBIDDEN,
+        )
+    return None
+
+
 def _get_user_local_now(request):
     """Get current time in the authenticated user's timezone."""
     import pytz
@@ -106,6 +122,9 @@ class RecapAvailableView(APIView):
     authentication_classes = [SessionAuthentication, TokenAuthentication]
 
     def get(self, request):
+        gate = _check_profile_synced(request)
+        if gate:
+            return gate
         profile = request.user.profile
         is_premium = profile.user_is_premium
 
@@ -132,6 +151,9 @@ class RecapDetailView(APIView):
 
     @method_decorator(ratelimit(key='user', rate='60/m', method='GET', block=True))
     def get(self, request, year, month):
+        gate = _check_profile_synced(request)
+        if gate:
+            return gate
         profile = request.user.profile
         now_local = _get_user_local_now(request)
 
@@ -201,6 +223,9 @@ class RecapRegenerateView(APIView):
 
     @method_decorator(ratelimit(key='user', rate='10/m', method='POST', block=True))
     def post(self, request, year, month):
+        gate = _check_profile_synced(request)
+        if gate:
+            return gate
         profile = request.user.profile
         now_local = _get_user_local_now(request)
 
@@ -262,6 +287,9 @@ class RecapShareImageHTMLView(APIView):
 
     @method_decorator(ratelimit(key='user', rate='60/m', method='GET', block=True))
     def get(self, request, year, month):
+        gate = _check_profile_synced(request)
+        if gate:
+            return gate
         profile = request.user.profile
         now_local = _get_user_local_now(request)
 
@@ -441,6 +469,9 @@ class RecapSlidePartialView(APIView):
     }
 
     def get(self, request, year, month, slide_type):
+        gate = _check_profile_synced(request)
+        if gate:
+            return gate
         profile = request.user.profile
         now_local = _get_user_local_now(request)
 

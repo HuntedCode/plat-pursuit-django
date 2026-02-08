@@ -21,6 +21,24 @@ class PremiumRequiredMixin(LoginRequiredMixin):
         return redirect('beta_access_required')
 
 
+class RecapSyncGateMixin:
+    """
+    Returns a gated recap_index response if the user has no linked profile or
+    their profile hasn't finished syncing. Add to recap views before other mixins.
+    """
+    def _get_sync_gate_response(self, request):
+        from django.shortcuts import render as _render
+        profile = getattr(request.user, 'profile', None)
+        if not profile:
+            return _render(request, 'recap/recap_index.html', {'sync_gate': 'no_profile'})
+        if profile.sync_status != 'synced':
+            return _render(request, 'recap/recap_index.html', {
+                'sync_gate': profile.sync_status,
+                'profile': profile,
+            })
+        return None
+
+
 class ProfileHotbarMixin(View):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
