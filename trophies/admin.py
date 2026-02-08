@@ -1165,6 +1165,7 @@ class MonthlyRecapAdmin(admin.ModelAdmin):
         from core.services.email_service import EmailService
         from django.conf import settings
         from django.utils import timezone
+        from users.services.email_preference_service import EmailPreferenceService
 
         # Filter to only finalized recaps with linked users
         valid_recaps = queryset.filter(
@@ -1219,6 +1220,14 @@ class MonthlyRecapAdmin(admin.ModelAdmin):
                 else:
                     trophy_tier = '1000+'
 
+                # Generate preference token for email footer
+                try:
+                    preference_token = EmailPreferenceService.generate_preference_token(user.id)
+                    preference_url = f"{settings.SITE_URL}/users/email-preferences/?token={preference_token}"
+                except Exception as e:
+                    # Fallback to generic preferences page (no token)
+                    preference_url = f"{settings.SITE_URL}/users/email-preferences/"
+
                 context = {
                     'username': profile.display_psn_username or profile.psn_username,
                     'month_name': recap.month_name,
@@ -1233,6 +1242,7 @@ class MonthlyRecapAdmin(admin.ModelAdmin):
                     'has_streak': bool(recap.streak_data.get('longest_streak', 0) > 1),
                     'recap_url': f"{settings.SITE_URL}/recap/{recap.year}/{recap.month}/",
                     'site_url': settings.SITE_URL,
+                    'preference_url': preference_url,
                 }
 
                 subject = f"Your {recap.month_name} Monthly Rewind is Ready! 🏆"
