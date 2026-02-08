@@ -97,17 +97,15 @@
         }
 
         .stats-grid {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            flex-wrap: wrap;
-            gap: 40px;
             width: 100%;
+            margin: 0 auto;
+            border-spacing: 40px 0;
+            border-collapse: separate;
         }
 
         .stat-item {
             text-align: center;
-            flex: 0 0 auto;
+            padding: 0 20px;
         }
 
         .stat-value {
@@ -265,20 +263,22 @@
             <!-- Stats Preview -->
             <div class="stats-preview">
                 <h2>Quick Look at Your Month</h2>
-                <div class="stats-grid">
-                    <div class="stat-item">
-                        <span class="stat-value">{{ active_days }}</span>
-                        <span class="stat-label">Active Day{{ active_days|pluralize }}</span>
-                    </div>
-                    <div class="stat-item">
-                        <span class="stat-value">{{ trophy_tier }}</span>
-                        <span class="stat-label">Trophies</span>
-                    </div>
-                    <div class="stat-item">
-                        <span class="stat-value">{{ games_started }}</span>
-                        <span class="stat-label">Game{{ games_started|pluralize }} Started</span>
-                    </div>
-                </div>
+                <table class="stats-grid" role="presentation" cellpadding="0" cellspacing="0" align="center">
+                    <tr>
+                        <td class="stat-item">
+                            <span class="stat-value">{{ active_days }}</span>
+                            <span class="stat-label">Active Day{{ active_days|pluralize }}</span>
+                        </td>
+                        <td class="stat-item">
+                            <span class="stat-value">{{ trophy_tier }}</span>
+                            <span class="stat-label">Trophies</span>
+                        </td>
+                        <td class="stat-item">
+                            <span class="stat-value">{{ games_started }}</span>
+                            <span class="stat-label">Game{{ games_started|pluralize }} Started</span>
+                        </td>
+                    </tr>
+                </table>
             </div>
 
             <!-- Platinum Badge (if user earned platinums) -->
