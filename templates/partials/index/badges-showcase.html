@@ -1,0 +1,35 @@
+{% load static humanize custom_filters %}
+
+<section class="card shadow-lg shadow-neutral w-full bg-base-200 rounded-box border-2 border-base-300 transition duration-300 hover:shadow-secondary hover:border-secondary">
+    <div class="rounded-box p-4 bg-base-200 w-full transition duration-300 hover:bg-base-300">
+        <h2 class="text-2xl sm:text-3xl lg:text-4xl font-bold text-center italic">Badges</h2>
+        <p class="text-center text-base-content/70 mt-1">Earn exclusive badges by completing game series</p>
+        <div class="divider mt-2"></div>
+        <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+            {% for badge in items %}
+            <a href="{% url 'badge_detail' badge.series_slug %}"
+               class="card bg-base-100 border-2 border-base-300 shadow-md shadow-neutral transition-all duration-300 hover:scale-105 hover:border-{{ badge.tier|badge_color }} hover:shadow-{{ badge.tier|badge_color }} cursor-pointer group">
+                <div class="card-body p-3 gap-1 items-center text-center">
+                    <div class="relative w-28 h-28 mx-auto">
+                        <img src="{% static badge.layers.backdrop %}" alt="" class="absolute inset-0 w-full h-full object-cover rounded-box" loading="lazy" />
+                        {% if badge.has_custom_image %}
+                            <img src="{{ badge.layers.main }}" alt="{{ badge.name }}" class="absolute inset-0 w-full h-full object-cover rounded-box" loading="lazy" />
+                        {% else %}
+                            <img src="{% static badge.layers.main %}" alt="{{ badge.name }}" class="absolute inset-0 w-full h-full object-cover rounded-box" loading="lazy" />
+                        {% endif %}
+                        {% if badge.layers.foreground %}
+                            <img src="{% static badge.layers.foreground %}" alt="" class="absolute inset-0 w-full h-full object-cover rounded-box" loading="lazy" />
+                        {% endif %}
+                    </div>
+                    <h3 class="text-sm font-bold line-clamp-1 italic">{{ badge.name }}</h3>
+                    <p class="text-xs text-base-content/70 line-clamp-1">{{ badge.series }}</p>
+                    <span class="badge badge-sm badge-ghost">{{ badge.earned_count|intcomma }} earned</span>
+                </div>
+            </a>
+            {% endfor %}
+        </div>
+        <div class="text-center mt-4">
+            <a href="{% url 'badges_list' %}" class="btn btn-secondary">Browse All Badges</a>
+        </div>
+    </div>
+</section>

@@ -206,6 +206,7 @@ class BadgeListView(ProfileHotbarMixin, ListView):
         context['form'] = BadgeSearchForm(self.request.GET)
         context['selected_tiers'] = self.request.GET.getlist('tier')
 
+        track_page_view('badges_list', 'list', self.request)
         return context
 
 
@@ -399,6 +400,7 @@ class BadgeLeaderboardsView(ProfileHotbarMixin, DetailView):
             {'text': 'Leaderboards'},
         ]
 
+        track_page_view('badge_leaderboard', badge.series_slug, self.request)
         return context
 
 
@@ -458,6 +460,7 @@ class OverallBadgeLeaderboardsView(ProfileHotbarMixin, TemplateView):
             {'text': 'Leaderboards'},
         ]
 
+        track_page_view('overall_leaderboard', 'global', self.request)
         return context
 
 
@@ -642,4 +645,5 @@ class MilestoneListView(ProfileHotbarMixin, ListView):
             {'text': 'Milestones'},
         ]
 
+        track_page_view('milestones_list', 'list', self.request)
         return context

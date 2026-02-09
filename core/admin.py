@@ -4,7 +4,7 @@ from django.contrib import admin
 from django.http import HttpResponse
 from django.utils import timezone
 
-from .models import PageView, SiteEvent
+from .models import AnalyticsSession, PageView, SiteEvent
 
 
 def _export_pageviews_csv(modeladmin, request, queryset):
@@ -12,13 +12,27 @@ def _export_pageviews_csv(modeladmin, request, queryset):
     response = HttpResponse(content_type='text/csv')
     response['Content-Disposition'] = f'attachment; filename="pageviews_{timezone.now().strftime("%Y%m%d_%H%M%S")}.csv"'
     writer = csv.writer(response)
-    writer.writerow(['id', 'page_type', 'object_id', 'viewed_at', 'user_id', 'ip_address'])
-    for row in queryset.values_list('id', 'page_type', 'object_id', 'viewed_at', 'user_id', 'ip_address'):
+    writer.writerow(['id', 'page_type', 'object_id', 'viewed_at', 'session_id', 'user_id', 'ip_address'])
+    for row in queryset.values_list('id', 'page_type', 'object_id', 'viewed_at', 'session_id', 'user_id', 'ip_address'):
         writer.writerow(row)
     return response
 
 
 _export_pageviews_csv.short_description = "Export selected as CSV"
+
+
+def _export_sessions_csv(modeladmin, request, queryset):
+    """Export selected AnalyticsSession records as CSV."""
+    response = HttpResponse(content_type='text/csv')
+    response['Content-Disposition'] = f'attachment; filename="analytics_sessions_{timezone.now().strftime("%Y%m%d_%H%M%S")}.csv"'
+    writer = csv.writer(response)
+    writer.writerow(['session_id', 'user_id', 'ip_address', 'created_at', 'last_activity', 'page_count', 'referrer', 'user_agent'])
+    for row in queryset.values_list('session_id', 'user_id', 'ip_address', 'created_at', 'last_activity', 'page_count', 'referrer', 'user_agent'):
+        writer.writerow(row)
+    return response
+
+
+_export_sessions_csv.short_description = "Export selected as CSV"
 
 
 def _export_siteevents_csv(modeladmin, request, queryset):
@@ -35,16 +49,33 @@ def _export_siteevents_csv(modeladmin, request, queryset):
 _export_siteevents_csv.short_description = "Export selected as CSV"
 
 
+@admin.register(AnalyticsSession)
+class AnalyticsSessionAdmin(admin.ModelAdmin):
+    list_display = ('session_id', 'user_id', 'created_at', 'last_activity', 'page_count', 'ip_address')
+    list_filter = ('created_at', 'last_activity')
+    search_fields = ('session_id', 'user_id', 'ip_address')
+    date_hierarchy = 'created_at'
+    ordering = ('-created_at',)
+    list_per_page = 100
+    actions = [_export_sessions_csv]
+    readonly_fields = ('session_id', 'user_id', 'ip_address', 'created_at',
+                       'last_activity', 'ended_at', 'page_count', 'page_sequence',
+                       'referrer', 'user_agent')
+
+    def has_add_permission(self, request):
+        return False
+
+
 @admin.register(PageView)
 class PageViewAdmin(admin.ModelAdmin):
-    list_display = ('page_type', 'object_id', 'viewed_at', 'user_id', 'ip_address')
+    list_display = ('page_type', 'object_id', 'viewed_at', 'session_id', 'user_id', 'ip_address')
     list_filter = ('page_type', 'viewed_at')
-    search_fields = ('object_id', 'user_id', 'ip_address')
+    search_fields = ('object_id', 'user_id', 'ip_address', 'session_id')
     date_hierarchy = 'viewed_at'
     ordering = ('-viewed_at',)
     list_per_page = 100
     actions = [_export_pageviews_csv]
-    readonly_fields = ('page_type', 'object_id', 'viewed_at', 'user_id', 'ip_address')
+    readonly_fields = ('page_type', 'object_id', 'viewed_at', 'session_id', 'user_id', 'ip_address')
 
     def has_add_permission(self, request):
         return False

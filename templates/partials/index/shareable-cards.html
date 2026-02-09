@@ -1,0 +1,123 @@
+{% load static %}
+
+<section class="card shadow-lg shadow-neutral w-full bg-base-200 rounded-box border-2 border-base-300 transition duration-300 hover:shadow-primary hover:border-primary">
+    <div class="rounded-box p-4 bg-base-200 w-full transition duration-300 hover:bg-base-300">
+        <h2 class="text-2xl sm:text-3xl lg:text-4xl font-bold text-center italic">Share Your Achievements</h2>
+        <p class="text-center text-base-content/70 mt-1">Generate beautiful share cards for your platinums and monthly recaps</p>
+        <div class="divider mt-2"></div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 items-center">
+            <!-- Example Card Image -->
+            <div class="space-y-4">
+                <div class="rounded-box overflow-hidden border-2 border-base-300 shadow-lg transition-all duration-300 hover:shadow-primary hover:border-primary hover:scale-[1.01] cursor-pointer shareable-image-clickable"
+                     data-image-src="{% static 'images/showcase/recap_card_example.png' %}"
+                     data-image-alt="Monthly Recap Card Example">
+                    <img src="{% static 'images/showcase/recap_card_example.png' %}"
+                         alt="Monthly Recap Card Example"
+                         class="w-full h-auto" loading="lazy" />
+                </div>
+            </div>
+
+            <!-- Description & CTA -->
+            <div class="flex flex-col items-center gap-4 text-center px-4">
+                <h3 class="text-xl sm:text-2xl font-bold italic">Monthly Recaps</h3>
+                <p class="text-base-content/70 text-sm sm:text-base max-w-md">
+                    Every month, get a personalized recap of your trophy hunting journey; 
+                    trophies earned, rarest achievements, activity streaks, and more.
+                    Download a beautiful share card to post on social media.
+                </p>
+                <div class="flex flex-col sm:flex-row gap-3">
+                    {% if user.is_authenticated %}
+                        <a href="{% url 'recap_index' %}" class="btn btn-primary">View Your Recap</a>
+                    {% else %}
+                        <a href="{% url 'account_signup' %}" class="btn btn-primary">Sign Up to Get Yours</a>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <div class="divider mt-6"></div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 items-center">
+            <!-- Description & CTA (Left Side) -->
+            <div class="flex flex-col items-center gap-4 text-center px-4 lg:order-1">
+                <h3 class="text-xl sm:text-2xl font-bold italic">Platinum Share Cards</h3>
+                <p class="text-base-content/70 text-sm sm:text-base max-w-md">
+                    Celebrate every platinum milestone! Generate stunning share cards for each platinum you earn,
+                    personalized with your profile stats, rarity data, and completion time.
+                    Perfect for sharing your achievements on social media.
+                </p>
+                <div class="flex flex-col sm:flex-row gap-3">
+                    {% if user.is_authenticated %}
+                        <a href="{% url 'my_shareables' %}" class="btn btn-primary">View My Shareable Cards</a>
+                    {% else %}
+                        <a href="{% url 'account_signup' %}" class="btn btn-primary">Sign Up to Create Yours</a>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Example Card Image (Right Side) -->
+            <div class="space-y-4 lg:order-2">
+                <div class="rounded-box overflow-hidden border-2 border-base-300 shadow-lg transition-all duration-300 hover:shadow-primary hover:border-primary hover:scale-[1.01] cursor-pointer shareable-image-clickable"
+                     data-image-src="{% static 'images/showcase/plat_card_example.png' %}"
+                     data-image-alt="Platinum Share Card Example">
+                    <img src="{% static 'images/showcase/plat_card_example.png' %}"
+                         alt="Platinum Share Card Example"
+                         class="w-full h-auto" loading="lazy" />
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+{# Shareable Card Image Modal #}
+<dialog id="shareable-image-modal" class="modal modal-bottom sm:modal-middle backdrop-blur-sm">
+    <div class="modal-box max-w-7xl w-full p-0 bg-transparent shadow-none">
+        <div class="relative">
+            {# Close button #}
+            <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2 z-10 bg-base-100/80 hover:bg-base-100"
+                    onclick="document.getElementById('shareable-image-modal').close()">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+            </button>
+
+            {# Image container #}
+            <figure class="w-full rounded-lg overflow-hidden shadow-xl bg-base-300 border-4 border-base-300">
+                <img id="shareable-modal-image"
+                     src=""
+                     alt="Enlarged view"
+                     class="w-full h-auto object-contain max-h-[85vh]">
+            </figure>
+        </div>
+    </div>
+    <form method="dialog" class="modal-backdrop">
+        <button>close</button>
+    </form>
+</dialog>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const modal = document.getElementById('shareable-image-modal');
+    const modalImage = document.getElementById('shareable-modal-image');
+
+    // Handle clicks on shareable card images
+    document.addEventListener('click', function(e) {
+        const clickableImage = e.target.closest('.shareable-image-clickable');
+        if (clickableImage) {
+            e.preventDefault();
+
+            // Get image data from data attributes
+            const imageSrc = clickableImage.dataset.imageSrc;
+            const imageAlt = clickableImage.dataset.imageAlt || 'Shareable card';
+
+            // Set modal content
+            modalImage.src = imageSrc;
+            modalImage.alt = imageAlt;
+
+            // Show modal
+            modal.showModal();
+        }
+    });
+});
+</script>

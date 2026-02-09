@@ -10,8 +10,6 @@ from django.core.cache import cache
 from django.utils import timezone
 from datetime import timedelta
 from .services.playing_now import get_playing_now
-from .services.featured_profile import get_featured_profile
-from .services.events import get_upcoming_events
 from .services.featured_guide import get_featured_guide
 from .services.tracking import track_page_view
 from trophies.models import Concept
@@ -27,15 +25,16 @@ class IndexView(ProfileHotbarMixin, TemplateView):
     FEATURED_GAMES_TIMEOUT = 86400
     FEATURED_GUIDE_KEY = 'featured_guide'
     FEATURED_GUIDE_TIMEOUT = 86400
-    LATEST_PLATINUMS_KEY = 'latest_platinums'
-    LATEST_PLATINUMS_TIMEOUT = 3600
+    LATEST_BADGES_KEY = 'latest_badges'
+    LATEST_BADGES_TIMEOUT = 3600
     PLAYING_NOW_KEY = 'playing_now'
     PLAYING_NOW_TIMEOUT = 86400
-    FEATURED_PROFILE_KEY = 'featured_profile'
-    FEATURED_PROFILE_TIMEOUT = 86400
-    EVENTS_KEY = 'upcoming_events'
-    EVENTS_TIMEOUT = 86400
-    EVENTS_PAGE_SIZE = 3
+    FEATURED_BADGES_KEY = 'featured_badges'
+    FEATURED_BADGES_TIMEOUT = 86400
+    FEATURED_CHECKLISTS_KEY = 'featured_checklists'
+    FEATURED_CHECKLISTS_TIMEOUT = 86400
+    WHATS_NEW_KEY = 'whats_new'
+    WHATS_NEW_TIMEOUT = 3600
 
 
     def get_context_data(self, **kwargs):
@@ -84,13 +83,13 @@ class IndexView(ProfileHotbarMixin, TemplateView):
         except Concept.DoesNotExist:
             pass
 
-        # Latest platinums - cache resets hourly at top of the hour UTC (cron)
-        latest_plats_key = f"{self.LATEST_PLATINUMS_KEY}_{today_utc}_{now_utc.hour:02d}"
-        latest_plats = cache.get(latest_plats_key)
-        if latest_plats is None:
-            prev_key = f"{self.LATEST_PLATINUMS_KEY}_{today_utc}_{(now_utc.hour - 1):02d}"
-            latest_plats = cache.get(prev_key)
-        context['latestPlatinums'] = latest_plats
+        # Latest badges - cache resets hourly at top of the hour UTC (cron)
+        latest_badges_key = f"{self.LATEST_BADGES_KEY}_{today_utc}_{now_utc.hour:02d}"
+        latest_badges = cache.get(latest_badges_key)
+        if latest_badges is None:
+            prev_key = f"{self.LATEST_BADGES_KEY}_{today_utc}_{(now_utc.hour - 1):02d}"
+            latest_badges = cache.get(prev_key)
+        context['latestBadges'] = latest_badges
 
         # Playing Now - cache resets daily at midnight UTC
         playing_now_key = f"{self.PLAYING_NOW_KEY}_{today_utc}"
@@ -101,25 +100,31 @@ class IndexView(ProfileHotbarMixin, TemplateView):
         )
         context['playingNow'] = playing_now
 
-        # Featured profile - cache resets weekly
-        week_start = (now_utc - timedelta(days=now_utc.weekday())).date().isoformat()
-        featured_profile_key = f"featured_profile_{week_start}"
-        featured = cache.get_or_set(
-            featured_profile_key,
-            lambda: get_featured_profile(),
-            self.FEATURED_PROFILE_TIMEOUT * 8
-        )
-        context['featuredProfile'] = featured
+        # Featured badges - cache resets daily at midnight UTC (cron)
+        featured_badges_key = f"{self.FEATURED_BADGES_KEY}_{today_utc}"
+        featured_badges = cache.get(featured_badges_key)
+        if featured_badges is None:
+            prev_day = now_utc - timedelta(days=1)
+            prev_key = f"{self.FEATURED_BADGES_KEY}_{prev_day.date().isoformat()}"
+            featured_badges = cache.get(prev_key)
+        context['featuredBadges'] = featured_badges
 
-        # Upcoming Events - cache resets daily at midnight UTC
-        events_key = f"{self.EVENTS_KEY}_{today_utc}"
-        events = cache.get_or_set(
-            events_key,
-            get_upcoming_events,
-            self.EVENTS_TIMEOUT * 2
-        )
-        context['upcomingEvents_json'] = json.dumps(events)
-        context['eventsPageSize'] = self.EVENTS_PAGE_SIZE
+        # Featured checklists - cache resets daily at midnight UTC (cron)
+        featured_checklists_key = f"{self.FEATURED_CHECKLISTS_KEY}_{today_utc}"
+        featured_checklists = cache.get(featured_checklists_key)
+        if featured_checklists is None:
+            prev_day = now_utc - timedelta(days=1)
+            prev_key = f"{self.FEATURED_CHECKLISTS_KEY}_{prev_day.date().isoformat()}"
+            featured_checklists = cache.get(prev_key)
+        context['featuredChecklists'] = featured_checklists
+
+        # What's New - cache resets hourly at top of the hour UTC (cron)
+        whats_new_key = f"{self.WHATS_NEW_KEY}_{today_utc}_{now_utc.hour:02d}"
+        whats_new = cache.get(whats_new_key)
+        if whats_new is None:
+            prev_key = f"{self.WHATS_NEW_KEY}_{today_utc}_{(now_utc.hour - 1):02d}"
+            whats_new = cache.get(prev_key)
+        context['whatsNew'] = whats_new
 
         return context
     

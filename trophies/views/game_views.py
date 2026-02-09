@@ -128,6 +128,8 @@ class GamesListView(ProfileHotbarMixin, ListView):
         context['view_type'] = self.request.GET.get('view', 'grid')
         context['show_only_platinum'] = self.request.GET.get('show_only_platinum', '')
         context['filter_shovelware'] = self.request.GET.get('filter_shovelware', '')
+
+        track_page_view('games_list', 'list', self.request)
         return context
 
 
@@ -812,5 +814,6 @@ class GuideListView(ProfileHotbarMixin, ListView):
         context['is_paginated'] = self.object_list.count() > self.paginate_by
 
         track_site_event('guide_visit', 'list', self.request)
+        track_page_view('guides_list', 'list', self.request)
 
         return context

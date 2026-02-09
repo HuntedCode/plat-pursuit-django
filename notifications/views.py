@@ -7,6 +7,7 @@ from django.contrib import messages
 from django.utils import timezone
 from datetime import datetime
 
+from core.services.tracking import track_page_view
 from trophies.mixins import ProfileHotbarMixin
 from notifications.models import (
     NotificationTemplate, ScheduledNotification, NotificationLog
@@ -46,6 +47,7 @@ class NotificationInboxView(LoginRequiredMixin, ProfileHotbarMixin, TemplateView
         from trophies.themes import get_available_themes_for_grid
         context['available_themes'] = get_available_themes_for_grid(include_game_art=True)
 
+        track_page_view('notifications', 'inbox', self.request)
         return context
 
 

@@ -4,27 +4,40 @@
     {% include 'partials/breadcrumb.html' with items=breadcrumb %}
 
     <div class="space-y-8">
-        <!-- Community Stats Page Header -->
+        <!-- Hero for unauthenticated users -->
+        {% include 'partials/index/hero.html' %}
+
+        <!-- Community Stats (8 stats) -->
         {% include 'partials/index/community-stats.html' with items=communityStats %}
+
+        <!-- Badges Showcase -->
+        {% if featuredBadges %}
+            {% include 'partials/index/badges-showcase.html' with items=featuredBadges %}
+        {% endif %}
+
+        <!-- Shareable Cards Showcase -->
+        {% include 'partials/index/shareable-cards.html' %}
 
         <!-- Featured Games Carousel -->
         {% include 'partials/index/featured-games.html' with items=featuredGames %}
 
         <!-- Featured Guide -->
-         {% include 'partials/index/featured-guide.html' %}
+        {% include 'partials/index/featured-guide.html' %}
 
-        <!-- Lower Content -->
+        <!-- Lower Content Grid -->
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div class="lg:col-span-2 space-y-8">
-                {% include 'partials/index/latest-platinums.html' with items=latestPlatinums %}
+                {% include 'partials/index/latest-badges.html' with items=latestBadges %}
+                {% if featuredChecklists %}
+                    {% include 'partials/index/checklists-showcase.html' with items=featuredChecklists %}
+                {% endif %}
                 {% include 'partials/index/playing-now.html' with items=playingNow %}
             </div>
             <aside class="lg:col-span-1">
-                <div class="sticky top-20 mb-8">
-                    <div class="hidden">
-                        {% include 'partials/index/featured-profile.html' with item=featuredProfile %}
-                    </div>
-                    {% include 'partials/index/events-list.html' with upcomingEvents=upcomingEvents pageSize=eventsPageSize %}
+                <div class="sticky top-20 space-y-8 mb-8">
+                    {% if whatsNew %}
+                        {% include 'partials/index/whats-new.html' with items=whatsNew %}
+                    {% endif %}
                 </div>
             </aside>
         </div>

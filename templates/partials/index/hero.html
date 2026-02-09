@@ -1,0 +1,24 @@
+{% load static %}
+
+{% if not user.is_authenticated %}
+<section class="hero min-h-[50vh] bg-base-200 rounded-box border-2 border-base-300 shadow-lg shadow-neutral transition duration-300 hover:shadow-primary hover:border-primary">
+    <div class="hero-content text-center flex-col gap-4 py-12 px-4">
+        <img src="{% static 'images/logo.png' %}" alt="PlatPursuit Logo" class="w-24 h-24" loading="eager" decoding="async" />
+        <h1 class="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold italic text-primary">
+            No Trophy Can Hide From Us
+        </h1>
+        <p class="text-base sm:text-lg md:text-xl text-base-content/70 max-w-2xl">
+            Track your PlayStation trophies, earn exclusive badges, create checklists,
+            and join a passionate community of trophy hunters.
+        </p>
+        <div class="flex flex-wrap gap-4 justify-center mt-2">
+            <a href="{% url 'account_signup' %}" class="btn btn-primary btn-lg">
+                Start Your Pursuit
+            </a>
+            <a href="{% url 'profiles_list' %}" class="btn btn-ghost btn-lg">
+                Browse Profiles
+            </a>
+        </div>
+    </div>
+</section>
+{% endif %}

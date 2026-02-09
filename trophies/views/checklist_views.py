@@ -303,6 +303,7 @@ class ChecklistEditView(LoginRequiredMixin, ProfileHotbarMixin, DetailView):
         if checklist.concept and checklist.concept.bg_url:
             context['image_urls'] = {'bg_url': checklist.concept.bg_url}
 
+        track_page_view('checklist_edit', checklist.id, self.request)
         return context
 
 
@@ -358,6 +359,7 @@ class MyChecklistsView(LoginRequiredMixin, ProfileHotbarMixin, TemplateView):
         # Active tab
         context['active_tab'] = self.request.GET.get('tab', 'drafts')
 
+        track_page_view('my_checklists', 'user', self.request)
         return context
 
 
@@ -459,4 +461,5 @@ class MyShareablesView(LoginRequiredMixin, ProfileHotbarMixin, TemplateView):
             {'text': 'My Shareables'},
         ]
 
+        track_page_view('my_shareables', 'user', self.request)
         return context

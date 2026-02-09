@@ -83,7 +83,7 @@ class Command(BaseCommand):
             f"{prefix}featured_badges_*",
             f"{prefix}featured_checklists_*",
             f"{prefix}whats_new_*",
-            f"{prefix}upcoming_events_*"
+            f"{prefix}latest_badges_*"
         ]
         
         try:

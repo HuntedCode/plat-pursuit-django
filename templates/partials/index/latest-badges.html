@@ -1,0 +1,44 @@
+{% load humanize custom_filters static %}
+
+<section class="card w-full bg-base-200 shadow-lg shadow-neutral transition duration-300 hover:shadow-accent hover:border-accent hover:bg-base-300 mb-8">
+    <div class="card-body">
+        <h2 class="card-title text-2xl sm:text-3xl lg:text-4xl font-bold place-self-center italic">Latest Badges</h2>
+        <div class="divider mt-0"></div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {% for item in items %}
+                <div class="card bg-base-100 shadow-lg shadow-neutral transition duration-300 cursor-pointer hover:scale-105 hover:border-accent hover:shadow-accent hover:shadow-md group" onclick="document.location='{% url 'badge_detail' item.series_slug %}'">
+                    <div class="card-body flex flex-row items-center justify-between p-4 overflow-x-hidden group">
+
+                        <div class="flex flex-row items-center">
+                            <figure class="flex shrink-0 rounded-lg mr-4 border-2 border-base-300 transition duration-300 hover:scale-105 group-hover:border-accent group-focus-within:border-accent">
+                                <div class="relative w-12 h-12 xl:w-20 xl:h-20">
+                                    <img src="{% static item.layers.backdrop %}" alt="" class="absolute inset-0 w-full h-full object-cover rounded-lg" loading="lazy" />
+                                    {% if item.has_custom_image %}
+                                        <img src="{{ item.layers.main }}" alt="{{ item.name }}" class="absolute inset-0 w-full h-full object-cover rounded-lg" loading="lazy" />
+                                    {% else %}
+                                        <img src="{% static item.layers.main %}" alt="{{ item.name }}" class="absolute inset-0 w-full h-full object-cover rounded-lg" loading="lazy" />
+                                    {% endif %}
+                                    {% if item.layers.foreground %}
+                                        <img src="{% static item.layers.foreground %}" alt="" class="absolute inset-0 w-full h-full object-cover rounded-lg" loading="lazy" />
+                                    {% endif %}
+                                </div>
+                            </figure>
+                            <div class="flex-grow space-y-1">
+                                <h3 class="card-title text-sm md:text-base xl:text-lg line-clamp-1 italic">{{ item.name }}</h3>
+                                <p class="text-xs xl:text-sm text-base-content/70 mb-2 line-clamp-1">{{ item.series }}</p>
+                                <div>
+                                    <span class="badge badge-outline badge-xs xl:badge-sm">{{ item.created_at|iso_naturaltime|default:"Just now" }}</span>
+                                    <span class="badge badge-outline badge-accent badge-xs xl:badge-sm">{{ item.earned_count }} Pursuers</span>
+                                </div>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+            {% endfor %}
+        </div>
+        <div class="text-right mt-4">
+            <a href="{% url 'badges_list' %}" class="btn btn-ghost">Browse All Badges</a>
+        </div>
+    </div>
+</section>

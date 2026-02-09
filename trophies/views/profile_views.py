@@ -96,6 +96,8 @@ class ProfilesListView(ProfileHotbarMixin, ListView):
         context['form'] = ProfileSearchForm(self.request.GET)
         context['is_paginated'] = self.object_list.count() > self.paginate_by
         context['filter_shovelware'] = self.request.GET.get('filter_shovelware', '')
+
+        track_page_view('profiles_list', 'list', self.request)
         return context
 
 

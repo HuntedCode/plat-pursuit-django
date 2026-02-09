@@ -1,4 +1,5 @@
 import logging
+from core.services.tracking import track_page_view
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db.models import Q, F
 from django.db.models.functions import Lower
@@ -121,6 +122,8 @@ class TrophiesListView(ProfileHotbarMixin, ListView):
         context['selected_psn_rarity'] = self.request.GET.getlist('psn_rarity')
         context['show_only_platinum'] = self.request.GET.get('show_only_platinum', '')
         context['filter_shovelware'] = self.request.GET.get('filter_shovelware', '')
+
+        track_page_view('trophies_list', 'list', self.request)
         return context
 
 
@@ -169,6 +172,7 @@ class TrophyCaseView(ProfileHotbarMixin, ListView):
         max_selections = 10 if profile.user_is_premium else 3 if is_own_profile else 0
         context['max_selections'] = max_selections
 
+        track_page_view('trophy_case', profile.id, self.request)
         return context
 
 class ToggleSelectionView(LoginRequiredMixin, ProfileHotbarMixin, View):

@@ -1,0 +1,31 @@
+{% load humanize %}
+
+<section class="card shadow-lg shadow-neutral w-full bg-base-200 border-2 border-base-300 transition duration-300 hover:shadow-info hover:border-info">
+    <div class="card-body items-center text-center pt-4 pb-4 px-4 w-full">
+        <h2 class="card-title text-xl xl:text-2xl 2xl:text-3xl font-bold italic">What's New</h2>
+        <div class="divider mt-0 mb-2"></div>
+        <div class="space-y-2 w-full">
+            {% for item in items %}
+            <a href="{{ item.url }}"
+               class="flex items-center gap-3 p-2 rounded-box bg-base-100 border border-base-300 shadow-sm transition duration-200 hover:shadow-md hover:border-info hover:bg-base-200 cursor-pointer group w-full">
+                <div class="badge
+                    {% if item.type == 'new_badge' %}badge-secondary
+                    {% elif item.type == 'new_checklist' %}badge-success
+                    {% elif item.type == 'new_guide' %}badge-accent
+                    {% endif %} badge-sm whitespace-nowrap shrink-0">
+                    {% if item.type == 'new_badge' %}Badge
+                    {% elif item.type == 'new_checklist' %}Checklist
+                    {% elif item.type == 'new_guide' %}Guide
+                    {% endif %}
+                </div>
+                <div class="text-start overflow-hidden min-w-0">
+                    <h4 class="text-sm font-bold line-clamp-1 group-hover:text-info transition-colors">{{ item.title }}</h4>
+                    <p class="text-xs text-base-content/60 line-clamp-1">{{ item.subtitle }}</p>
+                </div>
+            </a>
+            {% empty %}
+            <p class="text-center text-base-content/50 text-sm py-4">No recent updates</p>
+            {% endfor %}
+        </div>
+    </div>
+</section>

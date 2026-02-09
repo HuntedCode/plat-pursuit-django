@@ -2,8 +2,8 @@
 Page view and site event tracking service.
 
 Design:
-- Redis key `pv:dedup:{page_type}:{object_id}:{viewer_key}` with 86400s TTL
-  gates whether to count a view (one view per viewer per page per 24 hours).
+- Redis key `pv:dedup:{page_type}:{object_id}:{session_id}` with 1800s TTL
+  gates whether to count a view (one view per session per page per 30 minutes).
 - If the Redis gate passes, the PageView DB record and denormalized view_count
   update run in a background daemon thread to keep the hot path fast.
 - SiteEvents (guide visits, share card downloads, recap shares) write synchronously
@@ -17,7 +17,7 @@ from django.db.models import F
 
 logger = logging.getLogger("psn_api")
 
-_DEDUP_TTL = 86400  # 24 hours in seconds
+_DEDUP_TTL = 1800  # 30 minutes in seconds (aligned with session timeout)
 
 
 def _get_ip(request):
@@ -28,29 +28,88 @@ def _get_ip(request):
     return request.META.get('REMOTE_ADDR', '')
 
 
-def _get_viewer_key(request):
+def _append_to_page_sequence(page_type, object_id, session_id):
     """
-    Returns a stable string identifier for the viewer.
-    Authenticated: 'u:{user_id}'
-    Anonymous: 'ip:{ip_address}'
+    Append a page visit to the session's page_sequence. Runs in background thread.
+
+    Called on every page view (before dedup) to capture the full navigation path,
+    including repeat visits to the same page.
+
+    Note: For brand-new sessions, the AnalyticsSession DB row is created in a
+    separate background thread. A single retry with 0.5s delay handles this race.
     """
-    if request.user.is_authenticated:
-        return f"u:{request.user.id}"
-    ip = _get_ip(request)
-    return f"ip:{ip}" if ip else "ip:unknown"
+    try:
+        from django.utils import timezone
+        from django.db import connection
+
+        page_entry_json = (
+            f'[{{"page_type": "{page_type}", '
+            f'"object_id": "{str(object_id)}", '
+            f'"timestamp": "{timezone.now().isoformat()}"}}]'
+        )
+        session_id_str = str(session_id)
+
+        with connection.cursor() as cursor:
+            cursor.execute("""
+                UPDATE core_analyticssession
+                SET page_sequence = page_sequence || %s::jsonb
+                WHERE session_id = %s
+            """, [page_entry_json, session_id_str])
+
+            if cursor.rowcount == 0:
+                import time
+                time.sleep(0.5)
+                cursor.execute("""
+                    UPDATE core_analyticssession
+                    SET page_sequence = page_sequence || %s::jsonb
+                    WHERE session_id = %s
+                """, [page_entry_json, session_id_str])
+
+                if cursor.rowcount == 0:
+                    logger.warning(
+                        "AnalyticsSession row not found after retry (sequence): session_id=%s, page_type=%s",
+                        session_id_str, page_type,
+                    )
+    except Exception:
+        logger.exception("Failed to append page sequence: page_type=%s, object_id=%s", page_type, object_id)
 
 
-def _write_pageview_to_db(page_type, object_id, user_id, ip_address):
-    """Write a PageView record and increment the parent model's view_count. Runs in background thread."""
+def _write_pageview_to_db(page_type, object_id, user_id, ip_address, session_id):
+    """
+    Write a PageView record and increment counters. Runs in background thread.
+
+    Only called for deduplicated views (unique page per session per 30-min window).
+    Updates:
+    - PageView record (creates new row)
+    - Parent model view_count (Profile, Game, etc.)
+    - AnalyticsSession page_count (unique pages visited)
+
+    Note: page_sequence is updated separately by _append_to_page_sequence (pre-dedup).
+    """
     try:
         from core.models import PageView
+        from django.db import connection
+
+        # Create PageView record
         PageView.objects.create(
             page_type=page_type,
             object_id=str(object_id),
             user_id=user_id,
             ip_address=ip_address or None,
+            session_id=session_id,
         )
+
+        # Increment parent model view_count
         _increment_parent_view_count(page_type, object_id)
+
+        # Increment session page_count (unique pages only, deduped)
+        session_id_str = str(session_id)
+        with connection.cursor() as cursor:
+            cursor.execute("""
+                UPDATE core_analyticssession
+                SET page_count = page_count + 1
+                WHERE session_id = %s
+            """, [session_id_str])
     except Exception:
         logger.exception("Failed to write page view: page_type=%s, object_id=%s", page_type, object_id)
 
@@ -82,9 +141,8 @@ def track_page_view(page_type, object_id, request):
     """
     Track a deduplicated page view with background DB write.
 
-    Deduplication: one view per viewer per page per 24 hours.
-    - Authenticated users identified by user_id
-    - Anonymous users identified by IP address
+    Deduplication: one view per session per page per 30-minute window.
+    Session identified by analytics_session_id (set by AnalyticsSessionMiddleware).
 
     Args:
         page_type: One of 'profile', 'game', 'checklist', 'badge', 'index'
@@ -92,10 +150,22 @@ def track_page_view(page_type, object_id, request):
         request: Django HttpRequest object
     """
     try:
-        viewer_key = _get_viewer_key(request)
-        dedup_key = f"pv:dedup:{page_type}:{object_id}:{viewer_key}"
+        # Get analytics session ID from request (set by middleware)
+        session_id = getattr(request, 'analytics_session_id', None)
+        if not session_id:
+            logger.warning("No analytics_session_id on request - skipping track_page_view for %s:%s", page_type, object_id)
+            return
 
-        # cache.add() sets the key only if it doesn't exist; returns True if added (new view)
+        # Always append to page_sequence (captures full navigation path including repeat visits)
+        seq_thread = threading.Thread(
+            target=_append_to_page_sequence,
+            args=(page_type, str(object_id), session_id),
+            daemon=True,
+        )
+        seq_thread.start()
+
+        # Dedup: one PageView record + page_count increment per page per session per 30-min window
+        dedup_key = f"pv:dedup:{page_type}:{object_id}:{session_id}"
         is_new_view = cache.add(dedup_key, 1, _DEDUP_TTL)
 
         if not is_new_view:
@@ -107,7 +177,7 @@ def track_page_view(page_type, object_id, request):
 
         thread = threading.Thread(
             target=_write_pageview_to_db,
-            args=(page_type, str(object_id), user_id, ip_address),
+            args=(page_type, str(object_id), user_id, ip_address, session_id),
             daemon=True,
         )
         thread.start()
