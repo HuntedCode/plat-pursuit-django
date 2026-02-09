@@ -264,6 +264,7 @@ class SubscriptionManagementView(LoginRequiredMixin, TemplateView):
         sub = Subscription.objects.filter(customer__subscriber=user).first()
         if sub and sub.status == 'active':
             context['tier'] = user.get_premium_tier()
+            context['premium_tier_slug'] = user.premium_tier
             context['status'] = sub.status.capitalize()
             context['next_billing'] = sub.current_period_end if sub.current_period_end else 'N/A'
 
