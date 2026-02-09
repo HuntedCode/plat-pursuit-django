@@ -161,14 +161,25 @@ class RecapSlideView(LoginRequiredMixin, RecapSyncGateMixin, ProfileHotbarMixin,
         profile = self.request.user.profile
         now_local = _get_user_local_now(self.request)
 
+        # Always provide base context (needed for calendar month selector on no-activity pages too)
+        context['year'] = year
+        context['month'] = month
+        context['month_name'] = calendar.month_name[month]
+        context['is_premium'] = profile.user_is_premium
+
+        # Calendar month selector
+        calendar_data = MonthlyRecapService.get_available_months_by_year(
+            profile,
+            include_premium_only=profile.user_is_premium
+        )
+        calendar_data['years_json'] = json.dumps(calendar_data['years'])
+        context['calendar_data'] = calendar_data
+
         # Get or generate the recap
         recap = MonthlyRecapService.get_or_generate_recap(profile, year, month)
 
         if not recap:
             context['no_activity'] = True
-            context['year'] = year
-            context['month'] = month
-            context['month_name'] = calendar.month_name[month]
             context['recap_json'] = json.dumps({'slides': []})
             return context
 
@@ -189,20 +200,7 @@ class RecapSlideView(LoginRequiredMixin, RecapSyncGateMixin, ProfileHotbarMixin,
             'slides': slides,
         }
 
-        context['year'] = year
-        context['month'] = month
-        context['month_name'] = calendar.month_name[month]
         context['recap_json'] = json.dumps(recap_data)
-        context['is_premium'] = profile.user_is_premium
-
-        # Get available months for calendar month selector
-        calendar_data = MonthlyRecapService.get_available_months_by_year(
-            profile,
-            include_premium_only=profile.user_is_premium
-        )
-        # JSON-encode the years data to ensure proper boolean conversion for JavaScript
-        calendar_data['years_json'] = json.dumps(calendar_data['years'])
-        context['calendar_data'] = calendar_data
 
         # Get available months for bottom month picker (backward compatibility)
         is_current_month = (year == now_local.year and month == now_local.month)

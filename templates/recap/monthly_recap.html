@@ -442,7 +442,7 @@
         Check out another month or start hunting!
     </p>
     <div class="flex gap-2 justify-center flex-wrap">
-        <button onclick="window.scrollTo({top: 0, behavior: 'smooth'})" class="btn btn-ghost">
+        <button onclick="var el = document.getElementById('month-calendar-card'); el.scrollIntoView({behavior: 'smooth', block: 'center'}); el.classList.add('ring-2', 'ring-primary'); setTimeout(function(){ el.classList.remove('ring-2', 'ring-primary'); }, 2000);" class="btn btn-ghost">
             Pick Another Month
         </button>
         <a href="{% url 'games_list' %}" class="btn btn-primary">Browse Games</a>
