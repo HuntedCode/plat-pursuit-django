@@ -531,6 +531,15 @@ class TokenKeeper:
             stuck_count = 0
 
             for profile in stuck_profiles:
+                # Grace period: skip profiles that started syncing recently
+                sync_started_at = redis_client.get(f"sync_started_at:{profile.id}")
+                if sync_started_at:
+                    try:
+                        if time.time() - float(sync_started_at) < 90:
+                            continue
+                    except (ValueError, TypeError):
+                        pass
+
                 # Check if there are any pending jobs for this profile
                 current_jobs = self._get_current_jobs_for_profile(profile.id)
 
@@ -834,6 +843,7 @@ class TokenKeeper:
         finally:
             # Always clear the sync_complete in-progress flag, even on error
             redis_client.delete(sync_complete_key)
+            redis_client.delete(f"sync_started_at:{profile_id}")
 
     def _job_handle_privacy_error(self, profile_id: int):
         try:

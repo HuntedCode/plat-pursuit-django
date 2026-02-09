@@ -80,9 +80,9 @@ class Command(BaseCommand):
             f"{prefix}featured_guide_*",
             f"{prefix}featured_guide:*",
             f"{prefix}playing_now_*",
-            f"{prefix}latest_psn_rares_*",
-            f"{prefix}latest_pp_rares_*",
-            f"{prefix}featured_profile_*",
+            f"{prefix}featured_badges_*",
+            f"{prefix}featured_checklists_*",
+            f"{prefix}whats_new_*",
             f"{prefix}upcoming_events_*"
         ]
         
@@ -139,7 +139,7 @@ class Command(BaseCommand):
                 deleted_count += 1
             
             # Clear profile_jobs:* (all queues)
-            for pattern in ['profile_jobs:*', 'deferred_jobs:*', 'pending_sync_complete:*']:
+            for pattern in ['profile_jobs:*', 'deferred_jobs:*', 'pending_sync_complete:*', 'sync_started_at:*']:
                 matching_keys = redis_client.keys(pattern)
                 if matching_keys:
                     redis_client.delete(*matching_keys)
@@ -162,7 +162,10 @@ class Command(BaseCommand):
             
         lock_key = f"complete_lock:{profile_id}"
         profile_jobs_key = f"pending_sync_complete:{profile_id}"
+        sync_started_key = f"sync_started_at:{profile_id}"
         redis_client.delete(lock_key)
         self.stdout.write(self.style.SUCCESS(f"Lock successfully flushed!"))
-        redis_client.delete(profile_id)
+        redis_client.delete(profile_jobs_key)
         self.stdout.write(self.style.SUCCESS(f"Pending complete successfully flushed!"))
+        redis_client.delete(sync_started_key)
+        self.stdout.write(self.style.SUCCESS(f"Sync started timestamp successfully flushed!"))

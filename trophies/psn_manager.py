@@ -56,6 +56,7 @@ class PSNManager:
         if not profile.sync_status == 'syncing':
             profile.reset_sync_progress()
             profile.set_sync_status('syncing')
+            redis_client.set(f"sync_started_at:{profile.id}", str(time.time()), ex=7200)
             cls.assign_job('sync_profile_data', args=[], profile_id=profile.id)
             cls.assign_job('sync_trophy_titles', args=[], profile_id=profile.id)
     
@@ -66,6 +67,7 @@ class PSNManager:
         elif profile.sync_status == 'synced':
             profile.reset_sync_progress()
             profile.set_sync_status('syncing')
+            redis_client.set(f"sync_started_at:{profile.id}", str(time.time()), ex=7200)
             cls.assign_job('profile_refresh', args=[], profile_id=profile.id)
 
     @classmethod
