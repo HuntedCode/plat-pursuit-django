@@ -68,22 +68,6 @@
         {% if hotbar.active %}
           {% include 'partials/hotbar.html' %}
         {% endif %}
-        {% if ADSENSE_ENABLED %}
-        <div class="mx-auto">
-          <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-8077352214921676"
-              crossorigin="anonymous"></script>
-          <!-- Topbar -->
-          <ins class="adsbygoogle"
-              style="display:block"
-              data-ad-client="ca-pub-8077352214921676"
-              data-ad-slot="8393162469"
-              data-ad-format="auto"
-              data-full-width-responsive="true"></ins>
-          <script>
-              (adsbygoogle = window.adsbygoogle || []).push({});
-          </script>
-        </div>
-        {% endif %}
         {% block content %}{% endblock %}
       </main>
 
