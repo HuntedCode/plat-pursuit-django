@@ -187,6 +187,18 @@ def subscribe(request):
         
     context = {'prices': {k: v.unit_amount / 100 for k, v in prices.items()}}
     context['is_live'] = is_live
+
+    # Hand-picked themes for the "Try it!" preview swatches
+    import re
+    from trophies.themes import GRADIENT_THEMES
+    clean = lambda css: re.sub(r'\s+', ' ', css).strip()
+    context['preview_themes'] = [
+        {'name': 'Machine Hunter', 'css': clean(GRADIENT_THEMES['machineHunter']['background'])},
+        {'name': 'Cosmic Nebula', 'css': clean(GRADIENT_THEMES['cosmicNebula']['background'])},
+        {'name': 'PlayStation Blue', 'css': clean(GRADIENT_THEMES['playstationBlue']['background'])},
+        {'name': 'Game Art', 'image': 'https://image.api.playstation.com/vulcan/ap/rnd/202101/2921/x64hEmgvhgxpXc9z9hpyLAyQ.jpg'},
+    ]
+
     return render(request, 'users/subscribe.html', context)
 
 @login_required

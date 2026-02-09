@@ -358,3 +358,21 @@
   background-color: rgba(255, 193, 7, 0.1);
   border: 1px dashed rgba(255, 193, 7, 0.5);
 }
+
+/* Extend DaisyUI text-rotate to support 7-10 items */
+.text-rotate > *:has(:nth-child(7)) {
+  --items: 7;
+  animation: rotator var(--duration, 10s) linear(0 0% 13%, 0.142857 14% 27%, 0.285714 28% 41%, 0.428571 42% 55%, 0.571429 56% 70%, 0.714286 71% 84%, 0.857143 85% 99%, 1 100% 100%) infinite;
+}
+.text-rotate > *:has(:nth-child(8)) {
+  --items: 8;
+  animation: rotator var(--duration, 10s) linear(0 0% 11%, 0.125 12% 23%, 0.25 24% 36%, 0.375 37% 49%, 0.5 50% 61%, 0.625 62% 74%, 0.75 75% 86%, 0.875 87% 99%, 1 100% 100%) infinite;
+}
+.text-rotate > *:has(:nth-child(9)) {
+  --items: 9;
+  animation: rotator var(--duration, 10s) linear(0 0% 10%, 0.111111 11% 21%, 0.222222 22% 32%, 0.333333 33% 43%, 0.444444 44% 54%, 0.555556 55% 65%, 0.666667 66% 76%, 0.777778 77% 87%, 0.888889 88% 99%, 1 100% 100%) infinite;
+}
+.text-rotate > *:has(:nth-child(10)) {
+  --items: 10;
+  animation: rotator var(--duration, 10s) linear(0 0% 9%, 0.1 10% 19%, 0.2 20% 29%, 0.3 30% 39%, 0.4 40% 49%, 0.5 50% 59%, 0.6 60% 69%, 0.7 70% 79%, 0.8 80% 89%, 0.9 90% 99%, 1 100% 100%) infinite;
+}
