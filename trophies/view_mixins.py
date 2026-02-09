@@ -213,29 +213,3 @@ class PlatformFilterMixin:
         if not regions:
             return None
         return regions
-
-
-class ProfileHotbarMixin:
-    """
-    Mixin for views that need to display profile hotbar/sidebar data.
-
-    This mixin is already used extensively in views.py. This documentation
-    clarifies its purpose and usage.
-    """
-
-    def get_profile_context(self, profile):
-        """
-        Get context data for profile hotbar/sidebar.
-
-        Args:
-            profile: Profile instance
-
-        Returns:
-            dict: Context dictionary with profile data for hotbar
-        """
-        return {
-            'profile': profile,
-            'profile_username': profile.display_psn_username,
-            'profile_avatar': profile.avatar_url,
-            'can_sync': profile.can_sync(),
-        }

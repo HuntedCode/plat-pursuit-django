@@ -51,7 +51,7 @@ class ProfileHotbarMixin(View):
                 'sync_status': profile.sync_status,
                 'sync_progress': profile.sync_progress_value,
                 'sync_target': profile.sync_progress_target,
-                'sync_percentage': profile.sync_progress_value / profile.sync_progress_target * 100 if profile.sync_progress_target > 0 else 0,
+                'progress_percentage': profile.sync_percentage,
                 'seconds_to_next_sync': seconds_to_next_sync,
             }
             context['hotbar'] = hotbar_data

@@ -154,6 +154,18 @@ const TimeFormatter = {
     absolute(timestamp, options = {}) {
         const date = new Date(timestamp);
         return date.toLocaleString(undefined, options);
+    },
+
+    /**
+     * Format seconds as countdown timer (HH:MM:SS)
+     * @param {number} totalSeconds - Total seconds to format
+     * @returns {string} Formatted countdown string
+     */
+    countdown(totalSeconds) {
+        const h = Math.floor(totalSeconds / 3600).toString().padStart(2, '0');
+        const m = Math.floor((totalSeconds % 3600) / 60).toString().padStart(2, '0');
+        const s = Math.floor(totalSeconds % 60).toString().padStart(2, '0');
+        return `${h}:${m}:${s}`;
     }
 };
 

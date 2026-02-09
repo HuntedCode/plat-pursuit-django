@@ -336,6 +336,12 @@ class Profile(models.Model):
         self.sync_progress_value = 0
         self.save(update_fields=['sync_progress_target', 'sync_progress_value'])
         self.refresh_from_db(fields=['sync_progress_target', 'sync_progress_value'])
+
+    @property
+    def sync_percentage(self):
+        if self.sync_progress_target > 0:
+            return self.sync_progress_value / self.sync_progress_target * 100
+        return 0
     
     def update_plats(self):
         """Recalculate and update recent and rarest platinums."""

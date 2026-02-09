@@ -118,6 +118,25 @@
     @apply bg-base-200 rounded-lg shadow-md border-2 border-base-300;
   }
 
+  /* Hotbar loading state - prevents flash of unstyled content */
+  .hotbar-loading {
+    opacity: 0;
+    transition: opacity 0.3s ease-in-out;
+  }
+
+  /* Hotbar toggle pulse when collapsed */
+  .hotbar-toggle-pulse {
+    animation: hotbar-pulse 2.5s ease-in-out infinite;
+  }
+  @keyframes hotbar-pulse {
+    0%, 100% {
+      box-shadow: 0 4px 6px -1px color-mix(in oklch, var(--color-primary) 15%, transparent);
+    }
+    50% {
+      box-shadow: 0 4px 14px -1px color-mix(in oklch, var(--color-primary) 35%, transparent);
+    }
+  }
+
   /* Interactive card with standard hover effect */
   .card-interactive {
     @apply transition-all duration-300 cursor-pointer hover:scale-105;

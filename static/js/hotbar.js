@@ -4,11 +4,10 @@
  */
 
 document.addEventListener('DOMContentLoaded', () => {
-    // Get container with data attributes
     const container = document.getElementById('hotbar-container');
     if (!container) return;
 
-    // Read URLs from data attributes
+    // Read URLs and initial state from data attributes
     const syncStatusUrl = container.dataset.urlSync;
     const triggerSyncUrl = container.dataset.urlTrigger;
     const addSyncStatusUrl = container.dataset.urlAddSync;
@@ -16,7 +15,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const initialSeconds = parseInt(container.dataset.seconds) || 0;
 
     // DOM elements - Profile sync
-    const syncUser = document.getElementById('sync-user');
     const syncBtn = document.getElementById('sync-now-btn');
     const syncBadge = document.getElementById('sync-badge');
     const syncDiv = document.getElementById('sync-progress-div');
@@ -30,142 +28,120 @@ document.addEventListener('DOMContentLoaded', () => {
     const addSyncAnchor = document.getElementById('add-sync-anchor');
     const addSyncInput = document.getElementById('add-sync-input');
     const addSyncErrorText = document.getElementById('add-sync-error-text');
-    const syncForm = document.getElementById('sync-form');
 
-    // DOM elements - Hotbar toggle
-    const hotbarContainer = document.getElementById('hotbar-container');
+    // DOM elements - Toggle
+    const wrapper = document.getElementById('hotbar-wrapper');
     const toggleBtn = document.getElementById('hotbar-toggle');
     const toggleIcon = document.getElementById('toggle-icon');
 
-    // Polling configuration
-    let pollingInterval;
+    // DOM elements - Mobile search
+    const mobileSearchToggle = document.getElementById('mobile-search-toggle');
+    const mobileSearchRow = document.getElementById('mobile-search-row');
+
+    // Polling state
+    let pollingTimeout;
     let pollingStartTime;
     let addSyncInterval;
-    const currentInterval = 2000;
-    const extendedInterval = 10000;
-    const extensionThreshold = 60000;
-    let activeInterval = currentInterval;
+    const INITIAL_POLL_INTERVAL = 2000;
+    const EXTENDED_POLL_INTERVAL = 10000;
+    const EXTENSION_THRESHOLD = 60000;
+    let activeInterval = INITIAL_POLL_INTERVAL;
 
-    // Cookie configuration
-    const cookieName = 'hotbar_hidden';
-    const cookieDuration = 30 * 24 * 60 * 60 * 1000; // 30 days
+    // Toggle state
+    const STORAGE_KEY = 'hotbar_hidden';
+
+    // --- Helpers ---
+
+    function show(el) { el?.classList.remove('hidden'); }
+    function hide(el) { el?.classList.add('hidden'); }
+
+    // --- Profile Sync Status ---
 
     /**
      * Updates the hotbar UI based on sync status data
-     * @param {Object} data - Sync status data from server
      */
     function updateHotbar(data) {
         if (data.sync_status === 'synced') {
-            // Update UI for synced status
-            syncUser?.classList.remove('hidden', 'xl:block');
             syncBadge?.classList.remove('badge-warning', 'badge-error');
             syncBadge?.classList.add('badge-success');
             if (syncBadge) syncBadge.textContent = 'Synced!';
-            if (syncDiv) syncDiv.hidden = true;
+            hide(syncDiv);
 
-            // Announce to screen readers
             if (syncAnnouncement) {
                 syncAnnouncement.textContent = 'Profile sync completed successfully';
             }
 
-            // Stop polling and start countdown
-            if (pollingInterval) clearInterval(pollingInterval);
+            stopPolling();
             startSyncCountdown(data.seconds_to_next_sync);
+            PlatPursuit.ToastManager.success('Profile sync complete!');
 
         } else if (data.sync_status === 'syncing') {
-            // Update UI for syncing status
-            syncUser?.classList.add('hidden', 'xl:block');
             syncBadge?.classList.remove('badge-success', 'badge-error');
             syncBadge?.classList.add('badge-warning');
             if (syncBadge) syncBadge.textContent = 'Syncing...';
-            if (syncBtn) syncBtn.hidden = true;
-            if (syncDiv) {
-                syncDiv.hidden = false;
-                syncDiv.classList.remove('hidden');
-            }
+            hide(syncBtn);
+            show(syncDiv);
+
             if (syncProgress) {
-                syncProgress.value = data.sync_progress;
-                syncProgress.max = data.sync_target;
+                syncProgress.value = data.sync_percentage;
             }
             if (syncPercent) {
                 syncPercent.textContent = `${parseInt(data.sync_percentage)}%`;
             }
 
-            // Announce to screen readers
             if (syncAnnouncement) {
                 syncAnnouncement.textContent = `Syncing in progress: ${parseInt(data.sync_percentage)}% complete`;
             }
 
         } else {
-            // Update UI for error status
             syncBadge?.classList.remove('badge-success', 'badge-warning');
             syncBadge?.classList.add('badge-error');
             if (syncBadge) syncBadge.textContent = 'Error';
-            if (syncDiv) syncDiv.hidden = true;
+            hide(syncDiv);
 
-            // Announce to screen readers
             if (syncAnnouncement) {
                 syncAnnouncement.textContent = 'Profile sync encountered an error';
             }
 
-            // Stop polling and start countdown
-            if (pollingInterval) clearInterval(pollingInterval);
+            stopPolling();
             startSyncCountdown(data.seconds_to_next_sync);
         }
     }
 
     /**
-     * Updates the sync button display
-     * @param {number} seconds - Seconds until next sync is available
+     * Updates the sync button display with countdown or ready state
      */
     function updateSyncButton(seconds) {
         if (!syncBtn) return;
 
         if (seconds <= 0) {
-            syncBtn.innerHTML = 'Sync Now!';
+            syncBtn.textContent = 'Sync Now!';
             syncBtn.disabled = false;
             syncBtn.setAttribute('aria-label', 'Sync profile now');
         } else {
-            syncBtn.innerHTML = `${formatHMS(seconds)}`;
+            syncBtn.textContent = PlatPursuit.TimeFormatter.countdown(seconds);
             syncBtn.disabled = true;
-            syncBtn.setAttribute('aria-label', `Sync available in ${formatHMS(seconds)}`);
+            syncBtn.setAttribute('aria-label', `Sync available in ${PlatPursuit.TimeFormatter.countdown(seconds)}`);
         }
     }
 
     /**
-     * Formats seconds into HH:MM:SS format
-     * @param {number} seconds - Seconds to format
-     * @returns {string} Formatted time string
-     */
-    function formatHMS(seconds) {
-        const h = Math.floor(seconds / 3600).toString().padStart(2, '0');
-        const m = Math.floor((seconds % 3600) / 60).toString().padStart(2, '0');
-        const s = Math.floor(seconds % 60).toString().padStart(2, '0');
-        return `${h}:${m}:${s}`;
-    }
-
-    /**
      * Starts countdown timer for next available sync
-     * @param {number} seconds - Initial seconds for countdown
      */
     function startSyncCountdown(seconds) {
         if (!syncBtn) return;
 
-        syncBtn.hidden = false;
-        syncBtn.classList.remove('hidden');
+        show(syncBtn);
+        updateSyncButton(seconds);
 
         const interval = setInterval(() => {
-            if (seconds <= 0) {
-                clearInterval(interval);
-                updateSyncButton(seconds);
-            } else {
-                seconds--;
-                updateSyncButton(seconds);
-            }
+            seconds--;
+            updateSyncButton(seconds);
+            if (seconds <= 0) clearInterval(interval);
         }, 1000);
-
-        updateSyncButton(seconds);
     }
+
+    // --- Polling ---
 
     /**
      * Polls the server for current sync status
@@ -179,212 +155,244 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     /**
-     * Starts polling for sync status with adaptive intervals
+     * Starts polling with chained setTimeout for adaptive intervals
      */
     function startPolling() {
         pollingStartTime = Date.now();
+        activeInterval = INITIAL_POLL_INTERVAL;
 
-        pollingInterval = setInterval(() => {
-            const elapsed = Date.now() - pollingStartTime;
+        function scheduleNext() {
+            pollingTimeout = setTimeout(() => {
+                pollSyncStatus();
 
-            // Extend polling interval after threshold
-            if (elapsed > extensionThreshold && activeInterval !== extendedInterval) {
-                clearInterval(pollingInterval);
-                activeInterval = extendedInterval;
-                pollingInterval = setInterval(pollSyncStatus, activeInterval);
-            }
+                const elapsed = Date.now() - pollingStartTime;
+                if (elapsed > EXTENSION_THRESHOLD) {
+                    activeInterval = EXTENDED_POLL_INTERVAL;
+                }
 
-            pollSyncStatus();
-        }, activeInterval);
+                scheduleNext();
+            }, activeInterval);
+        }
+
+        pollSyncStatus();
+        scheduleNext();
     }
 
     /**
-     * Triggers a manual sync when user clicks sync button
+     * Stops any active polling
+     */
+    function stopPolling() {
+        if (pollingTimeout) {
+            clearTimeout(pollingTimeout);
+            pollingTimeout = null;
+        }
+    }
+
+    /**
+     * Triggers a manual sync
      */
     function triggerSync() {
         if (!triggerSyncUrl || !syncBtn || syncBtn.disabled) return;
 
-        // Update UI to show syncing state
-        syncUser?.classList.add('hidden', 'xl:block');
+        // Optimistic UI update
         syncBadge?.classList.remove('badge-success', 'badge-error');
         syncBadge?.classList.add('badge-warning');
         if (syncBadge) syncBadge.textContent = 'Syncing...';
-        if (syncBtn) syncBtn.hidden = true;
-        if (syncDiv) {
-            syncDiv.hidden = false;
-            syncDiv.classList.remove('hidden');
-        }
+        hide(syncBtn);
+        show(syncDiv);
 
-        // Make API request to trigger sync
         PlatPursuit.API.post(triggerSyncUrl, {})
-        .then(data => {
-            startPolling();
-            if (data.error) {
-                console.error(data.error);
-                clearInterval(pollingInterval);
-            }
-        })
-        .catch(error => {
-            console.error('Sync trigger error:', error);
-            clearInterval(pollingInterval);
-        });
+            .then(data => {
+                if (data.error) {
+                    console.error(data.error);
+                    stopPolling();
+                } else {
+                    startPolling();
+                }
+            })
+            .catch(error => {
+                console.error('Sync trigger error:', error);
+                stopPolling();
+                PlatPursuit.ToastManager.error('Failed to start sync. Please try again.');
+            });
     }
 
-    // Attach sync button event listener
     if (syncBtn) {
         syncBtn.addEventListener('click', triggerSync);
     }
 
-    // Initialize sync status based on initial state
+    // Initialize based on initial state
     if (initialStatus === 'synced') {
         startSyncCountdown(initialSeconds);
     } else if (initialStatus === 'syncing') {
         startPolling();
     }
 
+    // --- Add Sync (Search) ---
+
     /**
      * Checks the status of a newly added sync
-     * @param {Object} data - Add sync status data from server
      */
     function checkAddSync(data) {
         if (data.sync_status === 'error') {
-            if (addSyncLoad) addSyncLoad.hidden = true;
-            if (addSyncInput) addSyncInput.hidden = true;
+            hide(addSyncLoad);
+            hide(addSyncInput);
             if (addSyncErrorText) {
-                addSyncErrorText.classList.remove('hidden');
-                addSyncErrorText.hidden = false;
+                addSyncErrorText.textContent = 'Sync error: check spelling or account permissions, then refresh and try again.';
+                show(addSyncErrorText);
             }
             clearInterval(addSyncInterval);
         } else if (data.account_id) {
-            if (addSyncLoad) addSyncLoad.hidden = true;
+            hide(addSyncLoad);
             if (addSyncAnchor) {
                 addSyncAnchor.href = data.slug;
-                addSyncAnchor.classList.remove('hidden');
-                addSyncAnchor.hidden = false;
+                show(addSyncAnchor);
             }
             clearInterval(addSyncInterval);
         }
     }
 
     /**
-     * Polls the server for add sync status
-     * @param {string} psn_username - PSN username to check
+     * Polls for add sync status
      */
     function pollAddSync(psn_username) {
-        if (!psn_username || !addSyncStatusUrl) {
-            console.error('psn_username is required for polling');
-            return;
-        }
+        if (!psn_username || !addSyncStatusUrl) return;
 
         const url = `${addSyncStatusUrl}?psn_username=${encodeURIComponent(psn_username)}`;
         PlatPursuit.API.get(url)
             .then(data => checkAddSync(data))
-            .catch(error => console.error('Polling error:', error));
+            .catch(error => console.error('Add sync polling error:', error));
     }
 
     /**
-     * Handles the add sync form submission
+     * Handles sync form submission (shared between desktop and mobile forms)
      */
-    if (syncForm) {
-        syncForm.addEventListener('submit', (e) => {
-            e.preventDefault();
+    function handleSyncFormSubmit(e) {
+        e.preventDefault();
 
-            const formData = new FormData(e.target);
-            PlatPursuit.API.postFormData(e.target.action, formData)
+        const formData = new FormData(e.target);
+        PlatPursuit.API.postFormData(e.target.action, formData)
             .then(data => {
                 if (data.success) {
-                    if (addSyncBtn) addSyncBtn.hidden = true;
-                    if (addSyncLoad) {
-                        addSyncLoad.hidden = false;
-                        addSyncLoad.classList.remove('hidden');
-                    }
+                    hide(addSyncBtn);
+                    show(addSyncLoad);
 
-                    // Start polling after a delay
                     setTimeout(() => {
                         addSyncInterval = setInterval(() => pollAddSync(data.psn_username), 2500);
                     }, 2500);
                 } else {
-                    alert(data.error);
+                    PlatPursuit.ToastManager.error(data.error || 'Failed to sync profile. Check the username and try again.');
                 }
             })
-            .catch(error => console.error('Sync error:', error));
+            .catch(error => {
+                console.error('Sync form error:', error);
+                PlatPursuit.ToastManager.error('Failed to sync profile. Please try again.');
+            });
+    }
+
+    document.querySelectorAll('#sync-form, #sync-form-mobile').forEach(form => {
+        form.addEventListener('submit', handleSyncFormSubmit);
+    });
+
+    // --- Mobile Search Toggle ---
+
+    if (mobileSearchToggle && mobileSearchRow) {
+        mobileSearchToggle.addEventListener('click', () => {
+            const isCollapsed = mobileSearchRow.classList.contains('max-h-0');
+            if (isCollapsed) {
+                mobileSearchRow.classList.remove('max-h-0');
+                mobileSearchRow.classList.add('max-h-24');
+                const input = mobileSearchRow.querySelector('input');
+                if (input) setTimeout(() => input.focus(), 300);
+            } else {
+                mobileSearchRow.classList.add('max-h-0');
+                mobileSearchRow.classList.remove('max-h-24');
+            }
         });
     }
 
-    // Hotbar toggle functionality
+    // --- Hotbar Toggle ---
 
-    /**
-     * Gets a cookie value by name
-     * @param {string} name - Cookie name
-     * @returns {string|null} Cookie value or null
-     */
-    function getCookie(name) {
-        const value = `; ${document.cookie}`;
-        const parts = value.split(`; ${name}=`);
-        if (parts.length === 2) return parts.pop().split(';').shift();
-        return null;
+    function isHotbarHidden() {
+        return localStorage.getItem(STORAGE_KEY) === 'true';
     }
 
-    /**
-     * Sets a cookie with name, value, and duration
-     * @param {string} name - Cookie name
-     * @param {string} value - Cookie value
-     * @param {number} duration - Duration in milliseconds
-     */
-    function setCookie(name, value, duration) {
-        const date = new Date();
-        date.setTime(date.getTime() + duration);
-        document.cookie = `${name}=${value}; expires=${date.toUTCString()}; path=/`;
+    function setHotbarHidden(hidden) {
+        localStorage.setItem(STORAGE_KEY, hidden ? 'true' : 'false');
     }
 
-    /**
-     * Toggles hotbar visibility
-     */
-    function toggleHotbar() {
-        const isHidden = getCookie(cookieName) === 'true';
-
-        if (isHidden) {
-            // Show hotbar
-            hotbarContainer?.classList.remove('-translate-y-[250%]', '-mb-[100px]');
-            toggleIcon?.classList.add('rotate-180');
-            toggleBtn?.classList.remove('-translate-y-[300%]');
-            setCookie(cookieName, 'false', cookieDuration);
-            if (toggleBtn) toggleBtn.setAttribute('aria-label', 'Hide hotbar');
-        } else {
-            // Hide hotbar - add negative margin to collapse the space
-            hotbarContainer?.classList.add('-translate-y-[250%]', '-mb-[100px]');
-            toggleIcon?.classList.remove('rotate-180');
-            toggleBtn?.classList.add('-translate-y-[300%]');
-            setCookie(cookieName, 'true', cookieDuration);
-            if (toggleBtn) toggleBtn.setAttribute('aria-label', 'Show hotbar');
-        }
-    }
-
-    // Initialize hotbar toggle state from cookie
-    const hiddenCookie = getCookie(cookieName);
-    if (hiddenCookie === 'true') {
-        hotbarContainer?.classList.add('-translate-y-[250%]', '-mb-[100px]');
+    function collapseHotbar() {
+        // Set explicit height so transition has a start value (can't transition from 'none')
+        container.style.maxHeight = container.scrollHeight + 'px';
+        // Force reflow, then collapse to 0
+        void container.offsetHeight;
+        container.style.maxHeight = '0';
+        container.style.borderWidth = '0';
+        // Pull toggle flush against navbar (negate main's py-2 padding)
+        wrapper.style.top = '0px';
+        wrapper.style.marginTop = '-8px';
         toggleIcon?.classList.remove('rotate-180');
-        toggleBtn?.classList.add('-translate-y-[300%]');
-        if (toggleBtn) toggleBtn.setAttribute('aria-label', 'Show hotbar');
-    } else {
-        if (hotbarContainer) hotbarContainer.style.display = 'false';
-        hotbarContainer?.classList.remove('-translate-y-[250%]', '-mb-[100px]');
+        toggleBtn?.classList.add('hotbar-toggle-pulse');
+        toggleBtn?.setAttribute('aria-label', 'Show hotbar');
+    }
+
+    function expandHotbar() {
+        // Restore sticky gap from viewport top
+        wrapper.style.top = '';
+        wrapper.style.marginTop = '';
+        container.style.borderWidth = '';
+        container.style.maxHeight = container.scrollHeight + 'px';
         toggleIcon?.classList.add('rotate-180');
-        toggleBtn?.classList.remove('-translate-y-[300%]');
-        if (toggleBtn) toggleBtn.setAttribute('aria-label', 'Hide hotbar');
+        toggleBtn?.classList.remove('hotbar-toggle-pulse');
+        toggleBtn?.setAttribute('aria-label', 'Hide hotbar');
+        // After transition, set to 'none' so content can reflow naturally
+        container.addEventListener('transitionend', function handler() {
+            if (!isHotbarHidden()) {
+                container.style.maxHeight = 'none';
+            }
+            container.removeEventListener('transitionend', handler);
+        });
+    }
 
-        setTimeout(() => {
-            if (hotbarContainer) hotbarContainer.style.display = 'true';
-        }, 500);
-
-        if (hiddenCookie === null) {
-            setCookie(cookieName, 'false', cookieDuration);
+    function toggleHotbar() {
+        const hidden = isHotbarHidden();
+        setHotbarHidden(!hidden);
+        if (hidden) {
+            expandHotbar();
+        } else {
+            collapseHotbar();
         }
     }
 
-    // Attach toggle button event listener
+    // Initialize toggle state immediately (no animation)
+    if (isHotbarHidden()) {
+        container.style.maxHeight = '0';
+        container.style.borderWidth = '0';
+        wrapper.style.top = '0px';
+        wrapper.style.marginTop = '-8px';
+        toggleIcon?.classList.remove('rotate-180');
+        toggleBtn?.classList.add('hotbar-toggle-pulse');
+        toggleBtn?.setAttribute('aria-label', 'Show hotbar');
+    } else {
+        container.style.maxHeight = 'none';
+        toggleIcon?.classList.add('rotate-180');
+        toggleBtn?.setAttribute('aria-label', 'Hide hotbar');
+    }
+    if (localStorage.getItem(STORAGE_KEY) === null) {
+        setHotbarHidden(false);
+    }
+
     if (toggleBtn) {
         toggleBtn.addEventListener('click', toggleHotbar);
     }
+
+    // Remove loading class to reveal hotbar with fade-in
+    container.classList.remove('hotbar-loading');
+
+    // --- Cleanup ---
+
+    window.addEventListener('beforeunload', () => {
+        stopPolling();
+        if (addSyncInterval) clearInterval(addSyncInterval);
+    });
 });
