@@ -31,9 +31,16 @@
     <!-- Browse -->
     <div class="more-drawer-section-title">Browse</div>
     <ul class="menu menu-sm px-2">
-        <li><a href="{% url 'trophies_list' %}">Trophies</a></li>
         <li><a href="{% url 'games_list' %}">Games</a></li>
         <li><a href="{% url 'profiles_list' %}">Profiles</a></li>
+        <li><a href="{% url 'trophies_list' %}">Trophies</a></li>
+    </ul>
+
+    <!-- Community -->
+    <div class="more-drawer-section-title">Community</div>
+    <ul class="menu menu-sm px-2">
+        <li><a href="https://discord.gg/platpursuit" target="_blank" rel="noopener noreferrer">Discord</a></li>
+        <li><a href="{% url 'overall_badge_leaderboards' %}">Leaderboards</a></li>
     </ul>
 
     <!-- Earn -->
@@ -41,15 +48,15 @@
     <ul class="menu menu-sm px-2">
         <li><a href="{% url 'badges_list' %}">Badges</a></li>
         <li><a href="{% url 'milestones_list' %}">Milestones</a></li>
-        <li><a href="{% url 'overall_badge_leaderboards' %}">Leaderboards</a></li>
-        {% if user.is_authenticated and user.profile %}
-            <li><a href="{% url 'trophy_case' user.profile.psn_username %}">Trophy Case</a></li>
-        {% endif %}
     </ul>
 
-    <!-- Create -->
-    <div class="more-drawer-section-title">Create</div>
+    <!-- Guides -->
+    <div class="more-drawer-section-title">Guides</div>
     <ul class="menu menu-sm px-2">
+        <li><a href="{% url 'guides_browse' %}">Guide Hub</a></li>
+        {% if user.is_authenticated and user.profile %}
+            <li><a href="{% url 'my_guides' %}">My Guides</a></li>
+        {% endif %}
         <li>
             <a href="{% url 'guides_list' %}">
                 <span class="flex flex-row gap-2 items-center">
@@ -61,84 +68,36 @@
                 </span>
             </a>
         </li>
-        {% if user.is_authenticated and user.profile %}
-            <li><a href="{% url 'my_checklists' %}">My Guides</a></li>
-        {% endif %}
     </ul>
 
-    <!-- Community -->
-    <div class="more-drawer-section-title">Community</div>
+    <!-- My Pursuit -->
+    {% if user.is_authenticated and user.profile %}
+    <div class="more-drawer-section-title">My Pursuit</div>
     <ul class="menu menu-sm px-2">
-        <li><a href="https://discord.gg/platpursuit" target="_blank" rel="noopener noreferrer">Discord</a></li>
-        {% if user.is_authenticated and user.profile %}
-            <li><a href="{% url 'my_shareables' %}">My Shareables</a></li>
-        {% endif %}
+        <li><a href="{% url 'settings' %}">Customization</a></li>
+        <li><a href="{% url 'recap_index' %}">Monthly Recap</a></li>
+        <li><a href="{% url 'my_guides' %}">My Guides</a></li>
+        <li><a href="{% url 'profile_detail' user.profile.psn_username %}">My Profile</a></li>
+        <li><a href="{% url 'my_shareables' %}">My Shareables</a></li>
+        <li><a href="{% url 'trophy_case' user.profile.psn_username %}">Trophy Case</a></li>
     </ul>
+    {% endif %}
 
     <!-- Account -->
     <div class="more-drawer-section-title">Account</div>
     <ul class="menu menu-sm px-2">
-        {% if user.is_authenticated %}
-            <li>
-                <a href="{% url 'recap_index' %}">Monthly Recap</a>
-            </li>
-            {% if user.profile %}
-                <li><a href="{% url 'profile_detail' user.profile.psn_username %}">Profile</a></li>
-                <li><a href="{% url 'trophy_case' user.profile.psn_username %}">Trophy Case</a></li>
-                {% if not user.premium_tier %}
-                    <li><a href="{% url 'subscribe' %}">PP Premium</a></li>
-                {% else %}
-                    <li><a href="{% url 'subscription_management' %}">My Premium</a></li>
-                {% endif %}
-            {% else %}
-                <li><a href="{% url 'link_psn' %}">Link PSN</a></li>
-            {% endif %}
-            <li><a href="{% url 'settings' %}">Settings</a></li>
-            {% if user.is_staff %}
-                <li>
-                    <a href="{% url 'comment_moderation' %}" class="flex items-center">
-                        <span>Moderation</span>
-                        {% if pending_reports_count > 0 %}
-                            <span class="text-error ml-1">({{ pending_reports_count }})</span>
-                        {% endif %}
-                    </a>
-                </li>
-            {% endif %}
-            <li>
-                <button id="more-drawer-theme-toggle" type="button" class="flex items-center gap-2 w-full">
-                    <svg id="drawer-theme-icon-sun" class="w-4 h-4 hidden" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <circle cx="12" cy="12" r="5"/>
-                        <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
-                    </svg>
-                    <svg id="drawer-theme-icon-moon" class="w-4 h-4 hidden" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
-                    </svg>
-                    <span id="drawer-theme-toggle-label">Dark Mode</span>
-                </button>
-            </li>
-            <div class="divider my-0"></div>
-            <li>
-                <form method="post" action="{% url 'logout' %}">
-                    {% csrf_token %}
-                    <button type="submit" class="w-full text-left">Logout</button>
-                </form>
-            </li>
-        {% else %}
-            <li><a href="{% url 'account_login' %}">Login</a></li>
-            <li><a href="{% url 'account_signup' %}">Register</a></li>
-            <li>
-                <button id="more-drawer-theme-toggle" type="button" class="flex items-center gap-2 w-full">
-                    <svg id="drawer-theme-icon-sun-guest" class="w-4 h-4 hidden" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <circle cx="12" cy="12" r="5"/>
-                        <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
-                    </svg>
-                    <svg id="drawer-theme-icon-moon-guest" class="w-4 h-4 hidden" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
-                    </svg>
-                    <span id="drawer-theme-toggle-label-guest">Dark Mode</span>
-                </button>
-            </li>
-        {% endif %}
+        <li>
+            <button id="more-drawer-theme-toggle" type="button" class="flex items-center gap-2 w-full">
+                <svg id="drawer-theme-icon-sun" class="w-4 h-4 hidden" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="5"/>
+                    <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
+                </svg>
+                <svg id="drawer-theme-icon-moon" class="w-4 h-4 hidden" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+                </svg>
+                <span id="drawer-theme-toggle-label">Dark Mode</span>
+            </button>
+        </li>
     </ul>
 
     <!-- Footer links -->

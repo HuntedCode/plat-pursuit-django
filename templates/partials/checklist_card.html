@@ -23,7 +23,7 @@
     <div class="card-body p-4">
         {# Header - Title and Vote #}
         <div class="flex justify-between items-start gap-2">
-            <a href="{% url 'checklist_detail' checklist.id %}" class="flex-1 hover:underline">
+            <a href="{% url 'guide_detail' checklist.id %}" class="flex-1 hover:underline">
                 <h3 class="card-title text-lg line-clamp-2">{{ checklist.title }}</h3>
             </a>
             <div class="flex flex-col items-center gap-1">
@@ -99,7 +99,7 @@
 
         {# Actions #}
         <div class="card-actions justify-end mt-3 pt-3 border-t border-base-300">
-            <a href="{% url 'checklist_detail' checklist.id %}" class="btn btn-secondary btn-sm">
+            <a href="{% url 'guide_detail' checklist.id %}" class="btn btn-secondary btn-sm">
                 {% if checklist.user_progress %}
                 Continue
                 {% else %}
@@ -107,7 +107,7 @@
                 {% endif %}
             </a>
             {% if checklist.can_edit %}
-            <a href="{% url 'checklist_edit' checklist.id %}" class="btn btn-ghost btn-sm">
+            <a href="{% url 'guide_edit' checklist.id %}" class="btn btn-ghost btn-sm">
                 Edit
             </a>
             {% endif %}

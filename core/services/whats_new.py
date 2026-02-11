@@ -49,7 +49,7 @@ def get_whats_new(limit=8):
             'type': 'new_checklist',
             'title': cl.title,
             'subtitle': f"By {cl.profile.display_psn_username}",
-            'url': reverse('checklist_detail', args=[cl.id]),
+            'url': reverse('guide_detail', args=[cl.id]),
             'timestamp': cl.published_at.isoformat() if cl.published_at else cl.created_at.isoformat(),
         })
 

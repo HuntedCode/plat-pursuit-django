@@ -54,7 +54,7 @@ class PageView(models.Model):
         # Detail pages (have per-object view_count)
         ('profile', 'Profile'),
         ('game', 'Game'),
-        ('checklist', 'Checklist'),
+        ('guide', 'Guide'),
         ('badge', 'Badge Series'),
         ('index', 'Index Page'),
         # List pages
@@ -69,9 +69,9 @@ class PageView(models.Model):
         ('overall_leaderboard', 'Overall Badge Leaderboard'),
         ('trophy_case', 'Trophy Case'),
         # User-specific pages
-        ('my_checklists', 'My Checklists'),
+        ('my_guides', 'My Guides'),
         ('my_shareables', 'My Shareables'),
-        ('checklist_edit', 'Checklist Edit'),
+        ('guide_edit', 'Guide Edit'),
         ('settings', 'Settings'),
         ('subscription', 'Subscription Management'),
         ('email_prefs', 'Email Preferences'),

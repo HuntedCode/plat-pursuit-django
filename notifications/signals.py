@@ -4,6 +4,8 @@ Hooks into existing models using Django signals.
 """
 from django.db.models.signals import post_save, pre_save
 from django.dispatch import receiver
+from django.utils import timezone
+from datetime import timedelta
 from trophies.models import EarnedTrophy, UserBadge, UserMilestone, Profile, ProfileGame
 from notifications.services.notification_service import NotificationService
 from notifications.services.shareable_data_service import ShareableDataService
@@ -245,6 +247,12 @@ def notify_platinum_earned(sender, instance, created, **kwargs):
         logger.debug(f"[SIGNAL] Skipping - no earned date")
         return
 
+    # Apply 2-day threshold to prevent spam on initial sync (matches Discord notification logic)
+    threshold = timezone.now() - timedelta(days=2)
+    if instance.earned_date_time < threshold:
+        logger.info(f"[SIGNAL] Skipping - earned more than 2 days ago (initial sync spam prevention)")
+        return
+
     logger.info(f"[SIGNAL] Passed initial checks for {instance.profile.psn_username} - {instance.trophy.game.title_name}")
 
     from notifications.models import Notification
@@ -260,133 +268,143 @@ def notify_platinum_earned(sender, instance, created, **kwargs):
         logger.info(f"[SIGNAL] Notification already exists for game_id={instance.trophy.game.id}, skipping")
         return  # Already sent notification for this platinum
 
-    logger.info(f"[SIGNAL] No existing notification found, creating notification")
+    logger.info(f"[SIGNAL] No existing notification found, checking sync status")
 
-    try:
-        template = NotificationTemplate.objects.get(
-            name='platinum_earned',
-            auto_trigger_enabled=True
-        )
+    # Check if profile is currently syncing
+    profile = instance.profile
+    if profile.sync_status == 'syncing':
+        # Queue notification for later creation (after game sync completes)
+        from notifications.services.deferred_notification_service import DeferredNotificationService
+        try:
+            DeferredNotificationService.queue_platinum_notification(
+                profile=profile,
+                game=instance.trophy.game,
+                trophy=instance.trophy,
+                earned_date=instance.earned_date_time
+            )
+            logger.info(f"[SIGNAL] Queued platinum notification for {profile.psn_username} - {instance.trophy.game.title_name}")
+        except Exception as e:
+            logger.exception(f"[SIGNAL] Failed to queue platinum notification: {e}")
+    else:
+        # Create notification immediately (manual update outside sync)
+        try:
+            template = NotificationTemplate.objects.get(
+                name='platinum_earned',
+                auto_trigger_enabled=True
+            )
 
-        # Fetch ProfileGame data for enriched metadata
-        profile_game = ProfileGame.objects.filter(
-            profile=instance.profile,
-            game=instance.trophy.game
-        ).first()
+            # Fetch ProfileGame data for enriched metadata
+            profile_game = ProfileGame.objects.filter(
+                profile=profile,
+                game=instance.trophy.game
+            ).first()
 
-        # Count user's total platinums (including this one)
-        total_plats = EarnedTrophy.objects.filter(
-            profile=instance.profile,
-            earned=True,
-            trophy__trophy_type='platinum'
-        ).count()
-
-        # Get the earned date for filtering
-        earned_date = instance.earned_date_time
-
-        # Calculate yearly platinum count
-        yearly_plats = 0
-
-        if earned_date:
-            earned_year = earned_date.year
-
-            # Count platinums earned in the same year
-            yearly_plats = EarnedTrophy.objects.filter(
-                profile=instance.profile,
+            # Count user's total platinums (including this one)
+            total_plats = EarnedTrophy.objects.filter(
+                profile=profile,
                 earned=True,
-                trophy__trophy_type='platinum',
-                earned_date_time__year=earned_year
+                trophy__trophy_type='platinum'
             ).count()
 
-        # Create notification from template with enhanced context
-        # Note: badge_xp and tier1_badges are intentionally NOT stored here
-        # Badge progress is fetched live when the share card is accessed because
-        # UserBadgeProgress is calculated at the end of full sync, not per-game sync
-        NotificationService.create_from_template(
-            recipient=instance.profile.user,
-            template=template,
-            context={
-                'username': instance.profile.display_psn_username or instance.profile.psn_username,
-                'trophy_name': instance.trophy.trophy_name,
-                'game_name': instance.trophy.game.title_name,
-                'game_id': instance.trophy.game.id,
-                'np_communication_id': instance.trophy.game.np_communication_id,
-                # Concept ID for rating system (may be None for games without concepts)
-                'concept_id': instance.trophy.game.concept.id if instance.trophy.game.concept else None,
-                # Rich content fields for detail view
-                'trophy_detail': instance.trophy.trophy_detail or '',
-                'trophy_earn_rate': instance.trophy.trophy_earn_rate or 0,
-                'trophy_rarity': instance.trophy.trophy_rarity,
-                'trophy_icon_url': instance.trophy.trophy_icon_url or '',
-                'game_image': instance.trophy.game.title_image or instance.trophy.game.title_icon_url or '',
-                'rarity_label': ShareableDataService.get_rarity_label(instance.trophy.trophy_rarity),
-                # Game platform and region info
-                'title_platform': instance.trophy.game.title_platform,
-                'region': instance.trophy.game.region,
-                'is_regional': instance.trophy.game.is_regional,
-                # ProfileGame data for share image
-                'first_played_date_time': profile_game.first_played_date_time.isoformat() if profile_game and profile_game.first_played_date_time else None,
-                'last_played_date_time': profile_game.last_played_date_time.isoformat() if profile_game and profile_game.last_played_date_time else None,
-                'play_duration_seconds': profile_game.play_duration.total_seconds() if profile_game and profile_game.play_duration else None,
-                'earned_trophies_count': profile_game.earned_trophies_count if profile_game else 0,
-                'total_trophies_count': profile_game.total_trophies if profile_game else 0,
-                'progress_percentage': profile_game.progress if profile_game else 0,
-                # User global context
-                'user_total_platinums': total_plats,
-                'user_avatar_url': instance.profile.avatar_url or '',
-                # Earned date
-                'earned_date_time': instance.earned_date_time.isoformat() if instance.earned_date_time else None,
-                # Yearly platinum stats
-                'yearly_plats': yearly_plats,
-                'earned_year': earned_year if earned_date else None,
-            }
-        )
+            # Get the earned date for filtering
+            earned_date = instance.earned_date_time
 
-        logger.info(
-            f"[SIGNAL] Created platinum notification for {instance.profile.psn_username} - {instance.trophy.game.title_name}"
-        )
+            # Calculate yearly platinum count
+            yearly_plats = 0
 
-    except NotificationTemplate.DoesNotExist:
-        logger.error("[SIGNAL] Platinum earned template not found or not enabled")
-    except Exception as e:
-        logger.error(f"[SIGNAL] Failed to create platinum notification: {e}", exc_info=True)
+            if earned_date:
+                earned_year = earned_date.year
+
+                # Count platinums earned in the same year
+                yearly_plats = EarnedTrophy.objects.filter(
+                    profile=profile,
+                    earned=True,
+                    trophy__trophy_type='platinum',
+                    earned_date_time__year=earned_year
+                ).count()
+
+            # Create notification from template with enhanced context
+            # Note: badge_xp and tier1_badges are intentionally NOT stored here
+            # Badge progress is fetched live when the share card is accessed because
+            # UserBadgeProgress is calculated at the end of full sync, not per-game sync
+            NotificationService.create_from_template(
+                recipient=profile.user,
+                template=template,
+                context={
+                    'username': profile.display_psn_username or profile.psn_username,
+                    'trophy_name': instance.trophy.trophy_name,
+                    'game_name': instance.trophy.game.title_name,
+                    'game_id': instance.trophy.game.id,
+                    'np_communication_id': instance.trophy.game.np_communication_id,
+                    # Concept ID for rating system (may be None for games without concepts)
+                    'concept_id': instance.trophy.game.concept.id if instance.trophy.game.concept else None,
+                    # Rich content fields for detail view
+                    'trophy_detail': instance.trophy.trophy_detail or '',
+                    'trophy_earn_rate': instance.trophy.trophy_earn_rate or 0,
+                    'trophy_rarity': instance.trophy.trophy_rarity,
+                    'trophy_icon_url': instance.trophy.trophy_icon_url or '',
+                    'game_image': instance.trophy.game.title_image or instance.trophy.game.title_icon_url or '',
+                    'rarity_label': ShareableDataService.get_rarity_label(instance.trophy.trophy_rarity),
+                    # Game platform and region info
+                    'title_platform': instance.trophy.game.title_platform,
+                    'region': instance.trophy.game.region,
+                    'is_regional': instance.trophy.game.is_regional,
+                    # ProfileGame data for share image
+                    'first_played_date_time': profile_game.first_played_date_time.isoformat() if profile_game and profile_game.first_played_date_time else None,
+                    'last_played_date_time': profile_game.last_played_date_time.isoformat() if profile_game and profile_game.last_played_date_time else None,
+                    'play_duration_seconds': profile_game.play_duration.total_seconds() if profile_game and profile_game.play_duration else None,
+                    'earned_trophies_count': profile_game.earned_trophies_count if profile_game else 0,
+                    'total_trophies_count': profile_game.total_trophies if profile_game else 0,
+                    'progress_percentage': profile_game.progress if profile_game else 0,
+                    # User global context
+                    'user_total_platinums': total_plats,
+                    'user_avatar_url': profile.avatar_url or '',
+                    # Earned date
+                    'earned_date_time': instance.earned_date_time.isoformat() if instance.earned_date_time else None,
+                    # Yearly platinum stats
+                    'yearly_plats': yearly_plats,
+                    'earned_year': earned_year if earned_date else None,
+                }
+            )
+
+            logger.info(
+                f"[SIGNAL] Created platinum notification immediately for {profile.psn_username} - {instance.trophy.game.title_name}"
+            )
+
+        except NotificationTemplate.DoesNotExist:
+            logger.error("[SIGNAL] Platinum earned template not found or not enabled")
+        except Exception as e:
+            logger.exception(f"[SIGNAL] Failed to create platinum notification: {e}")
 
 
 @receiver(post_save, sender=UserBadge)
 def notify_badge_awarded(sender, instance, created, **kwargs):
     """
     Triggered when a badge is awarded to a user.
-    Includes enhanced context with badge layers, next tier progress, and stage completion.
+    Always queues notification for time-window based consolidation.
     """
     if created:
+        # Get user from profile
+        if not instance.profile.user:
+            return  # No user linked to profile
+
+        profile = instance.profile
+
+        # Build comprehensive notification context
+        context = _get_badge_notification_context(instance)
+
+        # Always queue badge notifications for consolidation
+        # This handles both sync and manual operations (like refresh_badge_series)
+        from notifications.services.deferred_notification_service import DeferredNotificationService
         try:
-            template = NotificationTemplate.objects.get(
-                name='badge_awarded',
-                auto_trigger_enabled=True
+            DeferredNotificationService.queue_badge_notification(
+                profile=profile,
+                badge=instance.badge,
+                context_data=context
             )
-
-            # Get user from profile
-            if not instance.profile.user:
-                return  # No user linked to profile
-
-            # Build comprehensive notification context
-            context = _get_badge_notification_context(instance)
-
-            # Create notification from template
-            NotificationService.create_from_template(
-                recipient=instance.profile.user,
-                template=template,
-                context=context,
-            )
-
-            logger.info(
-                f"Created badge notification for {instance.profile.psn_username} - {instance.badge.name}"
-            )
-
-        except NotificationTemplate.DoesNotExist:
-            logger.warning("Badge awarded template not found or not enabled")
+            logger.info(f"Queued badge notification for {profile.psn_username} - {instance.badge.name}")
         except Exception as e:
-            logger.error(f"Failed to create badge notification: {e}", exc_info=True)
+            logger.exception(f"Failed to queue badge notification: {e}")
 
 
 def _build_milestone_context(user_milestone_instance):

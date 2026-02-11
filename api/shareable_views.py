@@ -117,7 +117,12 @@ class ShareableImageHTMLView(APIView):
         trophy_icon_url = metadata.get('trophy_icon_url', '')
 
         game_image_data = self._fetch_image_as_base64(game_image_url) if game_image_url else ''
+        if game_image_url and not game_image_data:
+            logger.warning(f"[SHARE] Failed to convert game image to base64: {game_image_url}")
+
         trophy_icon_data = self._fetch_image_as_base64(trophy_icon_url) if trophy_icon_url else ''
+        if trophy_icon_url and not trophy_icon_data:
+            logger.warning(f"[SHARE] Failed to convert trophy icon to base64: {trophy_icon_url}")
 
         # Extract badge data
         badge_xp = self._to_int(metadata.get('badge_xp', 0))
@@ -138,8 +143,8 @@ class ShareableImageHTMLView(APIView):
             'progress': self._to_int(metadata.get('progress_percentage', 0)),
             'earned_trophies': self._to_int(metadata.get('earned_trophies_count', 0)),
             'total_trophies': self._to_int(metadata.get('total_trophies_count', 0)),
-            'game_image': game_image_data or game_image_url,
-            'trophy_icon': trophy_icon_data or trophy_icon_url,
+            'game_image': game_image_data,
+            'trophy_icon': trophy_icon_data,
             'rarity_label': metadata.get('rarity_label', ''),
             'earn_rate': earn_rate,
             'playtime': playtime,

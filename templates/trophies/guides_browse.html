@@ -1,0 +1,195 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Browse All Guides - Platinum Pursuit{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+    <div class="flex flex-col gap-6">
+        <!-- Header -->
+        <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div>
+                <h1 class="text-3xl font-bold">Browse All Guides</h1>
+                <p class="text-base-content/60">{{ total_guides }} community-created guide{{ total_guides|pluralize }}</p>
+            </div>
+            {% if user.is_authenticated and user.profile %}
+                <a href="{% url 'my_guides' %}" class="btn btn-primary">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 mr-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M12 5v14M5 12h14"/>
+                    </svg>
+                    Create Your Own Guide
+                </a>
+            {% endif %}
+        </div>
+
+        <!-- Search and Filters -->
+        <form method="GET" class="flex flex-col sm:flex-row gap-2">
+            <input
+                type="text"
+                name="q"
+                value="{{ query }}"
+                placeholder="Search by game or creator..."
+                class="input input-bordered flex-1"
+            />
+            <select name="sort" class="select select-bordered w-full sm:w-auto">
+                <option value="popular" {% if sort == 'popular' %}selected{% endif %}>Most Popular</option>
+                <option value="recent" {% if sort == 'recent' %}selected{% endif %}>Most Recent</option>
+                <option value="oldest" {% if sort == 'oldest' %}selected{% endif %}>Oldest</option>
+            </select>
+            <button type="submit" class="btn btn-primary">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 mr-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="11" cy="11" r="8"></circle>
+                    <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                </svg>
+                Search
+            </button>
+        </form>
+
+        <!-- Guides Grid -->
+        {% if checklists %}
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                {% for checklist in checklists %}
+                    <a href="{% url 'guide_detail' checklist.id %}"
+                       class="card bg-base-200 border-2 border-base-300 rounded-2xl shadow-lg shadow-neutral transition-all duration-300 hover:shadow-xl hover:border-primary hover:scale-[1.02] cursor-pointer group">
+                        {% with checklist.selected_game|default:checklist.concept.games.first as game %}
+                            <figure class="aspect-video bg-base-300 rounded-t-2xl overflow-hidden relative">
+                                {% if checklist.thumbnail %}
+                                    <img
+                                        src="{{ checklist.thumbnail.url }}"
+                                        alt="{{ checklist.title }}"
+                                        class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                                        loading="lazy"
+                                    />
+                                {% elif game %}
+                                    <img
+                                        src="{{ game.image_url }}"
+                                        alt="{{ game.title_name }}"
+                                        class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                                        loading="lazy"
+                                    />
+                                {% else %}
+                                    <div class="flex items-center justify-center w-full h-full bg-base-300 text-base-content/20">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="w-16 h-16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                            <rect x="2" y="6" width="20" height="12" rx="2"></rect>
+                                            <circle cx="17" cy="10" r="1"></circle>
+                                        </svg>
+                                    </div>
+                                {% endif %}
+                            </figure>
+                            <div class="card-body p-4">
+                                <!-- Game title (if available) -->
+                                {% if game %}
+                                    <div class="text-xs text-primary/80 font-semibold uppercase tracking-wide mb-1">
+                                        {{ game.title_name }}
+                                    </div>
+                                {% endif %}
+
+                                <!-- Guide title with enhanced typography -->
+                                <h3 class="card-title text-base font-bold line-clamp-2 min-h-[3rem] group-hover:text-primary transition-colors duration-300">
+                                    {{ checklist.title }}
+                                </h3>
+
+                                <!-- Author info with enhanced avatar -->
+                                <div class="flex items-center gap-2 text-sm text-base-content/60 mt-1">
+                                    <div class="avatar">
+                                        <div class="w-6 rounded-full ring-1 ring-base-300 group-hover:ring-primary transition-all duration-300">
+                                            <img
+                                                src="{{ checklist.profile.avatar_url }}"
+                                                alt="{{ checklist.profile.psn_username }}"
+                                                loading="lazy"
+                                            />
+                                        </div>
+                                    </div>
+                                    <span class="truncate">{{ checklist.profile.psn_username }}</span>
+                                </div>
+
+                                <!-- Stats row with upvotes, views, and age -->
+                                <div class="flex items-center justify-between text-xs text-base-content/50 mt-3 pt-3 border-t border-base-300/50">
+                                    <div class="flex items-center gap-3">
+                                        <!-- Upvote count -->
+                                        <span class="flex items-center gap-1 group-hover:text-primary transition-colors duration-300">
+                                            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                                <path stroke-linecap="round" stroke-linejoin="round" d="M5 15l7-7 7 7"/>
+                                            </svg>
+                                            {{ checklist.upvote_count }}
+                                        </span>
+                                        <!-- View count -->
+                                        <span class="flex items-center gap-1">
+                                            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                <path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                                                <path d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
+                                            </svg>
+                                            {{ checklist.view_count }}
+                                        </span>
+                                    </div>
+                                    <span>{{ checklist.created_at|timesince }} ago</span>
+                                </div>
+                            </div>
+                        {% endwith %}
+                    </a>
+                {% endfor %}
+            </div>
+
+            <!-- Pagination -->
+            {% if is_paginated %}
+                <div class="flex flex-wrap justify-center gap-2 mt-6">
+                    {% if page_obj.has_previous %}
+                        <a href="?page=1{% if query %}&q={{ query }}{% endif %}{% if sort %}&sort={{ sort }}{% endif %}" class="btn btn-sm">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <polyline points="11 17 6 12 11 7"></polyline>
+                                <polyline points="18 17 13 12 18 7"></polyline>
+                            </svg>
+                            First
+                        </a>
+                        <a href="?page={{ page_obj.previous_page_number }}{% if query %}&q={{ query }}{% endif %}{% if sort %}&sort={{ sort }}{% endif %}" class="btn btn-sm">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <polyline points="15 18 9 12 15 6"></polyline>
+                            </svg>
+                            Previous
+                        </a>
+                    {% endif %}
+
+                    <span class="btn btn-sm btn-disabled">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+
+                    {% if page_obj.has_next %}
+                        <a href="?page={{ page_obj.next_page_number }}{% if query %}&q={{ query }}{% endif %}{% if sort %}&sort={{ sort }}{% endif %}" class="btn btn-sm">
+                            Next
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <polyline points="9 18 15 12 9 6"></polyline>
+                            </svg>
+                        </a>
+                        <a href="?page={{ page_obj.paginator.num_pages }}{% if query %}&q={{ query }}{% endif %}{% if sort %}&sort={{ sort }}{% endif %}" class="btn btn-sm">
+                            Last
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <polyline points="13 17 18 12 13 7"></polyline>
+                                <polyline points="6 17 11 12 6 7"></polyline>
+                            </svg>
+                        </a>
+                    {% endif %}
+                </div>
+            {% endif %}
+        {% else %}
+            <!-- Empty State -->
+            <div class="text-center py-16">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-24 h-24 mx-auto mb-6 text-base-content/20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M9 11l3 3L22 4"></path>
+                    <path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"></path>
+                </svg>
+                {% if query %}
+                    <p class="text-2xl font-bold text-base-content/80 mb-2">No guides found</p>
+                    <p class="text-base-content/60 mb-6">Try a different search term or browse all guides</p>
+                    <a href="{% url 'guides_browse' %}" class="btn btn-primary">Clear Search</a>
+                {% else %}
+                    <p class="text-2xl font-bold text-base-content/80 mb-2">No guides yet</p>
+                    <p class="text-base-content/60 mb-6">Be the first to create a trophy guide!</p>
+                    {% if user.is_authenticated and user.profile %}
+                        <a href="{% url 'my_guides' %}" class="btn btn-primary">Create the First Guide</a>
+                    {% else %}
+                        <a href="{% url 'account_login' %}" class="btn btn-primary">Login to Create a Guide</a>
+                    {% endif %}
+                {% endif %}
+            </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

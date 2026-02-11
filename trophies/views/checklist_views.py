@@ -3,13 +3,13 @@ import logging
 from core.services.tracking import track_page_view
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.db.models import F
+from django.db.models import F, Count, Q
 from django.db.models.functions import Lower
 from django.http import Http404
 from django.shortcuts import redirect, get_object_or_404
 from django.urls import reverse_lazy, reverse
 from django.utils import timezone
-from django.views.generic import View, DetailView, TemplateView
+from django.views.generic import View, DetailView, TemplateView, ListView
 
 from trophies.mixins import ProfileHotbarMixin
 from ..models import Game, Profile, EarnedTrophy, ProfileGame, Concept, Checklist
@@ -29,7 +29,7 @@ class ChecklistDetailView(ProfileHotbarMixin, DetailView):
     model = Checklist
     template_name = 'trophies/checklist_detail.html'
     context_object_name = 'checklist'
-    pk_url_kwarg = 'checklist_id'
+    pk_url_kwarg = 'guide_id'
 
     def dispatch(self, request, *args, **kwargs):
         """Allow anyone to view guides (no authentication required)."""
@@ -177,7 +177,7 @@ class ChecklistDetailView(ProfileHotbarMixin, DetailView):
         context['comment_count'] = comment_count
 
         if checklist.status == 'published':
-            track_page_view('checklist', checklist.id, self.request)
+            track_page_view('guide', checklist.id, self.request)
         context['view_count'] = checklist.view_count if checklist.status == 'published' else None
 
         return context
@@ -229,7 +229,7 @@ class ChecklistCreateView(LoginRequiredMixin, ProfileHotbarMixin, View):
         checklist.save(update_fields=['selected_game', 'updated_at'])
 
         messages.success(request, "Guide created! Start adding sections and items.")
-        return redirect('checklist_edit', checklist_id=checklist.id)
+        return redirect('guide_edit', guide_id=checklist.id)
 
 
 class ChecklistEditView(LoginRequiredMixin, ProfileHotbarMixin, DetailView):
@@ -242,7 +242,7 @@ class ChecklistEditView(LoginRequiredMixin, ProfileHotbarMixin, DetailView):
     model = Checklist
     template_name = 'trophies/checklist_edit.html'
     context_object_name = 'checklist'
-    pk_url_kwarg = 'checklist_id'
+    pk_url_kwarg = 'guide_id'
     login_url = reverse_lazy('account_login')
 
     def dispatch(self, request, *args, **kwargs):
@@ -294,7 +294,7 @@ class ChecklistEditView(LoginRequiredMixin, ProfileHotbarMixin, DetailView):
             })
         breadcrumb.append({
             'text': checklist.title,
-            'url': reverse_lazy('checklist_detail', kwargs={'checklist_id': checklist.id})
+            'url': reverse_lazy('guide_detail', kwargs={'guide_id': checklist.id})
         })
         breadcrumb.append({'text': 'Edit'})
         context['breadcrumb'] = breadcrumb
@@ -303,7 +303,7 @@ class ChecklistEditView(LoginRequiredMixin, ProfileHotbarMixin, DetailView):
         if checklist.concept and checklist.concept.bg_url:
             context['image_urls'] = {'bg_url': checklist.concept.bg_url}
 
-        track_page_view('checklist_edit', checklist.id, self.request)
+        track_page_view('guide_edit', checklist.id, self.request)
         return context
 
 
@@ -353,13 +353,13 @@ class MyChecklistsView(LoginRequiredMixin, ProfileHotbarMixin, TemplateView):
         # Breadcrumbs
         context['breadcrumb'] = [
             {'text': 'Home', 'url': reverse_lazy('home')},
-            {'text': 'My Checklists'},
+            {'text': 'My Guides'},
         ]
 
         # Active tab
         context['active_tab'] = self.request.GET.get('tab', 'drafts')
 
-        track_page_view('my_checklists', 'user', self.request)
+        track_page_view('my_guides', 'user', self.request)
         return context
 
 
@@ -462,4 +462,71 @@ class MyShareablesView(LoginRequiredMixin, ProfileHotbarMixin, TemplateView):
         ]
 
         track_page_view('my_shareables', 'user', self.request)
+        return context
+
+
+class BrowseGuidesView(ProfileHotbarMixin, ListView):
+    """
+    Public hub for browsing user-created checklists/guides.
+
+    Allows anyone to discover and explore community-created guides.
+    Features search, filtering by game, and sorting options.
+    """
+    model = Checklist
+    template_name = 'trophies/guides_browse.html'
+    context_object_name = 'checklists'
+    paginate_by = 24
+
+    def get_queryset(self):
+        """Return public checklists with optimized queries and optional filtering."""
+        queryset = Checklist.objects.filter(
+            status='published',
+            is_deleted=False
+        ).select_related(
+            'concept',
+            'profile'
+        ).prefetch_related(
+            'concept__games'
+        ).annotate(
+            # Count user progress saves as a proxy for completion/usage
+            completion_count=Count('user_progress')
+        ).order_by('-completion_count', '-created_at')
+
+        # Filter by game if provided
+        game_id = self.request.GET.get('game')
+        if game_id:
+            queryset = queryset.filter(concept__game__np_communication_id=game_id)
+
+        # Search query
+        query = self.request.GET.get('q')
+        if query:
+            queryset = queryset.filter(
+                Q(title__icontains=query) |
+                Q(description__icontains=query) |
+                Q(profile__psn_username__icontains=query)
+            )
+
+        # Sort options
+        sort = self.request.GET.get('sort', 'popular')
+        if sort == 'recent':
+            queryset = queryset.order_by('-created_at')
+        elif sort == 'oldest':
+            queryset = queryset.order_by('created_at')
+        # default is popular (already ordered by completion_count)
+
+        return queryset
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['total_guides'] = Checklist.objects.filter(status='published', is_deleted=False).count()
+        context['sort'] = self.request.GET.get('sort', 'popular')
+        context['query'] = self.request.GET.get('q', '')
+
+        # Breadcrumbs
+        context['breadcrumb'] = [
+            {'text': 'Home', 'url': reverse_lazy('home')},
+            {'text': 'Browse All Guides'},
+        ]
+
+        track_page_view('guides_browse', 'content', self.request)
         return context

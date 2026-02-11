@@ -395,3 +395,26 @@
   --items: 10;
   animation: rotator var(--duration, 10s) linear(0 0% 9%, 0.1 10% 19%, 0.2 20% 29%, 0.3 30% 39%, 0.4 40% 49%, 0.5 50% 59%, 0.6 60% 69%, 0.7 70% 79%, 0.8 80% 89%, 0.9 90% 99%, 1 100% 100%) infinite;
 }
+
+/* ===== Mega Menu with Sections (My Pursuit) ===== */
+.mega-menu-content .menu-title {
+  @apply text-xs uppercase tracking-wider text-base-content/50 font-bold px-2 pt-2 pb-1;
+}
+
+.mega-menu-content .menu-title:first-child {
+  @apply pt-0;
+}
+
+.mega-menu-content .divider {
+  @apply my-1;
+}
+
+/* Wider mega menu for My Pursuit to accommodate sections */
+.mega-menu-sectioned {
+  @apply min-w-64;
+}
+
+/* Ensure badge indicators are visible on mega menu summaries */
+.mega-menu-dropdown summary .badge {
+  @apply ml-1;
+}

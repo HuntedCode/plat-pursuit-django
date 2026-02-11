@@ -7,7 +7,7 @@
         <div class="divider mt-2"></div>
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             {% for cl in items %}
-            <a href="{% url 'checklist_detail' cl.id %}"
+            <a href="{% url 'guide_detail' cl.id %}"
                class="card bg-base-100 border-2 border-base-300 shadow-md shadow-neutral transition-all duration-300 hover:shadow-lg hover:border-success hover:scale-[1.02] cursor-pointer group">
                 <figure class="w-full aspect-video bg-base-300 rounded-t-2xl overflow-hidden">
                     {% if cl.thumbnail_url %}
@@ -43,7 +43,7 @@
             {% endfor %}
         </div>
         <div class="text-center mt-4">
-            <a href="{% url 'my_checklists' %}" class="btn btn-success btn-outline">Browse Checklists</a>
+            <a href="{% url 'my_guides' %}" class="btn btn-success btn-outline">Browse Checklists</a>
         </div>
     </div>
 </section>

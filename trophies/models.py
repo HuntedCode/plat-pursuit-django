@@ -468,6 +468,11 @@ class Game(models.Model):
         return self.title_image
 
     @property
+    def image_url(self):
+        """Alias for get_icon_url() for template convenience."""
+        return self.get_icon_url()
+
+    @property
     def platforms_display(self):
         """Format platforms for display: 'PS5, PS4' or 'PS5'."""
         if not self.title_platform:

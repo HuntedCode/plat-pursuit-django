@@ -30,7 +30,7 @@ sitemaps = {
     'games': GameSitemap,
     'profiles': ProfileSitemap,
 }
-from trophies.views import GamesListView, TrophiesListView, ProfilesListView, SearchView, GameDetailView, ProfileDetailView, TrophyCaseView, ToggleSelectionView, BadgeListView, BadgeDetailView, GuideListView, ProfileSyncStatusView, TriggerSyncView, SearchSyncProfileView, AddSyncStatusView, LinkPSNView, ProfileVerifyView, TokenMonitoringView, BadgeCreationView, BadgeLeaderboardsView, OverallBadgeLeaderboardsView, MilestoneListView, CommentModerationView, ModerationActionView, ModerationLogView, ChecklistDetailView, ChecklistCreateView, ChecklistEditView, MyChecklistsView, MyShareablesView
+from trophies.views import GamesListView, TrophiesListView, ProfilesListView, SearchView, GameDetailView, ProfileDetailView, TrophyCaseView, ToggleSelectionView, BadgeListView, BadgeDetailView, GuideListView, ProfileSyncStatusView, TriggerSyncView, SearchSyncProfileView, AddSyncStatusView, LinkPSNView, ProfileVerifyView, TokenMonitoringView, BadgeCreationView, BadgeLeaderboardsView, OverallBadgeLeaderboardsView, MilestoneListView, CommentModerationView, ModerationActionView, ModerationLogView, ChecklistDetailView, ChecklistCreateView, ChecklistEditView, MyChecklistsView, MyShareablesView, BrowseGuidesView
 from trophies.recap_views import RecapIndexView, RecapSlideView
 from users.views import CustomConfirmEmailView, stripe_webhook
 from notifications.views import (
@@ -62,12 +62,13 @@ urlpatterns = [
     path('leaderboard/badges/<str:series_slug>/', BadgeLeaderboardsView.as_view(), name='badge_leaderboards' ),
 
     path('pptv/', GuideListView.as_view(), name='guides_list'),
+    path('guides/', BrowseGuidesView.as_view(), name='guides_browse'),
 
-    # Checklist URLs
-    path('checklists/<int:checklist_id>/', ChecklistDetailView.as_view(), name='checklist_detail'),
-    path('checklists/<int:checklist_id>/edit/', ChecklistEditView.as_view(), name='checklist_edit'),
-    path('checklists/create/<int:concept_id>/<str:np_communication_id>/', ChecklistCreateView.as_view(), name='checklist_create'),
-    path('my-checklists/', MyChecklistsView.as_view(), name='my_checklists'),
+    # Guide URLs (checklists)
+    path('guides/<int:guide_id>/', ChecklistDetailView.as_view(), name='guide_detail'),
+    path('guides/<int:guide_id>/edit/', ChecklistEditView.as_view(), name='guide_edit'),
+    path('guides/create/<int:concept_id>/<str:np_communication_id>/', ChecklistCreateView.as_view(), name='guide_create'),
+    path('my-guides/', MyChecklistsView.as_view(), name='my_guides'),
     path('my-shareables/', MyShareablesView.as_view(), name='my_shareables'),
 
     # Monthly Recap URLs

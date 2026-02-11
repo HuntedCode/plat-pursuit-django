@@ -24,9 +24,19 @@
                 <details class="mega-menu-dropdown">
                     <summary>Browse</summary>
                     <ul class="mega-menu-content">
-                        <li><a href="{% url 'trophies_list' %}">Trophies</a></li>
                         <li><a href="{% url 'games_list' %}">Games</a></li>
                         <li><a href="{% url 'profiles_list' %}">Profiles</a></li>
+                        <li><a href="{% url 'trophies_list' %}">Trophies</a></li>
+                    </ul>
+                </details>
+            </li>
+            <!-- Community -->
+            <li>
+                <details class="mega-menu-dropdown">
+                    <summary>Community</summary>
+                    <ul class="mega-menu-content">
+                        <li><a href="https://discord.gg/platpursuit" target="_blank" rel="noopener noreferrer">Discord</a></li>
+                        <li><a href="{% url 'overall_badge_leaderboards' %}">Leaderboards</a></li>
                     </ul>
                 </details>
             </li>
@@ -37,18 +47,18 @@
                     <ul class="mega-menu-content">
                         <li><a href="{% url 'badges_list' %}">Badges</a></li>
                         <li><a href="{% url 'milestones_list' %}">Milestones</a></li>
-                        <li><a href="{% url 'overall_badge_leaderboards' %}">Leaderboards</a></li>
-                        {% if user.is_authenticated and user.profile %}
-                            <li><a href="{% url 'trophy_case' user.profile.psn_username %}">Trophy Case</a></li>
-                        {% endif %}
                     </ul>
                 </details>
             </li>
-            <!-- Create -->
+            <!-- Guides -->
             <li>
                 <details class="mega-menu-dropdown">
-                    <summary>Create</summary>
+                    <summary>Guides</summary>
                     <ul class="mega-menu-content">
+                        <li><a href="{% url 'guides_browse' %}">Guide Hub</a></li>
+                        {% if user.is_authenticated and user.profile %}
+                            <li><a href="{% url 'my_guides' %}">My Guides</a></li>
+                        {% endif %}
                         <li>
                             <a href="{% url 'guides_list' %}" aria-label="PPTV Guides">
                                 <span class="flex flex-row gap-2 items-center">
@@ -60,24 +70,25 @@
                                 </span>
                             </a>
                         </li>
-                        {% if user.is_authenticated and user.profile %}
-                            <li><a href="{% url 'my_checklists' %}">My Guides</a></li>
-                        {% endif %}
                     </ul>
                 </details>
             </li>
-            <!-- Community -->
+            <!-- My Pursuit -->
+            {% if user.is_authenticated and user.profile %}
             <li>
                 <details class="mega-menu-dropdown">
-                    <summary>Community</summary>
+                    <summary>My Pursuit</summary>
                     <ul class="mega-menu-content">
-                        <li><a href="https://discord.gg/platpursuit" target="_blank" rel="noopener noreferrer">Discord</a></li>
-                        {% if user.is_authenticated and user.profile %}
-                            <li><a href="{% url 'my_shareables' %}">My Shareables</a></li>
-                        {% endif %}
+                        <li><a href="{% url 'settings' %}">Customization</a></li>
+                        <li><a href="{% url 'recap_index' %}">Monthly Recap</a></li>
+                        <li><a href="{% url 'my_guides' %}">My Guides</a></li>
+                        <li><a href="{% url 'profile_detail' user.profile.psn_username %}">My Profile</a></li>
+                        <li><a href="{% url 'my_shareables' %}">My Shareables</a></li>
+                        <li><a href="{% url 'trophy_case' user.profile.psn_username %}">Trophy Case</a></li>
                     </ul>
                 </details>
             </li>
+            {% endif %}
         </ul>
     </div>
 

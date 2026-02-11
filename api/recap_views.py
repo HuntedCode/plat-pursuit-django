@@ -389,21 +389,25 @@ class RecapShareImageHTMLView(APIView):
         if recap.rarest_trophy_data:
             icon_url = recap.rarest_trophy_data.get('icon_url', '')
             if icon_url:
-                rarest_icon = self._fetch_image_as_base64(icon_url) or icon_url
+                rarest_icon = self._fetch_image_as_base64(icon_url) or ''
+                if icon_url and not rarest_icon:
+                    logger.warning(f"[RECAP-SHARE] Failed to convert rarest trophy icon: {icon_url}")
 
         # Process avatar
         avatar_url = profile.avatar_url or ''
         avatar_data = self._fetch_image_as_base64(avatar_url) if avatar_url else ''
+        if avatar_url and not avatar_data:
+            logger.warning(f"[RECAP-SHARE] Failed to convert avatar: {avatar_url}")
 
         # Process platinum game images (first 3 for share card)
         platinums_with_images = []
         for plat in (recap.platinums_data or [])[:3]:
             plat_copy = dict(plat)
             if plat_copy.get('game_image'):
-                plat_copy['game_image'] = (
-                    self._fetch_image_as_base64(plat_copy['game_image'])
-                    or plat_copy['game_image']
-                )
+                original_url = plat_copy['game_image']
+                plat_copy['game_image'] = self._fetch_image_as_base64(original_url) or ''
+                if original_url and not plat_copy['game_image']:
+                    logger.warning(f"[RECAP-SHARE] Failed to convert platinum game image: {original_url}")
             platinums_with_images.append(plat_copy)
 
         return {
@@ -412,7 +416,7 @@ class RecapShareImageHTMLView(APIView):
             'month': recap.month,
             'month_name': month_name,
             'username': profile.display_psn_username or profile.psn_username,
-            'avatar_url': avatar_data or avatar_url,
+            'avatar_url': avatar_data,
             # Trophy counts
             'total_trophies': recap.total_trophies_earned,
             'bronzes': recap.bronzes_earned,

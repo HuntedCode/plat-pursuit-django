@@ -831,6 +831,14 @@ class TokenKeeper:
             PsnApiService.update_profilegame_stats(touched_profilegame_ids)
             logger.info(f"Checking profile badges for {profile_id}...")
             check_profile_badges(profile, touched_profilegame_ids)
+
+            # Create consolidated badge notifications
+            try:
+                from notifications.services.deferred_notification_service import DeferredNotificationService
+                DeferredNotificationService.create_badge_notifications(profile_id)
+            except Exception as e:
+                logger.error(f"Failed to create badge notifications for profile {profile_id}: {e}", exc_info=True)
+
             logger.info(f"ProfileGame Stats updated for {profile_id} successfully! | {len(touched_profilegame_ids)} profilegames updated")
             check_all_milestones_for_user(profile, criteria_type='plat_count')
             check_all_milestones_for_user(profile, criteria_type='playtime_hours')
@@ -1071,6 +1079,16 @@ class TokenKeeper:
                     trophy, _ = PsnApiService.create_or_update_trophy_from_trophy_data(game, trophy_data)
                     PsnApiService.create_or_update_earned_trophy_from_trophy_data(profile, trophy, trophy_data)
         profile.increment_sync_progress(value=2)
+
+        # Create any pending platinum notifications for this game
+        try:
+            from notifications.services.deferred_notification_service import DeferredNotificationService
+            DeferredNotificationService.create_platinum_notification_for_game(
+                profile_id=profile_id,
+                game_id=game.id
+            )
+        except Exception as e:
+            logger.error(f"Failed to create platinum notification for game {game.id}: {e}", exc_info=True)
     
     def _job_sync_title_id(self, profile_id: str, title_id_str: str, np_communication_id: str):
         try:
