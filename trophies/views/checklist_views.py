@@ -487,10 +487,7 @@ class BrowseGuidesView(ProfileHotbarMixin, ListView):
             'profile'
         ).prefetch_related(
             'concept__games'
-        ).annotate(
-            # Count user progress saves as a proxy for completion/usage
-            completion_count=Count('user_progress')
-        ).order_by('-completion_count', '-created_at')
+        )
 
         # Filter by game if provided
         game_id = self.request.GET.get('game')
@@ -512,7 +509,12 @@ class BrowseGuidesView(ProfileHotbarMixin, ListView):
             queryset = queryset.order_by('-created_at')
         elif sort == 'oldest':
             queryset = queryset.order_by('created_at')
-        # default is popular (already ordered by completion_count)
+        elif sort == 'popular':
+            # Sort by upvotes (primary quality signal), then creation date
+            queryset = queryset.order_by('-upvote_count', '-created_at')
+        else:
+            # Fallback to popular if invalid sort param
+            queryset = queryset.order_by('-upvote_count', '-created_at')
 
         return queryset
 
