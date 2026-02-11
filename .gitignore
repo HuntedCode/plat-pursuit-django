@@ -13,3 +13,4 @@ logs/plat_pursuit.log
 .VSCodeCounter/
 docker-compose.yml
 REFACTORING_GUIDE.md
+gamification-design.md

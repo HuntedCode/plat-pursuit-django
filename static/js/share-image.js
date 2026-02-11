@@ -620,6 +620,9 @@ class ShareImageManager {
         // Wait for images to load inside iframe
         await this.waitForImages(iframeDoc.body);
 
+        // Small delay to ensure rendering is complete
+        await new Promise(r => setTimeout(r, 100));
+
         // Use html2canvas to generate the image (no oklch colors in isolated iframe)
         const canvas = await html2canvas(wrapper, {
             width: width,
