@@ -13,3 +13,4 @@
 <div class="hidden divider-warning"></div>
 <div class="hidden bg-error group-hover:bg-error border-2 border-error shadow-error hover:border-error hover:shadow-error group-hover:border-error"></div>
 <div class="hidden divider-error"></div>
+<div class="hidden timeline timeline-horizontal timeline-start timeline-middle timeline-end"></div>

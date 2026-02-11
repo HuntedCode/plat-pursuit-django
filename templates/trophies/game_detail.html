@@ -46,43 +46,65 @@
         </section>
     {% else %}
         <section class="section-container w-full mt-8 mx-auto">
-            <div class="card bg-base-100 border-4 border-base-300 shadow-md shadow-neutral">
+            <div class="card bg-base-100 border-2 border-base-300 shadow-sm shadow-neutral">
                 <div class="card-body px-4 py-2">
                     <form id="filter-form" method="get" class="mb-4">
                         <fieldset>
                             <legend class="sr-only">Filter and Sort Trophies</legend>
-                            <div class="flex flex-col lg:flex-row w-7/8 justify-between mx-auto">
-                                <div class="form-control w-full lg:w-1/2">
+                            <div class="grid grid-cols-1 lg:grid-cols-[1fr_1fr_auto] gap-4 items-end mx-auto">
+                                <div class="form-control w-full">
                                     <label for="id_sort" class="label">
-                                        <span class="label-text text-lg lg:text-xl italic">Sort By</span>
+                                        <span class="label-text text-base lg:text-lg italic">Sort By</span>
                                     </label>
-                                    <select name="sort" id="id_sort" class="select select-primary w-7/8 justify-self-center">
+                                    <select name="sort" id="id_sort" class="select select-primary w-full">
                                         {% for value, display in form.sort.field.choices %}
                                             <option value="{{ value }}" {% if request.GET.sort == value %}selected{% endif %}>{{ display }}</option>
                                         {% endfor %}
                                     </select>
                                 </div>
-                                <div class="form-control w-full lg:w-1/2">
+                                <div class="form-control w-full">
                                     <label for="id_earned" class="label">
-                                        <span class="label-text text-lg lg:text-xl italic">Earned Status</span>
+                                        <span class="label-text text-base lg:text-lg italic">Earned Status</span>
                                     </label>
-                                    <select name="earned" id="id_earned" class="select select-primary w-7/8 justify-self-center">
+                                    <select name="earned" id="id_earned" class="select select-primary w-full">
                                         {% for value, display in form.earned.field.choices %}
                                             <option value="{{ value }}" {% if request.GET.earned == value %}selected{% endif %}>{{ display }}</option>
                                         {% endfor %}
                                     </select>
                                 </div>
-                                <button id="submit-btn" type="submit" class="btn btn-md md:btn-lg border-3 shadow-md place-self-end mt-4 lg:mt-0" aria-label="Apply trophy filters" disabled>Feel The Power...</button>
+                                <button id="submit-btn" type="submit" class="btn btn-md md:btn-lg border-3 shadow-md w-full lg:w-auto" aria-label="Apply trophy filters" disabled>Feel The Power...</button>
                             </div>
                         </fieldset>
                     </form>
                 </div>
             </div>
         </section>
+        {% if game.has_trophy_groups %}
+            <section class="section-container w-full mt-4">
+                <div class="card bg-base-100 border-2 border-base-300 shadow-sm shadow-neutral">
+                    <div class="card-body px-4 py-2">
+                        <h3 class="text-sm font-semibold text-base-content/70 italic mb-1">Trophy Groups</h3>
+                        <div class="flex flex-row gap-2 overflow-x-auto pb-1">
+                            {% for group_id, trophies in grouped_trophies.items %}
+                                {% with trophy_groups|dict_get:group_id as group %}
+                                    <a href="#trophy-group-{{ group_id }}"
+                                       class="btn btn-sm btn-ghost border border-base-300 flex-shrink-0 gap-1.5 hover:border-primary hover:shadow-sm"
+                                       onclick="event.preventDefault(); document.getElementById('trophy-group-{{ group_id }}').scrollIntoView({behavior:'smooth', block:'start'})">
+                                        <img src="{{ group.trophy_group_icon_url }}" class="w-5 h-5 rounded" alt="" />
+                                        <span class="text-xs whitespace-nowrap">{{ group.trophy_group_name }}</span>
+                                        <span class="badge badge-xs badge-ghost">{{ trophies|length }}</span>
+                                    </a>
+                                {% endwith %}
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            </section>
+        {% endif %}
         {% for group_id, trophies in grouped_trophies.items %}
             {% with trophy_groups|dict_get:group_id as group %}
                 {% with profile_group_totals|dict_get:group_id as profile_group_total %}
-                    <section class="section-container w-full mt-8">
+                    <section id="trophy-group-{{ group_id }}" class="section-container w-full mt-8">
                         {% include 'trophies/partials/game_detail/trophy_group_card.html' %}
                         {% include 'trophies/partials/game_detail/trophy_list.html' %}
                     </section>

@@ -894,18 +894,21 @@ class Badge(models.Model):
     def get_badge_layers(self):
         """Return dict of layer URLs for backdrop, main and foreground."""
 
+        has_custom = bool(self.badge_image or (self.base_badge and self.base_badge.badge_image))
         main_url = self.badge_image.url if self.badge_image else self.base_badge.badge_image.url if self.base_badge and self.base_badge.badge_image else 'images/badges/default.png'
         backdrop_url = f"images/badges/backdrops/{self.tier}_backdrop.png"
-        if self.badge_image or (self.base_badge and self.base_badge.badge_image):
+        if has_custom:
             foreground_url = f"images/badges/foregrounds/{self.tier}_foreground.png"
             return {
                 'backdrop': backdrop_url,
                 'main': main_url,
-                'foreground': foreground_url
+                'foreground': foreground_url,
+                'has_custom_image': True,
             }
         return {
             'backdrop': backdrop_url,
             'main': main_url,
+            'has_custom_image': False,
         }
 
     def update_most_recent_concept(self):

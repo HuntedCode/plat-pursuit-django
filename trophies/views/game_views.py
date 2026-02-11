@@ -183,11 +183,14 @@ class GameDetailView(ProfileHotbarMixin, DetailView):
             'profile_earned': {},
             'profile_trophy_totals': {},
             'profile_group_totals': {},
-            'milestones': [
-                {'label': 'First Trophy'},
-                {'label': '50% Trophy'},
-                {'label': 'Platinum Trophy'},
-                {'label': '100% Trophy'}
+            'timeline_events': [
+                self._make_timeline_event('Started Playing', 'started', False),
+                self._make_timeline_event('First Trophy', 'trophy', False),
+                self._make_timeline_event('25% Trophy', 'trophy', False),
+                self._make_timeline_event('50% Trophy', 'trophy', False),
+                self._make_timeline_event('75% Trophy', 'trophy', False),
+                self._make_timeline_event('Platinum Trophy', 'trophy', False),
+                self._make_timeline_event('100% Trophy', 'trophy', False),
             ]
         }
 
@@ -235,92 +238,121 @@ class GameDetailView(ProfileHotbarMixin, DetailView):
                 context['profile_group_totals'] = profile_group_totals
 
                 # Build milestones
-                context['milestones'] = self._build_milestones(ordered_earned_qs, len(earned_qs), context['profile_progress'])
+                context['timeline_events'] = self._build_timeline_events(ordered_earned_qs, len(earned_qs), context['profile_progress'], profile_game)
 
         except ProfileGame.DoesNotExist:
             pass
 
         return context
 
-    def _build_milestones(self, ordered_earned_qs, total_trophies, profile_progress):
+    def _make_timeline_event(self, label, event_type, earned, date=None, trophy=None):
+        """Create a uniform timeline event dict."""
+        event = {
+            'label': label,
+            'event_type': event_type,
+            'earned': earned,
+            'date': date,
+            'trophy_name': None,
+            'trophy_id': None,
+            'trophy_icon_url': None,
+            'trophy_earn_rate': None,
+            'trophy_rarity': None,
+            'trophy_detail': None,
+        }
+        if trophy:
+            event.update({
+                'trophy_name': trophy.trophy_name,
+                'trophy_id': trophy.trophy_id,
+                'trophy_icon_url': trophy.trophy_icon_url,
+                'trophy_earn_rate': trophy.trophy_earn_rate,
+                'trophy_rarity': trophy.trophy_rarity,
+                'trophy_detail': trophy.trophy_detail,
+            })
+        return event
+
+    def _build_timeline_events(self, ordered_earned_qs, total_trophies, profile_progress, profile_game):
         """
-        Build milestone trophy data (first, 50%, platinum, 100%).
+        Build timeline events for the player's journey
+        (started, first, 25%, 50%, 75%, platinum, 100%).
 
         Args:
             ordered_earned_qs: QuerySet of earned trophies ordered by date
             total_trophies: Total number of trophies in game
             profile_progress: Profile progress dict with 'progress' key
+            profile_game: ProfileGame instance for first_played_date_time
 
         Returns:
-            list: List of milestone dicts with trophy info or empty label
+            list: List of timeline event dicts
         """
-        milestones = []
+        events = []
         earned_list = list(ordered_earned_qs)
+
+        # Started Playing
+        first_played = profile_game.first_played_date_time
+        events.append(self._make_timeline_event(
+            'Started Playing', 'started', first_played is not None, date=first_played
+        ))
 
         # First trophy
         if len(earned_list) > 0:
             first = earned_list[0]
-            milestones.append({
-                'label': 'First Trophy',
-                'trophy_name': first.trophy.trophy_name,
-                'trophy_id': first.trophy.trophy_id,
-                'trophy_icon_url': first.trophy.trophy_icon_url,
-                'earned_date_time': first.earned_date_time,
-                'trophy_earn_rate': first.trophy.trophy_earn_rate,
-                'trophy_rarity': first.trophy.trophy_rarity
-            })
+            events.append(self._make_timeline_event(
+                'First Trophy', 'trophy', True, date=first.earned_date_time, trophy=first.trophy
+            ))
         else:
-            milestones.append({'label': 'First Trophy'})
+            events.append(self._make_timeline_event('First Trophy', 'trophy', False))
+
+        # 25% trophy
+        quarter_idx = math.ceil((total_trophies - 1) * 0.25)
+        if len(earned_list) > quarter_idx:
+            quarter = earned_list[quarter_idx]
+            events.append(self._make_timeline_event(
+                '25% Trophy', 'trophy', True, date=quarter.earned_date_time, trophy=quarter.trophy
+            ))
+        else:
+            events.append(self._make_timeline_event('25% Trophy', 'trophy', False))
 
         # 50% trophy
         mid_idx = math.ceil((total_trophies - 1) * 0.5)
         if len(earned_list) > mid_idx:
             mid = earned_list[mid_idx]
-            milestones.append({
-                'label': '50% Trophy',
-                'trophy_name': mid.trophy.trophy_name,
-                'trophy_id': mid.trophy.trophy_id,
-                'trophy_icon_url': mid.trophy.trophy_icon_url,
-                'earned_date_time': mid.earned_date_time,
-                'trophy_earn_rate': mid.trophy.trophy_earn_rate,
-                'trophy_rarity': mid.trophy.trophy_rarity
-            })
+            events.append(self._make_timeline_event(
+                '50% Trophy', 'trophy', True, date=mid.earned_date_time, trophy=mid.trophy
+            ))
         else:
-            milestones.append({'label': '50% Trophy'})
+            events.append(self._make_timeline_event('50% Trophy', 'trophy', False))
+
+        # 75% trophy
+        three_quarter_idx = math.ceil((total_trophies - 1) * 0.75)
+        if len(earned_list) > three_quarter_idx:
+            three_quarter = earned_list[three_quarter_idx]
+            events.append(self._make_timeline_event(
+                '75% Trophy', 'trophy', True, date=three_quarter.earned_date_time, trophy=three_quarter.trophy
+            ))
+        else:
+            events.append(self._make_timeline_event('75% Trophy', 'trophy', False))
 
         # Platinum trophy
         plat_entry = None
         if len(earned_list) > 0:
             plat_entry = next((e for e in reversed(earned_list) if e.trophy.trophy_type == 'platinum'), None)
         if plat_entry:
-            milestones.append({
-                'label': 'Platinum Trophy',
-                'trophy_name': plat_entry.trophy.trophy_name,
-                'trophy_id': plat_entry.trophy.trophy_id,
-                'trophy_icon_url': plat_entry.trophy.trophy_icon_url,
-                'earned_date_time': plat_entry.earned_date_time,
-                'trophy_earn_rate': plat_entry.trophy.trophy_earn_rate,
-                'trophy_rarity': plat_entry.trophy.trophy_rarity
-            })
+            events.append(self._make_timeline_event(
+                'Platinum Trophy', 'trophy', True, date=plat_entry.earned_date_time, trophy=plat_entry.trophy
+            ))
         else:
-            milestones.append({'label': 'Platinum Trophy'})
+            events.append(self._make_timeline_event('Platinum Trophy', 'trophy', False))
 
         # 100% trophy
         if profile_progress and profile_progress['progress'] == 100:
             complete = earned_list[-1]
-            milestones.append({
-                'label': '100% Trophy',
-                'trophy_name': complete.trophy.trophy_name,
-                'trophy_id': complete.trophy.trophy_id,
-                'trophy_icon_url': complete.trophy.trophy_icon_url,
-                'earned_date_time': complete.earned_date_time,
-                'trophy_earn_rate': complete.trophy.trophy_earn_rate,
-                'trophy_rarity': complete.trophy.trophy_rarity
-            })
+            events.append(self._make_timeline_event(
+                '100% Trophy', 'trophy', True, date=complete.earned_date_time, trophy=complete.trophy
+            ))
         else:
-            milestones.append({'label': '100% Trophy'})
+            events.append(self._make_timeline_event('100% Trophy', 'trophy', False))
 
-        return milestones
+        return events
 
     def _build_images_context(self, game):
         """
@@ -634,7 +666,7 @@ class GameDetailView(ProfileHotbarMixin, DetailView):
         psn_username = self.kwargs.get('psn_username')
         logger.info(f"Target Profile: {target_profile} | Profile Username: {psn_username}")
 
-        # Build profile-specific context (progress, milestones, earned trophies)
+        # Build profile-specific context (progress, timeline events, earned trophies)
         if target_profile:
             profile_context = self._build_profile_context(game, target_profile)
             context['profile'] = target_profile
@@ -642,18 +674,19 @@ class GameDetailView(ProfileHotbarMixin, DetailView):
             context['profile_earned'] = profile_context['profile_earned']
             context['profile_trophy_totals'] = profile_context['profile_trophy_totals']
             context['profile_group_totals'] = profile_context['profile_group_totals']
-            context['milestones'] = profile_context['milestones']
+            context['timeline_events'] = profile_context['timeline_events']
         else:
             context['profile'] = None
             context['profile_progress'] = None
             context['profile_earned'] = {}
             context['profile_trophy_totals'] = {}
             context['profile_group_totals'] = {}
-            context['milestones'] = [
-                {'label': 'First Trophy'},
-                {'label': '50% Trophy'},
-                {'label': 'Platinum Trophy'},
-                {'label': '100% Trophy'}
+            context['timeline_events'] = [
+                self._make_timeline_event('Started Playing', 'started', False),
+                self._make_timeline_event('First Trophy', 'trophy', False),
+                self._make_timeline_event('50% Trophy', 'trophy', False),
+                self._make_timeline_event('Platinum Trophy', 'trophy', False),
+                self._make_timeline_event('100% Trophy', 'trophy', False),
             ]
 
         # Build game images context
