@@ -201,43 +201,22 @@
                     </div>
                     {% endif %}
                     {% if badges %}
-                        {% if badges|length == 1 %}
-                            {% with badge=badges.0 %}
-                            <a href="{% if profile %}{% url 'badge_detail_with_profile' badge.series_slug profile.psn_username %}{% else %}{% url 'badge_detail' badge.series_slug %}{% endif %}"
-                               class="card border-2 border-base-300 shadow-sm shadow-neutral hover:scale-105 hover:border-error hover:shadow-error group flex-1 lg:flex-initial" aria-label="View {{ badge.display_series }} badge">
-                                <div class="card-body p-2">
-                                    <div class="stats overflow-visible">
-                                        <div class="stat">
-                                            <div class="stat-figure">
-                                                <figure class="w-8 h-8" aria-hidden="true">
-                                                    {% include 'partials/badge.html' with layers=badge.get_badge_layers %}
-                                                </figure>
-                                            </div>
-                                            <div class="stat-title text-sm 2xl:text-base text-base-content/70 italic">Badge</div>
-                                            <div class="stat-value text-lg line-clamp-1">{{ badge.display_series }}</div>
+                        <div class="card border-2 border-base-300 shadow-sm shadow-neutral hover:scale-105 hover:border-error hover:shadow-error group cursor-pointer flex-1 lg:flex-initial"
+                                onclick="document.getElementById('badges-modal').showModal()" role="button" aria-label="View all badges">
+                            <div class="card-body p-2">
+                                <div class="stats overflow-visible">
+                                    <div class="stat">
+                                        <div class="stat-figure">
+                                            <figure class="w-8 h-8" aria-hidden="true">
+                                                {% include 'partials/badge.html' with layers=badges.0.get_badge_layers %}
+                                            </figure>
                                         </div>
-                                    </div>
-                                </div>
-                            </a>
-                            {% endwith %}
-                        {% else %}
-                            <div class="card border-2 border-base-300 shadow-sm shadow-neutral hover:scale-105 hover:border-error hover:shadow-error group cursor-pointer flex-1 lg:flex-initial"
-                                 onclick="document.getElementById('badges-modal').showModal()" role="button" aria-label="View all badges">
-                                <div class="card-body p-2">
-                                    <div class="stats overflow-visible">
-                                        <div class="stat">
-                                            <div class="stat-figure">
-                                                <figure class="w-8 h-8" aria-hidden="true">
-                                                    {% include 'partials/badge.html' with layers=badges.0.get_badge_layers %}
-                                                </figure>
-                                            </div>
-                                            <div class="stat-title text-sm 2xl:text-base text-base-content/70 italic">Badges</div>
-                                            <div class="stat-value text-xl">{{ badges|length }}</div>
-                                        </div>
+                                        <div class="stat-title text-sm 2xl:text-base text-base-content/70 italic">Badges</div>
+                                        <div class="stat-value text-xl">{{ badges|length }}</div>
                                     </div>
                                 </div>
                             </div>
-                        {% endif %}
+                        </div>
                     {% endif %}
                 </div>
                 {% endif %}
@@ -555,7 +534,7 @@
 </dialog>
 {% endif %}
 
-{% if badges|length > 1 %}
+{% if badges %}
 <dialog id="badges-modal" class="modal">
     <div class="modal-box max-w-md bg-base-200 border-2 border-base-300">
         <form method="dialog">
