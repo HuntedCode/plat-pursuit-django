@@ -1,11 +1,12 @@
 /**
  * ShareImageManager - Handles platinum share image generation and preview
- * Uses html2canvas for client-side image generation from HTML template
- * Depends on: PlatPursuit.API, PlatPursuit.ToastManager, html2canvas (CDN)
+ * Downloads are rendered server-side via Playwright (headless Chromium).
+ * Preview is still client-side HTML rendering.
  *
- * Theme definitions can be loaded from server via window.GRADIENT_THEMES
+ * Depends on: PlatPursuit.API, PlatPursuit.ToastManager, PlatPursuit.CSRFToken
+ *
+ * Theme definitions are loaded from server via window.GRADIENT_THEMES
  * (set by the gradient_themes_json template tag) for single source of truth.
- * Falls back to inline definitions if external themes aren't available.
  */
 class ShareImageManager {
     constructor(notificationId, metadata) {
@@ -68,7 +69,6 @@ class ShareImageManager {
                 gameImageSource: theme.gameImageSource || null,
                 getStyle: theme.requiresGameImage
                     ? function(gameImages) {
-                        // gameImages can be a string (backward compat) or object { game_image, concept_bg_url }
                         const source = theme.gameImageSource || 'game_image';
                         const imageUrl = typeof gameImages === 'string'
                             ? gameImages
@@ -81,7 +81,6 @@ class ShareImageManager {
                                 backgroundPosition: 'center'
                             };
                         }
-                        // Fallback to default if no game image
                         return styles.default ? styles.default.getStyle() : { background: theme.background };
                     }
                     : function() {
@@ -91,7 +90,6 @@ class ShareImageManager {
                             backgroundPosition: theme.backgroundPosition || undefined,
                             backgroundRepeat: theme.backgroundRepeat || undefined
                         };
-                        // Remove undefined properties
                         Object.keys(result).forEach(k => result[k] === undefined && delete result[k]);
                         return result;
                     },
@@ -183,9 +181,6 @@ class ShareImageManager {
                     </button>
                 </div>
 
-                <!-- Hidden container for full-size rendering -->
-                <div id="share-render-container" style="position: absolute; left: -9999px; top: 0;"></div>
-
                 <!-- Error message -->
                 <div id="share-error" class="alert alert-error mt-4 hidden">
                     <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">
@@ -205,24 +200,18 @@ class ShareImageManager {
     renderBackgroundOptions() {
         const entries = Object.entries(this.backgroundStyles);
 
-        // Filter: include non-game-art themes, and game art themes only if their image is available
         const filtered = entries.filter(([, style]) => {
             if (!style.gameImageSource) {
-                return true; // Non-game-art themes always included
+                return true;
             }
-            // Game art themes: include only if the required image exists
             const imageUrl = this.metadata[style.gameImageSource];
             return !!imageUrl;
         });
 
-        // Separate default from others
         const defaultEntry = filtered.find(([key]) => key === 'default');
         const otherEntries = filtered.filter(([key]) => key !== 'default');
-
-        // Sort others alphabetically by name
         otherEntries.sort((a, b) => a[1].name.localeCompare(b[1].name));
 
-        // Combine with default first
         const sortedEntries = defaultEntry ? [defaultEntry, ...otherEntries] : otherEntries;
 
         return sortedEntries
@@ -231,11 +220,10 @@ class ShareImageManager {
     }
 
     /**
-     * Apply selected background style to an element and its banner
+     * Apply selected background style to an element and its banner (for preview only)
      * @param {HTMLElement} element - The .share-image-content element to style
-     * @param {boolean} useBase64 - If true, use server-provided base64 images for game art (for downloads)
      */
-    async applyBackground(element, useBase64 = false) {
+    async applyBackground(element) {
         if (!element) return;
 
         const styleKey = this.currentBackground;
@@ -243,29 +231,10 @@ class ShareImageManager {
 
         if (!styleDef) return;
 
-        // Pass both game images for styles that use them
-        // For download (useBase64=true), use server-provided base64 versions to avoid CORS
-        let gameImages = {
+        const gameImages = {
             game_image: this.metadata.game_image || null,
             concept_bg_url: this.metadata.concept_bg_url || null
         };
-
-        // For download, convert background images to base64 data URIs
-        // (CSS background urls don't resolve correctly inside about:blank iframes)
-        if (useBase64 && styleDef.gameImageSource) {
-            const source = styleDef.gameImageSource;
-            const imageUrl = source === 'game_image' ? this.gameImageBase64 : this.conceptBgBase64;
-            if (imageUrl) {
-                try {
-                    const dataUrl = await this.imageToBase64(imageUrl);
-                    if (dataUrl) {
-                        gameImages[source] = dataUrl;
-                    }
-                } catch (e) {
-                    console.warn('Failed to convert background image to base64:', e);
-                }
-            }
-        }
 
         const styles = styleDef.getStyle(gameImages);
 
@@ -280,12 +249,9 @@ class ShareImageManager {
             if (banner) {
                 const bannerStyles = styleDef.getBannerStyle();
 
-                // Apply background
                 if (bannerStyles.background) {
                     banner.style.background = bannerStyles.background;
                 }
-
-                // Apply border color (handles both landscape border-left and portrait border-top/bottom)
                 if (bannerStyles.borderColor) {
                     banner.style.borderLeftColor = bannerStyles.borderColor;
                     banner.style.borderTopColor = bannerStyles.borderColor;
@@ -334,7 +300,6 @@ class ShareImageManager {
         if (window.PlatPursuit?.getColorGridModal) {
             this.colorModal = window.PlatPursuit.getColorGridModal();
 
-            // Attach modal trigger
             const modalBtn = document.getElementById('open-color-grid');
             if (modalBtn) {
                 modalBtn.addEventListener('click', () => {
@@ -356,31 +321,24 @@ class ShareImageManager {
             return;
         }
 
-        // Pass game images to modal for preview thumbnails
         const gameImages = {
             game_image: this.metadata.game_image || '',
             concept_bg_url: this.metadata.concept_bg_url || ''
         };
 
-        // Open modal with current background, callback, format, and game images
         this.colorModal.open(this.currentBackground, (selectedTheme) => {
-            // Update internal state
             this.currentBackground = selectedTheme;
 
-            // Sync dropdown to match selection (if theme is in dropdown)
             const selectElement = document.getElementById('background-select');
             if (selectElement) {
-                // Check if option exists in dropdown before setting
                 const optionExists = Array.from(selectElement.options).some(opt => opt.value === selectedTheme);
                 if (optionExists) {
                     selectElement.value = selectedTheme;
                 } else {
-                    // Game art theme selected - reset dropdown to default visual
                     selectElement.value = 'default';
                 }
             }
 
-            // Trigger preview re-render with new background
             this.renderPreview();
         }, this.currentFormat, gameImages);
     }
@@ -411,29 +369,23 @@ class ShareImageManager {
         loading?.classList.remove('hidden');
 
         try {
-            // Fetch rendered HTML from server
             const html = await this.fetchCardHTML(this.currentFormat);
 
             const { width, height } = this.dimensions[this.currentFormat];
 
-            // Calculate scale to fit in preview container (increased by 15% for better readability)
             const maxHeight = 437;
             const scale = Math.min(1, maxHeight / height, 575 / width);
 
-            // Set container dimensions BEFORE inserting HTML to prevent flash
             container.style.width = `${width * scale}px`;
             container.style.height = `${height * scale}px`;
 
-            // Insert the HTML
             container.innerHTML = html;
 
-            // Scale the inner content and apply background
             const innerContent = container.querySelector('.share-image-content');
             if (innerContent) {
                 innerContent.style.transform = `scale(${scale})`;
                 innerContent.style.transformOrigin = 'top left';
-                // Apply the selected background style (no base64 conversion needed for preview)
-                await this.applyBackground(innerContent, false);
+                await this.applyBackground(innerContent);
             }
         } catch (error) {
             console.error('Failed to render preview:', error);
@@ -444,39 +396,26 @@ class ShareImageManager {
     }
 
     /**
-     * Fetch the card HTML from the server
-     * Also stores base64 background images from response for use in downloads
+     * Fetch the card HTML from the server (used for preview)
      */
     async fetchCardHTML(format) {
-        // Note: Using 'image_format' instead of 'format' because DRF reserves 'format' for content negotiation
         const response = await PlatPursuit.API.get(
             `/api/v1/notifications/${this.notificationId}/share-image/html/?image_format=${format}`
         );
 
         if (response && response.html) {
-            // Store base64 background images from API response for download use
-            // These bypass CORS issues since they're fetched server-side
-            if (response.game_image_base64) {
-                this.gameImageBase64 = response.game_image_base64;
-            }
-            if (response.concept_bg_base64) {
-                this.conceptBgBase64 = response.concept_bg_base64;
-            }
             return response.html;
         }
         throw new Error('Failed to fetch card HTML');
     }
 
     /**
-     * Generate image using html2canvas and download
+     * Generate image via server-side Playwright rendering and download
      */
     async generateAndDownload(format) {
         const btn = document.getElementById('generate-image-btn');
         const bothBtn = document.getElementById('generate-both-btn');
         const errorEl = document.getElementById('share-error');
-        const renderContainer = document.getElementById('share-render-container');
-
-        if (!renderContainer) return;
 
         try {
             errorEl?.classList.add('hidden');
@@ -487,10 +426,10 @@ class ShareImageManager {
             const formats = format === 'both' ? ['landscape', 'portrait'] : [format];
 
             for (const fmt of formats) {
-                await this.generateSingleImage(fmt, renderContainer);
+                await this.generateSingleImage(fmt);
             }
 
-            // Track download after successful image generation
+            // Track download
             try {
                 await PlatPursuit.API.post('/api/v1/tracking/site-event/', {
                     event_type: 'share_card_download',
@@ -509,257 +448,50 @@ class ShareImageManager {
             btn.classList.remove('loading');
             btn.disabled = false;
             bothBtn.disabled = false;
-            renderContainer.innerHTML = '';
         }
     }
 
     /**
-     * Convert a single oklch color to rgba using canvas
+     * Build the PNG endpoint URL for server-side rendering
      */
-    oklchToRgba(oklchColor) {
-        const canvas = document.createElement('canvas');
-        canvas.width = 1;
-        canvas.height = 1;
-        const ctx = canvas.getContext('2d');
-        ctx.fillStyle = oklchColor;
-        ctx.fillRect(0, 0, 1, 1);
-        const [r, g, b, a] = ctx.getImageData(0, 0, 1, 1).data;
-        return `rgba(${r}, ${g}, ${b}, ${(a / 255).toFixed(3)})`;
+    getPngEndpoint(format) {
+        return `/api/v1/notifications/${this.notificationId}/share-image/png/?image_format=${format}&theme=${this.currentBackground}`;
     }
 
     /**
-     * Convert oklch colors in a string to rgba
+     * Generate a single image format via server-side Playwright rendering
      */
-    convertOklchInString(str) {
-        // Match oklch(...) including nested parentheses for calc() etc.
-        const oklchRegex = /oklch\([^)]+\)/g;
-        return str.replace(oklchRegex, (match) => {
-            return this.oklchToRgba(match);
-        });
-    }
+    async generateSingleImage(format) {
+        const url = this.getPngEndpoint(format);
 
-    /**
-     * Convert oklch colors to rgb for html2canvas compatibility
-     * html2canvas doesn't support oklch() color function used by Tailwind CSS v4
-     */
-    convertOklchToRgb(element) {
-        const allElements = [element, ...element.querySelectorAll('*')];
-
-        // Properties that can contain colors
-        const colorProperties = [
-            'color', 'backgroundColor', 'borderColor',
-            'borderTopColor', 'borderRightColor', 'borderBottomColor', 'borderLeftColor',
-            'outlineColor', 'textDecorationColor', 'fill', 'stroke'
-        ];
-
-        allElements.forEach(el => {
-            const computed = window.getComputedStyle(el);
-
-            colorProperties.forEach(prop => {
-                const value = computed[prop];
-                if (value && value.includes('oklch')) {
-                    el.style[prop] = this.convertOklchInString(value);
-                }
-            });
-
-            // Handle box-shadow which may have multiple oklch colors
-            const boxShadow = computed.boxShadow;
-            if (boxShadow && boxShadow.includes('oklch')) {
-                el.style.boxShadow = this.convertOklchInString(boxShadow);
-            }
-
-            // Handle gradient backgrounds which might use oklch
-            const bgImage = computed.backgroundImage;
-            if (bgImage && bgImage.includes('oklch')) {
-                el.style.backgroundImage = this.convertOklchInString(bgImage);
-            }
-        });
-    }
-
-    /**
-     * Generate a single image format
-     */
-    async generateSingleImage(format, renderContainer) {
-        const { width, height } = this.dimensions[format];
-
-        // Fetch the full-size HTML
-        const html = await this.fetchCardHTML(format);
-
-        // Create an iframe to isolate from global CSS (prevents oklch inheritance)
-        const iframe = document.createElement('iframe');
-        iframe.style.cssText = `width: ${width}px; height: ${height}px; position: absolute; left: 0; top: 0; border: none; visibility: hidden;`;
-        renderContainer.appendChild(iframe);
-
-        // Wait for iframe to be ready
-        await new Promise(resolve => {
-            iframe.onload = resolve;
-            // Trigger load for about:blank
-            iframe.src = 'about:blank';
+        const response = await fetch(url, {
+            credentials: 'same-origin',
+            headers: {
+                'X-CSRFToken': PlatPursuit.CSRFToken.get(),
+            },
         });
 
-        const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
-
-        // Write minimal HTML with no external CSS
-        // <base href> is critical: without it, relative URLs (like /api/v1/share-temp/...)
-        // resolve against about:blank and fail to load images
-        iframeDoc.open();
-        iframeDoc.write(`
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <base href="${window.location.origin}/" />
-                <style>
-                    * { margin: 0; padding: 0; box-sizing: border-box; }
-                    body { margin: 0; padding: 0; }
-                    img { display: inline-block; }
-                </style>
-            </head>
-            <body>${html}</body>
-            </html>
-        `);
-        iframeDoc.close();
-
-        const wrapper = iframeDoc.body.firstElementChild;
-
-        // Apply the selected background style to the wrapper
-        // Use convertToBase64=true to ensure game art backgrounds render correctly in html2canvas
-        const shareImageContent = iframeDoc.querySelector('.share-image-content');
-        if (shareImageContent) {
-            await this.applyBackground(shareImageContent, true);
+        if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`Server rendering failed: ${response.status} ${errorText}`);
         }
 
-        // Wait for images to load inside iframe
-        await this.waitForImages(iframeDoc.body);
+        const blob = await response.blob();
 
-        // Delay to ensure rendering is complete (longer for iOS Safari image decode)
-        await new Promise(r => setTimeout(r, 500));
-
-        // Use html2canvas to generate the image (no oklch colors in isolated iframe)
-        const canvas = await html2canvas(wrapper, {
-            width: width,
-            height: height,
-            scale: 1,
-            useCORS: true,
-            allowTaint: false,
-            backgroundColor: null,
-            logging: true,
-            windowWidth: width,
-            windowHeight: height,
-            foreignObjectRendering: true,
-            window: iframe.contentWindow,
-        });
-
-        // Convert to blob and download
-        const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
-
-        // Create safe filename
         const gameName = (this.metadata.game_name || 'platinum')
             .replace(/[^a-z0-9]/gi, '_')
             .substring(0, 30);
 
         const filename = `platinum_${gameName}_${format}.png`;
 
-        // Download the file
-        const url = URL.createObjectURL(blob);
+        const downloadUrl = URL.createObjectURL(blob);
         const a = document.createElement('a');
-        a.href = url;
+        a.href = downloadUrl;
         a.download = filename;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-
-        // Clean up
-        renderContainer.removeChild(iframe);
-    }
-
-    /**
-     * Wait for an image to be fully decoded and ready to render.
-     * On iOS Safari, img.complete can be true before the image is actually decoded,
-     * causing html2canvas to read zero dimensions and skip the image.
-     */
-    async waitForImageDecode(img, timeout = 3000) {
-        if (!img.complete) {
-            await new Promise((resolve) => {
-                img.onload = resolve;
-                img.onerror = resolve;
-            });
-        }
-
-        // Verify the image has valid dimensions (proves it's decoded)
-        if (img.naturalWidth > 0 && img.naturalHeight > 0) {
-            return;
-        }
-
-        // Use decode() API if available (Safari 11+)
-        if (typeof img.decode === 'function') {
-            try {
-                await img.decode();
-                return;
-            } catch (e) {
-                // decode() failed, fall through to polling
-            }
-        }
-
-        // Polling fallback for iOS Safari edge cases
-        const start = Date.now();
-        while (Date.now() - start < timeout) {
-            if (img.naturalWidth > 0 && img.naturalHeight > 0) {
-                return;
-            }
-            await new Promise(r => setTimeout(r, 50));
-        }
-        console.warn('Image decode timeout:', img.src.substring(0, 100));
-    }
-
-    /**
-     * Wait for all images in container to load and convert to base64
-     */
-    async waitForImages(container) {
-        const images = container.querySelectorAll('img');
-        // Force eager loading — iOS Safari may lazy-load images in hidden iframes
-        images.forEach(img => { img.loading = 'eager'; });
-        const promises = Array.from(images).map(async (img) => {
-            // Wait for image to be fully decoded (handles iOS Safari timing)
-            await this.waitForImageDecode(img);
-
-            // Convert to base64 to avoid CORS issues with html2canvas
-            try {
-                const dataUrl = await this.imageToBase64(img.src);
-                if (dataUrl) {
-                    img.src = dataUrl;
-                    // After changing src, wait for decode again
-                    await this.waitForImageDecode(img);
-                }
-            } catch (e) {
-                console.warn('Could not convert image to base64:', img.src.substring(0, 100), e);
-            }
-        });
-        return Promise.all(promises);
-    }
-
-    /**
-     * Convert an image URL to base64 data URL
-     */
-    async imageToBase64(url) {
-        // Skip if already a data URL
-        if (url.startsWith('data:')) {
-            return url;
-        }
-
-        try {
-            const response = await fetch(url, { mode: 'cors' });
-            const blob = await response.blob();
-            return new Promise((resolve, reject) => {
-                const reader = new FileReader();
-                reader.onloadend = () => resolve(reader.result);
-                reader.onerror = reject;
-                reader.readAsDataURL(blob);
-            });
-        } catch (e) {
-            console.warn('Failed to fetch image for base64 conversion:', url, e);
-            return null;
-        }
+        URL.revokeObjectURL(downloadUrl);
     }
 
     /**

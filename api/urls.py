@@ -19,13 +19,14 @@ from .notification_views import (
     NotificationListView, NotificationMarkReadView, NotificationMarkAllReadView,
     AdminSendNotificationView, NotificationBulkDeleteView,
     NotificationDeleteView, NotificationShareImageGenerateView, NotificationShareImageView,
-    NotificationShareImageStatusView, NotificationShareImageHTMLView, NotificationRatingView,
+    NotificationShareImageStatusView, NotificationShareImageHTMLView, NotificationShareImagePNGView,
+    NotificationRatingView,
     AdminNotificationPreviewView, AdminTargetCountView, AdminUserSearchView
 )
-from .shareable_views import ShareableImageHTMLView
+from .shareable_views import ShareableImageHTMLView, ShareableImagePNGView
 from .recap_views import (
     RecapAvailableView, RecapDetailView, RecapRegenerateView, RecapShareImageHTMLView,
-    RecapSlidePartialView
+    RecapShareImagePNGView, RecapSlidePartialView
 )
 from .tracking_views import TrackSiteEventView
 from .share_temp_views import serve_share_temp_image
@@ -108,6 +109,7 @@ urlpatterns = [
     path('notifications/<int:pk>/share-image/generate/', NotificationShareImageGenerateView.as_view(), name='notification-share-image-generate'),
     path('notifications/<int:pk>/share-image/status/', NotificationShareImageStatusView.as_view(), name='notification-share-image-status'),
     path('notifications/<int:pk>/share-image/html/', NotificationShareImageHTMLView.as_view(), name='notification-share-image-html'),
+    path('notifications/<int:pk>/share-image/png/', NotificationShareImagePNGView.as_view(), name='notification-share-image-png'),
     path('notifications/<int:pk>/share-image/<str:format_type>/', NotificationShareImageView.as_view(), name='notification-share-image'),
 
     # Notification rating endpoint (for platinum notifications)
@@ -119,12 +121,14 @@ urlpatterns = [
 
     # Shareable image endpoints (EarnedTrophy-based, for My Shareables page)
     path('shareables/platinum/<int:earned_trophy_id>/html/', ShareableImageHTMLView.as_view(), name='shareable-platinum-html'),
+    path('shareables/platinum/<int:earned_trophy_id>/png/', ShareableImagePNGView.as_view(), name='shareable-platinum-png'),
 
     # Monthly recap endpoints
     path('recap/available/', RecapAvailableView.as_view(), name='recap-available'),
     path('recap/<int:year>/<int:month>/', RecapDetailView.as_view(), name='recap-detail'),
     path('recap/<int:year>/<int:month>/regenerate/', RecapRegenerateView.as_view(), name='recap-regenerate'),
     path('recap/<int:year>/<int:month>/html/', RecapShareImageHTMLView.as_view(), name='recap-share-html'),
+    path('recap/<int:year>/<int:month>/png/', RecapShareImagePNGView.as_view(), name='recap-share-png'),
     path('recap/<int:year>/<int:month>/slide/<str:slide_type>/', RecapSlidePartialView.as_view(), name='recap-slide-partial'),
 
     # Tracking endpoints

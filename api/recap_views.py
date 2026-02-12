@@ -12,6 +12,7 @@ from rest_framework import status as http_status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.authentication import SessionAuthentication, TokenAuthentication
 from django.template.loader import render_to_string
+from django.http import HttpResponse
 from django.utils.decorators import method_decorator
 from django.utils import timezone
 from core.services.tracking import track_site_event
@@ -432,6 +433,88 @@ class RecapShareImageHTMLView(APIView):
             'badges_count': recap.badges_earned_count,
         }
 
+
+
+class RecapShareImagePNGView(APIView):
+    """
+    GET /api/v1/recap/<year>/<month>/png/?image_format=landscape&theme=default
+
+    Server-side PNG rendering via Playwright. Returns the finished PNG as a download.
+    """
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [SessionAuthentication, TokenAuthentication]
+
+    @method_decorator(ratelimit(key='user', rate='20/m', method='GET', block=True))
+    def get(self, request, year, month):
+        gate = _check_profile_synced(request)
+        if gate:
+            return gate
+        profile = request.user.profile
+        now_local = _get_user_local_now(request)
+
+        if not 1 <= month <= 12:
+            return Response(
+                {'error': 'Invalid month. Must be 1-12.'},
+                status=http_status.HTTP_400_BAD_REQUEST
+            )
+
+        # Check premium gating
+        recent_year, recent_month = _get_most_recent_completed_month(now_local)
+        is_recent_or_current = (
+            (year == now_local.year and month == now_local.month) or
+            (year == recent_year and month == recent_month)
+        )
+
+        if not is_recent_or_current and not profile.user_is_premium:
+            return Response(
+                {'error': 'Premium subscription required to share past recaps.'},
+                status=http_status.HTTP_403_FORBIDDEN
+            )
+
+        format_type = request.query_params.get('image_format', 'landscape')
+        if format_type not in ['landscape', 'portrait']:
+            return Response(
+                {'error': 'Invalid format. Must be landscape or portrait.'},
+                status=http_status.HTTP_400_BAD_REQUEST
+            )
+
+        theme_key = request.query_params.get('theme', 'default')
+
+        recap = MonthlyRecapService.get_or_generate_recap(profile, year, month)
+        if not recap:
+            return Response(
+                {'error': 'No activity found for this month.'},
+                status=http_status.HTTP_404_NOT_FOUND
+            )
+
+        track_site_event('recap_share_generate', f"{year}-{month:02d}", request)
+
+        # Reuse the HTML view's context builder
+        html_view = RecapShareImageHTMLView()
+        context = html_view._build_template_context(recap, profile, format_type)
+
+        html = render_to_string('recap/partials/recap_share_card.html', context)
+
+        try:
+            from core.services.playwright_renderer import render_png
+            png_bytes = render_png(
+                html,
+                format_type=format_type,
+                theme_key=theme_key,
+            )
+        except Exception as e:
+            logger.exception(f"[RECAP-PNG] Playwright render failed for {year}/{month}: {e}")
+            return Response(
+                {'error': 'Failed to render share image'},
+                status=http_status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+        month_name = calendar.month_name[month]
+        filename = f"recap-{month_name}-{year}-{format_type}.png"
+
+        response = HttpResponse(png_bytes, content_type='image/png')
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+        return response
 
 
 class RecapSlidePartialView(APIView):

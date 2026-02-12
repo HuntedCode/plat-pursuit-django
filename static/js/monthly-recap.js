@@ -914,11 +914,30 @@ class MonthlyRecapManager {
         btn.innerHTML = '<span class="loading loading-spinner loading-sm"></span> Generating...';
 
         try {
-            // Fetch the share image HTML
-            const data = await PlatPursuit.API.get(`/api/v1/recap/${this.year}/${this.month}/html/`);
+            // Fetch PNG from server-side Playwright renderer
+            const url = `/api/v1/recap/${this.year}/${this.month}/png/?image_format=landscape&theme=${this.currentBackground}`;
 
-            // Use html2canvas to generate image
-            await this.generateImage(data.html);
+            const response = await fetch(url, {
+                credentials: 'same-origin',
+                headers: {
+                    'X-CSRFToken': PlatPursuit.CSRFToken.get(),
+                },
+            });
+
+            if (!response.ok) {
+                throw new Error(`Server rendering failed: ${response.status}`);
+            }
+
+            const blob = await response.blob();
+
+            const downloadUrl = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = downloadUrl;
+            a.download = `platpursuit_recap_${this.year}_${this.month}.png`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(downloadUrl);
 
         } catch (error) {
             console.error('Error generating share image:', error);
@@ -928,177 +947,6 @@ class MonthlyRecapManager {
         } finally {
             btn.disabled = false;
             btn.innerHTML = originalText;
-        }
-    }
-
-    async generateImage(html) {
-        // Dynamically load html2canvas if not already loaded
-        if (typeof html2canvas === 'undefined') {
-            await new Promise((resolve, reject) => {
-                const script = document.createElement('script');
-                script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
-                script.onload = resolve;
-                script.onerror = reject;
-                document.head.appendChild(script);
-            });
-        }
-
-        const width = 1200;
-        const height = 630;
-
-        // Create iframe for isolated rendering
-        const iframe = document.createElement('iframe');
-        iframe.style.cssText = 'position: fixed; left: -9999px; top: 0; width: ' + width + 'px; height: ' + height + 'px;';
-        document.body.appendChild(iframe);
-
-        const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
-        // <base href> is critical: without it, relative URLs (like /api/v1/share-temp/...)
-        // resolve against about:blank and fail to load images
-        iframeDoc.open();
-        iframeDoc.write(`
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <meta charset="UTF-8">
-                <base href="${window.location.origin}/" />
-                <style>
-                    * { margin: 0; padding: 0; box-sizing: border-box; }
-                    body { margin: 0; padding: 0; width: ${width}px; height: ${height}px; overflow: hidden; }
-                    img { display: inline-block; }
-                </style>
-            </head>
-            <body>${html}</body>
-            </html>
-        `);
-        iframeDoc.close();
-
-        // Apply background style to the rendered card
-        const shareContent = iframeDoc.querySelector('.share-image-content');
-        if (shareContent) {
-            await this.applyBackground(shareContent);
-        }
-
-        // Wait for images to load and convert to base64 for html2canvas
-        const images = iframeDoc.querySelectorAll('img');
-        // Force eager loading — iOS Safari may lazy-load images in hidden iframes
-        images.forEach(img => { img.loading = 'eager'; });
-        await Promise.all(Array.from(images).map(async (img) => {
-            // Wait for image to be fully decoded (handles iOS Safari timing)
-            await this.waitForImageDecode(img);
-
-            // Convert to base64 to avoid CORS issues with html2canvas
-            try {
-                const dataUrl = await this.imageToBase64(img.src);
-                if (dataUrl) {
-                    img.src = dataUrl;
-                    // After changing src, wait for decode again
-                    await this.waitForImageDecode(img);
-                }
-            } catch (e) {
-                console.warn('Could not convert image to base64:', img.src.substring(0, 100), e);
-            }
-        }));
-
-        // Delay to ensure rendering is complete (longer for iOS Safari image decode)
-        await new Promise(r => setTimeout(r, 500));
-
-        // Generate canvas
-        const wrapper = iframeDoc.querySelector('.share-image-content') || iframeDoc.body;
-        const canvas = await html2canvas(wrapper, {
-            width,
-            height,
-            scale: 1,
-            useCORS: true,
-            allowTaint: false,
-            backgroundColor: null,
-            logging: false,
-            windowWidth: width,
-            windowHeight: height,
-            foreignObjectRendering: true,
-            window: iframe.contentWindow,
-        });
-
-        // Download
-        canvas.toBlob(blob => {
-            if (!blob) {
-                console.error('Failed to create blob from canvas');
-                return;
-            }
-
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `platpursuit_recap_${this.year}_${this.month}.png`;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
-        }, 'image/png');
-
-        // Cleanup
-        document.body.removeChild(iframe);
-    }
-
-    /**
-     * Wait for an image to be fully decoded and ready to render.
-     * On iOS Safari, img.complete can be true before the image is actually decoded,
-     * causing html2canvas to read zero dimensions and skip the image.
-     */
-    async waitForImageDecode(img, timeout = 3000) {
-        if (!img.complete) {
-            await new Promise((resolve) => {
-                img.onload = resolve;
-                img.onerror = resolve;
-            });
-        }
-
-        // Verify the image has valid dimensions (proves it's decoded)
-        if (img.naturalWidth > 0 && img.naturalHeight > 0) {
-            return;
-        }
-
-        // Use decode() API if available (Safari 11+)
-        if (typeof img.decode === 'function') {
-            try {
-                await img.decode();
-                return;
-            } catch (e) {
-                // decode() failed, fall through to polling
-            }
-        }
-
-        // Polling fallback for iOS Safari edge cases
-        const start = Date.now();
-        while (Date.now() - start < timeout) {
-            if (img.naturalWidth > 0 && img.naturalHeight > 0) {
-                return;
-            }
-            await new Promise(r => setTimeout(r, 50));
-        }
-        console.warn('Image decode timeout:', img.src.substring(0, 100));
-    }
-
-    /**
-     * Convert an image URL to base64 data URL
-     */
-    async imageToBase64(url) {
-        // Skip if already a data URL
-        if (url.startsWith('data:')) {
-            return url;
-        }
-
-        try {
-            const response = await fetch(url);
-            const blob = await response.blob();
-            return new Promise((resolve, reject) => {
-                const reader = new FileReader();
-                reader.onloadend = () => resolve(reader.result);
-                reader.onerror = reject;
-                reader.readAsDataURL(blob);
-            });
-        } catch (e) {
-            console.warn('Failed to fetch image for base64 conversion:', url, e);
-            return null;
         }
     }
 

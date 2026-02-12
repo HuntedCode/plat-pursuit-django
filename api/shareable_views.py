@@ -8,6 +8,7 @@ from rest_framework import status as http_status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.authentication import SessionAuthentication, TokenAuthentication
 from django.template.loader import render_to_string
+from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
 from django.utils.decorators import method_decorator
 from django_ratelimit.decorators import ratelimit
@@ -228,4 +229,82 @@ class ShareableImageHTMLView(APIView):
             processed.append(badge_copy)
 
         return processed
+
+
+class ShareableImagePNGView(APIView):
+    """
+    GET /api/v1/shareables/platinum/<earned_trophy_id>/png/?image_format=landscape&theme=default
+
+    Server-side PNG rendering via Playwright. Returns the finished PNG as a download.
+    """
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [SessionAuthentication, TokenAuthentication]
+
+    @method_decorator(ratelimit(key='user', rate='20/m', method='GET', block=True))
+    def get(self, request, earned_trophy_id):
+        earned_trophy = get_object_or_404(
+            EarnedTrophy.objects.select_related('trophy__game__concept', 'profile'),
+            id=earned_trophy_id,
+            profile=request.user.profile,
+            earned=True,
+            trophy__trophy_type='platinum'
+        )
+
+        format_type = request.query_params.get('image_format', 'landscape')
+        if format_type not in ['landscape', 'portrait']:
+            return Response(
+                {'error': 'Invalid format. Must be landscape or portrait'},
+                status=http_status.HTTP_400_BAD_REQUEST
+            )
+
+        theme_key = request.query_params.get('theme', 'default')
+
+        # Reuse existing HTML view's context builder
+        html_view = ShareableImageHTMLView()
+        metadata = ShareableDataService.get_platinum_share_data(earned_trophy)
+        context = html_view._build_template_context(metadata, format_type)
+
+        html = render_to_string('notifications/partials/share_image_card.html', context)
+
+        # Use the cached image paths from the context (already fetched by _build_template_context)
+        game_image_path = self._resolve_temp_path(context.get('game_image', ''))
+
+        # Concept bg is not in the template context — cache it separately for game art themes
+        concept_bg_url = metadata.get('concept_bg_url', '')
+        concept_bg_cached = ShareImageCache.fetch_and_cache(concept_bg_url) if concept_bg_url else ''
+        concept_bg_path = self._resolve_temp_path(concept_bg_cached)
+
+        try:
+            from core.services.playwright_renderer import render_png
+            png_bytes = render_png(
+                html,
+                format_type=format_type,
+                theme_key=theme_key,
+                game_image_path=game_image_path,
+                concept_bg_path=concept_bg_path,
+            )
+        except Exception as e:
+            logger.exception(f"[SHARE-PNG] Playwright render failed for shareable {earned_trophy_id}: {e}")
+            return Response(
+                {'error': 'Failed to render share image'},
+                status=http_status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+        game_name = metadata.get('game_name', 'share-card')
+        safe_name = "".join(c for c in game_name if c.isalnum() or c in (' ', '-', '_')).strip()
+        filename = f"{safe_name}-{format_type}.png"
+
+        response = HttpResponse(png_bytes, content_type='image/png')
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+        return response
+
+    @staticmethod
+    def _resolve_temp_path(serve_path):
+        """Convert a /api/v1/share-temp/<file> path to an absolute filesystem path."""
+        if not serve_path or not serve_path.startswith('/api/v1/share-temp/'):
+            return None
+        filename = serve_path.split('/')[-1]
+        from core.services.share_image_cache import SHARE_TEMP_DIR
+        full_path = SHARE_TEMP_DIR / filename
+        return str(full_path) if full_path.exists() else None
 

@@ -6,15 +6,14 @@
  */
 class ShareableManager extends ShareImageManager {
     constructor(earnedTrophyId, gameName, gameImage, conceptBgUrl) {
-        // Parent constructor expects notificationId, but we'll override fetchCardHTML
+        // Parent constructor expects notificationId, but we override getPngEndpoint/fetchCardHTML
         super(null, { game_name: gameName, game_image: gameImage, concept_bg_url: conceptBgUrl });
         this.earnedTrophyId = earnedTrophyId;
         this.gameName = gameName;
     }
 
     /**
-     * Override fetchCardHTML to use the new shareable endpoint
-     * Also stores base64 background images from response for use in downloads
+     * Override fetchCardHTML to use the shareable endpoint (for preview)
      */
     async fetchCardHTML(format) {
         const response = await PlatPursuit.API.get(
@@ -22,30 +21,16 @@ class ShareableManager extends ShareImageManager {
         );
 
         if (response && response.html) {
-            // Store base64 background images from API response for download use
-            // These bypass CORS issues since they're fetched server-side
-            if (response.game_image_base64) {
-                this.gameImageBase64 = response.game_image_base64;
-            }
-            if (response.concept_bg_base64) {
-                this.conceptBgBase64 = response.concept_bg_base64;
-            }
             return response.html;
         }
         throw new Error('Failed to fetch card HTML');
     }
 
     /**
-     * Override to use game name from constructor for filename
+     * Override to use shareable PNG endpoint for server-side rendering
      */
-    getFilename(format) {
-        // Sanitize game name for filename
-        const safeName = this.gameName
-            .toLowerCase()
-            .replace(/[^a-z0-9]+/g, '_')
-            .replace(/^_+|_+$/g, '')
-            .substring(0, 50);
-        return `platinum_${safeName}_${format}.png`;
+    getPngEndpoint(format) {
+        return `/api/v1/shareables/platinum/${this.earnedTrophyId}/png/?image_format=${format}&theme=${this.currentBackground}`;
     }
 
     /**
@@ -55,9 +40,6 @@ class ShareableManager extends ShareImageManager {
         const btn = document.getElementById('generate-image-btn');
         const bothBtn = document.getElementById('generate-both-btn');
         const errorEl = document.getElementById('share-error');
-        const renderContainer = document.getElementById('share-render-container');
-
-        if (!renderContainer) return;
 
         try {
             errorEl?.classList.add('hidden');
@@ -68,10 +50,10 @@ class ShareableManager extends ShareImageManager {
             const formats = format === 'both' ? ['landscape', 'portrait'] : [format];
 
             for (const fmt of formats) {
-                await this.generateSingleImage(fmt, renderContainer);
+                await this.generateSingleImage(fmt);
             }
 
-            // Track download after successful image generation (using earnedTrophyId)
+            // Track download (using earnedTrophyId)
             try {
                 await PlatPursuit.API.post('/api/v1/tracking/site-event/', {
                     event_type: 'share_card_download',
@@ -90,7 +72,6 @@ class ShareableManager extends ShareImageManager {
             btn.classList.remove('loading');
             btn.disabled = false;
             bothBtn.disabled = false;
-            renderContainer.innerHTML = '';
         }
     }
 }

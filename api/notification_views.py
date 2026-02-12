@@ -16,6 +16,7 @@ from notifications.services.shareable_data_service import ShareableDataService
 from notifications.models import Notification
 from django.contrib.auth import get_user_model
 import logging
+from django.http import HttpResponse
 from core.services.share_image_cache import ShareImageCache
 
 logger = logging.getLogger(__name__)
@@ -800,6 +801,145 @@ class NotificationShareImageHTMLView(APIView):
 
         return processed
 
+
+
+class NotificationShareImagePNGView(APIView):
+    """
+    GET /api/v1/notifications/<id>/share-image/png/?image_format=landscape&theme=default
+
+    Server-side PNG rendering via Playwright. Returns the finished PNG as a download.
+    """
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [SessionAuthentication, TokenAuthentication]
+
+    @method_decorator(ratelimit(key='user', rate='20/m', method='GET', block=True))
+    def get(self, request, pk):
+        try:
+            notification = Notification.objects.get(
+                id=pk,
+                recipient=request.user,
+                notification_type='platinum_earned'
+            )
+        except Notification.DoesNotExist:
+            return Response(
+                {'error': 'Platinum notification not found'},
+                status=http_status.HTTP_404_NOT_FOUND
+            )
+
+        format_type = request.query_params.get('image_format', 'landscape')
+        if format_type not in ['landscape', 'portrait']:
+            return Response(
+                {'error': 'Invalid format. Must be landscape or portrait'},
+                status=http_status.HTTP_400_BAD_REQUEST
+            )
+
+        theme_key = request.query_params.get('theme', 'default')
+
+        # Reuse the existing HTML view's context-building logic
+        html_view = NotificationShareImageHTMLView()
+        metadata = notification.metadata or {}
+
+        # Calculate playtime
+        playtime = ''
+        play_duration_seconds = metadata.get('play_duration_seconds')
+        if play_duration_seconds:
+            try:
+                seconds = float(play_duration_seconds)
+                hours = int(seconds // 3600)
+                minutes = int((seconds % 3600) // 60)
+                playtime = f"{hours}h {minutes}m" if hours > 0 else f"{minutes}m"
+            except (ValueError, TypeError):
+                pass
+
+        # Format earn rate
+        earn_rate = metadata.get('trophy_earn_rate')
+        if earn_rate:
+            try:
+                earn_rate = round(float(earn_rate), 2)
+            except (ValueError, TypeError):
+                earn_rate = None
+
+        # Cache images as local temp files (renderer embeds as base64 data URIs)
+        game_image_url = metadata.get('game_image', '')
+        trophy_icon_url = metadata.get('trophy_icon_url', '')
+
+        game_image_data = ShareImageCache.fetch_and_cache(game_image_url)
+        trophy_icon_data = ShareImageCache.fetch_and_cache(trophy_icon_url)
+
+        # Get live badge data
+        badge_xp, tier1_badges = html_view._get_live_badge_data(request.user.profile, metadata)
+        badge_xp = html_view._to_int(badge_xp)
+        processed_badges = html_view._process_badge_images(tier1_badges)
+
+        first_played_date_time = html_view._format_date(metadata.get('first_played_date_time'))
+        earned_date_time = html_view._format_date(metadata.get('earned_date_time'))
+
+        context = {
+            'format': format_type,
+            'game_name': metadata.get('game_name', 'Unknown Game'),
+            'username': metadata.get('username', 'Player'),
+            'total_plats': html_view._to_int(metadata.get('user_total_platinums', 0)),
+            'progress': html_view._to_int(metadata.get('progress_percentage', 0)),
+            'earned_trophies': html_view._to_int(metadata.get('earned_trophies_count', 0)),
+            'total_trophies': html_view._to_int(metadata.get('total_trophies_count', 0)),
+            'game_image': game_image_data,
+            'trophy_icon': trophy_icon_data,
+            'rarity_label': metadata.get('rarity_label', ''),
+            'earn_rate': earn_rate,
+            'playtime': playtime,
+            'title_platform': metadata.get('title_platform', []),
+            'region': metadata.get('region', []),
+            'is_regional': metadata.get('is_regional', False),
+            'first_played_date_time': first_played_date_time,
+            'earned_date_time': earned_date_time,
+            'yearly_plats': html_view._to_int(metadata.get('yearly_plats', 0)),
+            'earned_year': html_view._to_int(metadata.get('earned_year', 0)),
+            'badge_xp': badge_xp,
+            'tier1_badges': processed_badges,
+            'user_rating': html_view._get_live_user_rating(request.user.profile, metadata),
+        }
+
+        html = render_to_string('notifications/partials/share_image_card.html', context)
+
+        # Resolve game image paths for game art themes
+        game_image_path = self._resolve_temp_path(game_image_data)
+        concept_bg_url = metadata.get('concept_bg_url', '')
+        concept_bg_data = ShareImageCache.fetch_and_cache(concept_bg_url) if concept_bg_url else ''
+        concept_bg_path = self._resolve_temp_path(concept_bg_data)
+
+        try:
+            from core.services.playwright_renderer import render_png
+            png_bytes = render_png(
+                html,
+                format_type=format_type,
+                theme_key=theme_key,
+                game_image_path=game_image_path,
+                concept_bg_path=concept_bg_path,
+            )
+        except Exception as e:
+            logger.exception(f"[SHARE-PNG] Playwright render failed for notification {pk}: {e}")
+            return Response(
+                {'error': 'Failed to render share image'},
+                status=http_status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+        game_name = metadata.get('game_name', 'share-card')
+        safe_name = "".join(c for c in game_name if c.isalnum() or c in (' ', '-', '_')).strip()
+        filename = f"{safe_name}-{format_type}.png"
+
+        response = HttpResponse(png_bytes, content_type='image/png')
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+        return response
+
+    @staticmethod
+    def _resolve_temp_path(serve_path):
+        """Convert a /api/v1/share-temp/<file> path to an absolute filesystem path."""
+        if not serve_path or not serve_path.startswith('/api/v1/share-temp/'):
+            return None
+        filename = serve_path.split('/')[-1]
+        from core.services.share_image_cache import SHARE_TEMP_DIR
+        full_path = SHARE_TEMP_DIR / filename
+        return str(full_path) if full_path.exists() else None
 
 
 class NotificationRatingView(APIView):
