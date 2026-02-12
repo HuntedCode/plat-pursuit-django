@@ -977,6 +977,8 @@ class MonthlyRecapManager {
 
         // Wait for images to load and convert to base64 for html2canvas
         const images = iframeDoc.querySelectorAll('img');
+        // Force eager loading — iOS Safari may lazy-load images in hidden iframes
+        images.forEach(img => { img.loading = 'eager'; });
         await Promise.all(Array.from(images).map(async (img) => {
             // Wait for image to be fully decoded (handles iOS Safari timing)
             await this.waitForImageDecode(img);

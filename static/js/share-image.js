@@ -706,6 +706,8 @@ class ShareImageManager {
      */
     async waitForImages(container) {
         const images = container.querySelectorAll('img');
+        // Force eager loading — iOS Safari may lazy-load images in hidden iframes
+        images.forEach(img => { img.loading = 'eager'; });
         const promises = Array.from(images).map(async (img) => {
             // Wait for image to be fully decoded (handles iOS Safari timing)
             await this.waitForImageDecode(img);
