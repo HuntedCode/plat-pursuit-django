@@ -242,12 +242,15 @@ def format_date(value, arg=None):
 
     if isinstance(value, str):
         try:
-            value = datetime.strptime(value, '%b. %d, %Y, %I:%M %p')
-        except ValueError:
+            value = datetime.fromisoformat(value)
+        except (ValueError, TypeError):
             try:
-                value = datetime.strptime(value, '%Y-%m-%d %H:%M:%S')
+                value = datetime.strptime(value, '%b. %d, %Y, %I:%M %p')
             except ValueError:
-                return value
+                try:
+                    value = datetime.strptime(value, '%Y-%m-%d %H:%M:%S')
+                except ValueError:
+                    return value
 
     if not isinstance(value, (datetime, timezone.datetime)):
         return value
