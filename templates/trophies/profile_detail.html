@@ -59,6 +59,30 @@
                     {% include 'trophies/partials/profile_detail/badge_list_items.html' %}
                 </div>
             </div>
+            <a href="?tab=lists" id="lists-tab" class="tab {% if current_tab == 'lists' %}tab-active{% endif %}" role="tab" aria-selected="{% if current_tab == 'lists' %}true{% else %}false{% endif %}" aria-controls="lists-panel">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 mr-2" fill="none" viewBox="0 0 24 24" stroke="var(--color-info)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <line x1="8" y1="6" x2="21" y2="6"></line>
+                    <line x1="8" y1="12" x2="21" y2="12"></line>
+                    <line x1="8" y1="18" x2="21" y2="18"></line>
+                    <line x1="3" y1="6" x2="3.01" y2="6"></line>
+                    <line x1="3" y1="12" x2="3.01" y2="12"></line>
+                    <line x1="3" y1="18" x2="3.01" y2="18"></line>
+                </svg>
+                Lists{% if profile_lists_count %} ({{ profile_lists_count }}){% endif %}
+            </a>
+            <div id="lists-panel" class="tab-content bg-base-100/90 border-2 border-base-300 shadow-md shadow-neutral p-6" role="tabpanel" aria-labelledby="lists-tab">
+                {% if profile_lists %}
+                    <div id="lists-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                        {% for game_list in profile_lists %}
+                            {% include 'partials/game_list_card.html' with game_list=game_list %}
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <div class="text-center py-8">
+                        <p class="text-base-content/60 italic">No public lists yet.</p>
+                    </div>
+                {% endif %}
+            </div>
         </div>
     {% endif %}
 {% endblock %}

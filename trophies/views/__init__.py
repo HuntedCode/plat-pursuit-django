@@ -12,6 +12,7 @@ from .checklist_views import ChecklistDetailView, ChecklistCreateView, Checklist
 from .sync_views import ProfileSyncStatusView, TriggerSyncView, SearchSyncProfileView, AddSyncStatusView
 from .admin_views import TokenMonitoringView, BadgeCreationView, CommentModerationView, ModerationActionView, ModerationLogView
 from .misc_views import SearchView
+from .list_views import BrowseListsView, GameListDetailView, GameListEditView, GameListCreateView, MyListsView
 
 __all__ = [
     # Game views
@@ -30,4 +31,6 @@ __all__ = [
     'TokenMonitoringView', 'BadgeCreationView', 'CommentModerationView', 'ModerationActionView', 'ModerationLogView',
     # Misc views
     'SearchView',
+    # List views
+    'BrowseListsView', 'GameListDetailView', 'GameListEditView', 'GameListCreateView', 'MyListsView',
 ]

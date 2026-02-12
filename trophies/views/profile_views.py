@@ -30,6 +30,7 @@ from ..models import (
     Badge,
     UserBadge,
     UserBadgeProgress,
+    GameList,
 )
 from trophies.mixins import ProfileHotbarMixin
 from trophies.psn_manager import PSNManager
@@ -390,6 +391,13 @@ class ProfileDetailView(ProfileHotbarMixin, DetailView):
         context['form'] = form
         return context
 
+    def _build_lists_tab_context(self, profile):
+        """Build context for lists tab — public game lists for this profile."""
+        lists = GameList.objects.filter(
+            profile=profile, is_public=True, is_deleted=False
+        ).order_by('-like_count', '-created_at')
+        return {'profile_lists': lists}
+
     def get_context_data(self, **kwargs):
         """Build context for profile detail page with tab-specific content.
 
@@ -422,6 +430,10 @@ class ProfileDetailView(ProfileHotbarMixin, DetailView):
         context['trophy_case'] = self._build_trophy_case(profile)
         context['trophy_case_count'] = len(context['trophy_case'])
 
+        # Public game lists count (shown in tab header regardless of active tab)
+        public_lists = GameList.objects.filter(profile=profile, is_public=True, is_deleted=False)
+        context['profile_lists_count'] = public_lists.count()
+
         # Delegate to tab-specific handler methods
         if tab == 'games':
             tab_context = self._build_games_tab_context(profile, per_page, page_number)
@@ -429,6 +441,8 @@ class ProfileDetailView(ProfileHotbarMixin, DetailView):
             tab_context = self._build_trophies_tab_context(profile, per_page, page_number)
         elif tab == 'badges':
             tab_context = self._build_badges_tab_context(profile)
+        elif tab == 'lists':
+            tab_context = self._build_lists_tab_context(profile)
         else:
             # Default to games tab if invalid tab specified
             tab_context = self._build_games_tab_context(profile, per_page, page_number)

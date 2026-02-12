@@ -3,7 +3,7 @@ from django.contrib.admin import SimpleListFilter
 from django.db import transaction
 from django.db.models import Q
 from datetime import timedelta
-from .models import Profile, Game, Trophy, EarnedTrophy, ProfileGame, APIAuditLog, FeaturedGame, FeaturedProfile, Concept, TitleID, TrophyGroup, UserTrophySelection, UserConceptRating, Badge, UserBadge, UserBadgeProgress, FeaturedGuide, Stage, PublisherBlacklist, Title, UserTitle, Milestone, UserMilestone, UserMilestoneProgress, Comment, CommentVote, CommentReport, ModerationLog, BannedWord, Checklist, ChecklistSection, ChecklistItem, ChecklistVote, UserChecklistProgress, ChecklistReport, ProfileGamification, StatType, StageStatValue, MonthlyRecap
+from .models import Profile, Game, Trophy, EarnedTrophy, ProfileGame, APIAuditLog, FeaturedGame, FeaturedProfile, Concept, TitleID, TrophyGroup, UserTrophySelection, UserConceptRating, Badge, UserBadge, UserBadgeProgress, FeaturedGuide, Stage, PublisherBlacklist, Title, UserTitle, Milestone, UserMilestone, UserMilestoneProgress, Comment, CommentVote, CommentReport, ModerationLog, BannedWord, Checklist, ChecklistSection, ChecklistItem, ChecklistVote, UserChecklistProgress, ChecklistReport, ProfileGamification, StatType, StageStatValue, MonthlyRecap, GameList, GameListItem, GameListLike
 
 
 # Register your models here.
@@ -1316,3 +1316,74 @@ class MonthlyRecapAdmin(admin.ModelAdmin):
             messages.warning(request, msg)
         else:
             messages.success(request, f"All {queryset.count()} recap(s) have correct badge XP.")
+
+
+# ---------- Game List Admin ----------
+
+class GameListItemInline(admin.TabularInline):
+    model = GameListItem
+    extra = 0
+    fields = ('game', 'position', 'note', 'added_at')
+    readonly_fields = ('added_at',)
+    raw_id_fields = ('game',)
+    ordering = ('position',)
+
+
+@admin.register(GameList)
+class GameListAdmin(admin.ModelAdmin):
+    list_display = [
+        'id',
+        'name',
+        'profile',
+        'game_count',
+        'like_count',
+        'is_public',
+        'is_deleted',
+        'created_at',
+    ]
+    list_filter = [
+        'is_public',
+        'is_deleted',
+        'created_at',
+    ]
+    search_fields = [
+        'name',
+        'description',
+        'profile__psn_username',
+    ]
+    raw_id_fields = ['profile']
+    readonly_fields = [
+        'game_count',
+        'like_count',
+        'view_count',
+        'created_at',
+        'updated_at',
+        'deleted_at',
+    ]
+    ordering = ['-created_at']
+    date_hierarchy = 'created_at'
+    inlines = [GameListItemInline]
+    actions = ['soft_delete_lists', 'restore_lists']
+
+    @admin.action(description='Soft delete selected game lists')
+    def soft_delete_lists(self, request, queryset):
+        count = 0
+        for game_list in queryset.filter(is_deleted=False):
+            game_list.soft_delete()
+            count += 1
+        messages.success(request, f"Soft-deleted {count} game list(s).")
+
+    @admin.action(description='Restore soft-deleted game lists')
+    def restore_lists(self, request, queryset):
+        count = queryset.filter(is_deleted=True).update(is_deleted=False, deleted_at=None)
+        messages.success(request, f"Restored {count} game list(s).")
+
+
+@admin.register(GameListLike)
+class GameListLikeAdmin(admin.ModelAdmin):
+    list_display = ['id', 'game_list', 'profile', 'created_at']
+    list_filter = ['created_at']
+    search_fields = ['profile__psn_username', 'game_list__name']
+    raw_id_fields = ['game_list', 'profile']
+    readonly_fields = ['created_at']
+    ordering = ['-created_at']

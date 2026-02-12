@@ -189,4 +189,8 @@
     </script>
     <script src="{% static 'js\submit_shimmer.js' %}"></script>
     <script src="{% static 'js\list_page_filters.js' %}"></script>
+    {% if user.is_authenticated and user.profile %}
+    <script src="{% static 'js/game-lists.js' %}"></script>
+    <script>document.addEventListener('DOMContentLoaded', () => GameListQuickAdd.init());</script>
+    {% endif %}
 {% endblock %}

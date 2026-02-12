@@ -1,0 +1,171 @@
+{% load static custom_filters %}
+{# Game card within a game list - used on list detail and edit pages #}
+{# Expects: item (GameListItem with .game), is_owner, is_premium, edit_mode (optional bool) #}
+{# NOTE: When editing this template, also update _buildGameItemCardHTML() in game-lists.js #}
+{% with item.game as game %}
+<div class="card bg-base-100 border-2 border-base-300 shadow-md transition-all duration-200 hover:shadow-lg hover:border-{{ game|platform_color }} group game-list-item-card"
+     data-item-id="{{ item.id }}"
+     data-position="{{ item.position }}"
+     {% if edit_mode and is_owner %}draggable="true"{% endif %}>
+    <div class="card-body p-3 sm:p-4">
+        <div class="flex gap-3 items-start">
+            {# Drag handle + position (edit mode only) #}
+            {% if edit_mode and is_owner %}
+                <div class="flex-col items-center justify-center gap-1 flex-shrink-0 cursor-grab active:cursor-grabbing drag-handle hidden sm:flex pt-3">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-base-content/30" viewBox="0 0 24 24" fill="currentColor">
+                        <circle cx="9" cy="5" r="1.5"/><circle cx="15" cy="5" r="1.5"/>
+                        <circle cx="9" cy="10" r="1.5"/><circle cx="15" cy="10" r="1.5"/>
+                        <circle cx="9" cy="15" r="1.5"/><circle cx="15" cy="15" r="1.5"/>
+                    </svg>
+                    <span class="text-xs font-mono text-base-content/40 position-label">#{{ item.position|add:1 }}</span>
+                </div>
+            {% endif %}
+
+            {# Game image #}
+            <a href="{% url 'game_detail' game.np_communication_id %}" class="flex-shrink-0">
+                <figure class="w-16 h-16 sm:w-20 sm:h-20 rounded-lg overflow-hidden border-2 border-base-300 group-hover:border-{{ game|platform_color }} transition-colors duration-200">
+                    {% if game.title_image and not game.force_title_icon %}
+                        <img src="{{ game.title_image }}" alt="{{ game.title_name }}" class="w-full h-full object-cover" loading="lazy" />
+                    {% else %}
+                        <img src="{{ game.title_icon_url }}" alt="{{ game.title_name }}" class="w-full h-full object-fill" loading="lazy" />
+                    {% endif %}
+                </figure>
+            </a>
+
+            {# Game info #}
+            <div class="flex-1 min-w-0">
+                <div class="flex items-start justify-between gap-2">
+                    <a href="{% url 'game_detail' game.np_communication_id %}" class="hover:underline">
+                        <h3 class="font-bold text-sm sm:text-base line-clamp-2 group-hover:text-primary transition-colors">{{ game.title_name }}</h3>
+                    </a>
+                    {% if not edit_mode %}
+                        <span class="badge badge-ghost badge-sm font-mono flex-shrink-0">#{{ item.position|add:1 }}</span>
+                    {% endif %}
+                </div>
+
+                {# Platform badges + region badges + trophy counts #}
+                <div class="flex flex-wrap items-center gap-2 mt-1">
+                    {% for platform in game.title_platform reversed %}
+                        <span class="badge badge-ghost badge-xs font-bold border border-{{ platform|platform_color_str }}">{{ platform }}</span>
+                    {% endfor %}
+                    {% if game.is_regional %}
+                        {% for region in game.region %}
+                            {% if region == "NA" %}
+                                <span class="badge badge-xs badge-primary font-bold italic">NA</span>
+                            {% elif region == "EU" %}
+                                <span class="badge badge-xs badge-secondary font-bold italic">EU</span>
+                            {% elif region == "JP" %}
+                                <span class="badge badge-xs badge-accent font-bold italic">JP</span>
+                            {% else %}
+                                <span class="badge badge-xs badge-warning font-bold italic">{{ region }}</span>
+                            {% endif %}
+                        {% endfor %}
+                    {% else %}
+                        <span class="badge badge-xs badge-ghost">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 512 512" stroke="var(--color-success)" fill="var(--color-success)"><path d="M351.9 280l-190.9 0c2.9 64.5 17.2 123.9 37.5 167.4 11.4 24.5 23.7 41.8 35.1 52.4 11.2 10.5 18.9 12.2 22.9 12.2s11.7-1.7 22.9-12.2c11.4-10.6 23.7-28 35.1-52.4 20.3-43.5 34.6-102.9 37.5-167.4zM160.9 232l190.9 0C349 167.5 334.7 108.1 314.4 64.6 303 40.2 290.7 22.8 279.3 12.2 268.1 1.7 260.4 0 256.4 0s-11.7 1.7-22.9 12.2c-11.4 10.6-23.7 28-35.1 52.4-20.3 43.5-34.6 102.9-37.5 167.4zm-48 0C116.4 146.4 138.5 66.9 170.8 14.7 78.7 47.3 10.9 131.2 1.5 232l111.4 0zM1.5 280c9.4 100.8 77.2 184.7 169.3 217.3-32.3-52.2-54.4-131.7-57.9-217.3L1.5 280zm398.4 0c-3.5 85.6-25.6 165.1-57.9 217.3 92.1-32.7 159.9-116.5 169.3-217.3l-111.4 0zm111.4-48C501.9 131.2 434.1 47.3 342 14.7 374.3 66.9 396.4 146.4 399.9 232l111.4 0z"/></svg>
+                        </span>
+                    {% endif %}
+                    {% if game.defined_trophies %}
+                        <span class="text-xs flex items-center gap-1">
+                            {% if game.defined_trophies.platinum %}
+                                <span class="flex items-center gap-0.5" style="color: var(--color-trophy-platinum);">
+                                    {% include 'partials/trophy_cup_icon.html' with color='var(--color-trophy-platinum)' %}
+                                    {{ game.defined_trophies.platinum }}
+                                </span>
+                            {% endif %}
+                            <span class="flex items-center gap-0.5" style="color: var(--color-trophy-gold);">
+                                {% include 'partials/trophy_cup_icon.html' with color='var(--color-trophy-gold)' %}
+                                {{ game.defined_trophies.gold }}
+                            </span>
+                            <span class="flex items-center gap-0.5" style="color: var(--color-trophy-silver);">
+                                {% include 'partials/trophy_cup_icon.html' with color='var(--color-trophy-silver)' %}
+                                {{ game.defined_trophies.silver }}
+                            </span>
+                            <span class="flex items-center gap-0.5" style="color: var(--color-trophy-bronze);">
+                                {% include 'partials/trophy_cup_icon.html' with color='var(--color-trophy-bronze)' %}
+                                {{ game.defined_trophies.bronze }}
+                            </span>
+                        </span>
+                    {% endif %}
+                </div>
+
+                {# Note section #}
+                {% if edit_mode and is_owner %}
+                    <div class="mt-2">
+                        {% if is_premium %}
+                            {# Note display (click to edit) #}
+                            <div class="note-display-container" data-item-id="{{ item.id }}">
+                                {% if item.note %}
+                                    <div class="note-display flex items-start gap-2 px-2 py-1 bg-base-200 rounded-lg cursor-pointer hover:bg-base-300 transition-colors"
+                                         title="Click to edit note">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3 mt-0.5 text-primary flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                            <path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+                                        </svg>
+                                        <span class="text-xs text-base-content/70 italic line-clamp-2">{{ item.note }}</span>
+                                    </div>
+                                {% else %}
+                                    <button class="btn btn-ghost btn-xs text-base-content/40 note-add-btn gap-1" data-item-id="{{ item.id }}">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/>
+                                        </svg>
+                                        Add note
+                                    </button>
+                                {% endif %}
+                            </div>
+                            {# Inline note editor (hidden by default) #}
+                            <div class="note-edit-container hidden mt-1" data-item-id="{{ item.id }}">
+                                <textarea class="textarea textarea-bordered textarea-xs w-full note-input"
+                                          maxlength="500" rows="2"
+                                          placeholder="Add a personal note..."
+                                          data-item-id="{{ item.id }}">{{ item.note }}</textarea>
+                                <div class="flex items-center justify-between mt-1">
+                                    <span class="text-xs text-base-content/40">
+                                        <span class="note-char-count">{{ item.note|length }}</span>/500
+                                    </span>
+                                    <div class="flex gap-1">
+                                        <button class="btn btn-ghost btn-xs note-cancel-btn" data-item-id="{{ item.id }}">Cancel</button>
+                                        <button class="btn btn-primary btn-xs note-save-btn" data-item-id="{{ item.id }}">Save</button>
+                                    </div>
+                                </div>
+                            </div>
+                        {% else %}
+                            <span class="text-xs text-base-content/30 italic flex items-center gap-1">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+                                </svg>
+                                <a href="{% url 'beta_access_required' %}" class="link link-primary text-xs">Premium</a>: Add personal notes
+                            </span>
+                        {% endif %}
+                    </div>
+                {% elif item.note %}
+                    {# Read-only note on detail page #}
+                    <div class="mt-2 px-2 py-1 bg-base-200 rounded-lg text-xs text-base-content/70 italic">
+                        {{ item.note }}
+                    </div>
+                {% endif %}
+            </div>
+
+            {# Edit controls (edit mode only) #}
+            {% if edit_mode and is_owner %}
+                <div class="flex flex-col items-center gap-1 flex-shrink-0">
+                    {# Position input #}
+                    <input type="number"
+                           class="input input-bordered input-xs w-12 text-center font-mono game-list-position-input"
+                           data-item-id="{{ item.id }}"
+                           value="{{ item.position|add:1 }}"
+                           min="1"
+                           title="Jump to position" />
+                    {# Remove #}
+                    <button class="btn btn-ghost btn-xs btn-square text-error game-list-remove-btn"
+                            data-item-id="{{ item.id }}" data-game-name="{{ game.title_name }}"
+                            title="Remove from list">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+                        </svg>
+                    </button>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endwith %}

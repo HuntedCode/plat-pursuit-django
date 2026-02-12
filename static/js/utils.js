@@ -245,6 +245,18 @@ const API = {
         });
     },
 
+    async patch(url, data, options = {}) {
+        return this.request(url, {
+            ...options,
+            method: 'PATCH',
+            headers: {
+                'Content-Type': 'application/json',
+                ...options.headers
+            },
+            body: JSON.stringify(data)
+        });
+    },
+
     async delete(url, options = {}) {
         return this.request(url, { ...options, method: 'DELETE' });
     },

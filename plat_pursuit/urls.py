@@ -30,7 +30,7 @@ sitemaps = {
     'games': GameSitemap,
     'profiles': ProfileSitemap,
 }
-from trophies.views import GamesListView, TrophiesListView, ProfilesListView, SearchView, GameDetailView, ProfileDetailView, TrophyCaseView, ToggleSelectionView, BadgeListView, BadgeDetailView, GuideListView, ProfileSyncStatusView, TriggerSyncView, SearchSyncProfileView, AddSyncStatusView, LinkPSNView, ProfileVerifyView, TokenMonitoringView, BadgeCreationView, BadgeLeaderboardsView, OverallBadgeLeaderboardsView, MilestoneListView, CommentModerationView, ModerationActionView, ModerationLogView, ChecklistDetailView, ChecklistCreateView, ChecklistEditView, MyChecklistsView, MyShareablesView, BrowseGuidesView
+from trophies.views import GamesListView, TrophiesListView, ProfilesListView, SearchView, GameDetailView, ProfileDetailView, TrophyCaseView, ToggleSelectionView, BadgeListView, BadgeDetailView, GuideListView, ProfileSyncStatusView, TriggerSyncView, SearchSyncProfileView, AddSyncStatusView, LinkPSNView, ProfileVerifyView, TokenMonitoringView, BadgeCreationView, BadgeLeaderboardsView, OverallBadgeLeaderboardsView, MilestoneListView, CommentModerationView, ModerationActionView, ModerationLogView, ChecklistDetailView, ChecklistCreateView, ChecklistEditView, MyChecklistsView, MyShareablesView, BrowseGuidesView, BrowseListsView, GameListDetailView, GameListEditView, GameListCreateView, MyListsView
 from trophies.recap_views import RecapIndexView, RecapSlideView
 from users.views import CustomConfirmEmailView, stripe_webhook
 from notifications.views import (
@@ -70,6 +70,13 @@ urlpatterns = [
     path('guides/create/<int:concept_id>/<str:np_communication_id>/', ChecklistCreateView.as_view(), name='guide_create'),
     path('my-guides/', MyChecklistsView.as_view(), name='my_guides'),
     path('my-shareables/', MyShareablesView.as_view(), name='my_shareables'),
+
+    # Game List URLs
+    path('lists/', BrowseListsView.as_view(), name='lists_browse'),
+    path('lists/create/', GameListCreateView.as_view(), name='list_create'),
+    path('lists/<int:list_id>/', GameListDetailView.as_view(), name='list_detail'),
+    path('lists/<int:list_id>/edit/', GameListEditView.as_view(), name='list_edit'),
+    path('my-lists/', MyListsView.as_view(), name='my_lists'),
 
     # Monthly Recap URLs
     path('recap/', RecapIndexView.as_view(), name='recap_index'),

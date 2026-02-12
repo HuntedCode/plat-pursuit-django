@@ -30,6 +30,12 @@ from .recap_views import (
 )
 from .tracking_views import TrackSiteEventView
 from .share_temp_views import serve_share_temp_image
+from .game_list_views import (
+    GameListCreateView, GameListDetailView, GameListUpdateView, GameListDeleteView,
+    GameListAddItemView, GameListRemoveItemView, GameListUpdateItemView, GameListReorderView,
+    GameListLikeView, GameListQuickAddView, UserGameListsView, GameListCopyView,
+    GameSearchView,
+)
 
 app_name = 'api'
 
@@ -136,4 +142,21 @@ urlpatterns = [
 
     # Temp share image serving
     path('share-temp/<str:filename>', serve_share_temp_image, name='share-temp-image'),
+
+    # Game list endpoints
+    path('lists/', GameListCreateView.as_view(), name='game-list-create'),
+    path('lists/my/', UserGameListsView.as_view(), name='game-list-my'),
+    path('lists/quick-add/', GameListQuickAddView.as_view(), name='game-list-quick-add'),
+    path('lists/<int:list_id>/', GameListDetailView.as_view(), name='game-list-detail'),
+    path('lists/<int:list_id>/update/', GameListUpdateView.as_view(), name='game-list-update'),
+    path('lists/<int:list_id>/delete/', GameListDeleteView.as_view(), name='game-list-delete'),
+    path('lists/<int:list_id>/items/', GameListAddItemView.as_view(), name='game-list-add-item'),
+    path('lists/<int:list_id>/items/<int:item_id>/', GameListRemoveItemView.as_view(), name='game-list-remove-item'),
+    path('lists/<int:list_id>/items/<int:item_id>/update/', GameListUpdateItemView.as_view(), name='game-list-update-item'),
+    path('lists/<int:list_id>/items/reorder/', GameListReorderView.as_view(), name='game-list-reorder'),
+    path('lists/<int:list_id>/like/', GameListLikeView.as_view(), name='game-list-like'),
+    path('lists/<int:list_id>/copy/', GameListCopyView.as_view(), name='game-list-copy'),
+
+    # Game search (for list typeahead)
+    path('games/search/', GameSearchView.as_view(), name='game-search'),
 ]

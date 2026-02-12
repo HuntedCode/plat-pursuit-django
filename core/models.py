@@ -78,6 +78,11 @@ class PageView(models.Model):
         # Utility pages
         ('notifications', 'Notifications'),
         ('recap', 'Monthly Recap'),
+        # Game lists
+        ('game_list', 'Game List'),
+        ('game_lists_browse', 'Browse Game Lists'),
+        ('my_lists', 'My Lists'),
+        ('game_list_edit', 'Game List Edit'),
     ]
 
     page_type = models.CharField(max_length=20, choices=PAGE_TYPE_CHOICES, db_index=True)
@@ -124,6 +129,8 @@ class SiteEvent(models.Model):
         ('recap_page_view', 'Monthly Recap Page View'),
         ('recap_share_generate', 'Monthly Recap Share Card View'),
         ('recap_image_download', 'Recap Image Download'),
+        ('game_list_create', 'Game List Created'),
+        ('game_list_share', 'Game List Shared'),
     ]
 
     event_type = models.CharField(max_length=30, choices=EVENT_TYPE_CHOICES, db_index=True)

@@ -2278,3 +2278,120 @@ class MonthlyRecap(models.Model):
         """Return abbreviated month name (e.g., 'Jan')"""
         import calendar
         return calendar.month_abbr[self.month]
+
+
+# ---------- Game Lists ----------
+
+# Tier limits for game lists
+GAME_LIST_FREE_MAX_LISTS = 3
+GAME_LIST_FREE_MAX_ITEMS = 100
+
+
+class GameList(models.Model):
+    """
+    User-created game collection. Users can organize games into named lists
+    (e.g., "My Backlog", "Favorites", "Best Platinums").
+
+    Free users: up to 3 private lists, 100 games each.
+    Premium users: unlimited lists/games, public visibility, notes on items.
+    """
+    profile = models.ForeignKey(
+        Profile,
+        on_delete=models.CASCADE,
+        related_name='game_lists'
+    )
+    name = models.CharField(max_length=200)
+    description = models.TextField(max_length=1000, blank=True)
+    is_public = models.BooleanField(default=False)
+    selected_theme = models.CharField(
+        max_length=50, blank=True, default='',
+        help_text='Selected gradient theme key for list background (premium only).'
+    )
+
+    # Denormalized counts
+    game_count = models.PositiveIntegerField(default=0)
+    like_count = models.PositiveIntegerField(default=0)
+    view_count = models.PositiveIntegerField(default=0)
+
+    # Timestamps
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    # Soft delete
+    is_deleted = models.BooleanField(default=False)
+    deleted_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=['profile', 'is_deleted'], name='gl_profile_deleted_idx'),
+            models.Index(fields=['is_public', 'is_deleted', '-like_count'], name='gl_public_likes_idx'),
+            models.Index(fields=['is_public', 'is_deleted', '-created_at'], name='gl_public_created_idx'),
+        ]
+        ordering = ['-updated_at']
+
+    def __str__(self):
+        return f"{self.name} by {self.profile.psn_username}"
+
+    def soft_delete(self):
+        self.is_deleted = True
+        self.deleted_at = timezone.now()
+        self.save(update_fields=['is_deleted', 'deleted_at'])
+
+    @property
+    def first_game_image(self):
+        """Return the title_image of the first game in the list (for auto-thumbnail)."""
+        first_item = self.items.select_related('game').order_by('position').first()
+        if first_item and first_item.game.title_image:
+            return first_item.game.title_image
+        return None
+
+
+class GameListItem(models.Model):
+    """
+    A game entry within a GameList. Tracks position for custom ordering
+    and optional personal notes (premium only).
+    """
+    game_list = models.ForeignKey(
+        GameList,
+        on_delete=models.CASCADE,
+        related_name='items'
+    )
+    game = models.ForeignKey(
+        Game,
+        on_delete=models.CASCADE,
+        related_name='list_appearances'
+    )
+    note = models.CharField(max_length=500, blank=True)
+    position = models.PositiveIntegerField(default=0)
+    added_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ['game_list', 'game']
+        indexes = [
+            models.Index(fields=['game_list', 'position'], name='gli_list_position_idx'),
+        ]
+        ordering = ['position']
+
+    def __str__(self):
+        return f"{self.game.title_name} in {self.game_list.name}"
+
+
+class GameListLike(models.Model):
+    """Tracks likes on public game lists (one per user per list)."""
+    game_list = models.ForeignKey(
+        GameList,
+        on_delete=models.CASCADE,
+        related_name='likes'
+    )
+    profile = models.ForeignKey(
+        Profile,
+        on_delete=models.CASCADE,
+        related_name='liked_lists'
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ['game_list', 'profile']
+
+    def __str__(self):
+        return f"{self.profile.psn_username} likes {self.game_list.name}"

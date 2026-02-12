@@ -9,6 +9,24 @@
         <section class="section-container w-full">
             {% include 'partials/breadcrumb.html' with items=breadcrumb view_count=view_count %}
             {% include 'trophies/partials/game_detail/game_detail_header.html' %}
+
+            {% if user.is_authenticated and user.profile %}
+            <div class="mt-4 flex justify-end">
+                <div class="relative" id="quick-add-container" data-game-id="{{ game.id }}">
+                    <button class="btn btn-sm btn-outline btn-info quick-add-trigger" aria-label="Add to List">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <line x1="8" y1="6" x2="21" y2="6"></line>
+                            <line x1="8" y1="12" x2="21" y2="12"></line>
+                            <line x1="8" y1="18" x2="21" y2="18"></line>
+                            <line x1="3" y1="6" x2="3.01" y2="6"></line>
+                            <line x1="3" y1="12" x2="3.01" y2="12"></line>
+                            <line x1="3" y1="18" x2="3.01" y2="18"></line>
+                        </svg>
+                        Add to List
+                    </button>
+                </div>
+            </div>
+            {% endif %}
         </section>
 
     <div class="flex flex-col xl:flex-row gap-4 mt-8 items-start">
@@ -120,4 +138,10 @@
     <script src="{% static 'js/submit_shimmer.js' %}"></script>
     <script src="{% static 'js/comments.js' %}"></script>
     <script src="{% static 'js/checklist.js' %}"></script>
+    {% if user.is_authenticated and user.profile %}
+    <script src="{% static 'js/game-lists.js' %}"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => GameListQuickAdd.init());
+    </script>
+    {% endif %}
 {% endblock %}

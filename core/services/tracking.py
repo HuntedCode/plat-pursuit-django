@@ -130,6 +130,9 @@ def _increment_parent_view_count(page_type, object_id):
             from trophies.models import Badge
             # Only increment the tier=1 badge (canonical series entry)
             Badge.objects.filter(series_slug=object_id, tier=1).update(view_count=F('view_count') + 1)
+        elif page_type == 'game_list':
+            from trophies.models import GameList
+            GameList.objects.filter(id=int(object_id)).update(view_count=F('view_count') + 1)
         elif page_type == 'index':
             from core.models import SiteSettings
             SiteSettings.objects.filter(id=1).update(index_page_view_count=F('index_page_view_count') + 1)
@@ -145,8 +148,8 @@ def track_page_view(page_type, object_id, request):
     Session identified by analytics_session_id (set by AnalyticsSessionMiddleware).
 
     Args:
-        page_type: One of 'profile', 'game', 'checklist', 'badge', 'index'
-        object_id: The object's identifier (int PK for profile/game/checklist, series_slug str for badge, 'home' for index)
+        page_type: One of 'profile', 'game', 'checklist', 'badge', 'game_list', 'index', etc.
+        object_id: The object's identifier (int PK for profile/game/checklist/game_list, series_slug str for badge, 'home' for index)
         request: Django HttpRequest object
     """
     try:
@@ -198,6 +201,8 @@ def track_site_event(event_type, object_id, request):
             - 'recap_page_view' - User visits a monthly recap page
             - 'recap_share_generate' - User views the monthly recap share card on summary slide
             - 'recap_image_download' - User downloads monthly recap share image
+            - 'game_list_create' - User creates a new game list
+            - 'game_list_share' - User copies/shares a game list URL
         object_id: Related object identifier (guide_slug, earned_trophy_id, 'YYYY-MM')
         request: Django HttpRequest object
     """

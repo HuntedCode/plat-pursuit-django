@@ -1,4 +1,4 @@
-{% load custom_filters static %}
+{% load custom_filters static humanize %}
 <div class="space-y-2">
     {% for trophy in trophies %}
         {% with profile_earned|dict_get:trophy.trophy_id as earned %}
@@ -28,7 +28,7 @@
                                 <div class="divider divider-horizontal hidden lg:block"></div>
                                 <div class="flex flex-col justify-center gap-0">
                                     <h6 class="text-xs text-base-content/60 text-center italic">Progress</h6>
-                                    <h3 class="text-xs lg:text-sm text-base-content font-bold"><span class="text-accent text-sm lg:text-lg">{{ earned.progress|default:0 }}</span> / {{ trophy.progress_target_value }}</h3>
+                                    <h3 class="text-xs lg:text-sm text-base-content font-bold"><span class="text-accent text-sm lg:text-lg">{{ earned.progress|default:0|intcomma }}</span> / {{ trophy.progress_target_value|intcomma }}</h3>
                                 </div>
                                 <div class="divider divider-horizontal m-2 p-0 lg:hidden"></div>
                             {% endif %}
