@@ -176,6 +176,19 @@ class ProfileDetailView(ProfileHotbarMixin, DetailView):
         trophy_case = trophy_case + [None] * (max_trophies - len(trophy_case))
         return trophy_case
 
+    def _build_timeline(self, profile):
+        """
+        Build timeline events for profile header.
+
+        Args:
+            profile: Profile instance
+
+        Returns:
+            list[dict] or None: Timeline events, or None if too few events
+        """
+        from trophies.services.timeline_service import build_timeline_events
+        return build_timeline_events(profile)
+
     def _build_games_tab_context(self, profile, per_page, page_number):
         """
         Build context for games tab with filtering and pagination.
@@ -482,18 +495,17 @@ class ProfileDetailView(ProfileHotbarMixin, DetailView):
         per_page = 50
         page_number = self.request.GET.get('page', 1)
 
-        # Prefetch earned trophies for efficiency
-        earned_trophies_prefetch = Prefetch(
-            'earned_trophy_entries',
-            queryset=EarnedTrophy.objects.filter(earned=True).select_related('trophy', 'trophy__game'),
-            to_attr='earned_trophies'
-        )
-        profile = Profile.objects.prefetch_related(earned_trophies_prefetch).get(id=profile.id)
+        # Efficiently load profile with denormalized plat FKs
+        profile = Profile.objects.select_related(
+            'recent_plat__trophy__game', 'rarest_plat__trophy__game'
+        ).get(id=profile.id)
 
-        # Build shared context (header stats and trophy case)
+        # Build shared context (header stats, trophy case, and timeline)
         context['header_stats'] = self._build_header_stats(profile)
         context['trophy_case'] = self._build_trophy_case(profile)
         context['trophy_case_count'] = len(context['trophy_case'])
+        if profile.psn_history_public:
+            context['timeline_events'] = self._build_timeline(profile)
 
         # Public game lists count (shown in tab header regardless of active tab)
         public_lists = GameList.objects.filter(profile=profile, is_public=True, is_deleted=False)

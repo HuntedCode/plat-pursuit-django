@@ -1,0 +1,26 @@
+{% load custom_filters %}
+{% if timeline_events %}
+<div class="w-full mt-2 mb-1">
+    <h2 class="text-lg text-base-content text-center italic mb-1">Trophy Timeline</h2>
+    <div class="overflow-x-auto w-full py-1 flex justify-center">
+        <ul class="timeline timeline-horizontal">
+            {% for event in timeline_events %}
+            <li>
+                {% if not forloop.first %}<hr style="background-color: var(--color-{{ event.color }});"/>{% endif %}
+                <div class="timeline-start text-center px-2 max-w-36">
+                    <span class="text-sm font-semibold line-clamp-1" style="color: var(--color-{{ event.color }});">{{ event.title }}</span>
+                    <p class="text-xs text-base-content/70 italic line-clamp-1">{{ event.subtitle }}</p>
+                </div>
+                <div class="timeline-middle">
+                    <div class="w-3.5 h-3.5 rounded-full" style="background-color: var(--color-{{ event.color }});"></div>
+                </div>
+                <div class="timeline-end text-center px-2">
+                    <span class="text-xs text-base-content/50">{{ event.date|format_date:"format_short" }}</span>
+                </div>
+                {% if not forloop.last %}<hr style="background-color: var(--color-{{ event.color }});"/>{% endif %}
+            </li>
+            {% endfor %}
+        </ul>
+    </div>
+</div>
+{% endif %}
