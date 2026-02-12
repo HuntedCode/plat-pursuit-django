@@ -975,30 +975,27 @@ class MonthlyRecapManager {
             await this.applyBackground(shareContent);
         }
 
-        // Wait for images to load and convert to base64 for foreignObjectRendering
+        // Wait for images to load and convert to base64 for html2canvas
         const images = iframeDoc.querySelectorAll('img');
         await Promise.all(Array.from(images).map(async (img) => {
-            // Wait for image to load first
-            if (!img.complete) {
-                await new Promise(resolve => {
-                    img.onload = resolve;
-                    img.onerror = resolve;
-                });
-            }
+            // Wait for image to be fully decoded (handles iOS Safari timing)
+            await this.waitForImageDecode(img);
 
-            // Convert to base64 to avoid CORS issues with foreignObjectRendering
+            // Convert to base64 to avoid CORS issues with html2canvas
             try {
                 const dataUrl = await this.imageToBase64(img.src);
                 if (dataUrl) {
                     img.src = dataUrl;
+                    // After changing src, wait for decode again
+                    await this.waitForImageDecode(img);
                 }
             } catch (e) {
-                console.warn('Could not convert image to base64:', img.src, e);
+                console.warn('Could not convert image to base64:', img.src.substring(0, 100), e);
             }
         }));
 
-        // Small delay to ensure rendering
-        await new Promise(r => setTimeout(r, 100));
+        // Delay to ensure rendering is complete (longer for iOS Safari image decode)
+        await new Promise(r => setTimeout(r, 300));
 
         // Generate canvas
         const wrapper = iframeDoc.querySelector('.share-image-content') || iframeDoc.body;
@@ -1035,6 +1032,45 @@ class MonthlyRecapManager {
 
         // Cleanup
         document.body.removeChild(iframe);
+    }
+
+    /**
+     * Wait for an image to be fully decoded and ready to render.
+     * On iOS Safari, img.complete can be true before the image is actually decoded,
+     * causing html2canvas to read zero dimensions and skip the image.
+     */
+    async waitForImageDecode(img, timeout = 3000) {
+        if (!img.complete) {
+            await new Promise((resolve) => {
+                img.onload = resolve;
+                img.onerror = resolve;
+            });
+        }
+
+        // Verify the image has valid dimensions (proves it's decoded)
+        if (img.naturalWidth > 0 && img.naturalHeight > 0) {
+            return;
+        }
+
+        // Use decode() API if available (Safari 11+)
+        if (typeof img.decode === 'function') {
+            try {
+                await img.decode();
+                return;
+            } catch (e) {
+                // decode() failed, fall through to polling
+            }
+        }
+
+        // Polling fallback for iOS Safari edge cases
+        const start = Date.now();
+        while (Date.now() - start < timeout) {
+            if (img.naturalWidth > 0 && img.naturalHeight > 0) {
+                return;
+            }
+            await new Promise(r => setTimeout(r, 50));
+        }
+        console.warn('Image decode timeout:', img.src.substring(0, 100));
     }
 
     /**
