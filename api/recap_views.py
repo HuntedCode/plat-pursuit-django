@@ -3,11 +3,8 @@ REST API views for Monthly Recap feature.
 Provides endpoints for viewing, regenerating, and sharing monthly recaps.
 """
 import calendar
-import base64
 import random
-import requests
 import logging
-from urllib.parse import urlparse
 
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -22,6 +19,7 @@ from django_ratelimit.decorators import ratelimit
 
 from trophies.models import MonthlyRecap
 from trophies.services.monthly_recap_service import MonthlyRecapService
+from core.services.share_image_cache import ShareImageCache
 
 logger = logging.getLogger(__name__)
 
@@ -310,9 +308,6 @@ class RecapShareImageHTMLView(APIView):
     permission_classes = [IsAuthenticated]
     authentication_classes = [SessionAuthentication, TokenAuthentication]
 
-    # Cache for base64 encoded images
-    _image_cache = {}
-
     @method_decorator(ratelimit(key='user', rate='60/m', method='GET', block=True))
     def get(self, request, year, month):
         gate = _check_profile_synced(request)
@@ -372,11 +367,11 @@ class RecapShareImageHTMLView(APIView):
 
         response_data = {'html': html}
 
-        # Include avatar as base64 if available
+        # Include avatar as same-origin URL if available
         if profile.avatar_url:
-            avatar_base64 = self._fetch_image_as_base64(profile.avatar_url)
-            if avatar_base64:
-                response_data['avatar_base64'] = avatar_base64
+            avatar_cached = ShareImageCache.fetch_and_cache(profile.avatar_url)
+            if avatar_cached:
+                response_data['avatar_base64'] = avatar_cached
 
         return Response(response_data)
 
@@ -384,20 +379,20 @@ class RecapShareImageHTMLView(APIView):
         """Build the context dict for the share image template."""
         month_name = calendar.month_name[recap.month]
 
-        # Process rarest trophy image
+        # Process rarest trophy image — cache as same-origin temp file
         rarest_icon = ''
         if recap.rarest_trophy_data:
             icon_url = recap.rarest_trophy_data.get('icon_url', '')
             if icon_url:
-                rarest_icon = self._fetch_image_as_base64(icon_url) or ''
+                rarest_icon = ShareImageCache.fetch_and_cache(icon_url)
                 if icon_url and not rarest_icon:
-                    logger.warning(f"[RECAP-SHARE] Failed to convert rarest trophy icon: {icon_url}")
+                    logger.warning(f"[RECAP-SHARE] Failed to cache rarest trophy icon: {icon_url}")
 
         # Process avatar
         avatar_url = profile.avatar_url or ''
-        avatar_data = self._fetch_image_as_base64(avatar_url) if avatar_url else ''
+        avatar_data = ShareImageCache.fetch_and_cache(avatar_url) if avatar_url else ''
         if avatar_url and not avatar_data:
-            logger.warning(f"[RECAP-SHARE] Failed to convert avatar: {avatar_url}")
+            logger.warning(f"[RECAP-SHARE] Failed to cache avatar: {avatar_url}")
 
         # Process platinum game images (first 3 for share card)
         platinums_with_images = []
@@ -405,9 +400,9 @@ class RecapShareImageHTMLView(APIView):
             plat_copy = dict(plat)
             if plat_copy.get('game_image'):
                 original_url = plat_copy['game_image']
-                plat_copy['game_image'] = self._fetch_image_as_base64(original_url) or ''
+                plat_copy['game_image'] = ShareImageCache.fetch_and_cache(original_url)
                 if original_url and not plat_copy['game_image']:
-                    logger.warning(f"[RECAP-SHARE] Failed to convert platinum game image: {original_url}")
+                    logger.warning(f"[RECAP-SHARE] Failed to cache platinum game image: {original_url}")
             platinums_with_images.append(plat_copy)
 
         return {
@@ -437,44 +432,6 @@ class RecapShareImageHTMLView(APIView):
             'badges_count': recap.badges_earned_count,
         }
 
-    def _fetch_image_as_base64(self, url):
-        """Fetch an external image and convert it to a base64 data URL."""
-        if not url:
-            return ''
-
-        # Check cache first
-        if url in self._image_cache:
-            return self._image_cache[url]
-
-        try:
-            parsed = urlparse(url)
-            if parsed.scheme not in ('http', 'https'):
-                return ''
-
-            response = requests.get(url, timeout=10, headers={
-                'User-Agent': 'Mozilla/5.0 (compatible; PlatPursuit/1.0)'
-            })
-            response.raise_for_status()
-
-            content_type = response.headers.get('Content-Type', 'image/png')
-            if not content_type.startswith('image/'):
-                content_type = 'image/png'
-
-            image_data = base64.b64encode(response.content).decode('utf-8')
-            data_url = f"data:{content_type};base64,{image_data}"
-
-            # Cache the result (limit cache size)
-            if len(self._image_cache) < 100:
-                self._image_cache[url] = data_url
-
-            return data_url
-
-        except requests.RequestException as e:
-            logger.warning(f"[RECAP-HTML] Failed to fetch image {url}: {e}")
-            return ''
-        except Exception as e:
-            logger.exception(f"[RECAP-HTML] Error encoding image {url}: {e}")
-            return ''
 
 
 class RecapSlidePartialView(APIView):

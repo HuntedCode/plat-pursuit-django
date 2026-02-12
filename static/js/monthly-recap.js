@@ -997,7 +997,7 @@ class MonthlyRecapManager {
         }));
 
         // Delay to ensure rendering is complete (longer for iOS Safari image decode)
-        await new Promise(r => setTimeout(r, 300));
+        await new Promise(r => setTimeout(r, 500));
 
         // Generate canvas
         const wrapper = iframeDoc.querySelector('.share-image-content') || iframeDoc.body;

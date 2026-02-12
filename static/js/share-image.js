@@ -250,12 +250,20 @@ class ShareImageManager {
             concept_bg_url: this.metadata.concept_bg_url || null
         };
 
-        // For download, use base64 versions fetched by the server (avoids CORS)
+        // For download, convert background images to base64 data URIs
+        // (CSS background urls don't resolve correctly inside about:blank iframes)
         if (useBase64 && styleDef.gameImageSource) {
-            if (styleDef.gameImageSource === 'game_image' && this.gameImageBase64) {
-                gameImages.game_image = this.gameImageBase64;
-            } else if (styleDef.gameImageSource === 'concept_bg_url' && this.conceptBgBase64) {
-                gameImages.concept_bg_url = this.conceptBgBase64;
+            const source = styleDef.gameImageSource;
+            const imageUrl = source === 'game_image' ? this.gameImageBase64 : this.conceptBgBase64;
+            if (imageUrl) {
+                try {
+                    const dataUrl = await this.imageToBase64(imageUrl);
+                    if (dataUrl) {
+                        gameImages[source] = dataUrl;
+                    }
+                } catch (e) {
+                    console.warn('Failed to convert background image to base64:', e);
+                }
             }
         }
 
@@ -621,7 +629,7 @@ class ShareImageManager {
         await this.waitForImages(iframeDoc.body);
 
         // Delay to ensure rendering is complete (longer for iOS Safari image decode)
-        await new Promise(r => setTimeout(r, 300));
+        await new Promise(r => setTimeout(r, 500));
 
         // Use html2canvas to generate the image (no oklch colors in isolated iframe)
         const canvas = await html2canvas(wrapper, {

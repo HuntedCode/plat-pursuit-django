@@ -14,3 +14,4 @@ logs/plat_pursuit.log
 docker-compose.yml
 REFACTORING_GUIDE.md
 gamification-design.md
+share_temp_images/

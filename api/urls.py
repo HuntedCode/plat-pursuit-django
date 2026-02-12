@@ -28,6 +28,7 @@ from .recap_views import (
     RecapSlidePartialView
 )
 from .tracking_views import TrackSiteEventView
+from .share_temp_views import serve_share_temp_image
 
 app_name = 'api'
 
@@ -128,4 +129,7 @@ urlpatterns = [
 
     # Tracking endpoints
     path('tracking/site-event/', TrackSiteEventView.as_view(), name='tracking-site-event'),
+
+    # Temp share image serving
+    path('share-temp/<str:filename>', serve_share_temp_image, name='share-temp-image'),
 ]

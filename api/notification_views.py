@@ -16,9 +16,7 @@ from notifications.services.shareable_data_service import ShareableDataService
 from notifications.models import Notification
 from django.contrib.auth import get_user_model
 import logging
-import base64
-import requests
-from urllib.parse import urlparse
+from core.services.share_image_cache import ShareImageCache
 
 logger = logging.getLogger(__name__)
 CustomUser = get_user_model()
@@ -534,9 +532,6 @@ class NotificationShareImageHTMLView(APIView):
     permission_classes = [IsAuthenticated]
     authentication_classes = [SessionAuthentication, TokenAuthentication]
 
-    # Cache for base64 encoded images to avoid repeated fetches
-    _image_cache = {}
-
     def get(self, request, pk):
         # Note: Using 'image_format' instead of 'format' because DRF reserves 'format' for content negotiation
         logger.info(f"[SHARE-HTML] Request received for notification {pk}, image_format={request.query_params.get('image_format')}")
@@ -586,17 +581,17 @@ class NotificationShareImageHTMLView(APIView):
             except (ValueError, TypeError):
                 earn_rate = None
 
-        # Convert external images to base64 data URLs to avoid CORS issues with html2canvas
+        # Cache external images as same-origin temp files (fixes iOS Safari intermittent failures with data URIs)
         game_image_url = metadata.get('game_image', '')
         trophy_icon_url = metadata.get('trophy_icon_url', '')
 
-        game_image_data = self._fetch_image_as_base64(game_image_url) if game_image_url else ''
+        game_image_data = ShareImageCache.fetch_and_cache(game_image_url)
         if game_image_url and not game_image_data:
-            logger.warning(f"[SHARE] Failed to convert game image to base64: {game_image_url}")
+            logger.warning(f"[SHARE] Failed to cache game image: {game_image_url}")
 
-        trophy_icon_data = self._fetch_image_as_base64(trophy_icon_url) if trophy_icon_url else ''
+        trophy_icon_data = ShareImageCache.fetch_and_cache(trophy_icon_url)
         if trophy_icon_url and not trophy_icon_data:
-            logger.warning(f"[SHARE] Failed to convert trophy icon to base64: {trophy_icon_url}")
+            logger.warning(f"[SHARE] Failed to cache trophy icon: {trophy_icon_url}")
 
         # Extract badge data - fetch LIVE from database instead of stale metadata
         # Badge progress is calculated at end of full sync, so metadata may be outdated
@@ -644,21 +639,20 @@ class NotificationShareImageHTMLView(APIView):
         # Render the template
         html = render_to_string('notifications/partials/share_image_card.html', context)
 
-        # Convert background images to base64 for JS to use with game art themes
-        # This avoids CORS issues when downloading share cards
+        # Cache background images as same-origin temp files for JS game art themes
         concept_bg_url = metadata.get('concept_bg_url', '')
 
         response_data = {'html': html}
 
-        # Include base64 versions of background images if available
-        # game_image is already converted above, reuse it
+        # Include same-origin URLs for background images
+        # game_image is already cached above, reuse it
         if game_image_url and game_image_data:
             response_data['game_image_base64'] = game_image_data
 
         if concept_bg_url:
-            concept_bg_base64 = self._fetch_image_as_base64(concept_bg_url)
-            if concept_bg_base64:
-                response_data['concept_bg_base64'] = concept_bg_base64
+            concept_bg_cached = ShareImageCache.fetch_and_cache(concept_bg_url)
+            if concept_bg_cached:
+                response_data['concept_bg_base64'] = concept_bg_cached
 
         return Response(response_data)
 
@@ -748,12 +742,12 @@ class NotificationShareImageHTMLView(APIView):
     def _process_badge_images(self, badges):
         """
         Process badge images for share image rendering.
-        Converts badge image URLs to base64 data URLs, using default image for badges without custom images.
+        Converts badge image URLs to same-origin temp files or base64 data URLs.
 
         Handles three types of paths:
-        1. Full URLs (http/https) - fetched via HTTP
-        2. Media paths (/media/...) - loaded from MEDIA_ROOT
-        3. Static paths (images/...) - loaded from staticfiles
+        1. Full URLs (http/https) - cached as same-origin temp files
+        2. Media paths (/media/...) - converted to base64 (small local files)
+        3. Static paths (images/...) - converted to base64 (small local files)
         """
         if not badges:
             return []
@@ -762,136 +756,50 @@ class NotificationShareImageHTMLView(APIView):
         default_badge_image = None
 
         for badge in badges:
-            badge_copy = dict(badge)  # Don't mutate the original
+            badge_copy = dict(badge)
             badge_image_url = badge_copy.get('badge_image_url', '')
 
             if badge_image_url:
-                # Case 1: Full URL - fetch via HTTP
+                # Case 1: Full URL - cache as same-origin temp file
                 if badge_image_url.startswith(('http://', 'https://')):
-                    badge_image_data = self._fetch_image_as_base64(badge_image_url)
-                    if badge_image_data:
-                        badge_copy['badge_image_url'] = badge_image_data
-                    # If fetch fails, leave the original URL
+                    cached_url = ShareImageCache.fetch_and_cache(badge_image_url)
+                    if cached_url:
+                        badge_copy['badge_image_url'] = cached_url
 
-                # Case 2: Media file path (/media/...) - load from MEDIA_ROOT
+                # Case 2: Media file path (/media/...) - convert to base64 (small local files)
                 elif badge_image_url.startswith('/media/'):
-                    try:
-                        from django.conf import settings
-                        # Convert /media/badges/... to MEDIA_ROOT/badges/...
-                        relative_path = badge_image_url[len('/media/'):]  # Remove /media/ prefix
-                        file_path = settings.MEDIA_ROOT / relative_path
+                    from django.conf import settings
+                    relative_path = badge_image_url[len('/media/'):]
+                    file_path = settings.MEDIA_ROOT / relative_path
+                    data_uri = ShareImageCache.local_file_to_base64(str(file_path))
+                    if data_uri:
+                        badge_copy['badge_image_url'] = data_uri
 
-                        if file_path.exists():
-                            with open(file_path, 'rb') as f:
-                                image_data = base64.b64encode(f.read()).decode('utf-8')
-                                # Determine image type from extension
-                                if badge_image_url.endswith('.png'):
-                                    mime_type = 'image/png'
-                                elif badge_image_url.endswith(('.jpg', '.jpeg')):
-                                    mime_type = 'image/jpeg'
-                                else:
-                                    mime_type = 'image/png'
-                                badge_copy['badge_image_url'] = f"data:{mime_type};base64,{image_data}"
-                        else:
-                            logger.warning(f"[SHARE-HTML] Media file not found: {file_path}")
-                            # Leave original URL, will use template fallback
-                    except Exception as e:
-                        logger.warning(f"[SHARE-HTML] Failed to load media badge image: {e}")
-                        # Leave original URL, will use template fallback
-
-                # Case 3: Static file path (images/badges/default.png) - load from staticfiles
+                # Case 3: Static file path - convert to base64 (small local files)
                 else:
-                    # Cache the default badge image to avoid reloading it
                     if default_badge_image is None:
-                        try:
-                            from django.contrib.staticfiles import finders
-                            default_path = finders.find(badge_image_url)
-                            if default_path:
-                                with open(default_path, 'rb') as f:
-                                    image_data = base64.b64encode(f.read()).decode('utf-8')
-                                    # Determine image type from extension
-                                    if badge_image_url.endswith('.png'):
-                                        mime_type = 'image/png'
-                                    elif badge_image_url.endswith(('.jpg', '.jpeg')):
-                                        mime_type = 'image/jpeg'
-                                    else:
-                                        mime_type = 'image/png'
-                                    default_badge_image = f"data:{mime_type};base64,{image_data}"
-                            else:
-                                logger.warning(f"[SHARE-HTML] Static file not found: {badge_image_url}")
-                                default_badge_image = ''
-                        except Exception as e:
-                            logger.warning(f"[SHARE-HTML] Failed to load static badge image: {e}")
+                        from django.contrib.staticfiles import finders
+                        default_path = finders.find(badge_image_url)
+                        if default_path:
+                            default_badge_image = ShareImageCache.local_file_to_base64(default_path)
+                        else:
                             default_badge_image = ''
                     badge_copy['badge_image_url'] = default_badge_image
             else:
                 # No image URL provided - use default badge image
                 if default_badge_image is None:
-                    try:
-                        from django.contrib.staticfiles import finders
-                        default_path = finders.find('images/badges/default.png')
-                        if default_path:
-                            with open(default_path, 'rb') as f:
-                                image_data = base64.b64encode(f.read()).decode('utf-8')
-                                default_badge_image = f"data:image/png;base64,{image_data}"
-                        else:
-                            default_badge_image = ''
-                    except Exception as e:
-                        logger.warning(f"[SHARE-HTML] Failed to load default badge image: {e}")
+                    from django.contrib.staticfiles import finders
+                    default_path = finders.find('images/badges/default.png')
+                    if default_path:
+                        default_badge_image = ShareImageCache.local_file_to_base64(default_path)
+                    else:
                         default_badge_image = ''
-
                 badge_copy['badge_image_url'] = default_badge_image
 
             processed.append(badge_copy)
 
         return processed
 
-    def _fetch_image_as_base64(self, url):
-        """
-        Fetch an external image and convert it to a base64 data URL.
-        This allows html2canvas to render external images without CORS issues.
-        """
-        if not url:
-            return ''
-
-        # Check cache first
-        if url in self._image_cache:
-            return self._image_cache[url]
-
-        try:
-            # Validate URL
-            parsed = urlparse(url)
-            if not parsed.scheme in ('http', 'https'):
-                logger.warning(f"[SHARE-HTML] Invalid URL scheme: {url}")
-                return ''
-
-            # Fetch the image with timeout
-            response = requests.get(url, timeout=10, headers={
-                'User-Agent': 'Mozilla/5.0 (compatible; PlatPursuit/1.0)'
-            })
-            response.raise_for_status()
-
-            # Get content type
-            content_type = response.headers.get('Content-Type', 'image/png')
-            if not content_type.startswith('image/'):
-                content_type = 'image/png'
-
-            # Encode to base64
-            image_data = base64.b64encode(response.content).decode('utf-8')
-            data_url = f"data:{content_type};base64,{image_data}"
-
-            # Cache the result (limit cache size)
-            if len(self._image_cache) < 100:
-                self._image_cache[url] = data_url
-
-            return data_url
-
-        except requests.RequestException as e:
-            logger.warning(f"[SHARE-HTML] Failed to fetch image {url}: {e}")
-            return ''
-        except Exception as e:
-            logger.exception(f"[SHARE-HTML] Error encoding image {url}: {e}")
-            return ''
 
 
 class NotificationRatingView(APIView):
