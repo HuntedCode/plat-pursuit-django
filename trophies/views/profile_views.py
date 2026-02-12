@@ -171,7 +171,11 @@ class ProfileDetailView(ProfileHotbarMixin, DetailView):
             list: Trophy case selections padded to max_trophies
         """
         max_trophies = 10
-        trophy_case = list(UserTrophySelection.objects.filter(profile=profile).order_by('-earned_trophy__earned_date_time'))
+        trophy_case = list(
+            UserTrophySelection.objects.filter(profile=profile)
+            .select_related('earned_trophy__trophy__game')
+            .order_by('-earned_trophy__earned_date_time')
+        )
         # Pad with None to reach max_trophies
         trophy_case = trophy_case + [None] * (max_trophies - len(trophy_case))
         return trophy_case
@@ -186,8 +190,8 @@ class ProfileDetailView(ProfileHotbarMixin, DetailView):
         Returns:
             list[dict] or None: Timeline events, or None if too few events
         """
-        from trophies.services.timeline_service import build_timeline_events
-        return build_timeline_events(profile)
+        from trophies.services.timeline_service import get_cached_timeline_events
+        return get_cached_timeline_events(profile)
 
     def _build_games_tab_context(self, profile, per_page, page_number):
         """
@@ -441,9 +445,7 @@ class ProfileDetailView(ProfileHotbarMixin, DetailView):
             badge__series_slug__in=earned_series_slugs,
         ).select_related('badge', 'badge__base_badge', 'badge__title', 'badge__base_badge__title')
 
-        earned_badge_ids = set(
-            UserBadge.objects.filter(profile=profile).values_list('badge_id', flat=True)
-        )
+        earned_badge_ids = {b.id for b in badge_lookup.values()}
 
         in_progress_badges = []
         for progress in in_progress_qs:
@@ -469,12 +471,9 @@ class ProfileDetailView(ProfileHotbarMixin, DetailView):
         context['form'] = form
         return context
 
-    def _build_lists_tab_context(self, profile):
+    def _build_lists_tab_context(self, public_lists_qs):
         """Build context for lists tab — public game lists for this profile."""
-        lists = GameList.objects.filter(
-            profile=profile, is_public=True, is_deleted=False
-        ).order_by('-like_count', '-created_at')
-        return {'profile_lists': lists}
+        return {'profile_lists': public_lists_qs.order_by('-like_count', '-created_at')}
 
     def get_context_data(self, **kwargs):
         """Build context for profile detail page with tab-specific content.
@@ -508,8 +507,8 @@ class ProfileDetailView(ProfileHotbarMixin, DetailView):
             context['timeline_events'] = self._build_timeline(profile)
 
         # Public game lists count (shown in tab header regardless of active tab)
-        public_lists = GameList.objects.filter(profile=profile, is_public=True, is_deleted=False)
-        context['profile_lists_count'] = public_lists.count()
+        public_lists_qs = GameList.objects.filter(profile=profile, is_public=True, is_deleted=False)
+        context['profile_lists_count'] = public_lists_qs.count()
 
         # Delegate to tab-specific handler methods
         if tab == 'games':
@@ -519,7 +518,7 @@ class ProfileDetailView(ProfileHotbarMixin, DetailView):
         elif tab == 'badges':
             tab_context = self._build_badges_tab_context(profile)
         elif tab == 'lists':
-            tab_context = self._build_lists_tab_context(profile)
+            tab_context = self._build_lists_tab_context(public_lists_qs)
         else:
             # Default to games tab if invalid tab specified
             tab_context = self._build_games_tab_context(profile, per_page, page_number)

@@ -847,6 +847,10 @@ class TokenKeeper:
 
             update_profile_trophy_counts(profile)
             profile.set_sync_status('synced')
+
+            from trophies.services.timeline_service import invalidate_timeline_cache
+            invalidate_timeline_cache(profile_id)
+
             logger.info(f"{profile.display_psn_username} account has finished syncing!")
         finally:
             # Always clear the sync_complete in-progress flag, even on error

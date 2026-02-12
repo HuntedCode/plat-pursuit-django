@@ -8,6 +8,7 @@ interesting ones for display using a priority-based algorithm.
 import math
 import logging
 
+from django.core.cache import cache
 from django.db.models import Min
 
 logger = logging.getLogger("psn_api")
@@ -302,3 +303,24 @@ def build_timeline_events(profile, max_events=8):
         return None
 
     return selected
+
+
+def get_cached_timeline_events(profile):
+    """Return cached timeline events, building and caching on miss.
+
+    Cache key: profile:timeline:{profile_id}
+    TTL: 1 hour (invalidated on sync completion via invalidate_timeline_cache)
+    """
+    cache_key = f"profile:timeline:{profile.id}"
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return cached
+
+    events = build_timeline_events(profile)
+    cache.set(cache_key, events, timeout=3600)
+    return events
+
+
+def invalidate_timeline_cache(profile_id):
+    """Delete cached timeline for a profile (call after sync completion)."""
+    cache.delete(f"profile:timeline:{profile_id}")
