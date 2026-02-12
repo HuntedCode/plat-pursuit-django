@@ -341,13 +341,13 @@ class ProfileDetailView(ProfileHotbarMixin, DetailView):
     def _sort_badge_groups(self, badge_list, sort_val):
         """Apply consistent sorting to a list of badge group dicts."""
         if sort_val == 'name':
-            badge_list.sort(key=lambda d: d['highest_badge'].effective_display_title or '')
+            badge_list.sort(key=lambda d: (d['highest_badge'].effective_display_title or '').lower())
         elif sort_val == 'tier':
-            badge_list.sort(key=lambda d: (d['max_tier'], d['highest_badge'].effective_display_title or ''))
+            badge_list.sort(key=lambda d: (d['max_tier'], (d['highest_badge'].effective_display_title or '').lower()))
         elif sort_val == 'tier_desc':
-            badge_list.sort(key=lambda d: (-d['max_tier'], d['highest_badge'].effective_display_title or ''))
+            badge_list.sort(key=lambda d: (-d['max_tier'], (d['highest_badge'].effective_display_title or '').lower()))
         else:
-            badge_list.sort(key=lambda d: d['highest_badge'].effective_display_series or '')
+            badge_list.sort(key=lambda d: (d['highest_badge'].effective_display_series or '').lower())
 
     def _build_badges_tab_context(self, profile):
         """
@@ -466,7 +466,7 @@ class ProfileDetailView(ProfileHotbarMixin, DetailView):
                 'max_tier': 0,
             })
 
-        self._sort_badge_groups(in_progress_badges, sort_val)
+        in_progress_badges.sort(key=lambda d: (-d['percentage'], (d['highest_badge'].effective_display_title or '').lower()))
         context['in_progress_badges'] = in_progress_badges
         context['form'] = form
         return context
