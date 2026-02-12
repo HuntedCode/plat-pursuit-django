@@ -20,6 +20,7 @@ from trophies.models import (
     Game, GameList, GameListItem, GameListLike,
     GAME_LIST_FREE_MAX_LISTS, GAME_LIST_FREE_MAX_ITEMS,
 )
+from trophies.util_modules.constants import ALL_PLATFORMS, REGIONS
 
 logger = logging.getLogger('psn_api')
 
@@ -780,7 +781,7 @@ class GameSearchView(APIView):
     @method_decorator(ratelimit(key='user', rate='120/m', method='GET', block=True))
     def get(self, request):
         """
-        GET /api/v1/games/search/?q=<query>&limit=20&exclude_list=<list_id>
+        GET /api/v1/games/search/?q=<query>&limit=20&exclude_list=<list_id>&platform=PS5,PS4&region=NA,EU
         Returns matching games with basic info for typeahead.
         """
         try:
@@ -791,9 +792,22 @@ class GameSearchView(APIView):
             limit = min(safe_int(request.query_params.get('limit', 20), 20), 50)
             exclude_list_id = safe_int(request.query_params.get('exclude_list'), None)
 
-            games = Game.objects.filter(
-                Q(title_name__icontains=query)
-            ).order_by('-played_count')[:limit]
+            # Parse optional filter params (comma-separated)
+            platforms_raw = (request.query_params.get('platform') or '').strip()
+            platforms = [p for p in platforms_raw.split(',') if p in ALL_PLATFORMS] if platforms_raw else []
+
+            regions_raw = (request.query_params.get('region') or '').strip()
+            valid_regions = REGIONS + ['global']
+            regions = [r for r in regions_raw.split(',') if r in valid_regions] if regions_raw else []
+
+            games = Game.objects.filter(Q(title_name__icontains=query))
+
+            if platforms:
+                games = games.for_platform(platforms)
+            if regions:
+                games = games.for_region(regions)
+
+            games = games.order_by('-played_count')[:limit]
 
             # If excluding games already in a list
             exclude_game_ids = set()
@@ -813,6 +827,8 @@ class GameSearchView(APIView):
                     'title_image': game.title_image or '',
                     'title_icon_url': game.title_icon_url or '',
                     'title_platform': game.title_platform or [],
+                    'is_regional': game.is_regional,
+                    'region': game.region or [],
                     'defined_trophies': game.defined_trophies or {},
                     'played_count': game.played_count,
                     'already_in_list': game.id in exclude_game_ids,

@@ -2,9 +2,9 @@
 {% if grouped_earned_badges %}
     {% for group in grouped_earned_badges %}
     {% with group.highest_badge as badge %}
-        <a href="{% url 'badge_detail_with_profile' badge.series_slug profile.psn_username %}" class="card bg-base-100/80 border-4 border-base-300 shadow-md shadow-neutral cursor-pointer hover:border-{{ badge.tier|badge_color }} hover:shadow-{{ badge.tier|badge_color }} hover:scale-105 group">
+        <a href="{% url 'badge_detail_with_profile' badge.series_slug profile.psn_username %}" class="card bg-base-100/80 border-2 border-base-300 shadow-sm shadow-neutral cursor-pointer hover:border-{{ badge.tier|badge_color }} hover:shadow-{{ badge.tier|badge_color }} hover:scale-[1.02] group">
             <div class="card-body">
-                <div class="w-42 h-42 mx-auto">
+                <div class="w-32 h-32 mx-auto">
                     {% include 'partials/badge.html' with layers=badge.get_badge_layers %}
                 </div>
                 <div class="flex flex-col items-center gap-0">
@@ -17,6 +17,31 @@
         </a>
     {% endwith %}
     {% endfor %}
-{% else %}
+{% endif %}
+{% if in_progress_badges %}
+    <div class="col-span-full">
+        <div class="divider divider-vertical">
+            <span class="text-base text-base-content/60 italic">In Progress</span>
+        </div>
+    </div>
+    {% for group in in_progress_badges %}
+    {% with group.highest_badge as badge %}
+        <a href="{% url 'badge_detail_with_profile' badge.series_slug profile.psn_username %}" class="card bg-base-100/80 border-2 border-base-300 shadow-sm shadow-neutral cursor-pointer hover:border-warning hover:shadow-warning hover:scale-[1.02] group">
+            <div class="card-body">
+                <div class="w-32 h-32 mx-auto grayscale opacity-60">
+                    {% include 'partials/badge.html' with layers=badge.get_badge_layers %}
+                </div>
+                <div class="flex flex-col items-center gap-0">
+                    <h1 class="text-lg text-base-content/60 text-center font-semibold line-clamp-1">{{ badge.effective_user_title }}</h1>
+                    <h1 class="text-base text-base-content/50 text-center font-semibold pr-1 italic line-clamp-1 mb-1">{{ badge.effective_display_series }}</h1>
+                    <progress class="progress {% if group.percentage < 33.0 %}progress-error{% elif group.percentage < 66.0 %}progress-warning{% elif group.percentage < 100.0 %}progress-success{% else %}progress-primary{% endif %}" value="{{ group.percentage }}" max="100"></progress>
+                    <h1 class="text-base text-base-content/60 text-center">{{ group.progress.completed_concepts|default:0 }} / {{ group.next_badge.required_stages|default:0 }} ({{ group.percentage|floatformat:2 }}%)</h1>
+                </div>
+            </div>
+        </a>
+    {% endwith %}
+    {% endfor %}
+{% endif %}
+{% if not grouped_earned_badges and not in_progress_badges %}
     <p class="text-base text-center text-base-content col-span-4">No badges earned yet! Keep playing to earn your first one!</p>
 {% endif %}

@@ -46,7 +46,6 @@ class IndexView(ProfileHotbarMixin, TemplateView):
         from core.models import SiteSettings
         track_page_view('index', 'home', self.request)
         settings = SiteSettings.get_settings()
-        context['view_count'] = settings.index_page_view_count
 
         # Breadcrumb
         context['breadcrumb'] = [

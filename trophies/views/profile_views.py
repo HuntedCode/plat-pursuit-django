@@ -321,47 +321,86 @@ class ProfileDetailView(ProfileHotbarMixin, DetailView):
         context['form'] = form
         return context
 
+    def _sort_badge_groups(self, badge_list, sort_val):
+        """Apply consistent sorting to a list of badge group dicts."""
+        if sort_val == 'name':
+            badge_list.sort(key=lambda d: d['highest_badge'].effective_display_title or '')
+        elif sort_val == 'tier':
+            badge_list.sort(key=lambda d: (d['max_tier'], d['highest_badge'].effective_display_title or ''))
+        elif sort_val == 'tier_desc':
+            badge_list.sort(key=lambda d: (-d['max_tier'], d['highest_badge'].effective_display_title or ''))
+        else:
+            badge_list.sort(key=lambda d: d['highest_badge'].effective_display_series or '')
+
     def _build_badges_tab_context(self, profile):
         """
-        Build context for badges tab with earned badges and progress.
+        Build context for badges tab with earned badges, in-progress badges, and progress.
 
         Args:
             profile: Profile instance
 
         Returns:
-            dict: Context with grouped_earned_badges and form
+            dict: Context with grouped_earned_badges, in_progress_badges, and form
         """
         form = ProfileBadgesForm(self.request.GET)
         context = {}
 
         if not form.is_valid():
             context['grouped_earned_badges'] = []
+            context['in_progress_badges'] = []
             context['form'] = form
             return context
 
         sort_val = form.cleaned_data.get('sort')
 
-        # Get earned badges
-        earned_badges_qs = UserBadge.objects.filter(profile=profile).select_related('badge').values(
+        # Get earned badge series with max tier per series
+        earned_badges_qs = UserBadge.objects.filter(profile=profile).values(
             'badge__series_slug'
         ).annotate(max_tier=Max('badge__tier')).distinct()
 
+        # Collect all series slugs and needed tiers for bulk fetch
+        series_tier_pairs = []
+        earned_series_slugs = set()
+        for entry in earned_badges_qs:
+            slug = entry['badge__series_slug']
+            max_tier = entry['max_tier']
+            earned_series_slugs.add(slug)
+            series_tier_pairs.append((slug, max_tier))
+            series_tier_pairs.append((slug, max_tier + 1))  # next tier
+
+        # Bulk fetch all needed Badge objects in one query
+        if series_tier_pairs:
+            tier_filter = Q()
+            for slug, tier in series_tier_pairs:
+                tier_filter |= Q(series_slug=slug, tier=tier)
+            all_badges = Badge.objects.filter(tier_filter).select_related(
+                'base_badge', 'title', 'base_badge__title'
+            )
+            badge_lookup = {(b.series_slug, b.tier): b for b in all_badges}
+        else:
+            badge_lookup = {}
+
+        # Bulk fetch all UserBadgeProgress for this profile
+        progress_lookup = {
+            p.badge_id: p
+            for p in UserBadgeProgress.objects.filter(profile=profile).select_related('badge')
+        }
+
+        # Build earned badges list using lookups instead of per-item queries
         grouped_earned = []
         for entry in earned_badges_qs:
             series_slug = entry['badge__series_slug']
             max_tier = entry['max_tier']
-            highest_badge = Badge.objects.by_series(series_slug).filter(tier=max_tier).first()
+            highest_badge = badge_lookup.get((series_slug, max_tier))
             if not highest_badge:
                 continue
 
-            next_tier = max_tier + 1
-            next_badge = Badge.objects.by_series(series_slug).filter(tier=next_tier).first()
+            next_badge = badge_lookup.get((series_slug, max_tier + 1))
             is_maxed = next_badge is None
             if is_maxed:
                 next_badge = highest_badge
 
-            # Calculate progress
-            progress_entry = UserBadgeProgress.objects.filter(profile=profile, badge=next_badge).first()
+            progress_entry = progress_lookup.get(next_badge.id)
             if progress_entry and next_badge.required_stages > 0:
                 progress_percentage = (progress_entry.completed_concepts / next_badge.required_stages) * 100
             else:
@@ -374,20 +413,46 @@ class ProfileDetailView(ProfileHotbarMixin, DetailView):
                 'next_badge': next_badge,
                 'progress': progress_entry,
                 'percentage': progress_percentage,
-                'max_tier': max_tier,  # For sorting
+                'max_tier': max_tier,
             })
 
-        # Sort
-        if sort_val == 'name':
-            grouped_earned.sort(key=lambda d: d['highest_badge'].effective_display_title)
-        elif sort_val == 'tier':
-            grouped_earned.sort(key=lambda d: (d['max_tier'], d['highest_badge'].effective_display_title))
-        elif sort_val == 'tier_desc':
-            grouped_earned.sort(key=lambda d: (-d['max_tier'], d['highest_badge'].effective_display_title))
-        else:
-            grouped_earned.sort(key=lambda d: d['highest_badge'].effective_display_series)
-
+        self._sort_badge_groups(grouped_earned, sort_val)
         context['grouped_earned_badges'] = grouped_earned
+
+        # Build in-progress badges (tier 1, some progress, not yet earned)
+        in_progress_qs = UserBadgeProgress.objects.filter(
+            profile=profile,
+            badge__tier=1,
+            completed_concepts__gt=0,
+        ).exclude(
+            badge__series_slug__in=earned_series_slugs,
+        ).select_related('badge', 'badge__base_badge', 'badge__title', 'badge__base_badge__title')
+
+        earned_badge_ids = set(
+            UserBadge.objects.filter(profile=profile).values_list('badge_id', flat=True)
+        )
+
+        in_progress_badges = []
+        for progress in in_progress_qs:
+            badge = progress.badge
+            if badge.id in earned_badge_ids:
+                continue
+
+            if badge.required_stages > 0:
+                percentage = (progress.completed_concepts / badge.required_stages) * 100
+            else:
+                percentage = 0
+
+            in_progress_badges.append({
+                'highest_badge': badge,
+                'next_badge': badge,
+                'progress': progress,
+                'percentage': percentage,
+                'max_tier': 0,
+            })
+
+        self._sort_badge_groups(in_progress_badges, sort_val)
+        context['in_progress_badges'] = in_progress_badges
         context['form'] = form
         return context
 

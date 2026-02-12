@@ -94,7 +94,7 @@
                     </div>
                 {% endif %}
                 <div class="avatar mb-4 transition duration-300 mt-6 group-hover:scale-105">
-                    <div class="w-48 lg:w-35 2xl:4-48 rounded-full ring-3 ring-primary {% if profile.user_is_premium %}border-4 shimmer{% endif %}">
+                    <div class="w-48 lg:w-35 2xl:w-48 rounded-full ring-3 ring-primary {% if profile.user_is_premium %}border-4 shimmer{% endif %}">
                         <img src="{{ profile.avatar_url }}" alt="{{ profile.psn_username }}'s avatar" class="hover:scale-105" />
                     </div>
                 </div>
@@ -116,15 +116,15 @@
                         <div class="flex flex-col w-full">
                             <h1 class="text-2xl text-base-content text-center italic">Latest Platinum</h1>
                             {% if not profile.sync_status == 'syncing' and profile.psn_history_public and game %}
-                                <a href="{% if game.np_communication_id %}{% url 'game_detail' game.np_communication_id %}{% endif %}" class="flex flex-row items-center w-full shadow-md shadow-neutral border-4 border-base-300 p-1 mb-2 cursor-pointer hover:border-primary hover:shadow-primary hover:scale-105">
-                                    <figure class="w-28 h-28 border-4 border-primary rounded-box mr-4">
+                                <a href="{% if game.np_communication_id %}{% url 'game_detail' game.np_communication_id %}{% endif %}" class="flex flex-row items-center w-full shadow-md shadow-neutral border-2 border-base-300 p-1 mb-2 cursor-pointer hover:border-primary hover:shadow-primary hover:scale-[1.02]">
+                                    <figure class="w-20 h-20 border-2 border-primary rounded-box mr-4">
                                         {% if game.title_image and not game.force_title_icon %}
                                             <img src="{{ game.title_image }}" class="w-full object-cover hover:scale-105" />
                                         {% else %}
                                             <img src="{{ game.title_icon_url }}" class="w-full object-fill hover:scale-105" />
                                         {% endif %}
                                     </figure>
-                                    <div class="flex flex-col">
+                                    <div class="flex flex-col flex-1 min-w-0">
                                         <h1 class="text-xl text-base-content line-clamp-2 pr-1 ">{{ trophy.trophy_name }}</h1>
                                         <h3 class="text-base text-secondary line-clamp-1 pr-1 italic ">{{ game.title_name }}</h3>
                                         <h3 class="text-sm text-base-content/70 line-clamp-1 pr-1 italic ">Earned: {{ header_stats.recent_platinum.earned_date|format_date:"with_tz" }}</h3>
@@ -148,15 +148,15 @@
                         <div class="flex flex-col w-full">
                             <h1 class="text-2xl text-base-content text-center italic">Rarest Platinum</h1>
                             {% if not profile.sync_status == 'syncing' and profile.psn_history_public and game %}
-                                <a href="{% if game.np_communication_id %}{% url 'game_detail' game.np_communication_id %}{% endif %}" class="flex flex-row items-center w-full shadow-md shadow-neutral border-4 border-base-300 p-1 mb-2 cursor-pointer hover:border-accent hover:shadow-accent hover:scale-105">
-                                    <figure class="w-28 h-28 border-4 border-accent rounded-box mr-4">
+                                <a href="{% if game.np_communication_id %}{% url 'game_detail' game.np_communication_id %}{% endif %}" class="flex flex-row items-center w-full shadow-md shadow-neutral border-2 border-base-300 p-1 mb-2 cursor-pointer hover:border-accent hover:shadow-accent hover:scale-[1.02]">
+                                    <figure class="w-20 h-20 border-2 border-accent rounded-box mr-4">
                                         {% if game.title_image %}
                                             <img src="{{ game.title_image }}" class="w-full object-cover object-center hover:scale-105" />
                                         {% else %}
                                             <img src="{{ game.title_icon_url }}" class="w-full object-cover object-center hover:scale-105" />
                                         {% endif %}
                                     </figure>
-                                    <div class="flex flex-col">
+                                    <div class="flex flex-col flex-1 min-w-0">
                                         <h1 class="text-xl text-base-content line-clamp-2 pr-1">{{ trophy.trophy_name }}</h1>
                                         <h3 class="text-base text-secondary line-clamp-1 pr-1 italic">{{ game.title_name }}</h3>
                                         <h3 class="text-sm text-base-content/70 line-clamp-1 pr-1 italic">Earned: {{ header_stats.rarest_platinum.earned_date|format_date:"with_tz" }}</h3>
@@ -238,7 +238,7 @@
                         </div>                
                         <p class="text-xs text-base-content text-center pr-1 italic">* Visit settings to update your hidden trophy visibility.</p>
                     </div>
-                    <div class="hidden xl:block border-4 border-base-300 shadow-md shadow-neutral hover:border-secondary hover:shadow-secondary hover:scale-105">
+                    <div class="hidden xl:block border-2 border-base-300 shadow-md shadow-neutral hover:border-secondary hover:shadow-secondary hover:scale-[1.02]">
                         <div class="p-4">
                             <h3 class="text-lg text-base-content">Trophy Level: <span class="text-primary font-bold">{{ profile.trophy_level }}</span></h3>
                             <progress class="progress {% if profile.progress < 33 %}progress-error{% elif profile.progress < 66 %}progress-warning{% else %}progress-success{% endif %} w-full" value="{{ profile.progress }}" max="100"></progress>
@@ -258,7 +258,7 @@
                         <a href="{% url 'game_detail_with_profile' trophy.game.np_communication_id profile.psn_username %}" class="card bg-base-100 border-2 border-base-300 shadow-md shadow-neutral hover:scale-105 hover:border-primary hover:shadow-primary cursor-pointer">
                             <div class="card-body p-2">
                                 <div class="hover-3d">
-                                    <figure class="w-full border-4 border-base-300 shadow-md shadow-neutral">
+                                    <figure class="w-full border-2 border-base-300 shadow-md shadow-neutral">
                                         <img src="{{ trophy.trophy_icon_url }}" />
                                     </figure>
                                     <div></div>

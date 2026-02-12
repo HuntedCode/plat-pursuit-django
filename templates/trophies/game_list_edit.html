@@ -61,7 +61,7 @@
                             <path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
                             <circle cx="12" cy="12" r="3"/>
                         </svg>
-                        Settings
+                        <span id="settings-toggle-label">Settings</span>
                     </button>
                 </div>
             </div>
@@ -70,7 +70,7 @@
 </section>
 
 {# Section 2: Settings Panel (hidden by default) #}
-<section id="list-settings-collapse" class="hidden shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 w-full p-0 lg:p-4 mt-4">
+<section id="list-settings-collapse" class="hidden shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 w-full p-0 lg:p-4 mt-6">
     <div class="card bg-base-100 border-4 border-base-300 shadow-md shadow-neutral">
         <div class="card-body">
             <div class="flex items-center justify-between mb-3">
@@ -228,7 +228,7 @@
 </section>
 
 {# Section 3: Add Games #}
-<section class="shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 w-full p-0 lg:p-4 mt-4">
+<section class="shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 w-full p-0 lg:p-4 mt-6">
     <div class="card bg-base-100 border-4 border-base-300 shadow-md shadow-neutral">
         <div class="card-body">
             <div class="flex items-center justify-between mb-2">
@@ -252,6 +252,52 @@
                     <a href="{% url 'beta_access_required' %}" class="btn btn-primary btn-sm whitespace-nowrap">Upgrade</a>
                 </div>
             {% else %}
+                {# Filter chips #}
+                <div class="flex flex-wrap items-center gap-2 mb-3" id="search-filter-row">
+                    <span class="text-xs text-base-content/50 font-semibold uppercase tracking-wider mr-1">Filters</span>
+
+                    {# Platform filter chips #}
+                    <div class="flex flex-wrap gap-1">
+                        <button type="button" class="badge badge-ghost badge-sm font-bold cursor-pointer hover:badge-outline transition-all search-filter-chip"
+                                data-filter="platform" data-value="PS5">PS5</button>
+                        <button type="button" class="badge badge-ghost badge-sm font-bold cursor-pointer hover:badge-outline transition-all search-filter-chip"
+                                data-filter="platform" data-value="PS4">PS4</button>
+                        <button type="button" class="badge badge-ghost badge-sm font-bold cursor-pointer hover:badge-outline transition-all search-filter-chip"
+                                data-filter="platform" data-value="PS3">PS3</button>
+                        <button type="button" class="badge badge-ghost badge-sm font-bold cursor-pointer hover:badge-outline transition-all search-filter-chip"
+                                data-filter="platform" data-value="PSVITA">PSVita</button>
+                        <button type="button" class="badge badge-ghost badge-sm font-bold cursor-pointer hover:badge-outline transition-all search-filter-chip"
+                                data-filter="platform" data-value="PSVR">PSVR</button>
+                    </div>
+
+                    <span class="text-base-content/20">|</span>
+
+                    {# Region filter chips #}
+                    <div class="flex flex-wrap gap-1">
+                        <button type="button" class="badge badge-ghost badge-sm font-bold cursor-pointer hover:badge-outline transition-all search-filter-chip"
+                                data-filter="region" data-value="global">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3 mr-0.5" viewBox="0 0 512 512" fill="currentColor"><path d="M351.9 280l-190.9 0c2.9 64.5 17.2 123.9 37.5 167.4 11.4 24.5 23.7 41.8 35.1 52.4 11.2 10.5 18.9 12.2 22.9 12.2s11.7-1.7 22.9-12.2c11.4-10.6 23.7-28 35.1-52.4 20.3-43.5 34.6-102.9 37.5-167.4zM160.9 232l190.9 0C349 167.5 334.7 108.1 314.4 64.6 303 40.2 290.7 22.8 279.3 12.2 268.1 1.7 260.4 0 256.4 0s-11.7 1.7-22.9 12.2c-11.4 10.6-23.7 28-35.1 52.4-20.3 43.5-34.6 102.9-37.5 167.4zm-48 0C116.4 146.4 138.5 66.9 170.8 14.7 78.7 47.3 10.9 131.2 1.5 232l111.4 0zM1.5 280c9.4 100.8 77.2 184.7 169.3 217.3-32.3-52.2-54.4-131.7-57.9-217.3L1.5 280zm398.4 0c-3.5 85.6-25.6 165.1-57.9 217.3 92.1-32.7 159.9-116.5 169.3-217.3l-111.4 0zm111.4-48C501.9 131.2 434.1 47.3 342 14.7 374.3 66.9 396.4 146.4 399.9 232l111.4 0z"/></svg>
+                            Global
+                        </button>
+                        <button type="button" class="badge badge-ghost badge-sm font-bold cursor-pointer hover:badge-outline transition-all search-filter-chip"
+                                data-filter="region" data-value="NA">NA</button>
+                        <button type="button" class="badge badge-ghost badge-sm font-bold cursor-pointer hover:badge-outline transition-all search-filter-chip"
+                                data-filter="region" data-value="EU">EU</button>
+                        <button type="button" class="badge badge-ghost badge-sm font-bold cursor-pointer hover:badge-outline transition-all search-filter-chip"
+                                data-filter="region" data-value="JP">JP</button>
+                        <button type="button" class="badge badge-ghost badge-sm font-bold cursor-pointer hover:badge-outline transition-all search-filter-chip"
+                                data-filter="region" data-value="AS">AS</button>
+                    </div>
+
+                    {# Clear all button (hidden when no filters active) #}
+                    <button type="button" class="btn btn-ghost btn-xs text-error/70 hover:text-error hidden" id="clear-search-filters">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+                        </svg>
+                        Clear
+                    </button>
+                </div>
+
                 <div class="relative">
                     <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 absolute left-3 top-1/2 -translate-y-1/2 text-base-content/40 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <circle cx="11" cy="11" r="8"></circle>
@@ -260,10 +306,12 @@
                     <input type="text"
                            id="game-search-input"
                            class="input input-bordered w-full pl-10 pr-10"
-                           placeholder="Search for a game to add..."
+                           placeholder="Search by title to add games..."
                            autocomplete="off"
                            data-list-id="{{ game_list.id }}" />
                     <span id="search-loading" class="loading loading-spinner loading-sm absolute right-3 top-1/2 -translate-y-1/2 hidden"></span>
+                    {# Active filter count indicator #}
+                    <span id="active-filter-count" class="badge badge-primary badge-xs absolute right-10 top-1/2 -translate-y-1/2 hidden"></span>
                     {# Search results dropdown #}
                     <div id="game-search-results" class="absolute z-50 w-full mt-1 bg-base-100 border-2 border-base-300 rounded-box shadow-xl max-h-80 overflow-y-auto hidden"></div>
                 </div>
@@ -273,12 +321,13 @@
 </section>
 
 {# Section 4: Games in List #}
-<section class="shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 w-full p-0 lg:p-4 mt-4">
+<section class="shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 w-full p-0 lg:p-4 mt-6">
     <div class="p-4">
         <div class="flex items-center justify-between mb-4">
             <h2 class="text-lg font-bold">Games in List</h2>
             {% if items %}
                 <span class="text-xs text-base-content/40 hidden sm:inline">Drag to reorder</span>
+                <span class="text-xs text-base-content/40 sm:hidden">Tap position # to reorder</span>
             {% endif %}
         </div>
 
@@ -294,8 +343,8 @@
                     <path d="M11.5 6.027a.5.5 0 1 1-1 0 .5.5 0 0 1 1 0m-1.5 1.5a.5.5 0 1 0 0-1 .5.5 0 0 0 0 1m2.5-.5a.5.5 0 1 1-1 0 .5.5 0 0 1 1 0m-1.5 1.5a.5.5 0 1 0 0-1 .5.5 0 0 0 0 1m-6.5-3h1v1h1v1h-1v1h-1v-1h-1v-1h1z"/>
                     <path d="M3.051 3.26a.5.5 0 0 1 .354-.613l1.932-.518a.5.5 0 0 1 .62.39c.655-.079 1.35-.117 2.043-.117.72 0 1.443.041 2.12.126a.5.5 0 0 1 .622-.399l1.932.518a.5.5 0 0 1 .306.729q.211.136.373.297c.408.408.78 1.05 1.095 1.772.32.733.599 1.591.805 2.466s.34 1.78.364 2.606c.024.816-.059 1.602-.328 2.21a1.42 1.42 0 0 1-1.445.83c-.636-.067-1.115-.394-1.513-.773-.245-.232-.496-.526-.739-.808-.126-.148-.25-.292-.368-.423-.728-.804-1.597-1.527-3.224-1.527s-2.496.723-3.224 1.527c-.119.131-.242.275-.368.423-.243.282-.494.575-.739.808-.398.38-.877.706-1.513.773a1.42 1.42 0 0 1-1.445-.83c-.27-.608-.352-1.395-.329-2.21.024-.826.16-1.73.365-2.606.206-.875.486-1.733.805-2.466.315-.722.687-1.364 1.094-1.772a2.3 2.3 0 0 1 .433-.335l-.028-.079zm2.036.412c-.877.185-1.469.443-1.733.708-.276.276-.587.783-.885 1.465a14 14 0 0 0-.748 2.295 12.4 12.4 0 0 0-.339 2.406c-.022.755.062 1.368.243 1.776a.42.42 0 0 0 .426.24c.327-.034.61-.199.929-.502.212-.202.4-.423.615-.674.133-.156.276-.323.44-.504C4.861 9.969 5.978 9.027 8 9.027s3.139.942 3.965 1.855c.164.181.307.348.44.504.214.251.403.472.615.674.318.303.601.468.929.503a.42.42 0 0 0 .426-.241c.18-.408.265-1.02.243-1.776a12.4 12.4 0 0 0-.339-2.406 14 14 0 0 0-.748-2.295c-.298-.682-.61-1.19-.885-1.465-.264-.265-.856-.523-1.733-.708-.85-.179-1.877-.27-2.913-.27s-2.063.091-2.913.27"/>
                 </svg>
-                <p class="text-base-content/50 mt-4 text-lg font-semibold">No games yet</p>
-                <p class="text-base-content/40 text-sm mt-1">Search above to start building your list</p>
+                <p class="text-base-content/50 mt-4 text-lg font-semibold">Your list is a blank canvas</p>
+                <p class="text-base-content/40 text-sm mt-1">Search above and start curating your collection</p>
             </div>
         {% endif %}
     </div>
@@ -303,7 +352,7 @@
 
 {# Section 5: Premium Upsell (free users only) #}
 {% if not is_premium %}
-<section class="mt-4">
+<section class="mt-6">
     <div class="p-6 bg-gradient-to-r from-primary/10 via-secondary/5 to-primary/10 border-2 border-primary/20 rounded-box">
         <div class="flex flex-col sm:flex-row items-center gap-4">
             <div class="flex-shrink-0 text-primary">
