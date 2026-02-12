@@ -600,11 +600,14 @@ class ShareImageManager {
         const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
 
         // Write minimal HTML with no external CSS
+        // <base href> is critical: without it, relative URLs (like /api/v1/share-temp/...)
+        // resolve against about:blank and fail to load images
         iframeDoc.open();
         iframeDoc.write(`
             <!DOCTYPE html>
             <html>
             <head>
+                <base href="${window.location.origin}/" />
                 <style>
                     * { margin: 0; padding: 0; box-sizing: border-box; }
                     body { margin: 0; padding: 0; }
