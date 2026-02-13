@@ -1,0 +1,27 @@
+{# Reusable pagination component. Usage: {% include 'partials/pagination.html' with position='top' show_page_jump=True anchor='filter-form' %} #}
+{% load query_tags %}
+{% if is_paginated %}
+    <div class="flex flex-col md:flex-row justify-center items-center gap-2 {% if position == 'top' %}mb-2{% else %}mt-6{% endif %}">
+        <div class="btn-group">
+            {% if page_obj.has_previous %}
+                <a href="?{% query_transform page=1 %}{% if anchor %}#{{ anchor }}{% endif %}" class="btn btn-outline btn-xs sm:btn-sm md:btn-md">&laquo; First</a>
+                <a href="?{% query_transform page=page_obj.previous_page_number %}{% if anchor %}#{{ anchor }}{% endif %}" class="btn btn-outline btn-xs sm:btn-sm md:btn-md">Previous</a>
+            {% endif %}
+
+            <span class="btn btn-active btn-xs sm:btn-sm md:btn-md">Page {{ page_obj.number }} of {{ paginator.num_pages }}</span>
+
+            {% if page_obj.has_next %}
+                <a href="?{% query_transform page=page_obj.next_page_number %}{% if anchor %}#{{ anchor }}{% endif %}" class="btn btn-outline btn-xs sm:btn-sm md:btn-md">Next</a>
+                <a href="?{% query_transform page=paginator.num_pages %}{% if anchor %}#{{ anchor }}{% endif %}" class="btn btn-outline btn-xs sm:btn-sm md:btn-md">Last &raquo;</a>
+            {% endif %}
+        </div>
+
+        {% if show_page_jump %}
+            <form class="page-jump-form form-control flex-row items-center space-x-2 ml-4" method="get" data-anchor="{{ anchor|default:'' }}">
+                <label class="label font-semibold">Go to page:</label>
+                <input type="number" name="page" min="1" max="{{ paginator.num_pages }}" value="{{ page_obj.number }}" class="input w-20" />
+                <button type="submit" class="btn btn-primary btn-sm">Go</button>
+            </form>
+        {% endif %}
+    </div>
+{% endif %}

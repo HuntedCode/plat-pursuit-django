@@ -122,7 +122,6 @@ class GamesListView(ProfileHotbarMixin, ListView):
         ]
 
         context['form'] = GameSearchForm(self.request.GET)
-        context['is_paginated'] = self.object_list.count() > self.paginate_by
         context['selected_platforms'] = self.request.GET.getlist('platform')
         context['selected_regions'] = self.request.GET.getlist('regions')
         context['view_type'] = self.request.GET.get('view', 'grid')
@@ -844,7 +843,6 @@ class GuideListView(ProfileHotbarMixin, ListView):
 
         context['featured_concept'] = featured_concept
         context['form'] = GuideSearchForm(self.request.GET)
-        context['is_paginated'] = self.object_list.count() > self.paginate_by
 
         track_site_event('guide_visit', 'list', self.request)
         track_page_view('guides_list', 'list', self.request)

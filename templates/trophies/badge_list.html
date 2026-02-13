@@ -49,68 +49,17 @@
         </h1>
     </div>
 
-    {% if is_paginated %}
-        <div class="flex flex-col md:flex-row justify-center items-center gap-2 mb-6">
-            <div class="btn-group">
-                {% if page_obj.has_previous %}
-                    <a href="?{% query_transform page=1 %}#filter-form" class="btn btn-outline btn-xs sm:btn-sm md:btn-md">&laquo; First</a>
-                    <a href="?{% query_transform page=page_obj.previous_page_number %}#filter-form" class="btn btn-outline btn-xs sm:btn-sm md:btn-md">Previous</a>
-                {% endif %}
-
-                <span class="btn btn-active btn-xs sm:btn-sm md:btn-md">Page {{ page_obj.number }} of {{ paginator.num_pages }}</span>
-
-                {% if page_obj.has_next %}
-                    <a href="?{% query_transform page=page_obj.next_page_number %}#filter-form" class="btn btn-outline btn-xs sm:btn-sm md:btn-md">Next</a>
-                    <a href="?{% query_transform page=paginator.num_pages %}#filter-form" class="btn btn-outline btn-xs sm:btn-sm md:btn-md">Last &raquo;</a>
-                {% endif %}
-            </div>
-
-            <form id="page-jump-form" method="get" class="form-control flex-row items-center space-x-2 ml-4">
-                <label class="label font-semibold" for="page-input">Go to page:</label>
-                <input type="number" id="page-input" name="page" min="1" max="{{ paginator.num_pages }}" value="{{ page_obj.number }}" class="input w-20" />
-                <button type="submit" class="btn btn-primary btn-sm">Go</button>
-            </form>
-        </div>
-    {% endif %}
+    {% include 'partials/pagination.html' with position='top' show_page_jump=True anchor='filter-form' %}
 
     <div id="items-grid" class="space-y-2">
         {% include 'trophies/partials/badge_list/badge_list_items.html' %}
     </div>
 
-    {% if is_paginated %}
-        <div class="flex flex-col md:flex-row justify-center items-center gap-2 mt-6">
-            <div class="btn-group">
-                {% if page_obj.has_previous %}
-                    <a href="?{% query_transform page=1 %}#filter-form" class="btn btn-outline btn-xs sm:btn-sm md:btn-md">&laquo; First</a>
-                    <a href="?{% query_transform page=page_obj.previous_page_number %}#filter-form" class="btn btn-outline btn-xs sm:btn-sm md:btn-md">Previous</a>
-                {% endif %}
-
-                <span class="btn btn-active btn-xs sm:btn-sm md:btn-md">Page {{ page_obj.number }} of {{ paginator.num_pages }}</span>
-
-                {% if page_obj.has_next %}
-                    <a href="?{% query_transform page=page_obj.next_page_number %}#filter-form" class="btn btn-outline btn-xs sm:btn-sm md:btn-md">Next</a>
-                    <a href="?{% query_transform page=paginator.num_pages %}#filter-form" class="btn btn-outline btn-xs sm:btn-sm md:btn-md">Last &raquo;</a>
-                {% endif %}
-            </div>
-        </div>
-    {% endif %}
+    {% include 'partials/pagination.html' with position='bottom' show_page_jump=False anchor='filter-form' %}
 
 {% endblock %}
 
 {% block js_scripts %}
-    <script>
-        document.getElementById('page-jump-form').addEventListener('submit', function(e) {
-            e.preventDefault();
-            
-            const newPage = document.getElementById('page-input').value;
-            const currentParams = new URLSearchParams(window.location.search);
-            currentParams.set('page', newPage);
-            
-            const newUrl = `${window.location.pathname}?${currentParams.toString()}#filter-form`;
-            
-            window.location.href = newUrl;
-        });
-    </script>
-    <script src="{% static 'js\submit_shimmer.js' %}"></script>
-    <script src="{% static 'js\list_page_filters.js' %}"></script>
+    <script src="{% static 'js/submit_shimmer.js' %}"></script>
+    <script src="{% static 'js/list_page_filters.js' %}"></script>
 {% endblock %}

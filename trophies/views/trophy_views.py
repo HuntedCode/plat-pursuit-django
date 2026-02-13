@@ -115,7 +115,6 @@ class TrophiesListView(ProfileHotbarMixin, ListView):
         ]
 
         context['form'] = TrophySearchForm(self.request.GET)
-        context['is_paginated'] = self.object_list.count() > self.paginate_by
         context['selected_platforms'] = self.request.GET.getlist('platform')
         context['selected_types'] = self.request.GET.getlist('type')
         context['selected_regions'] = self.request.GET.getlist('region')
@@ -162,7 +161,6 @@ class TrophyCaseView(ProfileHotbarMixin, ListView):
             {'text': f"{profile.display_psn_username}", 'url': reverse_lazy('profile_detail', kwargs={'psn_username': profile.psn_username})},
             {'text': 'Trophy Case'}
         ]
-        context['is_paginated'] = self.object_list.count() > self.paginate_by
         context['profile'] = profile
         context['selected_ids'] = selected_ids
         context['selected_count'] = len(selected_ids)

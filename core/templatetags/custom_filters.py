@@ -114,6 +114,12 @@ def trophy_color(trophy):
         return 'trophy-platinum'
 
 @register.filter
+def trophy_css_color(trophy):
+    """Returns the full CSS variable for a trophy's color, e.g. 'var(--color-trophy-gold)'.
+    Useful for passing as a color parameter to icon partials."""
+    return f'var(--color-{trophy_color(trophy)})'
+
+@register.filter
 def trophy_color_dict(trophy):
     type = trophy['trophy_type']
     if type == 'bronze':
@@ -124,6 +130,12 @@ def trophy_color_dict(trophy):
         return 'trophy-gold'
     elif type == 'platinum':
         return 'trophy-platinum'
+
+@register.filter
+def trophy_css_color_dict(trophy):
+    """Returns the full CSS variable for a trophy dict's color, e.g. 'var(--color-trophy-gold)'.
+    Useful for passing as a color parameter to icon partials when trophy is a dict."""
+    return f'var(--color-{trophy_color_dict(trophy)})'
 
 @register.filter
 def badge_color(tier):

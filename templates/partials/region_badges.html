@@ -1,0 +1,18 @@
+{# Reusable region badge row. Usage: {% include 'partials/region_badges.html' with game=game badge_size='badge-sm' %} #}
+{% if game.is_regional %}
+    {% for region in game.region %}
+        {% if region == "NA" %}
+            <div class="badge {{ badge_size|default:'badge-sm' }} badge-primary font-bold italic hover:scale-105">NA</div>
+        {% elif region == "EU" %}
+            <div class="badge {{ badge_size|default:'badge-sm' }} badge-secondary font-bold italic hover:scale-105">EU</div>
+        {% elif region == "JP" %}
+            <div class="badge {{ badge_size|default:'badge-sm' }} badge-accent font-bold italic hover:scale-105">JP</div>
+        {% else %}
+            <div class="badge {{ badge_size|default:'badge-sm' }} badge-warning font-bold italic hover:scale-105">AS</div>
+        {% endif %}
+    {% endfor %}
+{% else %}
+    <div class="badge {{ badge_size|default:'badge-sm' }} badge-ghost font-bold italic hover:scale-105">
+        {% include 'partials/icons/globe.html' with size='w-3.5 h-3.5' %}
+    </div>
+{% endif %}
