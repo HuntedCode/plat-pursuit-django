@@ -3,124 +3,108 @@
 {% for profile in object_list %}
     <a href="{% url 'profile_detail' profile.psn_username %}" class="card bg-base-100 border-4 {% if profile.user_is_premium %}shimmer{% else %}border-base-300{% endif %} shadow-xl shadow-neutral cursor-pointer transition-all duration-300 hover:scale-105 hover:border-primary hover:shadow-primary hover:z-10 group">
         <div class="relative card-body m-0 px-3 py-3">
+            {# Top-right: Country flag #}
             <div class="absolute top-2 right-4 text-lg text-base-content font-bold">{{ profile.flag }}</div>
+
+            {# Top-left: Privacy warning or Premium badge #}
             {% if not profile.psn_history_public %}
                 <div class="tooltip absolute top-2 left-4 z-50 hover:scale-105" data-tip="Game Data Privated">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="mx-auto" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="var(--color-error)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2"></polygon><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+                    {% include 'partials/icons/privacy_warning.html' with size='w-7 h-7' %}
                 </div>
             {% elif profile.user_is_premium %}
                 <div class="tooltip absolute top-2 left-4 z-50 hover:scale-105" data-tip="Premium User">
                     <img src="{% static 'images/badges/default.png' %}" class="w-7.5 h-7.5" />
                 </div>
             {% endif %}
+
             <div class="flex flex-col items-center">
-                <div class="avatar mb-4 transition duration-300 group-hover:scale-105">
+                {# Avatar #}
+                <div class="avatar mb-3 transition duration-300 group-hover:scale-105">
                     <div class="w-24 rounded-full ring-3 ring-primary">
                         <img src="{{ profile.avatar_url }}" alt="{{ profile.psn_username }}'s avatar" class="hover:scale-105" />
                     </div>
                 </div>
-                <h3 class="text-lg text-base-content font-bold h-10 line-clamp-1">{{ profile.display_psn_username }}</h3>
+
+                {# Username #}
+                <h3 class="text-lg text-base-content font-bold line-clamp-1">{{ profile.display_psn_username }}</h3>
+
+                {# About me #}
                 <p class="text-xs text-base-content/70 text-center line-clamp-2 min-h-[2rem]">{{ profile.about_me }}</p>
-                <h3 class="text-lg legendary-title h-10 line-clamp-1 pr-1 italic">{% if profile.user_is_premium %}{{ profile.displayed_title }}{% endif %}</h3>
 
-                <div class="divider divider-vertical my-0"></div>
+                {# Premium title (always rendered for consistent card height) #}
+                <span class="text-lg line-clamp-1 pr-1 italic {% if profile.user_is_premium %}legendary-title{% else %}invisible{% endif %}">{% if profile.user_is_premium %}{{ profile.displayed_title }}{% else %}&nbsp;{% endif %}</span>
 
-                <div class="flex flex-row gap-2 items-center">
-                    <div class="flex flex-col gap-1 items-center">
-                        <h3 class="text-xs text-base-content/70 italic">Level:</h3>
-                        {% if not profile.psn_history_public %}
-                            <div class="tooltip" data-tip="Game Data Privated">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="mx-auto" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--color-error)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2"></polygon><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
-                            </div>
-                        {% else %}
-                            <h3 class="text-sm text-accent font-bold">{{ profile.trophy_level }}</h3>
-                        {% endif %}
+                {# --- Stats Section --- #}
+                {% if not profile.psn_history_public %}
+                    {# Single privacy banner instead of per-stat icons #}
+                    <div class="divider divider-vertical my-0"></div>
+                    <div class="flex items-center gap-2 py-3">
+                        {% include 'partials/icons/privacy_warning.html' with size='w-5 h-5' %}
+                        <span class="text-xs text-error italic">Profile data is private</span>
                     </div>
-                    <div class="divider divider-horizontal mx-0"></div>
-                    <div class="flex flex-col gap-1 items-center">
-                        <h3 class="text-xs text-base-content/70 italic">Trophies:</h3>
-                        {% if not profile.sync_status == 'syncing' and profile.psn_history_public %}
-                            <h3 class="text-sm text-secondary font-bold">{{ profile.total_trophies|intcomma }}</h3>
-                        {% elif not profile.psn_history_public %}
-                            <div class="tooltip" data-tip="Game Data Privated">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="mx-auto" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--color-error)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2"></polygon><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
-                            </div>
-                        {% else %}
-                            <span class="loading loading-infinity loading-md"></span>
-                        {% endif %}
+                {% elif profile.sync_status == 'syncing' %}
+                    {# Syncing state — single loading indicator #}
+                    <div class="divider divider-vertical my-0"></div>
+                    <div class="flex flex-col items-center gap-1 py-3">
+                        <span class="loading loading-infinity loading-lg"></span>
+                        <span class="text-xs text-base-content/50 italic">Syncing profile...</span>
                     </div>
-                    <div class="divider divider-horizontal mx-0"></div>
-                    <div class="flex flex-col gap-1 items-center">
-                        <h3 class="text-xs text-base-content/70 italic">Plats:</h3>
-                        {% if not profile.sync_status == 'syncing' and profile.psn_history_public %}
-                            <h3 class="text-sm text-primary font-bold">{{ profile.total_plats|intcomma }}</h3>
-                        {% elif not profile.psn_history_public %}
-                            <div class="tooltip" data-tip="Game Data Privated">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="mx-auto" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--color-error)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2"></polygon><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
-                            </div>
-                        {% else %}
-                            <span class="loading loading-infinity loading-md"></span>
-                        {% endif %}
+                {% else %}
+                    {# Trophy type breakdown row #}
+                    <div class="divider divider-vertical my-0"></div>
+                    <div class="flex flex-row flex-wrap gap-2 justify-center items-center py-0.5">
+                        <div class="flex items-center gap-0.5">
+                            {% include 'partials/icons/trophy_cup.html' with color='var(--color-trophy-bronze)' size='w-3.5 h-3.5' %}
+                            <span class="text-xs font-semibold">{{ profile.total_bronzes|intcomma }}</span>
+                        </div>
+                        <div class="flex items-center gap-0.5">
+                            {% include 'partials/icons/trophy_cup.html' with color='var(--color-trophy-silver)' size='w-3.5 h-3.5' %}
+                            <span class="text-xs font-semibold">{{ profile.total_silvers|intcomma }}</span>
+                        </div>
+                        <div class="flex items-center gap-0.5">
+                            {% include 'partials/icons/trophy_cup.html' with color='var(--color-trophy-gold)' size='w-3.5 h-3.5' %}
+                            <span class="text-xs font-semibold">{{ profile.total_golds|intcomma }}</span>
+                        </div>
+                        <div class="flex items-center gap-0.5">
+                            {% include 'partials/icons/trophy_cup.html' with color='var(--color-trophy-platinum)' size='w-3.5 h-3.5' %}
+                            <span class="text-xs font-semibold">{{ profile.total_plats|intcomma }}</span>
+                        </div>
                     </div>
-                </div>
 
-                <div class="divider divider-vertical my-0"></div>
-
-                <div class="flex flex-row gap-2 items-center">
-                    <div class="flex flex-col gap-1 items-center">
-                        <h3 class="text-xs text-base-content/70 italic">Games:</h3>
-                        {% if not profile.psn_history_public %}
-                            <div class="tooltip" data-tip="Game Data Privated">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="mx-auto" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--color-error)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2"></polygon><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
-                            </div>
-                        {% else %}
-                            <h3 class="text-sm text-warning font-bold">{{ profile.total_games }}</h3>
-                        {% endif %}
+                    {# Compact stats row #}
+                    <div class="divider divider-vertical my-0"></div>
+                    <div class="flex flex-row flex-wrap gap-x-3 gap-y-1 justify-center items-center">
+                        <div class="flex flex-col items-center">
+                            <span class="text-xs text-base-content/70 italic">Level</span>
+                            <span class="text-sm text-accent font-bold">{{ profile.trophy_level }}</span>
+                        </div>
+                        <div class="flex flex-col items-center">
+                            <span class="text-xs text-base-content/70 italic">Games</span>
+                            <span class="text-sm text-warning font-bold">{{ profile.total_games }}</span>
+                        </div>
+                        <div class="flex flex-col items-center">
+                            <span class="text-xs text-base-content/70 italic">100%'s</span>
+                            <span class="text-sm text-success font-bold">{{ profile.total_completes }}</span>
+                        </div>
+                        <div class="flex flex-col items-center">
+                            <span class="text-xs text-base-content/70 italic">Avg.</span>
+                            <span class="text-sm text-base-content font-bold">{{ profile.avg_progress|floatformat:0 }}%</span>
+                        </div>
                     </div>
-                    <div class="divider divider-horizontal mx-0"></div>
-                    <div class="flex flex-col gap-1 items-center">
-                        <h3 class="text-xs text-base-content/70 italic">100%'s:</h3>
-                        {% if not profile.psn_history_public %}
-                            <div class="tooltip" data-tip="Game Data Privated">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="mx-auto" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--color-error)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2"></polygon><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
-                            </div>
-                        {% else %}
-                            <h3 class="text-sm text-success font-bold">{{ profile.total_completes }}</h3>
-                        {% endif %}
-                    </div>
-                    <div class="divider divider-horizontal mx-0"></div>
-                    <div class="flex flex-col gap-1 items-center">
-                        <h3 class="text-xs text-base-content/70 italic">Avg. %</h3>
-                        {% if not profile.psn_history_public %}
-                            <div class="tooltip" data-tip="Game Data Privated">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="mx-auto" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--color-error)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2"></polygon><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
-                            </div>
-                        {% else %}
-                            <h3 class="text-sm text-base-content font-bold">{{ profile.avg_progress|floatformat:0 }}%</h3>
-                        {% endif %}
-                    </div>
-                </div>
+                {% endif %}
 
-                <div class="divider divider-vertical my-0"></div>
-
+                {# Latest Platinum (compact) #}
                 {% with profile.recent_platinum.0.trophy as recent %}
-                    {% if recent %}
-                        <div class="flex flex-col items-start gap-2 w-full">
-                            <h3 class="text-sm text-base-content italic self-center text-center">Latest Platinum:</h3>
-                            {% if not profile.sync_status == 'syncing' %}
-                                <div class="flex flex-row self-start items-center w-full gap-2">
-                                    <figure class="border-2 border-{{ recent|trophy_color }} rounded-box shrink-0 transition-colors duration-300 hover:scale-105">
-                                        <img src="{{ recent.trophy_icon_url }}" alt="{{ recent.trophy_name }}" class="h-10 w-10 object-fill shrink-0" loading="lazy" />
-                                    </figure>
-                                    <div class="flex flex-col gap-0">
-                                        <h3 class="text-xs text-base-content text-start line-clamp-1">{{ recent.trophy_name }}</h3>
-                                        <h3 class="text-xs text-accent text-start italic line-clamp-1 pr-1">{{ recent.game.title_name }}</h3>
-                                        <h3 class="text-xs text-base-content/70 text-start italic line-clamp-1 pr-1">{{ profile.recent_platinum.0.earned_date_time|format_date:"with_tz" }}</h3>
-                                    </div>
-                                </div>
-                            {% else %}
-                                <span class="loading loading-infinity loading-xl self-center"></span>
-                            {% endif %}
+                    {% if recent and profile.psn_history_public and profile.sync_status != 'syncing' %}
+                        <div class="divider divider-vertical my-0"></div>
+                        <div class="flex flex-row self-start items-center w-full gap-2">
+                            <figure class="border-2 border-{{ recent|trophy_color }} rounded-box shrink-0 transition-colors duration-300 hover:scale-105">
+                                <img src="{{ recent.trophy_icon_url }}" alt="{{ recent.trophy_name }}" class="h-8 w-8 object-fill shrink-0" loading="lazy" />
+                            </figure>
+                            <div class="flex flex-col gap-0 min-w-0">
+                                <span class="text-xs text-base-content text-start line-clamp-1">{{ recent.trophy_name }}</span>
+                                <span class="text-xs text-accent text-start italic line-clamp-1">{{ recent.game.title_name }}</span>
+                            </div>
                         </div>
                     {% endif %}
                 {% endwith %}
@@ -128,5 +112,9 @@
         </div>
     </a>
 {% empty %}
-    <p>No profiles found. Try expanding your search or syncing a new one!</p>
+    <div class="col-span-full text-center py-16 px-4">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 mx-auto text-base-content/30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+        <p class="text-base-content/60 mt-4 mb-2 text-lg font-semibold">No profiles found</p>
+        <p class="text-base-content/40 text-sm">Try adjusting your search or filters</p>
+    </div>
 {% endfor %}

@@ -1,6 +1,7 @@
 {% extends 'base.html' %}
 {% load static %}
 {% load query_tags %}
+{% load humanize %}
 {% block title %}Profiles Search{% endblock %}
 
 {% block content %}
@@ -37,7 +38,6 @@
             </div>
         </div>
 
-        <input type="hidden" name="filter_shovelware" value="{{ request.GET.filter_shovelware }}" />
     </form>
 
     <div class="divider divider-vertical"></div>
@@ -66,6 +66,7 @@
                     All Countries
                 {% endif %}
             {% endwith %}
+            <span class="text-base-content/50">({{ paginator.count|intcomma }})</span>
         </h1>
     </div>
 
