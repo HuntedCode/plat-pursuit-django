@@ -105,79 +105,6 @@
     @apply shadow-lg shadow-base-300 border-2 border-base-300;
   }
 
-  /* Game card responsive scaling - Fine-grained zoom that adapts to screen size */
-  /* Design target: 768px = 100% zoom, then scale proportionally for smaller screens */
-
-  /* Ultra-small phones (320px): 42% zoom */
-  @media (max-width: 359px) {
-    #games-grid {
-      zoom: 0.42;
-    }
-  }
-
-  /* Small phones (360px-389px): 47% zoom */
-  @media (min-width: 360px) and (max-width: 389px) {
-    #games-grid {
-      zoom: 0.47;
-    }
-  }
-
-  /* Standard small phones (390px-419px): 51% zoom */
-  @media (min-width: 390px) and (max-width: 419px) {
-    #games-grid {
-      zoom: 0.51;
-    }
-  }
-
-  /* Large phones (420px-479px): 55% zoom */
-  @media (min-width: 420px) and (max-width: 479px) {
-    #games-grid {
-      zoom: 0.55;
-    }
-  }
-
-  /* Extra large phones (480px-539px): 63% zoom */
-  @media (min-width: 480px) and (max-width: 539px) {
-    #games-grid {
-      zoom: 0.63;
-    }
-  }
-
-  /* Small phablets (540px-599px): 70% zoom */
-  @media (min-width: 540px) and (max-width: 599px) {
-    #games-grid {
-      zoom: 0.70;
-    }
-  }
-
-  /* Phablets (600px-639px): 78% zoom */
-  @media (min-width: 600px) and (max-width: 639px) {
-    #games-grid {
-      zoom: 0.78;
-    }
-  }
-
-  /* Small tablets portrait (640px-719px): 83% zoom */
-  @media (min-width: 640px) and (max-width: 719px) {
-    #games-grid {
-      zoom: 0.83;
-    }
-  }
-
-  /* Tablets portrait (720px-767px): 94% zoom */
-  @media (min-width: 720px) and (max-width: 767px) {
-    #games-grid {
-      zoom: 0.94;
-    }
-  }
-
-  /* Tablets and up (768px+): 100% - Design target size */
-  @media (min-width: 768px) {
-    #games-grid {
-      zoom: 1;
-    }
-  }
-
   .card-img-container {
     @apply border-2 border-base-300 group-hover:scale-105 group-focus-within:scale-105 hover:animate-pulse;
   }
@@ -412,9 +339,9 @@
     transform: translateY(0);
   }
 
-  /* Bottom padding for body on mobile to prevent content behind tab bar */
+  /* Bottom padding on mobile to prevent content behind tab bar */
   @media (max-width: 1023px) {
-    body {
+    #zoom-wrapper {
       padding-bottom: 3.5rem;
     }
   }
