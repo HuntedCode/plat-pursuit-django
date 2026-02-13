@@ -1,43 +1,43 @@
 {% load static humanize custom_filters %}
-<section class="shadow-lg shadow-neutral bg-base-200/90 rounded-box border-2 border-base-300 p-0 lg:p-4">
+<section class="shadow-lg shadow-neutral bg-base-200/90 rounded-box border-2 border-base-300 p-2 md:p-3 lg:p-4">
     <div class="flex flex-col w-full">
-        <div class="stats stats-vertical lg:stats-horizontal shadow-md shadow-neutral border-2 border-base-300">
+        <div class="stats stats-horizontal shadow-md shadow-neutral border-2 border-base-300">
             <div class="stat">
                 <div class="stat-figure">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="w-14 h-14 hover:scale-105" fill="var(--color-accent)" viewBox="0 0 16 16">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-10 h-10 md:w-12 md:h-12 lg:w-14 lg:h-14 hover:scale-105" fill="var(--color-accent)" viewBox="0 0 16 16">
                         <path d="M11.5 6.027a.5.5 0 1 1-1 0 .5.5 0 0 1 1 0m-1.5 1.5a.5.5 0 1 0 0-1 .5.5 0 0 0 0 1m2.5-.5a.5.5 0 1 1-1 0 .5.5 0 0 1 1 0m-1.5 1.5a.5.5 0 1 0 0-1 .5.5 0 0 0 0 1m-6.5-3h1v1h1v1h-1v1h-1v-1h-1v-1h1z"/>
                         <path d="M3.051 3.26a.5.5 0 0 1 .354-.613l1.932-.518a.5.5 0 0 1 .62.39c.655-.079 1.35-.117 2.043-.117.72 0 1.443.041 2.12.126a.5.5 0 0 1 .622-.399l1.932.518a.5.5 0 0 1 .306.729q.211.136.373.297c.408.408.78 1.05 1.095 1.772.32.733.599 1.591.805 2.466s.34 1.78.364 2.606c.024.816-.059 1.602-.328 2.21a1.42 1.42 0 0 1-1.445.83c-.636-.067-1.115-.394-1.513-.773-.245-.232-.496-.526-.739-.808-.126-.148-.25-.292-.368-.423-.728-.804-1.597-1.527-3.224-1.527s-2.496.723-3.224 1.527c-.119.131-.242.275-.368.423-.243.282-.494.575-.739.808-.398.38-.877.706-1.513.773a1.42 1.42 0 0 1-1.445-.83c-.27-.608-.352-1.395-.329-2.21.024-.826.16-1.73.365-2.606.206-.875.486-1.733.805-2.466.315-.722.687-1.364 1.094-1.772a2.3 2.3 0 0 1 .433-.335l-.028-.079zm2.036.412c-.877.185-1.469.443-1.733.708-.276.276-.587.783-.885 1.465a14 14 0 0 0-.748 2.295 12.4 12.4 0 0 0-.339 2.406c-.022.755.062 1.368.243 1.776a.42.42 0 0 0 .426.24c.327-.034.61-.199.929-.502.212-.202.4-.423.615-.674.133-.156.276-.323.44-.504C4.861 9.969 5.978 9.027 8 9.027s3.139.942 3.965 1.855c.164.181.307.348.44.504.214.251.403.472.615.674.318.303.601.468.929.503a.42.42 0 0 0 .426-.241c.18-.408.265-1.02.243-1.776a12.4 12.4 0 0 0-.339-2.406 14 14 0 0 0-.748-2.295c-.298-.682-.61-1.19-.885-1.465-.264-.265-.856-.523-1.733-.708-.85-.179-1.877-.27-2.913-.27s-2.063.091-2.913.27"/>
                     </svg>
                 </div>
-                <div class="stat-title text-base font-bold text-accent italic">Total Games</div>
+                <div class="stat-title text-xs md:text-sm lg:text-base font-bold text-accent italic">Total Games</div>
                 {% if not profile.psn_history_public %}
                     <div class="tooltip" data-tip="Game Data Privated">
                         <svg xmlns="http://www.w3.org/2000/svg" class="mx-auto" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="var(--color-error)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2"></polygon><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
                     </div>
                 {% else %}
-                    <div class="stat-value text-2xl text-base-content">{{ header_stats.total_games|intcomma }}</div>
+                    <div class="stat-value text-lg md:text-xl lg:text-2xl text-base-content">{{ header_stats.total_games|intcomma }}</div>
                 {% endif %}
             </div>
             <div class="stat">
                 <div class="stat-figure">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="w-14 h-14 hover:scale-105" viewBox="0 0 24 24" fill="none" stroke="var(--color-secondary)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 11 12 14 22 4"></polyline><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path></svg>
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-10 h-10 md:w-12 md:h-12 lg:w-14 lg:h-14 hover:scale-105" viewBox="0 0 24 24" fill="none" stroke="var(--color-secondary)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 11 12 14 22 4"></polyline><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path></svg>
                 </div>
-                <div class="stat-title text-base font-bold text-secondary italic">Total 100%'s</div>
+                <div class="stat-title text-xs md:text-sm lg:text-base font-bold text-secondary italic">Total 100%'s</div>
                 {% if not profile.psn_history_public %}
                     <div class="tooltip" data-tip="Game Data Privated">
                         <svg xmlns="http://www.w3.org/2000/svg" class="mx-auto" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="var(--color-error)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2"></polygon><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
                     </div>
                 {% else %}
-                    <div class="stat-value text-2xl text-base-content">{{ header_stats.total_completions|intcomma }}</div>
+                    <div class="stat-value text-lg md:text-xl lg:text-2xl text-base-content">{{ header_stats.total_completions|intcomma }}</div>
                 {% endif %}
             </div>
             <div class="stat">
                 <div class="stat-figure">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="w-14 h-14 hover:scale-105" viewBox="0 0 24 24" fill="none" stroke="var(--color-success)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.2 7.8l-7.7 7.7-4-4-5.7 5.7"/><path d="M15 7h6v6"/></svg>
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-10 h-10 md:w-12 md:h-12 lg:w-14 lg:h-14 hover:scale-105" viewBox="0 0 24 24" fill="none" stroke="var(--color-success)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.2 7.8l-7.7 7.7-4-4-5.7 5.7"/><path d="M15 7h6v6"/></svg>
                 </div>
-                <div class="stat-title text-base font-bold text-success italic">Avg. Completion</div>
+                <div class="stat-title text-xs md:text-sm lg:text-base font-bold text-success italic">Avg. Completion</div>
                 {% if not profile.sync_status == 'syncing' and profile.psn_history_public %}
-                    <div class="stat-value text-2xl text-base-content">{{ header_stats.average_completion|floatformat:2 }}%</div>
+                    <div class="stat-value text-lg md:text-xl lg:text-2xl text-base-content">{{ header_stats.average_completion|floatformat:2 }}%</div>
                 {% elif not profile.psn_history_public %}
                     <div class="tooltip" data-tip="Game Data Privated">
                         <svg xmlns="http://www.w3.org/2000/svg" class="mx-auto" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="var(--color-error)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2"></polygon><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
@@ -48,11 +48,11 @@
             </div>
             <div class="stat">
                 <div class="stat-figure">
-                    {% include 'partials/icons/trophy_cup.html' with color='var(--color-primary)' size='w-14 h-14' extra_class='hover:scale-105' %}
+                    {% include 'partials/icons/trophy_cup.html' with color='var(--color-primary)' size='w-10 h-10 md:w-12 md:h-12 lg:w-14 lg:h-14' extra_class='hover:scale-105' %}
                 </div>
-                <div class="stat-title text-base font-bold text-primary italic">Total Trophies</div>
+                <div class="stat-title text-xs md:text-sm lg:text-base font-bold text-primary italic">Total Trophies</div>
                 {% if not profile.sync_status == 'syncing' and profile.psn_history_public %}
-                    <div class="stat-value text-2xl text-base-content">{{ header_stats.total_earned_trophies|intcomma }}</div>
+                    <div class="stat-value text-lg md:text-xl lg:text-2xl text-base-content">{{ header_stats.total_earned_trophies|intcomma }}</div>
                 {% elif not profile.psn_history_public %}
                     <div class="tooltip" data-tip="Game Data Privated">
                         <svg xmlns="http://www.w3.org/2000/svg" class="mx-auto" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="var(--color-error)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2"></polygon><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
@@ -63,11 +63,11 @@
             </div>
             <div class="stat">
                 <div class="stat-figure">
-                    {% include 'partials/icons/trophy_cup.html' with color='var(--color-error)' size='w-14 h-14' extra_class='hover:scale-105' %}
+                    {% include 'partials/icons/trophy_cup.html' with color='var(--color-error)' size='w-10 h-10 md:w-12 md:h-12 lg:w-14 lg:h-14' extra_class='hover:scale-105' %}
                 </div>
-                <div class="stat-title text-base font-bold text-error italic">Unearned Trophies</div>
+                <div class="stat-title text-xs md:text-sm lg:text-base font-bold text-error italic">Unearned Trophies</div>
                 {% if not profile.sync_status == 'syncing' and profile.psn_history_public %}
-                    <div class="stat-value text-2xl text-base-content">{{ header_stats.total_unearned_trophies|intcomma }}</div>
+                    <div class="stat-value text-lg md:text-xl lg:text-2xl text-base-content">{{ header_stats.total_unearned_trophies|intcomma }}</div>
                 {% elif not profile.psn_history_public %}
                     <div class="tooltip" data-tip="Game Data Privated">
                         <svg xmlns="http://www.w3.org/2000/svg" class="mx-auto" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="var(--color-error)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2"></polygon><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
@@ -79,45 +79,50 @@
             </div>
         </div>
 
-        <div class="divider divider-vertical"></div>
+        <div class="divider divider-vertical my-2 md:my-3 lg:my-4"></div>
 
-        <div class="flex flex-col lg:flex-row">
-            <div class="relative flex flex-col items-center gap-2 w-full lg:w-1/4">
+        <div class="flex flex-col md:flex-col lg:flex-row">
+            <div class="relative flex flex-col items-center gap-2 w-full md:w-full lg:w-1/4">
                 {% if profile.user_is_premium %}
                     <div class="tooltip absolute top-2 left-2" data-tip="Premium Account">
-                        <img src="{% static 'images/badges/default.png' %}" class="w-7 shrink-0 place-self-start hover:scale-105" />
+                        <img src="{% static 'images/badges/default.png' %}" class="w-5 md:w-6 lg:w-7 shrink-0 place-self-start hover:scale-105" />
                     </div>
                 {% endif %}
                 {% if profile.is_plus %}
                     <div class="tooltip absolute top-2 right-2" data-tip="PS+">
-                        <img src="{% static 'images/plus.png' %}" class="w-7 shrink-0 self-end hover:scale-105" />
+                        <img src="{% static 'images/plus.png' %}" class="w-5 md:w-6 lg:w-7 shrink-0 self-end hover:scale-105" />
                     </div>
                 {% endif %}
-                <div class="avatar mb-4 transition duration-300 mt-6 group-hover:scale-105">
-                    <div class="w-48 lg:w-35 2xl:w-48 rounded-full ring-3 ring-primary {% if profile.user_is_premium %}border-4 shimmer{% endif %}">
+                <div class="avatar mb-4 transition duration-300 mt-2 md:mt-4 lg:mt-6 group-hover:scale-105">
+                    <div class="w-32 md:w-40 lg:w-48 rounded-full ring-2 md:ring-3 ring-primary {% if profile.user_is_premium %}border-4 shimmer{% endif %}">
                         <img src="{{ profile.avatar_url }}" alt="{{ profile.psn_username }}'s avatar" class="hover:scale-105" />
                     </div>
                 </div>
                 <div class="flex flex-row gap-1">
-                    <h1 class="text-2xl lg:text-lg 2xl:text-2xl text-base-content text-center pr-1 mr-1 italic">{{ profile.display_psn_username }}</h1>
-                    <h1 class="text-2xl lg:text-lg 2xl:text-2xl text-accent text-center italic">{{ profile.flag }}</h1>
+                    <h1 class="text-xl md:text-2xl lg:text-2xl text-base-content text-center pr-1 mr-1 italic">{{ profile.display_psn_username }}</h1>
+                    <h1 class="text-xl md:text-2xl lg:text-2xl text-accent text-center italic">{{ profile.flag }}</h1>
                 </div>
-                <h3 class="text-sm lg:text-xs 2xl:text-sm text-base-content/70 text-center pr-1 line-clamp-2 italic">{{ profile.about_me }}</h3>
+                <h3 class="text-xs md:text-sm text-base-content/70 text-center pr-1 line-clamp-2 italic">{{ profile.about_me }}</h3>
                 {% if profile.user_is_premium %}
-                    <h3 class="text-lg lg:text-base 2xl:text-lg legendary-title text-center pr-1 line-clamp-1 italic">{{ profile.displayed_title }}</h3>
+                    <h3 class="text-base md:text-lg legendary-title text-center pr-1 line-clamp-1 italic">{{ profile.displayed_title }}</h3>
                 {% endif %}
-                <a href="{% url 'trophy_case' profile.psn_username %}" class="btn btn-primary btn-lg">View Trophy Case</a>
+                <div class="flex flex-col items-center gap-1 w-full">
+                    <h3 class="text-base md:text-lg text-base-content text-center">Trophy Level: <span class="text-primary font-bold">{{ profile.trophy_level }}</span></h3>
+                    <progress class="progress {% if profile.progress < 33 %}progress-error{% elif profile.progress < 66 %}progress-warning{% else %}progress-success{% endif %} w-full max-w-xs" value="{{ profile.progress }}" max="100"></progress>
+                    <h4 class="text-xs md:text-sm text-center italic text-base-content/70">{{ profile.progress }}% to next level</h4>
+                </div>
+                <a href="{% url 'trophy_case' profile.psn_username %}" class="btn btn-primary btn-md md:btn-lg">View Trophy Case</a>
             </div>
-            <div class="divider divider-vertical lg:divider-horizontal"></div>
-            <div class="flex flex-col justify-center items-center w-full lg:w-3/4">
-                <div class="flex flex-col lg:flex-row w-full gap-4">
+            <div class="divider divider-vertical md:divider-horizontal lg:divider-horizontal"></div>
+            <div class="flex flex-col justify-center items-center w-full md:w-full lg:w-3/4">
+                <div class="flex flex-col md:flex-row w-full gap-2 md:gap-4">
                     {% with header_stats.recent_platinum.game as game %}
                     {% with header_stats.recent_platinum.trophy as trophy %}
                         <div class="flex flex-col w-full">
-                            <h1 class="text-2xl text-base-content text-center italic">Latest Platinum</h1>
+                            <h1 class="text-xl md:text-2xl text-base-content text-center italic">Latest Platinum</h1>
                             {% if not profile.sync_status == 'syncing' and profile.psn_history_public and game %}
                                 <a href="{% if game.np_communication_id %}{% url 'game_detail' game.np_communication_id %}{% endif %}" class="flex flex-row items-center w-full shadow-md shadow-neutral border-2 border-base-300 p-1 mb-2 cursor-pointer hover:border-primary hover:shadow-primary hover:scale-[1.02]">
-                                    <figure class="w-20 h-20 border-2 border-primary rounded-box mr-4">
+                                    <figure class="w-16 h-16 md:w-20 md:h-20 border-2 border-primary rounded-box mr-2 md:mr-4">
                                         {% if game.title_image and not game.force_title_icon %}
                                             <img src="{{ game.title_image }}" class="w-full object-cover hover:scale-105" />
                                         {% else %}
@@ -125,9 +130,9 @@
                                         {% endif %}
                                     </figure>
                                     <div class="flex flex-col flex-1 min-w-0">
-                                        <h1 class="text-xl text-base-content line-clamp-2 pr-1 ">{{ trophy.trophy_name }}</h1>
-                                        <h3 class="text-base text-secondary line-clamp-1 pr-1 italic ">{{ game.title_name }}</h3>
-                                        <h3 class="text-sm text-base-content/70 line-clamp-1 pr-1 italic ">Earned: {{ header_stats.recent_platinum.earned_date|format_date:"with_tz" }}</h3>
+                                        <h1 class="text-base md:text-xl text-base-content line-clamp-2 pr-1 ">{{ trophy.trophy_name }}</h1>
+                                        <h3 class="text-sm md:text-base text-secondary line-clamp-1 pr-1 italic ">{{ game.title_name }}</h3>
+                                        <h3 class="text-xs md:text-sm text-base-content/70 line-clamp-1 pr-1 italic ">Earned: {{ header_stats.recent_platinum.earned_date|format_date:"with_tz" }}</h3>
                                         <h3 class="text-sm text-base-content line-clamp-1 pr-1 ">Rarity (PSN): {{ trophy.trophy_earn_rate }}% <span class="text-accent italic">({{ trophy.trophy_rarity|psn_rarity }})</span></h3>
                                     </div>
                                 </a>
@@ -146,10 +151,10 @@
                     {% with header_stats.rarest_platinum.game as game %}
                     {% with header_stats.rarest_platinum.trophy as trophy %}
                         <div class="flex flex-col w-full">
-                            <h1 class="text-2xl text-base-content text-center italic">Rarest Platinum</h1>
+                            <h1 class="text-xl md:text-2xl text-base-content text-center italic">Rarest Platinum</h1>
                             {% if not profile.sync_status == 'syncing' and profile.psn_history_public and game %}
                                 <a href="{% if game.np_communication_id %}{% url 'game_detail' game.np_communication_id %}{% endif %}" class="flex flex-row items-center w-full shadow-md shadow-neutral border-2 border-base-300 p-1 mb-2 cursor-pointer hover:border-accent hover:shadow-accent hover:scale-[1.02]">
-                                    <figure class="w-20 h-20 border-2 border-accent rounded-box mr-4">
+                                    <figure class="w-16 h-16 md:w-20 md:h-20 border-2 border-accent rounded-box mr-2 md:mr-4">
                                         {% if game.title_image %}
                                             <img src="{{ game.title_image }}" class="w-full object-cover object-center hover:scale-105" />
                                         {% else %}
@@ -157,9 +162,9 @@
                                         {% endif %}
                                     </figure>
                                     <div class="flex flex-col flex-1 min-w-0">
-                                        <h1 class="text-xl text-base-content line-clamp-2 pr-1">{{ trophy.trophy_name }}</h1>
-                                        <h3 class="text-base text-secondary line-clamp-1 pr-1 italic">{{ game.title_name }}</h3>
-                                        <h3 class="text-sm text-base-content/70 line-clamp-1 pr-1 italic">Earned: {{ header_stats.rarest_platinum.earned_date|format_date:"with_tz" }}</h3>
+                                        <h1 class="text-base md:text-xl text-base-content line-clamp-2 pr-1">{{ trophy.trophy_name }}</h1>
+                                        <h3 class="text-sm md:text-base text-secondary line-clamp-1 pr-1 italic">{{ game.title_name }}</h3>
+                                        <h3 class="text-xs md:text-sm text-base-content/70 line-clamp-1 pr-1 italic">Earned: {{ header_stats.rarest_platinum.earned_date|format_date:"with_tz" }}</h3>
                                         <h3 class="text-sm text-base-content line-clamp-1 pr-1">Rarity (PSN): {{ trophy.trophy_earn_rate }}% <span class="text-accent italic">({{ trophy.trophy_rarity|psn_rarity }})</span></h3>
                                     </div>
                                 </a>
@@ -178,81 +183,74 @@
                 </div>
                 {% include 'trophies/partials/profile_detail/profile_timeline.html' %}
                 <div class="divider divider-vertical"></div>
-                <div class="flex flex-row justify-around w-full">
-                    <div class="flex flex-col items-center gap-1 w-full lg:w-auto">
-                        <div class="stats stats-vertical lg:stats-horizontal shadow-md shadow-neutral border-2 border-base-300 w-full lg:w-auto">
+                <div class="flex flex-row justify-center w-full">
+                    <div class="flex flex-col items-center gap-1 w-auto">
+                        <div class="stats stats-horizontal shadow-md shadow-neutral border-2 border-base-300 w-auto">
                             <div class="stat ">
                                 <div class="stat-figure">
-                                    {% include 'partials/icons/trophy_cup.html' with color='var(--color-trophy-bronze)' size='w-10 2xl:w-14 h-10 2xl:h-14' extra_class='hover:scale-105' %}
+                                    {% include 'partials/icons/trophy_cup.html' with color='var(--color-trophy-bronze)' size='w-10 h-10 md:w-12 md:h-12 lg:w-14 lg:h-14' extra_class='hover:scale-105' %}
                                 </div>
-                                <div class="stat-title text-base font-bold text-trophy-bronze italic">Bronze</div>
+                                <div class="stat-title text-xs md:text-sm lg:text-base font-bold text-trophy-bronze italic">Bronze</div>
                                 {% if not profile.psn_history_public %}
                                     <div class="tooltip" data-tip="Game Data Privated">
                                         <svg xmlns="http://www.w3.org/2000/svg" class="mx-auto" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="var(--color-error)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2"></polygon><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
                                     </div>
                                 {% else %}
-                                    <div class="stat-value text-2xl text-base-content">{{ profile.total_bronzes|intcomma }}</div>
+                                    <div class="stat-value text-lg md:text-xl lg:text-2xl text-base-content">{{ profile.total_bronzes|intcomma }}</div>
                                 {% endif %}
                             </div>
 
                             <div class="stat">
                                 <div class="stat-figure">
-                                    {% include 'partials/icons/trophy_cup.html' with color='var(--color-trophy-silver)' size='w-10 2xl:w-14 h-10 2xl:h-14' extra_class='hover:scale-105' %}
+                                    {% include 'partials/icons/trophy_cup.html' with color='var(--color-trophy-silver)' size='w-10 h-10 md:w-12 md:h-12 lg:w-14 lg:h-14' extra_class='hover:scale-105' %}
                                 </div>
-                                <div class="stat-title text-base font-bold text-trophy-silver italic">Silver</div>
+                                <div class="stat-title text-xs md:text-sm lg:text-base font-bold text-trophy-silver italic">Silver</div>
                                 {% if not profile.psn_history_public %}
                                     <div class="tooltip" data-tip="Game Data Privated">
                                         <svg xmlns="http://www.w3.org/2000/svg" class="mx-auto" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="var(--color-error)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2"></polygon><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
                                     </div>
                                 {% else %}
-                                    <div class="stat-value text-2xl text-base-content">{{ profile.total_silvers|intcomma }}</div>
+                                    <div class="stat-value text-lg md:text-xl lg:text-2xl text-base-content">{{ profile.total_silvers|intcomma }}</div>
                                 {% endif %}
                             </div>
 
                             <div class="stat">
                                 <div class="stat-figure">
-                                    {% include 'partials/icons/trophy_cup.html' with color='var(--color-trophy-gold)' size='w-10 2xl:w-14 h-10 2xl:h-14' extra_class='hover:scale-105' %}
+                                    {% include 'partials/icons/trophy_cup.html' with color='var(--color-trophy-gold)' size='w-10 h-10 md:w-12 md:h-12 lg:w-14 lg:h-14' extra_class='hover:scale-105' %}
                                 </div>
-                                <div class="stat-title text-base font-bold text-trophy-gold italic">Gold</div>
+                                <div class="stat-title text-xs md:text-sm lg:text-base font-bold text-trophy-gold italic">Gold</div>
                                 {% if not profile.psn_history_public %}
                                     <div class="tooltip" data-tip="Game Data Privated">
                                         <svg xmlns="http://www.w3.org/2000/svg" class="mx-auto" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="var(--color-error)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2"></polygon><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
                                     </div>
                                 {% else %}
-                                    <div class="stat-value text-2xl text-base-content">{{ profile.total_golds|intcomma }}</div>
+                                    <div class="stat-value text-lg md:text-xl lg:text-2xl text-base-content">{{ profile.total_golds|intcomma }}</div>
                                 {% endif %}
                             </div>
 
                             <div class="stat">
                                 <div class="stat-figure">
-                                    {% include 'partials/icons/trophy_cup.html' with color='var(--color-trophy-platinum)' size='w-10 2xl:w-14 h-10 2xl:h-14' extra_class='hover:scale-105' %}
+                                    {% include 'partials/icons/trophy_cup.html' with color='var(--color-trophy-platinum)' size='w-10 h-10 md:w-12 md:h-12 lg:w-14 lg:h-14' extra_class='hover:scale-105' %}
                                 </div>
-                                <div class="stat-title text-base font-bold text-trophy-platinum italic">Platinum</div>
+                                <div class="stat-title text-xs md:text-sm lg:text-base font-bold text-trophy-platinum italic">Platinum</div>
                                 {% if not profile.psn_history_public %}
                                     <div class="tooltip" data-tip="Game Data Privated">
                                         <svg xmlns="http://www.w3.org/2000/svg" class="mx-auto" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="var(--color-error)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2"></polygon><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
                                     </div>
                                 {% else %}
-                                    <div class="stat-value text-2xl text-base-content">{{ profile.total_plats|intcomma }}</div>
+                                    <div class="stat-value text-lg md:text-xl lg:text-2xl text-base-content">{{ profile.total_plats|intcomma }}</div>
                                 {% endif %}
                             </div>
-                        </div>                
-                        <p class="text-xs text-base-content text-center pr-1 italic">* Visit settings to update your hidden trophy visibility.</p>
-                    </div>
-                    <div class="hidden xl:block border-2 border-base-300 shadow-md shadow-neutral hover:border-secondary hover:shadow-secondary hover:scale-[1.02]">
-                        <div class="p-4">
-                            <h3 class="text-lg text-base-content">Trophy Level: <span class="text-primary font-bold">{{ profile.trophy_level }}</span></h3>
-                            <progress class="progress {% if profile.progress < 33 %}progress-error{% elif profile.progress < 66 %}progress-warning{% else %}progress-success{% endif %} w-full" value="{{ profile.progress }}" max="100"></progress>
-                            <h4 class="text-sm text-center italic">{{ profile.progress }}% to next level.</h4>
                         </div>
+                        <p class="text-xs text-base-content text-center pr-1 italic">* Visit settings to update your hidden trophy visibility.</p>
                     </div>
                 </div>
             </div>
         </div>
         {% if trophy_case_count > 0 %}
-            <div class="divider divider-vertical mb-0 pb-0"></div>
-            <h3 class="text-2xl sm:text-3xl text-base-content text-center italic mb-2"><span class="text-trophy-platinum">Platinum</span> Trophy Case</h3>
-            <div class="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-5 xl:grid-cols-10 gap-2 justify-self-center">
+            <div class="divider divider-vertical mb-0 pb-0 my-2 md:my-3 lg:my-4"></div>
+            <h3 class="text-3xl text-base-content text-center italic mb-2"><span class="text-trophy-platinum">Platinum</span> Trophy Case</h3>
+            <div class="grid grid-cols-5 md:grid-cols-5 lg:grid-cols-10 gap-2 justify-self-center">
                 {% for item in trophy_case %}
                 {% if item %}
                     {% with item.earned_trophy.trophy as trophy %}
@@ -271,7 +269,7 @@
                                     <div></div>
                                     <div></div>
                                 </div>
-                                <h4 class="text-xs text-base-content text-center font-semibold pr-1 italic line-clamp-2">{{ trophy.game.title_name }}</h4>
+                                <h4 class="text-[10px] md:text-xs text-base-content text-center font-semibold pr-1 italic line-clamp-2">{{ trophy.game.title_name }}</h4>
                             </div>
                         </a>
                     {% endwith%}

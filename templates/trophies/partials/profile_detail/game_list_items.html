@@ -2,33 +2,33 @@
 {% for pgame in profile_games %}
 {% with pgame.game as game %}
     <a href="{% url 'game_detail_with_profile' game.np_communication_id profile.psn_username %}" class="card {% if pgame.progress == 100 %}bg-success/15{% elif pgame.earned_trophies.platinum == 1 %}bg-warning/20{% else %}bg-base-100/80{% endif %} border-2 border-base-300 shadow-sm shadow-neutral cursor-pointer transition-all duration-300 hover:border-{{ game|platform_color }} hover:shadow-{{ game|platform_color }} hover:shadow-md hover:z-10 group">
-        <div class="card-body m-0 p-1.5 sm:p-2 {% if pgame.progress == 100 %}border-l-4 border-success{% elif pgame.earned_trophies.platinum == 1 %}border-l-4 border-warning{% endif %}">
-            <div class="flex flex-col lg:flex-row lg:justify-between items-center gap-2 lg:gap-3 w-full">
-                <div class="flex flex-col lg:flex-row items-center justify-start gap-2 col-span-1 w-full">
-                    <figure class="border-2 border-base-300 rounded-box transition-colors duration-300 mr-2 lg:mr-3 group-hover:border-{{ game|platform_color }}">
+        <div class="card-body m-0 p-2 {% if pgame.progress == 100 %}border-l-4 border-success{% elif pgame.earned_trophies.platinum == 1 %}border-l-4 border-warning{% endif %}">
+            <div class="flex flex-row justify-between items-center gap-2 w-full">
+                <div class="flex flex-row items-center justify-start gap-2 flex-1 min-w-0">
+                    <figure class="border-2 border-base-300 rounded-box transition-colors duration-300 mr-2 flex-shrink-0 group-hover:border-{{ game|platform_color }}">
                         {% if game.title_image and not game.force_title_icon %}
-                            <img src="{{ game.title_image }}" alt="{{ game.title_name }}" class="h-14 w-14 lg:h-16 lg:w-16 object-cover shrink-0" loading="lazy" />
+                            <img src="{{ game.title_image }}" alt="{{ game.title_name }}" class="h-12 w-12 lg:h-16 lg:w-16 object-cover shrink-0" loading="lazy" />
                         {% else %}
-                            <img src="{{ game.title_icon_url }}" alt="{{ game.title_name }}" class="h-14 w-14 lg:h-16 lg:w-16 object-fill shrink-0" loading="lazy" />
+                            <img src="{{ game.title_icon_url }}" alt="{{ game.title_name }}" class="h-12 w-12 lg:h-16 lg:w-16 object-cover shrink-0" loading="lazy" />
                         {% endif %}
                     </figure>
-                    <div class="flex flex-col gap-1 w-full">
-                        <h1 class="text-sm md:text-base lg:text-lg text-base-content italic pr-1 line-clamp-2">{{ game.title_name }}</h1>
+                    <div class="flex flex-col gap-1 flex-1 min-w-0">
+                        <h1 class="text-sm text-base-content italic pr-1 line-clamp-2 min-w-0">{{ game.title_name }}</h1>
                         <div class="flex flex-row items-center gap-2">
                             {% for platform in game.title_platform reversed %}
-                                <div class="badge badge-xs lg:badge-sm badge-ghost font-bold text-xs md:text-sm lg:text-base border-2 border-{{ platform|platform_color_str }} rounded-box">{{ platform }}</div>
+                                <div class="badge badge-xs badge-ghost font-bold border-2 border-{{ platform|platform_color_str }} rounded-box">{{ platform }}</div>
                             {% endfor %}
                             {% if game.is_regional %}
                                 <div class="flex flex-row gap-2">
                                     {% for region in game.region %}
                                         {% if region == "NA" %}
-                                            <div class="badge badge-xs lg:badge-sm badge-primary font-bold italic">NA</div>
+                                            <div class="badge badge-xs badge-primary font-bold italic">NA</div>
                                         {% elif region == "EU" %}
-                                            <div class="badge badge-xs lg:badge-sm badge-secondary font-bold italic">EU</div>
+                                            <div class="badge badge-xs badge-secondary font-bold italic">EU</div>
                                         {% elif region == "JP" %}
-                                            <div class="badge badge-xs lg:badge-sm badge-accent font-bold italic">JP</div>
+                                            <div class="badge badge-xs badge-accent font-bold italic">JP</div>
                                         {% else %}
-                                            <div class="badge badge-xs lg:badge-sm badge-warning font-bold italic">AS</div>
+                                            <div class="badge badge-xs badge-warning font-bold italic">AS</div>
                                         {% endif %}
                                     {% endfor %}
                                 </div>
@@ -39,40 +39,34 @@
                             {% endif %}
                         </div>
                         {% if not profile.sync_status == 'syncing' %}
-                            <h3 class="text-xs lg:hidden text-base-content/70 pr-1 italic">Latest: {{ pgame.most_recent_trophy_date }}</h3>
-                            <h3 class="hidden lg:block text-sm text-base-content/70 pr-1 italic">Latest Trophy Earned: {{ pgame.most_recent_trophy_date|format_date:"with_tz" }}</h3>
+                            <h3 class="text-xs text-base-content/70 pr-1 italic truncate">Latest: {{ pgame.most_recent_trophy_date }}</h3>
                         {% else %}
-                            <h3 class="text-xs lg:hidden text-base-content/70 pr-1 italic">Latest: <span class="loading loading-infinity loading-md"></span></h3>
-                            <h3 class="hidden lg:block text-sm text-base-content/70 pr-1 italic">Latest Trophy Earned: <span class="loading loading-infinity loading-md"></span></h3>
+                            <h3 class="text-xs text-base-content/70 pr-1 italic truncate">Latest: <span class="loading loading-infinity loading-md"></span></h3>
                         {% endif %}
                     </div>
                 </div>
 
-                <div class="flex flex-col w-full lg:w-auto lg:min-w-80 2xl:min-w-100">
-                    <div class="flex flex-col sm:flex-row items-center justify-around w-full gap-2 sm:gap-0 mb-2">
-                        <div class="flex flex-row items-center justify-around w-full gap-4">
-                            <div class="flex flex-row items-end">
-                                {% include 'partials/icons/trophy_cup.html' with color='var(--color-trophy-bronze)' size='mr-2 w-5 2xl:w-6 h-5 2xl:h-6' %}
-                                <p class="text-xs 2xl:text-sm font-bold"><span class="text-base 2xl:text-lg text-primary">{{ pgame.earned_trophies.bronze }}</span> / {{ game.defined_trophies.bronze }}</p>
-                            </div>
-                            <div class="flex flex-row items-end">
-                                {% include 'partials/icons/trophy_cup.html' with color='var(--color-trophy-silver)' size='mr-2 w-5 2xl:w-6 h-5 2xl:h-6' %}
-                                <p class="text-xs 2xl:text-sm font-bold"><span class="text-base 2xl:text-lg text-primary">{{ pgame.earned_trophies.silver }}</span> / {{ game.defined_trophies.silver }}</p>
-                            </div>
+                <div class="flex flex-col flex-shrink-0">
+                    <div class="flex flex-row items-center justify-around w-full gap-3 mb-2">
+                        <div class="flex flex-row items-end gap-1">
+                            {% include 'partials/icons/trophy_cup.html' with color='var(--color-trophy-bronze)' size='w-4 h-4' %}
+                            <p class="text-xs font-bold"><span class="text-sm text-primary">{{ pgame.earned_trophies.bronze }}</span> / {{ game.defined_trophies.bronze }}</p>
                         </div>
-                        <div class="flex flex-row items-center justify-around w-full gap-4">
-                            <div class="flex flex-row items-end">
-                                {% include 'partials/icons/trophy_cup.html' with color='var(--color-trophy-gold)' size='mr-2 w-5 2xl:w-6 h-5 2xl:h-6' %}
-                                <p class="text-xs 2xl:text-sm font-bold"><span class="text-base 2xl:text-lg text-primary">{{ pgame.earned_trophies.gold }}</span> / {{ game.defined_trophies.gold }}</p>
-                            </div>
-                            <div class="flex flex-row items-end">
-                                {% include 'partials/icons/trophy_cup.html' with color='var(--color-trophy-platinum)' size='mr-2 w-5 2xl:w-6 h-5 2xl:h-6' %}
-                                <p class="text-xs 2xl:text-sm font-bold"><span class="text-base 2xl:text-lg text-primary">{{ pgame.earned_trophies.platinum }}</span> / {{ game.defined_trophies.platinum }}</p>
-                            </div>
+                        <div class="flex flex-row items-end gap-1">
+                            {% include 'partials/icons/trophy_cup.html' with color='var(--color-trophy-silver)' size='w-4 h-4' %}
+                            <p class="text-xs font-bold"><span class="text-sm text-primary">{{ pgame.earned_trophies.silver }}</span> / {{ game.defined_trophies.silver }}</p>
+                        </div>
+                        <div class="flex flex-row items-end gap-1">
+                            {% include 'partials/icons/trophy_cup.html' with color='var(--color-trophy-gold)' size='w-4 h-4' %}
+                            <p class="text-xs font-bold"><span class="text-sm text-primary">{{ pgame.earned_trophies.gold }}</span> / {{ game.defined_trophies.gold }}</p>
+                        </div>
+                        <div class="flex flex-row items-end gap-1">
+                            {% include 'partials/icons/trophy_cup.html' with color='var(--color-trophy-platinum)' size='w-4 h-4' %}
+                            <p class="text-xs font-bold"><span class="text-sm text-primary">{{ pgame.earned_trophies.platinum }}</span> / {{ game.defined_trophies.platinum }}</p>
                         </div>
                     </div>
-                    <progress class="progress {% if pgame.progress < 33 %}progress-error{% elif pgame.progress < 66 %}progress-warning{% elif pgame.progress < 100 %}progress-success{% else %}progress-primary{% endif %} w-7/8 mx-auto mb-0.5" value="{{ pgame.progress }}" max="100"></progress>
-                    <h3 class="text-sm 2xl:text-base text-base-content/70 text-center font-bold pr-1 italic">Total Completion: {{ pgame.progress }}%</h3>
+                    <progress class="progress {% if pgame.progress < 33 %}progress-error{% elif pgame.progress < 66 %}progress-warning{% elif pgame.progress < 100 %}progress-success{% else %}progress-primary{% endif %} w-full mb-0.5" value="{{ pgame.progress }}" max="100"></progress>
+                    <h3 class="text-xs text-base-content/70 text-center font-bold pr-1 italic">Total Completion: {{ pgame.progress }}%</h3>
                 </div>
             </div>
         </div>

@@ -1,29 +1,29 @@
 <form id="games-form" method="get" class="mb-4">
-    <div class="flex flex-col lg:flex-row w-full justify-between">
-        <div class="form-control fieldset w-full lg:w-1/3">
-            <legend class="fieldset-legend text-base lg:text-lg italic">Sort By</legend>
-            <select name="sort" id="id_sort" class="select select-primary w-7/8 justify-self-center">
+    <div class="flex flex-col md:flex-col lg:flex-row w-full gap-4 md:gap-4 lg:gap-0 lg:justify-between">
+        <div class="form-control fieldset w-full md:w-full lg:w-1/3">
+            <legend class="fieldset-legend text-base md:text-lg italic">Sort By</legend>
+            <select name="sort" id="id_sort" class="select select-primary w-full md:w-full lg:w-7/8 text-sm md:text-base px-3 md:px-4 py-2 md:py-3">
                 {% for value, display in form.sort.field.choices %}
                     <option value="{{ value }}" {% if request.GET.sort == value %}selected{% endif %}>{{ display }}</option>
                 {% endfor %}
             </select>
         </div>
 
-        <div class="form-control fieldset w-full lg:w-1/2">
-            <legend class="fieldset-legend text-base lg:text-lg italic">Platforms</legend>
-            <div class="flex flex-col xl:flex-row gap-2 xl:gap-0  flex-wrap justify-self-center justify-between bg-base-100 border-2 border-primary rounded-box w-7/8 p-2">
+        <div class="form-control fieldset w-full md:w-full lg:w-1/2">
+            <legend class="fieldset-legend text-base md:text-lg italic">Platforms</legend>
+            <div class="flex flex-row gap-2 flex-wrap justify-self-center justify-between bg-base-100 border-2 border-primary rounded-box w-full md:w-full lg:w-7/8 p-2 md:p-3">
                 {% for value, display in form.platform.field.choices %}
                     <label class="cursor-pointer label justify-start gap-2">
                         <input type="checkbox" name="platform" value="{{ value }}" class="checkbox checkbox-primary" {% if value in selected_platforms %}checked{% endif %} />
-                        <span class="text-sm xl:text-base">{{ display }}</span>
+                        <span class="text-base">{{ display }}</span>
                     </label>
                 {% endfor %}
             </div>
         </div>
 
-        <div class="form-control fieldset w-full lg:w-1/3">
-            <legend class="fieldset-legend text-base lg:text-lg italic">Platinum Status</legend>
-            <select name="plat_status" id="id_plat_status" class="select select-primary w-7/8 justify-self-center">
+        <div class="form-control fieldset w-full md:w-full lg:w-1/3">
+            <legend class="fieldset-legend text-base md:text-lg italic">Platinum Status</legend>
+            <select name="plat_status" id="id_plat_status" class="select select-primary w-full md:w-full lg:w-7/8 text-sm md:text-base px-3 md:px-4 py-2 md:py-3">
                 {% for value, display in form.plat_status.field.choices %}
                     <option value="{{ value }}" {% if request.GET.plat_status == value %}selected{% endif %}>{{ display }}</option>
                 {% endfor %}
@@ -31,12 +31,12 @@
         </div>
     </div>
 
-    <div class="flex justify-center">
-        <div class="form-control fieldset w-full lg:w-75/100">
-            <legend class="fieldset-legend text-base lg:text-lg italic">Search By Name</legend>
-            <div class="flex flex-col md:flex-row justify-self-center gap-4 w-full md:w-15/16">
-                <input type="text" name="query" id="id_query" value="{{ request.GET.query }}" class="input input-md md:input-lg input-primary w-23/24 justify-self-center" placeholder="Enter game name..." />
-                <button id="submit-btn" type="submit" class="btn btn-md md:btn-lg border-3 shadow-md">Filter Games</button>
+    <div class="flex justify-center mt-4">
+        <div class="form-control fieldset w-full md:w-full lg:w-75/100">
+            <legend class="fieldset-legend text-base md:text-lg italic">Search By Name</legend>
+            <div class="flex flex-col md:flex-row justify-self-center gap-2 md:gap-4 w-full md:w-15/16">
+                <input type="text" name="query" id="id_query" value="{{ request.GET.query }}" class="input input-md md:input-lg input-primary w-full md:w-23/24 text-sm md:text-base px-3 md:px-4 py-2 md:py-3" placeholder="Enter game name..." />
+                <button id="submit-btn" type="submit" class="btn btn-md md:btn-lg border-3 shadow-md w-full md:w-auto">Filter Games</button>
             </div>
         </div>
     </div>

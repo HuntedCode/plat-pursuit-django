@@ -2,6 +2,78 @@
 {% load custom_filters humanize static %}
 {% block title %}{{ profile.display_psn_username }}{% endblock %}
 
+{% block extra_head %}
+<style>
+    /* Profile Page CSS Zoom - Scales entire page proportionally based on viewport width */
+    /* Design baseline: 768px tablet design at 100%, scales down for smaller screens */
+
+    /* IMPORTANT: Disable the existing #games-grid zoom to prevent double-zooming */
+    #games-grid {
+        zoom: 1 !important;
+    }
+
+    /* Ultra-small phones (320px): 42% zoom */
+    @media (max-width: 359px) {
+        body { zoom: 0.42; }
+    }
+
+    /* Small phones (360px-389px): 47% zoom */
+    @media (min-width: 360px) and (max-width: 389px) {
+        body { zoom: 0.47; }
+    }
+
+    /* Standard small phones (390px-419px): 51% zoom */
+    @media (min-width: 390px) and (max-width: 419px) {
+        body { zoom: 0.51; }
+    }
+
+    /* Large phones (420px-479px): 55% zoom */
+    @media (min-width: 420px) and (max-width: 479px) {
+        body { zoom: 0.55; }
+    }
+
+    /* Extra large phones (480px-539px): 63% zoom */
+    @media (min-width: 480px) and (max-width: 539px) {
+        body { zoom: 0.63; }
+    }
+
+    /* Small phablets (540px-599px): 70% zoom */
+    @media (min-width: 540px) and (max-width: 599px) {
+        body { zoom: 0.70; }
+    }
+
+    /* Phablets (600px-639px): 78% zoom */
+    @media (min-width: 600px) and (max-width: 639px) {
+        body { zoom: 0.78; }
+    }
+
+    /* Small tablets portrait (640px-719px): 83% zoom */
+    @media (min-width: 640px) and (max-width: 719px) {
+        body { zoom: 0.83; }
+    }
+
+    /* Tablets portrait (720px-767px): 94% zoom */
+    @media (min-width: 720px) and (max-width: 767px) {
+        body { zoom: 0.94; }
+    }
+
+    /* Tablets and up (768px+): 100% - Design target size */
+    @media (min-width: 768px) {
+        body { zoom: 1; }
+    }
+
+    /* Prevent Tailwind container margins in the 640px-768px range */
+    /* This fixes the visual jump where margins grow while zoomed */
+    @media (min-width: 640px) and (max-width: 767px) {
+        .container {
+            max-width: 100% !important;
+            padding-left: 1rem !important;
+            padding-right: 1rem !important;
+        }
+    }
+</style>
+{% endblock %}
+
 {% block content %}
     {% include 'partials/breadcrumb.html' with items=breadcrumb view_count=view_count %}
 
@@ -55,7 +127,7 @@
             <div id="badges-panel" class="tab-content bg-base-100/90 border-2 border-base-300 shadow-md shadow-neutral p-4" role="tabpanel" aria-labelledby="badges-tab">
                 {% include 'trophies/partials/profile_detail/badge_filters.html' %}
                 <div class="divider divider-vertical"></div>
-                <div id="badges-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3">
+                <div id="badges-grid" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3">
                     {% include 'trophies/partials/profile_detail/badge_list_items.html' %}
                 </div>
             </div>
@@ -72,7 +144,7 @@
             </a>
             <div id="lists-panel" class="tab-content bg-base-100/90 border-2 border-base-300 shadow-md shadow-neutral p-4" role="tabpanel" aria-labelledby="lists-tab">
                 {% if profile_lists %}
-                    <div id="lists-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                    <div id="lists-grid" class="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                         {% for game_list in profile_lists %}
                             {% include 'partials/game_list_card.html' with game_list=game_list %}
                         {% endfor %}

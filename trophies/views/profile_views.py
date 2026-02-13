@@ -684,3 +684,4 @@ class ProfileVerifyView(LoginRequiredMixin, View):
             'synced': synced,
             'verified': verified,
         })
+
