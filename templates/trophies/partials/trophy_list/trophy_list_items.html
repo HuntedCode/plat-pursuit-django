@@ -2,100 +2,71 @@
 {% for trophy in object_list %}
     <a href="{% url 'game_detail' trophy.game.np_communication_id %}#{{ trophy.trophy_id }}" class="card bg-base-100 border-4 border-base-300 shadow-md shadow-neutral cursor-pointer transition-all duration-300 hover:scale-105 hover:border-{{ trophy|trophy_color }} hover:shadow-{{ trophy|trophy_color }} hover:shadow-lg hover:z-10 group">
         <div class="card-body m-0 px-3 py-3">
-            <div class="flex flex-col lg:flex-row justify-between items-center gap-2 lg:gap-4 mx-auto lg:mx-0">
-                <div class="flex flex-col lg:flex-row items-center justify-center lg:justify-start gap-2 w-full lg:w-auto">
+            <div class="grid grid-cols-1 lg:grid-cols-3 items-center gap-4">
+
+                {# Column 1: Game Icon + Trophy Icon + Name + Description + Badges #}
+                <div class="flex flex-row items-center justify-start gap-2 col-span-1">
                     <div class="flex flex-row">
-                        <figure class="border-4 border-{{ trophy.game|platform_color }} rounded-box transition-colors duration-300 mr-2 lg:mr-4 hover:scale-105">
-                            {% if trophy.game.title_image and not game.force_title_icon %}
-                                <img src="{{ trophy.game.title_image }}" alt="{{ trophy.game.title_name }}" class="h-25 w-25 object-fill shrink-0" loading="lazy" />
+                        <figure class="border-4 border-base-300 rounded-box transition-colors duration-300 mr-1 lg:mr-2 group-hover:border-{{ trophy.game|platform_color }} overflow-hidden">
+                            {% if trophy.game.title_image and not trophy.game.force_title_icon %}
+                                <img src="{{ trophy.game.title_image }}" alt="{{ trophy.game.title_name }}" class="h-15 lg:h-18 w-15 lg:w-18 object-fill shrink-0" loading="lazy" />
                             {% else %}
-                                <img src="{{ trophy.game.title_icon_url }}" alt="{{ trophy.game.title_name }}" class="h-25 w-25 object-cover shrink-0" loading="lazy" />
+                                <img src="{{ trophy.game.title_icon_url }}" alt="{{ trophy.game.title_name }}" class="h-15 lg:h-18 w-15 lg:w-18 object-cover shrink-0" loading="lazy" />
                             {% endif %}
                         </figure>
-                        <figure class="border-4 border-{{ trophy|trophy_color }} rounded-box transition-colors duration-300 mr-2 lg:mr-4 hover:scale-105">
-                            <img src="{{ trophy.trophy_icon_url }}" alt="{{ trophy.trophy_name }}" class="h-25 w-25 object-fill shrink-0" loading="lazy" />
+                        <figure class="border-4 border-base-300 rounded-box transition-colors duration-300 mr-2 lg:mr-4 group-hover:border-{{ trophy|trophy_color }} overflow-hidden">
+                            <img src="{{ trophy.trophy_icon_url }}" alt="{{ trophy.trophy_name }}" class="h-15 lg:h-18 w-15 lg:w-18 object-fill shrink-0" loading="lazy" />
                         </figure>
                     </div>
-                    <div class="flex flex-col items-center lg:items-start">
-                        <h1 class="text-base sm:text-lg lg:text-xl text-base-content pr-1 line-clamp-2">{{ trophy.trophy_name }}</h1>
-                        <h3 class="text-sm text-base-content/70 pr-1 line-clamp-2">{{ trophy.trophy_detail }}</h3>
+                    <div class="flex flex-col gap-0.5">
+                        <div class="flex flex-row items-center gap-1.5">
+                            {% include 'partials/icons/trophy_cup.html' with color=trophy|trophy_css_color size='w-4 h-4' %}
+                            <h1 class="text-base lg:text-lg text-base-content pr-1 line-clamp-2">{{ trophy.trophy_name }}</h1>
+                        </div>
+                        <p class="text-xs text-base-content/70 pr-1 line-clamp-1">{{ trophy.trophy_detail }}</p>
                         <h3 class="text-sm text-accent italic pr-1 line-clamp-1">{{ trophy.game.title_name }}</h3>
-                        <div class="flex flex-row items-center gap-2">
-                            {% include 'partials/icons/trophy_cup.html' with color=trophy|trophy_css_color size='w-4 h-4 sm:hidden' extra_class='hover:scale-105' %}
+                        <div class="flex flex-row flex-wrap items-center gap-1">
                             {% for platform in trophy.game.title_platform reversed %}
-                                <div class="badge badge-xs badge-ghost font-bold text-xs border-2 border-{{ platform|platform_color_str }} rounded-box hover:scale-105">{{ platform }}</div>
+                                <div class="badge badge-xs lg:badge-sm badge-ghost font-bold border-2 border-{{ platform|platform_color_str }} rounded-box hover:scale-105">{{ platform }}</div>
                             {% endfor %}
-                            {% if trophy.game.is_regional %}
-                                <div class="flex flex-row gap-2">
-                                    {% for region in trophy.game.region %}
-                                        {% if region == "NA" %}
-                                            <div class="badge badge-xs badge-primary font-bold italic hover:scale-105">NA</div>
-                                        {% elif region == "EU" %}
-                                            <div class="badge badge-xs badge-secondary font-bold italic hover:scale-105">EU</div>
-                                        {% elif region == "JP" %}
-                                            <div class="badge badge-xs badge-accent font-bold italic hover:scale-105">JP</div>
-                                        {% else %}
-                                            <div class="badge badge-xs badge-warning font-bold italic hover:scale-105">AS</div>
-                                        {% endif %}
-                                    {% endfor %}
-                                </div>
-                            {% else %}
-                                <div class="badge badge-sm badge-ghost font-bold italic hover:scale-105">
-                                    <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15"  viewBox="0 0 512 512" stroke="var(--color-success)" fill="var(--color-success)"><path d="M351.9 280l-190.9 0c2.9 64.5 17.2 123.9 37.5 167.4 11.4 24.5 23.7 41.8 35.1 52.4 11.2 10.5 18.9 12.2 22.9 12.2s11.7-1.7 22.9-12.2c11.4-10.6 23.7-28 35.1-52.4 20.3-43.5 34.6-102.9 37.5-167.4zM160.9 232l190.9 0C349 167.5 334.7 108.1 314.4 64.6 303 40.2 290.7 22.8 279.3 12.2 268.1 1.7 260.4 0 256.4 0s-11.7 1.7-22.9 12.2c-11.4 10.6-23.7 28-35.1 52.4-20.3 43.5-34.6 102.9-37.5 167.4zm-48 0C116.4 146.4 138.5 66.9 170.8 14.7 78.7 47.3 10.9 131.2 1.5 232l111.4 0zM1.5 280c9.4 100.8 77.2 184.7 169.3 217.3-32.3-52.2-54.4-131.7-57.9-217.3L1.5 280zm398.4 0c-3.5 85.6-25.6 165.1-57.9 217.3 92.1-32.7 159.9-116.5 169.3-217.3l-111.4 0zm111.4-48C501.9 131.2 434.1 47.3 342 14.7 374.3 66.9 396.4 146.4 399.9 232l111.4 0z"/></svg>
-                                </div>
-                            {% endif %}
+                            {% include 'partials/region_badges.html' with game=trophy.game badge_size='badge-xs lg:badge-sm' %}
                         </div>
                     </div>
                 </div>
 
-                <div class="divider divider-vertical my-0 xl:hidden"></div>
-
-                <div class="flex flex-row items-center justify-center lg:justify-normal w-full lg:w-auto">
-                    {% include 'partials/icons/trophy_cup.html' with color=trophy|trophy_css_color size='w-10 sm:w-12 h-10 sm:h-12 hidden sm:block' extra_class='hover:scale-105' %}
-                    <div class="divider divider-horizontal hidden sm:flex"></div>
-                    <div class="flex flex-col gap-2">
-                        <div class="flex flex-col md:flex-row items-center">
-                            <div class="flex flex-col gap-2">
-                                <p class="text-sm text-base-content/70 text-center italic">- Plat Pursuit Stats -</p>
-                                <div class="flex flex-row">
-                                    <div class="flex flex-row gap-2">
-                                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 sm:w-6 h-4 sm:h-6 hover:scale-105" viewBox="0 0 24 24" fill="none" stroke="var(--color-secondary)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
-                                        <div class="stat-value text-sm sm:text-base">{{ trophy.game.played_count|intcomma }}</div>
-                                    </div>
-                                    <div class="divider divider-horizontal mx-1"></div>
-                                    <div class="flex flex-row gap-2">
-                                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 sm:w-6 h-4 sm:h-6 hover:scale-105" fill="none" stroke="var(--color-accent)" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                                        <div class="stat-value text-sm sm:text-base">{{ trophy.earned_count|intcomma }}</div>
-                                    </div>
-                                    <div class="divider divider-horizontal mx-1"></div>
-                                    <div class="flex flex-row gap-2">
-                                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 sm:w-6 h-4 sm:h-6 hover:scale-105" viewBox="0 0 24 24" fill="none" stroke="var(--color-warning)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="5" x2="5" y2="19"></line><circle cx="6.5" cy="6.5" r="2.5"></circle><circle cx="17.5" cy="17.5" r="2.5"></circle></svg>
-                                        <div class="stat-value text-sm sm:text-base">{{ trophy.earn_rate|multiply:100|floatformat:2 }}%</div>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="divider divider-horizontal"></div>
-                            <div class="flex flex-col gap-2">
-                                <p class="text-sm text-base-content/70 text-center mt-2 md:mt-0 italic">- PSN Rarity -</p>
-                                <div class="flex flex-row">
-                                    <div class="flex flex-row gap-2">
-                                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 sm:w-6 h-4 sm:h-6 hover:scale-105" viewBox="0 0 24 24" fill="none" stroke="var(--color-secondary)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="5" x2="5" y2="19"></line><circle cx="6.5" cy="6.5" r="2.5"></circle><circle cx="17.5" cy="17.5" r="2.5"></circle></svg>
-                                        <div class="stat-value text-sm sm:text-base">{{ trophy.trophy_earn_rate }}%</div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="divider divider-vertical my-0"></div>
-                        <div class="flex flex-col md:flex-row justify-self-start justify-around">
-                            {% if trophy.get_most_recent_earner %}
-                                <h3 class="text-sm sm:text-base text-base-content/70 text-right italic">Last Earned By: <span class="text-primary">{{ trophy.get_most_recent_earner }}</span> <span class="text-accent">({{ trophy.get_most_recent_earned_date|format_date:"short" }})</span></h3>
-                            {% endif %}
-                        </div>
+                {# Column 2: Earn Rates (PlatPursuit + PSN) #}
+                <div class="flex flex-row items-center justify-center gap-4 col-span-1">
+                    <div class="flex flex-row gap-2 justify-center items-center">
+                        {% include 'partials/icons/percent.html' with color='var(--color-warning)' size='w-6 h-6' %}
+                        <span class="text-lg italic text-base-content/70">{{ trophy.earn_rate|multiply:100|floatformat:2 }}%</span>
+                    </div>
+                    <div class="divider divider-horizontal mx-0 px-0"></div>
+                    <div class="flex flex-row gap-2 justify-center items-center">
+                        {% include 'partials/icons/percent.html' with color='var(--color-info)' size='w-6 h-6' %}
+                        <span class="text-lg italic text-base-content/70">{{ trophy.trophy_earn_rate }}%</span>
                     </div>
                 </div>
+
+                {# Column 3: Player Count + Earned Count #}
+                <div class="flex flex-row items-center justify-center lg:justify-end gap-2 col-span-1">
+                    <div class="flex flex-row gap-2 justify-center items-center">
+                        {% include 'partials/icons/user.html' with size='w-6 h-6' %}
+                        <span class="text-lg italic text-base-content/70">{{ trophy.game.played_count|intcomma }}</span>
+                    </div>
+                    <div class="divider divider-horizontal mx-0 px-0"></div>
+                    <div class="flex flex-row gap-2 justify-center items-center">
+                        {% include 'partials/icons/checkmark.html' with size='w-6 h-6' %}
+                        <span class="text-lg italic text-base-content/70">{{ trophy.earned_count|intcomma }}</span>
+                    </div>
+                </div>
+
             </div>
         </div>
     </a>
 {% empty %}
-    <p>No trophies found. Try expanding your search!</p>
+    <div class="col-span-full text-center py-16 px-4">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 mx-auto text-base-content/30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="7" width="20" height="15" rx="2" ry="2"></rect><polyline points="17 2 12 7 7 2"></polyline></svg>
+        <p class="text-base-content/60 mt-4 mb-2 text-lg font-semibold">No trophies found</p>
+        <p class="text-base-content/40 text-sm">Try expanding your search or adjusting your filters</p>
+    </div>
 {% endfor %}

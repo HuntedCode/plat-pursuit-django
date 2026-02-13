@@ -45,7 +45,7 @@ class TrophiesListView(ProfileHotbarMixin, ListView):
         return super().dispatch(request, *args, **kwargs)
 
     def get_queryset(self):
-        qs = super().get_queryset()
+        qs = super().get_queryset().select_related('game')
         form = TrophySearchForm(self.request.GET)
         order = [Lower('trophy_name')]
 
