@@ -168,13 +168,38 @@
                     </div>
                 </div>
 
-                {# Publishing Requirements #}
-                <div id="publish-requirements" class="alert alert-info mt-4 {% if checklist.sections.count > 0 %}hidden{% endif %}">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                {# Publishing Requirements Checklist #}
+                {% if checklist.status == 'draft' %}
+                <div id="publish-requirements" class="alert alert-info mt-4">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
                     </svg>
-                    <span>To publish, your guide needs at least 1 section with at least 1 item.</span>
+                    <div class="flex-1">
+                        <h3 class="font-bold">Publishing Requirements</h3>
+                        <ul class="text-sm space-y-1 mt-2">
+                            <li class="flex items-center gap-2">
+                                <span id="req-title-icon" class="{% if checklist.title %}text-success{% else %}text-error{% endif %}">
+                                    {% if checklist.title %}✓{% else %}✗{% endif %}
+                                </span>
+                                <span id="req-title-text" class="{% if checklist.title %}line-through opacity-50{% endif %}">Title filled out</span>
+                            </li>
+                            <li class="flex items-center gap-2">
+                                <span id="req-sections-icon" class="{% if checklist.sections.count > 0 %}text-success{% else %}text-error{% endif %}">
+                                    {% if checklist.sections.count > 0 %}✓{% else %}✗{% endif %}
+                                </span>
+                                <span id="req-sections-text" class="{% if checklist.sections.count > 0 %}line-through opacity-50{% endif %}">At least 1 section</span>
+                            </li>
+                            <li class="flex items-center gap-2">
+                                <span id="req-items-icon" class="text-error">✗</span>
+                                <span id="req-items-text">All sections have items</span>
+                            </li>
+                        </ul>
+                        <button id="show-missing-btn" class="btn btn-sm btn-outline mt-3" onclick="highlightMissingRequirements()">
+                            Show Me What's Missing
+                        </button>
+                    </div>
                 </div>
+                {% endif %}
 
                 {# Published Checklist Lock Warning #}
                 {% if checklist.is_published %}
@@ -216,6 +241,18 @@
 
     {# Sections Container #}
     <div id="sections-container">
+        {# No Sections Empty State #}
+        {% if not checklist.sections.exists and checklist.status == 'draft' %}
+        <div id="no-sections-state" class="text-center py-12 mt-6">
+            <div class="text-6xl mb-4">📝</div>
+            <h3 class="text-xl font-bold mb-2">Let's Build Your Guide!</h3>
+            <p class="text-base-content/70 mb-6 max-w-md mx-auto">
+                Sections help you organize your checklist into logical groups.
+                Start by adding your first section below.
+            </p>
+        </div>
+        {% endif %}
+
         {% for section in checklist.sections.all %}
             <section class="shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 w-full p-0 lg:p-4 mt-6 checklist-section"
                      data-section-id="{{ section.id }}"
@@ -371,7 +408,10 @@
                                     {% endif %}
                                 </div>
                                 {% else %}
-                                <p class="text-base-content/50 italic text-center py-2">No items yet. Click to expand and add items.</p>
+                                <div class="text-center py-4">
+                                    <p class="text-base-content/50 italic">No items yet.</p>
+                                    <p class="text-xs text-base-content/40 mt-1">Click to expand and add items 👇</p>
+                                </div>
                                 {% endif %}
                             </div>
                             {% endif %}
@@ -684,234 +724,119 @@
                                     {% endif %}
                                     {% endif %}
                                 {% empty %}
-                                    <p class="text-base-content/50 italic text-center py-2 empty-items-message">No items yet.{% if not checklist.is_published %} Add your first item below.{% endif %}</p>
+                                    {# Empty State with Charm #}
+                                    <div class="text-center py-8 empty-items-message">
+                                        <div class="text-4xl mb-2">🏆</div>
+                                        <p class="text-base-content/50 italic mb-2">No items yet.</p>
+                                        {% if not checklist.is_published %}
+                                        <p class="text-xs text-base-content/40">"Every platinum starts with a single trophy..." ✨</p>
+                                        {% endif %}
+                                    </div>
                                 {% endfor %}
                             </div>
 
-                            {# Add Item Input - Hidden for published checklists #}
+                            {# UNIFIED ITEM CREATOR - Hidden for published checklists #}
                             {% if not checklist.is_published %}
-                            <div class="mt-3">
-                                <div class="flex items-center gap-2 mb-2">
-                                    <select class="select select-sm select-bordered new-item-type-select">
-                                        <option value="item">Item</option>
-                                        <option value="sub_header">Sub-header</option>
+                            <div id="item-creator-{{ section.id }}" class="mt-4 bg-base-200/50 rounded-lg p-4 border border-base-300">
+                                {# Type Selector #}
+                                <div class="flex flex-col sm:flex-row items-start sm:items-center gap-3 mb-3">
+                                    <label class="label-text font-semibold shrink-0">Item Type:</label>
+                                    <select id="item-type-select-{{ section.id }}"
+                                            class="select select-bordered select-sm flex-1 max-w-xs unified-item-type-select"
+                                            data-section-id="{{ section.id }}">
+                                        <option value="item" selected>📋 Regular Item</option>
+                                        <option value="sub_header">📌 Sub-Header</option>
+                                        <option value="trophy">🏆 Trophy</option>
+                                        <option value="image">🖼️ Inline Image</option>
+                                        <option value="text_area">📝 Text Area (Markdown)</option>
                                     </select>
                                 </div>
-                                <div class="flex items-center gap-2">
-                                    <input type="text"
-                                           class="input input-bordered flex-1 new-item-input"
-                                           maxlength="500"
-                                           placeholder="Add new item...">
-                                    <button class="btn btn-secondary btn-sm add-item-btn">
-                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
-                                        </svg>
-                                        Add
-                                    </button>
-                                </div>
-                                <span class="text-xs text-base-content/50 block text-right mt-1">
-                                    <span class="new-item-char-count">0</span>/500
-                                </span>
-                            </div>
-                            {% endif %}
 
-                            {# Add Trophy Section #}
-                            {% if not checklist.is_published %}
-                            <div class="divider divider-neutral text-xs">OR ADD TROPHY</div>
-
-                            <div class="mt-3 p-4 bg-warning/5 rounded-lg border border-warning/20">
-                                <div class="flex items-center gap-2 mb-3">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-warning" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"/>
-                                    </svg>
-                                    <span class="font-semibold text-warning">Add Trophy from Game</span>
-                                </div>
-
-                                {% if not checklist.selected_game %}
-                                <div class="alert alert-info mb-3">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                                    </svg>
-                                    <span>Select a game in the header above before adding trophies.</span>
-                                </div>
-                                {% endif %}
-
-                                <button class="btn btn-warning btn-sm open-trophy-selector-btn"
-                                        data-section-id="{{ section.id }}"
-                                        data-checklist-id="{{ checklist.id }}"
-                                        {% if not checklist.selected_game %}disabled{% endif %}>
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
-                                    </svg>
-                                    Select Trophy
-                                </button>
-                            </div>
-                            {% endif %}
-
-                            {# Bulk Upload Section #}
-                            {% if not checklist.is_published %}
-                            <div class="divider divider-neutral text-xs">OR</div>
-
-                            <div class="mt-3 bulk-upload-section">
-                                <div class="flex items-center gap-2 mb-2">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
-                                    </svg>
-                                    <span class="font-semibold text-sm">Bulk Upload</span>
-                                    <button type="button" class="btn btn-ghost btn-xs" onclick="document.getElementById('bulk-upload-help-modal').showModal()">
-                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                                        </svg>
-                                    </button>
-                                </div>
-
-                                <div class="form-control w-full flex flex-col gap-1 items-center">
-                                    <label class="label flex-wrap gap-y-0 w-full">
-                                        <span class="label-text text-xs">Paste items (one per line)</span>
-                                        <span class="label-text-alt text-xs">
-                                            <span class="bulk-item-count">0</span> items detected
-                                        </span>
-                                    </label>
-                                    <textarea class="textarea textarea-bordered bulk-upload-textarea font-mono text-sm max-w-3xl w-full"
-                                              rows="6"
-                                              placeholder="Paste your items here, one per line&#10;&#10;Example:&#10;Collect all 10 coins in World 1&#10;# Level 2&#10;Complete all side quests&#10;Defeat the final boss"></textarea>
-                                    <label class="label py-1">
-                                        <span class="label-text-alt text-xs text-base-content/60 text-wrap">
-                                            Max 100 items. '#' = sub-header.
-                                        </span>
-                                    </label>
-                                </div>
-
-                                <div class="flex items-center gap-2 mt-2">
-                                    <button type="button" class="btn btn-primary btn-sm bulk-upload-btn" disabled>
-                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
-                                        </svg>
-                                        Upload Items
-                                    </button>
-                                    <button type="button" class="btn btn-ghost btn-sm bulk-clear-btn">Clear</button>
-                                </div>
-
-                                {# Preview area #}
-                                <div class="bulk-preview hidden mt-3 p-3 bg-base-200 rounded-lg border border-base-300">
-                                    <div class="flex justify-between items-center mb-2">
-                                        <span class="text-sm font-semibold">Preview</span>
-                                        <span class="text-xs text-base-content/60 bulk-preview-count"></span>
-                                    </div>
-                                    <div class="bulk-preview-items space-y-1 max-h-48 overflow-y-auto">
-                                        {# Preview items rendered here via JS #}
+                                {# Dynamic Input Area #}
+                                <div id="item-input-area-{{ section.id }}" class="mb-3">
+                                    {# Default: Regular Item input #}
+                                    <div class="form-control">
+                                        <input type="text"
+                                               id="item-text-{{ section.id }}"
+                                               class="input input-bordered w-full"
+                                               placeholder="Item text..."
+                                               maxlength="500">
+                                        <label class="label">
+                                            <span class="label-text-alt" id="char-counter-{{ section.id }}">0 / 500</span>
+                                        </label>
                                     </div>
                                 </div>
 
-                                {# Progress indicator #}
-                                <div class="bulk-progress hidden mt-3">
-                                    <progress class="progress progress-primary w-full" value="0" max="100"></progress>
-                                    <p class="text-xs text-center mt-1 text-base-content/60 bulk-progress-text">Uploading...</p>
-                                </div>
-                            </div>
-
-                            {# Add Inline Image #}
-                            <div class="divider divider-neutral text-xs">OR ADD IMAGE</div>
-
-                            <div class="mt-3 p-4 bg-secondary/5 rounded-lg border border-secondary/20">
-                                <div class="flex items-center gap-2 mb-3 flex-wrap">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-secondary shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
-                                    </svg>
-                                    <span class="font-semibold text-secondary">Add Inline Image</span>
-                                </div>
-
-                                <div class="form-control">
-                                    <input type="file"
-                                           class="file-input file-input-bordered file-input-secondary file-input-sm sm:file-input-md w-full inline-image-input"
-                                           accept="image/jpeg,image/png,image/webp,image/gif"
-                                           data-section-id="{{ section.id }}">
-                                    <div class="label py-1">
-                                        <span class="label-text-alt">Max 5MB</span>
-                                    </div>
-                                </div>
-
-                                <input type="text"
-                                       class="input input-sm input-bordered w-full mt-2 inline-image-caption"
-                                       placeholder="Optional caption (200 chars max)..."
-                                       maxlength="200">
-
-                                <button class="btn btn-secondary btn-sm mt-2 add-inline-image-btn"
-                                        data-section-id="{{ section.id }}">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
-                                    </svg>
-                                    Add Image
-                                </button>
-                            </div>
-
-                            {# Add Text Area - All Users #}
-                            <div class="divider divider-neutral text-xs">OR ADD TEXT AREA</div>
-
-                            <div class="mt-3 p-4 bg-info/5 rounded-lg border border-info/20 max-w-2xl mx-auto">
-                                <div class="flex items-center gap-2 mb-3">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-info" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
-                                    </svg>
-                                    <span class="font-semibold text-info">Add Text Area</span>
-                                    <span class="badge badge-info badge-xs">Markdown Supported</span>
-                                </div>
-
-                                <div class="form-control w-full">
-                                    <div class="flex items-center justify-between mb-2">
-                                        <span class="label-text">Content (supports markdown formatting)</span>
-                                        <span class="label-text-alt text-base-content/50 text-area-char-count" data-section-id="{{ section.id }}">0/2000</span>
-                                    </div>
-                                    <textarea class="textarea textarea-bordered textarea-info text-area-content-input w-full"
-                                              placeholder="Add detailed instructions, tips, warnings, or context here...&#10;&#10;Supports markdown: **bold**, *italic*, `code`, links, lists, and more!"
-                                              rows="8"
-                                              maxlength="2000"
-                                              data-section-id="{{ section.id }}"></textarea>
-                                </div>
-
-                                <div class="flex items-center gap-2 mt-2">
-                                    <button class="btn btn-info btn-sm add-text-area-btn"
+                                {# Add Button #}
+                                <div class="flex justify-end">
+                                    <button id="add-item-btn-{{ section.id }}"
+                                            class="btn btn-primary btn-sm gap-2 unified-add-item-btn"
                                             data-section-id="{{ section.id }}">
-                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
                                         </svg>
-                                        Add Text Area
+                                        Add Item
                                     </button>
-
-                                    <div class="tooltip" data-tip="Preview markdown formatting">
-                                        <button class="btn btn-ghost btn-sm preview-text-area-btn"
-                                                data-section-id="{{ section.id }}">
-                                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
-                                            </svg>
-                                        </button>
-                                    </div>
                                 </div>
+                            </div>
 
-                                {# Markdown Help Text #}
-                                <div class="mt-3 text-xs text-base-content/60">
-                                    <details>
-                                        <summary class="cursor-pointer hover:text-base-content">Markdown formatting guide</summary>
-                                        <div class="mt-2 space-y-1 pl-3">
-                                            <div class="font-semibold text-base-content mt-1">Text Formatting:</div>
-                                            <div><code>**bold text**</code> → <strong>bold text</strong></div>
-                                            <div><code>*italic text*</code> → <em>italic text</em></div>
-                                            <div><code>~~strikethrough~~</code> → <del>strikethrough</del></div>
-                                            <div><code>__underline__</code> → <u>underline</u></div>
-                                            <div><code>`code`</code> → <code>code</code></div>
-
-                                            <div class="font-semibold text-base-content mt-2">Lists:</div>
-                                            <div><code>- Item</code> or <code>* Item</code> → Bullet list</div>
-                                            <div><code>1. Item</code> → Numbered list</div>
-
-                                            <div class="font-semibold text-base-content mt-2">Other:</div>
-                                            <div><code>[Link text](url)</code> → <a href="#" class="link">Link text</a></div>
-                                            <div><code>&gt; Quote</code> → Blockquote</div>
-                                            <div>Press <kbd class="kbd kbd-xs">Enter</kbd> once for line breaks</div>
-                                            <div>Press <kbd class="kbd kbd-xs">Enter</kbd> twice for extra spacing</div>
+                            {# Bulk Upload (Collapsible) #}
+                            <div class="collapse collapse-arrow bg-base-200/30 mt-3 border border-base-300/50 rounded-lg">
+                                <input type="checkbox" id="bulk-toggle-{{ section.id }}" class="peer" />
+                                <div class="collapse-title text-sm font-medium flex items-center gap-2 min-h-0 py-3">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-warning" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+                                    </svg>
+                                    <span>Bulk Upload (Advanced)</span>
+                                    <span class="badge badge-sm badge-ghost">Max 100 items</span>
+                                </div>
+                                <div class="collapse-content">
+                                    <div class="bulk-upload-section" data-section-id="{{ section.id }}">
+                                        <div class="form-control w-full">
+                                            <label class="label flex-wrap gap-y-0">
+                                                <span class="label-text text-xs">Paste items (one per line)</span>
+                                                <span class="label-text-alt text-xs">
+                                                    <span class="bulk-item-count">0</span> items detected
+                                                </span>
+                                            </label>
+                                            <textarea class="textarea textarea-bordered bulk-upload-textarea font-mono text-sm w-full"
+                                                      rows="6"
+                                                      placeholder="Paste your items here, one per line&#10;&#10;Example:&#10;Collect all 10 coins in World 1&#10;# Level 2&#10;Complete all side quests&#10;Defeat the final boss"></textarea>
+                                            <label class="label py-1">
+                                                <span class="label-text-alt text-xs text-base-content/60">
+                                                    Max 100 items. '#' = sub-header.
+                                                    <button type="button" class="link link-hover" onclick="document.getElementById('bulk-upload-help-modal').showModal()">Learn more</button>
+                                                </span>
+                                            </label>
                                         </div>
-                                    </details>
+
+                                        <div class="flex items-center gap-2 mt-2">
+                                            <button type="button" class="btn btn-primary btn-sm bulk-upload-btn" disabled>
+                                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
+                                                </svg>
+                                                Upload Items
+                                            </button>
+                                            <button type="button" class="btn btn-ghost btn-sm bulk-clear-btn">Clear</button>
+                                        </div>
+
+                                        {# Preview area #}
+                                        <div class="bulk-preview hidden mt-3 p-3 bg-base-200 rounded-lg border border-base-300">
+                                            <div class="flex justify-between items-center mb-2">
+                                                <span class="text-sm font-semibold">Preview</span>
+                                                <span class="text-xs text-base-content/60 bulk-preview-count"></span>
+                                            </div>
+                                            <div class="bulk-preview-items space-y-1 max-h-48 overflow-y-auto">
+                                                {# Preview items rendered here via JS #}
+                                            </div>
+                                        </div>
+
+                                        {# Progress indicator #}
+                                        <div class="bulk-progress hidden mt-3">
+                                            <progress class="progress progress-primary w-full" value="0" max="100"></progress>
+                                            <p class="text-xs text-center mt-1 text-base-content/60 bulk-progress-text">Uploading...</p>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                             {% endif %}

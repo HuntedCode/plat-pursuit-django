@@ -42,28 +42,12 @@ def _get_joined_event(profile):
 
 
 def _get_first_trophy_event(profile):
-    """Earliest earned trophy date. 1 aggregate query."""
-    from trophies.models import EarnedTrophy
-
-    result = EarnedTrophy.objects.filter(
-        profile=profile, earned=True,
-    ).aggregate(first=Min('earned_date_time'))
-
-    if not result['first']:
-        return []
-    return [_make_event(
-        'first_trophy', 'First Trophy', 'The collection begins!',
-        result['first'], 'primary', 3,
-    )]
-
-
-def _get_first_platinum_event(profile):
-    """First platinum earned. 1 query."""
+    """Earliest earned trophy with game info. 1 query."""
     from trophies.models import EarnedTrophy
 
     et = (
         EarnedTrophy.objects
-        .filter(profile=profile, earned=True, trophy__trophy_type='platinum')
+        .filter(profile=profile, earned=True)
         .select_related('trophy__game')
         .order_by('earned_date_time')
         .first()
@@ -71,9 +55,9 @@ def _get_first_platinum_event(profile):
     if not et or not et.earned_date_time:
         return []
     return [_make_event(
-        'first_platinum', 'First Platinum',
+        'first_trophy', 'First Trophy',
         et.trophy.game.title_name,
-        et.earned_date_time, 'trophy-platinum', 7,
+        et.earned_date_time, 'primary', 7,
     )]
 
 
@@ -218,10 +202,9 @@ def _select_events(candidates, max_events):
     Select the most interesting events from candidates using priority-based algorithm.
 
     Rules:
-    - Always include 'joined' and 'first_platinum' if present
+    - Always include 'joined' and 'first_trophy' if present
     - Cap milestone_plat events at 3 (highest, lowest, one middle)
     - Cap badge events at 2
-    - Skip 'first_trophy' if 'first_platinum' exists
     - Sort by priority descending, take top max_events
     - Re-sort final selection by date descending
     """
@@ -231,18 +214,13 @@ def _select_events(candidates, max_events):
     badges = []
     other = []
 
-    has_first_plat = any(e['event_type'] == 'first_platinum' for e in candidates)
-
     for event in candidates:
-        if event['event_type'] in ('joined', 'first_platinum'):
+        if event['event_type'] in ('joined', 'first_trophy'):
             guaranteed.append(event)
         elif event['event_type'] == 'milestone_plat':
             milestone_plats.append(event)
         elif event['event_type'] == 'badge':
             badges.append(event)
-        elif event['event_type'] == 'first_trophy' and has_first_plat:
-            # Skip first_trophy when first_platinum exists
-            continue
         else:
             other.append(event)
 
@@ -300,7 +278,6 @@ def build_timeline_events(profile, max_events=8):
     candidates = []
     candidates.extend(_get_joined_event(profile))
     candidates.extend(_get_first_trophy_event(profile))
-    candidates.extend(_get_first_platinum_event(profile))
     candidates.extend(_get_milestone_plat_events(profile))
     candidates.extend(_get_fastest_plat_event(profile))
     candidates.extend(_get_rarest_plat_event(profile))

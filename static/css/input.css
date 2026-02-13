@@ -418,3 +418,131 @@
 .mega-menu-dropdown summary .badge {
   @apply ml-1;
 }
+
+/* ==========================================
+   Checklist Edit Page - Visual Design System
+   ========================================== */
+
+/* Item Type Color Coding */
+.checklist-item-edit[data-item-type="item"],
+.checklist-item[data-item-type="item"] {
+  @apply border-l-4 border-l-base-300;
+}
+
+.checklist-item-edit[data-item-type="sub_header"],
+.checklist-item[data-item-type="sub_header"] {
+  @apply border-l-4 border-l-secondary bg-secondary/5;
+}
+
+.checklist-trophy-item[data-item-type="trophy"],
+.checklist-item[data-item-type="trophy"] {
+  @apply border-l-4 border-l-warning bg-warning/5;
+}
+
+.checklist-item-edit[data-item-type="image"],
+.checklist-item[data-item-type="image"] {
+  @apply border-l-4 border-l-info bg-info/5;
+}
+
+.checklist-item-edit[data-item-type="text_area"],
+.checklist-text-area-edit[data-item-type="text_area"],
+.checklist-item[data-item-type="text_area"] {
+  @apply border-l-4 border-l-accent bg-accent/5;
+}
+
+/* Character Limit Color Coding */
+.char-counter-safe {
+  @apply text-base-content/50;
+}
+
+.char-counter-warning {
+  @apply text-warning font-medium;
+}
+
+.char-counter-danger {
+  @apply text-error font-bold;
+}
+
+/* Drag Handles */
+.item-drag-handle,
+[class*="drag-handle"] {
+  @apply cursor-grab opacity-40 hover:opacity-100 transition-opacity;
+}
+
+.item-drag-handle:active,
+[class*="drag-handle"]:active {
+  @apply cursor-grabbing;
+}
+
+.checklist-item-edit.dragging,
+.checklist-trophy-item.dragging {
+  @apply opacity-50 shadow-xl ring-2 ring-primary;
+}
+
+/* Section Cards - Collapsed/Expanded States */
+.checklist-section .card {
+  @apply transition-all duration-200;
+}
+
+.section-items-content {
+  @apply transition-all duration-300 ease-in-out overflow-hidden;
+}
+
+/* Micro-Interactions */
+@keyframes flash-success {
+  0%, 100% {
+    background-color: transparent;
+  }
+  50% {
+    background-color: oklch(86.171% 0.142 166.534 / 0.2);
+  }
+}
+
+@keyframes flash-error {
+  0%, 100% {
+    background-color: transparent;
+  }
+  50% {
+    background-color: oklch(0.759 0.24 19.2 / 0.2);
+  }
+}
+
+.flash-success {
+  animation: flash-success 1s ease-in-out;
+}
+
+.flash-error {
+  animation: flash-error 1s ease-in-out;
+}
+
+/* Smooth Scrolling */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Unified Item Creator */
+[id^="item-creator-"] {
+  @apply transition-all duration-200;
+}
+
+/* Trophy Modal Batch Selection */
+.trophy-card.selected {
+  @apply ring-2 ring-warning bg-warning/10;
+}
+
+/* Section Toggle Icon Rotation */
+.section-toggle-icon {
+  @apply transition-transform duration-200;
+}
+
+/* Checklist Items Hover States */
+.checklist-item-edit:hover,
+.checklist-trophy-item:hover,
+.checklist-text-area-edit:hover {
+  @apply shadow-sm;
+}
+
+/* Empty State Styling */
+.empty-items-message {
+  @apply text-base-content/50 italic text-center py-4;
+}

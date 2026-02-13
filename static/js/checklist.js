@@ -1887,14 +1887,36 @@
 
         if (!collapseAllBtn || !expandAllBtn) return;
 
-        // Restore collapse state from sessionStorage
-        const storageKey = `checklist_${checklistId}_collapsed_sections`;
-        const collapsedSections = JSON.parse(sessionStorage.getItem(storageKey) || '[]');
+        // NEW BEHAVIOR: Track EXPANDED sections instead of collapsed
+        // Sections are collapsed by default, expanded sections are tracked
+        const newStorageKey = `checklist_${checklistId}_expanded_sections`;
+        const oldStorageKey = `checklist_${checklistId}_collapsed_sections`;
+
+        // Migration: Convert old collapsed_sections to new expanded_sections
+        let expandedSections = [];
+        if (sessionStorage.getItem(newStorageKey)) {
+            // New format exists, use it
+            expandedSections = JSON.parse(sessionStorage.getItem(newStorageKey) || '[]');
+        } else if (sessionStorage.getItem(oldStorageKey)) {
+            // Migrate from old format
+            const allSectionIds = Array.from(document.querySelectorAll('.section-items-content'))
+                .map(content => content.dataset.sectionId)
+                .filter(id => id);
+
+            const oldCollapsed = JSON.parse(sessionStorage.getItem(oldStorageKey) || '[]');
+            // Expanded = all sections NOT in collapsed list
+            expandedSections = allSectionIds.filter(id => !oldCollapsed.includes(id));
+
+            // Save in new format and remove old
+            sessionStorage.setItem(newStorageKey, JSON.stringify(expandedSections));
+            sessionStorage.removeItem(oldStorageKey);
+        }
+        // If neither exists, expandedSections stays empty (all collapsed by default)
 
         // Template starts with all sections collapsed (content hidden)
         // We need to:
-        // 1. Expand sections that are NOT in collapsedSections
-        // 2. Set correct icon rotation for all sections
+        // 1. Expand ONLY sections that are in expandedSections
+        // 2. Keep all others collapsed (new default behavior)
 
         document.querySelectorAll('.section-items-content').forEach(content => {
             const sectionId = content.dataset.sectionId;
@@ -1902,26 +1924,25 @@
             const toggle = document.querySelector(`.section-items-toggle[data-section-id="${sectionId}"]`);
             const icon = toggle?.querySelector('.section-toggle-icon');
 
-            const shouldBeCollapsed = collapsedSections.includes(sectionId);
+            const shouldBeExpanded = expandedSections.includes(sectionId);
 
-            if (shouldBeCollapsed) {
-                // Keep collapsed (template default)
-                if (summary) summary.classList.remove('hidden');
-                content.classList.add('hidden');
-                if (toggle) toggle.setAttribute('aria-expanded', 'false');
-                if (icon) icon.style.transform = 'rotate(-90deg)'; // Collapsed: right-pointing
-            } else {
+            if (shouldBeExpanded) {
                 // Expand this section
                 if (summary) summary.classList.add('hidden');
                 content.classList.remove('hidden');
                 if (toggle) toggle.setAttribute('aria-expanded', 'true');
                 if (icon) icon.style.transform = 'rotate(0deg)'; // Expanded: down-pointing
+            } else {
+                // Keep collapsed (new default)
+                if (summary) summary.classList.remove('hidden');
+                content.classList.add('hidden');
+                if (toggle) toggle.setAttribute('aria-expanded', 'false');
+                if (icon) icon.style.transform = 'rotate(-90deg)'; // Collapsed: right-pointing
             }
         });
 
-        // Collapse all button
+        // Collapse all button - clears expanded list
         collapseAllBtn.addEventListener('click', () => {
-            const allSections = [];
             document.querySelectorAll('.section-items-content').forEach(content => {
                 const sectionId = content.dataset.sectionId;
                 const summary = document.querySelector(`.section-items-summary[data-section-id="${sectionId}"]`);
@@ -1929,7 +1950,6 @@
                 // Show summary, hide content
                 if (summary) summary.classList.remove('hidden');
                 content.classList.add('hidden');
-                if (sectionId) allSections.push(sectionId);
 
                 const toggle = document.querySelector(`.section-items-toggle[data-section-id="${sectionId}"]`);
                 if (toggle) {
@@ -1938,11 +1958,13 @@
                     if (icon) icon.style.transform = 'rotate(-90deg)'; // Collapsed: -90deg (right)
                 }
             });
-            sessionStorage.setItem(storageKey, JSON.stringify(allSections));
+            // Clear expanded list (all collapsed)
+            sessionStorage.setItem(newStorageKey, JSON.stringify([]));
         });
 
-        // Expand all button
+        // Expand all button - adds all sections to expanded list
         expandAllBtn.addEventListener('click', () => {
+            const allSections = [];
             document.querySelectorAll('.section-items-content').forEach(content => {
                 const sectionId = content.dataset.sectionId;
                 const summary = document.querySelector(`.section-items-summary[data-section-id="${sectionId}"]`);
@@ -1957,8 +1979,11 @@
                     const icon = toggle.querySelector('.section-toggle-icon');
                     if (icon) icon.style.transform = 'rotate(0deg)'; // Expanded: 0deg (down)
                 }
+
+                if (sectionId) allSections.push(sectionId);
             });
-            sessionStorage.setItem(storageKey, JSON.stringify([]));
+            // Save all as expanded
+            sessionStorage.setItem(newStorageKey, JSON.stringify(allSections));
         });
 
         // Individual section toggle (existing toggle buttons)
@@ -1981,11 +2006,10 @@
                 const icon = toggle.querySelector('.section-toggle-icon');
                 if (icon) icon.style.transform = 'rotate(-90deg)'; // Collapsed: -90deg (right)
 
-                const collapsed = JSON.parse(sessionStorage.getItem(storageKey) || '[]');
-                if (!collapsed.includes(sectionId)) {
-                    collapsed.push(sectionId);
-                    sessionStorage.setItem(storageKey, JSON.stringify(collapsed));
-                }
+                // Remove from expanded list
+                const expanded = JSON.parse(sessionStorage.getItem(newStorageKey) || '[]');
+                const filtered = expanded.filter(id => id !== sectionId);
+                sessionStorage.setItem(newStorageKey, JSON.stringify(filtered));
             } else {
                 // Expand - hide summary, show content
                 if (summary) summary.classList.add('hidden');
@@ -1994,9 +2018,12 @@
                 const icon = toggle.querySelector('.section-toggle-icon');
                 if (icon) icon.style.transform = 'rotate(0deg)'; // Expanded: 0deg (down)
 
-                const collapsed = JSON.parse(sessionStorage.getItem(storageKey) || '[]');
-                const filtered = collapsed.filter(id => id !== sectionId);
-                sessionStorage.setItem(storageKey, JSON.stringify(filtered));
+                // Add to expanded list
+                const expanded = JSON.parse(sessionStorage.getItem(newStorageKey) || '[]');
+                if (!expanded.includes(sectionId)) {
+                    expanded.push(sectionId);
+                    sessionStorage.setItem(newStorageKey, JSON.stringify(expanded));
+                }
             }
         });
 
@@ -2211,6 +2238,11 @@
 
                 const itemId = item.dataset.itemId;
                 const section = this.closest('.checklist-section');
+                const sectionId = section?.dataset.sectionId;
+
+                // Capture item data before deletion for undo
+                const itemType = item.dataset.itemType || 'item';
+                const itemText = item.querySelector('.item-text-input, .item-text')?.value || item.querySelector('.item-text-input, .item-text')?.textContent || '';
 
                 try {
                     await apiRequest(`${API_BASE}/checklists/items/${itemId}/`, 'DELETE');
@@ -3951,13 +3983,14 @@
      * Initialize trophy selection handlers.
      */
     function initTrophySelection() {
-        // Open modal buttons
-        document.querySelectorAll('.open-trophy-selector-btn').forEach(btn => {
-            btn.addEventListener('click', function() {
-                const sectionId = this.dataset.sectionId;
-                const checklistId = this.dataset.checklistId;
+        // Open modal buttons (using event delegation for dynamically created buttons)
+        document.addEventListener('click', function(e) {
+            const btn = e.target.closest('.open-trophy-selector-btn');
+            if (btn) {
+                const sectionId = btn.dataset.sectionId;
+                const checklistId = btn.dataset.checklistId;
                 openTrophySelector(sectionId, checklistId);
-            });
+            }
         });
 
         // Search and filter
@@ -4087,6 +4120,662 @@
         if (toggleBtn && toggleBtn.getAttribute('aria-expanded') !== 'true') {
             toggleBtn.click();
         }
+    }
+
+    /**
+     * Collapse all sections (for edit page).
+     */
+    function collapseAllSections() {
+        const toggles = document.querySelectorAll('.section-items-toggle[aria-expanded="true"]');
+        toggles.forEach(toggle => {
+            toggle.click();
+        });
+    }
+
+    /**
+     * Expand all sections (for edit page).
+     */
+    function expandAllSections() {
+        const toggles = document.querySelectorAll('.section-items-toggle[aria-expanded="false"]');
+        toggles.forEach(toggle => {
+            toggle.click();
+        });
+    }
+
+
+    // ==========================================
+    // Real-Time Form Validation
+    // ==========================================
+
+    /**
+     * Validate a field and show/hide error message.
+     * @param {string} fieldType - Type of field (title, section-title, etc.)
+     * @param {string} value - Current field value
+     * @param {string} context - Optional context (e.g., section ID)
+     * @returns {boolean} - True if valid
+     */
+    function validateField(fieldType, value, context = null) {
+        let isValid = true;
+        let errorMessage = '';
+
+        switch (fieldType) {
+            case 'checklist-title':
+                if (!value.trim()) {
+                    isValid = false;
+                    errorMessage = 'Title is required';
+                } else if (value.length > 200) {
+                    isValid = false;
+                    errorMessage = 'Title must be 200 characters or less';
+                }
+                break;
+
+            case 'section-title':
+                if (!value.trim()) {
+                    isValid = false;
+                    errorMessage = 'Section title is required';
+                } else if (value.length > 200) {
+                    isValid = false;
+                    errorMessage = 'Section title must be 200 characters or less';
+                }
+                break;
+
+            case 'item-text':
+                if (!value.trim()) {
+                    isValid = false;
+                    errorMessage = 'Item text is required';
+                } else if (value.length > 500) {
+                    isValid = false;
+                    errorMessage = 'Item text must be 500 characters or less';
+                }
+                break;
+        }
+
+        // Find or create error element
+        const fieldId = context ? `${fieldType}-${context}` : fieldType;
+        let errorElement = document.getElementById(`${fieldId}-error`);
+
+        if (!errorElement) {
+            // Create error element if it doesn't exist
+            const inputElement = document.getElementById(fieldId);
+            if (inputElement && inputElement.parentElement) {
+                errorElement = document.createElement('span');
+                errorElement.id = `${fieldId}-error`;
+                errorElement.className = 'text-error text-xs mt-1 hidden';
+                inputElement.parentElement.appendChild(errorElement);
+            }
+        }
+
+        if (errorElement) {
+            if (isValid) {
+                errorElement.classList.add('hidden');
+            } else {
+                errorElement.textContent = errorMessage;
+                errorElement.classList.remove('hidden');
+            }
+        }
+
+        return isValid;
+    }
+
+    /**
+     * Setup real-time validation for form fields.
+     */
+    function initFormValidation() {
+        // Checklist title validation
+        const titleInput = document.getElementById('checklist-title');
+        if (titleInput) {
+            titleInput.addEventListener('blur', () => {
+                validateField('checklist-title', titleInput.value);
+            });
+        }
+
+        // Section title validation
+        document.querySelectorAll('.section-title-input').forEach(input => {
+            const section = input.closest('.checklist-section');
+            const sectionId = section?.dataset.sectionId;
+
+            if (sectionId) {
+                input.addEventListener('blur', () => {
+                    validateField('section-title', input.value, sectionId);
+                });
+            }
+        });
+    }
+
+    /**
+     * Update publishing requirements checklist in real-time.
+     */
+    function updatePublishingRequirements() {
+        const titleInput = document.getElementById('checklist-title');
+        const hasTitle = titleInput && titleInput.value.trim() !== '';
+
+        const sections = document.querySelectorAll('.checklist-section');
+        const hasSections = sections.length > 0;
+
+        let allSectionsHaveItems = true;
+        if (hasSections) {
+            sections.forEach(section => {
+                const items = section.querySelectorAll('[data-item-id]');
+                if (items.length === 0) {
+                    allSectionsHaveItems = false;
+                }
+            });
+        } else {
+            allSectionsHaveItems = false;
+        }
+
+        // Update UI
+        updateRequirementStatus('title', hasTitle);
+        updateRequirementStatus('sections', hasSections);
+        updateRequirementStatus('items', allSectionsHaveItems);
+
+        // Enable/disable publish button
+        const publishBtn = document.getElementById('publish-checklist-btn');
+        if (publishBtn) {
+            publishBtn.disabled = !(hasTitle && hasSections && allSectionsHaveItems);
+        }
+    }
+
+    function updateRequirementStatus(requirement, met) {
+        const icon = document.getElementById(`req-${requirement}-icon`);
+        const text = document.getElementById(`req-${requirement}-text`);
+
+        if (!icon || !text) return;
+
+        if (met) {
+            icon.textContent = '✓';
+            icon.classList.remove('text-error');
+            icon.classList.add('text-success');
+            text.classList.add('line-through', 'opacity-50');
+        } else {
+            icon.textContent = '✗';
+            icon.classList.remove('text-success');
+            icon.classList.add('text-error');
+            text.classList.remove('line-through', 'opacity-50');
+        }
+    }
+
+    /**
+     * Highlight missing requirements when "Show Me What's Missing" is clicked.
+     */
+    window.highlightMissingRequirements = function() {
+        const titleInput = document.getElementById('checklist-title');
+        const hasTitle = titleInput && titleInput.value.trim() !== '';
+
+        if (!hasTitle) {
+            titleInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            titleInput.focus();
+            titleInput.classList.add('flash-error');
+            setTimeout(() => titleInput.classList.remove('flash-error'), 1000);
+            return;
+        }
+
+        const sections = document.querySelectorAll('.checklist-section');
+        if (sections.length === 0) {
+            const addSectionBtn = document.getElementById('add-section-btn');
+            if (addSectionBtn) {
+                addSectionBtn.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                addSectionBtn.classList.add('flash-error');
+                setTimeout(() => addSectionBtn.classList.remove('flash-error'), 1000);
+            }
+            return;
+        }
+
+        // Find first empty section
+        for (const section of sections) {
+            const items = section.querySelectorAll('[data-item-id]');
+            if (items.length === 0) {
+                section.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                section.classList.add('flash-error');
+                setTimeout(() => section.classList.remove('flash-error'), 1000);
+
+                // Expand the section if collapsed
+                const toggleBtn = section.querySelector('.section-items-toggle');
+                if (toggleBtn && toggleBtn.getAttribute('aria-expanded') === 'false') {
+                    toggleBtn.click();
+                }
+                return;
+            }
+        }
+    };
+
+    // ==========================================
+    // Character Counter with Color Coding
+    // ==========================================
+
+    /**
+     * Update character counter with color coding based on usage percentage.
+     * @param {string} counterId - ID of the counter element
+     * @param {number} currentLength - Current text length
+     * @param {number} maxLength - Maximum allowed length
+     */
+    function updateCharCounter(counterId, currentLength, maxLength) {
+        const counter = document.getElementById(counterId);
+        if (!counter) return;
+
+        counter.textContent = `${currentLength} / ${maxLength}`;
+
+        const percentage = (currentLength / maxLength) * 100;
+
+        // Remove all color classes
+        counter.classList.remove('char-counter-safe', 'char-counter-warning', 'char-counter-danger');
+
+        // Add appropriate class based on percentage
+        if (percentage >= 100) {
+            counter.classList.add('char-counter-danger');
+        } else if (percentage >= 90) {
+            counter.classList.add('char-counter-warning');
+        } else {
+            counter.classList.add('char-counter-safe');
+        }
+    }
+
+    /**
+     * Initialize character counters for all inputs with maxlength.
+     */
+    function initCharacterCounters() {
+        // Find all inputs/textareas with char counters
+        document.querySelectorAll('input[maxlength], textarea[maxlength]').forEach(input => {
+            const maxLength = parseInt(input.getAttribute('maxlength'));
+
+            // Find associated counter (various patterns in use)
+            let counter = null;
+            const inputId = input.id;
+
+            if (inputId) {
+                // Look for counter with matching ID pattern
+                counter = document.getElementById(`char-counter-${inputId.replace('item-text-', '').replace('item-markdown-', '').replace('image-caption-', '')}`);
+
+                // Or look for counter in parent's label
+                if (!counter) {
+                    const label = input.closest('.form-control')?.querySelector('.label');
+                    counter = label?.querySelector('[id^="char-counter-"]');
+                }
+            }
+
+            if (counter && maxLength) {
+                // Initialize counter
+                updateCharCounter(counter.id, input.value.length, maxLength);
+
+                // Update on input
+                input.addEventListener('input', () => {
+                    updateCharCounter(counter.id, input.value.length, maxLength);
+                });
+            }
+        });
+
+        // Also handle existing char-count elements (old pattern)
+        document.querySelectorAll('.char-count-input').forEach(input => {
+            const target = input.id;
+            const counter = document.querySelector(`.char-count[data-target="${target}"]`);
+            const maxLength = parseInt(input.getAttribute('maxlength'));
+
+            if (counter && maxLength) {
+                input.addEventListener('input', () => {
+                    const currentLength = input.value.length;
+                    counter.textContent = currentLength;
+
+                    const percentage = (currentLength / maxLength) * 100;
+                    counter.classList.remove('char-counter-safe', 'char-counter-warning', 'char-counter-danger');
+
+                    if (percentage >= 100) {
+                        counter.classList.add('char-counter-danger');
+                    } else if (percentage >= 90) {
+                        counter.classList.add('char-counter-warning');
+                    } else {
+                        counter.classList.add('char-counter-safe');
+                    }
+                });
+
+                // Initial color
+                const currentLength = input.value.length;
+                const percentage = (currentLength / maxLength) * 100;
+
+                if (percentage >= 100) {
+                    counter.classList.add('char-counter-danger');
+                } else if (percentage >= 90) {
+                    counter.classList.add('char-counter-warning');
+                } else {
+                    counter.classList.add('char-counter-safe');
+                }
+            }
+        });
+    }
+
+    // ==========================================
+    // Unified Item Creator
+    // ==========================================
+
+    /**
+     * Handle item type change in unified creator.
+     * Dynamically renders appropriate input fields based on selected type.
+     */
+    function handleItemTypeChange(sectionId, itemType) {
+        const inputArea = document.getElementById(`item-input-area-${sectionId}`);
+        const addBtn = document.getElementById(`add-item-btn-${sectionId}`);
+
+        if (!inputArea || !addBtn) return;
+
+        // Clear previous inputs
+        inputArea.innerHTML = '';
+
+        switch (itemType) {
+            case 'item':
+            case 'sub_header':
+                // Text input with character counter
+                inputArea.innerHTML = `
+                    <div class="form-control">
+                        <input type="text"
+                               id="item-text-${sectionId}"
+                               class="input input-bordered w-full ${itemType === 'sub_header' ? 'font-semibold' : ''}"
+                               placeholder="${itemType === 'sub_header' ? 'Sub-header text...' : 'Item text...'}"
+                               maxlength="500"
+                               data-section-id="${sectionId}">
+                        <label class="label">
+                            <span class="label-text-alt" id="char-counter-${sectionId}">0 / 500</span>
+                        </label>
+                    </div>
+                `;
+
+                // Setup character counter
+                const textInput = document.getElementById(`item-text-${sectionId}`);
+                if (textInput) {
+                    textInput.addEventListener('input', () => {
+                        const counter = document.getElementById(`char-counter-${sectionId}`);
+                        if (counter) {
+                            counter.textContent = `${textInput.value.length} / 500`;
+                        }
+                    });
+                }
+
+                addBtn.innerHTML = `
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                    </svg>
+                    Add ${itemType === 'sub_header' ? 'Sub-Header' : 'Item'}
+                `;
+                addBtn.style.display = '';
+                break;
+
+            case 'trophy':
+                // Trophy selection button
+                const container = document.getElementById('checklist-edit-container');
+                const hasGame = container && container.dataset.conceptId;
+                const checklistId = container && container.dataset.checklistId;
+
+                inputArea.innerHTML = `
+                    <div class="alert ${hasGame ? 'alert-info' : 'alert-warning'} text-sm">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            ${hasGame ?
+                                '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>' :
+                                '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>'
+                            }
+                        </svg>
+                        <span>${hasGame ? 'Select one or more trophies from the game\'s trophy list. Supports batch selection!' : 'Select a game in the header above before adding trophies.'}</span>
+                    </div>
+                    <button class="btn btn-warning btn-block gap-2 open-trophy-selector-btn mt-3"
+                            data-section-id="${sectionId}"
+                            data-checklist-id="${checklistId}"
+                            ${!hasGame ? 'disabled' : ''}>
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"/>
+                        </svg>
+                        Select Trophy(s)
+                    </button>
+                `;
+
+                addBtn.style.display = 'none'; // Trophy modal handles adding
+                break;
+
+            case 'image':
+                // Image upload with caption
+                inputArea.innerHTML = `
+                    <div class="space-y-3">
+                        <div class="form-control">
+                            <label class="label">
+                                <span class="label-text">Image File</span>
+                                <span class="label-text-alt">Max 5MB</span>
+                            </label>
+                            <input type="file"
+                                   id="item-image-${sectionId}"
+                                   class="file-input file-input-bordered file-input-secondary w-full"
+                                   accept="image/jpeg,image/png,image/webp,image/gif">
+                        </div>
+                        <div id="image-preview-${sectionId}" class="hidden">
+                            <img src="" class="rounded-lg max-h-48 mx-auto border border-base-300" />
+                        </div>
+                        <div class="form-control">
+                            <label class="label">
+                                <span class="label-text">Caption (optional)</span>
+                                <span class="label-text-alt" id="caption-counter-${sectionId}">0 / 200</span>
+                            </label>
+                            <input type="text"
+                                   id="image-caption-${sectionId}"
+                                   class="input input-bordered w-full"
+                                   placeholder="Optional caption..."
+                                   maxlength="200">
+                        </div>
+                    </div>
+                `;
+
+                // Setup image preview
+                const imageInput = document.getElementById(`item-image-${sectionId}`);
+                if (imageInput) {
+                    imageInput.addEventListener('change', function() {
+                        const file = this.files[0];
+                        const preview = document.getElementById(`image-preview-${sectionId}`);
+                        if (file && preview) {
+                            const reader = new FileReader();
+                            reader.onload = (e) => {
+                                const img = preview.querySelector('img');
+                                if (img) {
+                                    img.src = e.target.result;
+                                    preview.classList.remove('hidden');
+                                }
+                            };
+                            reader.readAsDataURL(file);
+                        }
+                    });
+                }
+
+                // Setup caption counter
+                const captionInput = document.getElementById(`image-caption-${sectionId}`);
+                if (captionInput) {
+                    captionInput.addEventListener('input', () => {
+                        const counter = document.getElementById(`caption-counter-${sectionId}`);
+                        if (counter) {
+                            counter.textContent = `${captionInput.value.length} / 200`;
+                        }
+                    });
+                }
+
+                addBtn.innerHTML = `
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                    </svg>
+                    Add Image
+                `;
+                addBtn.style.display = '';
+                break;
+
+            case 'text_area':
+                // Markdown textarea with preview
+                inputArea.innerHTML = `
+                    <div class="space-y-2">
+                        <div class="form-control">
+                            <label class="label">
+                                <span class="label-text">Content (Markdown supported)</span>
+                                <span class="label-text-alt" id="char-counter-${sectionId}">0 / 2000</span>
+                            </label>
+                            <textarea id="item-markdown-${sectionId}"
+                                      class="textarea textarea-bordered textarea-info w-full h-32"
+                                      placeholder="Add detailed instructions, tips, warnings...&#10;&#10;**bold**, *italic*, \`code\`, [links](url), lists, and more!"
+                                      maxlength="2000"></textarea>
+                        </div>
+                        <div class="flex justify-between items-center">
+                            <span class="text-xs text-base-content/60">
+                                <button type="button" class="link link-hover" onclick="document.getElementById('bulk-upload-help-modal').showModal()">
+                                    Markdown formatting guide
+                                </button>
+                            </span>
+                        </div>
+                    </div>
+                `;
+
+                // Setup character counter
+                const markdownInput = document.getElementById(`item-markdown-${sectionId}`);
+                if (markdownInput) {
+                    markdownInput.addEventListener('input', () => {
+                        const counter = document.getElementById(`char-counter-${sectionId}`);
+                        if (counter) {
+                            counter.textContent = `${markdownInput.value.length} / 2000`;
+                        }
+                    });
+                }
+
+                addBtn.innerHTML = `
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                    </svg>
+                    Add Text Area
+                `;
+                addBtn.style.display = '';
+                break;
+        }
+    }
+
+    /**
+     * Initialize unified item creator for all sections.
+     */
+    function initUnifiedItemCreator() {
+        // Setup type selectors
+        document.querySelectorAll('.unified-item-type-select').forEach(select => {
+            const sectionId = select.dataset.sectionId;
+
+            // Initialize with default (item)
+            handleItemTypeChange(sectionId, 'item');
+
+            // Handle type changes
+            select.addEventListener('change', function() {
+                handleItemTypeChange(sectionId, this.value);
+            });
+        });
+
+        // Setup add buttons (delegation handles new buttons after DOM updates)
+        document.addEventListener('click', async (e) => {
+            const addBtn = e.target.closest('.unified-add-item-btn');
+            if (!addBtn) return;
+
+            const sectionId = addBtn.dataset.sectionId;
+            const typeSelect = document.getElementById(`item-type-select-${sectionId}`);
+            const itemType = typeSelect ? typeSelect.value : 'item';
+
+            // Collect data based on type
+            let itemData = { item_type: itemType };
+            let isValid = true;
+
+            switch (itemType) {
+                case 'item':
+                case 'sub_header':
+                    const textInput = document.getElementById(`item-text-${sectionId}`);
+                    const text = textInput ? textInput.value.trim() : '';
+                    if (!text) {
+                        PlatPursuit.ToastManager.show('Item text is required', 'error');
+                        return;
+                    }
+                    itemData.text = text;
+                    break;
+
+                case 'image':
+                    const imageFile = document.getElementById(`item-image-${sectionId}`)?.files[0];
+                    const caption = document.getElementById(`image-caption-${sectionId}`)?.value.trim();
+
+                    if (!imageFile) {
+                        PlatPursuit.ToastManager.show('Please select an image', 'error');
+                        return;
+                    }
+
+                    // Use FormData for file upload
+                    itemData = new FormData();
+                    itemData.append('item_type', 'image');
+                    itemData.append('image', imageFile);
+                    if (caption) {
+                        itemData.append('caption', caption);
+                    }
+                    break;
+
+                case 'text_area':
+                    const markdownText = document.getElementById(`item-markdown-${sectionId}`)?.value.trim();
+                    if (!markdownText) {
+                        PlatPursuit.ToastManager.show('Text area content is required', 'error');
+                        return;
+                    }
+                    itemData.text = markdownText;
+                    break;
+
+                case 'trophy':
+                    // Trophy modal handles this
+                    return;
+            }
+
+            // Make API call
+            try {
+                addBtn.classList.add('loading');
+                addBtn.disabled = true;
+
+                let response;
+                if (itemData instanceof FormData) {
+                    // Image upload - use fetch directly for FormData
+                    const res = await fetch(`${API_BASE}/checklists/sections/${sectionId}/items/`, {
+                        method: 'POST',
+                        headers: {
+                            'X-CSRFToken': PlatPursuit.CSRFToken.get()
+                        },
+                        body: itemData
+                    });
+
+                    if (!res.ok) {
+                        const errorData = await res.json().catch(() => ({}));
+                        throw new Error(errorData.error || 'Failed to upload image');
+                    }
+
+                    response = await res.json();
+                } else {
+                    // Regular JSON request
+                    response = await apiRequest(`${API_BASE}/checklists/sections/${sectionId}/items/`, 'POST', itemData);
+                }
+
+                // Success! Reload page to show new item
+                // TODO: In the future, dynamically add to DOM instead of reload
+                PlatPursuit.ToastManager.show(`${itemType === 'sub_header' ? 'Sub-header' : itemType === 'text_area' ? 'Text area' : itemType === 'image' ? 'Image' : 'Item'} added!`, 'success');
+
+                // Clear inputs
+                if (itemType === 'item' || itemType === 'sub_header') {
+                    const textInput = document.getElementById(`item-text-${sectionId}`);
+                    if (textInput) textInput.value = '';
+                    const counter = document.getElementById(`char-counter-${sectionId}`);
+                    if (counter) counter.textContent = '0 / 500';
+                } else if (itemType === 'image') {
+                    document.getElementById(`item-image-${sectionId}`).value = '';
+                    document.getElementById(`image-caption-${sectionId}`).value = '';
+                    document.getElementById(`image-preview-${sectionId}`)?.classList.add('hidden');
+                } else if (itemType === 'text_area') {
+                    document.getElementById(`item-markdown-${sectionId}`).value = '';
+                    const counter = document.getElementById(`char-counter-${sectionId}`);
+                    if (counter) counter.textContent = '0 / 2000';
+                }
+
+                // Reload to show new item (temporary - will be replaced with DOM insertion)
+                setTimeout(() => window.location.reload(), 500);
+
+            } catch (error) {
+                console.error('Add item error:', error);
+                PlatPursuit.ToastManager.show(error.message || 'Failed to add item', 'error');
+            } finally {
+                addBtn.classList.remove('loading');
+                addBtn.disabled = false;
+            }
+        });
     }
 
     // ==========================================
@@ -4294,6 +4983,14 @@
         // Section controls
         initSectionCollapse();
         initBulkCheckButtons();
+        // Unified Item Creator
+        initUnifiedItemCreator();
+        // Character counters with color coding
+        initCharacterCounters();
+        // Form validation
+        initFormValidation();
+        // Publishing requirements
+        updatePublishingRequirements();
         // Unsaved changes warning - skip capturing original state if we restored unsaved changes
         initUnsavedChangesWarning(hasRestoredFields);
     });
