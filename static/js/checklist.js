@@ -556,45 +556,49 @@
     /**
      * Display detailed error modal for failed items.
      */
-    function showBulkUploadErrors(errorResponse) {
-        const { failed_items, summary } = errorResponse;
+    function showBulkUploadErrors(errors) {
+        if (!errors || errors.length === 0) return;
+
+        // Prepare failed items text for copy-to-clipboard
+        const failedItemsText = errors.map(item => item.text).join('\n');
 
         const modalHtml = `
             <dialog id="bulk-error-modal" class="modal modal-open">
                 <div class="modal-box max-w-2xl">
-                    <h3 class="font-bold text-lg text-error">Upload Failed</h3>
+                    <h3 class="font-bold text-lg text-warning">Partial Upload - Some Items Failed</h3>
                     <div class="py-4">
-                        <div class="stats stats-horizontal shadow mb-4">
-                            <div class="stat">
-                                <div class="stat-title">Total</div>
-                                <div class="stat-value text-sm">${summary.total_submitted}</div>
-                            </div>
-                            <div class="stat">
-                                <div class="stat-title">Valid</div>
-                                <div class="stat-value text-sm text-success">${summary.valid}</div>
-                            </div>
-                            <div class="stat">
-                                <div class="stat-title">Failed</div>
-                                <div class="stat-value text-sm text-error">${summary.failed}</div>
-                            </div>
-                        </div>
+                        <p class="text-sm mb-3">Valid items were added successfully. The following ${errors.length} item(s) failed validation:</p>
 
-                        <p class="text-sm mb-2">The following items failed validation:</p>
-                        <div class="max-h-64 overflow-y-auto space-y-2">
-                            ${failed_items.map(item => `
-                                <div class="alert alert-error text-xs p-2">
-                                    <div>
-                                        <span class="font-mono">Line ${item.index + 1}:</span>
-                                        <span class="font-semibold">"${escapeHtml(item.text)}"</span>
-                                        <br>
-                                        <span class="text-error-content/70">${escapeHtml(item.error)}</span>
+                        <div class="max-h-80 overflow-y-auto space-y-2 mb-4">
+                            ${errors.map(item => `
+                                <div class="alert alert-error text-xs p-3">
+                                    <div class="w-full">
+                                        <div class="flex items-start gap-2 mb-1">
+                                            <span class="badge badge-error badge-sm">Line ${item.index + 1}</span>
+                                            <span class="font-mono text-xs flex-1">"${PlatPursuit.HTMLUtils.escape(item.text.length > 100 ? item.text.substring(0, 100) + '...' : item.text)}"</span>
+                                        </div>
+                                        <p class="text-error-content/80 text-xs mt-1">⚠ ${PlatPursuit.HTMLUtils.escape(item.error)}</p>
                                     </div>
                                 </div>
                             `).join('')}
                         </div>
 
-                        <p class="text-sm mt-4 text-base-content/70">
-                            Please fix the errors and try again. Valid items were not uploaded (all-or-nothing).
+                        <button class="btn btn-sm btn-outline" onclick="
+                            const text = \`${failedItemsText.replace(/`/g, '\\`')}\`;
+                            navigator.clipboard.writeText(text).then(() => {
+                                PlatPursuit.ToastManager.success('Failed items copied to clipboard');
+                            }).catch(() => {
+                                PlatPursuit.ToastManager.error('Failed to copy');
+                            });
+                        ">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/>
+                            </svg>
+                            Copy Failed Items
+                        </button>
+
+                        <p class="text-xs mt-3 text-base-content/60">
+                            Fix the errors and paste them back to retry.
                         </p>
                     </div>
                     <div class="modal-action">
@@ -688,25 +692,40 @@
                 { items }
             );
 
-            // Success
+            // Add successful items to DOM
+            if (result.items && result.items.length > 0) {
+                result.items.forEach(item => {
+                    addItemToDOM(section, item);
+                });
+            }
+
+            // Handle response
             if (progressBar) progressBar.value = 100;
-            if (progressText) progressText.textContent = `Successfully uploaded ${result.items_created} items!`;
 
-            // Add items to DOM
-            result.items.forEach(item => {
-                addItemToDOM(section, item);
-            });
+            if (result.failed === 0) {
+                // Full success
+                if (progressText) progressText.textContent = `Successfully uploaded ${result.created} items!`;
+                PlatPursuit.ToastManager.success(`Added ${result.created} items!`);
 
-            // Clear textarea and reset UI
-            textarea.value = '';
-            updateBulkPreview(section);
+                // Clear textarea
+                textarea.value = '';
+                updateBulkPreview(section);
+            } else {
+                // Partial success
+                if (progressText) progressText.textContent = `Added ${result.created} items, ${result.failed} failed`;
+                PlatPursuit.ToastManager.warning(
+                    `Added ${result.created} items, ${result.failed} failed. See details below.`,
+                    { duration: 5000 }
+                );
+
+                // Show error modal
+                showBulkUploadErrors(result.errors);
+            }
 
             // Hide progress after delay
             setTimeout(() => {
                 if (progressEl) progressEl.classList.add('hidden');
             }, 2000);
-
-            PlatPursuit.ToastManager.show(`${result.items_created} items added!`, 'success');
 
         } catch (error) {
             // Error handling
@@ -1103,6 +1122,7 @@
         if (!container) return;
 
         const checklistId = container.dataset.checklistId;
+        const isPublished = container.dataset.isPublished === 'true';
 
         // Save checklist button
         initSaveChecklist(checklistId);
@@ -1122,6 +1142,20 @@
         // Item operations
         initItemOperations(checklistId);
 
+        // Drag-and-drop reordering for items (only if not published)
+        if (!isPublished) {
+            initDragAndDrop(checklistId);
+            initSectionArrowButtons(checklistId);
+        }
+
+        // Auto-save on blur
+        initAutoSave(checklistId);
+
+        // Collapse/expand controls
+        if (!isPublished) {
+            initCollapseExpand(checklistId);
+        }
+
         // Character counters
         initCharacterCounters();
 
@@ -1134,6 +1168,23 @@
         // Image handling
         initImagePreviews();
         initImageUploads();
+
+        // Keyboard shortcuts
+        initKeyboardShortcuts();
+    }
+
+    function initKeyboardShortcuts() {
+        // Intercept Ctrl/Cmd+S to show "Saved" message instead of browser save
+        document.addEventListener('keydown', (e) => {
+            if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+                e.preventDefault();
+                if (!window.PlatPursuit?.ToastManager) {
+                    console.error('ToastManager not available');
+                    return;
+                }
+                PlatPursuit.ToastManager.success('Saved', 2000);
+            }
+        });
     }
 
     function initSaveChecklist(checklistId) {
@@ -1535,6 +1586,434 @@
         } catch (error) {
             PlatPursuit.ToastManager.show('Failed to reorder items', 'error');
         }
+    }
+
+    function initDragAndDrop(checklistId) {
+        // Sections now use arrow buttons - no drag needed for sections
+
+        // Initialize drag-and-drop for items within each section
+        // Note: This works even on hidden containers - the drag events will fire when sections are expanded
+        const containers = document.querySelectorAll('.section-items-container');
+        console.log(`Initializing drag for ${containers.length} item containers`);
+
+        containers.forEach(container => {
+            const sectionId = container.dataset.sectionId;
+            if (!sectionId) {
+                console.warn('Found container without section ID:', container);
+                return;
+            }
+
+            const items = container.querySelectorAll('.checklist-item-edit, .checklist-image-item, .checklist-text-area-edit, .checklist-trophy-item-edit');
+            console.log(`Section ${sectionId}: ${items.length} draggable items found`);
+
+            new PlatPursuit.DragReorderManager({
+                container: container,
+                itemSelector: '.checklist-item-edit, .checklist-image-item, .checklist-text-area-edit, .checklist-trophy-item-edit',
+                handleSelector: '.item-drag-handle',
+                onReorder: async (itemId, newPosition, allItemIds) => {
+                    console.log('Item reordered:', { itemId, newPosition, allItemIds });
+                    try {
+                        await apiRequest(`${API_BASE}/checklists/sections/${sectionId}/items/reorder/`, 'POST', {
+                            ids: allItemIds.map(id => parseInt(id))
+                        });
+                        PlatPursuit.ToastManager.success('Reordered', 1500);
+                    } catch (error) {
+                        console.error('Failed to reorder items:', error);
+                        PlatPursuit.ToastManager.error('Failed to reorder items');
+                    }
+                }
+            });
+        });
+    }
+
+    function initSectionArrowButtons(checklistId) {
+        // Move up handler
+        document.addEventListener('click', async (e) => {
+            if (!e.target.closest('.section-move-up')) return;
+
+            const section = e.target.closest('.checklist-section');
+            if (!section) return;
+
+            const prev = section.previousElementSibling;
+            if (prev && prev.classList.contains('checklist-section')) {
+                // Move section before its previous sibling
+                section.parentNode.insertBefore(section, prev);
+
+                // Save new order
+                try {
+                    const allSections = Array.from(document.querySelectorAll('.checklist-section'));
+                    const sectionIds = allSections.map(s => parseInt(s.dataset.sectionId)).filter(id => !isNaN(id));
+
+                    await apiRequest(`${API_BASE}/checklists/${checklistId}/sections/reorder/`, 'POST', {
+                        ids: sectionIds
+                    });
+                    PlatPursuit.ToastManager.success('Moved up', 1500);
+                } catch (error) {
+                    console.error('Failed to save section order:', error);
+                    PlatPursuit.ToastManager.error('Failed to save order');
+                }
+            }
+        });
+
+        // Move down handler
+        document.addEventListener('click', async (e) => {
+            if (!e.target.closest('.section-move-down')) return;
+
+            const section = e.target.closest('.checklist-section');
+            if (!section) return;
+
+            const next = section.nextElementSibling;
+            if (next && next.classList.contains('checklist-section')) {
+                // Move section after its next sibling
+                section.parentNode.insertBefore(next, section);
+
+                // Save new order
+                try {
+                    const allSections = Array.from(document.querySelectorAll('.checklist-section'));
+                    const sectionIds = allSections.map(s => parseInt(s.dataset.sectionId)).filter(id => !isNaN(id));
+
+                    await apiRequest(`${API_BASE}/checklists/${checklistId}/sections/reorder/`, 'POST', {
+                        ids: sectionIds
+                    });
+                    PlatPursuit.ToastManager.success('Moved down', 1500);
+                } catch (error) {
+                    console.error('Failed to save section order:', error);
+                    PlatPursuit.ToastManager.error('Failed to save order');
+                }
+            }
+        });
+    }
+
+    function initAutoSave(checklistId) {
+        // Track original values for comparison
+        const originalValues = {
+            title: document.getElementById('checklist-title')?.value || '',
+            description: document.getElementById('checklist-description')?.value || ''
+        };
+
+        // Auto-save checklist title on blur
+        const titleInput = document.getElementById('checklist-title');
+        if (titleInput) {
+            titleInput.addEventListener('blur', async () => {
+                const newTitle = titleInput.value.trim();
+                if (newTitle && newTitle !== originalValues.title) {
+                    try {
+                        await PlatPursuit.API.patch(`${API_BASE}/checklists/${checklistId}/`, {
+                            title: newTitle
+                        });
+                        originalValues.title = newTitle;
+                        if (!window.PlatPursuit?.ToastManager) {
+                            console.error('ToastManager not available');
+                        } else {
+                            PlatPursuit.ToastManager.success('Saved', 2000);
+                        }
+                    } catch (error) {
+                        console.error('Failed to save checklist title:', error);
+                        if (window.PlatPursuit?.ToastManager) {
+                            PlatPursuit.ToastManager.error('Failed to save title');
+                        }
+                        titleInput.value = originalValues.title; // Revert on error
+                    }
+                }
+            });
+        }
+
+        // Auto-save checklist description on blur
+        const descInput = document.getElementById('checklist-description');
+        if (descInput) {
+            descInput.addEventListener('blur', async () => {
+                const newDesc = descInput.value.trim();
+                if (newDesc !== originalValues.description) {
+                    try {
+                        await PlatPursuit.API.patch(`${API_BASE}/checklists/${checklistId}/`, {
+                            description: newDesc
+                        });
+                        originalValues.description = newDesc;
+                        if (!window.PlatPursuit?.ToastManager) {
+                            console.error('ToastManager not available');
+                        } else {
+                            PlatPursuit.ToastManager.success('Saved', 2000);
+                        }
+                    } catch (error) {
+                        console.error('Failed to save checklist description:', error);
+                        if (window.PlatPursuit?.ToastManager) {
+                            PlatPursuit.ToastManager.error('Failed to save description');
+                        }
+                        descInput.value = originalValues.description; // Revert on error
+                    }
+                }
+            });
+        }
+
+        // Auto-save section title on blur (delegated)
+        document.addEventListener('blur', async (e) => {
+            if (e.target.matches('.section-title-input')) {
+                const section = e.target.closest('.checklist-section');
+                const sectionId = section?.dataset.sectionId;
+                if (!sectionId) return;
+
+                const newTitle = e.target.value.trim();
+                const originalTitle = e.target.dataset.originalValue || e.target.defaultValue;
+
+                if (newTitle && newTitle !== originalTitle) {
+                    try {
+                        await PlatPursuit.API.patch(`${API_BASE}/checklists/${checklistId}/sections/${sectionId}/`, {
+                            subtitle: newTitle
+                        });
+                        e.target.dataset.originalValue = newTitle;
+                        if (!window.PlatPursuit?.ToastManager) {
+                            console.error('ToastManager not available');
+                        } else {
+                            PlatPursuit.ToastManager.success('Saved', 2000);
+                        }
+                    } catch (error) {
+                        console.error('Failed to save section title:', error);
+                        if (window.PlatPursuit?.ToastManager) {
+                            PlatPursuit.ToastManager.error('Failed to save');
+                        }
+                        e.target.value = originalTitle; // Revert on error
+                    }
+                }
+            }
+        }, true);
+
+        // Auto-save section description on blur (delegated)
+        document.addEventListener('blur', async (e) => {
+            if (e.target.matches('.section-description-input')) {
+                const section = e.target.closest('.checklist-section');
+                const sectionId = section?.dataset.sectionId;
+                if (!sectionId) return;
+
+                const newDesc = e.target.value.trim();
+                const originalDesc = e.target.dataset.originalValue || e.target.defaultValue;
+
+                if (newDesc !== originalDesc) {
+                    try {
+                        await PlatPursuit.API.patch(`${API_BASE}/checklists/${checklistId}/sections/${sectionId}/`, {
+                            description: newDesc
+                        });
+                        e.target.dataset.originalValue = newDesc;
+                        if (!window.PlatPursuit?.ToastManager) {
+                            console.error('ToastManager not available');
+                        } else {
+                            PlatPursuit.ToastManager.success('Saved', 2000);
+                        }
+                    } catch (error) {
+                        console.error('Failed to save section description:', error);
+                        if (window.PlatPursuit?.ToastManager) {
+                            PlatPursuit.ToastManager.error('Failed to save');
+                        }
+                        e.target.value = originalDesc; // Revert on error
+                    }
+                }
+            }
+        }, true);
+
+        // Auto-save item text on blur (delegated)
+        document.addEventListener('blur', async (e) => {
+            if (e.target.matches('.item-text-input')) {
+                const itemId = e.target.dataset.itemId;
+                if (!itemId) return;
+
+                const newText = e.target.value.trim();
+                const originalText = e.target.dataset.originalValue || e.target.defaultValue;
+
+                if (newText && newText !== originalText) {
+                    try {
+                        await PlatPursuit.API.patch(`${API_BASE}/checklists/items/${itemId}/`, {
+                            text: newText
+                        });
+                        e.target.dataset.originalValue = newText;
+                        if (!window.PlatPursuit?.ToastManager) {
+                            console.error('ToastManager not available');
+                        } else {
+                            PlatPursuit.ToastManager.success('Saved', 2000);
+                        }
+                    } catch (error) {
+                        console.error('Failed to save item text:', error);
+                        if (window.PlatPursuit?.ToastManager) {
+                            PlatPursuit.ToastManager.error('Failed to save');
+                        }
+                        e.target.value = originalText; // Revert on error
+                    }
+                }
+            }
+        }, true);
+
+        // Auto-save item type on change (delegated)
+        document.addEventListener('change', async (e) => {
+            if (e.target.matches('.item-type-select')) {
+                const item = e.target.closest('.checklist-item-edit');
+                const itemId = item?.dataset.itemId;
+                if (!itemId) return;
+
+                const newType = e.target.value;
+                const textInput = item.querySelector('.item-text-input');
+
+                try {
+                    await PlatPursuit.API.patch(`${API_BASE}/checklists/items/${itemId}/`, {
+                        item_type: newType
+                    });
+
+                    // Update styling based on type
+                    if (newType === 'sub_header') {
+                        textInput.placeholder = 'Sub-header text...';
+                        textInput.classList.add('font-semibold', 'input-primary');
+                    } else {
+                        textInput.placeholder = 'Item text...';
+                        textInput.classList.remove('font-semibold', 'input-primary');
+                    }
+
+                    if (!window.PlatPursuit?.ToastManager) {
+                        console.error('ToastManager not available');
+                    } else {
+                        PlatPursuit.ToastManager.success('Saved', 2000);
+                    }
+                } catch (error) {
+                    console.error('Failed to save item type:', error);
+                    if (window.PlatPursuit?.ToastManager) {
+                        PlatPursuit.ToastManager.error('Failed to save');
+                    }
+                    // Revert type selector on error
+                    e.target.value = e.target.dataset.originalValue || 'item';
+                }
+            }
+        }, true);
+    }
+
+    function initCollapseExpand(checklistId) {
+        const collapseAllBtn = document.getElementById('collapse-all-btn');
+        const expandAllBtn = document.getElementById('expand-all-btn');
+
+        if (!collapseAllBtn || !expandAllBtn) return;
+
+        // Restore collapse state from sessionStorage
+        const storageKey = `checklist_${checklistId}_collapsed_sections`;
+        const collapsedSections = JSON.parse(sessionStorage.getItem(storageKey) || '[]');
+
+        // Template starts with all sections collapsed (content hidden)
+        // We need to:
+        // 1. Expand sections that are NOT in collapsedSections
+        // 2. Set correct icon rotation for all sections
+
+        document.querySelectorAll('.section-items-content').forEach(content => {
+            const sectionId = content.dataset.sectionId;
+            const summary = document.querySelector(`.section-items-summary[data-section-id="${sectionId}"]`);
+            const toggle = document.querySelector(`.section-items-toggle[data-section-id="${sectionId}"]`);
+            const icon = toggle?.querySelector('.section-toggle-icon');
+
+            const shouldBeCollapsed = collapsedSections.includes(sectionId);
+
+            if (shouldBeCollapsed) {
+                // Keep collapsed (template default)
+                if (summary) summary.classList.remove('hidden');
+                content.classList.add('hidden');
+                if (toggle) toggle.setAttribute('aria-expanded', 'false');
+                if (icon) icon.style.transform = 'rotate(-90deg)'; // Collapsed: right-pointing
+            } else {
+                // Expand this section
+                if (summary) summary.classList.add('hidden');
+                content.classList.remove('hidden');
+                if (toggle) toggle.setAttribute('aria-expanded', 'true');
+                if (icon) icon.style.transform = 'rotate(0deg)'; // Expanded: down-pointing
+            }
+        });
+
+        // Collapse all button
+        collapseAllBtn.addEventListener('click', () => {
+            const allSections = [];
+            document.querySelectorAll('.section-items-content').forEach(content => {
+                const sectionId = content.dataset.sectionId;
+                const summary = document.querySelector(`.section-items-summary[data-section-id="${sectionId}"]`);
+
+                // Show summary, hide content
+                if (summary) summary.classList.remove('hidden');
+                content.classList.add('hidden');
+                if (sectionId) allSections.push(sectionId);
+
+                const toggle = document.querySelector(`.section-items-toggle[data-section-id="${sectionId}"]`);
+                if (toggle) {
+                    toggle.setAttribute('aria-expanded', 'false');
+                    const icon = toggle.querySelector('.section-toggle-icon');
+                    if (icon) icon.style.transform = 'rotate(-90deg)'; // Collapsed: -90deg (right)
+                }
+            });
+            sessionStorage.setItem(storageKey, JSON.stringify(allSections));
+        });
+
+        // Expand all button
+        expandAllBtn.addEventListener('click', () => {
+            document.querySelectorAll('.section-items-content').forEach(content => {
+                const sectionId = content.dataset.sectionId;
+                const summary = document.querySelector(`.section-items-summary[data-section-id="${sectionId}"]`);
+
+                // Hide summary, show content
+                if (summary) summary.classList.add('hidden');
+                content.classList.remove('hidden');
+
+                const toggle = document.querySelector(`.section-items-toggle[data-section-id="${sectionId}"]`);
+                if (toggle) {
+                    toggle.setAttribute('aria-expanded', 'true');
+                    const icon = toggle.querySelector('.section-toggle-icon');
+                    if (icon) icon.style.transform = 'rotate(0deg)'; // Expanded: 0deg (down)
+                }
+            });
+            sessionStorage.setItem(storageKey, JSON.stringify([]));
+        });
+
+        // Individual section toggle (existing toggle buttons)
+        document.addEventListener('click', (e) => {
+            const toggle = e.target.closest('.section-items-toggle');
+            if (!toggle) return;
+
+            const sectionId = toggle.dataset.sectionId;
+            const summary = document.querySelector(`.section-items-summary[data-section-id="${sectionId}"]`);
+            const content = document.querySelector(`.section-items-content[data-section-id="${sectionId}"]`);
+            if (!content) return;
+
+            const isExpanded = !content.classList.contains('hidden');
+
+            if (isExpanded) {
+                // Collapse - show summary, hide content
+                if (summary) summary.classList.remove('hidden');
+                content.classList.add('hidden');
+                toggle.setAttribute('aria-expanded', 'false');
+                const icon = toggle.querySelector('.section-toggle-icon');
+                if (icon) icon.style.transform = 'rotate(-90deg)'; // Collapsed: -90deg (right)
+
+                const collapsed = JSON.parse(sessionStorage.getItem(storageKey) || '[]');
+                if (!collapsed.includes(sectionId)) {
+                    collapsed.push(sectionId);
+                    sessionStorage.setItem(storageKey, JSON.stringify(collapsed));
+                }
+            } else {
+                // Expand - hide summary, show content
+                if (summary) summary.classList.add('hidden');
+                content.classList.remove('hidden');
+                toggle.setAttribute('aria-expanded', 'true');
+                const icon = toggle.querySelector('.section-toggle-icon');
+                if (icon) icon.style.transform = 'rotate(0deg)'; // Expanded: 0deg (down)
+
+                const collapsed = JSON.parse(sessionStorage.getItem(storageKey) || '[]');
+                const filtered = collapsed.filter(id => id !== sectionId);
+                sessionStorage.setItem(storageKey, JSON.stringify(filtered));
+            }
+        });
+
+        // Make summary clickable to expand
+        document.querySelectorAll('.section-items-summary').forEach(summary => {
+            summary.addEventListener('click', function() {
+                const sectionId = this.dataset.sectionId;
+                const section = this.closest('.checklist-section');
+                if (!section) return;
+
+                const toggleBtn = section.querySelector(`.section-items-toggle[data-section-id="${sectionId}"]`);
+                if (toggleBtn) {
+                    toggleBtn.click();
+                }
+            });
+            summary.style.cursor = 'pointer';
+        });
     }
 
     function initItemOperations(checklistId) {
@@ -3596,50 +4075,6 @@
     // Section Items Toggle (Edit Page)
     // ==========================================
 
-    function initSectionItemsToggle() {
-        document.querySelectorAll('.section-items-toggle').forEach(btn => {
-            btn.addEventListener('click', function() {
-                const sectionId = this.dataset.sectionId;
-                const section = this.closest('.checklist-section');
-                if (!section) return;
-
-                const summary = section.querySelector(`.section-items-summary[data-section-id="${sectionId}"]`);
-                const content = section.querySelector(`.section-items-content[data-section-id="${sectionId}"]`);
-                const icon = this.querySelector('.section-toggle-icon');
-
-                const isExpanded = this.getAttribute('aria-expanded') === 'true';
-
-                if (isExpanded) {
-                    // Collapse
-                    if (summary) summary.classList.remove('hidden');
-                    if (content) content.classList.add('hidden');
-                    if (icon) icon.style.transform = 'rotate(0deg)';
-                    this.setAttribute('aria-expanded', 'false');
-                } else {
-                    // Expand
-                    if (summary) summary.classList.add('hidden');
-                    if (content) content.classList.remove('hidden');
-                    if (icon) icon.style.transform = 'rotate(180deg)';
-                    this.setAttribute('aria-expanded', 'true');
-                }
-            });
-        });
-
-        // Also make summary clickable to expand
-        document.querySelectorAll('.section-items-summary').forEach(summary => {
-            summary.addEventListener('click', function() {
-                const sectionId = this.dataset.sectionId;
-                const section = this.closest('.checklist-section');
-                if (!section) return;
-
-                const toggleBtn = section.querySelector(`.section-items-toggle[data-section-id="${sectionId}"]`);
-                if (toggleBtn) {
-                    toggleBtn.click();
-                }
-            });
-            summary.style.cursor = 'pointer';
-        });
-    }
 
     /**
      * Expand a section's items view (used when adding items).
@@ -3858,7 +4293,6 @@
         initTrophySelection();
         // Section controls
         initSectionCollapse();
-        initSectionItemsToggle();
         initBulkCheckButtons();
         // Unsaved changes warning - skip capturing original state if we restored unsaved changes
         initUnsavedChangesWarning(hasRestoredFields);

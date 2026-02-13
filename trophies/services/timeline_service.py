@@ -78,9 +78,12 @@ def _get_first_platinum_event(profile):
 
 
 def _get_milestone_plat_events(profile):
-    """Platinum count milestones with actual trophy earned dates. 2 queries."""
+    """Platinum count milestones with actual trophy earned dates. 1 optimized query."""
+    from django.db.models import Window, F
+    from django.db.models.functions import RowNumber
     from trophies.models import UserMilestone, EarnedTrophy
 
+    # Get milestone targets we need to fetch
     milestones = list(
         UserMilestone.objects
         .filter(profile=profile, milestone__criteria_type='plat_count')
@@ -90,22 +93,31 @@ def _get_milestone_plat_events(profile):
     if not milestones:
         return []
 
-    # Get all platinum earned dates in chronological order to find the Nth plat date
-    plat_dates = list(
+    # Collect which Nth platinums we need (e.g., [10, 25, 50, 100])
+    needed_positions = {m.milestone.required_value for m in milestones}
+
+    # Single query using Window function to get only needed rows
+    plat_dates_qs = (
         EarnedTrophy.objects
         .filter(profile=profile, earned=True, trophy__trophy_type='platinum')
-        .order_by('earned_date_time')
-        .values_list('earned_date_time', flat=True)
+        .annotate(plat_number=Window(
+            expression=RowNumber(),
+            order_by=F('earned_date_time').asc()
+        ))
+        .filter(plat_number__in=needed_positions)
+        .values('plat_number', 'earned_date_time')
     )
+
+    # Build lookup dict {10: datetime, 25: datetime, ...}
+    plat_date_lookup = {
+        row['plat_number']: row['earned_date_time']
+        for row in plat_dates_qs
+    }
 
     events = []
     for um in milestones:
         target = um.milestone.required_value
-        # Use the actual Nth platinum's earned date (0-indexed)
-        if target <= len(plat_dates) and plat_dates[target - 1]:
-            earned_date = plat_dates[target - 1]
-        else:
-            earned_date = um.earned_at  # Fallback to milestone award date
+        earned_date = plat_date_lookup.get(target, um.earned_at)
 
         # Scale priority: base 8 + log(target/10) capped at 10
         priority = min(8 + math.log10(max(target, 10)) - 1, 10)

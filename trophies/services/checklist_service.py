@@ -1202,17 +1202,8 @@ class ChecklistService:
                 "index": index
             })
 
-        # If any validation errors, return them (no items created)
-        if failed_items:
-            return None, {
-                "error": f"Validation failed for {len(failed_items)} items",
-                "failed_items": failed_items,
-                "summary": {
-                    "total_submitted": len(items_data),
-                    "valid": len(validated_items),
-                    "failed": len(failed_items)
-                }
-            }
+        # Progressive upload: Create valid items even if some failed
+        # (Changed from all-or-nothing to allow partial success)
 
         # All items valid - create them with sequential ordering
         # Get max order in section
@@ -1231,7 +1222,19 @@ class ChecklistService:
             )
             created_items.append(item)
 
-        logger.info(f"Bulk created {len(created_items)} items in section {section.id}")
+        logger.info(f"Bulk created {len(created_items)} items in section {section.id}, {len(failed_items)} failed")
+
+        # Return both successes and failures
+        if failed_items:
+            return created_items, {
+                "failed_items": failed_items,
+                "summary": {
+                    "total_submitted": len(items_data),
+                    "created": len(created_items),
+                    "failed": len(failed_items)
+                }
+            }
+
         return created_items, None
 
     @staticmethod

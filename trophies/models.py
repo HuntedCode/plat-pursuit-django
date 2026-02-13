@@ -4,7 +4,7 @@ from users.models import CustomUser
 from django.contrib.postgres.fields import ArrayField
 from django.core.validators import RegexValidator, MinValueValidator, MaxValueValidator
 from django.db import transaction
-from django.db.models import F, Max, Min
+from django.db.models import F, Max, Min, Q
 import logging
 
 logger = logging.getLogger("psn_api")
@@ -798,6 +798,12 @@ class EarnedTrophy(models.Model):
             models.Index(fields=['earned_date_time'], name="earned_trophy_earned_time_idx"),
             # Composite index for trophy type count queries (profile + earned status)
             models.Index(fields=['profile', 'earned'], name="earnedtrophy_profileearned_idx"),
+            # Composite index for timeline queries (profile + earned + date for Window functions)
+            models.Index(
+                fields=['profile', 'earned', 'earned_date_time'],
+                condition=Q(earned=True),
+                name='earnedtrophy_timeline_idx'
+            ),
         ]
 
 class UserTrophySelection(models.Model):

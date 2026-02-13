@@ -137,12 +137,6 @@
 
                     {# Action Buttons #}
                     <div class="flex flex-col gap-2 lg:min-w-48">
-                        <button id="save-checklist-btn" class="btn btn-primary">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"/>
-                            </svg>
-                            Save Changes
-                        </button>
                         <a href="{% url 'guide_detail' checklist.id %}" class="btn btn-ghost">
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
@@ -184,19 +178,41 @@
 
                 {# Published Checklist Lock Warning #}
                 {% if checklist.is_published %}
-                <div class="alert alert-warning mt-4">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <div class="alert alert-info mt-4 border-2 border-warning/50">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-warning" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
                     </svg>
                     <div>
-                        <span class="font-semibold">Structural changes locked</span>
-                        <p class="text-sm">You can edit the title and description, but sections and items cannot be modified because users may be tracking their progress. Unpublish first to make structural changes.</p>
+                        <div class="flex items-center gap-2 mb-1">
+                            <span class="text-lg">📌</span>
+                            <span class="font-bold text-lg">This checklist is published</span>
+                        </div>
+                        <p class="text-sm"><strong>Structure is locked.</strong> You can still edit titles and descriptions to fix typos, but you cannot add, delete, or reorder sections/items.</p>
+                        <p class="text-xs text-base-content/70 mt-1">Unpublish first to make structural changes.</p>
                     </div>
                 </div>
                 {% endif %}
             </div>
         </div>
     </section>
+
+    {# Collapse/Expand All Controls - Only for unpublished with sections #}
+    {% if not checklist.is_published and checklist.sections.count > 0 %}
+    <div class="flex justify-end gap-2 mt-6 px-4">
+        <button id="collapse-all-btn" class="btn btn-ghost btn-sm">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 transition-transform duration-200" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="transform: rotate(-90deg);">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+            </svg>
+            Collapse All
+        </button>
+        <button id="expand-all-btn" class="btn btn-ghost btn-sm">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 transition-transform duration-200" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="transform: rotate(0deg);">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+            </svg>
+            Expand All
+        </button>
+    </div>
+    {% endif %}
 
     {# Sections Container #}
     <div id="sections-container">
@@ -207,8 +223,11 @@
                 <div class="card bg-base-100 border-4 border-base-300 shadow-md shadow-neutral">
                     <div class="card-body">
                         {# Section Header #}
-                        <div class="flex flex-col lg:flex-row justify-between items-start gap-4">
+                        <div class="flex items-start gap-3">
+                            {# Section Content #}
                             <div class="flex-1 w-full">
+                                <div class="flex flex-col lg:flex-row justify-between items-start gap-4">
+                                    <div class="flex-1 w-full">
                                 {# Section Title Input #}
                                 <div class="form-control w-full">
                                     <label class="label flex-wrap gap-y-0">
@@ -280,31 +299,31 @@
                                 </div>
                             </div>
 
-                            {# Section Actions - Hidden for published checklists #}
-                            {% if not checklist.is_published %}
-                            <div class="flex lg:flex-col gap-2">
-                                <button class="btn btn-ghost btn-sm section-save-btn" title="Save section">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
-                                    </svg>
-                                </button>
-                                <button class="btn btn-ghost btn-sm section-move-up-btn" title="Move up">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"/>
-                                    </svg>
-                                </button>
-                                <button class="btn btn-ghost btn-sm section-move-down-btn" title="Move down">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
-                                    </svg>
-                                </button>
-                                <button class="btn btn-ghost btn-sm text-error section-delete-btn" title="Delete section">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
-                                    </svg>
-                                </button>
+                                    {# Section Controls - Hidden for published checklists #}
+                                    {% if not checklist.is_published %}
+                                    <div class="flex flex-col gap-1">
+                                        {# Move Up Button #}
+                                        <button type="button" class="btn btn-ghost btn-xs section-move-up" title="Move section up">
+                                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"/>
+                                            </svg>
+                                        </button>
+                                        {# Move Down Button #}
+                                        <button type="button" class="btn btn-ghost btn-xs section-move-down" title="Move section down">
+                                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                                            </svg>
+                                        </button>
+                                        {# Delete Button #}
+                                        <button class="btn btn-ghost btn-xs text-error section-delete-btn" title="Delete section">
+                                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                                            </svg>
+                                        </button>
+                                    </div>
+                                    {% endif %}
+                                </div>
                             </div>
-                            {% endif %}
                         </div>
 
                         {# Items List #}
@@ -357,9 +376,9 @@
                             </div>
                             {% endif %}
 
-                            {# Full Items Container - hidden by default for unpublished #}
-                            <div class="section-items-content {% if not checklist.is_published %}hidden{% endif %}" data-section-id="{{ section.id }}">
-                            <div class="section-items-container space-y-2">
+                            {# Full Items Container - collapsed by default #}
+                            <div class="section-items-content hidden" data-section-id="{{ section.id }}">
+                            <div class="section-items-container space-y-2" data-section-id="{{ section.id }}">
                                 {% for item in section.items.all %}
                                     {% if checklist.is_published %}
                                     {# Read-only display for published checklists #}
@@ -442,22 +461,19 @@
                                     {# Editable display for draft checklists #}
                                     {% if item.item_type == 'image' %}
                                         {# Inline Image Display - Editable #}
-                                        <div class="checklist-image-item my-4 p-3 bg-secondary/5 border-2 border-secondary/20 rounded-lg"
+                                        <div class="checklist-image-item my-4 p-3 bg-secondary/5 border-2 border-secondary/20 rounded-lg hover:bg-secondary/10 transition-colors"
                                              data-item-id="{{ item.id }}"
                                              data-item-order="{{ item.order }}"
-                                             data-item-type="image">
+                                             data-item-type="image"
+                                             draggable="true">
                                             <div class="flex items-start gap-3">
-                                                <div class="flex flex-col gap-1">
-                                                    <button class="btn btn-ghost btn-xs item-move-up-btn" title="Move up">
-                                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"/>
-                                                        </svg>
-                                                    </button>
-                                                    <button class="btn btn-ghost btn-xs item-move-down-btn" title="Move down">
-                                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
-                                                        </svg>
-                                                    </button>
+                                                {# Drag Handle #}
+                                                <div class="item-drag-handle text-base-content/40 hover:text-primary cursor-move pt-1" aria-label="Drag to reorder" title="Drag to reorder">
+                                                    <svg class="h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
+                                                        <circle cx="9" cy="5" r="1.5"/><circle cx="15" cy="5" r="1.5"/>
+                                                        <circle cx="9" cy="10" r="1.5"/><circle cx="15" cy="10" r="1.5"/>
+                                                        <circle cx="9" cy="15" r="1.5"/><circle cx="15" cy="15" r="1.5"/>
+                                                    </svg>
                                                 </div>
                                                 <div class="flex-1">
                                                     <div class="flex items-center gap-2 mb-2">
@@ -498,23 +514,19 @@
 
                                     {% elif item.item_type == 'text_area' %}
                                         {# Text Area Display - Editable #}
-                                        <div class="checklist-text-area-edit my-4 p-3 bg-info/5 border-2 border-info/20 rounded-lg"
+                                        <div class="checklist-text-area-edit my-4 p-3 bg-info/5 border-2 border-info/20 rounded-lg hover:bg-info/10 transition-colors"
                                              data-item-id="{{ item.id }}"
                                              data-item-order="{{ item.order }}"
-                                             data-item-type="text_area">
+                                             data-item-type="text_area"
+                                             draggable="true">
                                             <div class="flex items-start gap-3">
-                                                {# Side controls column #}
-                                                <div class="flex flex-col gap-1">
-                                                    <button class="btn btn-ghost btn-xs item-move-up-btn" title="Move up">
-                                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"/>
-                                                        </svg>
-                                                    </button>
-                                                    <button class="btn btn-ghost btn-xs item-move-down-btn" title="Move down">
-                                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
-                                                        </svg>
-                                                    </button>
+                                                {# Drag Handle #}
+                                                <div class="item-drag-handle text-base-content/40 hover:text-primary cursor-move pt-1" aria-label="Drag to reorder" title="Drag to reorder">
+                                                    <svg class="h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
+                                                        <circle cx="9" cy="5" r="1.5"/><circle cx="15" cy="5" r="1.5"/>
+                                                        <circle cx="9" cy="10" r="1.5"/><circle cx="15" cy="10" r="1.5"/>
+                                                        <circle cx="9" cy="15" r="1.5"/><circle cx="15" cy="15" r="1.5"/>
+                                                    </svg>
                                                 </div>
 
                                                 {# Main content column #}
@@ -563,19 +575,12 @@
                                                     </div>
                                                 </div>
 
-                                                {# Right side controls column #}
-                                                <div class="flex flex-col gap-1">
-                                                    <button class="btn btn-ghost btn-xs item-save-btn" title="Save changes">
-                                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-success" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
-                                                        </svg>
-                                                    </button>
-                                                    <button class="btn btn-ghost btn-xs item-delete-btn" title="Delete text area">
-                                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-error" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
-                                                        </svg>
-                                                    </button>
-                                                </div>
+                                                {# Delete button #}
+                                                <button class="btn btn-ghost btn-xs item-delete-btn" title="Delete text area">
+                                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-error" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                                                    </svg>
+                                                </button>
                                             </div>
                                         </div>
 
@@ -583,24 +588,20 @@
                                         {# Trophy Item Display - Editable #}
                                         {% get_trophy item.trophy_id as trophy %}
                                         {% if trophy %}
-                                        <div class="checklist-trophy-item-edit my-2 p-3 bg-warning/5 border-2 border-warning/20 rounded-lg"
+                                        <div class="checklist-trophy-item-edit my-2 p-3 bg-warning/5 border-2 border-warning/20 rounded-lg hover:bg-warning/10 transition-colors"
                                              data-item-id="{{ item.id }}"
                                              data-item-order="{{ item.order }}"
                                              data-item-type="trophy"
-                                             data-trophy-id="{{ item.trophy_id }}">
+                                             data-trophy-id="{{ item.trophy_id }}"
+                                             draggable="true">
                                             <div class="flex items-start gap-3">
-                                                {# Move buttons #}
-                                                <div class="flex flex-col gap-1">
-                                                    <button class="btn btn-ghost btn-xs item-move-up-btn" title="Move up">
-                                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"/>
-                                                        </svg>
-                                                    </button>
-                                                    <button class="btn btn-ghost btn-xs item-move-down-btn" title="Move down">
-                                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
-                                                        </svg>
-                                                    </button>
+                                                {# Drag Handle #}
+                                                <div class="item-drag-handle text-base-content/40 hover:text-primary cursor-move pt-1" aria-label="Drag to reorder" title="Drag to reorder">
+                                                    <svg class="h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
+                                                        <circle cx="9" cy="5" r="1.5"/><circle cx="15" cy="5" r="1.5"/>
+                                                        <circle cx="9" cy="10" r="1.5"/><circle cx="15" cy="10" r="1.5"/>
+                                                        <circle cx="9" cy="15" r="1.5"/><circle cx="15" cy="15" r="1.5"/>
+                                                    </svg>
                                                 </div>
 
                                                 {# Trophy display #}
@@ -642,22 +643,20 @@
                                         {% endif %}
 
                                     {% else %}
-                                        <div class="flex items-center gap-2 p-2 {% if item.item_type == 'sub_header' %}bg-base-300/50 border-l-4 border-secondary{% else %}bg-base-200{% endif %} rounded-lg checklist-item-edit"
+                                        <div class="flex items-center gap-2 p-2 {% if item.item_type == 'sub_header' %}bg-base-300/50 border-l-4 border-secondary{% else %}bg-base-200{% endif %} rounded-lg checklist-item-edit hover:bg-base-300 transition-colors"
                                              data-item-id="{{ item.id }}"
                                              data-item-order="{{ item.order }}"
-                                             data-item-type="{{ item.item_type|default:'item' }}">
-                                            <div class="flex flex-col">
-                                                <button class="btn btn-ghost btn-xs item-move-up-btn" title="Move up">
-                                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"/>
-                                                    </svg>
-                                                </button>
-                                                <button class="btn btn-ghost btn-xs item-move-down-btn" title="Move down">
-                                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
-                                                    </svg>
-                                                </button>
+                                             data-item-type="{{ item.item_type|default:'item' }}"
+                                             draggable="true">
+                                            {# Drag Handle #}
+                                            <div class="item-drag-handle text-base-content/40 hover:text-primary cursor-move" aria-label="Drag to reorder" title="Drag to reorder">
+                                                <svg class="h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
+                                                    <circle cx="9" cy="5" r="1.5"/><circle cx="15" cy="5" r="1.5"/>
+                                                    <circle cx="9" cy="10" r="1.5"/><circle cx="15" cy="10" r="1.5"/>
+                                                    <circle cx="9" cy="15" r="1.5"/><circle cx="15" cy="15" r="1.5"/>
+                                                </svg>
                                             </div>
+
                                             <div class="flex-1 flex flex-col">
                                                 <div class="flex flex-col sm:flex-row items-center gap-2">
                                                     <select class="select select-xs select-bordered item-type-select">
@@ -665,7 +664,8 @@
                                                         <option value="sub_header" {% if item.item_type == 'sub_header' %}selected{% endif %}>Sub-header</option>
                                                     </select>
                                                     <input type="text"
-                                                           class="input input-sm input-bordered w-full item-text-input {% if item.item_type == 'sub_header' %}font-semibold text-secondary{% endif %}"
+                                                           class="input input-sm input-bordered w-full item-text-input {% if item.item_type == 'sub_header' %}font-semibold input-primary{% endif %}"
+                                                           data-item-id="{{ item.id }}"
                                                            value="{{ item.text }}"
                                                            maxlength="500"
                                                            placeholder="{% if item.item_type == 'sub_header' %}Sub-header text...{% else %}Item text...{% endif %}">
@@ -674,11 +674,7 @@
                                                     <span class="item-char-count">{{ item.text|length }}</span>/500
                                                 </span>
                                             </div>
-                                            <button class="btn btn-ghost btn-xs item-save-btn" title="Save">
-                                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-success" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
-                                                </svg>
-                                            </button>
+
                                             <button class="btn btn-ghost btn-xs item-delete-btn" title="Delete">
                                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-error" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>

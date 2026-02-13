@@ -978,7 +978,7 @@ class ChecklistItemBulkCreateView(APIView):
             if not serializer.is_valid():
                 return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-            # Bulk create items
+            # Bulk create items (progressive - allows partial success)
             items_data = serializer.validated_data['items']
             created_items, error = ChecklistService.bulk_add_items(
                 section=section,
@@ -986,21 +986,19 @@ class ChecklistItemBulkCreateView(APIView):
                 items_data=items_data
             )
 
-            if error:
-                # Validation errors
-                return Response(error, status=status.HTTP_400_BAD_REQUEST)
-
-            # Success - serialize created items
-            return Response({
+            # Progressive upload: Return created items even if some failed
+            response_data = {
                 'success': True,
-                'items_created': len(created_items),
-                'items': ChecklistItemSerializer(created_items, many=True).data,
-                'summary': {
-                    'total_submitted': len(items_data),
-                    'created': len(created_items),
-                    'failed': 0
-                }
-            }, status=status.HTTP_201_CREATED)
+                'created': len(created_items) if created_items else 0,
+                'failed': error['summary']['failed'] if error else 0,
+                'items': ChecklistItemSerializer(created_items, many=True).data if created_items else []
+            }
+
+            # Add error details if any items failed
+            if error:
+                response_data['errors'] = error['failed_items']
+
+            return Response(response_data, status=status.HTTP_201_CREATED if created_items else status.HTTP_400_BAD_REQUEST)
 
         except Exception as e:
             logger.exception(f"Bulk item create error: {e}")

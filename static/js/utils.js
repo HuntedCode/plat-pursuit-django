@@ -559,6 +559,174 @@ function debounce(fn, delay = 300) {
 }
 
 /**
+ * Drag Reorder Manager
+ * Reusable drag-and-drop reordering with position caching for performance
+ */
+class DragReorderManager {
+    /**
+     * Initialize drag reordering on a container
+     * @param {Object} config Configuration object
+     * @param {HTMLElement} config.container - Container element
+     * @param {string} config.itemSelector - CSS selector for draggable items
+     * @param {Function} config.onReorder - Callback when drop completes: (itemId, newPosition, allItemIds)
+     * @param {string} [config.handleSelector] - Optional selector for drag handle (defaults to item itself)
+     * @param {string} [config.placeholderClass] - Custom placeholder CSS class
+     */
+    constructor(config) {
+        this.container = config.container;
+        this.itemSelector = config.itemSelector;
+        this.onReorder = config.onReorder;
+        this.handleSelector = config.handleSelector || null;
+        this.placeholderClass = config.placeholderClass || 'border-2 border-dashed border-primary rounded-box h-16 bg-primary/5';
+
+        this.draggedEl = null;
+        this.placeholder = null;
+        this.rafScheduled = false;
+        this.lastClientY = 0;
+        this._cachedPositions = [];
+        this._mouseDownTarget = null; // Track where mousedown occurred
+
+        this._bindEvents();
+    }
+
+    _bindEvents() {
+        // Track mousedown to know where drag started
+        this.container.addEventListener('mousedown', (e) => {
+            this._mouseDownTarget = e.target;
+        });
+        this.container.addEventListener('dragstart', (e) => this._onDragStart(e));
+        this.container.addEventListener('dragover', (e) => this._onDragOver(e));
+        this.container.addEventListener('dragend', () => this._onDragEnd());
+        this.container.addEventListener('drop', (e) => this._onDrop(e));
+    }
+
+    _onDragStart(e) {
+        // If handle selector is provided, only allow drag from handle
+        // Check the mousedown target, not the drag target (which is always the draggable element)
+        if (this.handleSelector && this._mouseDownTarget) {
+            const handle = this._mouseDownTarget.closest(this.handleSelector);
+            if (!handle) {
+                e.preventDefault();
+                return;
+            }
+        }
+
+        const item = e.target.closest(this.itemSelector);
+        if (!item) return;
+
+        this.draggedEl = item;
+        item.classList.add('opacity-50', 'border-primary');
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', item.dataset.itemId || '');
+
+        // Create placeholder
+        this.placeholder = document.createElement('div');
+        this.placeholder.className = this.placeholderClass;
+
+        // Cache positions at drag start
+        this._cacheItemPositions();
+    }
+
+    _onDragOver(e) {
+        e.preventDefault();
+        if (!this.draggedEl || !this.placeholder) return;
+        e.dataTransfer.dropEffect = 'move';
+
+        this.lastClientY = e.clientY;
+
+        // Throttle to one update per animation frame
+        if (this.rafScheduled) return;
+        this.rafScheduled = true;
+
+        requestAnimationFrame(() => {
+            this.rafScheduled = false;
+            if (!this.draggedEl || !this.placeholder) return;
+
+            const afterEl = this._getDragAfterElement(this.lastClientY);
+
+            // Short-circuit: skip if placeholder is already in the right spot
+            if (afterEl) {
+                if (this.placeholder.nextElementSibling !== afterEl) {
+                    this.container.insertBefore(this.placeholder, afterEl);
+                    this._cacheItemPositions();
+                }
+            } else {
+                if (this.container.lastElementChild !== this.placeholder) {
+                    this.container.appendChild(this.placeholder);
+                    this._cacheItemPositions();
+                }
+            }
+        });
+    }
+
+    _onDragEnd() {
+        if (this.draggedEl) {
+            this.draggedEl.classList.remove('opacity-50', 'border-primary');
+        }
+        if (this.placeholder && this.placeholder.parentNode) {
+            this.placeholder.remove();
+        }
+        this.draggedEl = null;
+        this.placeholder = null;
+        this._cachedPositions = [];
+    }
+
+    _onDrop(e) {
+        e.preventDefault();
+        if (!this.draggedEl || !this.placeholder) return;
+
+        // Insert dragged element where placeholder is
+        this.placeholder.replaceWith(this.draggedEl);
+        this.draggedEl.classList.remove('opacity-50', 'border-primary');
+
+        // Collect all item IDs in new order
+        const items = [...this.container.querySelectorAll(this.itemSelector)];
+        const newPosition = items.indexOf(this.draggedEl);
+        const itemId = this.draggedEl.dataset.itemId;
+        const allItemIds = items.map(item => item.dataset.itemId);
+
+        // Call reorder callback
+        if (this.onReorder) {
+            this.onReorder(itemId, newPosition, allItemIds);
+        }
+
+        this.draggedEl = null;
+        this.placeholder = null;
+        this._cachedPositions = [];
+    }
+
+    _cacheItemPositions() {
+        const items = [...this.container.querySelectorAll(`${this.itemSelector}:not(.opacity-50)`)];
+        this._cachedPositions = items.map(item => {
+            const box = item.getBoundingClientRect();
+            return { element: item, top: box.top, height: box.height };
+        });
+    }
+
+    _getDragAfterElement(y) {
+        const result = this._cachedPositions.reduce((closest, item) => {
+            const offset = y - item.top - item.height / 2;
+            if (offset < 0 && offset > closest.offset) {
+                return { offset, element: item.element };
+            }
+            return closest;
+        }, { offset: Number.NEGATIVE_INFINITY });
+        return result.element || null;
+    }
+
+    /**
+     * Cleanup event listeners
+     */
+    destroy() {
+        // Event listeners are on the container which persists, so no cleanup needed
+        // But we can clear references
+        this.draggedEl = null;
+        this.placeholder = null;
+        this._cachedPositions = [];
+    }
+}
+
+/**
  * Infinite Scroller Factory
  * Creates reusable infinite scroll behavior with IntersectionObserver
  */
@@ -679,3 +847,4 @@ window.PlatPursuit.UnsavedChangesManager = UnsavedChangesManager;
 window.PlatPursuit.HTMLUtils = HTMLUtils;
 window.PlatPursuit.debounce = debounce;
 window.PlatPursuit.InfiniteScroller = InfiniteScroller;
+window.PlatPursuit.DragReorderManager = DragReorderManager;
