@@ -1,0 +1,3 @@
+{# Reusable PlatPursuit logo icon. Usage: {% include 'partials/icons/pp_logo.html' with size='w-5 h-5' %} #}
+{% load static %}
+<img src="{% static 'images/logo.png' %}" alt="PP" class="{{ size|default:'w-5 h-5' }} inline-block flex-shrink-0 rounded-full {{ extra_class }}" />
