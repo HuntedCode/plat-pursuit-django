@@ -14,7 +14,7 @@
                 <h2 class="text-lg italic font-bold">Total Badge XP Leaders</h2>
                 <p class="text-sm text-base-content/70 text-center pr-1 italic">Leaderboard Updated: {{ lb_total_xp_refresh_time|iso_datetime }}</p>
                 <p class="text-sm text-base-content/70 text-center pr-1 italic">Refreshed every 6 hours.</p>
-                <div class="flex flex-col sm:flex-row justify-between items-center gap-4 mt-4 w-7/8 mx-auto">
+                <div class="flex flex-row justify-between items-center gap-4 mt-4 w-7/8 mx-auto">
                     <div class="btn-group">
                         {% if lb_total_xp_page_obj.has_previous %}
                         <a href="?{% query_transform lb_total_xp_page=1 %}" class="btn btn-xs">First</a>
@@ -51,9 +51,9 @@
                             {% for entry in lb_total_xp_page_obj %}
                                 <tr id="1-rank-{{ entry.rank }}" class="{% if request.user.is_authenticated and request.user.profile.display_psn_username == entry.psn_username %}bg-success/15{% endif %} h-15">
                                     <td>{{ entry.rank }}</td>
-                                    <td class="text-xs sm:text-sm lg:text-base">
+                                    <td class="text-sm lg:text-base">
                                         <a href="{% url 'profile_detail' entry.psn_username %}">
-                                            <div class="avatar mr-2 hidden sm:inline-flex">
+                                            <div class="avatar mr-2 inline-flex">
                                                 <div class="w-4 lg:w-6 rounded-full ring-2 ring-primary cursor-pointer hover:scale-105">
                                                     <img src="{{ entry.avatar_url|default:'/static/default-avatar.png' }}" alt="Profile Avatar" />
                                                 </div>
@@ -61,15 +61,15 @@
                                             <span class="{% if entry.is_premium %}legendary-title{% endif %}">{{ entry.psn_username }}</span> • {{ entry.flag }}
                                         </a>
                                     </td>
-                                    <td class="text-xs sm:text-sm lg:text-base">{{ entry.total_xp|intcomma }} xp</td>
-                                    <td class="text-xs sm:text-sm lg:text-base">{{ entry.total_badges|intcomma }}</td>
+                                    <td class="text-sm lg:text-base">{{ entry.total_xp|intcomma }} xp</td>
+                                    <td class="text-sm lg:text-base">{{ entry.total_badges|intcomma }}</td>
                                 </tr>
                             {% endfor %}
                         </tbody>
                     </table>
                 </div>
 
-                <div class="flex flex-col sm:flex-row justify-between items-center gap-4 mt-4 w-7/8 mx-auto">
+                <div class="flex flex-row justify-between items-center gap-4 mt-4 w-7/8 mx-auto">
 
                     <div class="btn-group">
                         {% if lb_total_xp_page_obj.has_previous %}
@@ -100,7 +100,7 @@
                 <h2 class="text-xl italic font-bold">Total Badge Trophy Leaders</h2>
                 <p class="text-sm text-base-content/70 text-center pr-1 italic">Leaderboard Updated: {{ lb_total_progress_refresh_time|iso_datetime }}</p>
                 <p class="text-sm text-base-content/70 text-center pr-1 italic">Refreshed every 6 hours.</p>
-                <div class="flex flex-col sm:flex-row justify-between items-center gap-4 mt-4 w-7/8 mx-auto">
+                <div class="flex flex-row justify-between items-center gap-4 mt-4 w-7/8 mx-auto">
                     <div class="btn-group">
                         {% if lb_total_progress_page_obj.has_previous %}
                         <a href="?{% query_transform lb_total_progress_page=1 %}" class="btn btn-xs">First</a>
@@ -141,7 +141,7 @@
                                 <td>{{ entry.rank }}</td>
                                 <td>
                                     <a href="{% url 'profile_detail' entry.psn_username %}">
-                                        <div class="avatar mr-2 hidden sm:inline-flex">
+                                        <div class="avatar mr-2 inline-flex">
                                             <div class="w-4 lg:w-6 rounded-full ring-2 ring-primary cursor-pointer hover:scale-105">
                                                 <img src="{{ entry.avatar_url|default:'/static/default-avatar.png' }}" alt="Profile Avatar" />
                                             </div>
@@ -180,7 +180,7 @@
                     </table>
                 </div>
 
-                <div class="flex flex-col sm:flex-row justify-between items-center gap-4 mt-4 w-7/8 mx-auto">
+                <div class="flex flex-row justify-between items-center gap-4 mt-4 w-7/8 mx-auto">
                     <div class="btn-group">
                         {% if lb_total_progress_page_obj.has_previous %}
                         <a href="?{% query_transform lb_total_progress_page=1 %}" class="btn btn-xs">First</a>
@@ -221,4 +221,5 @@
         window.location.href = url.toString();
     }
 </script>
+<script>PlatPursuit.ZoomScaler.init();</script>
 {% endblock %}

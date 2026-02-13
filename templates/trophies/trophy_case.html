@@ -5,7 +5,7 @@
 
 {% block content %}
     {% include 'partials/breadcrumb.html' with items=breadcrumb %}
-    <h1 class="text-base sm:text-lg md:text-xl lg:text-2xl xl:text-3xl text-base-content text-center line-clamp-1"><span class="font-bold italic">{{ profile.display_psn_username }}'s</span> <span class="text-trophy-platinum font-bold">Platinum</span> Trophy Case!</h1>
+    <h1 class="text-xl lg:text-2xl xl:text-3xl text-base-content text-center line-clamp-1"><span class="font-bold italic">{{ profile.display_psn_username }}'s</span> <span class="text-trophy-platinum font-bold">Platinum</span> Trophy Case!</h1>
     <div class="divider divider-vertical"></div>
 
     <form id="filter-form" method="get" class="mb-4">
@@ -22,18 +22,20 @@
 
     {% include 'partials/pagination.html' with position='top' show_page_jump=True anchor='filter-form' %}
 
-    <div id="items-grid" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
+    <div id="items-grid" class="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
         {% include 'trophies/partials/trophy_case/trophy_case_items.html' %}
     </div>
 
     {% include 'partials/pagination.html' with position='bottom' show_page_jump=False anchor='filter-form' %}
 
+{% endblock %}
+
+{% block fixed_overlays %}
     {% if request.user == profile.user %}
-        <div class="fixed bottom-4 right-4 bg-base-100 p-2 rounded-box shadow-md shadow-accent border-4 border-accent z-20">
+        <div class="fixed bottom-40 lg:bottom-30 right-4 lg:right-8 bg-base-100 p-2 rounded-box shadow-md shadow-accent border-4 border-accent z-30">
             <span id="selected-counter" class="font-bold">Selected: {{ selected_count }}/{{ max_selections }}</span>
         </div>
     {% endif %}
-
 {% endblock %}
 
 {% block js_scripts %}
@@ -93,4 +95,5 @@
             });
         });
     </script>
+    <script>PlatPursuit.ZoomScaler.init();</script>
 {% endblock %}

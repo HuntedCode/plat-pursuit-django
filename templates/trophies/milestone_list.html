@@ -9,7 +9,7 @@
 
     <div class="divider divider-vertical"></div>
 
-    <h1 class="text-md sm:text-lg md:text-2xl lg:text-3xl xl:text-4xl text-base-content text-start italic self-end mb-4">
+    <h1 class="text-2xl lg:text-3xl xl:text-4xl text-base-content text-start italic self-end mb-4">
         All Milestones
     </h1>
 
@@ -17,4 +17,10 @@
         {% include 'trophies/partials/milestone_list/milestone_list_items.html' %}
     </div>
 
+{% endblock %}
+
+{% block js_scripts %}
+<script>
+    PlatPursuit.ZoomScaler.init();
+</script>
 {% endblock %}

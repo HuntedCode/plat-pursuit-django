@@ -2,10 +2,10 @@
 {% for trophy in object_list %}
     <a href="{% url 'game_detail' trophy.game.np_communication_id %}#{{ trophy.trophy_id }}" class="card bg-base-100 border-4 border-base-300 shadow-md shadow-neutral cursor-pointer transition-all duration-300 hover:scale-105 hover:border-{{ trophy|trophy_color }} hover:shadow-{{ trophy|trophy_color }} hover:shadow-lg hover:z-10 group">
         <div class="card-body m-0 px-3 py-3">
-            <div class="grid grid-cols-1 lg:grid-cols-3 items-center gap-4">
+            <div class="flex flex-row items-center gap-2 lg:gap-4">
 
                 {# Column 1: Game Icon + Trophy Icon + Name + Description + Badges #}
-                <div class="flex flex-row items-center justify-start gap-2 col-span-1">
+                <div class="flex flex-row items-center justify-start gap-2 min-w-0 flex-1">
                     <div class="flex flex-row">
                         <figure class="border-4 border-base-300 rounded-box transition-colors duration-300 mr-1 lg:mr-2 group-hover:border-{{ trophy.game|platform_color }} overflow-hidden">
                             {% if trophy.game.title_image and not trophy.game.force_title_icon %}
@@ -14,7 +14,7 @@
                                 <img src="{{ trophy.game.title_icon_url }}" alt="{{ trophy.game.title_name }}" class="h-15 lg:h-18 w-15 lg:w-18 object-cover shrink-0" loading="lazy" />
                             {% endif %}
                         </figure>
-                        <figure class="border-4 border-base-300 rounded-box transition-colors duration-300 mr-2 lg:mr-4 group-hover:border-{{ trophy|trophy_color }} overflow-hidden">
+                        <figure class="border-4 border-base-300 rounded-box transition-colors duration-300 mr-1 lg:mr-2 group-hover:border-{{ trophy|trophy_color }} overflow-hidden">
                             <img src="{{ trophy.trophy_icon_url }}" alt="{{ trophy.trophy_name }}" class="h-15 lg:h-18 w-15 lg:w-18 object-fill shrink-0" loading="lazy" />
                         </figure>
                     </div>
@@ -34,29 +34,30 @@
                     </div>
                 </div>
 
-                {# Column 2: Earn Rates (PlatPursuit + PSN) #}
-                <div class="flex flex-row items-center justify-center gap-4 col-span-1">
-                    <div class="flex flex-row gap-2 justify-center items-center">
-                        {% include 'partials/icons/pp_logo.html' with size='w-6 h-6' %}
-                        <span class="text-lg italic text-base-content/70">{{ trophy.earn_rate|multiply:100|floatformat:2 }}%</span>
+                {# Right side: Rates + Counts — stacked at tablet, inline at desktop #}
+                <div class="flex flex-col lg:flex-row items-center gap-0 lg:gap-3 shrink-0">
+                    <div class="flex flex-row items-center gap-1 lg:gap-3">
+                        <div class="flex flex-row gap-1 justify-center items-center">
+                            {% include 'partials/icons/pp_logo.html' with size='w-5 h-5 lg:w-6 lg:h-6' %}
+                            <span class="text-sm lg:text-base italic text-base-content/70">{{ trophy.earn_rate|multiply:100|floatformat:2 }}%</span>
+                        </div>
+                        <div class="divider divider-horizontal mx-0 px-0"></div>
+                        <div class="flex flex-row gap-1 justify-center items-center">
+                            {% include 'partials/icons/ps_logo.html' with size='w-5 h-5 lg:w-6 lg:h-6' %}
+                            <span class="text-sm lg:text-base italic text-base-content/70">{{ trophy.trophy_earn_rate }}%</span>
+                        </div>
                     </div>
-                    <div class="divider divider-horizontal mx-0 px-0"></div>
-                    <div class="flex flex-row gap-2 justify-center items-center">
-                        {% include 'partials/icons/ps_logo.html' with size='w-6 h-6' %}
-                        <span class="text-lg italic text-base-content/70">{{ trophy.trophy_earn_rate }}%</span>
-                    </div>
-                </div>
-
-                {# Column 3: Player Count + Earned Count #}
-                <div class="flex flex-row items-center justify-center lg:justify-end gap-2 col-span-1">
-                    <div class="flex flex-row gap-2 justify-center items-center">
-                        {% include 'partials/icons/user.html' with size='w-6 h-6' %}
-                        <span class="text-lg italic text-base-content/70">{{ trophy.game.played_count|intcomma }}</span>
-                    </div>
-                    <div class="divider divider-horizontal mx-0 px-0"></div>
-                    <div class="flex flex-row gap-2 justify-center items-center">
-                        {% include 'partials/icons/checkmark.html' with size='w-6 h-6' %}
-                        <span class="text-lg italic text-base-content/70">{{ trophy.earned_count|intcomma }}</span>
+                    <div class="divider divider-horizontal mx-0 px-0 hidden lg:flex"></div>
+                    <div class="flex flex-row items-center gap-1 lg:gap-2">
+                        <div class="flex flex-row gap-1 justify-center items-center">
+                            {% include 'partials/icons/user.html' with size='w-5 h-5 lg:w-6 lg:h-6' %}
+                            <span class="text-sm lg:text-base italic text-base-content/70">{{ trophy.game.played_count|intcomma }}</span>
+                        </div>
+                        <div class="divider divider-horizontal mx-0 px-0"></div>
+                        <div class="flex flex-row gap-1 justify-center items-center">
+                            {% include 'partials/icons/checkmark.html' with size='w-5 h-5 lg:w-6 lg:h-6' %}
+                            <span class="text-sm lg:text-base italic text-base-content/70">{{ trophy.earned_count|intcomma }}</span>
+                        </div>
                     </div>
                 </div>
 

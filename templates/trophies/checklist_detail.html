@@ -514,7 +514,7 @@
 </dialog>
 
 {# Checklist Image Modal #}
-<dialog id="checklist-image-modal" class="modal modal-bottom sm:modal-middle backdrop-blur-sm">
+<dialog id="checklist-image-modal" class="modal modal-bottom md:modal-middle backdrop-blur-sm">
     <div class="modal-box max-w-7xl w-full p-0 bg-transparent shadow-none">
         <div class="relative">
             {# Close button #}
@@ -547,6 +547,7 @@
 {% endblock %}
 
 {% block js_scripts %}
+    <script>PlatPursuit.ZoomScaler.init();</script>
     <script src="{% static 'js/checklist.js' %}"></script>
     {% if checklist.status == 'published' %}
         <script src="{% static 'js/comments.js' %}"></script>

@@ -80,7 +80,7 @@
         <div class="divider divider-vertical"></div>
 
         <div class="flex flex-row justify-between mt-8">
-            <h1 class="text-md sm:text-lg md:text-2xl lg:text-3xl xl:text-4xl text-base-content text-start italic self-end mb-4">Trophies By 
+            <h1 class="text-2xl lg:text-3xl xl:text-4xl text-base-content text-start italic self-end mb-4">Trophies By
                 {% with sort_val=request.GET.sort %}
                     {% if sort_val %}
                         {% for value, display in form.sort.field.choices %}
@@ -139,4 +139,5 @@
 {% block js_scripts %}
     <script src="{% static 'js/submit_shimmer.js' %}"></script>
     <script src="{% static 'js/list_page_filters.js' %}"></script>
+    <script>PlatPursuit.ZoomScaler.init();</script>
 {% endblock %}

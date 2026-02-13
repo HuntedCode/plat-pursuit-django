@@ -69,7 +69,7 @@
         </div>
     </div>
     <div class="flex flex-row justify-between">
-        <h1 class="text-md sm:text-lg md:text-2xl lg:text-3xl xl:text-4xl text-base-content text-start italic self-end mb-4">Games By 
+        <h1 class="text-2xl lg:text-3xl xl:text-4xl text-base-content text-start italic self-end mb-4">Games By
             {% with sort_val=request.GET.sort %}
                 {% if sort_val %}
                     {% for value, display in form.sort.field.choices %}
@@ -126,7 +126,7 @@
             {% include 'trophies/partials/game_list/game_list_items.html' %}
         </div>
     {% else %}
-        <div id="items-grid" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-2">
+        <div id="items-grid" class="grid grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-2">
             {% include 'trophies/partials/game_list/game_cards.html' %}
         </div>
     {% endif %}
@@ -142,4 +142,5 @@
     <script src="{% static 'js/game-lists.js' %}"></script>
     <script>document.addEventListener('DOMContentLoaded', () => GameListQuickAdd.init());</script>
     {% endif %}
+    <script>PlatPursuit.ZoomScaler.init();</script>
 {% endblock %}

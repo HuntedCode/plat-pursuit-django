@@ -43,7 +43,7 @@
     <div class="divider divider-vertical"></div>
 
     <div class="flex flex-row justify-between mt-8">
-        <h1 class="text-md sm:text-lg md:text-2xl lg:text-3xl xl:text-4xl text-base-content text-start italic self-end mb-4">Profiles By 
+        <h1 class="text-2xl lg:text-3xl xl:text-4xl text-base-content text-start italic self-end mb-4">Profiles By
             {% with sort_val=request.GET.sort %}
                 {% if sort_val %}
                     {% for value, display in form.sort.field.choices %}
@@ -72,7 +72,7 @@
 
     {% include 'partials/pagination.html' with position='top' show_page_jump=True anchor='filter-form' %}
 
-    <div id="items-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-2" data-paginate="{{ paginate }}">
+    <div id="items-grid" class="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-2" data-paginate="{{ paginate }}">
         {% include 'trophies/partials/profile_list/profile_cards.html' %}
     </div>
 
@@ -83,4 +83,5 @@
 {% block js_scripts %}
     <script src="{% static 'js/submit_shimmer.js' %}"></script>
     <script src="{% static 'js/list_page_filters.js' %}"></script>
+    <script>PlatPursuit.ZoomScaler.init();</script>
 {% endblock %}

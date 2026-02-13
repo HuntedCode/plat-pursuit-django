@@ -1,50 +1,50 @@
 <div class="card bg-base-100 border-2 border-base-300 shadow-sm shadow-neutral mb-3 transition-all duration-300 hover:border-primary hover:shadow-primary">
-    <div class="card-body border-2 border-primary flex flex-col lg:flex-row justify-around p-2 md:p-3 xl:p-4">
-        <div class="flex flex-row items-center gap-2">
-            <figure class="w-12 sm:w-14 md:w-16 xl:w-18 border-2 border-base-300 hover:scale-105">
+    <div class="card-body border-2 border-primary flex flex-row justify-around items-center p-2 md:p-3 xl:p-4">
+        <div class="flex flex-row items-center gap-2 min-w-0 shrink">
+            <figure class="w-14 md:w-16 xl:w-18 border-2 border-base-300 hover:scale-105">
                 <img src="{{ group.trophy_group_icon_url }}" alt="{{ group.trophy_group_name }} icon" loading="lazy" decoding="async" />
             </figure>
-            <p class="text-base sm:text-lg md:text-xl xl:text-2xl text-base-content font-bold line-clamp-2 pr-1 italic">{{ group.trophy_group_name }}</p>
+            <p class="text-sm md:text-base lg:text-xl xl:text-2xl text-base-content font-bold line-clamp-1 pr-1 italic">{{ group.trophy_group_name }}</p>
         </div>
-        <div class="flex flex-col sm:flex-row gap-4 lg:gap-0 justify-center items-center">
-            <div class="flex flex-row items-center gap-4 lg:gap-0">
-                <div class="flex flex-row items-center gap-4">
-                    {% include 'partials/icons/trophy_cup.html' with color='var(--color-trophy-bronze)' size='w-6 md:w-8 xl:w-10 h-6 md:h-8 xl:h-10' %}
+        <div class="flex flex-row gap-2 lg:gap-0 justify-end items-center shrink-0">
+            <div class="flex flex-row items-center gap-2 lg:gap-0">
+                <div class="flex flex-row items-center gap-1 lg:gap-4">
+                    {% include 'partials/icons/trophy_cup.html' with color='var(--color-trophy-bronze)' size='w-5 h-5 md:w-6 md:h-6 lg:w-8 lg:h-8 xl:w-10 xl:h-10' %}
                     {% if profile %}
-                        <p class="text-xs sm:text-sm md:text-base xl:text-lg text-base-content font-bold" aria-label="Bronze trophies: {{ profile_group_total.bronze|default:0 }} of {{ group.defined_trophies.bronze }}"><span class="text-primary text-base sm:text-lg md:text-xl xl:text-2xl">{{ profile_group_total.bronze|default:0 }}</span> / {{ group.defined_trophies.bronze }}</p>
+                        <p class="text-xs md:text-sm lg:text-base xl:text-lg text-base-content font-bold" aria-label="Bronze trophies: {{ profile_group_total.bronze|default:0 }} of {{ group.defined_trophies.bronze }}"><span class="text-primary text-sm md:text-base lg:text-xl xl:text-2xl">{{ profile_group_total.bronze|default:0 }}</span> / {{ group.defined_trophies.bronze }}</p>
                     {% else %}
-                        <p class="text-base sm:text-lg md:text-xl xl:text-2xl text-base-content font-bold" aria-label="Bronze trophies: {{ group.defined_trophies.bronze }}">{{ group.defined_trophies.bronze }}</p>
+                        <p class="text-sm md:text-base lg:text-xl xl:text-2xl text-base-content font-bold" aria-label="Bronze trophies: {{ group.defined_trophies.bronze }}">{{ group.defined_trophies.bronze }}</p>
                     {% endif %}
                 </div>
                 <div class="divider divider-horizontal hidden lg:block"></div>
 
-                <div class="flex flex-row items-center gap-4">
-                    {% include 'partials/icons/trophy_cup.html' with color='var(--color-trophy-silver)' size='w-6 md:w-8 xl:w-10 h-6 md:h-8 xl:h-10' %}
+                <div class="flex flex-row items-center gap-1 lg:gap-4">
+                    {% include 'partials/icons/trophy_cup.html' with color='var(--color-trophy-silver)' size='w-5 h-5 md:w-6 md:h-6 lg:w-8 lg:h-8 xl:w-10 xl:h-10' %}
                     {% if profile %}
-                        <p class="text-xs sm:text-sm md:text-base xl:text-lg text-base-content font-bold" aria-label="Silver trophies: {{ profile_group_total.silver|default:0 }} of {{ group.defined_trophies.silver }}"><span class="text-primary text-base sm:text-lg md:text-xl xl:text-2xl">{{ profile_group_total.silver|default:0 }}</span> / {{ group.defined_trophies.silver }}</p>
+                        <p class="text-xs md:text-sm lg:text-base xl:text-lg text-base-content font-bold" aria-label="Silver trophies: {{ profile_group_total.silver|default:0 }} of {{ group.defined_trophies.silver }}"><span class="text-primary text-sm md:text-base lg:text-xl xl:text-2xl">{{ profile_group_total.silver|default:0 }}</span> / {{ group.defined_trophies.silver }}</p>
                     {% else %}
-                        <p class="text-base sm:text-lg md:text-xl xl:text-2xl text-base-content font-bold" aria-label="Silver trophies: {{ group.defined_trophies.silver }}">{{ group.defined_trophies.silver }}</p>
+                        <p class="text-sm md:text-base lg:text-xl xl:text-2xl text-base-content font-bold" aria-label="Silver trophies: {{ group.defined_trophies.silver }}">{{ group.defined_trophies.silver }}</p>
                     {% endif %}
                 </div>
                 <div class="divider divider-horizontal hidden lg:block"></div>
             </div>
-            <div class="flex flex-row items-center gap-4 lg:gap-0">
-                <div class="flex flex-row items-center gap-4">
-                    {% include 'partials/icons/trophy_cup.html' with color='var(--color-trophy-gold)' size='w-6 md:w-8 xl:w-10 h-6 md:h-8 xl:h-10' %}
+            <div class="flex flex-row items-center gap-2 lg:gap-0">
+                <div class="flex flex-row items-center gap-1 lg:gap-4">
+                    {% include 'partials/icons/trophy_cup.html' with color='var(--color-trophy-gold)' size='w-5 h-5 md:w-6 md:h-6 lg:w-8 lg:h-8 xl:w-10 xl:h-10' %}
                     {% if profile %}
-                        <p class="text-xs sm:text-sm md:text-base xl:text-lg text-base-content font-bold" aria-label="Gold trophies: {{ profile_group_total.gold|default:0 }} of {{ group.defined_trophies.gold }}"><span class="text-primary text-base sm:text-lg md:text-xl xl:text-2xl">{{ profile_group_total.gold|default:0 }}</span> / {{ group.defined_trophies.gold }}</p>
+                        <p class="text-xs md:text-sm lg:text-base xl:text-lg text-base-content font-bold" aria-label="Gold trophies: {{ profile_group_total.gold|default:0 }} of {{ group.defined_trophies.gold }}"><span class="text-primary text-sm md:text-base lg:text-xl xl:text-2xl">{{ profile_group_total.gold|default:0 }}</span> / {{ group.defined_trophies.gold }}</p>
                     {% else %}
-                        <p class="text-base sm:text-lg md:text-xl xl:text-2xl text-base-content font-bold" aria-label="Gold trophies: {{ group.defined_trophies.gold }}">{{ group.defined_trophies.gold }}</p>
+                        <p class="text-sm md:text-base lg:text-xl xl:text-2xl text-base-content font-bold" aria-label="Gold trophies: {{ group.defined_trophies.gold }}">{{ group.defined_trophies.gold }}</p>
                     {% endif %}
                 </div>
                 <div class="divider divider-horizontal hidden lg:block"></div>
 
-                <div class="flex flex-row items-center gap-4">
-                    {% include 'partials/icons/trophy_cup.html' with color='var(--color-trophy-platinum)' size='w-6 md:w-8 xl:w-10 h-6 md:h-8 xl:h-10' %}
+                <div class="flex flex-row items-center gap-1 lg:gap-4">
+                    {% include 'partials/icons/trophy_cup.html' with color='var(--color-trophy-platinum)' size='w-5 h-5 md:w-6 md:h-6 lg:w-8 lg:h-8 xl:w-10 xl:h-10' %}
                     {% if profile %}
-                        <p class="text-xs sm:text-sm md:text-base xl:text-lg text-base-content font-bold" aria-label="Platinum trophies: {{ profile_group_total.platinum|default:0 }} of {{ group.defined_trophies.platinum }}"><span class="text-primary text-base sm:text-lg md:text-xl xl:text-2xl">{{ profile_group_total.platinum|default:0 }}</span> / {{ group.defined_trophies.platinum }}</p>
+                        <p class="text-xs md:text-sm lg:text-base xl:text-lg text-base-content font-bold" aria-label="Platinum trophies: {{ profile_group_total.platinum|default:0 }} of {{ group.defined_trophies.platinum }}"><span class="text-primary text-sm md:text-base lg:text-xl xl:text-2xl">{{ profile_group_total.platinum|default:0 }}</span> / {{ group.defined_trophies.platinum }}</p>
                     {% else %}
-                        <p class="text-base sm:text-lg md:text-xl xl:text-2xl text-base-content font-bold" aria-label="Platinum trophies: {{ group.defined_trophies.platinum }}">{{ group.defined_trophies.platinum }}</p>
+                        <p class="text-sm md:text-base lg:text-xl xl:text-2xl text-base-content font-bold" aria-label="Platinum trophies: {{ group.defined_trophies.platinum }}">{{ group.defined_trophies.platinum }}</p>
                     {% endif %}
                 </div>
             </div>

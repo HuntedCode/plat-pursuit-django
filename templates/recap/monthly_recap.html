@@ -313,7 +313,7 @@
         <!-- 12-Month Grid Container -->
         <div id="month-calendar-container">
             {% for year_data in calendar_data.years %}
-            <div class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2 year-calendar"
+            <div class="grid grid-cols-3 md:grid-cols-6 gap-2 year-calendar"
                  data-year="{{ year_data.year }}"
                  style="display: {% if year_data.year == year %}grid{% else %}none{% endif %};">
 
@@ -472,6 +472,7 @@
 <script src="{% static 'js/month-selector.js' %}"></script>
 
 <script>
+    PlatPursuit.ZoomScaler.init();
     document.addEventListener('DOMContentLoaded', function() {
         // Initialize month selector calendar
         {% if calendar_data.years %}

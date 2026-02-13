@@ -17,7 +17,7 @@
                 <p>Platinum Pursuit is a community-driven platform built by trophy hunters, for trophy hunters. We're passionate about celebrating gaming achievements and connecting players who share the same dedication to earning every trophy.</p>
 
                 <h2>What We Offer</h2>
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 not-prose my-6">
+                <div class="grid grid-cols-2 gap-4 not-prose my-6">
                     <div class="bg-base-200 p-4 rounded-lg">
                         <h3 class="font-bold text-lg mb-2">Trophy Tracking</h3>
                         <p class="text-base-content/80">Sync your PSN profile and track your trophy progress across all your games. See your stats, completion percentages, and earning history.</p>
@@ -66,4 +66,10 @@
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block js_scripts %}
+<script>
+    PlatPursuit.ZoomScaler.init();
+</script>
 {% endblock %}

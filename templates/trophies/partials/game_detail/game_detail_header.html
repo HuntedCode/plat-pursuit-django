@@ -11,7 +11,7 @@
                             <img src="{{ game.title_icon_url }}" alt="{{ game.title_name }} icon" loading="lazy" decoding="async" class="w-full object-fill" />
                         {% endif %}
                         {% if image_urls.content_rating_url %}
-                            <figure class="absolute left-1 bottom-1 w-6 sm:w-10 xl:w-8 2xl:w-10">
+                            <figure class="absolute left-1 bottom-1 w-10 xl:w-8 2xl:w-10">
                                 <img src="{{ image_urls.content_rating_url }}" alt="Content rating" loading="lazy" class="w-full object-fill" />
                             </figure>
                         {% endif %}
@@ -79,7 +79,7 @@
                     </div>
                 {% else %}
                     <div class="justify-self-center w-full">
-                        <h2 class="text-xl sm:text-2xl text-base-content text-center font-bold line-clamp-1 pr-2 italic">Total Trophies</h2>
+                        <h2 class="text-2xl text-base-content text-center font-bold line-clamp-1 pr-2 italic">Total Trophies</h2>
                         <div class="flex flex-row flex-wrap items-center justify-center gap-x-4 gap-y-1 py-2">
                             <span class="flex items-center gap-1.5">
                                 {% include 'partials/icons/trophy_cup.html' with color='var(--color-trophy-bronze)' size='w-5 h-5' %}
@@ -114,7 +114,7 @@
                         <div class="badge badge-sm md:badge-md lg:badge-lg badge-{{ platform|platform_color_str }} border-2 border-base-300 font-bold hover:scale-105">{{ platform }}</div>
                     {% endfor %}
                 </div>
-                <h2 class="text-base sm:text-lg md:text-xl lg:text-2xl text-base-content text-center font-bold line-clamp-1 pr-2 italic">{{ game.title_name }}</h2>
+                <h2 class="text-lg md:text-xl lg:text-2xl text-base-content text-center font-bold line-clamp-1 pr-2 italic">{{ game.title_name }}</h2>
                 {% if game.is_regional %}
                     <div class="flex flex-row gap-2">
                         {% for region in game.region %}
@@ -136,7 +136,7 @@
                 {% endif %}
             </div>
             {% if profile %}
-                <div class="flex flex-col sm:flex-row items-center gap-3 py-1">
+                <div class="flex flex-row items-center gap-3 py-1">
                     <a href="{% url 'profile_detail' profile.psn_username %}" class="flex flex-row items-center gap-3 hover:scale-105 transition-all">
                         <div class="avatar">
                             <div class="w-12 rounded-full ring-2 ring-primary">
@@ -154,7 +154,7 @@
                         </div>
                     </a>
                     {% if game.concept and image_urls.screenshot_urls %}
-                        <div class="flex flex-row flex-wrap items-center justify-center sm:justify-end gap-x-3 gap-y-1 sm:ml-auto">
+                        <div class="flex flex-row flex-wrap items-center justify-end gap-x-3 gap-y-1 ml-auto">
                             <span class="flex items-center gap-1.5">
                                 {% include 'partials/icons/trophy_cup.html' with color='var(--color-trophy-bronze)' size='w-4.5 h-4.5' %}
                                 <span class="text-xs font-bold text-base-content" aria-label="Bronze trophies: {{ profile_trophy_totals.bronze|default:0 }} of {{ game.defined_trophies.bronze }}"><span class="text-primary">{{ profile_trophy_totals.bronze|default:0 }}</span>/{{ game.defined_trophies.bronze }}</span>
@@ -183,7 +183,7 @@
             <div class="divider divider-vertical my-0"></div>
             <div class="flex flex-col lg:flex-row gap-4">
                 {% if other_versions or badges %}
-                <div class="flex flex-col sm:flex-row lg:flex-col gap-4 lg:w-48 xl:w-56 flex-shrink-0">
+                <div class="flex flex-row lg:flex-col gap-4 lg:w-48 xl:w-56 flex-shrink-0">
                     {% if other_versions %}
                     <div class="card border-2 border-base-300 shadow-sm shadow-neutral hover:scale-105 hover:border-error hover:shadow-error group cursor-pointer flex-1 lg:flex-initial"
                          onclick="document.getElementById('versions-modal').showModal()" role="button" aria-label="View all versions">
@@ -191,10 +191,10 @@
                             <div class="stats overflow-visible">
                                 <div class="stat">
                                     <div class="stat-figure">
-                                        <svg xmlns="http://www.w3.org/2000/svg" class="w-8 h-8 hover:scale-105" viewBox="0 0 24 24" fill="none" stroke="var(--color-base-content)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 17 12 22 22 17"></polyline><polyline points="2 12 12 17 22 12"></polyline></svg>
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 lg:w-8 lg:h-8 hover:scale-105" viewBox="0 0 24 24" fill="none" stroke="var(--color-base-content)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 17 12 22 22 17"></polyline><polyline points="2 12 12 17 22 12"></polyline></svg>
                                     </div>
-                                    <div class="stat-title text-sm 2xl:text-base text-base-content/70 italic">Versions</div>
-                                    <div class="stat-value text-xl">{{ other_versions|length }}</div>
+                                    <div class="stat-title text-xs lg:text-sm 2xl:text-base text-base-content/70 italic">Versions</div>
+                                    <div class="stat-value text-base lg:text-xl">{{ other_versions|length }}</div>
                                 </div>
                             </div>
                         </div>
@@ -211,8 +211,8 @@
                                                 {% include 'partials/badge.html' with layers=badges.0.get_badge_layers %}
                                             </figure>
                                         </div>
-                                        <div class="stat-title text-sm 2xl:text-base text-base-content/70 italic">Badges</div>
-                                        <div class="stat-value text-xl">{{ badges|length }}</div>
+                                        <div class="stat-title text-xs lg:text-sm 2xl:text-base text-base-content/70 italic">Badges</div>
+                                        <div class="stat-value text-base lg:text-xl">{{ badges|length }}</div>
                                     </div>
                                 </div>
                             </div>
@@ -221,17 +221,17 @@
                 </div>
                 {% endif %}
                 <div class="flex-1 min-w-0">
-                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-y-4 gap-x-2">
+                <div class="grid grid-cols-2 md:grid-cols-3 gap-y-3 gap-x-2">
 
                     <div class="card border-2 border-base-300 shadow-sm shadow-neutral hover:scale-105 hover:border-secondary hover:shadow-secondary group">
                         <div class="card-body p-2 col-span-1">
                             <div class="stats overflow-visible">
                                 <div class="stat">
                                     <div class="stat-figure">
-                                        <svg xmlns="http://www.w3.org/2000/svg" class="w-8 h-8 hover:scale-105" viewBox="0 0 24 24" fill="none" stroke="var(--color-secondary)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 lg:w-8 lg:h-8 hover:scale-105" viewBox="0 0 24 24" fill="none" stroke="var(--color-secondary)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
                                     </div>
-                                    <div class="stat-title text-sm 2xl:text-base text-base-content/70 italic">Total Players</div>
-                                    <div class="stat-value text-xl">{{ game_stats.total_players|intcomma }}</div>
+                                    <div class="stat-title text-xs lg:text-sm 2xl:text-base text-base-content/70 italic">Total Players</div>
+                                    <div class="stat-value text-base lg:text-xl">{{ game_stats.total_players|intcomma }}</div>
                                 </div>
                             </div>
                         </div>
@@ -242,10 +242,10 @@
                             <div class="stats overflow-visible">
                                 <div class="stat">
                                     <div class="stat-figure">
-                                        <svg xmlns="http://www.w3.org/2000/svg" class="w-8 h-8 hover:scale-105" viewBox="0 0 24 24" fill="none" stroke="var(--color-accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 lg:w-8 lg:h-8 hover:scale-105" viewBox="0 0 24 24" fill="none" stroke="var(--color-accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
                                     </div>
-                                    <div class="stat-title text-sm 2xl:text-base text-base-content/70 italic">Monthly Players</div>
-                                    <div class="stat-value text-xl">{{ game_stats.monthly_players|intcomma }}</div>
+                                    <div class="stat-title text-xs lg:text-sm 2xl:text-base text-base-content/70 italic">Monthly Players</div>
+                                    <div class="stat-value text-base lg:text-xl">{{ game_stats.monthly_players|intcomma }}</div>
                                 </div>
                             </div>
                         </div>
@@ -256,10 +256,10 @@
                             <div class="stats overflow-visible">
                                 <div class="stat">
                                     <div class="stat-figure">
-                                        <svg xmlns="http://www.w3.org/2000/svg" class="w-8 h-8 hover:scale-105" viewBox="0 0 24 24" fill="none" stroke="var(--color-warning)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 lg:w-8 lg:h-8 hover:scale-105" viewBox="0 0 24 24" fill="none" stroke="var(--color-warning)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
                                     </div>
-                                    <div class="stat-title text-sm 2xl:text-base text-base-content/70 italic">Trophies Earned</div>
-                                    <div class="stat-value text-xl">{{ game_stats.total_earns|intcomma }}</div>
+                                    <div class="stat-title text-xs lg:text-sm 2xl:text-base text-base-content/70 italic">Trophies Earned</div>
+                                    <div class="stat-value text-base lg:text-xl">{{ game_stats.total_earns|intcomma }}</div>
                                 </div>
                             </div>
                         </div>
@@ -270,10 +270,10 @@
                             <div class="stats overflow-visible">
                                 <div class="stat">
                                     <div class="stat-figure">
-                                        {% include 'partials/icons/trophy_cup.html' with color='var(--color-primary)' size='w-8 h-8' extra_class='hover:scale-105' %}
+                                        {% include 'partials/icons/trophy_cup.html' with color='var(--color-primary)' size='w-6 h-6 lg:w-8 lg:h-8' extra_class='hover:scale-105' %}
                                     </div>
-                                    <div class="stat-title text-sm 2xl:text-base text-base-content/70 italic">Plats Earned</div>
-                                    <div class="stat-value text-xl">{{ game_stats.plats_earned|intcomma }}</div>
+                                    <div class="stat-title text-xs lg:text-sm 2xl:text-base text-base-content/70 italic">Plats Earned</div>
+                                    <div class="stat-value text-base lg:text-xl">{{ game_stats.plats_earned|intcomma }}</div>
                                 </div>
                             </div>
                         </div>
@@ -284,10 +284,10 @@
                             <div class="stats overflow-visible">
                                 <div class="stat">
                                     <div class="stat-figure">
-                                        <svg xmlns="http://www.w3.org/2000/svg" class="w-8 h-8 hover:scale-105" viewBox="0 0 24 24" fill="none" stroke="var(--color-info)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 11 12 14 22 4"></polyline><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path></svg>
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 lg:w-8 lg:h-8 hover:scale-105" viewBox="0 0 24 24" fill="none" stroke="var(--color-info)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 11 12 14 22 4"></polyline><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path></svg>
                                     </div>
-                                    <div class="stat-title text-sm 2xl:text-base text-base-content/70 italic">100% Earns</div>
-                                    <div class="stat-value text-xl">{{ game_stats.completes|intcomma }}</div>
+                                    <div class="stat-title text-xs lg:text-sm 2xl:text-base text-base-content/70 italic">100% Earns</div>
+                                    <div class="stat-value text-base lg:text-xl">{{ game_stats.completes|intcomma }}</div>
                                 </div>
                             </div>
                         </div>
@@ -298,10 +298,10 @@
                             <div class="stats overflow-visible">
                                 <div class="stat">
                                     <div class="stat-figure">
-                                        <svg xmlns="http://www.w3.org/2000/svg" class="w-8 h-8 hover:scale-105" viewBox="0 0 24 24" fill="none" stroke="var(--color-success)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M18.7 8l-5.1 5.2-2.8-2.7L7 14.3"/></svg>
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 lg:w-8 lg:h-8 hover:scale-105" viewBox="0 0 24 24" fill="none" stroke="var(--color-success)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M18.7 8l-5.1 5.2-2.8-2.7L7 14.3"/></svg>
                                     </div>
-                                    <div class="stat-title text-sm 2xl:text-base text-base-content/70 italic">Avg. Completion</div>
-                                    <div class="stat-value text-xl">{{ game_stats.avg_progress|floatformat:2 }}%</div>
+                                    <div class="stat-title text-xs lg:text-sm 2xl:text-base text-base-content/70 italic">Avg. Completion</div>
+                                    <div class="stat-value text-base lg:text-xl">{{ game_stats.avg_progress|floatformat:2 }}%</div>
                                 </div>
                             </div>
                         </div>
@@ -311,12 +311,12 @@
                 </div> {# end flex-1 stats wrapper #}
             </div> {# end flex row wrapper #}
                 {% if profile and game.concept and image_urls.screenshot_urls %}
-                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 mt-2">
+                    <div class="grid grid-cols-2 lg:grid-cols-4 gap-2 mt-2">
                         <div class="card border-2 border-base-300 shadow-sm shadow-neutral p-0 hover:scale-105 hover:border-secondary hover:shadow-secondary group">
                             <div class="card-body p-0">
                                 <div class="stats overflow-visible">
                                     <div class="stat place-items-center p-2">
-                                        <div class="stat-value text-xl">{{ profile_progress.progress|floatformat:2|default:0 }}%</div>
+                                        <div class="stat-value text-base lg:text-xl">{{ profile_progress.progress|floatformat:2|default:0 }}%</div>
                                         <div class="stat-desc italic">Total Completion (PSN)</div>
                                     </div>
                                 </div>
@@ -326,7 +326,7 @@
                             <div class="card-body p-0">
                                 <div class="stats overflow-visible">
                                     <div class="stat place-items-center p-2">
-                                        <div class="stat-value text-xl">{{ profile_progress.play_count|intcomma|default:0 }}</div>
+                                        <div class="stat-value text-base lg:text-xl">{{ profile_progress.play_count|intcomma|default:0 }}</div>
                                         <div class="stat-desc italic">Play Count</div>
                                     </div>
                                 </div>

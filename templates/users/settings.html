@@ -172,9 +172,9 @@
                             </div>
                         </div>
                         <div class="flex flex-row items-center gap-3">
-                            <span id="sync-user" class="text-xs sm:text-base font-bold">{{ profile.display_psn_username }}</span>
+                            <span id="sync-user" class="text-base font-bold">{{ profile.display_psn_username }}</span>
                             <div class="divider divider-horizontal m-0 p-0"></div>
-                            <span class="text-xs sm:text-base font-bold">Last Sync: {{ profile.last_synced|date }}</span>
+                            <span class="text-base font-bold">Last Sync: {{ profile.last_synced|date }}</span>
                             
                         </div>
                     </div>
@@ -381,5 +381,8 @@ document.addEventListener('DOMContentLoaded', function() {
         showSaveButton: false  // POST forms, no API save
     });
 });
+</script>
+<script>
+    PlatPursuit.ZoomScaler.init();
 </script>
 {% endblock %}

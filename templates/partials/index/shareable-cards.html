@@ -2,11 +2,11 @@
 
 <section class="card shadow-lg shadow-neutral w-full bg-base-200 rounded-box border-2 border-base-300 transition duration-300 hover:shadow-primary hover:border-primary">
     <div class="rounded-box p-4 bg-base-200 w-full transition duration-300 hover:bg-base-300">
-        <h2 class="text-2xl sm:text-3xl lg:text-4xl font-bold text-center italic">Share Your Achievements</h2>
+        <h2 class="text-3xl lg:text-4xl font-bold text-center italic">Share Your Achievements</h2>
         <p class="text-center text-base-content/70 mt-1">Generate beautiful share cards for your platinums and monthly recaps</p>
         <div class="divider mt-2"></div>
 
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 items-center">
+        <div class="grid grid-cols-2 gap-6 items-center">
             <!-- Example Card Image -->
             <div class="space-y-4">
                 <div class="rounded-box overflow-hidden border-2 border-base-300 shadow-lg transition-all duration-300 hover:shadow-primary hover:border-primary hover:scale-[1.01] cursor-pointer shareable-image-clickable"
@@ -20,13 +20,13 @@
 
             <!-- Description & CTA -->
             <div class="flex flex-col items-center gap-4 text-center px-4">
-                <h3 class="text-xl sm:text-2xl font-bold italic">Monthly Recaps</h3>
-                <p class="text-base-content/70 text-sm sm:text-base max-w-md">
-                    Every month, get a personalized recap of your trophy hunting journey; 
+                <h3 class="text-2xl font-bold italic">Monthly Recaps</h3>
+                <p class="text-base-content/70 text-base max-w-md">
+                    Every month, get a personalized recap of your trophy hunting journey;
                     trophies earned, rarest achievements, activity streaks, and more.
                     Download a beautiful share card to post on social media.
                 </p>
-                <div class="flex flex-col sm:flex-row gap-3">
+                <div class="flex flex-row gap-3">
                     {% if user.is_authenticated %}
                         <a href="{% url 'recap_index' %}" class="btn btn-primary">View Your Recap</a>
                     {% else %}
@@ -38,16 +38,16 @@
 
         <div class="divider mt-6"></div>
 
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 items-center">
+        <div class="grid grid-cols-2 gap-6 items-center">
             <!-- Description & CTA (Left Side) -->
             <div class="flex flex-col items-center gap-4 text-center px-4 order-2 lg:order-1">
-                <h3 class="text-xl sm:text-2xl font-bold italic">Platinum Share Cards</h3>
-                <p class="text-base-content/70 text-sm sm:text-base max-w-md">
+                <h3 class="text-2xl font-bold italic">Platinum Share Cards</h3>
+                <p class="text-base-content/70 text-base max-w-md">
                     Celebrate every platinum milestone! Generate stunning share cards for each platinum you earn,
                     personalized with your profile stats, rarity data, and completion time.
                     Perfect for sharing your achievements on social media.
                 </p>
-                <div class="flex flex-col sm:flex-row gap-3">
+                <div class="flex flex-row gap-3">
                     {% if user.is_authenticated %}
                         <a href="{% url 'my_shareables' %}" class="btn btn-primary">View My Shareable Cards</a>
                     {% else %}
@@ -71,7 +71,7 @@
 </section>
 
 {# Shareable Card Image Modal #}
-<dialog id="shareable-image-modal" class="modal modal-bottom sm:modal-middle backdrop-blur-sm">
+<dialog id="shareable-image-modal" class="modal modal-bottom md:modal-middle backdrop-blur-sm">
     <div class="modal-box max-w-7xl w-full p-0 bg-transparent shadow-none">
         <div class="relative">
             {# Close button #}

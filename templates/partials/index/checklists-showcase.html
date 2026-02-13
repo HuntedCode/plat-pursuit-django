@@ -2,10 +2,10 @@
 
 <section class="card shadow-lg shadow-neutral w-full bg-base-200 rounded-box border-2 border-base-300 transition duration-300 hover:shadow-success hover:border-success">
     <div class="rounded-box p-4 bg-base-200 w-full transition duration-300 hover:bg-base-300">
-        <h2 class="text-2xl sm:text-3xl lg:text-4xl font-bold text-center italic">Community Checklists</h2>
+        <h2 class="text-3xl lg:text-4xl font-bold text-center italic">Community Checklists</h2>
         <p class="text-center text-base-content/70 mt-1">Trophy guides built by the community, for the community</p>
         <div class="divider mt-2"></div>
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
             {% for cl in items %}
             <a href="{% url 'guide_detail' cl.id %}"
                class="card bg-base-100 border-2 border-base-300 shadow-md shadow-neutral transition-all duration-300 hover:shadow-lg hover:border-success hover:scale-[1.02] cursor-pointer group">

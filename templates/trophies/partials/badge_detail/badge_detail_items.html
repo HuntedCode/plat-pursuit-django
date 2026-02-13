@@ -3,9 +3,9 @@
     <a href="{% if profile %}{% url 'game_detail_with_profile' game.np_communication_id profile.psn_username %}{% else %}{% url 'game_detail' game.np_communication_id %}{% endif %}" class="card bg-base-100 border-4 border-base-300 shadow-md shadow-neutral cursor-pointer transition-all duration-300 hover:border-{{ game|platform_color }} hover:shadow-{{ game|platform_color }} group">
         <div class="{% if pgame.progress == 100 %}bg-success/15{% elif pgame.earned_trophies.platinum == 1 %}bg-warning/20{% else %}bg-base-100{% endif %}">
             <div class="card-body m-0 px-3 py-3 {% if pgame.progress == 100 %}border-4 border-success{% elif pgame.earned_trophies.platinum == 1 %}border-4 border-warning{% endif %}">
-                <div class="flex flex-col lg:flex-row lg:justify-between items-center gap-4 w-full">
-                    <div class="flex flex-col lg:flex-row items-center justify-start gap-2 col-span-1 w-full">
-                        <figure class="border-4 border-base-300 rounded-box transition-all duration-300 w-28 mr-2 lg:mr-4 group-hover:border-{{ game|platform_color }} hover:scale-105">
+                <div class="flex flex-row justify-between items-center gap-2 lg:gap-4 w-full">
+                    <div class="flex flex-row items-center justify-start gap-2 lg:gap-4 min-w-0 flex-1">
+                        <figure class="border-2 lg:border-4 border-base-300 rounded-box transition-all duration-300 w-18 lg:w-28 shrink-0 group-hover:border-{{ game|platform_color }} hover:scale-105">
                             {% if game.title_image and not game.force_title_icon %}
                                 <img src="{{ game.title_image }}" alt="{{ game.title_name }} cover" class="w-full object-cover shrink-0" loading="lazy" decoding="async" />
                             {% else %}
@@ -62,7 +62,7 @@
                                     <p class="text-base-content/70 text-sm pr-1 italic">No ratings yet. Be the first!</p>
                                 {% endif %}
                             </div>
-                            <p class="text-lg 2xl:text-2xl text-base-content italic pr-1 line-clamp-2 font-semibold">{{ game.title_name }}</p>
+                            <p class="text-sm lg:text-lg 2xl:text-2xl text-base-content italic pr-1 line-clamp-1 font-semibold">{{ game.title_name }}</p>
                             <div class="flex flex-row items-center gap-2">
                                 {% for platform in game.title_platform reversed %}
                                     <div class="badge badge-xs lg:badge-sm badge-ghost font-bold text-xs md:text-sm lg:text-base border-2 border-{{ platform|platform_color_str }} rounded-box hover:scale-105">{{ platform }}</div>
@@ -90,31 +90,31 @@
                         </div>
                     </div>
                     
-                    <div class="flex flex-col w-full lg:w-auto lg:min-w-110 2xl:min-w-140">
-                        <div class="flex flex-col sm:flex-row items-center justify-around w-full gap-2 sm:gap-0 mb-4">
+                    <div class="flex flex-col w-auto shrink-0 min-w-[200px] lg:min-w-110 2xl:min-w-140">
+                        <div class="flex flex-row items-center justify-around w-full mb-4">
                             <div class="flex flex-row items-center justify-around w-full gap-4">
                                 <div class="flex flex-row items-end">
-                                    {% include 'partials/icons/trophy_cup.html' with color='var(--color-trophy-bronze)' size='w-7 2xl:w-10 h-7 2xl:h-10 mr-4' extra_class='hover:scale-105' %}
-                                    <p class="text-sm 2xl:text-base font-bold" aria-label="Bronze trophies: {{ pgame.earned_trophies.bronze|default:0 }} of {{ game.defined_trophies.bronze }}"><span class="text-2xl 2xl:text-3xl text-primary">{{ pgame.earned_trophies.bronze|default:0 }}</span> / {{ game.defined_trophies.bronze }}</p>
+                                    {% include 'partials/icons/trophy_cup.html' with color='var(--color-trophy-bronze)' size='w-5 lg:w-7 2xl:w-10 h-5 lg:h-7 2xl:h-10 mr-1 lg:mr-4' extra_class='hover:scale-105' %}
+                                    <p class="text-xs lg:text-sm 2xl:text-base font-bold" aria-label="Bronze trophies: {{ pgame.earned_trophies.bronze|default:0 }} of {{ game.defined_trophies.bronze }}"><span class="text-base lg:text-2xl 2xl:text-3xl text-primary">{{ pgame.earned_trophies.bronze|default:0 }}</span> / {{ game.defined_trophies.bronze }}</p>
                                 </div>
                                 <div class="flex flex-row items-end">
-                                    {% include 'partials/icons/trophy_cup.html' with color='var(--color-trophy-silver)' size='w-7 2xl:w-10 h-7 2xl:h-10 mr-4' extra_class='hover:scale-105' %}
-                                    <p class="text-sm 2xl:text-base font-bold" aria-label="Silver trophies: {{ pgame.earned_trophies.silver|default:0 }} of {{ game.defined_trophies.silver }}"><span class="text-2xl 2xl:text-3xl text-primary">{{ pgame.earned_trophies.silver|default:0 }}</span> / {{ game.defined_trophies.silver }}</p>
+                                    {% include 'partials/icons/trophy_cup.html' with color='var(--color-trophy-silver)' size='w-5 lg:w-7 2xl:w-10 h-5 lg:h-7 2xl:h-10 mr-1 lg:mr-4' extra_class='hover:scale-105' %}
+                                    <p class="text-xs lg:text-sm 2xl:text-base font-bold" aria-label="Silver trophies: {{ pgame.earned_trophies.silver|default:0 }} of {{ game.defined_trophies.silver }}"><span class="text-base lg:text-2xl 2xl:text-3xl text-primary">{{ pgame.earned_trophies.silver|default:0 }}</span> / {{ game.defined_trophies.silver }}</p>
                                 </div>
                             </div>
                             <div class="flex flex-row items-center justify-around w-full gap-4">
                                 <div class="flex flex-row items-end">
-                                    {% include 'partials/icons/trophy_cup.html' with color='var(--color-trophy-gold)' size='w-7 2xl:w-10 h-7 2xl:h-10 mr-4' extra_class='hover:scale-105' %}
-                                    <p class="text-sm 2xl:text-base font-bold" aria-label="Gold trophies: {{ pgame.earned_trophies.gold|default:0 }} of {{ game.defined_trophies.gold }}"><span class="text-2xl 2xl:text-3xl text-primary">{{ pgame.earned_trophies.gold|default:0 }}</span> / {{ game.defined_trophies.gold }}</p>
+                                    {% include 'partials/icons/trophy_cup.html' with color='var(--color-trophy-gold)' size='w-5 lg:w-7 2xl:w-10 h-5 lg:h-7 2xl:h-10 mr-1 lg:mr-4' extra_class='hover:scale-105' %}
+                                    <p class="text-xs lg:text-sm 2xl:text-base font-bold" aria-label="Gold trophies: {{ pgame.earned_trophies.gold|default:0 }} of {{ game.defined_trophies.gold }}"><span class="text-base lg:text-2xl 2xl:text-3xl text-primary">{{ pgame.earned_trophies.gold|default:0 }}</span> / {{ game.defined_trophies.gold }}</p>
                                 </div>
                                 <div class="flex flex-row items-end">
-                                    {% include 'partials/icons/trophy_cup.html' with color='var(--color-trophy-platinum)' size='w-7 2xl:w-10 h-7 2xl:h-10 mr-4' extra_class='hover:scale-105' %}
-                                    <p class="text-sm 2xl:text-base font-bold" aria-label="Platinum trophies: {{ pgame.earned_trophies.platinum|default:0 }} of {{ game.defined_trophies.platinum }}"><span class="text-2xl 2xl:text-3xl text-primary">{{ pgame.earned_trophies.platinum|default:0 }}</span> / {{ game.defined_trophies.platinum }}</p>
+                                    {% include 'partials/icons/trophy_cup.html' with color='var(--color-trophy-platinum)' size='w-5 lg:w-7 2xl:w-10 h-5 lg:h-7 2xl:h-10 mr-1 lg:mr-4' extra_class='hover:scale-105' %}
+                                    <p class="text-xs lg:text-sm 2xl:text-base font-bold" aria-label="Platinum trophies: {{ pgame.earned_trophies.platinum|default:0 }} of {{ game.defined_trophies.platinum }}"><span class="text-base lg:text-2xl 2xl:text-3xl text-primary">{{ pgame.earned_trophies.platinum|default:0 }}</span> / {{ game.defined_trophies.platinum }}</p>
                                 </div>
                             </div>
                         </div>
                         <progress class="progress {% if pgame.progress < 33 %}progress-error{% elif pgame.progress < 66 %}progress-warning{% elif pgame.progress < 100 %}progress-success{% else %}progress-primary{% endif %} w-7/8 mx-auto mb-1" value="{{ pgame.progress }}" max="100" aria-label="Game completion progress: {{ pgame.progress|default:0 }}%"></progress>
-                        <p class="text-base 2xl:text-lg text-base-content/70 text-center font-bold pr-1 italic">Total Completion: {{ pgame.progress|default:0 }}%</p>
+                        <p class="text-xs lg:text-base 2xl:text-lg text-base-content/70 text-center font-bold pr-1 italic">Total Completion: {{ pgame.progress|default:0 }}%</p>
                     </div>
                 </div>
             </div>

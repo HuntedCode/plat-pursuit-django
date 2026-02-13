@@ -6,15 +6,15 @@
 {% block content %}
 <div class="container mx-auto p-4">
     {# Header #}
-    <div class="flex flex-col lg:flex-row justify-between items-start lg:items-center mb-6">
-        <h1 class="text-3xl font-bold mb-4 lg:mb-0">Comment Moderation Dashboard</h1>
+    <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-6">
+        <h1 class="text-3xl font-bold mb-4 md:mb-0">Comment Moderation Dashboard</h1>
         <a href="{% url 'moderation_log' %}" class="btn btn-secondary btn-sm">
             View Full Action Log
         </a>
     </div>
 
     {# Stats Cards #}
-    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <div class="stat bg-base-100 border-2 border-base-300 rounded-box">
             <div class="stat-title">Pending</div>
             <div class="stat-value text-error">{{ pending_count }}</div>
@@ -49,7 +49,7 @@
         {% endfor %}
     {% endif %}
 
-    <div class="flex flex-col xl:flex-row gap-6">
+    <div class="flex flex-col lg:flex-row gap-6">
         {# Main Content - Report List #}
         <div class="flex-1">
             {# Tabs #}
@@ -220,7 +220,7 @@
         </div>
 
         {# Sidebar - Recent Activity #}
-        <aside class="w-full xl:w-96">
+        <aside class="w-full lg:w-96">
             <div class="card bg-base-100 border-2 border-base-300 lg:sticky lg:top-20">
                 <div class="card-body">
                     <h3 class="card-title text-lg">Recent Activity</h3>
@@ -322,4 +322,8 @@ function showActionModal(reportId, action) {
     modal.showModal();
 }
 </script>
+{% endblock %}
+
+{% block js_scripts %}
+<script>PlatPursuit.ZoomScaler.init();</script>
 {% endblock %}

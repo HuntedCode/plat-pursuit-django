@@ -5,8 +5,8 @@
 
 {% block content %}
 <div class="container mx-auto p-4">
-    <div class="flex flex-col lg:flex-row justify-between items-start lg:items-center mb-6">
-        <h1 class="text-3xl font-bold mb-4 lg:mb-0">Notification Center</h1>
+    <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-6">
+        <h1 class="text-3xl font-bold mb-4 md:mb-0">Notification Center</h1>
         <div class="flex gap-2">
             <a href="{% url 'admin_notification_history' %}" class="btn btn-secondary btn-sm">
                 History
@@ -28,7 +28,7 @@
         {% endfor %}
     {% endif %}
 
-    <div class="flex flex-col xl:flex-row gap-6">
+    <div class="flex flex-col lg:flex-row gap-6">
         <div class="flex-1">
             <form method="post" enctype="multipart/form-data" class="space-y-6" id="notification-form">
                 {% csrf_token %}
@@ -353,7 +353,7 @@
                     </div>
                 </div>
 
-                <div class="flex flex-col sm:flex-row gap-3">
+                <div class="flex flex-row gap-3">
                     <button type="submit" name="action" value="send_now" id="send-btn"
                             class="btn btn-primary flex-1 gap-2">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -379,7 +379,7 @@
             </form>
         </div>
 
-        <aside class="w-full xl:w-96 xl:sticky xl:top-10 xl:self-start">
+        <aside class="w-full lg:w-96 lg:sticky lg:top-10 lg:self-start">
             <div class="card bg-base-100 border-2 border-base-300">
                 <div class="card-body">
                     <div class="flex items-center gap-2 mb-3">
@@ -459,4 +459,5 @@
 <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 <script src="{% static 'js/section-builder.js' %}"></script>
 <script src="{% static 'js/admin-notifications.js' %}"></script>
+<script>PlatPursuit.ZoomScaler.init();</script>
 {% endblock %}

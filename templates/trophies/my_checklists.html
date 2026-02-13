@@ -42,7 +42,7 @@
         {% if active_tab == 'drafts' %}
             {# Drafts Tab #}
             {% if drafts %}
-                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 p-4">
+                <div class="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 p-4">
                     {% for checklist in drafts %}
                         <a href="{% url 'guide_edit' checklist.id %}"
                            class="card bg-base-200 border-2 border-warning/30 rounded-2xl shadow-lg shadow-neutral transition-all duration-300 hover:shadow-xl hover:border-warning hover:scale-[1.02] cursor-pointer group">
@@ -116,7 +116,7 @@
         {% elif active_tab == 'published' %}
             {# Published Tab #}
             {% if published %}
-                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 p-4">
+                <div class="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 p-4">
                     {% for checklist in published %}
                         <div class="card bg-base-200 border-2 border-base-300 rounded-2xl shadow-lg shadow-neutral transition-all duration-300 hover:shadow-xl hover:border-primary group">
                             <!-- Image Section -->
@@ -223,7 +223,7 @@
         {% else %}
             {# In Progress Tab #}
             {% if in_progress %}
-                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 p-4">
+                <div class="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 p-4">
                     {% for progress in in_progress %}
                         {% with progress.checklist as checklist %}
                         <a href="{% url 'guide_detail' checklist.id %}"
@@ -317,4 +317,8 @@
         {% endif %}
     </div>
 </section>
+{% endblock %}
+
+{% block js_scripts %}
+<script>PlatPursuit.ZoomScaler.init();</script>
 {% endblock %}

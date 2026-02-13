@@ -105,6 +105,53 @@
     @apply shadow-lg shadow-base-300 border-2 border-base-300;
   }
 
+  /* Zoom Scaling System - Uniform sub-768px scaling via transform: scale()
+     Activated per-page by adding .zoom-active to #zoom-container via JS (PlatPursuit.ZoomScaler.init())
+     See CLAUDE.md "Responsive Design Standards" for full documentation */
+  @media (max-width: 767px) {
+    #zoom-container.zoom-active {
+      overflow: hidden;
+    }
+    #zoom-container.zoom-active #zoom-wrapper {
+      transform-origin: top left;
+    }
+  }
+  @media (max-width: 359px) {
+    #zoom-container.zoom-active #zoom-wrapper { transform: scale(0.42); width: calc(100% / 0.42); }
+  }
+  @media (min-width: 360px) and (max-width: 389px) {
+    #zoom-container.zoom-active #zoom-wrapper { transform: scale(0.47); width: calc(100% / 0.47); }
+  }
+  @media (min-width: 390px) and (max-width: 419px) {
+    #zoom-container.zoom-active #zoom-wrapper { transform: scale(0.51); width: calc(100% / 0.51); }
+  }
+  @media (min-width: 420px) and (max-width: 479px) {
+    #zoom-container.zoom-active #zoom-wrapper { transform: scale(0.55); width: calc(100% / 0.55); }
+  }
+  @media (min-width: 480px) and (max-width: 539px) {
+    #zoom-container.zoom-active #zoom-wrapper { transform: scale(0.63); width: calc(100% / 0.63); }
+  }
+  @media (min-width: 540px) and (max-width: 599px) {
+    #zoom-container.zoom-active #zoom-wrapper { transform: scale(0.70); width: calc(100% / 0.70); }
+  }
+  @media (min-width: 600px) and (max-width: 639px) {
+    #zoom-container.zoom-active #zoom-wrapper { transform: scale(0.78); width: calc(100% / 0.78); }
+  }
+  @media (min-width: 640px) and (max-width: 719px) {
+    #zoom-container.zoom-active #zoom-wrapper { transform: scale(0.83); width: calc(100% / 0.83); }
+  }
+  @media (min-width: 720px) and (max-width: 767px) {
+    #zoom-container.zoom-active #zoom-wrapper { transform: scale(0.94); width: calc(100% / 0.94); }
+  }
+  /* Prevent Tailwind container margin jump in the 640px-768px range when scaling is active */
+  @media (min-width: 640px) and (max-width: 767px) {
+    #zoom-container.zoom-active .container {
+      max-width: 100% !important;
+      padding-left: 1rem !important;
+      padding-right: 1rem !important;
+    }
+  }
+
   .card-img-container {
     @apply border-2 border-base-300 group-hover:scale-105 group-focus-within:scale-105 hover:animate-pulse;
   }

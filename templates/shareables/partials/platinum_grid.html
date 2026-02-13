@@ -3,7 +3,7 @@
 
 {% if platinums_by_year %}
     {# Search and Jump to Year controls #}
-    <div class="mb-6 flex flex-col sm:flex-row gap-4">
+    <div class="mb-6 flex flex-row gap-4">
         {# Search bar #}
         <div class="form-control flex-1">
             <div class="relative">
@@ -30,7 +30,7 @@
         </div>
 
         {# Jump to Year dropdown #}
-        <div class="form-control w-full sm:w-auto">
+        <div class="form-control w-auto">
             <select id="jump-to-year" class="select select-bordered select-primary">
                 <option value="">Jump to year...</option>
                 {% for year, platinums in platinums_by_year.items %}
@@ -41,8 +41,8 @@
 
         {# Hide Shovelware toggle #}
         {% if shovelware_count > 0 %}
-        <div class="form-control w-full sm:w-auto">
-            <label class="label cursor-pointer gap-2 justify-start sm:justify-end">
+        <div class="form-control w-auto">
+            <label class="label cursor-pointer gap-2 justify-end">
                 <span class="label-text text-sm">
                     <span class="opacity-70">Hide Shovelware</span>
                     <span class="badge badge-sm badge-ghost ml-1">{{ shovelware_count }}</span>
@@ -61,7 +61,7 @@
             <span class="text-base-content/70 text-sm">({{ platinums|length }} platinum{{ platinums|length|pluralize }})</span>
         </h3>
 
-        <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-4">
+        <div class="grid grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-4">
             {% for et in platinums %}
             <div class="card bg-base-100 border-4 {% if et.is_milestone %}shimmer{% else %}border-base-300 hover:border-primary{% endif %} shadow-md hover:shadow-primary/20 transition-all duration-200 cursor-pointer group platinum-card"
                  data-earned-trophy-id="{{ et.id }}"

@@ -2,56 +2,6 @@
 {% load custom_filters humanize static %}
 {% block title %}{{ profile.display_psn_username }}{% endblock %}
 
-{% block extra_head %}
-<style>
-    /* Profile Page Responsive Scaling - Uses transform: scale() for cross-browser compatibility */
-    /* Design baseline: 768px tablet design at 100%, scales down for smaller screens */
-    /* Uses transform instead of CSS zoom for consistent Safari/WebKit behavior */
-
-    @media (max-width: 767px) {
-        #zoom-container { overflow: hidden; }
-        #zoom-wrapper { transform-origin: top left; }
-    }
-
-    @media (max-width: 359px) {
-        #zoom-wrapper { transform: scale(0.42); width: calc(100% / 0.42); }
-    }
-    @media (min-width: 360px) and (max-width: 389px) {
-        #zoom-wrapper { transform: scale(0.47); width: calc(100% / 0.47); }
-    }
-    @media (min-width: 390px) and (max-width: 419px) {
-        #zoom-wrapper { transform: scale(0.51); width: calc(100% / 0.51); }
-    }
-    @media (min-width: 420px) and (max-width: 479px) {
-        #zoom-wrapper { transform: scale(0.55); width: calc(100% / 0.55); }
-    }
-    @media (min-width: 480px) and (max-width: 539px) {
-        #zoom-wrapper { transform: scale(0.63); width: calc(100% / 0.63); }
-    }
-    @media (min-width: 540px) and (max-width: 599px) {
-        #zoom-wrapper { transform: scale(0.70); width: calc(100% / 0.70); }
-    }
-    @media (min-width: 600px) and (max-width: 639px) {
-        #zoom-wrapper { transform: scale(0.78); width: calc(100% / 0.78); }
-    }
-    @media (min-width: 640px) and (max-width: 719px) {
-        #zoom-wrapper { transform: scale(0.83); width: calc(100% / 0.83); }
-    }
-    @media (min-width: 720px) and (max-width: 767px) {
-        #zoom-wrapper { transform: scale(0.94); width: calc(100% / 0.94); }
-    }
-
-    /* Prevent Tailwind container margins in the 640px-768px range */
-    @media (min-width: 640px) and (max-width: 767px) {
-        .container {
-            max-width: 100% !important;
-            padding-left: 1rem !important;
-            padding-right: 1rem !important;
-        }
-    }
-</style>
-{% endblock %}
-
 {% block content %}
     {% include 'partials/breadcrumb.html' with items=breadcrumb view_count=view_count %}
 
@@ -176,37 +126,6 @@
         });
     });
 
-    // Zoom height correction for transform: scale() approach
-    // transform: scale() doesn't change the layout box height, so we set the
-    // container height to the visual (scaled) height of the wrapper
-    (function() {
-        var container = document.getElementById('zoom-container');
-        var wrapper = document.getElementById('zoom-wrapper');
-        if (!container || !wrapper) return;
-
-        function fixHeight() {
-            if (window.innerWidth >= 768) {
-                container.style.height = '';
-                return;
-            }
-            var style = getComputedStyle(wrapper);
-            var matrix = new DOMMatrixReadOnly(style.transform);
-            var scale = matrix.a;
-            if (scale > 0 && scale < 1) {
-                container.style.height = Math.ceil(wrapper.scrollHeight * scale) + 'px';
-            }
-        }
-
-        fixHeight();
-        window.addEventListener('resize', fixHeight);
-
-        // Re-calculate when content changes (infinite scroll, tab switches)
-        new MutationObserver(function() {
-            requestAnimationFrame(fixHeight);
-        }).observe(wrapper, { childList: true, subtree: true });
-
-        // Fix after images load (they change content height)
-        wrapper.addEventListener('load', fixHeight, true);
-    })();
+    PlatPursuit.ZoomScaler.init();
     </script>
 {% endblock %}

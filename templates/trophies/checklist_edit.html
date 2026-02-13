@@ -111,10 +111,10 @@
                             </figure>
 
                             {# File Input and Remove Button #}
-                            <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                            <div class="flex flex-row items-center gap-2">
                                 <input type="file"
                                        id="checklist-thumbnail-input"
-                                       class="file-input file-input-bordered file-input-sm sm:file-input-md flex-1 min-w-0"
+                                       class="file-input file-input-bordered file-input-md flex-1 min-w-0"
                                        accept="image/jpeg,image/png,image/webp,image/gif"
                                        data-checklist-id="{{ checklist.id }}">
                                 {% if checklist.thumbnail %}
@@ -125,7 +125,6 @@
                                     <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
                                     </svg>
-                                    <span class="sm:hidden">Remove</span>
                                 </button>
                                 {% endif %}
                             </div>
@@ -317,7 +316,7 @@
                                     </figure>
                                     {% endif %}
 
-                                    <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                                    <div class="flex flex-row items-center gap-2">
                                         <input type="file"
                                                class="file-input file-input-bordered file-input-sm flex-1 min-w-0 section-thumbnail-input"
                                                accept="image/jpeg,image/png,image/webp,image/gif"
@@ -698,7 +697,7 @@
                                             </div>
 
                                             <div class="flex-1 flex flex-col">
-                                                <div class="flex flex-col sm:flex-row items-center gap-2">
+                                                <div class="flex flex-row items-center gap-2">
                                                     <select class="select select-xs select-bordered item-type-select">
                                                         <option value="item" {% if item.item_type == 'item' or not item.item_type %}selected{% endif %}>Item</option>
                                                         <option value="sub_header" {% if item.item_type == 'sub_header' %}selected{% endif %}>Sub-header</option>
@@ -739,7 +738,7 @@
                             {% if not checklist.is_published %}
                             <div id="item-creator-{{ section.id }}" class="mt-4 bg-base-200/50 rounded-lg p-4 border border-base-300">
                                 {# Type Selector #}
-                                <div class="flex flex-col sm:flex-row items-start sm:items-center gap-3 mb-3">
+                                <div class="flex flex-row items-center gap-3 mb-3">
                                     <label class="label-text font-semibold shrink-0">Item Type:</label>
                                     <select id="item-type-select-{{ section.id }}"
                                             class="select select-bordered select-sm flex-1 max-w-xs unified-item-type-select"
@@ -1037,5 +1036,6 @@ Use fire attacks</pre>
 {% endblock %}
 
 {% block js_scripts %}
+    <script>PlatPursuit.ZoomScaler.init();</script>
     <script src="{% static 'js/checklist.js' %}"></script>
 {% endblock %}

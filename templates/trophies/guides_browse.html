@@ -7,7 +7,7 @@
 <div class="container mx-auto px-4 py-8">
     <div class="flex flex-col gap-6">
         <!-- Header -->
-        <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div class="flex flex-row items-center justify-between gap-4">
             <div>
                 <h1 class="text-3xl font-bold">Browse All Guides</h1>
                 <p class="text-base-content/60">{{ total_guides }} community-created guide{{ total_guides|pluralize }}</p>
@@ -23,7 +23,7 @@
         </div>
 
         <!-- Search and Filters -->
-        <form method="GET" class="flex flex-col sm:flex-row gap-2">
+        <form method="GET" class="flex flex-row gap-2">
             <input
                 type="text"
                 name="q"
@@ -31,7 +31,7 @@
                 placeholder="Search by game or creator..."
                 class="input input-bordered flex-1"
             />
-            <select name="sort" class="select select-bordered w-full sm:w-auto">
+            <select name="sort" class="select select-bordered w-auto">
                 <option value="popular" {% if sort == 'popular' %}selected{% endif %}>Most Popular</option>
                 <option value="recent" {% if sort == 'recent' %}selected{% endif %}>Most Recent</option>
                 <option value="oldest" {% if sort == 'oldest' %}selected{% endif %}>Oldest</option>
@@ -47,7 +47,7 @@
 
         <!-- Guides Grid -->
         {% if checklists %}
-            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            <div class="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                 {% for checklist in checklists %}
                     <a href="{% url 'guide_detail' checklist.id %}"
                        class="card bg-base-200 border-2 border-base-300 rounded-2xl shadow-lg shadow-neutral transition-all duration-300 hover:shadow-xl hover:border-primary hover:scale-[1.02] cursor-pointer group">
@@ -191,4 +191,10 @@
         {% endif %}
     </div>
 </div>
+{% endblock %}
+
+{% block js_scripts %}
+<script>
+    PlatPursuit.ZoomScaler.init();
+</script>
 {% endblock %}

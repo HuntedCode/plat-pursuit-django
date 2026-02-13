@@ -7,13 +7,13 @@
         {% include 'partials/breadcrumb.html' with items=breadcrumb %}
 
         <div class="flex flex-row bg-base-100 border-4 border-base-300 shadow-md shadow-neutral rounded-box items-center justify-center gap-4 p-4 w-fit mx-auto">
-            <figure class="w-32 sm:w-37 md:w-42 lg:w-48 h-32 sm:h-37 md:h-42 lg:h-48 overflow-visible">
+            <figure class="w-42 lg:w-48 h-42 lg:h-48 overflow-visible">
                 {% include 'partials/badge.html' with layers=badge.get_badge_layers %}
             </figure>
             <div class="flex flex-col gap-0">
-                <h1 class="text-sm sm:text-lg md:text-xl lg:text-2xl text-base-content text-start pr-1 italic">{{ badge.effective_display_series }}</h1>
-                <h1 class="text-sm sm:text-lg md:text-xl lg:text-2xl legendary-title text-start pr-1 italic">{{ badge.effective_user_title }}</h1>
-                <h1 class="text-sm sm:text-lg md:text-xl lg:text-2xl text-base-content text-start">Leaderboards</h1>
+                <h1 class="text-xl lg:text-2xl text-base-content text-start pr-1 italic">{{ badge.effective_display_series }}</h1>
+                <h1 class="text-xl lg:text-2xl legendary-title text-start pr-1 italic">{{ badge.effective_user_title }}</h1>
+                <h1 class="text-xl lg:text-2xl text-base-content text-start">Leaderboards</h1>
             </div>
         </div>
         <div class="divider divider-vertical"></div>
@@ -26,7 +26,7 @@
                 <h2 class="text-lg italic font-bold">Badge Earns By Date</h2>
                 <p class="text-sm text-base-content/70 text-center pr-1 italic">Leaderboard Updated: {{ lb_earners_refresh_time|iso_datetime }}</p>
                 <p class="text-sm text-base-content/70 text-center pr-1 italic">Refreshed every 6 hours.</p>
-                <div class="flex flex-col sm:flex-row justify-between items-center gap-4 mt-4 w-7/8 mx-auto">
+                <div class="flex flex-row justify-between items-center gap-4 mt-4 w-7/8 mx-auto">
                     <div class="btn-group">
                         {% if lb_earners_page_obj.has_previous %}
                         <a href="?{% query_transform lb_earners_page=1 %}" class="btn btn-xs">First</a>
@@ -63,9 +63,9 @@
                             {% for entry in lb_earners_page_obj %}
                                 <tr id="1-rank-{{ entry.rank }}" class="{% if request.user.is_authenticated and request.user.profile.display_psn_username == entry.psn_username %}bg-success/15{% endif %} h-15">
                                     <td>{{ entry.rank }}</td>
-                                    <td class="text-xs sm:text-sm lg:text-base">
+                                    <td class="text-sm lg:text-base">
                                         <a href="{% url 'profile_detail' entry.psn_username %}">
-                                            <div class="avatar mr-2 hidden sm:inline-flex">
+                                            <div class="avatar mr-2 inline-flex">
                                                 <div class="w-4 lg:w-6 rounded-full ring-2 ring-primary cursor-pointer hover:scale-105">
                                                     <img src="{{ entry.avatar_url|default:'/static/default-avatar.png' }}" alt="Profile Avatar" />
                                                 </div>
@@ -82,14 +82,14 @@
                                             </div>
                                         {% endwith %}
                                     </td>
-                                    <td class="text-xs sm:text-sm lg:text-base italic">{{ entry.earn_date|iso_datetime }}</td>
+                                    <td class="text-sm lg:text-base italic">{{ entry.earn_date|iso_datetime }}</td>
                                 </tr>
                             {% endfor %}
                         </tbody>
                     </table>
                 </div>
 
-                <div class="flex flex-col sm:flex-row justify-between items-center gap-4 mt-4 w-7/8 mx-auto">
+                <div class="flex flex-row justify-between items-center gap-4 mt-4 w-7/8 mx-auto">
 
                     <div class="btn-group">
                         {% if lb_earners_page_obj.has_previous %}
@@ -120,7 +120,7 @@
                 <h2 class="text-xl italic font-bold">Badge Trophy Leaders</h2>
                 <p class="text-sm text-base-content/70 text-center pr-1 italic">Leaderboard Updated: {{ lb_progress_refresh_time|iso_datetime }}</p>
                 <p class="text-sm text-base-content/70 text-center pr-1 italic">Refreshed every 6 hours.</p>
-                <div class="flex flex-col sm:flex-row justify-between items-center gap-4 mt-4 w-7/8 mx-auto">
+                <div class="flex flex-row justify-between items-center gap-4 mt-4 w-7/8 mx-auto">
                     <div class="btn-group">
                         {% if lb_progress_page_obj.has_previous %}
                         <a href="?{% query_transform lb_progress_page=1 %}" class="btn btn-xs">First</a>
@@ -161,7 +161,7 @@
                                 <td>{{ entry.rank }}</td>
                                 <td>
                                     <a href="{% url 'profile_detail' entry.psn_username %}">
-                                        <div class="avatar mr-2 hidden sm:inline-flex">
+                                        <div class="avatar mr-2 inline-flex">
                                             <div class="w-4 lg:w-6 rounded-full ring-2 ring-primary cursor-pointer hover:scale-105">
                                                 <img src="{{ entry.avatar_url|default:'/static/default-avatar.png' }}" alt="Profile Avatar" />
                                             </div>
@@ -200,7 +200,7 @@
                     </table>
                 </div>
 
-                <div class="flex flex-col sm:flex-row justify-between items-center gap-4 mt-4 w-7/8 mx-auto">
+                <div class="flex flex-row justify-between items-center gap-4 mt-4 w-7/8 mx-auto">
                     <div class="btn-group">
                         {% if lb_progress_page_obj.has_previous %}
                         <a href="?{% query_transform lb_progress_page=1 %}" class="btn btn-xs">First</a>
@@ -240,4 +240,5 @@
         window.location.href = url.toString();
     }
 </script>
+<script>PlatPursuit.ZoomScaler.init();</script>
 {% endblock %}
