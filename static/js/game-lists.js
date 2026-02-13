@@ -606,6 +606,8 @@ const GameListEditor = {
 
         let draggedEl = null;
         let placeholder = null;
+        let rafScheduled = false;
+        let lastClientY = 0;
 
         container.addEventListener('dragstart', (e) => {
             const card = e.target.closest('.game-list-item-card');
@@ -617,7 +619,10 @@ const GameListEditor = {
             e.dataTransfer.setData('text/plain', card.dataset.itemId);
 
             placeholder = document.createElement('div');
-            placeholder.className = 'border-2 border-dashed border-primary rounded-box h-16 bg-primary/5 transition-all';
+            placeholder.className = 'border-2 border-dashed border-primary rounded-box h-16 bg-primary/5';
+
+            // Cache all card positions once at drag start
+            this._cacheCardPositions(container);
         });
 
         container.addEventListener('dragover', (e) => {
@@ -625,12 +630,31 @@ const GameListEditor = {
             if (!draggedEl || !placeholder) return;
             e.dataTransfer.dropEffect = 'move';
 
-            const afterEl = this._getDragAfterElement(container, e.clientY);
-            if (afterEl) {
-                container.insertBefore(placeholder, afterEl);
-            } else {
-                container.appendChild(placeholder);
-            }
+            lastClientY = e.clientY;
+
+            // Throttle to one update per animation frame
+            if (rafScheduled) return;
+            rafScheduled = true;
+
+            requestAnimationFrame(() => {
+                rafScheduled = false;
+                if (!draggedEl || !placeholder) return;
+
+                const afterEl = this._getDragAfterElement(lastClientY);
+
+                // Short-circuit: skip if placeholder is already in the right spot
+                if (afterEl) {
+                    if (placeholder.nextElementSibling !== afterEl) {
+                        container.insertBefore(placeholder, afterEl);
+                        this._cacheCardPositions(container);
+                    }
+                } else {
+                    if (container.lastElementChild !== placeholder) {
+                        container.appendChild(placeholder);
+                        this._cacheCardPositions(container);
+                    }
+                }
+            });
         });
 
         container.addEventListener('dragend', () => {
@@ -642,6 +666,7 @@ const GameListEditor = {
             }
             draggedEl = null;
             placeholder = null;
+            this._cachedPositions = [];
         });
 
         container.addEventListener('drop', (e) => {
@@ -665,16 +690,23 @@ const GameListEditor = {
 
             draggedEl = null;
             placeholder = null;
+            this._cachedPositions = [];
         });
     },
 
-    _getDragAfterElement(container, y) {
+    _cacheCardPositions(container) {
         const cards = [...container.querySelectorAll('.game-list-item-card:not(.opacity-50)')];
-        const result = cards.reduce((closest, child) => {
-            const box = child.getBoundingClientRect();
-            const offset = y - box.top - box.height / 2;
+        this._cachedPositions = cards.map(card => {
+            const box = card.getBoundingClientRect();
+            return { element: card, top: box.top, height: box.height };
+        });
+    },
+
+    _getDragAfterElement(y) {
+        const result = this._cachedPositions.reduce((closest, item) => {
+            const offset = y - item.top - item.height / 2;
             if (offset < 0 && offset > closest.offset) {
-                return { offset, element: child };
+                return { offset, element: item.element };
             }
             return closest;
         }, { offset: Number.NEGATIVE_INFINITY });
