@@ -1,10 +1,11 @@
-from django.db import models, DatabaseError
+from django.db import models, DatabaseError, IntegrityError
 from django.utils import timezone
 from users.models import CustomUser
 from django.contrib.postgres.fields import ArrayField
 from django.core.validators import RegexValidator, MinValueValidator, MaxValueValidator
 from django.db import transaction
-from django.db.models import F, Max, Min, Q
+from django.db.models import F, IntegerField, Max, Min, Q
+from django.db.models.functions import Cast, Substr
 import logging
 
 logger = logging.getLogger("psn_api")
@@ -524,10 +525,63 @@ class Game(models.Model):
     def __str__(self):
         return self.title_name
 
+class GameFamily(models.Model):
+    """Groups related Concepts across generations/regions without merging them.
+
+    Each Concept keeps its own comments, ratings, and checklists.
+    GameFamily is a lightweight grouping layer for cross-gen unification.
+    """
+    canonical_name = models.CharField(max_length=255, db_index=True)
+    admin_notes = models.TextField(blank=True)
+    is_verified = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name_plural = "Game families"
+        ordering = ['canonical_name']
+
+    def __str__(self):
+        return self.canonical_name
+
+
+class GameFamilyProposal(models.Model):
+    """Proposed GameFamily grouping awaiting admin review."""
+    STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('approved', 'Approved'),
+        ('rejected', 'Rejected'),
+    ]
+
+    concepts = models.ManyToManyField('Concept', related_name='family_proposals')
+    proposed_name = models.CharField(max_length=255)
+    confidence = models.FloatField()
+    match_reason = models.TextField()
+    match_signals = models.JSONField(default=dict)
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='pending')
+    reviewed_by = models.ForeignKey(
+        'users.CustomUser', null=True, blank=True, on_delete=models.SET_NULL
+    )
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    resulting_family = models.ForeignKey(
+        GameFamily, null=True, blank=True, on_delete=models.SET_NULL, related_name='proposals'
+    )
+
+    class Meta:
+        ordering = ['-confidence', '-created_at']
+
+    def __str__(self):
+        return f"Proposal: {self.proposed_name} ({self.get_status_display()}, {self.confidence:.0%})"
+
+
 class Concept(models.Model):
     concept_id = models.CharField(max_length=50, unique=True)
     unified_title = models.CharField(max_length=255, blank=True)
     title_ids = models.JSONField(default=list, blank=True)
+    family = models.ForeignKey(
+        GameFamily, null=True, blank=True, on_delete=models.SET_NULL, related_name='concepts'
+    )
     publisher_name = models.CharField(max_length=255, blank=True)
     release_date = models.DateTimeField(null=True, blank=True)
     genres = models.JSONField(default=list, blank=True)
@@ -562,14 +616,22 @@ class Concept(models.Model):
     @classmethod
     def create_default_concept(cls, game):
         """Create a stub Concept for games that couldn't be looked up via PSN API."""
-        counter = 1
-        while cls.objects.filter(concept_id=f"PP_{counter}").exists():
-            counter += 1
         platforms = ', '.join(game.title_platform) if game.title_platform else 'Unknown'
-        return cls.objects.create(
-            concept_id=f"PP_{counter}",
-            unified_title=f"{game.title_name} ({platforms})",
-        )
+        for attempt in range(5):
+            max_counter = (
+                cls.objects
+                .filter(concept_id__startswith='PP_')
+                .annotate(numeric_suffix=Cast(Substr('concept_id', 4), output_field=IntegerField()))
+                .aggregate(max_val=Max('numeric_suffix'))
+            )['max_val'] or 0
+            try:
+                return cls.objects.create(
+                    concept_id=f"PP_{max_counter + 1}",
+                    unified_title=f"{game.title_name} ({platforms})",
+                )
+            except IntegrityError:
+                if attempt == 4:
+                    raise
 
     def absorb(self, other):
         """Migrate all related data from another concept to this one before deletion.
@@ -603,6 +665,11 @@ class Concept(models.Model):
         for stage in other.stages.all():
             stage.concepts.add(self)
             stage.concepts.remove(other)
+
+        # GameFamily — inherit if this concept doesn't have one
+        if other.family and not self.family:
+            self.family = other.family
+            self.save(update_fields=['family'])
 
         # Merge title_ids
         for tid in other.title_ids:

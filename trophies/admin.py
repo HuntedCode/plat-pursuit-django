@@ -3,7 +3,7 @@ from django.contrib.admin import SimpleListFilter
 from django.db import transaction
 from django.db.models import Q
 from datetime import timedelta
-from .models import Profile, Game, Trophy, EarnedTrophy, ProfileGame, APIAuditLog, FeaturedGame, FeaturedProfile, Concept, TitleID, TrophyGroup, UserTrophySelection, UserConceptRating, Badge, UserBadge, UserBadgeProgress, FeaturedGuide, Stage, PublisherBlacklist, Title, UserTitle, Milestone, UserMilestone, UserMilestoneProgress, Comment, CommentVote, CommentReport, ModerationLog, BannedWord, Checklist, ChecklistSection, ChecklistItem, ChecklistVote, UserChecklistProgress, ChecklistReport, ProfileGamification, StatType, StageStatValue, MonthlyRecap, GameList, GameListItem, GameListLike, Challenge, AZChallengeSlot
+from .models import Profile, Game, Trophy, EarnedTrophy, ProfileGame, APIAuditLog, FeaturedGame, FeaturedProfile, Concept, TitleID, TrophyGroup, UserTrophySelection, UserConceptRating, Badge, UserBadge, UserBadgeProgress, FeaturedGuide, Stage, PublisherBlacklist, Title, UserTitle, Milestone, UserMilestone, UserMilestoneProgress, Comment, CommentVote, CommentReport, ModerationLog, BannedWord, Checklist, ChecklistSection, ChecklistItem, ChecklistVote, UserChecklistProgress, ChecklistReport, ProfileGamification, StatType, StageStatValue, MonthlyRecap, GameList, GameListItem, GameListLike, Challenge, AZChallengeSlot, GameFamily, GameFamilyProposal
 
 
 # Register your models here.
@@ -1442,3 +1442,35 @@ class AZChallengeSlotAdmin(admin.ModelAdmin):
     raw_id_fields = ['challenge', 'game']
     readonly_fields = ['completed_at', 'assigned_at']
     ordering = ['challenge', 'letter']
+
+
+@admin.register(GameFamily)
+class GameFamilyAdmin(admin.ModelAdmin):
+    list_display = ['canonical_name', 'is_verified', 'concept_count', 'created_at', 'updated_at']
+    list_filter = ['is_verified']
+    search_fields = ['canonical_name', 'admin_notes']
+    readonly_fields = ['created_at', 'updated_at']
+    ordering = ['canonical_name']
+
+    def concept_count(self, obj):
+        return obj.concepts.count()
+    concept_count.short_description = 'Concepts'
+
+
+@admin.register(GameFamilyProposal)
+class GameFamilyProposalAdmin(admin.ModelAdmin):
+    list_display = ['proposed_name', 'confidence_pct', 'status', 'concept_count', 'reviewed_by', 'created_at']
+    list_filter = ['status', 'created_at']
+    search_fields = ['proposed_name', 'match_reason']
+    raw_id_fields = ['resulting_family', 'reviewed_by']
+    readonly_fields = ['created_at', 'confidence', 'match_reason', 'match_signals']
+    date_hierarchy = 'created_at'
+    ordering = ['-confidence', '-created_at']
+
+    def confidence_pct(self, obj):
+        return f"{obj.confidence:.0%}"
+    confidence_pct.short_description = 'Confidence'
+
+    def concept_count(self, obj):
+        return obj.concepts.count()
+    concept_count.short_description = 'Concepts'

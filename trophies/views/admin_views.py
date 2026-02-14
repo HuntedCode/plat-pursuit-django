@@ -4,7 +4,7 @@ from datetime import timedelta
 
 from django.contrib import messages
 from django.contrib.admin.views.decorators import staff_member_required
-from django.db.models import Q
+from django.db.models import Count, Q
 from django.http import JsonResponse
 from django.shortcuts import redirect, get_object_or_404
 from django.urls import reverse_lazy
@@ -15,7 +15,7 @@ from django.views.generic import ListView, TemplateView
 from django.views.generic.edit import FormView
 
 from trophies.services.psn_api_service import PsnApiService
-from ..models import CommentReport, ModerationLog
+from ..models import CommentReport, GameFamily, GameFamilyProposal, ModerationLog, Trophy
 from ..forms import BadgeCreationForm
 from trophies.util_modules.cache import redis_client
 
@@ -364,5 +364,55 @@ class ModerationLogView(ListView):
         context['actions_this_week'] = ModerationLog.objects.filter(
             timestamp__gte=timezone.now() - timedelta(days=7)
         ).count()
+
+        return context
+
+
+@method_decorator(staff_member_required, name='dispatch')
+class GameFamilyManagementView(TemplateView):
+    """Staff-only dashboard for managing GameFamily records and reviewing proposals."""
+    template_name = 'trophies/game_family_management.html'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+
+        proposals = GameFamilyProposal.objects.filter(
+            status='pending'
+        ).prefetch_related(
+            'concepts', 'concepts__games'
+        ).order_by('-confidence', '-created_at')
+
+        # Pre-compute trophy icons for proposal concepts (avoids N+1 in template)
+        proposal_concept_ids = set()
+        for p in proposals:
+            for c in p.concepts.all():
+                proposal_concept_ids.add(c.id)
+
+        concept_icons = {}
+        if proposal_concept_ids:
+            # Get platinum trophy icons first, fall back to any trophy icon
+            for concept_id in proposal_concept_ids:
+                icon = Trophy.objects.filter(
+                    game__concept_id=concept_id, trophy_type='platinum',
+                    trophy_icon_url__isnull=False,
+                ).exclude(trophy_icon_url='').values_list('trophy_icon_url', flat=True).first()
+                if not icon:
+                    icon = Trophy.objects.filter(
+                        game__concept_id=concept_id, trophy_icon_url__isnull=False,
+                    ).exclude(trophy_icon_url='').values_list('trophy_icon_url', flat=True).first()
+                if icon:
+                    concept_icons[concept_id] = icon
+
+        context['pending_proposals'] = proposals
+        context['concept_icons'] = concept_icons
+
+        context['families'] = GameFamily.objects.prefetch_related(
+            'concepts', 'concepts__games'
+        ).annotate(concept_count=Count('concepts')).order_by('canonical_name')
+
+        context['pending_count'] = proposals.count()
+        context['family_count'] = context['families'].count()
+        context['verified_count'] = context['families'].filter(is_verified=True).count()
+        context['unverified_count'] = context['family_count'] - context['verified_count']
 
         return context

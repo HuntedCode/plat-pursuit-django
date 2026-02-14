@@ -1,0 +1,290 @@
+{% extends 'base.html' %}
+{% load static custom_filters %}
+
+{% block title %}Game Family Management{% endblock %}
+
+{% block content %}
+<div class="container mx-auto p-4">
+    {# Header #}
+    <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-6">
+        <h1 class="text-3xl font-bold mb-4 md:mb-0">Game Family Management</h1>
+    </div>
+
+    {# Stats Cards #}
+    <div class="grid grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+        <div class="stat bg-base-100 border-2 border-base-300 rounded-box">
+            <div class="stat-title">Pending Proposals</div>
+            <div class="stat-value text-warning">{{ pending_count }}</div>
+            <div class="stat-desc">Awaiting review</div>
+        </div>
+        <div class="stat bg-base-100 border-2 border-base-300 rounded-box">
+            <div class="stat-title">Total Families</div>
+            <div class="stat-value text-info">{{ family_count }}</div>
+            <div class="stat-desc">{{ verified_count }} verified</div>
+        </div>
+        <div class="stat bg-base-100 border-2 border-base-300 rounded-box">
+            <div class="stat-title">Unverified</div>
+            <div class="stat-value text-error">{{ unverified_count }}</div>
+            <div class="stat-desc">Auto-created, not reviewed</div>
+        </div>
+    </div>
+
+    {# Tabs #}
+    <div id="gf-tabs" class="tabs tabs-boxed mb-6">
+        <button class="tab tab-active" data-tab="proposals">
+            Pending Proposals ({{ pending_count }})
+        </button>
+        <button class="tab" data-tab="families">
+            Existing Families ({{ family_count }})
+        </button>
+        <button class="tab" data-tab="create">
+            Manual Create
+        </button>
+    </div>
+
+    {# ── Tab 1: Pending Proposals ── #}
+    <div id="tab-proposals" class="gf-tab-panel">
+        {% if pending_proposals %}
+            <div class="space-y-4">
+                {% for proposal in pending_proposals %}
+                    <div class="card bg-base-100 border-2 border-base-300" data-proposal-id="{{ proposal.id }}">
+                        <div class="card-body">
+                            <div class="flex flex-col lg:flex-row justify-between items-start gap-4">
+                                <div class="flex-1">
+                                    <h3 class="text-xl font-bold mb-1">{{ proposal.proposed_name }}</h3>
+                                    <div class="flex flex-wrap gap-2 mb-2">
+                                        <span class="badge badge-warning">{{ proposal.confidence|multiply:100|floatformat:0 }}% confidence</span>
+                                        <span class="badge badge-ghost">{{ proposal.concepts.count }} concepts</span>
+                                    </div>
+                                    <p class="text-sm opacity-70 mb-3">{{ proposal.match_reason }}</p>
+
+                                    {# Concept cards #}
+                                    <div class="grid grid-cols-2 lg:grid-cols-3 gap-3">
+                                        {% for concept in proposal.concepts.all %}
+                                            <div class="bg-base-200 rounded-lg p-3">
+                                                <div class="flex items-center gap-2 mb-2">
+                                                    {% with concept_icons|dict_get:concept.id as icon_url %}
+                                                        {% if icon_url %}
+                                                            <img src="{{ icon_url }}"
+                                                                 alt="" class="w-10 h-10 rounded object-cover flex-shrink-0">
+                                                        {% endif %}
+                                                    {% endwith %}
+                                                    <div class="min-w-0">
+                                                        <p class="font-semibold text-sm truncate">{{ concept.unified_title }}</p>
+                                                        <p class="text-xs opacity-60">{{ concept.concept_id }}</p>
+                                                    </div>
+                                                </div>
+                                                <div class="flex flex-wrap gap-1">
+                                                    {% for game in concept.games.all %}
+                                                        {% for platform in game.title_platform %}
+                                                            <span class="badge badge-xs badge-outline">{{ platform }}</span>
+                                                        {% endfor %}
+                                                    {% endfor %}
+                                                    {% if concept.concept_id|slice:":3" == "PP_" %}
+                                                        <span class="badge badge-xs badge-error">Stub</span>
+                                                    {% endif %}
+                                                </div>
+                                            </div>
+                                        {% endfor %}
+                                    </div>
+                                </div>
+
+                                {# Actions #}
+                                <div class="flex flex-col gap-2 flex-shrink-0">
+                                    <button class="btn btn-success btn-sm"
+                                            onclick="GameFamilyAdmin.approveProposal({{ proposal.id }}, '{{ proposal.proposed_name|escapejs }}')">
+                                        Approve
+                                    </button>
+                                    <button class="btn btn-error btn-sm btn-outline"
+                                            onclick="GameFamilyAdmin.rejectProposal({{ proposal.id }})">
+                                        Reject
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                {% endfor %}
+            </div>
+        {% else %}
+            <div class="text-center py-12 opacity-60">
+                <p class="text-lg">No pending proposals.</p>
+                <p class="text-sm mt-2">Run <code>python manage.py match_game_families</code> to generate matches.</p>
+            </div>
+        {% endif %}
+    </div>
+
+    {# ── Tab 2: Existing Families ── #}
+    <div id="tab-families" class="gf-tab-panel hidden">
+        <div id="families-list" class="space-y-4">
+            {% for family in families %}
+                <div class="card bg-base-100 border-2 border-base-300" data-family-id="{{ family.id }}">
+                    <div class="card-body">
+                        <div class="flex flex-col lg:flex-row justify-between items-start gap-4">
+                            <div class="flex-1">
+                                <div class="flex items-center gap-2 mb-2">
+                                    <h3 class="text-xl font-bold family-name">{{ family.canonical_name }}</h3>
+                                    {% if family.is_verified %}
+                                        <span class="badge badge-success badge-sm">Verified</span>
+                                    {% else %}
+                                        <span class="badge badge-warning badge-sm">Unverified</span>
+                                    {% endif %}
+                                    <span class="badge badge-ghost badge-sm">{{ family.concept_count }} concepts</span>
+                                </div>
+                                {% if family.admin_notes %}
+                                    <p class="text-sm opacity-70 mb-2">{{ family.admin_notes }}</p>
+                                {% endif %}
+
+                                {# Member concepts #}
+                                <div class="flex flex-wrap gap-2 mt-2">
+                                    {% for concept in family.concepts.all %}
+                                        <div class="bg-base-200 rounded-lg px-3 py-2 flex items-center gap-2" data-concept-id="{{ concept.id }}">
+                                            <span class="text-sm font-medium">{{ concept.unified_title }}</span>
+                                            {% for game in concept.games.all %}
+                                                {% for platform in game.title_platform %}
+                                                    <span class="badge badge-xs badge-outline">{{ platform }}</span>
+                                                {% endfor %}
+                                            {% endfor %}
+                                            {% if concept.concept_id|slice:":3" == "PP_" %}
+                                                <span class="badge badge-xs badge-error">Stub</span>
+                                            {% endif %}
+                                            <button class="btn btn-ghost btn-xs text-error"
+                                                    onclick="GameFamilyAdmin.removeConcept({{ family.id }}, {{ concept.id }}, '{{ concept.unified_title|escapejs }}')">
+                                                &times;
+                                            </button>
+                                        </div>
+                                    {% endfor %}
+                                </div>
+                            </div>
+
+                            {# Actions #}
+                            <div class="flex flex-col gap-2 flex-shrink-0">
+                                <button class="btn btn-sm btn-outline"
+                                        onclick="GameFamilyAdmin.editFamily({{ family.id }}, '{{ family.canonical_name|escapejs }}', '{{ family.admin_notes|escapejs }}')">
+                                    Edit
+                                </button>
+                                <button class="btn btn-sm btn-outline"
+                                        onclick="GameFamilyAdmin.showAddConcept({{ family.id }})">
+                                    Add Concept
+                                </button>
+                                {% if family.is_verified %}
+                                    <button class="btn btn-sm btn-ghost text-warning"
+                                            onclick="GameFamilyAdmin.toggleVerified({{ family.id }}, false)">
+                                        Unverify
+                                    </button>
+                                {% else %}
+                                    <button class="btn btn-sm btn-ghost text-success"
+                                            onclick="GameFamilyAdmin.toggleVerified({{ family.id }}, true)">
+                                        Verify
+                                    </button>
+                                {% endif %}
+                                <button class="btn btn-sm btn-error btn-outline"
+                                        onclick="GameFamilyAdmin.deleteFamily({{ family.id }}, '{{ family.canonical_name|escapejs }}')">
+                                    Delete
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            {% empty %}
+                <div class="text-center py-12 opacity-60">
+                    <p class="text-lg">No game families yet.</p>
+                </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    {# ── Tab 3: Manual Create ── #}
+    <div id="tab-create" class="gf-tab-panel hidden">
+        <div class="card bg-base-100 border-2 border-base-300">
+            <div class="card-body">
+                <h3 class="text-xl font-bold mb-4">Create Game Family</h3>
+
+                <div class="form-control mb-4">
+                    <label class="label"><span class="label-text">Canonical Name</span></label>
+                    <input type="text" id="create-name" class="input input-bordered w-full lg:w-1/2"
+                           placeholder="e.g. Uncharted: Drake's Fortune">
+                </div>
+
+                <div class="form-control mb-4">
+                    <label class="label"><span class="label-text">Search Concepts</span></label>
+                    <div class="flex gap-2">
+                        <input type="text" id="concept-search" class="input input-bordered flex-1"
+                               placeholder="Search by game title...">
+                        <button class="btn btn-primary" onclick="GameFamilyAdmin.searchConcepts()">Search</button>
+                    </div>
+                </div>
+
+                {# Search Results #}
+                <div id="search-results" class="mb-4 hidden">
+                    <h4 class="text-sm font-semibold mb-2">Search Results</h4>
+                    <div id="search-results-list" class="grid grid-cols-2 lg:grid-cols-3 gap-2"></div>
+                </div>
+
+                {# Selected Concepts #}
+                <div class="mb-4">
+                    <h4 class="text-sm font-semibold mb-2">Selected Concepts (<span id="selected-count">0</span>)</h4>
+                    <div id="selected-concepts" class="flex flex-wrap gap-2">
+                        <p class="text-sm opacity-50" id="no-selection-msg">No concepts selected. Search and click to add.</p>
+                    </div>
+                </div>
+
+                <div class="form-control mb-4">
+                    <label class="label"><span class="label-text">Admin Notes (optional)</span></label>
+                    <textarea id="create-notes" class="textarea textarea-bordered w-full lg:w-1/2"
+                              rows="2" placeholder="Internal notes..."></textarea>
+                </div>
+
+                <button class="btn btn-primary" id="create-family-btn" disabled
+                        onclick="GameFamilyAdmin.createFamily()">
+                    Create Family
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{# Edit Family Modal #}
+<dialog id="edit-family-modal" class="modal">
+    <div class="modal-box">
+        <h3 class="text-lg font-bold mb-4">Edit Game Family</h3>
+        <input type="hidden" id="edit-family-id">
+        <div class="form-control mb-4">
+            <label class="label"><span class="label-text">Canonical Name</span></label>
+            <input type="text" id="edit-family-name" class="input input-bordered w-full">
+        </div>
+        <div class="form-control mb-4">
+            <label class="label"><span class="label-text">Admin Notes</span></label>
+            <textarea id="edit-family-notes" class="textarea textarea-bordered w-full" rows="3"></textarea>
+        </div>
+        <div class="modal-action">
+            <button class="btn btn-primary" onclick="GameFamilyAdmin.saveEdit()">Save</button>
+            <form method="dialog"><button class="btn">Cancel</button></form>
+        </div>
+    </div>
+    <form method="dialog" class="modal-backdrop"><button>close</button></form>
+</dialog>
+
+{# Add Concept to Family Modal #}
+<dialog id="add-concept-modal" class="modal">
+    <div class="modal-box">
+        <h3 class="text-lg font-bold mb-4">Add Concept to Family</h3>
+        <input type="hidden" id="add-concept-family-id">
+        <div class="form-control mb-4">
+            <div class="flex gap-2">
+                <input type="text" id="add-concept-search" class="input input-bordered flex-1"
+                       placeholder="Search concepts...">
+                <button class="btn btn-primary btn-sm" onclick="GameFamilyAdmin.searchConceptsForAdd()">Search</button>
+            </div>
+        </div>
+        <div id="add-concept-results" class="space-y-2 max-h-60 overflow-y-auto"></div>
+        <div class="modal-action">
+            <form method="dialog"><button class="btn">Close</button></form>
+        </div>
+    </div>
+    <form method="dialog" class="modal-backdrop"><button>close</button></form>
+</dialog>
+{% endblock %}
+
+{% block js_scripts %}
+<script src="{% static 'js/game-family-admin.js' %}"></script>
+{% endblock %}
