@@ -1104,23 +1104,31 @@ class TokenKeeper:
     def _job_sync_title_id(self, profile_id: str, title_id_str: str, np_communication_id: str):
         try:
             profile = Profile.objects.get(id=profile_id)
-            title_id = TitleID.objects.get(title_id=title_id_str)
         except Profile.DoesNotExist:
             logger.error(f"Profile {profile_id} does not exist.")
             return
-        except TitleID.DoesNotExist:
-            logger.warning(f"Title ID {title_id_str} not in title_id table.")
+
+        try:
+            game = Game.objects.get(np_communication_id=np_communication_id)
+        except Game.DoesNotExist:
+            logger.warning(f"Game {title_id_str} | {np_communication_id} not in database.")
+            profile.increment_sync_progress()
             return
+
+        title_id, created = TitleID.objects.get_or_create(
+            title_id=title_id_str,
+            defaults={
+                'platform': game.title_platform[0] if game.title_platform else 'PS4',
+                'region': 'IP',
+            }
+        )
+        if created:
+            logger.info(f"Auto-created TitleID {title_id_str} with platform={title_id.platform}, region=IP")
+
         job_type='sync_title_id'
-        
+
         logger.info(f"Beginning sync for {title_id.title_id} | {np_communication_id}")
         try:
-            try:
-                game = Game.objects.get(np_communication_id=np_communication_id)
-            except Game.DoesNotExist:
-                logger.warning(f"Game {title_id.title_id} | {np_communication_id} not in database.")
-                profile.increment_sync_progress()
-                return
 
             # Resolve platform mismatch: trust the Game's platform over TitleID
             api_platform = title_id.platform

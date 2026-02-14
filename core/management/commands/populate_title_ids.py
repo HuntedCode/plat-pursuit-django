@@ -15,6 +15,7 @@ class Command(BaseCommand):
         response.raise_for_status()
         reader = csv.DictReader(StringIO(response.text), delimiter='\t')
         created_count = 0
+        updated_count = 0
         for row in reader:
             title_id_str = row.get('titleId')
             if not title_id_str:
@@ -22,19 +23,20 @@ class Command(BaseCommand):
             region = row.get('region')
             if not region:
                 region = 'IP'
-            title_id, created = TitleID.objects.get_or_create(
+            title_id, created = TitleID.objects.update_or_create(
                 title_id=title_id_str,
                 defaults={'platform': platform, 'region': region},
             )
-            if not title_id.region:
-                title_id.region = 'IP'
-                title_id.save(update_fields=['region'])
             if created:
                 created_count += 1
-        return created_count
+            else:
+                updated_count += 1
+        return created_count, updated_count
 
     def handle(self, *args, **options):
-        ps4_count = self._process_tsv(PS4_TSV_FILE, 'PS4')
-        ps5_count = self._process_tsv(PS5_TSV_FILE, 'PS5')
-        total = ps4_count + ps5_count
-        self.stdout.write(f"Title IDs update complete. {total} IDs added (PS4: {ps4_count}, PS5: {ps5_count}).")
+        ps4_created, ps4_updated = self._process_tsv(PS4_TSV_FILE, 'PS4')
+        ps5_created, ps5_updated = self._process_tsv(PS5_TSV_FILE, 'PS5')
+        total_created = ps4_created + ps5_created
+        total_updated = ps4_updated + ps5_updated
+        self.stdout.write(f"Title IDs update complete. {total_created} created, {total_updated} updated "
+                          f"(PS4: {ps4_created} new/{ps4_updated} updated, PS5: {ps5_created} new/{ps5_updated} updated).")
