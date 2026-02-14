@@ -13,6 +13,10 @@ from .sync_views import ProfileSyncStatusView, TriggerSyncView, SearchSyncProfil
 from .admin_views import TokenMonitoringView, BadgeCreationView, CommentModerationView, ModerationActionView, ModerationLogView
 from .misc_views import SearchView
 from .list_views import BrowseListsView, GameListDetailView, GameListEditView, GameListCreateView, MyListsView
+from .challenge_views import (
+    ChallengeHubView, MyChallengesView, AZChallengeCreateView,
+    AZChallengeSetupView, AZChallengeDetailView, AZChallengeEditView,
+)
 
 __all__ = [
     # Game views
@@ -33,4 +37,7 @@ __all__ = [
     'SearchView',
     # List views
     'BrowseListsView', 'GameListDetailView', 'GameListEditView', 'GameListCreateView', 'MyListsView',
+    # Challenge views
+    'ChallengeHubView', 'MyChallengesView', 'AZChallengeCreateView',
+    'AZChallengeSetupView', 'AZChallengeDetailView', 'AZChallengeEditView',
 ]

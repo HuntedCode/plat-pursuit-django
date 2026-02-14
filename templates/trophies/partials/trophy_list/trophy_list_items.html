@@ -9,13 +9,13 @@
                     <div class="flex flex-row">
                         <figure class="border-4 border-base-300 rounded-box transition-colors duration-300 mr-1 lg:mr-2 group-hover:border-{{ trophy.game|platform_color }} overflow-hidden">
                             {% if trophy.game.title_image and not trophy.game.force_title_icon %}
-                                <img src="{{ trophy.game.title_image }}" alt="{{ trophy.game.title_name }}" class="h-15 lg:h-18 w-15 lg:w-18 object-fill shrink-0" loading="lazy" />
+                                <img src="{{ trophy.game.title_image }}" alt="{{ trophy.game.title_name }}" class="h-15 lg:h-18 w-15 lg:w-18 object-cover shrink-0" loading="lazy" />
                             {% else %}
                                 <img src="{{ trophy.game.title_icon_url }}" alt="{{ trophy.game.title_name }}" class="h-15 lg:h-18 w-15 lg:w-18 object-cover shrink-0" loading="lazy" />
                             {% endif %}
                         </figure>
                         <figure class="border-4 border-base-300 rounded-box transition-colors duration-300 mr-1 lg:mr-2 group-hover:border-{{ trophy|trophy_color }} overflow-hidden">
-                            <img src="{{ trophy.trophy_icon_url }}" alt="{{ trophy.trophy_name }}" class="h-15 lg:h-18 w-15 lg:w-18 object-fill shrink-0" loading="lazy" />
+                            <img src="{{ trophy.trophy_icon_url }}" alt="{{ trophy.trophy_name }}" class="h-15 lg:h-18 w-15 lg:w-18 object-cover shrink-0" loading="lazy" />
                         </figure>
                     </div>
                     <div class="flex flex-col gap-0.5">

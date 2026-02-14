@@ -108,7 +108,7 @@
                                     <a href="#trophy-group-{{ group_id }}"
                                        class="btn btn-sm btn-ghost border border-base-300 flex-shrink-0 gap-1.5 hover:border-primary hover:shadow-sm"
                                        onclick="event.preventDefault(); document.getElementById('trophy-group-{{ group_id }}').scrollIntoView({behavior:'smooth', block:'start'})">
-                                        <img src="{{ group.trophy_group_icon_url }}" class="w-5 h-5 rounded" alt="" />
+                                        <img src="{{ group.trophy_group_icon_url }}" class="w-5 h-5 rounded object-cover" alt="" />
                                         <span class="text-xs whitespace-nowrap">{{ group.trophy_group_name }}</span>
                                         <span class="badge badge-xs badge-ghost">{{ trophies|length }}</span>
                                     </a>

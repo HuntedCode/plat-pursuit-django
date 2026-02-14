@@ -27,7 +27,7 @@
                     {% if game.title_image and not game.force_title_icon %}
                         <img src="{{ game.title_image }}" alt="{{ game.title_name }}" class="w-full h-full object-cover" loading="lazy" />
                     {% else %}
-                        <img src="{{ game.title_icon_url }}" alt="{{ game.title_name }}" class="w-full h-full object-fill" loading="lazy" />
+                        <img src="{{ game.title_icon_url }}" alt="{{ game.title_name }}" class="w-full h-full object-cover" loading="lazy" />
                     {% endif %}
                 </figure>
             </a>

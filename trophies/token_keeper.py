@@ -22,7 +22,7 @@ from psnawp_api.models.trophies.trophy_constants import PlatformType
 from requests import HTTPError
 from requests.exceptions import ConnectionError, Timeout
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type, wait_fixed
-from .models import Profile, Game, TitleID, TrophyGroup, ProfileGame, EarnedTrophy
+from .models import Profile, Game, Concept, TitleID, TrophyGroup, ProfileGame, EarnedTrophy
 from .services.psn_api_service import PsnApiService
 from .psn_manager import PSNManager
 from trophies.util_modules.cache import redis_client, log_api_call
@@ -845,6 +845,13 @@ class TokenKeeper:
             check_all_milestones_for_user(profile, criteria_type='trophy_count')
             logger.info(f"Milestones checked for {profile_id} successfully!")
 
+            # Check A-Z challenge progress
+            try:
+                from trophies.services.challenge_service import check_az_challenge_progress
+                check_az_challenge_progress(profile)
+            except Exception as e:
+                logger.exception(f"Failed to check challenge progress for profile {profile_id}: {e}")
+
             update_profile_trophy_counts(profile)
             profile.set_sync_status('synced')
 
@@ -1115,18 +1122,30 @@ class TokenKeeper:
                 profile.increment_sync_progress()
                 return
 
-            game_title = self._execute_api_call(self._get_instance_for_job(job_type), profile, 'game_title', title_id=title_id.title_id, platform=PlatformType(title_id.platform), account_id=profile.account_id, np_communication_id=game.np_communication_id)
+            # Resolve platform mismatch: trust the Game's platform over TitleID
+            api_platform = title_id.platform
+            if game.title_platform and title_id.platform not in game.title_platform:
+                api_platform = game.title_platform[0]
+                logger.warning(f"Platform mismatch for {title_id.title_id}: TitleID={title_id.platform}, Game={game.title_platform}. Using {api_platform}.")
+
+            game_title = self._execute_api_call(self._get_instance_for_job(job_type), profile, 'game_title', title_id=title_id.title_id, platform=PlatformType(api_platform), account_id=profile.account_id, np_communication_id=game.np_communication_id)
             if game_title:
+                # Fix mismatch at source if API succeeded with corrected platform
+                if api_platform != title_id.platform:
+                    old_platform = title_id.platform
+                    title_id.platform = api_platform
+                    title_id.save(update_fields=['platform'])
+                    logger.info(f"Corrected TitleID {title_id.title_id} platform: {old_platform} -> {api_platform}")
+
                 details = game_title.get_details()[0]
                 error_code = details.get('errorCode', None)
                 if error_code is None:
                     concept, _ = PsnApiService.create_concept_from_details(details)
-                    
-                    if concept.release_date is None:
-                        release_date = details.get('defaultProduct', {}).get('releaseDate', None)
-                        if release_date is None:
-                            release_date = details.get('releaseDate', {}).get('date', '')
-                        concept.update_release_date(release_date)
+
+                    release_date = details.get('defaultProduct', {}).get('releaseDate', None)
+                    if release_date is None:
+                        release_date = details.get('releaseDate', {}).get('date', '')
+                    concept.update_release_date(release_date)
                     media_data = self._extract_media(details)
                     concept.update_media(media_data['all_media'], media_data['icon_url'], media_data['bg_url'])
                     game.add_concept(concept)
@@ -1146,6 +1165,9 @@ class TokenKeeper:
                             logger.info(f"Game {game.title_name} detected as Asian regional.")
                         else:
                             logger.warning(f"Concept for {title_id.title_id} returned an error code.")
+                        default_concept = Concept.create_default_concept(game)
+                        game.add_concept(default_concept)
+                        logger.info(f"Created default concept for {game.title_name}")
                     logger.info(f"Title ID {title_id.title_id} sync'd successfully!")
             else:
                 profile.increment_sync_progress()

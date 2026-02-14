@@ -429,6 +429,9 @@ class NotificationInboxManager {
             case 'monthly_recap':
                 enhancedContent = this.renderMonthlyRecapDetail(metadata);
                 break;
+            case 'challenge_completed':
+                enhancedContent = this.renderChallengeDetail(metadata);
+                break;
             default:
                 enhancedContent = '';
         }
@@ -631,7 +634,7 @@ class NotificationInboxManager {
                     <div class="space-y-3">
                         ${(trophyIcon || trophyDetail) ? `
                             <h3 class="text-lg font-semibold flex items-center gap-2">
-                                ${trophyIcon ? `<img src="${trophyIcon}" alt="Trophy Icon" class="w-8 h-8" loading="lazy" onerror="this.style.display='none'" />` : ''}
+                                ${trophyIcon ? `<img src="${trophyIcon}" alt="Trophy Icon" class="w-8 h-8 object-cover" loading="lazy" onerror="this.style.display='none'" />` : ''}
                                 Trophy Details
                             </h3>
                         ` : ''}
@@ -1127,6 +1130,43 @@ class NotificationInboxManager {
                         <p class="text-xs text-base-content/60">This is a one-time milestone</p>
                     </div>
                 ` : ''}
+            </div>
+        `;
+    }
+
+    renderChallengeDetail(metadata) {
+        if (!metadata) return '';
+
+        const challengeName = metadata.challenge_name || 'A-Z Challenge';
+        const completed = metadata.completed_count || 26;
+        const total = metadata.total_items || 26;
+
+        // Build 26-letter progress grid
+        const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
+        const letterGrid = letters.map(l =>
+            `<div class="w-7 h-7 rounded flex items-center justify-center text-xs font-bold bg-warning/30 text-warning">${l}</div>`
+        ).join('');
+
+        return `
+            <div class="bg-base-300 rounded-lg p-4 space-y-4">
+                ${this.renderCongratsHeader('Challenge Complete!', 'Welcome to the Hall of Fame!')}
+
+                <div class="text-center">
+                    <span class="text-4xl">&#127942;</span>
+                </div>
+
+                <div class="bg-base-100 rounded-lg p-3">
+                    <p class="text-sm font-bold text-center">${PlatPursuit.HTMLUtils.escape(challengeName)}</p>
+                    <div class="flex justify-center mt-2">
+                        <span class="badge badge-warning badge-lg font-bold gap-1">
+                            ${completed}/${total} Platinums
+                        </span>
+                    </div>
+                </div>
+
+                <div class="flex flex-wrap justify-center gap-1">
+                    ${letterGrid}
+                </div>
             </div>
         `;
     }

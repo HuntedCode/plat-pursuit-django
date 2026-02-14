@@ -20,7 +20,7 @@ Variables: correct_badge_id, correct_badge_name, correct_progress_pct, correct_c
                  class="card bg-base-200 border border-base-content/10 p-3 cursor-pointer hover:border-primary transition-all">
                 <!-- Badge Icon -->
                 <div class="flex justify-center mb-2">
-                    <img src="{% if badge.has_image %}{{ badge.icon_url }}{% else %}{% static badge.icon_url %}{% endif %}" alt="{{ badge.name }}" class="w-12 h-12 rounded" />
+                    <img src="{% if badge.has_image %}{{ badge.icon_url }}{% else %}{% static badge.icon_url %}{% endif %}" alt="{{ badge.name }}" class="w-12 h-12 rounded object-contain" />
                 </div>
 
                 <!-- Badge Name -->

@@ -83,6 +83,12 @@ class PageView(models.Model):
         ('game_lists_browse', 'Browse Game Lists'),
         ('my_lists', 'My Lists'),
         ('game_list_edit', 'Game List Edit'),
+        # Challenges
+        ('challenges_browse', 'Challenge Hub'),
+        ('my_challenges', 'My Challenges'),
+        ('az_challenge', 'A-Z Challenge'),
+        ('az_challenge_setup', 'A-Z Challenge Setup'),
+        ('az_challenge_edit', 'A-Z Challenge Edit'),
     ]
 
     page_type = models.CharField(max_length=20, choices=PAGE_TYPE_CHOICES, db_index=True)
@@ -131,6 +137,8 @@ class SiteEvent(models.Model):
         ('recap_image_download', 'Recap Image Download'),
         ('game_list_create', 'Game List Created'),
         ('game_list_share', 'Game List Shared'),
+        ('challenge_create', 'Challenge Created'),
+        ('challenge_complete', 'Challenge Completed'),
     ]
 
     event_type = models.CharField(max_length=30, choices=EVENT_TYPE_CHOICES, db_index=True)

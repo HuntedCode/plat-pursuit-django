@@ -1,0 +1,123 @@
+{% extends 'base.html' %}
+{% load static custom_filters %}
+
+{% block title %}Challenges - Platinum Pursuit{% endblock %}
+
+{% block content %}
+<section class="shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 w-full p-0 lg:p-4">
+    {% include 'partials/breadcrumb.html' with items=breadcrumb %}
+
+    <div class="card bg-base-100 border-4 border-base-300 shadow-md shadow-neutral">
+        <div class="card-body">
+            <div class="flex flex-row items-center justify-between gap-4">
+                <div>
+                    <h1 class="text-2xl lg:text-3xl font-bold">Challenge Hub</h1>
+                    <p class="text-base-content/70">
+                        From A to Z, the hunt never ends. Track your challenge or find inspiration from the community.
+                    </p>
+                </div>
+                {% if user.is_authenticated and user.profile %}
+                    <a href="{% url 'my_challenges' %}" class="btn btn-primary btn-md">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 mr-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+                        </svg>
+                        My Challenges
+                    </a>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</section>
+
+<section class="shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 w-full p-0 lg:p-4 mt-6">
+    {# Tabs #}
+    <div class="p-4 pb-0">
+        <div class="tabs tabs-boxed bg-base-200 inline-flex">
+            <a href="?tab=active{% if search_query %}&q={{ search_query }}{% endif %}"
+               class="tab {% if active_tab == 'active' %}tab-active{% endif %}">
+                In Progress
+                {% if active_count %}<span class="badge badge-sm ml-1">{{ active_count }}</span>{% endif %}
+            </a>
+            <a href="?tab=hall_of_fame{% if search_query %}&q={{ search_query }}{% endif %}"
+               class="tab {% if active_tab == 'hall_of_fame' %}tab-active{% endif %}">
+                Hall of Fame
+                {% if hall_of_fame_count %}<span class="badge badge-sm badge-warning ml-1">{{ hall_of_fame_count }}</span>{% endif %}
+            </a>
+        </div>
+    </div>
+
+    {# Search and Sort #}
+    <div class="p-4 pb-0">
+        <form method="GET" class="flex flex-row gap-2">
+            <input type="hidden" name="tab" value="{{ active_tab }}" />
+            <input
+                type="text"
+                name="q"
+                value="{{ search_query }}"
+                placeholder="Search by name or hunter..."
+                class="input input-bordered flex-1"
+            />
+            <select name="sort" class="select select-bordered w-auto">
+                <option value="progress" {% if current_sort == 'progress' %}selected{% endif %}>Most Progress</option>
+                <option value="recent" {% if current_sort == 'recent' %}selected{% endif %}>Most Recent</option>
+            </select>
+            <button type="submit" class="btn btn-primary">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 mr-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="11" cy="11" r="8"></circle>
+                    <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                </svg>
+                Search
+            </button>
+        </form>
+    </div>
+
+    {# Challenge cards grid #}
+    {% if challenges %}
+        <div class="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 p-4">
+            {% for challenge in challenges %}
+                {% include 'partials/az_challenge/challenge_card.html' with challenge=challenge %}
+            {% endfor %}
+        </div>
+
+        {# Pagination #}
+        {% if is_paginated %}
+            <div class="flex flex-wrap justify-center gap-2 px-4 pb-4">
+                {% if page_obj.has_previous %}
+                    <a href="?page=1&tab={{ active_tab }}{% if search_query %}&q={{ search_query }}{% endif %}{% if current_sort %}&sort={{ current_sort }}{% endif %}" class="btn btn-sm">First</a>
+                    <a href="?page={{ page_obj.previous_page_number }}&tab={{ active_tab }}{% if search_query %}&q={{ search_query }}{% endif %}{% if current_sort %}&sort={{ current_sort }}{% endif %}" class="btn btn-sm">Previous</a>
+                {% endif %}
+                <span class="btn btn-sm btn-disabled">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+                {% if page_obj.has_next %}
+                    <a href="?page={{ page_obj.next_page_number }}&tab={{ active_tab }}{% if search_query %}&q={{ search_query }}{% endif %}{% if current_sort %}&sort={{ current_sort }}{% endif %}" class="btn btn-sm">Next</a>
+                    <a href="?page={{ page_obj.paginator.num_pages }}&tab={{ active_tab }}{% if search_query %}&q={{ search_query }}{% endif %}{% if current_sort %}&sort={{ current_sort }}{% endif %}" class="btn btn-sm">Last</a>
+                {% endif %}
+            </div>
+        {% endif %}
+    {% else %}
+        <div class="text-center py-12 px-4">
+            {% if search_query %}
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-16 h-16 text-base-content/20 mx-auto mb-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="11" cy="11" r="8"></circle>
+                    <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                </svg>
+                <p class="text-base-content/50 text-lg">No challenges found for "{{ search_query }}"</p>
+                <a href="?tab={{ active_tab }}" class="btn btn-ghost btn-sm mt-2">Clear search</a>
+            {% elif active_tab == 'hall_of_fame' %}
+                <p class="text-4xl mb-2">&#127942;</p>
+                <p class="text-base-content/50 text-lg font-bold">The Hall of Fame awaits its first legend.</p>
+                <p class="text-base-content/40 text-sm">Complete all 26 platinums to earn your place.</p>
+            {% else %}
+                <p class="text-4xl mb-2">&#127775;</p>
+                <p class="text-base-content/50 text-lg font-bold">No challenges yet. Be the first to take on the alphabet!</p>
+                {% if user.is_authenticated %}
+                    <a href="{% url 'az_challenge_create' %}" class="btn btn-primary btn-sm mt-3">Start Your A-Z Challenge</a>
+                {% endif %}
+            {% endif %}
+        </div>
+    {% endif %}
+</section>
+{% endblock %}
+
+{% block js_scripts %}
+<script>PlatPursuit.ZoomScaler.init();</script>
+{% endblock %}

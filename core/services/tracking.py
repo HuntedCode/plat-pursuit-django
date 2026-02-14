@@ -133,6 +133,9 @@ def _increment_parent_view_count(page_type, object_id):
         elif page_type == 'game_list':
             from trophies.models import GameList
             GameList.objects.filter(id=int(object_id)).update(view_count=F('view_count') + 1)
+        elif page_type == 'az_challenge':
+            from trophies.models import Challenge
+            Challenge.objects.filter(id=int(object_id)).update(view_count=F('view_count') + 1)
         elif page_type == 'index':
             from core.models import SiteSettings
             SiteSettings.objects.filter(id=1).update(index_page_view_count=F('index_page_view_count') + 1)
@@ -203,7 +206,9 @@ def track_site_event(event_type, object_id, request):
             - 'recap_image_download' - User downloads monthly recap share image
             - 'game_list_create' - User creates a new game list
             - 'game_list_share' - User copies/shares a game list URL
-        object_id: Related object identifier (guide_slug, earned_trophy_id, 'YYYY-MM')
+            - 'challenge_create' - User creates a new challenge
+            - 'challenge_complete' - User completes a challenge (all slots done)
+        object_id: Related object identifier (guide_slug, earned_trophy_id, 'YYYY-MM', challenge_id)
         request: Django HttpRequest object
     """
     try:

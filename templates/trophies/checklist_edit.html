@@ -454,7 +454,7 @@
                                         {% get_trophy item.trophy_id as trophy %}
                                         {% if trophy %}
                                         <div class="flex items-center gap-3 p-3 bg-base-200/50 rounded-lg border-l-4 border-{{ trophy.trophy_type|default:'bronze' }}">
-                                            <img src="{{ trophy.trophy_icon_url }}" class="w-10 h-10 rounded shrink-0" alt="">
+                                            <img src="{{ trophy.trophy_icon_url }}" class="w-10 h-10 rounded shrink-0 object-cover" alt="">
                                             <div class="flex-1">
                                                 <div class="flex items-center gap-2 flex-wrap mb-1">
                                                     <span class="font-semibold">{{ item.text }}</span>
@@ -645,7 +645,7 @@
 
                                                 {# Trophy display #}
                                                 <div class="flex-1 flex items-center gap-3">
-                                                    <img src="{{ trophy.trophy_icon_url }}" class="w-10 h-10 rounded shrink-0" alt="">
+                                                    <img src="{{ trophy.trophy_icon_url }}" class="w-10 h-10 rounded shrink-0 object-cover" alt="">
                                                     <div class="flex-1">
                                                         <div class="flex items-center gap-2 mb-1 flex-wrap">
                                                             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-warning" fill="none" viewBox="0 0 24 24" stroke="currentColor">

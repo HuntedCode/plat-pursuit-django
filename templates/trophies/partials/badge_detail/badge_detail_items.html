@@ -9,7 +9,7 @@
                             {% if game.title_image and not game.force_title_icon %}
                                 <img src="{{ game.title_image }}" alt="{{ game.title_name }} cover" class="w-full object-cover shrink-0" loading="lazy" decoding="async" />
                             {% else %}
-                                <img src="{{ game.title_icon_url }}" alt="{{ game.title_name }} icon" class="w-full object-fill shrink-0" loading="lazy" decoding="async" />
+                                <img src="{{ game.title_icon_url }}" alt="{{ game.title_name }} icon" class="w-full object-cover shrink-0" loading="lazy" decoding="async" />
                             {% endif %}
                         </figure>
                         <div class="flex flex-col gap-1 w-full">

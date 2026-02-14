@@ -3,7 +3,7 @@ from django.contrib.admin import SimpleListFilter
 from django.db import transaction
 from django.db.models import Q
 from datetime import timedelta
-from .models import Profile, Game, Trophy, EarnedTrophy, ProfileGame, APIAuditLog, FeaturedGame, FeaturedProfile, Concept, TitleID, TrophyGroup, UserTrophySelection, UserConceptRating, Badge, UserBadge, UserBadgeProgress, FeaturedGuide, Stage, PublisherBlacklist, Title, UserTitle, Milestone, UserMilestone, UserMilestoneProgress, Comment, CommentVote, CommentReport, ModerationLog, BannedWord, Checklist, ChecklistSection, ChecklistItem, ChecklistVote, UserChecklistProgress, ChecklistReport, ProfileGamification, StatType, StageStatValue, MonthlyRecap, GameList, GameListItem, GameListLike
+from .models import Profile, Game, Trophy, EarnedTrophy, ProfileGame, APIAuditLog, FeaturedGame, FeaturedProfile, Concept, TitleID, TrophyGroup, UserTrophySelection, UserConceptRating, Badge, UserBadge, UserBadgeProgress, FeaturedGuide, Stage, PublisherBlacklist, Title, UserTitle, Milestone, UserMilestone, UserMilestoneProgress, Comment, CommentVote, CommentReport, ModerationLog, BannedWord, Checklist, ChecklistSection, ChecklistItem, ChecklistVote, UserChecklistProgress, ChecklistReport, ProfileGamification, StatType, StageStatValue, MonthlyRecap, GameList, GameListItem, GameListLike, Challenge, AZChallengeSlot
 
 
 # Register your models here.
@@ -108,6 +108,7 @@ class GameAdmin(admin.ModelAdmin):
         "region",
         "is_regional",
         "region_lock",
+        "concept_lock",
         "title_ids",
         "is_obtainable",
         "total_defined_trophies",
@@ -116,7 +117,7 @@ class GameAdmin(admin.ModelAdmin):
         "is_delisted",
         "has_online_trophies",
     )
-    list_filter = ("has_trophy_groups", "is_regional", RegionListFilter, 'is_shovelware', 'is_delisted', 'is_obtainable', "has_online_trophies")
+    list_filter = ("has_trophy_groups", "is_regional", RegionListFilter, 'concept_lock', 'is_shovelware', 'is_delisted', 'is_obtainable', "has_online_trophies")
     search_fields = ("title_name", "np_communication_id")
     ordering = ("title_name",)
     fieldsets = (
@@ -129,6 +130,7 @@ class GameAdmin(admin.ModelAdmin):
                     "title_name",
                     "lock_title",
                     "concept",
+                    "concept_lock",
                     "region",
                     "is_regional",
                     "region_lock",
@@ -1387,3 +1389,33 @@ class GameListLikeAdmin(admin.ModelAdmin):
     raw_id_fields = ['game_list', 'profile']
     readonly_fields = ['created_at']
     ordering = ['-created_at']
+
+
+class AZChallengeSlotInline(admin.TabularInline):
+    model = AZChallengeSlot
+    extra = 0
+    fields = ['letter', 'game', 'is_completed', 'completed_at', 'assigned_at']
+    readonly_fields = ['completed_at', 'assigned_at']
+    raw_id_fields = ['game']
+    ordering = ['letter']
+
+
+@admin.register(Challenge)
+class ChallengeAdmin(admin.ModelAdmin):
+    list_display = ['id', 'name', 'profile', 'challenge_type', 'filled_count', 'completed_count', 'is_complete', 'is_deleted', 'created_at']
+    list_filter = ['challenge_type', 'is_complete', 'is_deleted']
+    search_fields = ['name', 'profile__psn_username']
+    raw_id_fields = ['profile']
+    readonly_fields = ['created_at', 'updated_at', 'completed_at', 'deleted_at', 'view_count']
+    ordering = ['-created_at']
+    inlines = [AZChallengeSlotInline]
+
+
+@admin.register(AZChallengeSlot)
+class AZChallengeSlotAdmin(admin.ModelAdmin):
+    list_display = ['id', 'challenge', 'letter', 'game', 'is_completed', 'assigned_at']
+    list_filter = ['is_completed', 'letter']
+    search_fields = ['challenge__name', 'challenge__profile__psn_username', 'game__title_name']
+    raw_id_fields = ['challenge', 'game']
+    readonly_fields = ['completed_at', 'assigned_at']
+    ordering = ['challenge', 'letter']

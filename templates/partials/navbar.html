@@ -36,6 +36,7 @@
                     <summary>Community</summary>
                     <ul class="mega-menu-content">
                         <li><a href="https://discord.gg/platpursuit" target="_blank" rel="noopener noreferrer">Discord</a></li>
+                        <li><a href="{% url 'challenges_browse' %}">Challenges</a></li>
                         <li><a href="{% url 'lists_browse' %}">Game Lists</a></li>
                         <li><a href="{% url 'overall_badge_leaderboards' %}">Leaderboards</a></li>
                     </ul>
@@ -83,6 +84,7 @@
                         <li><a href="{% url 'settings' %}">Customization</a></li>
                         <li><a href="{% url 'recap_index' %}">Monthly Recap</a></li>
                         <li><a href="{% url 'my_guides' %}">My Guides</a></li>
+                        <li><a href="{% url 'my_challenges' %}">My Challenges</a></li>
                         <li><a href="{% url 'my_lists' %}">My Lists</a></li>
                         <li><a href="{% url 'profile_detail' user.profile.psn_username %}">My Profile</a></li>
                         <li><a href="{% url 'my_shareables' %}">My Shareables</a></li>

@@ -3529,7 +3529,7 @@
                     ${checkboxHtml}
                     <img src="${trophy.trophy_icon_url}"
                          alt="${escapeHtml(trophy.trophy_name)}"
-                         class="w-12 h-12 rounded shrink-0">
+                         class="w-12 h-12 rounded shrink-0 object-cover">
                     <div class="flex-1 min-w-0">
                         <div class="flex items-center gap-2 flex-wrap mb-1">
                             <span class="font-semibold truncate">${escapeHtml(trophy.trophy_name)}</span>
@@ -3848,7 +3848,7 @@
                     </button>
                 </div>
                 <div class="flex-1 flex items-center gap-3">
-                    <img src="${trophy.trophy_icon_url || ''}" class="w-10 h-10 rounded shrink-0" alt="">
+                    <img src="${trophy.trophy_icon_url || ''}" class="w-10 h-10 rounded shrink-0 object-cover" alt="">
                     <div class="flex-1">
                         <div class="flex items-center gap-2 mb-1 flex-wrap">
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-warning" fill="none" viewBox="0 0 24 24" stroke="currentColor">

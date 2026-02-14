@@ -36,6 +36,11 @@ from .game_list_views import (
     GameListLikeView, GameListQuickAddView, UserGameListsView, GameListCopyView,
     GameSearchView,
 )
+from .az_challenge_views import (
+    AZChallengeCreateAPIView, AZChallengeDetailAPIView, AZChallengeUpdateAPIView,
+    AZChallengeDeleteAPIView, AZSlotAssignAPIView, AZSlotClearAPIView,
+    AZGameSearchAPIView,
+)
 
 app_name = 'api'
 
@@ -159,4 +164,13 @@ urlpatterns = [
 
     # Game search (for list typeahead)
     path('games/search/', GameSearchView.as_view(), name='game-search'),
+
+    # A-Z Challenge endpoints (static paths before <int:> to avoid URL conflicts)
+    path('challenges/az/', AZChallengeCreateAPIView.as_view(), name='az-challenge-create'),
+    path('challenges/az/game-search/', AZGameSearchAPIView.as_view(), name='az-game-search'),
+    path('challenges/az/<int:challenge_id>/', AZChallengeDetailAPIView.as_view(), name='az-challenge-detail'),
+    path('challenges/az/<int:challenge_id>/update/', AZChallengeUpdateAPIView.as_view(), name='az-challenge-update'),
+    path('challenges/az/<int:challenge_id>/delete/', AZChallengeDeleteAPIView.as_view(), name='az-challenge-delete'),
+    path('challenges/az/<int:challenge_id>/slots/<str:letter>/assign/', AZSlotAssignAPIView.as_view(), name='az-slot-assign'),
+    path('challenges/az/<int:challenge_id>/slots/<str:letter>/clear/', AZSlotClearAPIView.as_view(), name='az-slot-clear'),
 ]

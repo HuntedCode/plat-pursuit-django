@@ -1,0 +1,87 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}New A-Z Challenge - Platinum Pursuit{% endblock %}
+
+{% block content %}
+<section class="shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 w-full p-0 lg:p-4">
+    {% include 'partials/breadcrumb.html' with items=breadcrumb %}
+
+    <div class="card bg-base-100 border-4 border-base-300 shadow-md shadow-neutral">
+        <div class="card-body items-center text-center">
+            <div class="text-5xl lg:text-6xl font-black text-primary tracking-tight">A - Z</div>
+            <h1 class="text-2xl lg:text-3xl font-bold mt-2">Start Your A-Z Challenge</h1>
+            <p class="text-base-content/70 max-w-lg">
+                Pick one game for each letter of the alphabet. Earn all 26 platinums. Become a legend.
+            </p>
+        </div>
+    </div>
+</section>
+
+<section class="shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 w-full p-0 lg:p-4 mt-6">
+    <div class="max-w-xl mx-auto p-4">
+        <div class="card bg-base-100 border-2 border-base-300 shadow-md shadow-neutral">
+            <div class="card-body">
+                <form method="POST" action="{% url 'az_challenge_create' %}">
+                    {% csrf_token %}
+                    <div class="form-control mb-4">
+                        <label class="label" for="challenge-name">
+                            <span class="label-text font-bold">Challenge Name</span>
+                        </label>
+                        <input type="text"
+                               id="challenge-name"
+                               name="name"
+                               class="input input-bordered w-full"
+                               maxlength="200"
+                               value="My A-Z Challenge"
+                               placeholder="e.g., My A-Z Challenge, The Alphabet Run..." />
+                        <div class="label">
+                            <span class="label-text-alt text-base-content/50"><span id="name-counter">16</span>/200</span>
+                        </div>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary w-full">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 mr-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+                        </svg>
+                        Begin the Hunt
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <div class="text-center mt-6">
+            <div class="card bg-base-100/50 border border-base-300 p-4">
+                <h3 class="font-bold text-sm mb-2">How it works</h3>
+                <div class="grid grid-cols-3 gap-3 text-xs text-base-content/70">
+                    <div>
+                        <div class="text-2xl mb-1">&#128269;</div>
+                        <p><strong>Pick</strong> a game for each letter A through Z</p>
+                    </div>
+                    <div>
+                        <div class="text-2xl mb-1">&#127919;</div>
+                        <p><strong>Earn</strong> the platinum trophy for each game</p>
+                    </div>
+                    <div>
+                        <div class="text-2xl mb-1">&#127942;</div>
+                        <p><strong>Complete</strong> all 26 to enter the Hall of Fame</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}
+
+{% block js_scripts %}
+<script>PlatPursuit.ZoomScaler.init();</script>
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const nameInput = document.getElementById('challenge-name');
+        const counter = document.getElementById('name-counter');
+        if (nameInput && counter) {
+            nameInput.addEventListener('input', () => counter.textContent = nameInput.value.length);
+        }
+    });
+</script>
+{% endblock %}

@@ -663,7 +663,7 @@ class MonthlyRecapManager {
                                 ${platinums.map(plat => `
                                     <div class="flex items-center gap-3 p-3 bg-base-200 rounded-lg border border-primary/10 hover:border-primary/30 transition-all">
                                         ${plat.icon_url ? `
-                                            <img src="${plat.icon_url}" alt="${plat.trophy_name}" class="w-12 h-12 rounded-lg flex-shrink-0" />
+                                            <img src="${plat.icon_url}" alt="${plat.trophy_name}" class="w-12 h-12 rounded-lg flex-shrink-0 object-cover" />
                                         ` : ''}
                                         <div class="flex-1 min-w-0">
                                             <p class="font-semibold text-base-content line-clamp-2">${plat.game_name}</p>

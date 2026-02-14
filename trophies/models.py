@@ -394,6 +394,7 @@ class Game(models.Model):
     view_count = models.PositiveIntegerField(default=0, help_text="Denormalized total page view count.")
     is_regional = models.BooleanField(default=False)
     region_lock = models.BooleanField(default=False, help_text="Admin region override lock - won't be automatically updated.")
+    concept_lock = models.BooleanField(default=False, help_text="Admin concept override lock - won't be automatically updated.")
     is_shovelware = models.BooleanField(default=False)
     is_obtainable= models.BooleanField(default=True)
     is_delisted = models.BooleanField(default=False)
@@ -426,9 +427,24 @@ class Game(models.Model):
         super().save(*args, **kwargs)
 
     def add_concept(self, concept):
-        if concept and not self.concept:
-            self.concept = concept
-            self.save(update_fields=['concept'])
+        if not concept or self.concept_lock:
+            return
+        if self.concept == concept:
+            return
+        old_concept = self.concept
+        self.concept = concept
+        self.save(update_fields=['concept'])
+        # Invalidate game page caches since concept data changed
+        from django.core.cache import cache
+        cache.delete(f"game:imageurls:{self.np_communication_id}")
+        cache.delete(f"game:trophygroups:{self.np_communication_id}")
+        if old_concept and old_concept.games.count() == 0:
+            concept.absorb(old_concept)
+            old_concept.delete()
+            from trophies.services.comment_service import CommentService
+            from trophies.services.rating_service import RatingService
+            CommentService.invalidate_cache(concept)
+            RatingService.invalidate_cache(concept)
     
     def add_region(self, region: str):
         if region and not self.region_lock:
@@ -538,6 +554,64 @@ class Concept(models.Model):
                 setattr(self, field, cleaned_value)
         super().save(*args, **kwargs)
     
+    @classmethod
+    def create_default_concept(cls, game):
+        """Create a stub Concept for games that couldn't be looked up via PSN API."""
+        counter = 1
+        while cls.objects.filter(concept_id=f"PP_{counter}").exists():
+            counter += 1
+        platforms = ', '.join(game.title_platform) if game.title_platform else 'Unknown'
+        return cls.objects.create(
+            concept_id=f"PP_{counter}",
+            unified_title=f"{game.title_name} ({platforms})",
+        )
+
+    def absorb(self, other):
+        """Migrate all related data from another concept to this one before deletion.
+
+        IMPORTANT: When adding new models with FK/M2M to Concept, update this method.
+        See CLAUDE.md for the full list of currently handled relationships.
+        """
+        if other == self:
+            return
+
+        # Comments (concept-level, trophy-level, checklist-level)
+        other.comments.update(concept=self)
+
+        # Ratings: re-point non-duplicate, duplicates cascade-delete with old concept
+        existing_raters = set(self.user_ratings.values_list('profile_id', flat=True))
+        other.user_ratings.exclude(profile_id__in=existing_raters).update(concept=self)
+
+        # Checklists
+        other.checklists.update(concept=self)
+
+        # Featured guides
+        other.featured_entries.update(concept=self)
+
+        # Profiles using old concept as background
+        other.selected_by_profiles.update(selected_background=self)
+
+        # Badge most_recent_concept
+        other.most_recent_for_badges.update(most_recent_concept=self)
+
+        # Stages M2M
+        for stage in other.stages.all():
+            stage.concepts.add(self)
+            stage.concepts.remove(other)
+
+        # Merge title_ids
+        for tid in other.title_ids:
+            if tid not in self.title_ids:
+                self.title_ids.append(tid)
+        if other.title_ids:
+            self.save(update_fields=['title_ids'])
+
+        # Rebuild comment count
+        self.comment_count = self.comments.filter(
+            is_deleted=False, trophy_id__isnull=True, checklist_id__isnull=True
+        ).count()
+        self.save(update_fields=['comment_count'])
+
     def add_title_id(self, title_id: str):
         if title_id and title_id not in self.title_ids:
             self.title_ids.append(title_id)
@@ -2401,3 +2475,90 @@ class GameListLike(models.Model):
 
     def __str__(self):
         return f"{self.profile.psn_username} likes {self.game_list.name}"
+
+
+# ─── Challenge System ───────────────────────────────────────────────────────────
+
+class Challenge(models.Model):
+    """
+    Base challenge model. Houses shared fields for all challenge types.
+    challenge_type determines which related data (slots, tasks, etc.) applies.
+    """
+    CHALLENGE_TYPES = [
+        ('az', 'A-Z Platinum Challenge'),
+    ]
+
+    profile = models.ForeignKey(Profile, on_delete=models.CASCADE, related_name='challenges')
+    challenge_type = models.CharField(max_length=30, choices=CHALLENGE_TYPES, db_index=True)
+    name = models.CharField(max_length=200)
+    description = models.TextField(blank=True, default='')
+
+    # Progress (meaning varies by type — for AZ: X/26)
+    total_items = models.PositiveIntegerField(default=0)
+    filled_count = models.PositiveIntegerField(default=0)
+    completed_count = models.PositiveIntegerField(default=0)
+
+    # Stats
+    view_count = models.PositiveIntegerField(default=0)
+
+    # Display
+    cover_letter = models.CharField(max_length=1, blank=True, default='')
+
+    # Status
+    is_complete = models.BooleanField(default=False)
+    completed_at = models.DateTimeField(null=True, blank=True)
+
+    # Timestamps
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    # Soft delete
+    is_deleted = models.BooleanField(default=False)
+    deleted_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=['profile', 'is_deleted', 'challenge_type'], name='challenge_profile_idx'),
+            models.Index(fields=['challenge_type', 'is_deleted', 'is_complete'], name='challenge_type_status_idx'),
+            models.Index(fields=['challenge_type', 'is_deleted', '-completed_count'], name='challenge_type_progress_idx'),
+        ]
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.name} ({self.get_challenge_type_display()}) by {self.profile.psn_username}"
+
+    def soft_delete(self):
+        self.is_deleted = True
+        self.deleted_at = timezone.now()
+        self.save(update_fields=['is_deleted', 'deleted_at'])
+
+    @property
+    def progress_percentage(self):
+        if self.total_items == 0:
+            return 0
+        return int((self.completed_count / self.total_items) * 100)
+
+
+class AZChallengeSlot(models.Model):
+    """One of the 26 letter slots (A-Z) in an A-Z Challenge."""
+    challenge = models.ForeignKey(Challenge, on_delete=models.CASCADE, related_name='az_slots')
+    letter = models.CharField(max_length=1, db_index=True)
+    game = models.ForeignKey(
+        Game, on_delete=models.SET_NULL, null=True, blank=True, related_name='az_slots'
+    )
+
+    # Progress
+    is_completed = models.BooleanField(default=False)
+    completed_at = models.DateTimeField(null=True, blank=True)
+
+    # Timestamps
+    assigned_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        unique_together = ['challenge', 'letter']
+        ordering = ['letter']
+
+    def __str__(self):
+        status = 'completed' if self.is_completed else ('assigned' if self.game else 'empty')
+        game_name = self.game.title_name if self.game else 'empty'
+        return f"{self.letter}: {game_name} ({status})"

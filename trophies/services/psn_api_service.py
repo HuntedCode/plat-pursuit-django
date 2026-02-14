@@ -238,7 +238,7 @@ class PsnApiService:
         return trophy_group, created
     
     @classmethod
-    def create_concept_from_details(cls, details, update_flag=False):
+    def create_concept_from_details(cls, details):
         try:
             descriptions_short = next((d['desc'] for d in details['descriptions'] if d['type'] == 'SHORT'), '')
         except:
@@ -279,7 +279,7 @@ class PsnApiService:
                 profile_game.last_played_date_time = title_stats.last_played_date_time
                 profile_game.play_duration = title_stats.play_duration
                 profile_game.save(update_fields=['play_count', 'first_played_date_time', 'last_played_date_time', 'play_duration'])
-            if game.concept:
+            if game.concept and not game.concept.concept_id.startswith('PP_'):
                 return True
             else:
                 logger.warning(f"Game {title_stats.title_id} does not have an expected concept.")

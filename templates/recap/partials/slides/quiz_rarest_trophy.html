@@ -20,7 +20,7 @@ Variables: correct_trophy_id, options (list of {id, name, icon_url, game, trophy
                 <!-- Trophy Icon -->
                 <div class="flex justify-center mb-2">
                     {% if trophy.icon_url %}
-                    <img src="{{ trophy.icon_url }}" alt="{{ trophy.name }}" class="w-12 h-12 rounded" />
+                    <img src="{{ trophy.icon_url }}" alt="{{ trophy.name }}" class="w-12 h-12 rounded object-cover" />
                     {% else %}
                     <div class="w-12 h-12 rounded bg-base-300 flex items-center justify-center">
                         <span class="text-2xl">🏆</span>

@@ -1,0 +1,111 @@
+{% extends 'base.html' %}
+{% load static custom_filters %}
+
+{% block title %}My Challenges - Platinum Pursuit{% endblock %}
+
+{% block content %}
+<section class="shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 w-full p-0 lg:p-4">
+    {% include 'partials/breadcrumb.html' with items=breadcrumb %}
+
+    <div class="card bg-base-100 border-4 border-base-300 shadow-md shadow-neutral">
+        <div class="card-body">
+            <div class="flex flex-row items-center justify-between gap-4">
+                <div>
+                    <h1 class="text-2xl lg:text-3xl font-bold">My Challenges</h1>
+                    <p class="text-base-content/70">Track your progress and manage your challenges.</p>
+                </div>
+                <a href="{% url 'challenges_browse' %}" class="btn btn-ghost btn-md">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 mr-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="11" cy="11" r="8"></circle>
+                        <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                    </svg>
+                    Browse All
+                </a>
+            </div>
+        </div>
+    </div>
+</section>
+
+{# Active Challenge Section #}
+<section class="shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 w-full p-0 lg:p-4 mt-6">
+    <div class="p-4">
+        <h2 class="text-lg font-bold mb-3">
+            <span class="text-primary">A-Z Platinum Challenge</span>
+        </h2>
+
+        {% if active_challenge %}
+            <div class="card bg-base-100 border-2 border-primary/30 shadow-md">
+                <div class="card-body p-4">
+                    <div class="flex flex-row items-center justify-between gap-4">
+                        <div class="flex-1">
+                            <h3 class="text-xl font-bold">{{ active_challenge.name }}</h3>
+                            <div class="flex items-center gap-3 mt-1 text-sm text-base-content/60">
+                                <span>{{ active_challenge.completed_count }}/26 Platinums</span>
+                                <span>{{ active_challenge.filled_count }}/26 Slots Filled</span>
+                            </div>
+                        </div>
+                        <div class="flex gap-2">
+                            {% if active_challenge.filled_count < 26 %}
+                                <a href="{% url 'az_challenge_setup' challenge_id=active_challenge.id %}" class="btn btn-primary btn-sm">
+                                    Continue Setup
+                                </a>
+                            {% endif %}
+                            <a href="{% url 'az_challenge_detail' challenge_id=active_challenge.id %}" class="btn btn-ghost btn-sm">View</a>
+                            <a href="{% url 'az_challenge_edit' challenge_id=active_challenge.id %}" class="btn btn-ghost btn-sm">Edit</a>
+                        </div>
+                    </div>
+
+                    {# Progress bar #}
+                    <div class="mt-3">
+                        <progress class="progress progress-primary w-full h-3"
+                                  value="{{ active_challenge.completed_count }}"
+                                  max="26"></progress>
+                    </div>
+
+                    {# Mini slot preview #}
+                    <div class="flex flex-wrap gap-1 mt-3">
+                        {% for slot in active_challenge.az_slots.all %}
+                            <div class="w-7 h-7 lg:w-8 lg:h-8 rounded text-xs font-bold flex items-center justify-center
+                                        {% if slot.is_completed %}bg-success text-success-content
+                                        {% elif slot.game %}bg-primary/20 text-primary
+                                        {% else %}bg-base-200 text-base-content/30{% endif %}">
+                                {{ slot.letter }}
+                            </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        {% elif can_create %}
+            <div class="card bg-base-100 border-2 border-dashed border-base-300">
+                <div class="card-body items-center text-center py-8">
+                    <p class="text-4xl mb-2">&#127775;</p>
+                    <p class="text-lg font-bold text-base-content/70">The alphabet awaits, hunter.</p>
+                    <p class="text-sm text-base-content/50 mb-4">26 letters, 26 platinums, infinite glory.</p>
+                    <a href="{% url 'az_challenge_create' %}" class="btn btn-primary">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 mr-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+                        Start A-Z Challenge
+                    </a>
+                </div>
+            </div>
+        {% endif %}
+    </div>
+</section>
+
+{# History Section #}
+{% if history %}
+<section class="shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 w-full p-0 lg:p-4 mt-6">
+    <div class="p-4">
+        <h2 class="text-lg font-bold mb-3">Challenge History</h2>
+        <div class="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            {% for challenge in history %}
+                {% include 'partials/az_challenge/challenge_card.html' with challenge=challenge %}
+            {% endfor %}
+        </div>
+    </div>
+</section>
+{% endif %}
+{% endblock %}
+
+{% block js_scripts %}
+<script>PlatPursuit.ZoomScaler.init();</script>
+{% endblock %}

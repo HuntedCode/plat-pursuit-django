@@ -1,0 +1,82 @@
+{# Reusable letter slot card for A-Z Challenge #}
+{# Required context: slot (AZChallengeSlot instance) #}
+{% load custom_filters %}
+
+<div class="card bg-base-100 border-2 border-base-300 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden {% if slot.is_completed %}border-success/50{% elif slot.game %}border-primary/30{% endif %}"
+     data-letter="{{ slot.letter }}" data-slot-id="{{ slot.id }}">
+
+    {# Completion overlay #}
+    {% if slot.is_completed %}
+        <div class="absolute top-1 right-1 z-10">
+            <div class="badge badge-success badge-sm gap-1">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>
+            </div>
+        </div>
+    {% endif %}
+
+    <div class="card-body p-2 lg:p-3 items-center text-center gap-1">
+        {# Letter badge #}
+        <div class="text-xl lg:text-2xl font-black {% if slot.is_completed %}text-success{% elif slot.game %}text-primary{% else %}text-base-content/30{% endif %}">
+            {{ slot.letter }}
+        </div>
+
+        {% if slot.game %}
+            {# Game icon #}
+            <div class="w-full aspect-square rounded-lg overflow-hidden bg-base-200">
+                <img src="{{ slot.game.title_icon_url|default:slot.game.title_image }}"
+                     alt="{{ slot.game.title_name }}"
+                     class="w-full h-full object-cover"
+                     loading="lazy" />
+            </div>
+
+            {# Game title #}
+            <p class="text-xs font-medium leading-tight line-clamp-2 min-h-[2rem]">
+                {{ slot.game.title_name }}
+            </p>
+
+            {# Platform badges #}
+            <div class="flex flex-wrap gap-0.5 justify-center">
+                {% for platform in slot.game.title_platform %}
+                    <span class="badge badge-xs badge-ghost font-mono">{{ platform }}</span>
+                {% endfor %}
+            </div>
+
+            {# Trophy progress #}
+            {% if not slot.is_completed %}
+                {# Active slot: semantic color progress bar #}
+                <div class="w-full mt-1">
+                    <progress class="progress {% if slot.user_progress.percentage < 33 %}progress-error{% elif slot.user_progress.percentage < 66 %}progress-warning{% elif slot.user_progress.percentage < 100 %}progress-success{% else %}progress-primary{% endif %} h-1.5 w-full"
+                              value="{{ slot.user_progress.percentage }}" max="100"></progress>
+                    <div class="flex items-center justify-center gap-1 mt-0.5">
+                        {% include 'partials/icons/trophy_cup.html' with color='var(--color-trophy-gold)' size='w-3 h-3' %}
+                        {% if slot.user_progress.total %}
+                            <span class="text-[0.6rem] text-base-content/50">{{ slot.user_progress.earned }}/{{ slot.user_progress.total }}</span>
+                            <span class="text-[0.6rem] text-base-content/30">&middot;</span>
+                            <span class="text-[0.6rem] font-semibold {% if slot.user_progress.percentage < 33 %}text-error/70{% elif slot.user_progress.percentage < 66 %}text-warning/70{% elif slot.user_progress.percentage < 100 %}text-success/70{% else %}text-primary{% endif %}">{{ slot.user_progress.percentage }}%</span>
+                        {% else %}
+                            <span class="text-[0.6rem] text-base-content/30 italic">Not started</span>
+                        {% endif %}
+                    </div>
+                </div>
+            {% else %}
+                {# Completed slot: platinum trophy celebration #}
+                <div class="w-full mt-1">
+                    <progress class="progress h-1.5 w-full" style="color: var(--color-trophy-platinum);" value="100" max="100"></progress>
+                    <div class="flex items-center justify-center gap-1 mt-0.5">
+                        {% include 'partials/icons/trophy_cup.html' with color='var(--color-trophy-platinum)' size='w-3 h-3' %}
+                        <span class="text-[0.6rem] font-bold" style="color: var(--color-trophy-platinum);">Platinum!</span>
+                    </div>
+                </div>
+            {% endif %}
+        {% else %}
+            {# Empty slot placeholder #}
+            <div class="w-full aspect-square rounded-lg bg-base-200/50 flex items-center justify-center">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-8 h-8 text-base-content/15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"/>
+                    <path d="M8 12h8M12 8v8"/>
+                </svg>
+            </div>
+            <p class="text-xs text-base-content/30 italic min-h-[2rem]">Not assigned</p>
+        {% endif %}
+    </div>
+</div>

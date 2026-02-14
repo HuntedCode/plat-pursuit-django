@@ -10,7 +10,7 @@ Variables: name, game, earn_rate, icon_url, trophy_type
         <!-- Trophy Icon -->
         {% if icon_url %}
         <div class="mb-6">
-            <img src="{{ icon_url }}" alt="{{ name }}" class="w-24 h-24 mx-auto rounded-lg shadow-lg border-2 border-accent" loading="lazy" />
+            <img src="{{ icon_url }}" alt="{{ name }}" class="w-24 h-24 mx-auto rounded-lg shadow-lg border-2 border-accent object-cover" loading="lazy" />
         </div>
         {% endif %}
 

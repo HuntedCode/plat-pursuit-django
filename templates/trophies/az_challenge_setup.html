@@ -1,0 +1,142 @@
+{% extends 'base.html' %}
+{% load static custom_filters %}
+
+{% block title %}Setup: {{ challenge.name }} - Platinum Pursuit{% endblock %}
+
+{% block content %}
+<section class="shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 w-full p-0 lg:p-4">
+    {% include 'partials/breadcrumb.html' with items=breadcrumb %}
+
+    <div class="card bg-base-100 border-4 border-base-300 shadow-md shadow-neutral">
+        <div class="card-body">
+            <h1 class="text-xl lg:text-2xl font-bold">{{ challenge.name }} &mdash; Setup Wizard</h1>
+            <p class="text-sm text-base-content/70">Pick a game for each letter. Skip any you're unsure about — you can always come back.</p>
+
+            {# Progress bar: 26 letter buttons #}
+            <div id="az-progress-bar" class="flex flex-wrap gap-1 mt-3">
+                {% for slot in slots %}
+                <button class="az-letter-btn w-8 h-8 lg:w-9 lg:h-9 rounded text-xs lg:text-sm font-bold flex items-center justify-center cursor-pointer transition-all border-2
+                               {% if slot.is_completed %}bg-success text-success-content border-success
+                               {% elif slot.game %}bg-primary/20 text-primary border-primary/40
+                               {% else %}bg-base-200 text-base-content/40 border-base-300 hover:border-primary/40{% endif %}"
+                        data-letter="{{ slot.letter }}">
+                    {{ slot.letter }}
+                </button>
+                {% endfor %}
+            </div>
+
+            {# Stats #}
+            <div class="flex items-center gap-4 mt-2 text-xs text-base-content/50">
+                <span id="az-filled-count">{{ challenge.filled_count }}/26 filled</span>
+                <span id="az-completed-count">{{ challenge.completed_count }}/26 completed</span>
+            </div>
+        </div>
+    </div>
+</section>
+
+{# Current Letter + Search #}
+<section class="shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 w-full p-0 lg:p-4 mt-6">
+    <div class="p-4">
+        {# Current letter display #}
+        <div class="text-center mb-4">
+            <div id="current-letter-display" class="text-6xl lg:text-8xl font-black text-primary">A</div>
+            <p id="current-letter-prompt" class="text-base-content/70 mt-1">Pick a game starting with <strong id="prompt-letter">A</strong></p>
+            <p class="text-xs text-base-content/40 mt-1">Choose wisely — or don't, you can always swap later!</p>
+        </div>
+
+        {# Version warning banner #}
+        <div class="alert border-2 border-warning/30 bg-warning/10 mb-4 max-w-2xl mx-auto">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-warning flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+            </svg>
+            <span class="text-sm"><strong>Version matters!</strong> Many games have separate trophy lists per platform and region. Make sure you're selecting the exact version you plan to platinum.</span>
+        </div>
+
+        {# Search + Filters + Sort #}
+        <div class="max-w-2xl mx-auto">
+            {# Chip filters #}
+            <div class="flex flex-wrap items-center gap-2 mb-3" id="az-filter-row">
+                <span class="text-xs text-base-content/50 font-semibold uppercase tracking-wider mr-1">Filters</span>
+                <div class="flex flex-wrap gap-1">
+                    <button type="button" class="badge badge-ghost badge-sm font-bold cursor-pointer hover:badge-outline transition-all az-filter-chip" data-filter="platform" data-value="PS5">PS5</button>
+                    <button type="button" class="badge badge-ghost badge-sm font-bold cursor-pointer hover:badge-outline transition-all az-filter-chip" data-filter="platform" data-value="PS4">PS4</button>
+                    <button type="button" class="badge badge-ghost badge-sm font-bold cursor-pointer hover:badge-outline transition-all az-filter-chip" data-filter="platform" data-value="PS3">PS3</button>
+                    <button type="button" class="badge badge-ghost badge-sm font-bold cursor-pointer hover:badge-outline transition-all az-filter-chip" data-filter="platform" data-value="PSVITA">PSVita</button>
+                    <button type="button" class="badge badge-ghost badge-sm font-bold cursor-pointer hover:badge-outline transition-all az-filter-chip" data-filter="platform" data-value="PSVR">PSVR</button>
+                </div>
+                <span class="text-base-content/20">|</span>
+                <div class="flex flex-wrap gap-1">
+                    <button type="button" class="badge badge-ghost badge-sm font-bold cursor-pointer hover:badge-outline transition-all az-filter-chip" data-filter="region" data-value="global">Global</button>
+                    <button type="button" class="badge badge-ghost badge-sm font-bold cursor-pointer hover:badge-outline transition-all az-filter-chip" data-filter="region" data-value="NA">NA</button>
+                    <button type="button" class="badge badge-ghost badge-sm font-bold cursor-pointer hover:badge-outline transition-all az-filter-chip" data-filter="region" data-value="EU">EU</button>
+                    <button type="button" class="badge badge-ghost badge-sm font-bold cursor-pointer hover:badge-outline transition-all az-filter-chip" data-filter="region" data-value="JP">JP</button>
+                    <button type="button" class="badge badge-ghost badge-sm font-bold cursor-pointer hover:badge-outline transition-all az-filter-chip" data-filter="region" data-value="AS">AS</button>
+                </div>
+                <button type="button" class="btn btn-ghost btn-xs text-error/70 hover:text-error hidden" id="az-clear-filters">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                    Clear
+                </button>
+            </div>
+
+            {# Search input + Sort dropdown #}
+            <div class="flex flex-col md:flex-row gap-2 mb-3">
+                <input id="az-search-input" type="text"
+                       placeholder="Search within this letter..."
+                       class="input input-bordered flex-1" />
+                <select id="az-sort-select" class="select select-bordered w-auto">
+                    <option value="popular">Most Popular</option>
+                    <option value="alpha">Alphabetical</option>
+                    <option value="plat_earners">Most Plats Earned</option>
+                </select>
+            </div>
+            <p class="text-xs text-base-content/40 mb-2">
+                Shovelware, games you've platted, games without a platinum, and games with &gt;50% progress are automatically excluded.
+            </p>
+        </div>
+
+        {# Search results — single column #}
+        <div id="az-search-results" class="max-w-2xl mx-auto flex flex-col gap-2 mt-4"></div>
+
+        {# Load More button #}
+        <div id="az-load-more-container" class="hidden text-center mt-4 max-w-2xl mx-auto">
+            <button id="az-load-more-btn" class="btn btn-ghost btn-sm">Load More</button>
+        </div>
+
+        {# Loading indicator #}
+        <div id="az-search-loading" class="hidden text-center py-4">
+            <span class="loading loading-spinner loading-md text-primary"></span>
+        </div>
+
+        {# No results message #}
+        <div id="az-no-results" class="hidden text-center py-6 text-base-content/50">
+            <p>No games found. Try different filters or a different search term.</p>
+        </div>
+
+        {# Navigation buttons #}
+        <div class="flex justify-center gap-3 mt-6 max-w-2xl mx-auto">
+            <button id="az-skip-btn" class="btn btn-ghost">
+                Skip for now
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 ml-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+            </button>
+            <button id="az-finish-btn" class="btn btn-primary hidden">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 mr-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>
+                Finish Setup
+            </button>
+        </div>
+    </div>
+</section>
+{% endblock %}
+
+{% block js_scripts %}
+<script>PlatPursuit.ZoomScaler.init();</script>
+<script src="{% static 'js/az-challenge.js' %}"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        if (typeof AZChallengeSetup !== 'undefined') {
+            AZChallengeSetup.init({{ challenge.id }}, {{ slots_json|safe }});
+        }
+    });
+</script>
+{% endblock %}

@@ -18,6 +18,7 @@ class NotificationTemplate(models.Model):
         ('subscription_created', 'Subscription Created'),
         ('subscription_updated', 'Subscription Updated'),
         ('discord_verified', 'Discord Verified'),
+        ('challenge_completed', 'Challenge Completed'),
         ('admin_announcement', 'Admin Announcement'),
         ('system_alert', 'System Alert'),
     ]

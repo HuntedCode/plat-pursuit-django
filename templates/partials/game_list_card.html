@@ -4,22 +4,24 @@
 <a href="{% url 'list_detail' game_list.id %}"
    class="card bg-base-200 border-2 border-base-300 rounded-2xl shadow-lg shadow-neutral transition-all duration-300 hover:shadow-xl hover:border-primary hover:scale-[1.02] cursor-pointer group">
 
-    {# Thumbnail - auto from first game or fallback #}
-    <figure class="aspect-video bg-base-300 rounded-t-2xl overflow-hidden relative">
-        {% if game_list.first_game_image %}
-            <img
-                src="{{ game_list.first_game_image }}"
-                alt="{{ game_list.name }}"
-                class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                loading="lazy"
-            />
-        {% else %}
-            <div class="flex items-center justify-center w-full h-full bg-gradient-to-br from-base-200 to-base-300 text-base-content/20">
-                <svg xmlns="http://www.w3.org/2000/svg" class="w-16 h-16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M8.25 6.75h12M8.25 12h12m-12 5.25h12M3.75 6.75h.007v.008H3.75V6.75zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zM3.75 12h.007v.008H3.75V12zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm-.375 5.25h.007v.008H3.75v-.008zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z"/>
-                </svg>
-            </div>
-        {% endif %}
+    {# Thumbnail - trading card style with inset game image #}
+    <div class="relative bg-gradient-to-b from-base-300 to-base-300/80 rounded-t-2xl p-4 pb-3">
+        <figure class="aspect-square w-3/4 mx-auto rounded-xl overflow-hidden border-4 border-base-100/50 shadow-lg shadow-neutral ring-1 ring-base-content/10">
+            {% if game_list.first_game_image %}
+                <img
+                    src="{{ game_list.first_game_image }}"
+                    alt="{{ game_list.name }}"
+                    class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                    loading="lazy"
+                />
+            {% else %}
+                <div class="flex items-center justify-center w-full h-full bg-gradient-to-br from-base-200 to-base-300 text-base-content/20">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-12 h-12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M8.25 6.75h12M8.25 12h12m-12 5.25h12M3.75 6.75h.007v.008H3.75V6.75zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zM3.75 12h.007v.008H3.75V12zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm-.375 5.25h.007v.008H3.75v-.008zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z"/>
+                    </svg>
+                </div>
+            {% endif %}
+        </figure>
 
         {# Game count badge #}
         <div class="absolute top-2 right-2">
@@ -44,7 +46,7 @@
                 </div>
             </div>
         {% endif %}
-    </figure>
+    </div>
 
     <div class="card-body p-4">
         {# List name #}

@@ -10,7 +10,7 @@
                         {% if game.title_image and not game.force_title_icon %}
                             <img src="{{ game.title_image }}" alt="{{ game.title_name }}" class="h-15 lg:h-18 w-15 lg:w-18 object-cover shrink-0" loading="lazy" />
                         {% else %}
-                            <img src="{{ game.title_icon_url }}" alt="{{ game.title_name }}" class="h-15 lg:h-18 w-15 lg:w-18 object-fill shrink-0" loading="lazy" />
+                            <img src="{{ game.title_icon_url }}" alt="{{ game.title_name }}" class="h-15 lg:h-18 w-15 lg:w-18 object-cover shrink-0" loading="lazy" />
                         {% endif %}
                         {% if user.is_authenticated and user.profile %}
                         <button class="quick-add-trigger absolute top-0.5 right-0.5 z-20 btn btn-xs btn-circle btn-info opacity-0 group-hover:opacity-100 transition-opacity"
@@ -55,7 +55,7 @@
                     </div>
                     {% if game.platinum_trophy %}
                         <figure>
-                            <img src="{{ plat.trophy_icon_url }}" class="w-10 h-10 border-2 border-trophy-platinum rounded-box hover:scale-105 hidden xl:block" loading="lazy" />
+                            <img src="{{ plat.trophy_icon_url }}" class="w-10 h-10 border-2 border-trophy-platinum rounded-box hover:scale-105 hidden xl:block object-cover" loading="lazy" />
                         </figure>
                     {% endif %}
                 </div>

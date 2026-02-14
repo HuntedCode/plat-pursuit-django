@@ -124,9 +124,9 @@
                                 <a href="{% if game.np_communication_id %}{% url 'game_detail' game.np_communication_id %}{% endif %}" class="flex flex-row items-center w-full shadow-md shadow-neutral border-2 border-base-300 p-1 mb-2 cursor-pointer hover:border-primary hover:shadow-primary hover:scale-[1.02]">
                                     <figure class="w-16 h-16 md:w-20 md:h-20 border-2 border-primary rounded-box mr-2 md:mr-4">
                                         {% if game.title_image and not game.force_title_icon %}
-                                            <img src="{{ game.title_image }}" class="w-full object-cover hover:scale-105" />
+                                            <img src="{{ game.title_image }}" class="w-full h-full object-cover hover:scale-105" />
                                         {% else %}
-                                            <img src="{{ game.title_icon_url }}" class="w-full object-fill hover:scale-105" />
+                                            <img src="{{ game.title_icon_url }}" class="w-full h-full object-cover hover:scale-105" />
                                         {% endif %}
                                     </figure>
                                     <div class="flex flex-col flex-1 min-w-0">
@@ -156,9 +156,9 @@
                                 <a href="{% if game.np_communication_id %}{% url 'game_detail' game.np_communication_id %}{% endif %}" class="flex flex-row items-center w-full shadow-md shadow-neutral border-2 border-base-300 p-1 mb-2 cursor-pointer hover:border-accent hover:shadow-accent hover:scale-[1.02]">
                                     <figure class="w-16 h-16 md:w-20 md:h-20 border-2 border-accent rounded-box mr-2 md:mr-4">
                                         {% if game.title_image %}
-                                            <img src="{{ game.title_image }}" class="w-full object-cover object-center hover:scale-105" />
+                                            <img src="{{ game.title_image }}" class="w-full h-full object-cover object-center hover:scale-105" />
                                         {% else %}
-                                            <img src="{{ game.title_icon_url }}" class="w-full object-cover object-center hover:scale-105" />
+                                            <img src="{{ game.title_icon_url }}" class="w-full h-full object-cover object-center hover:scale-105" />
                                         {% endif %}
                                     </figure>
                                     <div class="flex flex-col flex-1 min-w-0">
@@ -258,7 +258,7 @@
                             <div class="card-body p-2">
                                 <div class="hover-3d">
                                     <figure class="w-full border-2 border-base-300 shadow-md shadow-neutral">
-                                        <img src="{{ trophy.trophy_icon_url }}" />
+                                        <img src="{{ trophy.trophy_icon_url }}" class="w-full aspect-square object-cover" />
                                     </figure>
                                     <div></div>
                                     <div></div>

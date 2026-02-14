@@ -6,13 +6,13 @@
                 <div class="hover-3d max-w-3/4 overflow-visible">
                     <figure class="relative h-fit shadow-md shadow-neutral border-2 border-base-300 rounded-box">
                         {% if game.title_image and not game.force_title_icon %}
-                            <img src="{{ game.title_image }}" alt="{{ game.title_name }} cover" loading="lazy" decoding="async" class="w-full object-fill" />
+                            <img src="{{ game.title_image }}" alt="{{ game.title_name }} cover" loading="lazy" decoding="async" class="w-full object-cover" />
                         {% else %}
-                            <img src="{{ game.title_icon_url }}" alt="{{ game.title_name }} icon" loading="lazy" decoding="async" class="w-full object-fill" />
+                            <img src="{{ game.title_icon_url }}" alt="{{ game.title_name }} icon" loading="lazy" decoding="async" class="w-full object-cover" />
                         {% endif %}
                         {% if image_urls.content_rating_url %}
                             <figure class="absolute left-1 bottom-1 w-10 xl:w-8 2xl:w-10">
-                                <img src="{{ image_urls.content_rating_url }}" alt="Content rating" loading="lazy" class="w-full object-fill" />
+                                <img src="{{ image_urls.content_rating_url }}" alt="Content rating" loading="lazy" class="w-full object-contain" />
                             </figure>
                         {% endif %}
                     </figure>
