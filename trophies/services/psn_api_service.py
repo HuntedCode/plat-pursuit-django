@@ -280,7 +280,15 @@ class PsnApiService:
                 profile_game.play_duration = title_stats.play_duration
                 profile_game.save(update_fields=['play_count', 'first_played_date_time', 'last_played_date_time', 'play_duration'])
             if game.concept and not game.concept.concept_id.startswith('PP_'):
-                return True
+                if game.concept_stale:
+                    logger.info(f"Game {game} marked as concept_stale. Queuing for concept refresh.")
+                    return False
+                if title_stats.title_id in game.concept.title_ids:
+                    return True
+                else:
+                    logger.info(f"Game {game} has concept {game.concept.concept_id} but title_id "
+                                f"{title_stats.title_id} not in concept's title_ids. Queuing for concept refresh.")
+                    return False
             else:
                 logger.warning(f"Game {title_stats.title_id} does not have an expected concept.")
                 return False

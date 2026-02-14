@@ -109,6 +109,7 @@ class GameAdmin(admin.ModelAdmin):
         "is_regional",
         "region_lock",
         "concept_lock",
+        "concept_stale",
         "title_ids",
         "is_obtainable",
         "total_defined_trophies",
@@ -117,7 +118,7 @@ class GameAdmin(admin.ModelAdmin):
         "is_delisted",
         "has_online_trophies",
     )
-    list_filter = ("has_trophy_groups", "is_regional", RegionListFilter, 'concept_lock', 'is_shovelware', 'is_delisted', 'is_obtainable', "has_online_trophies")
+    list_filter = ("has_trophy_groups", "is_regional", RegionListFilter, 'concept_lock', 'concept_stale', 'is_shovelware', 'is_delisted', 'is_obtainable', "has_online_trophies")
     search_fields = ("title_name", "np_communication_id")
     ordering = ("title_name",)
     fieldsets = (
@@ -131,6 +132,7 @@ class GameAdmin(admin.ModelAdmin):
                     "lock_title",
                     "concept",
                     "concept_lock",
+                    "concept_stale",
                     "region",
                     "is_regional",
                     "region_lock",
@@ -153,7 +155,7 @@ class GameAdmin(admin.ModelAdmin):
             {"fields": ("title_icon_url", "force_title_icon", "title_platform", "metadata")},
         ),
     )
-    actions = ['toggle_is_regional', 'add_psvr_platform']
+    actions = ['toggle_is_regional', 'add_psvr_platform', 'mark_concepts_stale']
     autocomplete_fields=['concept']
 
     @admin.action(description="Toggle is_regional for selected games")
@@ -179,6 +181,11 @@ class GameAdmin(admin.ModelAdmin):
             messages.success(request, f"Added 'PSVR' to {updated_count} game(s).")
         else:
             messages.info(request,  'No changes made. "PSVR" already present in selected games.')
+
+    @admin.action(description="Mark concepts as stale for selected games")
+    def mark_concepts_stale(self, request, queryset):
+        updated = queryset.filter(concept_stale=False).update(concept_stale=True)
+        messages.success(request, f"Marked {updated} game(s) as concept_stale. Concepts will be re-looked up on next sync.")
 
     def total_defined_trophies(self, obj):
         return sum(obj.defined_trophies.values()) if obj.defined_trophies else 0

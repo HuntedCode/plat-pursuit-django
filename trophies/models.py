@@ -395,6 +395,7 @@ class Game(models.Model):
     is_regional = models.BooleanField(default=False)
     region_lock = models.BooleanField(default=False, help_text="Admin region override lock - won't be automatically updated.")
     concept_lock = models.BooleanField(default=False, help_text="Admin concept override lock - won't be automatically updated.")
+    concept_stale = models.BooleanField(default=False, help_text="Flag for concept re-lookup on next sync.")
     is_shovelware = models.BooleanField(default=False)
     is_obtainable= models.BooleanField(default=True)
     is_delisted = models.BooleanField(default=False)
@@ -430,10 +431,14 @@ class Game(models.Model):
         if not concept or self.concept_lock:
             return
         if self.concept == concept:
+            if self.concept_stale:
+                self.concept_stale = False
+                self.save(update_fields=['concept_stale'])
             return
         old_concept = self.concept
         self.concept = concept
-        self.save(update_fields=['concept'])
+        self.concept_stale = False
+        self.save(update_fields=['concept', 'concept_stale'])
         # Invalidate game page caches since concept data changed
         from django.core.cache import cache
         cache.delete(f"game:imageurls:{self.np_communication_id}")
