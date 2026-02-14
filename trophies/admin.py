@@ -302,7 +302,23 @@ class TitleIDAdmin(admin.ModelAdmin):
 class ConceptAdmin(admin.ModelAdmin):
     list_display = ('id', 'concept_id', 'unified_title', 'release_date', 'publisher_name', 'genres')
     search_fields = ('concept_id', 'unified_title')
-    actions = ['duplicate_concept']
+    actions = ['duplicate_concept', 'lock_games', 'unlock_games']
+
+    @admin.action(description="Lock concept on all games using selected concepts")
+    def lock_games(self, request, queryset):
+        count = 0
+        for concept in queryset:
+            updated = concept.games.filter(concept_lock=False).update(concept_lock=True)
+            count += updated
+        messages.success(request, f"Locked concept on {count} game(s).")
+
+    @admin.action(description="Unlock concept on all games using selected concepts")
+    def unlock_games(self, request, queryset):
+        count = 0
+        for concept in queryset:
+            updated = concept.games.filter(concept_lock=True).update(concept_lock=False)
+            count += updated
+        messages.success(request, f"Unlocked concept on {count} game(s).")
 
     @admin.action(description="Duplicate selected concepts")
     def duplicate_concept(self, request, queryset):
