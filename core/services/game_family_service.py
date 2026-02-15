@@ -207,17 +207,21 @@ def _precompute_data(all_concepts):
             'total': sum(types.values()),
         }
 
-    # 3. Pending proposals — prefetch M2M in 2 queries
-    pending_proposals_set = set()
-    for proposal in GameFamilyProposal.objects.filter(status='pending').prefetch_related('concepts'):
+    # 3. Existing proposals — prefetch M2M in 2 queries
+    # Track both pending and rejected to avoid re-proposing rejected matches
+    existing_proposals_set = set()
+    for proposal in (
+        GameFamilyProposal.objects.filter(status__in=['pending', 'rejected'])
+        .prefetch_related('concepts')
+    ):
         concept_ids = frozenset(c.id for c in proposal.concepts.all())
-        pending_proposals_set.add(concept_ids)
+        existing_proposals_set.add(concept_ids)
 
     return {
         'concept_game_count': concept_game_count,
         'trophy_names': dict(trophy_names),
         'trophy_fingerprints': trophy_fingerprints,
-        'pending_proposals_set': pending_proposals_set,
+        'existing_proposals_set': existing_proposals_set,
     }
 
 
@@ -356,7 +360,7 @@ def find_matches(dry_run=False, auto_only=False, verbose=False, stdout=None):
         elif best_confidence >= 0.5 and not auto_only:
             # Medium confidence — proposal
             concept_id_set = frozenset(c.id for c in concepts_in_group)
-            if concept_id_set not in precomputed['pending_proposals_set']:
+            if concept_id_set not in precomputed['existing_proposals_set']:
                 if verbose:
                     _log(
                         f"[PROPOSAL] '{canonical_name}' — {len(concepts_in_group)} concepts, "
@@ -371,7 +375,7 @@ def find_matches(dry_run=False, auto_only=False, verbose=False, stdout=None):
                     )
                     proposal.concepts.set(concepts_in_group)
                     # Track newly created proposal so Pass 1 doesn't duplicate it
-                    precomputed['pending_proposals_set'].add(concept_id_set)
+                    precomputed['existing_proposals_set'].add(concept_id_set)
                 matched_concept_ids.update(c.id for c in concepts_in_group)
                 stats['proposals_created'] += 1
             else:
