@@ -57,6 +57,7 @@
                         {% endif %}
                         {% if not challenge.is_deleted %}
                             <a href="{% url 'az_challenge_edit' challenge_id=challenge.id %}" class="btn btn-ghost btn-sm">Edit</a>
+                            <button id="delete-challenge-btn" class="btn btn-ghost btn-sm text-error hover:bg-error/10" data-challenge-id="{{ challenge.id }}">Delete</button>
                         {% endif %}
                     {% endif %}
                     <button id="share-btn" class="btn btn-ghost btn-sm" data-url="{{ request.build_absolute_uri }}">

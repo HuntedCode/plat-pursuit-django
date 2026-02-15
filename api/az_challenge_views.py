@@ -349,7 +349,7 @@ class AZSlotAssignAPIView(APIView):
             excluded_ids = get_excluded_game_ids(profile)
             if game.id in excluded_ids:
                 return Response(
-                    {'error': 'You have already platted this game or have over 50% progress.'},
+                    {'error': 'This game is excluded. You\'ve platted it (or a related version), or have over 50% progress.'},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 

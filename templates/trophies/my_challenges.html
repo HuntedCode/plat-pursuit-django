@@ -52,6 +52,7 @@
                             {% endif %}
                             <a href="{% url 'az_challenge_detail' challenge_id=active_challenge.id %}" class="btn btn-ghost btn-sm">View</a>
                             <a href="{% url 'az_challenge_edit' challenge_id=active_challenge.id %}" class="btn btn-ghost btn-sm">Edit</a>
+                            <button id="delete-challenge-btn" class="btn btn-ghost btn-sm text-error hover:bg-error/10" data-challenge-id="{{ active_challenge.id }}">Delete</button>
                         </div>
                     </div>
 
@@ -108,4 +109,5 @@
 
 {% block js_scripts %}
 <script>PlatPursuit.ZoomScaler.init();</script>
+<script src="{% static 'js/az-challenge.js' %}"></script>
 {% endblock %}

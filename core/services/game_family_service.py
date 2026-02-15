@@ -71,24 +71,6 @@ def calculate_trophy_name_overlap(concept_a, concept_b):
     return len(intersection) / min(len(names_a), len(names_b))
 
 
-def calculate_icon_overlap(concept_a, concept_b):
-    """Compare trophy icon URLs. Language-agnostic visual fingerprint. Returns 0.0-1.0 or None."""
-    icons_a = set(
-        Trophy.objects.filter(game__concept=concept_a, trophy_icon_url__isnull=False)
-        .exclude(trophy_icon_url='')
-        .values_list('trophy_icon_url', flat=True)
-    )
-    icons_b = set(
-        Trophy.objects.filter(game__concept=concept_b, trophy_icon_url__isnull=False)
-        .exclude(trophy_icon_url='')
-        .values_list('trophy_icon_url', flat=True)
-    )
-    if not icons_a or not icons_b:
-        return None
-    intersection = icons_a & icons_b
-    return len(intersection) / min(len(icons_a), len(icons_b))
-
-
 def fingerprints_match(fp_a, fp_b):
     """Check if two structural fingerprints are identical."""
     if fp_a is None or fp_b is None:
@@ -125,7 +107,6 @@ def _calculate_confidence_and_reason(concept_a, concept_b, name_match_type='exac
     signals = {
         'name_match': name_match_type,
         'trophy_name_overlap': None,
-        'icon_overlap': None,
         'fingerprint_match': None,
     }
 
@@ -139,26 +120,16 @@ def _calculate_confidence_and_reason(concept_a, concept_b, name_match_type='exac
         else:
             name_overlap = None
 
-        icons_a = precomputed['trophy_icons'].get(concept_a.id, set())
-        icons_b = precomputed['trophy_icons'].get(concept_b.id, set())
-        if icons_a and icons_b:
-            intersection = icons_a & icons_b
-            icon_overlap = len(intersection) / min(len(icons_a), len(icons_b))
-        else:
-            icon_overlap = None
-
         fp_a = precomputed['trophy_fingerprints'].get(concept_a.id)
         fp_b = precomputed['trophy_fingerprints'].get(concept_b.id)
     else:
         name_overlap = calculate_trophy_name_overlap(concept_a, concept_b)
-        icon_overlap = calculate_icon_overlap(concept_a, concept_b)
         fp_a = get_trophy_fingerprint(concept_a)
         fp_b = get_trophy_fingerprint(concept_b)
 
     fp_match = fingerprints_match(fp_a, fp_b)
 
     signals['trophy_name_overlap'] = name_overlap
-    signals['icon_overlap'] = icon_overlap
     signals['fingerprint_match'] = fp_match
 
     reasons = []
@@ -172,14 +143,6 @@ def _calculate_confidence_and_reason(concept_a, concept_b, name_match_type='exac
     elif name_match_type == 'exact' and fp_match:
         confidence = 0.90
         reasons.append("Exact title match + identical trophy fingerprint")
-
-    elif icon_overlap is not None and icon_overlap >= 0.7:
-        confidence = 0.90
-        reasons.append(f"Trophy icon URL overlap: {icon_overlap:.0%}")
-
-    elif fp_match and icon_overlap is not None and icon_overlap >= 0.5:
-        confidence = 0.88
-        reasons.append(f"Identical trophy fingerprint + {icon_overlap:.0%} icon overlap")
 
     # Fuzzy name match — escalate to high confidence if trophy data confirms
     elif name_match_type == 'fuzzy' and name_overlap is not None and name_overlap >= 0.5:
@@ -203,13 +166,9 @@ def _calculate_confidence_and_reason(concept_a, concept_b, name_match_type='exac
         confidence = 0.60
         reasons.append("Exact title match but no trophy data for overlap check")
 
-    elif fp_match and icon_overlap is None:
+    elif fp_match:
         confidence = 0.55
-        reasons.append("Identical trophy fingerprint (no icon data)")
-
-    elif icon_overlap is not None and 0.3 <= icon_overlap < 0.7:
-        confidence = 0.55
-        reasons.append(f"Partial trophy icon overlap: {icon_overlap:.0%}")
+        reasons.append("Identical trophy fingerprint (no name match)")
 
     reason = '; '.join(reasons) if reasons else "No strong signals"
     return confidence, reason, signals
@@ -220,7 +179,7 @@ def _precompute_data(all_concepts):
 
     Replaces per-concept DB queries with in-memory lookups for:
     - Game counts per concept
-    - Trophy names, icons, and structural fingerprints
+    - Trophy names and structural fingerprints
     - Pending proposal concept sets
     """
     # 1. Game counts — from already-prefetched games (no DB hit)
@@ -228,20 +187,17 @@ def _precompute_data(all_concepts):
 
     # 2. All trophy data — single bulk query
     trophy_names = defaultdict(set)
-    trophy_icons = defaultdict(set)
     trophy_type_counts = defaultdict(lambda: defaultdict(int))
     trophy_group_ids = defaultdict(set)
 
-    for concept_id, name, trophy_type, icon_url, group_id in (
+    for concept_id, name, trophy_type, group_id in (
         Trophy.objects.filter(game__concept__isnull=False)
-        .values_list('game__concept_id', 'trophy_name', 'trophy_type', 'trophy_icon_url', 'trophy_group_id')
+        .values_list('game__concept_id', 'trophy_name', 'trophy_type', 'trophy_group_id')
         .iterator()
     ):
         trophy_names[concept_id].add(name)
         trophy_type_counts[concept_id][trophy_type] += 1
         trophy_group_ids[concept_id].add(group_id)
-        if icon_url:
-            trophy_icons[concept_id].add(icon_url)
 
     trophy_fingerprints = {}
     for concept_id, type_counts in trophy_type_counts.items():
@@ -261,7 +217,6 @@ def _precompute_data(all_concepts):
     return {
         'concept_game_count': concept_game_count,
         'trophy_names': dict(trophy_names),
-        'trophy_icons': dict(trophy_icons),
         'trophy_fingerprints': trophy_fingerprints,
         'pending_proposals_set': pending_proposals_set,
     }
@@ -423,104 +378,203 @@ def find_matches(dry_run=False, auto_only=False, verbose=False, stdout=None):
                 stats['skipped'] += 1
 
     # ── Pass 2: Trophy-based grouping (cross-language) ──
-    # For concepts not matched in Pass 1 and not in a family
+    # For concepts not matched in Pass 1 and not in a family.
+    # Uses structural fingerprints to catch cross-language matches
+    # (e.g. Japanese vs English title for the same game).
     unmatched = [
         c for c in all_concepts
         if c.id not in matched_concept_ids
         and c.family_id is None
     ]
 
-    # Compare all unmatched pairs using pre-computed trophy data
+    # Build fingerprint groups — concepts with identical fingerprints
+    fp_groups = defaultdict(list)
+    for c in unmatched:
+        fp = precomputed['trophy_fingerprints'].get(c.id)
+        if fp is not None:
+            # Use a hashable key from the fingerprint
+            fp_key = (frozenset(fp['types'].items()), fp['groups'])
+            fp_groups[fp_key].append(c)
+
     pass2_matched = set()
 
-    for i, ca in enumerate(unmatched):
-        if ca.id in pass2_matched:
+    for fp_key, concepts_in_group in fp_groups.items():
+        if len(concepts_in_group) < 2:
             continue
-        for cb in unmatched[i + 1:]:
-            if cb.id in pass2_matched:
-                continue
 
-            fp_a = precomputed['trophy_fingerprints'].get(ca.id)
-            fp_b = precomputed['trophy_fingerprints'].get(cb.id)
-            icons_a = precomputed['trophy_icons'].get(ca.id, set())
-            icons_b = precomputed['trophy_icons'].get(cb.id, set())
+        # Filter out already-matched concepts
+        concepts_in_group = [c for c in concepts_in_group if c.id not in pass2_matched]
+        if len(concepts_in_group) < 2:
+            continue
 
-            # Check icon overlap
-            icon_overlap = None
-            if icons_a and icons_b:
-                intersection = icons_a & icons_b
-                icon_overlap = len(intersection) / min(len(icons_a), len(icons_b))
+        confidence = 0.55
+        reason = "Identical trophy fingerprint (no name match)"
+        signals = {
+            'name_match': 'none',
+            'trophy_name_overlap': None,
+            'fingerprint_match': True,
+        }
 
-            fp_match = fingerprints_match(fp_a, fp_b)
+        canonical_name = _get_canonical_name(concepts_in_group, precomputed)
 
-            signals = {
-                'name_match': 'none',
-                'trophy_name_overlap': None,
-                'icon_overlap': icon_overlap,
-                'fingerprint_match': fp_match,
-            }
-
-            confidence = 0.0
-            reasons = []
-
-            if icon_overlap is not None and icon_overlap >= 0.7:
-                confidence = 0.90
-                reasons.append(f"Trophy icon URL overlap: {icon_overlap:.0%}")
-            elif fp_match and icon_overlap is not None and icon_overlap >= 0.5:
-                confidence = 0.88
-                reasons.append(f"Identical fingerprint + {icon_overlap:.0%} icon overlap")
-            elif fp_match and icon_overlap is None:
-                confidence = 0.55
-                reasons.append("Identical trophy fingerprint (no icon data)")
-            elif icon_overlap is not None and 0.3 <= icon_overlap < 0.7:
-                confidence = 0.55
-                reasons.append(f"Partial trophy icon overlap: {icon_overlap:.0%}")
-
-            if confidence < 0.5:
-                continue
-
-            reason = '; '.join(reasons)
-            canonical_name = _get_canonical_name([ca, cb], precomputed)
-
-            if confidence >= 0.85:
+        if not auto_only:
+            concept_id_set = frozenset(c.id for c in concepts_in_group)
+            if concept_id_set not in precomputed['pending_proposals_set']:
                 if verbose:
                     _log(
-                        f"[AUTO/P2] '{canonical_name}' — 2 concepts, "
+                        f"[PROPOSAL/P2] '{canonical_name}' — {len(concepts_in_group)} concepts, "
                         f"confidence={confidence:.0%}: {reason}"
                     )
                 if not dry_run:
-                    family = GameFamily.objects.create(
-                        canonical_name=canonical_name,
-                        is_verified=False,
+                    proposal = GameFamilyProposal.objects.create(
+                        proposed_name=canonical_name,
+                        confidence=confidence,
+                        match_reason=reason,
+                        match_signals=signals,
                     )
-                    Concept.objects.filter(id__in=[ca.id, cb.id]).update(family=family)
-                    ca.family = family
-                    ca.family_id = family.id
-                    cb.family = family
-                    cb.family_id = family.id
-                pass2_matched.add(ca.id)
-                pass2_matched.add(cb.id)
-                stats['auto_created'] += 1
-
-            elif not auto_only:
-                concept_id_set = frozenset({ca.id, cb.id})
-                if concept_id_set not in precomputed['pending_proposals_set']:
-                    if verbose:
-                        _log(
-                            f"[PROPOSAL/P2] '{canonical_name}' — 2 concepts, "
-                            f"confidence={confidence:.0%}: {reason}"
-                        )
-                    if not dry_run:
-                        proposal = GameFamilyProposal.objects.create(
-                            proposed_name=canonical_name,
-                            confidence=confidence,
-                            match_reason=reason,
-                            match_signals=signals,
-                        )
-                        proposal.concepts.set([ca, cb])
-                        precomputed['pending_proposals_set'].add(concept_id_set)
-                    pass2_matched.add(ca.id)
-                    pass2_matched.add(cb.id)
-                    stats['proposals_created'] += 1
+                    proposal.concepts.set(concepts_in_group)
+                    precomputed['pending_proposals_set'].add(concept_id_set)
+                pass2_matched.update(c.id for c in concepts_in_group)
+                stats['proposals_created'] += 1
 
     return stats
+
+
+def diagnose_concept(concept_id, top_n=10, stdout=None):
+    """Compare a single concept against all others and return the top matches.
+
+    Read-only diagnostic — does not create or modify any data.
+
+    Args:
+        concept_id: The Concept.concept_id string (e.g. 'PPSA01234')
+        top_n: Number of top matches to return
+        stdout: Write function for output
+
+    Returns:
+        dict with 'target' info and 'matches' list, or None if concept not found
+    """
+    def _out(msg=''):
+        if stdout:
+            stdout(msg)
+
+    # Look up target concept
+    try:
+        target = Concept.objects.prefetch_related('games').get(concept_id=concept_id)
+    except Concept.DoesNotExist:
+        return None
+
+    # Load all concepts and precompute data
+    all_concepts = list(Concept.objects.prefetch_related('games').all())
+    precomputed = _precompute_data(all_concepts)
+
+    # Build target info header
+    game_titles = [g.title_name for g in target.games.all()]
+    fp = precomputed['trophy_fingerprints'].get(target.id)
+    trophy_names_count = len(precomputed['trophy_names'].get(target.id, set()))
+
+    _out(f'Diagnosing concept: {target.concept_id} — "{target.unified_title}"')
+    _out(f'  Games: {", ".join(game_titles) if game_titles else "(none)"}')
+    _out(f'  Family: {target.family.canonical_name if target.family else "None"}')
+    if fp:
+        type_parts = []
+        for t in ['platinum', 'gold', 'silver', 'bronze']:
+            count = fp['types'].get(t, 0)
+            if count:
+                type_parts.append(f'{count} {t}')
+        _out(f'  Trophies: {fp["total"]} ({", ".join(type_parts)}) | {fp["groups"]} groups')
+    else:
+        _out('  Trophies: (no trophy data)')
+    _out(f'  Trophy names: {trophy_names_count} unique names')
+
+    # Get target's normalized titles for name match type detection
+    target_normalized = set()
+    for game in target.games.all():
+        normalized = normalize_game_title(game.title_name)
+        if normalized:
+            target_normalized.add(normalized)
+    normalized = normalize_game_title(target.unified_title)
+    if normalized:
+        target_normalized.add(normalized)
+
+    target_raw = set()
+    for game in target.games.all():
+        target_raw.add(_strip_platform_suffix(game.title_name).lower().strip())
+    target_raw.add(_strip_platform_suffix(target.unified_title).lower().strip())
+
+    # Compare against every other concept
+    results = []
+    for other in all_concepts:
+        if other.id == target.id:
+            continue
+
+        # Determine name match type
+        other_normalized = set()
+        for game in other.games.all():
+            n = normalize_game_title(game.title_name)
+            if n:
+                other_normalized.add(n)
+        n = normalize_game_title(other.unified_title)
+        if n:
+            other_normalized.add(n)
+
+        title_overlap = target_normalized & other_normalized
+        if title_overlap:
+            # Titles normalize to the same thing — check if raw titles match
+            other_raw = set()
+            for game in other.games.all():
+                other_raw.add(_strip_platform_suffix(game.title_name).lower().strip())
+            other_raw.add(_strip_platform_suffix(other.unified_title).lower().strip())
+
+            # If any raw title matches, it's exact; otherwise fuzzy
+            name_match_type = 'exact' if target_raw & other_raw else 'fuzzy'
+        else:
+            name_match_type = 'none'
+
+        confidence, reason, signals = _calculate_confidence_and_reason(
+            target, other, name_match_type, precomputed
+        )
+
+        if confidence > 0:
+            results.append({
+                'concept_id': other.concept_id,
+                'unified_title': other.unified_title,
+                'confidence': confidence,
+                'reason': reason,
+                'signals': signals,
+                'family': other.family.canonical_name if other.family else None,
+                'family_id': other.family_id,
+            })
+
+    # Sort by confidence descending
+    results.sort(key=lambda r: r['confidence'], reverse=True)
+    top_results = results[:top_n]
+
+    # Print results
+    _out(f'\nTop {min(top_n, len(results))} closest matches (of {len(results)} with any signal):')
+
+    if not top_results:
+        _out('  (no matches found)')
+    else:
+        for i, match in enumerate(top_results, 1):
+            _out('─' * 60)
+            _out(
+                f' #{i:<3} {match["confidence"]:.0%} | {match["concept_id"]} — '
+                f'"{match["unified_title"]}"'
+            )
+
+            name_sig = match['signals']['name_match']
+            trophy_overlap = match['signals']['trophy_name_overlap']
+            fp_match = match['signals']['fingerprint_match']
+
+            trophy_str = f'{trophy_overlap:.0%}' if trophy_overlap is not None else 'n/a'
+            fp_str = 'yes' if fp_match else 'no'
+
+            _out(
+                f'         | Name: {name_sig} | Trophy names: {trophy_str} '
+                f'| Fingerprint: {fp_str}'
+            )
+            _out(f'         | Reason: {match["reason"]}')
+            family_str = f'{match["family"]}' if match['family'] else 'None'
+            _out(f'         | Family: {family_str}')
+
+    return {'target': target, 'matches': top_results}

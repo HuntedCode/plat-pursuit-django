@@ -1,6 +1,6 @@
 from django.core.management.base import BaseCommand
 
-from core.services.game_family_service import find_matches
+from core.services.game_family_service import diagnose_concept, find_matches
 
 
 class Command(BaseCommand):
@@ -22,8 +22,34 @@ class Command(BaseCommand):
             action='store_true',
             help='Print detailed match reasoning',
         )
+        parser.add_argument(
+            '--diagnose',
+            type=str,
+            default=None,
+            help='Diagnose a single concept — show its top closest matches (pass concept_id)',
+        )
+        parser.add_argument(
+            '--top',
+            type=int,
+            default=10,
+            help='Number of top matches to show in diagnose mode (default: 10)',
+        )
 
     def handle(self, *args, **options):
+        # Diagnose mode — read-only, skip normal matching
+        if options['diagnose']:
+            result = diagnose_concept(
+                concept_id=options['diagnose'],
+                top_n=options['top'],
+                stdout=self.stdout.write,
+            )
+            if result is None:
+                self.stderr.write(
+                    self.style.ERROR(f"Concept with concept_id '{options['diagnose']}' not found.")
+                )
+            return
+
+        # Normal matching mode
         dry_run = options['dry_run']
         auto_only = options['auto_only']
         verbose = options['verbose']

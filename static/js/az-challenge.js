@@ -20,6 +20,61 @@ const GLOBE_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10
 const LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
 const SEARCH_LIMIT = 20;
 
+// ─── Shared Delete Handler ───────────────────────────────────────────────────
+// Binds to #delete-challenge-btn on any page that includes this script.
+
+function _bindDeleteButton() {
+    const btn = document.getElementById('delete-challenge-btn');
+    if (!btn) return;
+
+    btn.addEventListener('click', () => {
+        const challengeId = btn.dataset.challengeId;
+        if (!challengeId) return;
+
+        // Inject confirmation modal if not already present
+        if (!document.getElementById('delete-challenge-modal')) {
+            document.body.insertAdjacentHTML('beforeend', `
+                <dialog id="delete-challenge-modal" class="modal">
+                    <div class="modal-box max-w-sm">
+                        <h3 class="text-lg font-bold text-error">Delete Challenge</h3>
+                        <p class="py-4 text-base-content/70">
+                            Are you sure? This will permanently remove your challenge. Any progress on incomplete slots will be lost.
+                        </p>
+                        <div class="modal-action">
+                            <form method="dialog">
+                                <button class="btn btn-ghost btn-sm">Cancel</button>
+                            </form>
+                            <button id="confirm-delete-btn" class="btn btn-error btn-sm">Delete</button>
+                        </div>
+                    </div>
+                    <form method="dialog" class="modal-backdrop"><button>close</button></form>
+                </dialog>
+            `);
+
+            document.getElementById('confirm-delete-btn').addEventListener('click', async () => {
+                const modal = document.getElementById('delete-challenge-modal');
+                try {
+                    await PlatPursuit.API.delete(`/api/v1/challenges/az/${challengeId}/delete/`);
+                    modal.close();
+                    PlatPursuit.ToastManager.success('Challenge deleted.');
+                    window.location.href = '/challenges/my/';
+                } catch (error) {
+                    modal.close();
+                    let msg = 'Failed to delete challenge.';
+                    try { const errData = await error.response?.json(); msg = errData?.error || msg; } catch {}
+                    PlatPursuit.ToastManager.error(msg);
+                }
+            });
+        }
+
+        document.getElementById('delete-challenge-modal').showModal();
+    });
+}
+
+// Auto-bind on DOMContentLoaded so it works on pages without explicit module init
+// (e.g. My Challenges page)
+document.addEventListener('DOMContentLoaded', _bindDeleteButton);
+
 // ─── Shared Filter State ─────────────────────────────────────────────────────
 // Persists across letter navigation for both Setup and Edit modules.
 

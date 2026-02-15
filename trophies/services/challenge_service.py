@@ -7,7 +7,7 @@ import logging
 from django.db.models import Q
 from django.utils import timezone
 
-from trophies.models import Challenge, AZChallengeSlot, ProfileGame
+from trophies.models import Challenge, AZChallengeSlot, ProfileGame, Game
 
 logger = logging.getLogger("psn_api")
 
@@ -121,16 +121,51 @@ def auto_set_cover_letter(challenge):
 def get_excluded_game_ids(profile):
     """
     Return set of game IDs to exclude from AZ search:
-    - Games user already has platinum for
-    - Games user has >50% progress on
+    - Games user has >50% progress on (that specific game only)
+    - Games user already has platinum for, PLUS all related versions:
+      - Concept siblings (same Concept, different platform/region)
+      - GameFamily siblings (different Concept, same GameFamily)
     """
-    return set(
+    # Tier 1: >50% progress — excludes only the specific game
+    progress_excluded = set(
         ProfileGame.objects.filter(
-            profile=profile
-        ).filter(
-            Q(has_plat=True) | Q(progress__gt=50)
+            profile=profile, progress__gt=50,
         ).values_list('game_id', flat=True)
     )
+
+    # Tier 2: Platinumed games + concept/family expansion
+    plat_game_ids = set(
+        ProfileGame.objects.filter(
+            profile=profile, has_plat=True,
+        ).values_list('game_id', flat=True)
+    )
+
+    if not plat_game_ids:
+        return progress_excluded
+
+    # Expand via Concept: all games sharing a Concept with any platted game
+    concept_ids = set(
+        Game.objects.filter(
+            id__in=plat_game_ids, concept__isnull=False,
+        ).values_list('concept_id', flat=True)
+    )
+    concept_siblings = set(
+        Game.objects.filter(concept_id__in=concept_ids)
+        .values_list('id', flat=True)
+    ) if concept_ids else set()
+
+    # Expand via GameFamily: all games in families that contain any platted game's concept
+    family_ids = set(
+        Game.objects.filter(
+            id__in=plat_game_ids, concept__family__isnull=False,
+        ).values_list('concept__family_id', flat=True)
+    )
+    family_siblings = set(
+        Game.objects.filter(concept__family_id__in=family_ids)
+        .values_list('id', flat=True)
+    ) if family_ids else set()
+
+    return progress_excluded | plat_game_ids | concept_siblings | family_siblings
 
 
 def _create_completion_notification(challenge):
