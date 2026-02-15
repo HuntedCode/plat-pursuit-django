@@ -247,6 +247,16 @@
                                 {% endif %}
                             </a>
                         </li>
+                        {% if user.is_superuser %}
+                            <li>
+                                <a href="{% url 'game_family_management' %}" class="flex items-center">
+                                    <span>Game Families</span>
+                                    {% if pending_proposals_count > 0 %}
+                                        <span class="text-error">({{ pending_proposals_count }})</span>
+                                    {% endif %}
+                                </a>
+                            </li>
+                        {% endif %}
                     {% endif %}
                     <div class="divider my-0"></div>
                     <li>
