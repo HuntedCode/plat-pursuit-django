@@ -166,10 +166,6 @@ def _calculate_confidence_and_reason(concept_a, concept_b, name_match_type='exac
         confidence = 0.60
         reasons.append("Exact title match but no trophy data for overlap check")
 
-    elif fp_match:
-        confidence = 0.55
-        reasons.append("Identical trophy fingerprint (no name match)")
-
     reason = '; '.join(reasons) if reasons else "No strong signals"
     return confidence, reason, signals
 
@@ -225,8 +221,9 @@ def _precompute_data(all_concepts):
 def find_matches(dry_run=False, auto_only=False, verbose=False, stdout=None):
     """Find and create GameFamily groupings.
 
-    Pass 1: Name-based grouping (exact + fuzzy normalized titles)
-    Pass 2: Trophy-based grouping (catches cross-language matches)
+    Groups concepts whose normalized titles match, using trophy data
+    (name overlap, structural fingerprint) to determine confidence.
+    Requires at least a title or trophy name similarity to flag a match.
 
     Args:
         dry_run: Print actions without creating anything
@@ -376,66 +373,6 @@ def find_matches(dry_run=False, auto_only=False, verbose=False, stdout=None):
                 stats['proposals_created'] += 1
             else:
                 stats['skipped'] += 1
-
-    # ── Pass 2: Trophy-based grouping (cross-language) ──
-    # For concepts not matched in Pass 1 and not in a family.
-    # Uses structural fingerprints to catch cross-language matches
-    # (e.g. Japanese vs English title for the same game).
-    unmatched = [
-        c for c in all_concepts
-        if c.id not in matched_concept_ids
-        and c.family_id is None
-    ]
-
-    # Build fingerprint groups — concepts with identical fingerprints
-    fp_groups = defaultdict(list)
-    for c in unmatched:
-        fp = precomputed['trophy_fingerprints'].get(c.id)
-        if fp is not None:
-            # Use a hashable key from the fingerprint
-            fp_key = (frozenset(fp['types'].items()), fp['groups'])
-            fp_groups[fp_key].append(c)
-
-    pass2_matched = set()
-
-    for fp_key, concepts_in_group in fp_groups.items():
-        if len(concepts_in_group) < 2:
-            continue
-
-        # Filter out already-matched concepts
-        concepts_in_group = [c for c in concepts_in_group if c.id not in pass2_matched]
-        if len(concepts_in_group) < 2:
-            continue
-
-        confidence = 0.55
-        reason = "Identical trophy fingerprint (no name match)"
-        signals = {
-            'name_match': 'none',
-            'trophy_name_overlap': None,
-            'fingerprint_match': True,
-        }
-
-        canonical_name = _get_canonical_name(concepts_in_group, precomputed)
-
-        if not auto_only:
-            concept_id_set = frozenset(c.id for c in concepts_in_group)
-            if concept_id_set not in precomputed['pending_proposals_set']:
-                if verbose:
-                    _log(
-                        f"[PROPOSAL/P2] '{canonical_name}' — {len(concepts_in_group)} concepts, "
-                        f"confidence={confidence:.0%}: {reason}"
-                    )
-                if not dry_run:
-                    proposal = GameFamilyProposal.objects.create(
-                        proposed_name=canonical_name,
-                        confidence=confidence,
-                        match_reason=reason,
-                        match_signals=signals,
-                    )
-                    proposal.concepts.set(concepts_in_group)
-                    precomputed['pending_proposals_set'].add(concept_id_set)
-                pass2_matched.update(c.id for c in concepts_in_group)
-                stats['proposals_created'] += 1
 
     return stats
 

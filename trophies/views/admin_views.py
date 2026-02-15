@@ -1,10 +1,12 @@
 import json
 import logging
+from collections import defaultdict
 from datetime import timedelta
 
 from django.contrib import messages
 from django.contrib.admin.views.decorators import staff_member_required
 from django.db.models import Count, Q
+from django.db.models.functions import Lower
 from django.http import JsonResponse
 from django.shortcuts import redirect, get_object_or_404
 from django.urls import reverse_lazy
@@ -376,13 +378,15 @@ class GameFamilyManagementView(TemplateView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
 
-        proposals = GameFamilyProposal.objects.filter(
-            status='pending'
-        ).prefetch_related(
-            'concepts', 'concepts__games'
-        ).order_by('-confidence', '-created_at')
+        proposals = list(
+            GameFamilyProposal.objects.filter(
+                status='pending'
+            ).prefetch_related(
+                'concepts', 'concepts__games'
+            ).order_by('-confidence', '-created_at')
+        )
 
-        # Pre-compute trophy icons for proposal concepts (avoids N+1 in template)
+        # Pre-compute trophy icons for proposal concepts in a single bulk query
         proposal_concept_ids = set()
         for p in proposals:
             for c in p.concepts.all():
@@ -390,29 +394,33 @@ class GameFamilyManagementView(TemplateView):
 
         concept_icons = {}
         if proposal_concept_ids:
-            # Get platinum trophy icons first, fall back to any trophy icon
-            for concept_id in proposal_concept_ids:
-                icon = Trophy.objects.filter(
-                    game__concept_id=concept_id, trophy_type='platinum',
+            all_icons = defaultdict(list)
+            for concept_id, trophy_type, url in (
+                Trophy.objects.filter(
+                    game__concept_id__in=proposal_concept_ids,
                     trophy_icon_url__isnull=False,
-                ).exclude(trophy_icon_url='').values_list('trophy_icon_url', flat=True).first()
-                if not icon:
-                    icon = Trophy.objects.filter(
-                        game__concept_id=concept_id, trophy_icon_url__isnull=False,
-                    ).exclude(trophy_icon_url='').values_list('trophy_icon_url', flat=True).first()
-                if icon:
-                    concept_icons[concept_id] = icon
+                ).exclude(trophy_icon_url='')
+                .values_list('game__concept_id', 'trophy_type', 'trophy_icon_url')
+            ):
+                all_icons[concept_id].append((trophy_type, url))
+
+            for concept_id, icons in all_icons.items():
+                plat = next((url for t, url in icons if t == 'platinum'), None)
+                concept_icons[concept_id] = plat or icons[0][1]
 
         context['pending_proposals'] = proposals
         context['concept_icons'] = concept_icons
 
-        context['families'] = GameFamily.objects.prefetch_related(
-            'concepts', 'concepts__games'
-        ).annotate(concept_count=Count('concepts')).order_by('canonical_name')
+        families = list(
+            GameFamily.objects.prefetch_related(
+                'concepts', 'concepts__games'
+            ).annotate(concept_count=Count('concepts')).order_by(Lower('canonical_name'))
+        )
 
-        context['pending_count'] = proposals.count()
-        context['family_count'] = context['families'].count()
-        context['verified_count'] = context['families'].filter(is_verified=True).count()
+        context['families'] = families
+        context['pending_count'] = len(proposals)
+        context['family_count'] = len(families)
+        context['verified_count'] = sum(1 for f in families if f.is_verified)
         context['unverified_count'] = context['family_count'] - context['verified_count']
 
         return context
