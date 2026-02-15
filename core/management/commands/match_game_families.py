@@ -37,6 +37,7 @@ class Command(BaseCommand):
             dry_run=dry_run,
             auto_only=auto_only,
             verbose=verbose,
+            stdout=self.stdout.write,
         )
 
         self.stdout.write(f"\nScanned {stats['total_concepts']} concepts")

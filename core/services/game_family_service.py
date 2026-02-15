@@ -4,7 +4,7 @@ from collections import defaultdict
 
 from django.db.models import Count
 
-from trophies.models import Concept, Game, GameFamily, GameFamilyProposal, Trophy
+from trophies.models import Concept, GameFamily, GameFamilyProposal, Trophy
 
 logger = logging.getLogger("psn_api")
 
@@ -120,29 +120,6 @@ def _get_canonical_name(concepts, precomputed=None):
     return _strip_platform_suffix(best.unified_title)
 
 
-def _has_concept_lock(concept):
-    """Check if any game in this concept has concept_lock=True."""
-    return concept.games.filter(concept_lock=True).exists()
-
-
-def _concepts_already_grouped(concepts):
-    """Check if all concepts are already in the same family."""
-    families = {c.family_id for c in concepts if c.family_id is not None}
-    if len(families) == 1:
-        return True
-    return False
-
-
-def _proposal_exists_for(concept_ids):
-    """Check if a pending proposal already covers this exact concept set."""
-    pending = GameFamilyProposal.objects.filter(status='pending')
-    for proposal in pending:
-        proposal_ids = set(proposal.concepts.values_list('id', flat=True))
-        if proposal_ids == concept_ids:
-            return True
-    return False
-
-
 def _calculate_confidence_and_reason(concept_a, concept_b, name_match_type='exact', precomputed=None):
     """Calculate confidence score between two concepts, returning (confidence, reason, signals)."""
     signals = {
@@ -242,22 +219,14 @@ def _precompute_data(all_concepts):
     """Run bulk queries upfront and return lookup dictionaries.
 
     Replaces per-concept DB queries with in-memory lookups for:
-    - Concept lock status
     - Game counts per concept
     - Trophy names, icons, and structural fingerprints
     - Pending proposal concept sets
     """
-    # 1. Concept lock status — single query
-    locked_concept_ids = set(
-        Game.objects.filter(concept_lock=True, concept__isnull=False)
-        .values_list('concept_id', flat=True)
-        .distinct()
-    )
-
-    # 2. Game counts — from already-prefetched games (no DB hit)
+    # 1. Game counts — from already-prefetched games (no DB hit)
     concept_game_count = {c.id: len(c.games.all()) for c in all_concepts}
 
-    # 3. All trophy data — single bulk query
+    # 2. All trophy data — single bulk query
     trophy_names = defaultdict(set)
     trophy_icons = defaultdict(set)
     trophy_type_counts = defaultdict(lambda: defaultdict(int))
@@ -283,14 +252,13 @@ def _precompute_data(all_concepts):
             'total': sum(types.values()),
         }
 
-    # 4. Pending proposals — prefetch M2M in 2 queries
+    # 3. Pending proposals — prefetch M2M in 2 queries
     pending_proposals_set = set()
     for proposal in GameFamilyProposal.objects.filter(status='pending').prefetch_related('concepts'):
         concept_ids = frozenset(c.id for c in proposal.concepts.all())
         pending_proposals_set.add(concept_ids)
 
     return {
-        'locked_concept_ids': locked_concept_ids,
         'concept_game_count': concept_game_count,
         'trophy_names': dict(trophy_names),
         'trophy_icons': dict(trophy_icons),
@@ -299,7 +267,7 @@ def _precompute_data(all_concepts):
     }
 
 
-def find_matches(dry_run=False, auto_only=False, verbose=False):
+def find_matches(dry_run=False, auto_only=False, verbose=False, stdout=None):
     """Find and create GameFamily groupings.
 
     Pass 1: Name-based grouping (exact + fuzzy normalized titles)
@@ -309,10 +277,18 @@ def find_matches(dry_run=False, auto_only=False, verbose=False):
         dry_run: Print actions without creating anything
         auto_only: Only process high-confidence matches
         verbose: Print detailed reasoning
+        stdout: Optional write function (e.g. management command's self.stdout.write)
+                for verbose output. Falls back to logger.info if not provided.
 
     Returns:
         dict with counts: auto_created, proposals_created, skipped
     """
+    def _log(msg):
+        if stdout:
+            stdout(msg)
+        else:
+            logger.info(msg)
+
     stats = {'auto_created': 0, 'proposals_created': 0, 'skipped': 0, 'total_concepts': 0}
 
     # Get all concepts with their games prefetched
@@ -335,8 +311,6 @@ def find_matches(dry_run=False, auto_only=False, verbose=False):
     for concept in all_concepts:
         if concept.family_id is not None:
             continue  # Already in a family
-        if concept.id in precomputed['locked_concept_ids']:
-            continue  # Admin locked
 
         titles = set()
         for game in concept.games.all():
@@ -375,17 +349,15 @@ def find_matches(dry_run=False, auto_only=False, verbose=False):
         if len(concepts_in_group) < 2:
             continue
 
-        if _concepts_already_grouped(concepts_in_group):
-            stats['skipped'] += 1
-            continue
-
         # Determine match type: check if titles are exact or fuzzy match
         # (fuzzy = original titles differ but normalize to the same thing)
+        # Strip platform suffixes before comparing so "Game (PS4)" and "Game (PS5)"
+        # are correctly classified as exact matches rather than fuzzy.
         raw_titles = set()
         for c in concepts_in_group:
             for g in c.games.all():
-                raw_titles.add(g.title_name.lower().strip())
-            raw_titles.add(c.unified_title.lower().strip())
+                raw_titles.add(_strip_platform_suffix(g.title_name).lower().strip())
+            raw_titles.add(_strip_platform_suffix(c.unified_title).lower().strip())
 
         name_match_type = 'exact' if len(raw_titles) == 1 else 'fuzzy'
 
@@ -409,7 +381,7 @@ def find_matches(dry_run=False, auto_only=False, verbose=False):
         if best_confidence >= 0.85:
             # High confidence — auto-create
             if verbose:
-                logger.info(
+                _log(
                     f"[AUTO] '{canonical_name}' — {len(concepts_in_group)} concepts, "
                     f"confidence={best_confidence:.0%}: {best_reason}"
                 )
@@ -431,7 +403,7 @@ def find_matches(dry_run=False, auto_only=False, verbose=False):
             concept_id_set = frozenset(c.id for c in concepts_in_group)
             if concept_id_set not in precomputed['pending_proposals_set']:
                 if verbose:
-                    logger.info(
+                    _log(
                         f"[PROPOSAL] '{canonical_name}' — {len(concepts_in_group)} concepts, "
                         f"confidence={best_confidence:.0%}: {best_reason}"
                     )
@@ -456,7 +428,6 @@ def find_matches(dry_run=False, auto_only=False, verbose=False):
         c for c in all_concepts
         if c.id not in matched_concept_ids
         and c.family_id is None
-        and c.id not in precomputed['locked_concept_ids']
     ]
 
     # Compare all unmatched pairs using pre-computed trophy data
@@ -513,7 +484,7 @@ def find_matches(dry_run=False, auto_only=False, verbose=False):
 
             if confidence >= 0.85:
                 if verbose:
-                    logger.info(
+                    _log(
                         f"[AUTO/P2] '{canonical_name}' — 2 concepts, "
                         f"confidence={confidence:.0%}: {reason}"
                     )
@@ -527,15 +498,15 @@ def find_matches(dry_run=False, auto_only=False, verbose=False):
                     ca.family_id = family.id
                     cb.family = family
                     cb.family_id = family.id
-                    pass2_matched.add(ca.id)
-                    pass2_matched.add(cb.id)
+                pass2_matched.add(ca.id)
+                pass2_matched.add(cb.id)
                 stats['auto_created'] += 1
 
             elif not auto_only:
                 concept_id_set = frozenset({ca.id, cb.id})
                 if concept_id_set not in precomputed['pending_proposals_set']:
                     if verbose:
-                        logger.info(
+                        _log(
                             f"[PROPOSAL/P2] '{canonical_name}' — 2 concepts, "
                             f"confidence={confidence:.0%}: {reason}"
                         )
@@ -548,8 +519,8 @@ def find_matches(dry_run=False, auto_only=False, verbose=False):
                         )
                         proposal.concepts.set([ca, cb])
                         precomputed['pending_proposals_set'].add(concept_id_set)
-                        pass2_matched.add(ca.id)
-                        pass2_matched.add(cb.id)
+                    pass2_matched.add(ca.id)
+                    pass2_matched.add(cb.id)
                     stats['proposals_created'] += 1
 
     return stats
