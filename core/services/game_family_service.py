@@ -162,9 +162,12 @@ def _calculate_confidence_and_reason(concept_a, concept_b, name_match_type='exac
             confidence = 0.55
             reasons.append("Fuzzy title match (suffix stripped)")
 
-    elif name_match_type == 'exact' and name_overlap is None:
+    elif name_match_type == 'exact':
         confidence = 0.60
-        reasons.append("Exact title match but no trophy data for overlap check")
+        if name_overlap is None:
+            reasons.append("Exact title match but no trophy data for overlap check")
+        else:
+            reasons.append(f"Exact title match (trophy name overlap: {name_overlap:.0%})")
 
     reason = '; '.join(reasons) if reasons else "No strong signals"
     return confidence, reason, signals
