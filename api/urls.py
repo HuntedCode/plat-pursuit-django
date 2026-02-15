@@ -41,6 +41,7 @@ from .az_challenge_views import (
     AZChallengeDeleteAPIView, AZSlotAssignAPIView, AZSlotClearAPIView,
     AZGameSearchAPIView,
 )
+from .az_challenge_share_views import AZChallengeShareHTMLView, AZChallengeSharePNGView
 from .game_family_views import (
     ProposalApproveView, ProposalRejectView,
     GameFamilyCreateView, GameFamilyUpdateView, GameFamilyDeleteView,
@@ -179,6 +180,8 @@ urlpatterns = [
     path('challenges/az/<int:challenge_id>/delete/', AZChallengeDeleteAPIView.as_view(), name='az-challenge-delete'),
     path('challenges/az/<int:challenge_id>/slots/<str:letter>/assign/', AZSlotAssignAPIView.as_view(), name='az-slot-assign'),
     path('challenges/az/<int:challenge_id>/slots/<str:letter>/clear/', AZSlotClearAPIView.as_view(), name='az-slot-clear'),
+    path('challenges/az/<int:challenge_id>/share/html/', AZChallengeShareHTMLView.as_view(), name='az-challenge-share-html'),
+    path('challenges/az/<int:challenge_id>/share/png/', AZChallengeSharePNGView.as_view(), name='az-challenge-share-png'),
 
     # Game Family endpoints (staff-only)
     path('game-families/', GameFamilyCreateView.as_view(), name='game-family-create'),

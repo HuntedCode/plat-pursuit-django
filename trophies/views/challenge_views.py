@@ -18,6 +18,7 @@ from django.views.generic import ListView, DetailView, TemplateView
 
 from trophies.mixins import ProfileHotbarMixin
 from trophies.models import Challenge, ProfileGame
+from trophies.themes import get_available_themes_for_grid
 from trophies.services.challenge_service import create_az_challenge
 
 logger = logging.getLogger("psn_api")
@@ -338,6 +339,10 @@ class AZChallengeDetailView(ProfileHotbarMixin, DetailView):
             {'text': 'Challenges', 'url': reverse_lazy('challenges_browse')},
             {'text': challenge.name},
         ]
+
+        # Provide theme grid data for share card color picker (owner only)
+        if context['is_owner']:
+            context['available_themes'] = get_available_themes_for_grid(include_game_art=False)
 
         track_page_view('az_challenge', str(challenge.id), self.request)
         return context

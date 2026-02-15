@@ -102,26 +102,8 @@
             </div>
         </div>
 
-        {# Search results — single column #}
-        <div id="az-search-results" class="max-w-2xl mx-auto flex flex-col gap-2 mt-4"></div>
-
-        {# Load More button #}
-        <div id="az-load-more-container" class="hidden text-center mt-4 max-w-2xl mx-auto">
-            <button id="az-load-more-btn" class="btn btn-ghost btn-sm">Load More</button>
-        </div>
-
-        {# Loading indicator #}
-        <div id="az-search-loading" class="hidden text-center py-4">
-            <span class="loading loading-spinner loading-md text-primary"></span>
-        </div>
-
-        {# No results message #}
-        <div id="az-no-results" class="hidden text-center py-6 text-base-content/50">
-            <p>No games found. Try different filters or a different search term.</p>
-        </div>
-
-        {# Navigation buttons #}
-        <div class="flex justify-center gap-3 mt-6 max-w-2xl mx-auto">
+        {# Navigation buttons — above results so users don't have to scroll past the list #}
+        <div class="flex justify-center gap-3 mt-4 max-w-2xl mx-auto">
             <button id="az-skip-btn" class="btn btn-ghost">
                 Skip for now
                 <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 ml-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
@@ -130,6 +112,24 @@
                 <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 mr-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>
                 Finish Setup
             </button>
+        </div>
+
+        {# Search results — single column #}
+        <div id="az-search-results" class="max-w-2xl mx-auto flex flex-col gap-2 mt-4"></div>
+
+        {# Infinite scroll sentinel with loading spinner #}
+        <div id="az-scroll-sentinel" class="hidden text-center py-4 max-w-2xl mx-auto">
+            <span class="loading loading-spinner loading-md text-primary"></span>
+        </div>
+
+        {# Loading indicator (initial search) #}
+        <div id="az-search-loading" class="hidden text-center py-4">
+            <span class="loading loading-spinner loading-md text-primary"></span>
+        </div>
+
+        {# No results message #}
+        <div id="az-no-results" class="hidden text-center py-6 text-base-content/50">
+            <p>No games found. Try different filters or a different search term.</p>
         </div>
     </div>
 </section>

@@ -150,10 +150,11 @@
         </div>
 
         {# Results — single column, scrollable #}
-        <div id="modal-search-results" class="flex flex-col gap-2 mt-4 max-h-96 overflow-y-auto"></div>
-        {# Load More #}
-        <div id="modal-load-more-container" class="hidden text-center mt-2">
-            <button id="modal-load-more-btn" class="btn btn-ghost btn-sm">Load More</button>
+        <div id="modal-search-results" class="flex flex-col gap-2 mt-4 max-h-96 overflow-y-auto">
+            {# Infinite scroll sentinel (inside scrollable container) #}
+            <div id="modal-scroll-sentinel" class="hidden text-center py-4">
+                <span class="loading loading-spinner loading-md text-primary"></span>
+            </div>
         </div>
         <div id="modal-search-loading" class="hidden text-center py-4">
             <span class="loading loading-spinner loading-md text-primary"></span>

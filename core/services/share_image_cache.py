@@ -2,6 +2,7 @@ import uuid
 import time
 import base64
 import logging
+import threading
 import requests
 from pathlib import Path
 from urllib.parse import urlparse
@@ -21,15 +22,34 @@ class ShareImageCache:
     (unlike base64 data URIs which intermittently fail in html2canvas).
     """
 
+    # In-memory URL deduplication: url -> (cached_path, timestamp)
+    _url_cache = {}
+    _url_cache_lock = threading.Lock()
+    _cache_ttl = 1800  # 30 minutes
+
     @staticmethod
     def fetch_and_cache(url):
         """
         Fetch an external image URL and save to temp directory.
         Returns the serve path (e.g., '/api/v1/share-temp/<uuid>.png')
         or empty string on failure.
+
+        Uses an in-memory cache to avoid re-fetching the same URL
+        within the TTL window (30 minutes).
         """
         if not url:
             return ''
+
+        # Check in-memory cache first
+        with ShareImageCache._url_cache_lock:
+            if url in ShareImageCache._url_cache:
+                cached_path, ts = ShareImageCache._url_cache[url]
+                if time.time() - ts < ShareImageCache._cache_ttl:
+                    filename = cached_path.split('/')[-1]
+                    if (SHARE_TEMP_DIR / filename).exists():
+                        return cached_path
+                # Expired or file missing: remove stale entry
+                del ShareImageCache._url_cache[url]
 
         try:
             parsed = urlparse(url)
@@ -55,7 +75,13 @@ class ShareImageCache:
             filepath = SHARE_TEMP_DIR / filename
             filepath.write_bytes(response.content)
 
-            return f"/api/v1/share-temp/{filename}"
+            serve_path = f"/api/v1/share-temp/{filename}"
+
+            # Store in cache for future lookups
+            with ShareImageCache._url_cache_lock:
+                ShareImageCache._url_cache[url] = (serve_path, time.time())
+
+            return serve_path
 
         except requests.RequestException as e:
             logger.warning(f"[SHARE-CACHE] Failed to fetch image {url}: {e}")

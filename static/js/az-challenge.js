@@ -280,6 +280,7 @@ const AZChallengeSetup = {
     _searchDebounced: null,
     _isSearching: false,
     _searchOffset: 0,
+    _scrollObserver: null,
 
     init(challengeId, existingSlots) {
         this.challengeId = challengeId;
@@ -301,7 +302,7 @@ const AZChallengeSetup = {
         this._bindSearch();
         this._bindChipFilters();
         this._bindSortSelect();
-        this._bindLoadMore();
+        this._initScrollObserver();
         this._bindLetterButtons();
         this._bindSkipButton();
         this._bindFinishButton();
@@ -418,13 +419,22 @@ const AZChallengeSetup = {
         });
     },
 
-    _bindLoadMore() {
-        const btn = document.getElementById('az-load-more-btn');
-        if (!btn) return;
+    _initScrollObserver() {
+        const sentinel = document.getElementById('az-scroll-sentinel');
+        if (!sentinel) return;
 
-        btn.addEventListener('click', () => {
-            this._doSearch(true);
+        this._scrollObserver = new IntersectionObserver((entries) => {
+            if (entries[0].isIntersecting && !this._isSearching) {
+                this._doSearch(true);
+            }
         });
+    },
+
+    _destroyScrollObserver() {
+        if (this._scrollObserver) {
+            this._scrollObserver.disconnect();
+            this._scrollObserver = null;
+        }
     },
 
     async _doSearch(append) {
@@ -436,16 +446,17 @@ const AZChallengeSetup = {
         const loading = document.getElementById('az-search-loading');
         const results = document.getElementById('az-search-results');
         const noResults = document.getElementById('az-no-results');
-        const loadMoreContainer = document.getElementById('az-load-more-container');
+        const sentinel = document.getElementById('az-scroll-sentinel');
 
         if (!append) {
             this._searchOffset = 0;
             if (results) results.innerHTML = '';
+            if (sentinel && this._scrollObserver) this._scrollObserver.unobserve(sentinel);
         }
 
-        if (loading) loading.classList.remove('hidden');
+        if (!append && loading) loading.classList.remove('hidden');
         if (noResults) noResults.classList.add('hidden');
-        if (loadMoreContainer) loadMoreContainer.classList.add('hidden');
+        if (sentinel) sentinel.classList.add('hidden');
 
         try {
             let url = `/api/v1/challenges/az/game-search/?letter=${this.currentLetter}&challenge_id=${this.challengeId}&limit=${SEARCH_LIMIT}&offset=${this._searchOffset}`;
@@ -477,9 +488,15 @@ const AZChallengeSetup = {
                     });
                 }
 
-                // Show/hide Load More
-                if (loadMoreContainer) {
-                    loadMoreContainer.classList.toggle('hidden', !data.has_more);
+                // Infinite scroll: observe sentinel if more results exist
+                if (sentinel && this._scrollObserver) {
+                    if (data.has_more) {
+                        sentinel.classList.remove('hidden');
+                        this._scrollObserver.observe(sentinel);
+                    } else {
+                        sentinel.classList.add('hidden');
+                        this._scrollObserver.unobserve(sentinel);
+                    }
                 }
 
                 this._searchOffset += data.results.length;
@@ -650,6 +667,7 @@ const AZChallengeEdit = {
     _modalSearchOffset: 0,
     _isModalSearching: false,
     _modalChipsBound: false,
+    _modalScrollObserver: null,
 
     init(challengeId, existingSlots, coverLetter) {
         this.challengeId = challengeId;
@@ -667,7 +685,7 @@ const AZChallengeEdit = {
         this._bindSlotActions();
         this._bindModalSearch();
         this._bindModalSortSelect();
-        this._bindModalLoadMore();
+        this._initModalScrollObserver();
     },
 
     // ── Slot Actions ────────────────────────────────────────
@@ -704,13 +722,17 @@ const AZChallengeEdit = {
         const input = document.getElementById('modal-search-input');
         const results = document.getElementById('modal-search-results');
         const noResults = document.getElementById('modal-no-results');
-        const loadMoreContainer = document.getElementById('modal-load-more-container');
+        const sentinel = document.getElementById('modal-scroll-sentinel');
 
         if (letterDisplay) letterDisplay.textContent = letter;
         if (input) input.value = '';
         if (results) results.innerHTML = '';
         if (noResults) noResults.classList.add('hidden');
-        if (loadMoreContainer) loadMoreContainer.classList.add('hidden');
+        // Re-append sentinel to results container (innerHTML cleared it)
+        if (sentinel && results) {
+            sentinel.classList.add('hidden');
+            results.appendChild(sentinel);
+        }
 
         // Bind chip filters once (they persist across modal opens)
         if (!this._modalChipsBound) {
@@ -763,13 +785,16 @@ const AZChallengeEdit = {
         });
     },
 
-    _bindModalLoadMore() {
-        const btn = document.getElementById('modal-load-more-btn');
-        if (!btn) return;
+    _initModalScrollObserver() {
+        const sentinel = document.getElementById('modal-scroll-sentinel');
+        const scrollContainer = document.getElementById('modal-search-results');
+        if (!sentinel || !scrollContainer) return;
 
-        btn.addEventListener('click', () => {
-            this._doModalSearch(true);
-        });
+        this._modalScrollObserver = new IntersectionObserver((entries) => {
+            if (entries[0].isIntersecting && !this._isModalSearching) {
+                this._doModalSearch(true);
+            }
+        }, { root: scrollContainer });
     },
 
     async _doModalSearch(append) {
@@ -781,16 +806,19 @@ const AZChallengeEdit = {
         const loading = document.getElementById('modal-search-loading');
         const results = document.getElementById('modal-search-results');
         const noResults = document.getElementById('modal-no-results');
-        const loadMoreContainer = document.getElementById('modal-load-more-container');
+        const sentinel = document.getElementById('modal-scroll-sentinel');
 
         if (!append) {
             this._modalSearchOffset = 0;
             if (results) results.innerHTML = '';
+            // Re-append sentinel (innerHTML cleared it)
+            if (sentinel && results) results.appendChild(sentinel);
+            if (sentinel && this._modalScrollObserver) this._modalScrollObserver.unobserve(sentinel);
         }
 
-        if (loading) loading.classList.remove('hidden');
+        if (!append && loading) loading.classList.remove('hidden');
         if (noResults) noResults.classList.add('hidden');
-        if (loadMoreContainer) loadMoreContainer.classList.add('hidden');
+        if (sentinel) sentinel.classList.add('hidden');
 
         try {
             let url = `/api/v1/challenges/az/game-search/?letter=${letter}&challenge_id=${this.challengeId}&limit=${SEARCH_LIMIT}&offset=${this._modalSearchOffset}`;
@@ -801,15 +829,19 @@ const AZChallengeEdit = {
 
             if (!append && !data.results.length) {
                 if (results) results.innerHTML = '';
+                // Re-append sentinel (innerHTML cleared it)
+                if (sentinel && results) results.appendChild(sentinel);
                 if (noResults) noResults.classList.remove('hidden');
             } else {
                 if (noResults) noResults.classList.add('hidden');
                 if (results) {
                     const html = data.results.map(g => _renderGameCard(g)).join('');
                     if (append) {
-                        results.insertAdjacentHTML('beforeend', html);
+                        // Insert before sentinel so it stays at the bottom
+                        sentinel?.insertAdjacentHTML('beforebegin', html);
                     } else {
-                        results.innerHTML = html;
+                        // Insert before sentinel (which was re-appended above)
+                        sentinel?.insertAdjacentHTML('beforebegin', html);
                     }
 
                     const selector = append ? '.az-game-result:not([data-bound])' : '.az-game-result';
@@ -825,8 +857,15 @@ const AZChallengeEdit = {
                     });
                 }
 
-                if (loadMoreContainer) {
-                    loadMoreContainer.classList.toggle('hidden', !data.has_more);
+                // Infinite scroll: observe sentinel if more results exist
+                if (sentinel && this._modalScrollObserver) {
+                    if (data.has_more) {
+                        sentinel.classList.remove('hidden');
+                        this._modalScrollObserver.observe(sentinel);
+                    } else {
+                        sentinel.classList.add('hidden');
+                        this._modalScrollObserver.unobserve(sentinel);
+                    }
                 }
 
                 this._modalSearchOffset += data.results.length;
@@ -1125,6 +1164,7 @@ const AZChallengeDetail = {
     init(challengeId) {
         this.challengeId = challengeId;
         this._bindShareButton();
+        this._bindShareImageButton();
     },
 
     _bindShareButton() {
@@ -1155,6 +1195,34 @@ const AZChallengeDetail = {
                 }
             }
         });
+    },
+
+    _bindShareImageButton() {
+        if (typeof AZChallengeShareManager === 'undefined') return;
+
+        const openShareModal = (challengeName) => {
+            const modal = document.getElementById('az-share-modal');
+            const content = document.getElementById('az-share-modal-content');
+            if (!modal || !content) return;
+
+            const manager = new AZChallengeShareManager(this.challengeId, challengeName);
+            content.innerHTML = manager.renderShareSection();
+            manager.init();
+
+            modal.showModal();
+        };
+
+        // Header "Share Image" button
+        const btn = document.getElementById('share-image-btn');
+        if (btn) {
+            btn.addEventListener('click', () => openShareModal(btn.dataset.challengeName || ''));
+        }
+
+        // CTA banner "Create Share Card" button
+        const bannerBtn = document.getElementById('banner-share-image-btn');
+        if (bannerBtn) {
+            bannerBtn.addEventListener('click', () => openShareModal(bannerBtn.dataset.challengeName || ''));
+        }
     },
 };
 
