@@ -57,7 +57,7 @@ function _bindDeleteButton() {
                     await PlatPursuit.API.delete(`/api/v1/challenges/az/${challengeId}/delete/`);
                     modal.close();
                     PlatPursuit.ToastManager.success('Challenge deleted.');
-                    window.location.href = '/challenges/my/';
+                    window.location.href = '/my-challenges/';
                 } catch (error) {
                     modal.close();
                     let msg = 'Failed to delete challenge.';

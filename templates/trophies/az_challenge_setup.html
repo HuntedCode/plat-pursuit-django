@@ -9,8 +9,8 @@
 
     <div class="card bg-base-100 border-4 border-base-300 shadow-md shadow-neutral">
         <div class="card-body">
-            <h1 class="text-xl lg:text-2xl font-bold">{{ challenge.name }} &mdash; Setup Wizard</h1>
-            <p class="text-sm text-base-content/70">Pick a game for each letter. Skip any you're unsure about — you can always come back.</p>
+            <h1 class="text-xl lg:text-2xl font-bold">{{ challenge.name }}: Setup Wizard</h1>
+            <p class="text-sm text-base-content/70">Pick a game for each letter. Skip any you're unsure about. You can always come back!</p>
 
             {# Progress bar: 26 letter buttons #}
             <div id="az-progress-bar" class="flex flex-wrap gap-1 mt-3">
@@ -41,7 +41,7 @@
         <div class="text-center mb-4">
             <div id="current-letter-display" class="text-6xl lg:text-8xl font-black text-primary">A</div>
             <p id="current-letter-prompt" class="text-base-content/70 mt-1">Pick a game starting with <strong id="prompt-letter">A</strong></p>
-            <p class="text-xs text-base-content/40 mt-1">Choose wisely — or don't, you can always swap later!</p>
+            <p class="text-xs text-base-content/40 mt-1">Choose wisely... or don't, you can always swap later!</p>
         </div>
 
         {# Version warning banner #}
@@ -102,7 +102,7 @@
             </div>
         </div>
 
-        {# Navigation buttons — above results so users don't have to scroll past the list #}
+        {# Navigation buttons (above results so users don't have to scroll past the list) #}
         <div class="flex justify-center gap-3 mt-4 max-w-2xl mx-auto">
             <button id="az-skip-btn" class="btn btn-ghost">
                 Skip for now
@@ -114,7 +114,7 @@
             </button>
         </div>
 
-        {# Search results — single column #}
+        {# Search results: single column #}
         <div id="az-search-results" class="max-w-2xl mx-auto flex flex-col gap-2 mt-4"></div>
 
         {# Infinite scroll sentinel with loading spinner #}

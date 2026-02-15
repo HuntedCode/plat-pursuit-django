@@ -2,6 +2,7 @@
 REST API views for Monthly Recap feature.
 Provides endpoints for viewing, regenerating, and sharing monthly recaps.
 """
+import base64
 import calendar
 import random
 import logging
@@ -11,6 +12,7 @@ from rest_framework.response import Response
 from rest_framework import status as http_status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.authentication import SessionAuthentication, TokenAuthentication
+from django.core.cache import cache
 from django.template.loader import render_to_string
 from django.http import HttpResponse
 from django.utils.decorators import method_decorator
@@ -489,25 +491,35 @@ class RecapShareImagePNGView(APIView):
 
         track_site_event('recap_share_generate', f"{year}-{month:02d}", request)
 
-        # Reuse the HTML view's context builder
-        html_view = RecapShareImageHTMLView()
-        context = html_view._build_template_context(recap, profile, format_type)
+        # Check Redis cache for a previously rendered PNG
+        # PNG bytes are base64-encoded for JSON serializer compatibility
+        cache_key = f"recap_share_png:{profile.id}:{year}:{month}:{format_type}:{theme_key}"
+        cached = cache.get(cache_key)
+        png_bytes = base64.b64decode(cached) if cached else None
 
-        html = render_to_string('recap/partials/recap_share_card.html', context)
+        if not png_bytes:
+            # Reuse the HTML view's context builder
+            html_view = RecapShareImageHTMLView()
+            context = html_view._build_template_context(recap, profile, format_type)
 
-        try:
-            from core.services.playwright_renderer import render_png
-            png_bytes = render_png(
-                html,
-                format_type=format_type,
-                theme_key=theme_key,
-            )
-        except Exception as e:
-            logger.exception(f"[RECAP-PNG] Playwright render failed for {year}/{month}: {e}")
-            return Response(
-                {'error': 'Failed to render share image'},
-                status=http_status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
+            html = render_to_string('recap/partials/recap_share_card.html', context)
+
+            try:
+                from core.services.playwright_renderer import render_png
+                png_bytes = render_png(
+                    html,
+                    format_type=format_type,
+                    theme_key=theme_key,
+                )
+            except Exception as e:
+                logger.exception(f"[RECAP-PNG] Playwright render failed for {year}/{month}: {e}")
+                return Response(
+                    {'error': 'Failed to render share image'},
+                    status=http_status.HTTP_500_INTERNAL_SERVER_ERROR
+                )
+
+            # Cache the rendered PNG for 30 minutes (base64-encoded for JSON serializer)
+            cache.set(cache_key, base64.b64encode(png_bytes).decode('ascii'), timeout=1800)
 
         month_name = calendar.month_name[month]
         filename = f"recap-{month_name}-{year}-{format_type}.png"

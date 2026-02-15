@@ -7,6 +7,7 @@ from rest_framework.response import Response
 from rest_framework import status as http_status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.authentication import SessionAuthentication, TokenAuthentication
+from django.core.cache import cache
 from django.template.loader import render_to_string
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
@@ -16,6 +17,7 @@ from core.services.tracking import track_site_event
 from trophies.models import EarnedTrophy
 from notifications.services.shareable_data_service import ShareableDataService
 from core.services.share_image_cache import ShareImageCache
+import base64
 import logging
 
 logger = logging.getLogger(__name__)
@@ -259,38 +261,48 @@ class ShareableImagePNGView(APIView):
 
         theme_key = request.query_params.get('theme', 'default')
 
-        # Reuse existing HTML view's context builder
-        html_view = ShareableImageHTMLView()
-        metadata = ShareableDataService.get_platinum_share_data(earned_trophy)
-        context = html_view._build_template_context(metadata, format_type)
+        # Check Redis cache for a previously rendered PNG
+        # PNG bytes are base64-encoded for JSON serializer compatibility
+        cache_key = f"shareable_png:{earned_trophy_id}:{format_type}:{theme_key}"
+        cached = cache.get(cache_key)
+        png_bytes = base64.b64decode(cached) if cached else None
 
-        html = render_to_string('notifications/partials/share_image_card.html', context)
+        if not png_bytes:
+            # Reuse existing HTML view's context builder
+            html_view = ShareableImageHTMLView()
+            metadata = ShareableDataService.get_platinum_share_data(earned_trophy)
+            context = html_view._build_template_context(metadata, format_type)
 
-        # Use the cached image paths from the context (already fetched by _build_template_context)
-        game_image_path = self._resolve_temp_path(context.get('game_image', ''))
+            html = render_to_string('notifications/partials/share_image_card.html', context)
 
-        # Concept bg is not in the template context — cache it separately for game art themes
-        concept_bg_url = metadata.get('concept_bg_url', '')
-        concept_bg_cached = ShareImageCache.fetch_and_cache(concept_bg_url) if concept_bg_url else ''
-        concept_bg_path = self._resolve_temp_path(concept_bg_cached)
+            # Use the cached image paths from the context (already fetched by _build_template_context)
+            game_image_path = self._resolve_temp_path(context.get('game_image', ''))
 
-        try:
-            from core.services.playwright_renderer import render_png
-            png_bytes = render_png(
-                html,
-                format_type=format_type,
-                theme_key=theme_key,
-                game_image_path=game_image_path,
-                concept_bg_path=concept_bg_path,
-            )
-        except Exception as e:
-            logger.exception(f"[SHARE-PNG] Playwright render failed for shareable {earned_trophy_id}: {e}")
-            return Response(
-                {'error': 'Failed to render share image'},
-                status=http_status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
+            # Concept bg is not in the template context: cache it separately for game art themes
+            concept_bg_url = metadata.get('concept_bg_url', '')
+            concept_bg_cached = ShareImageCache.fetch_and_cache(concept_bg_url) if concept_bg_url else ''
+            concept_bg_path = self._resolve_temp_path(concept_bg_cached)
 
-        game_name = metadata.get('game_name', 'share-card')
+            try:
+                from core.services.playwright_renderer import render_png
+                png_bytes = render_png(
+                    html,
+                    format_type=format_type,
+                    theme_key=theme_key,
+                    game_image_path=game_image_path,
+                    concept_bg_path=concept_bg_path,
+                )
+            except Exception as e:
+                logger.exception(f"[SHARE-PNG] Playwright render failed for shareable {earned_trophy_id}: {e}")
+                return Response(
+                    {'error': 'Failed to render share image'},
+                    status=http_status.HTTP_500_INTERNAL_SERVER_ERROR
+                )
+
+            # Cache the rendered PNG for 30 minutes (base64-encoded for JSON serializer)
+            cache.set(cache_key, base64.b64encode(png_bytes).decode('ascii'), timeout=1800)
+
+        game_name = earned_trophy.trophy.game.title_name or 'share-card'
         safe_name = "".join(c for c in game_name if c.isalnum() or c in (' ', '-', '_')).strip()
         filename = f"{safe_name}-{format_type}.png"
 

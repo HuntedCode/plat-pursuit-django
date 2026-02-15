@@ -35,6 +35,11 @@ class Command(BaseCommand):
             type=int,
             help='Flush TokenKeeper for a specific profile.'
         )
+        group.add_argument(
+            '--flush-share-cache',
+            action='store_true',
+            help='Flush all cached share card PNGs (az_share_png, recap_share_png, shareable_png, notification_share_png).'
+        )
 
     def handle(self, *args, **options):
         if not settings.DEBUG:
@@ -50,6 +55,8 @@ class Command(BaseCommand):
             self._handle_flush_token_keeper()
         elif options['flush_complete_lock']:
             self._handle_flush_complete_lock(options['flush_complete_lock'])
+        elif options['flush_share_cache']:
+            self._handle_flush_share_cache()
         
     def _confirm_action(self, action_desc):
         confirm = input(f"Are you sure you want to {action_desc}? (y/n):").strip().lower()
@@ -159,7 +166,7 @@ class Command(BaseCommand):
         if not self._confirm_action(f"flush TokenKeeper lock and pending complete for profile {profile_id} only (irreversible)"):
                 self.stdout.write(self.style.ERROR("Operation cancelled."))
                 return
-            
+
         lock_key = f"complete_lock:{profile_id}"
         profile_jobs_key = f"pending_sync_complete:{profile_id}"
         sync_started_key = f"sync_started_at:{profile_id}"
@@ -169,3 +176,32 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS(f"Pending complete successfully flushed!"))
         redis_client.delete(sync_started_key)
         self.stdout.write(self.style.SUCCESS(f"Sync started timestamp successfully flushed!"))
+
+    def _handle_flush_share_cache(self):
+        """Flush all cached share card PNGs from Django's cache (Redis-backed)."""
+        if not self._confirm_action("flush all cached share card PNGs"):
+            self.stdout.write(self.style.ERROR("Operation cancelled."))
+            return
+
+        cache_config = settings.CACHES['default']
+        prefix = f"{cache_config['KEY_PREFIX']}:1:"
+
+        share_patterns = [
+            f"{prefix}az_share_png:*",
+            f"{prefix}recap_share_png:*",
+            f"{prefix}shareable_png:*",
+            f"{prefix}notification_share_png:*",
+        ]
+
+        try:
+            deleted_count = 0
+            for pattern in share_patterns:
+                matching_keys = redis_client.keys(pattern)
+                if matching_keys:
+                    redis_client.delete(*matching_keys)
+                    deleted_count += len(matching_keys)
+            logger.info(f"Flushed {deleted_count} share card PNG cache keys.")
+            self.stdout.write(self.style.SUCCESS(f"Flushed {deleted_count} cached share card PNGs."))
+        except Exception as e:
+            logger.error(f"Error during share cache flush: {e}")
+            self.stdout.write(self.style.ERROR(f"Error: {e}"))

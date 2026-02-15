@@ -1,4 +1,5 @@
 import uuid
+import hashlib
 import time
 import base64
 import logging
@@ -20,6 +21,9 @@ class ShareImageCache:
     Fetches external images and saves them as temporary local files.
     Returns same-origin URLs that work reliably on iOS Safari
     (unlike base64 data URIs which intermittently fail in html2canvas).
+
+    Uses deterministic filenames (MD5 hash of URL) so files cached by
+    one Gunicorn worker can be reused by another without shared state.
     """
 
     # In-memory URL deduplication: url -> (cached_path, timestamp)
@@ -28,19 +32,26 @@ class ShareImageCache:
     _cache_ttl = 1800  # 30 minutes
 
     @staticmethod
+    def _deterministic_filename(url, ext):
+        """Generate a deterministic filename from a URL using MD5 hash."""
+        url_hash = hashlib.md5(url.encode()).hexdigest()
+        return f"{url_hash}{ext}"
+
+    @staticmethod
     def fetch_and_cache(url):
         """
         Fetch an external image URL and save to temp directory.
-        Returns the serve path (e.g., '/api/v1/share-temp/<uuid>.png')
+        Returns the serve path (e.g., '/api/v1/share-temp/<hash>.png')
         or empty string on failure.
 
-        Uses an in-memory cache to avoid re-fetching the same URL
-        within the TTL window (30 minutes).
+        Uses deterministic filenames so cached files persist across
+        Gunicorn workers. Also uses an in-memory cache as a fast path
+        for same-worker requests within the TTL window.
         """
         if not url:
             return ''
 
-        # Check in-memory cache first
+        # Check in-memory cache first (fast path for same-worker)
         with ShareImageCache._url_cache_lock:
             if url in ShareImageCache._url_cache:
                 cached_path, ts = ShareImageCache._url_cache[url]
@@ -57,25 +68,50 @@ class ShareImageCache:
                 logger.warning(f"[SHARE-CACHE] Invalid URL scheme: {url}")
                 return ''
 
+            # Determine extension from URL path for deterministic filename
+            url_path = parsed.path.lower()
+            if 'jpeg' in url_path or 'jpg' in url_path:
+                ext = '.jpg'
+            elif 'webp' in url_path:
+                ext = '.webp'
+            else:
+                ext = '.png'
+
+            filename = ShareImageCache._deterministic_filename(url, ext)
+            filepath = SHARE_TEMP_DIR / filename
+            serve_path = f"/api/v1/share-temp/{filename}"
+
+            # Check if file already exists on disk (cross-worker cache hit)
+            if filepath.exists():
+                # Touch the file to refresh its mtime (prevents cleanup)
+                filepath.touch()
+                with ShareImageCache._url_cache_lock:
+                    ShareImageCache._url_cache[url] = (serve_path, time.time())
+                return serve_path
+
+            # File not on disk: download from external URL
             response = requests.get(url, timeout=10, headers={
                 'User-Agent': 'Mozilla/5.0 (compatible; PlatPursuit/1.0)'
             })
             response.raise_for_status()
 
+            # Re-check extension from Content-Type header (more reliable)
             content_type = response.headers.get('Content-Type', 'image/png')
-            ext = '.png'
             if 'jpeg' in content_type or 'jpg' in content_type:
-                ext = '.jpg'
+                actual_ext = '.jpg'
             elif 'webp' in content_type:
-                ext = '.webp'
+                actual_ext = '.webp'
+            else:
+                actual_ext = '.png'
+
+            # If Content-Type gives a different ext, use that instead
+            if actual_ext != ext:
+                filename = ShareImageCache._deterministic_filename(url, actual_ext)
+                filepath = SHARE_TEMP_DIR / filename
+                serve_path = f"/api/v1/share-temp/{filename}"
 
             SHARE_TEMP_DIR.mkdir(parents=True, exist_ok=True)
-
-            filename = f"{uuid.uuid4().hex}{ext}"
-            filepath = SHARE_TEMP_DIR / filename
             filepath.write_bytes(response.content)
-
-            serve_path = f"/api/v1/share-temp/{filename}"
 
             # Store in cache for future lookups
             with ShareImageCache._url_cache_lock:
@@ -137,8 +173,8 @@ class ShareImageCache:
             return ''
 
     @staticmethod
-    def cleanup(max_age_seconds=3600):
-        """Delete temp files older than max_age_seconds. Returns count of deleted files."""
+    def cleanup(max_age_seconds=14400):
+        """Delete temp files older than max_age_seconds (default 4 hours). Returns count of deleted files."""
         if not SHARE_TEMP_DIR.exists():
             return 0
 

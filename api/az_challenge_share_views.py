@@ -7,6 +7,7 @@ from rest_framework.response import Response
 from rest_framework import status as http_status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.authentication import SessionAuthentication, TokenAuthentication
+from django.core.cache import cache
 from django.template.loader import render_to_string
 from django.http import HttpResponse
 from django.utils.decorators import method_decorator
@@ -15,6 +16,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from core.services.share_image_cache import ShareImageCache
 from core.services.tracking import track_site_event
 from trophies.models import Challenge, ProfileGame
+import base64
 import logging
 
 logger = logging.getLogger(__name__)
@@ -236,27 +238,37 @@ class AZChallengeSharePNGView(APIView):
         theme_key = request.query_params.get('theme', 'default')
         featured_letter = request.query_params.get('featured_letter', '')
 
-        context, _ = _build_template_context(
-            challenge, format_type, featured_letter,
-        )
+        # Check Redis cache for a previously rendered PNG
+        # PNG bytes are base64-encoded for JSON serializer compatibility
+        cache_key = f"az_share_png:{challenge_id}:{format_type}:{theme_key}:{featured_letter}"
+        cached = cache.get(cache_key)
+        png_bytes = base64.b64decode(cached) if cached else None
 
-        html = render_to_string(TEMPLATE, context)
+        if not png_bytes:
+            context, _ = _build_template_context(
+                challenge, format_type, featured_letter,
+            )
 
-        try:
-            from core.services.playwright_renderer import render_png
-            png_bytes = render_png(
-                html,
-                format_type=format_type,
-                theme_key=theme_key,
-            )
-        except Exception as e:
-            logger.exception(
-                f"[AZ-SHARE-PNG] Playwright render failed for challenge {challenge_id}: {e}"
-            )
-            return Response(
-                {'error': 'Failed to render share image'},
-                status=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
-            )
+            html = render_to_string(TEMPLATE, context)
+
+            try:
+                from core.services.playwright_renderer import render_png
+                png_bytes = render_png(
+                    html,
+                    format_type=format_type,
+                    theme_key=theme_key,
+                )
+            except Exception as e:
+                logger.exception(
+                    f"[AZ-SHARE-PNG] Playwright render failed for challenge {challenge_id}: {e}"
+                )
+                return Response(
+                    {'error': 'Failed to render share image'},
+                    status=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
+                )
+
+            # Cache the rendered PNG for 10 minutes (base64-encoded for JSON serializer)
+            cache.set(cache_key, base64.b64encode(png_bytes).decode('ascii'), timeout=600)
 
         # Track the download
         track_site_event('az_challenge_share_download', str(challenge_id), request)

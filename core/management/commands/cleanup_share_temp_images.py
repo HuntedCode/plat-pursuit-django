@@ -2,8 +2,9 @@
 Management command to clean up temporary share card images.
 
 Deletes temp files from share_temp_images/ that are older than the specified max age.
-These files are created when users generate share card downloads and are only needed
-for a few seconds between the API call and the download.
+These files are created when users generate share card downloads. With deterministic
+filenames, files on disk serve as a cross-worker cache, so a longer retention
+(4 hours) reduces redundant PSN CDN downloads.
 
 Recommended cron: Run hourly.
 """
@@ -12,14 +13,14 @@ from core.services.share_image_cache import ShareImageCache
 
 
 class Command(BaseCommand):
-    help = "Delete temporary share card images older than 1 hour"
+    help = "Delete temporary share card images older than 4 hours"
 
     def add_arguments(self, parser):
         parser.add_argument(
             '--max-age',
             type=int,
-            default=3600,
-            help='Max age in seconds (default: 3600 = 1 hour)',
+            default=14400,
+            help='Max age in seconds (default: 14400 = 4 hours)',
         )
         parser.add_argument(
             '--dry-run',
