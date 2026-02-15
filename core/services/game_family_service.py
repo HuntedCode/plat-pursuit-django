@@ -2,9 +2,9 @@ import logging
 import re
 from collections import defaultdict
 
-from django.db.models import Count, Q
+from django.db.models import Count
 
-from trophies.models import Concept, GameFamily, GameFamilyProposal, Trophy
+from trophies.models import Concept, Game, GameFamily, GameFamilyProposal, Trophy
 
 logger = logging.getLogger("psn_api")
 
@@ -17,16 +17,25 @@ REMASTER_SUFFIXES = [
     'anniversary edition', 'legendary edition',
 ]
 
+# Pre-compiled regexes for title normalization
+_TM_RE = re.compile(r'[™®]|(\bTM\b)|(\(R\))')
+_SUFFIX_PATTERNS = [
+    re.compile(rf'\s*[-:–]?\s*{re.escape(suffix)}\s*$', flags=re.IGNORECASE)
+    for suffix in REMASTER_SUFFIXES
+]
+_PLATFORM_SUFFIX_RE = re.compile(
+    r'\s*\([^)]*(?:PS\d|PS\s?Vita|PSVITA|PS\s?VR|Unknown)[^)]*\)\s*$',
+    flags=re.IGNORECASE,
+)
+
 
 def normalize_game_title(title):
     """Strip common remaster/edition suffixes and normalize for comparison."""
     title = title.lower().strip()
-    title = re.sub(r'[™®]|(\bTM\b)|(\(R\))', '', title).strip()
-    for suffix in REMASTER_SUFFIXES:
-        title = re.sub(rf'\s*[-:–]?\s*{re.escape(suffix)}\s*$', '', title, flags=re.IGNORECASE)
-    # Remove trailing platform markers: (PS4), (PS3, PS5), (PS4, PS VR), (Unknown), etc.
-    # Handles stub concepts whose unified_title has format "Game Name (PS4, PS5)"
-    title = re.sub(r'\s*\([^)]*(?:PS\d|PS\s?Vita|PSVITA|PS\s?VR|Unknown)[^)]*\)\s*$', '', title, flags=re.IGNORECASE)
+    title = _TM_RE.sub('', title).strip()
+    for pattern in _SUFFIX_PATTERNS:
+        title = pattern.sub('', title)
+    title = _PLATFORM_SUFFIX_RE.sub('', title)
     return title.strip()
 
 
@@ -92,13 +101,10 @@ def _strip_platform_suffix(title):
 
     Preserves original casing unlike normalize_game_title().
     """
-    return re.sub(
-        r'\s*\([^)]*(?:PS\d|PS\s?Vita|PSVITA|PS\s?VR|Unknown)[^)]*\)\s*$',
-        '', title, flags=re.IGNORECASE
-    ).strip()
+    return _PLATFORM_SUFFIX_RE.sub('', title).strip()
 
 
-def _get_canonical_name(concepts):
+def _get_canonical_name(concepts, precomputed=None):
     """Pick the best canonical name from a set of concepts.
 
     Prefer real concepts (non-PP_) over stubs, then prefer the one with the
@@ -107,8 +113,10 @@ def _get_canonical_name(concepts):
     """
     real = [c for c in concepts if not c.concept_id.startswith('PP_')]
     pool = real if real else list(concepts)
-    # Pick the concept with the most games
-    best = max(pool, key=lambda c: c.games.count())
+    if precomputed:
+        best = max(pool, key=lambda c: precomputed['concept_game_count'].get(c.id, 0))
+    else:
+        best = max(pool, key=lambda c: c.games.count())
     return _strip_platform_suffix(best.unified_title)
 
 
@@ -135,7 +143,7 @@ def _proposal_exists_for(concept_ids):
     return False
 
 
-def _calculate_confidence_and_reason(concept_a, concept_b, name_match_type='exact'):
+def _calculate_confidence_and_reason(concept_a, concept_b, name_match_type='exact', precomputed=None):
     """Calculate confidence score between two concepts, returning (confidence, reason, signals)."""
     signals = {
         'name_match': name_match_type,
@@ -144,10 +152,32 @@ def _calculate_confidence_and_reason(concept_a, concept_b, name_match_type='exac
         'fingerprint_match': None,
     }
 
-    name_overlap = calculate_trophy_name_overlap(concept_a, concept_b)
-    icon_overlap = calculate_icon_overlap(concept_a, concept_b)
-    fp_a = get_trophy_fingerprint(concept_a)
-    fp_b = get_trophy_fingerprint(concept_b)
+    if precomputed:
+        # Use pre-computed trophy data (in-memory lookups, no DB queries)
+        names_a = precomputed['trophy_names'].get(concept_a.id, set())
+        names_b = precomputed['trophy_names'].get(concept_b.id, set())
+        if names_a and names_b:
+            intersection = names_a & names_b
+            name_overlap = len(intersection) / min(len(names_a), len(names_b))
+        else:
+            name_overlap = None
+
+        icons_a = precomputed['trophy_icons'].get(concept_a.id, set())
+        icons_b = precomputed['trophy_icons'].get(concept_b.id, set())
+        if icons_a and icons_b:
+            intersection = icons_a & icons_b
+            icon_overlap = len(intersection) / min(len(icons_a), len(icons_b))
+        else:
+            icon_overlap = None
+
+        fp_a = precomputed['trophy_fingerprints'].get(concept_a.id)
+        fp_b = precomputed['trophy_fingerprints'].get(concept_b.id)
+    else:
+        name_overlap = calculate_trophy_name_overlap(concept_a, concept_b)
+        icon_overlap = calculate_icon_overlap(concept_a, concept_b)
+        fp_a = get_trophy_fingerprint(concept_a)
+        fp_b = get_trophy_fingerprint(concept_b)
+
     fp_match = fingerprints_match(fp_a, fp_b)
 
     signals['trophy_name_overlap'] = name_overlap
@@ -208,6 +238,67 @@ def _calculate_confidence_and_reason(concept_a, concept_b, name_match_type='exac
     return confidence, reason, signals
 
 
+def _precompute_data(all_concepts):
+    """Run bulk queries upfront and return lookup dictionaries.
+
+    Replaces per-concept DB queries with in-memory lookups for:
+    - Concept lock status
+    - Game counts per concept
+    - Trophy names, icons, and structural fingerprints
+    - Pending proposal concept sets
+    """
+    # 1. Concept lock status — single query
+    locked_concept_ids = set(
+        Game.objects.filter(concept_lock=True, concept__isnull=False)
+        .values_list('concept_id', flat=True)
+        .distinct()
+    )
+
+    # 2. Game counts — from already-prefetched games (no DB hit)
+    concept_game_count = {c.id: len(c.games.all()) for c in all_concepts}
+
+    # 3. All trophy data — single bulk query
+    trophy_names = defaultdict(set)
+    trophy_icons = defaultdict(set)
+    trophy_type_counts = defaultdict(lambda: defaultdict(int))
+    trophy_group_ids = defaultdict(set)
+
+    for concept_id, name, trophy_type, icon_url, group_id in (
+        Trophy.objects.filter(game__concept__isnull=False)
+        .values_list('game__concept_id', 'trophy_name', 'trophy_type', 'trophy_icon_url', 'trophy_group_id')
+        .iterator()
+    ):
+        trophy_names[concept_id].add(name)
+        trophy_type_counts[concept_id][trophy_type] += 1
+        trophy_group_ids[concept_id].add(group_id)
+        if icon_url:
+            trophy_icons[concept_id].add(icon_url)
+
+    trophy_fingerprints = {}
+    for concept_id, type_counts in trophy_type_counts.items():
+        types = dict(type_counts)
+        trophy_fingerprints[concept_id] = {
+            'types': types,
+            'groups': len(trophy_group_ids[concept_id]),
+            'total': sum(types.values()),
+        }
+
+    # 4. Pending proposals — prefetch M2M in 2 queries
+    pending_proposals_set = set()
+    for proposal in GameFamilyProposal.objects.filter(status='pending').prefetch_related('concepts'):
+        concept_ids = frozenset(c.id for c in proposal.concepts.all())
+        pending_proposals_set.add(concept_ids)
+
+    return {
+        'locked_concept_ids': locked_concept_ids,
+        'concept_game_count': concept_game_count,
+        'trophy_names': dict(trophy_names),
+        'trophy_icons': dict(trophy_icons),
+        'trophy_fingerprints': trophy_fingerprints,
+        'pending_proposals_set': pending_proposals_set,
+    }
+
+
 def find_matches(dry_run=False, auto_only=False, verbose=False):
     """Find and create GameFamily groupings.
 
@@ -230,6 +321,9 @@ def find_matches(dry_run=False, auto_only=False, verbose=False):
     )
     stats['total_concepts'] = len(all_concepts)
 
+    # Pre-compute all lookup data in bulk (~4 queries total)
+    precomputed = _precompute_data(all_concepts)
+
     # Track which concepts have been matched in this run
     matched_concept_ids = set()
 
@@ -241,7 +335,7 @@ def find_matches(dry_run=False, auto_only=False, verbose=False):
     for concept in all_concepts:
         if concept.family_id is not None:
             continue  # Already in a family
-        if _has_concept_lock(concept):
+        if concept.id in precomputed['locked_concept_ids']:
             continue  # Admin locked
 
         titles = set()
@@ -250,18 +344,12 @@ def find_matches(dry_run=False, auto_only=False, verbose=False):
             if normalized:
                 titles.add(normalized)
                 title_groups[normalized].add(concept.id)
-        concept_titles[concept.id] = titles
-
-    # Also check unified_title
-    for concept in all_concepts:
-        if concept.family_id is not None or _has_concept_lock(concept):
-            continue
+        # Also check unified_title
         normalized = normalize_game_title(concept.unified_title)
         if normalized:
-            if concept.id not in concept_titles:
-                concept_titles[concept.id] = set()
-            concept_titles[concept.id].add(normalized)
+            titles.add(normalized)
             title_groups[normalized].add(concept.id)
+        concept_titles[concept.id] = titles
 
     # Process name groups
     concept_map = {c.id: c for c in all_concepts}
@@ -300,15 +388,6 @@ def find_matches(dry_run=False, auto_only=False, verbose=False):
             raw_titles.add(c.unified_title.lower().strip())
 
         name_match_type = 'exact' if len(raw_titles) == 1 else 'fuzzy'
-        # If any pair has exact normalized match but different raw titles, it's fuzzy
-        if name_match_type == 'exact':
-            # Check if they truly have the same raw title
-            game_titles = set()
-            for c in concepts_in_group:
-                for g in c.games.all():
-                    game_titles.add(g.title_name.lower().strip())
-            if len(game_titles) > 1:
-                name_match_type = 'fuzzy'
 
         # Calculate pairwise confidence, use the best pair's confidence for the group
         best_confidence = 0.0
@@ -318,14 +397,14 @@ def find_matches(dry_run=False, auto_only=False, verbose=False):
         for i, ca in enumerate(concepts_in_group):
             for cb in concepts_in_group[i + 1:]:
                 conf, reason, signals = _calculate_confidence_and_reason(
-                    ca, cb, name_match_type
+                    ca, cb, name_match_type, precomputed
                 )
                 if conf > best_confidence:
                     best_confidence = conf
                     best_reason = reason
                     best_signals = signals
 
-        canonical_name = _get_canonical_name(concepts_in_group)
+        canonical_name = _get_canonical_name(concepts_in_group, precomputed)
 
         if best_confidence >= 0.85:
             # High confidence — auto-create
@@ -339,16 +418,18 @@ def find_matches(dry_run=False, auto_only=False, verbose=False):
                     canonical_name=canonical_name,
                     is_verified=False,
                 )
+                group_ids = [c.id for c in concepts_in_group]
+                Concept.objects.filter(id__in=group_ids).update(family=family)
                 for c in concepts_in_group:
                     c.family = family
-                    c.save(update_fields=['family'])
-                    matched_concept_ids.add(c.id)
+                    c.family_id = family.id
+                matched_concept_ids.update(group_ids)
             stats['auto_created'] += 1
 
         elif best_confidence >= 0.5 and not auto_only:
             # Medium confidence — proposal
-            concept_id_set = {c.id for c in concepts_in_group}
-            if not _proposal_exists_for(concept_id_set):
+            concept_id_set = frozenset(c.id for c in concepts_in_group)
+            if concept_id_set not in precomputed['pending_proposals_set']:
                 if verbose:
                     logger.info(
                         f"[PROPOSAL] '{canonical_name}' — {len(concepts_in_group)} concepts, "
@@ -362,8 +443,9 @@ def find_matches(dry_run=False, auto_only=False, verbose=False):
                         match_signals=best_signals,
                     )
                     proposal.concepts.set(concepts_in_group)
-                    for c in concepts_in_group:
-                        matched_concept_ids.add(c.id)
+                    # Track newly created proposal so Pass 1 doesn't duplicate it
+                    precomputed['pending_proposals_set'].add(concept_id_set)
+                matched_concept_ids.update(c.id for c in concepts_in_group)
                 stats['proposals_created'] += 1
             else:
                 stats['skipped'] += 1
@@ -374,23 +456,10 @@ def find_matches(dry_run=False, auto_only=False, verbose=False):
         c for c in all_concepts
         if c.id not in matched_concept_ids
         and c.family_id is None
-        and not _has_concept_lock(c)
+        and c.id not in precomputed['locked_concept_ids']
     ]
 
-    # Pre-compute fingerprints and icon sets
-    fingerprints = {}
-    icon_sets = {}
-    for c in unmatched:
-        fingerprints[c.id] = get_trophy_fingerprint(c)
-        icons = set(
-            Trophy.objects.filter(game__concept=c, trophy_icon_url__isnull=False)
-            .exclude(trophy_icon_url='')
-            .values_list('trophy_icon_url', flat=True)
-        )
-        icon_sets[c.id] = icons
-
-    # Compare all unmatched pairs
-    pass2_groups = []
+    # Compare all unmatched pairs using pre-computed trophy data
     pass2_matched = set()
 
     for i, ca in enumerate(unmatched):
@@ -400,10 +469,10 @@ def find_matches(dry_run=False, auto_only=False, verbose=False):
             if cb.id in pass2_matched:
                 continue
 
-            fp_a = fingerprints[ca.id]
-            fp_b = fingerprints[cb.id]
-            icons_a = icon_sets[ca.id]
-            icons_b = icon_sets[cb.id]
+            fp_a = precomputed['trophy_fingerprints'].get(ca.id)
+            fp_b = precomputed['trophy_fingerprints'].get(cb.id)
+            icons_a = precomputed['trophy_icons'].get(ca.id, set())
+            icons_b = precomputed['trophy_icons'].get(cb.id, set())
 
             # Check icon overlap
             icon_overlap = None
@@ -440,7 +509,7 @@ def find_matches(dry_run=False, auto_only=False, verbose=False):
                 continue
 
             reason = '; '.join(reasons)
-            canonical_name = _get_canonical_name([ca, cb])
+            canonical_name = _get_canonical_name([ca, cb], precomputed)
 
             if confidence >= 0.85:
                 if verbose:
@@ -453,17 +522,18 @@ def find_matches(dry_run=False, auto_only=False, verbose=False):
                         canonical_name=canonical_name,
                         is_verified=False,
                     )
+                    Concept.objects.filter(id__in=[ca.id, cb.id]).update(family=family)
                     ca.family = family
-                    ca.save(update_fields=['family'])
+                    ca.family_id = family.id
                     cb.family = family
-                    cb.save(update_fields=['family'])
+                    cb.family_id = family.id
                     pass2_matched.add(ca.id)
                     pass2_matched.add(cb.id)
                 stats['auto_created'] += 1
 
             elif not auto_only:
-                concept_id_set = {ca.id, cb.id}
-                if not _proposal_exists_for(concept_id_set):
+                concept_id_set = frozenset({ca.id, cb.id})
+                if concept_id_set not in precomputed['pending_proposals_set']:
                     if verbose:
                         logger.info(
                             f"[PROPOSAL/P2] '{canonical_name}' — 2 concepts, "
@@ -477,6 +547,7 @@ def find_matches(dry_run=False, auto_only=False, verbose=False):
                             match_signals=signals,
                         )
                         proposal.concepts.set([ca, cb])
+                        precomputed['pending_proposals_set'].add(concept_id_set)
                         pass2_matched.add(ca.id)
                         pass2_matched.add(cb.id)
                     stats['proposals_created'] += 1

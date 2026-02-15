@@ -5,7 +5,9 @@ Staff-only endpoints for managing GameFamily records and reviewing proposals.
 """
 import logging
 
-from django.db.models import Count, Q
+from collections import defaultdict
+
+from django.db.models import Q
 from django.db.models.functions import Lower
 from django.utils import timezone
 from rest_framework import status
@@ -19,47 +21,61 @@ from trophies.models import Concept, GameFamily, GameFamilyProposal, Trophy
 logger = logging.getLogger('psn_api')
 
 
+def _bulk_serialize_concepts(concepts):
+    """Serialize multiple concepts with a single bulk trophy query."""
+    concept_ids = [c.id for c in concepts]
+
+    # Single query for all trophy data across all concepts
+    trophy_type_counts = defaultdict(lambda: defaultdict(int))
+    trophy_icons = {}  # concept_id -> best icon (platinum preferred)
+    trophy_all_icons = defaultdict(list)  # concept_id -> [(type, url)]
+
+    for concept_id, trophy_type, icon_url in (
+        Trophy.objects.filter(game__concept_id__in=concept_ids)
+        .values_list('game__concept_id', 'trophy_type', 'trophy_icon_url')
+    ):
+        trophy_type_counts[concept_id][trophy_type] += 1
+        if icon_url:
+            trophy_all_icons[concept_id].append((trophy_type, icon_url))
+
+    # Pick best icon per concept: platinum first, then any
+    for concept_id, icons in trophy_all_icons.items():
+        plat = next((url for t, url in icons if t == 'platinum'), None)
+        trophy_icons[concept_id] = plat or icons[0][1]
+
+    results = []
+    for concept in concepts:
+        games = concept.games.all()
+        platforms = set()
+        regions = set()
+        for game in games:
+            platforms.update(game.title_platform or [])
+            for r in (game.region or []):
+                regions.add(r)
+
+        results.append({
+            'id': concept.id,
+            'concept_id': concept.concept_id,
+            'unified_title': concept.unified_title,
+            'is_stub': concept.concept_id.startswith('PP_'),
+            'platforms': sorted(platforms),
+            'regions': sorted(regions),
+            'trophy_counts': dict(trophy_type_counts.get(concept.id, {})),
+            'trophy_icon': trophy_icons.get(concept.id, ''),
+            'game_count': len(games),
+            'family_id': concept.family_id,
+        })
+    return results
+
+
 def _serialize_concept_brief(concept):
-    """Serialize a concept with minimal info for family management."""
-    games = concept.games.all()
-    platforms = set()
-    regions = set()
-    for game in games:
-        platforms.update(game.title_platform or [])
-        for r in (game.region or []):
-            regions.add(r)
-
-    # Trophy fingerprint
-    trophy_counts = {}
-    for entry in Trophy.objects.filter(game__concept=concept).values('trophy_type').annotate(count=Count('id')):
-        trophy_counts[entry['trophy_type']] = entry['count']
-
-    # Get platinum icon or first trophy icon
-    plat_icon = Trophy.objects.filter(
-        game__concept=concept, trophy_type='platinum'
-    ).values_list('trophy_icon_url', flat=True).first()
-    if not plat_icon:
-        plat_icon = Trophy.objects.filter(
-            game__concept=concept, trophy_icon_url__isnull=False
-        ).exclude(trophy_icon_url='').values_list('trophy_icon_url', flat=True).first()
-
-    return {
-        'id': concept.id,
-        'concept_id': concept.concept_id,
-        'unified_title': concept.unified_title,
-        'is_stub': concept.concept_id.startswith('PP_'),
-        'platforms': sorted(platforms),
-        'regions': sorted(regions),
-        'trophy_counts': trophy_counts,
-        'trophy_icon': plat_icon or '',
-        'game_count': games.count(),
-        'family_id': concept.family_id,
-    }
+    """Serialize a single concept. For small result sets (e.g., search)."""
+    return _bulk_serialize_concepts([concept])[0]
 
 
 def _serialize_family(family):
     """Serialize a GameFamily with its member concepts."""
-    concepts = family.concepts.prefetch_related('games').all()
+    concepts = list(family.concepts.prefetch_related('games').all())
     return {
         'id': family.id,
         'canonical_name': family.canonical_name,
@@ -67,14 +83,14 @@ def _serialize_family(family):
         'is_verified': family.is_verified,
         'created_at': family.created_at.isoformat(),
         'updated_at': family.updated_at.isoformat(),
-        'concepts': [_serialize_concept_brief(c) for c in concepts],
-        'concept_count': concepts.count(),
+        'concepts': _bulk_serialize_concepts(concepts),
+        'concept_count': len(concepts),
     }
 
 
 def _serialize_proposal(proposal):
     """Serialize a GameFamilyProposal with its member concepts."""
-    concepts = proposal.concepts.prefetch_related('games').all()
+    concepts = list(proposal.concepts.prefetch_related('games').all())
     return {
         'id': proposal.id,
         'proposed_name': proposal.proposed_name,
@@ -83,7 +99,7 @@ def _serialize_proposal(proposal):
         'match_signals': proposal.match_signals,
         'status': proposal.status,
         'created_at': proposal.created_at.isoformat(),
-        'concepts': [_serialize_concept_brief(c) for c in concepts],
+        'concepts': _bulk_serialize_concepts(concepts),
     }
 
 
@@ -323,11 +339,13 @@ class ConceptSearchView(APIView):
         if len(query) < 2:
             return Response({'results': []})
 
-        concepts = Concept.objects.filter(
-            Q(unified_title__icontains=query) |
-            Q(games__title_name__icontains=query)
-        ).distinct().order_by(Lower('unified_title'))[:20]
+        concepts = list(
+            Concept.objects.filter(
+                Q(unified_title__icontains=query) |
+                Q(games__title_name__icontains=query)
+            ).prefetch_related('games').distinct().order_by(Lower('unified_title'))[:20]
+        )
 
         return Response({
-            'results': [_serialize_concept_brief(c) for c in concepts],
+            'results': _bulk_serialize_concepts(concepts),
         })
