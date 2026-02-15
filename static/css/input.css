@@ -594,3 +594,34 @@ html {
 .empty-items-message {
   @apply text-base-content/50 italic text-center py-4;
 }
+
+/* Easter Egg: Platinum Trophy Rain (Konami Code) */
+@keyframes plat-rain {
+  0% { transform: translateY(-100px) rotate(0deg); opacity: 1; }
+  80% { opacity: 1; }
+  100% { transform: translateY(calc(100vh + 100px)) rotate(720deg); opacity: 0; }
+}
+
+.plat-rain-drop {
+  position: fixed;
+  top: 0;
+  z-index: 9999;
+  pointer-events: none;
+  width: 48px;
+  height: 48px;
+  animation: plat-rain 3s ease-in forwards;
+}
+
+/* Easter Egg: Logo Spin (Footer) */
+@keyframes logo-spin {
+  0% { transform: rotate(0deg) scale(1); }
+  25% { transform: rotate(180deg) scale(1.3); }
+  50% { transform: rotate(360deg) scale(1); }
+  75% { transform: rotate(540deg) scale(1.3); }
+  100% { transform: rotate(720deg) scale(1); }
+}
+
+.logo-spin-active {
+  animation: logo-spin 2s cubic-bezier(0.25, 0.46, 0.45, 0.94) !important;
+  cursor: pointer;
+}

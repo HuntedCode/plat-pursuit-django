@@ -1,7 +1,7 @@
 {# Reusable challenge summary card for browse and history #}
 {# Required context: challenge (Challenge instance with cover_image_url attached) #}
 
-<a href="{% url 'az_challenge_detail' challenge_id=challenge.id %}" class="card bg-base-200 border-2 border-base-300 rounded-2xl shadow-lg shadow-neutral transition-all duration-300 hover:shadow-xl hover:border-primary hover:scale-[1.02] cursor-pointer group">
+<a href="{% url 'az_challenge_detail' challenge_id=challenge.id %}" class="card bg-base-200 border-2 border-base-300 rounded-2xl shadow-lg shadow-neutral transition-all duration-300 hover:shadow-xl hover:border-primary hover:scale-[1.02] cursor-pointer group {% if challenge.profile.user_is_premium %}shimmer{% endif %}">
 
     {# Cover image - trading card style #}
     <div class="relative bg-gradient-to-b from-base-300 to-base-300/80 rounded-t-2xl p-4 pb-3">
@@ -78,7 +78,7 @@
                 </div>
             </div>
             <span class="truncate">
-                by <span class="font-medium text-secondary">{{ challenge.profile.psn_username }}</span>
+                by <span class="font-medium {% if challenge.profile.user_is_premium %}legendary-title{% else %}text-secondary{% endif %}">{{ challenge.profile.psn_username }}</span>
             </span>
         </div>
 

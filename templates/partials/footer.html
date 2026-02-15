@@ -1,7 +1,7 @@
 {% load static %}
 <footer class="footer sm:footer-horizontal bg-neutral text-neutral-content items-center p-4" role="contentinfo">
     <aside class="grid-flow-col items-center">
-        <img src="{% static 'images/logo.png' %}" alt="Platinum Pursuit Logo" class="h-8 w-8 mr-2 rounded-full" loading="lazy" decoding="async" />
+        <img id="pp-footer-logo" src="{% static 'images/logo.png' %}" alt="Platinum Pursuit Logo" class="h-8 w-8 mr-2 rounded-full cursor-pointer" loading="lazy" decoding="async" />
         <p>Copyright &copy; {% now "Y" %} Platinum Pursuit. All rights reserved.</p>
     </aside>
     <nav class="grid-flow-col gap-4 md:place-self-center justify-self-center" aria-label="Legal pages">
