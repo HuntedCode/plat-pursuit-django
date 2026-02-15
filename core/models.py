@@ -139,6 +139,7 @@ class SiteEvent(models.Model):
         ('game_list_share', 'Game List Shared'),
         ('challenge_create', 'Challenge Created'),
         ('challenge_complete', 'Challenge Completed'),
+        ('easter_egg', 'Easter Egg'),
     ]
 
     event_type = models.CharField(max_length=30, choices=EVENT_TYPE_CHOICES, db_index=True)

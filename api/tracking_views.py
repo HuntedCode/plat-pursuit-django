@@ -51,6 +51,7 @@ class TrackSiteEventView(APIView):
             'recap_image_download',
             'guide_visit',
             'az_challenge_share_download',
+            'easter_egg',
         ]
 
         if event_type not in valid_event_types:

@@ -71,6 +71,8 @@ const EasterEggs = {
             'success',
             8000
         );
+
+        this._trackEvent('konami_code');
     },
 
     // ==========================================
@@ -143,10 +145,22 @@ const EasterEggs = {
             if (logo.classList.contains('logo-spin-active')) return;
 
             logo.classList.add('logo-spin-active');
+            this._trackEvent('logo_spin');
             logo.addEventListener('animationend', () => {
                 logo.classList.remove('logo-spin-active');
             }, { once: true });
         });
+    },
+
+    // ==========================================
+    // Tracking: Fire-and-forget event logging for authenticated users
+    // ==========================================
+    _trackEvent(objectId) {
+        if (!document.body.dataset.authenticated) return;
+        PlatPursuit.API.post('/api/v1/tracking/site-event/', {
+            event_type: 'easter_egg',
+            object_id: objectId
+        }).catch(() => {});
     },
 };
 

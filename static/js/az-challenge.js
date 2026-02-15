@@ -75,6 +75,105 @@ function _bindDeleteButton() {
 // (e.g. My Challenges page)
 document.addEventListener('DOMContentLoaded', _bindDeleteButton);
 
+// ─── Shared Inline Rename ────────────────────────────────────────────────────
+// Binds click-to-edit rename on pages with the matching DOM structure.
+
+function _bindInlineRename(challengeId, onRenamed) {
+    const display = document.getElementById('challenge-name-display');
+    const nameText = document.getElementById('challenge-name-text');
+    const editBtn = document.getElementById('challenge-name-edit-btn');
+    const editor = document.getElementById('challenge-name-editor');
+    const input = document.getElementById('challenge-name-input');
+    const saveBtn = document.getElementById('challenge-name-save-btn');
+    const cancelBtn = document.getElementById('challenge-name-cancel-btn');
+
+    if (!editBtn || !editor || !input || !saveBtn || !cancelBtn) return;
+
+    let originalName = nameText ? nameText.textContent.trim() : input.value.trim();
+    let isSaving = false;
+
+    function openEditor() {
+        input.value = originalName;
+        display.classList.add('hidden');
+        editBtn.classList.add('hidden');
+        editor.classList.remove('hidden');
+        editor.classList.add('flex');
+        input.focus();
+        input.select();
+    }
+
+    function closeEditor() {
+        editor.classList.add('hidden');
+        editor.classList.remove('flex');
+        display.classList.remove('hidden');
+        editBtn.classList.remove('hidden');
+    }
+
+    async function saveName() {
+        if (isSaving) return;
+
+        const newName = input.value.trim();
+        if (!newName) {
+            PlatPursuit.ToastManager.error('Challenge name cannot be empty.');
+            input.focus();
+            return;
+        }
+        if (newName === originalName) {
+            closeEditor();
+            return;
+        }
+
+        isSaving = true;
+        input.disabled = true;
+        saveBtn.disabled = true;
+        const savedHTML = saveBtn.innerHTML;
+        saveBtn.innerHTML = '<span class="loading loading-spinner loading-xs"></span>';
+
+        try {
+            await PlatPursuit.API.patch(
+                `/api/v1/challenges/az/${challengeId}/update/`,
+                { name: newName }
+            );
+
+            originalName = newName;
+            if (nameText) nameText.textContent = newName;
+            input.value = newName;
+
+            // Update page title
+            document.title = document.title.replace(
+                /^(Edit: )?.*? - /,
+                (match, prefix) => `${prefix || ''}${newName} - `
+            );
+
+            closeEditor();
+            PlatPursuit.ToastManager.success('Challenge renamed!');
+            if (onRenamed) onRenamed(newName);
+
+        } catch (err) {
+            let msg = 'Failed to rename challenge.';
+            try { const errData = await err.response?.json(); msg = errData?.error || msg; } catch {}
+            PlatPursuit.ToastManager.error(msg);
+        } finally {
+            isSaving = false;
+            input.disabled = false;
+            saveBtn.disabled = false;
+            saveBtn.innerHTML = savedHTML;
+        }
+    }
+
+    editBtn.addEventListener('click', openEditor);
+    if (nameText) {
+        nameText.style.cursor = 'pointer';
+        nameText.addEventListener('click', openEditor);
+    }
+    cancelBtn.addEventListener('click', closeEditor);
+    saveBtn.addEventListener('click', saveName);
+    input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); saveName(); }
+        else if (e.key === 'Escape') { e.preventDefault(); closeEditor(); }
+    });
+}
+
 // ─── Shared Filter State ─────────────────────────────────────────────────────
 // Persists across letter navigation for both Setup and Edit modules.
 
@@ -686,6 +785,7 @@ const AZChallengeEdit = {
         this._bindModalSearch();
         this._bindModalSortSelect();
         this._initModalScrollObserver();
+        _bindInlineRename(this.challengeId);
     },
 
     // ── Slot Actions ────────────────────────────────────────
@@ -1165,6 +1265,14 @@ const AZChallengeDetail = {
         this.challengeId = challengeId;
         this._bindShareButton();
         this._bindShareImageButton();
+        _bindInlineRename(this.challengeId, (newName) => {
+            const shareBtn = document.getElementById('share-image-btn');
+            const bannerBtn = document.getElementById('banner-share-image-btn');
+            const modalTitle = document.getElementById('az-share-modal-title');
+            if (shareBtn) shareBtn.dataset.challengeName = newName;
+            if (bannerBtn) bannerBtn.dataset.challengeName = newName;
+            if (modalTitle) modalTitle.textContent = `Share: ${newName}`;
+        });
     },
 
     _bindShareButton() {
