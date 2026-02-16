@@ -966,16 +966,6 @@ class ChecklistService:
         if trophy.game != checklist.selected_game:
             return False, "Trophy does not belong to the selected game."
 
-        # Check for duplicates across all sections
-        existing = ChecklistItem.objects.filter(
-            section__checklist=checklist,
-            item_type='trophy',
-            trophy_id=trophy_id
-        )
-
-        if existing.exists():
-            return False, f"Trophy '{trophy.trophy_name}' is already in this checklist."
-
         return True, None
 
     @staticmethod
@@ -1617,9 +1607,9 @@ class ChecklistService:
         except ChecklistItem.DoesNotExist:
             return None, "Item not found."
 
-        # Sub-headers cannot be marked as complete
-        if item.item_type == 'sub_header':
-            return None, "Sub-headers cannot be marked as complete."
+        # Only trackable item types can be marked as complete
+        if item.item_type not in ('item', 'trophy'):
+            return None, "This item type cannot be marked as complete."
 
         # Get or create progress record
         progress, created = UserChecklistProgress.objects.get_or_create(
@@ -1636,12 +1626,29 @@ class ChecklistService:
         # Toggle item
         if item_id in progress.completed_items:
             progress.mark_item_incomplete(item_id)
+            completed = False
             logger.info(f"Item {item_id} unmarked by {profile.psn_username}")
-            return False, None
         else:
             progress.mark_item_complete(item_id)
+            completed = True
             logger.info(f"Item {item_id} marked complete by {profile.psn_username}")
-            return True, None
+
+        # Sync sibling trophy items (same trophy_id in other sections)
+        if item.item_type == 'trophy' and item.trophy_id:
+            sibling_ids = list(
+                ChecklistItem.objects.filter(
+                    section__checklist=checklist,
+                    item_type='trophy',
+                    trophy_id=item.trophy_id
+                ).exclude(id=item.id).values_list('id', flat=True)
+            )
+            for sibling_id in sibling_ids:
+                if completed:
+                    progress.mark_item_complete(sibling_id)
+                else:
+                    progress.mark_item_incomplete(sibling_id)
+
+        return completed, None
 
     @staticmethod
     @transaction.atomic
@@ -1704,6 +1711,28 @@ class ChecklistService:
                 if item_id in progress.completed_items:
                     progress.mark_item_incomplete(item_id)
                     updated_count += 1
+
+        # Sync linked trophy copies in other sections
+        trophy_ids_in_section = set(
+            ChecklistItem.objects.filter(
+                section=section,
+                item_type='trophy',
+                trophy_id__isnull=False
+            ).values_list('trophy_id', flat=True)
+        )
+
+        if trophy_ids_in_section:
+            siblings = ChecklistItem.objects.filter(
+                section__checklist=checklist,
+                item_type='trophy',
+                trophy_id__in=trophy_ids_in_section
+            ).exclude(section=section).values_list('id', flat=True)
+
+            for sibling_id in siblings:
+                if mark_complete:
+                    progress.mark_item_complete(sibling_id)
+                else:
+                    progress.mark_item_incomplete(sibling_id)
 
         logger.info(f"Bulk update: {updated_count} items in section {section_id} {'checked' if mark_complete else 'unchecked'} by {profile.psn_username}")
         return updated_count, None

@@ -102,7 +102,20 @@ def _get_canonical_name(concepts, precomputed=None):
     return _strip_platform_suffix(best.unified_title)
 
 
-def _calculate_confidence_and_reason(concept_a, concept_b, name_match_type='exact', precomputed=None):
+def _get_trophy_names(concept_id, cache):
+    """Fetch and cache trophy names for a single concept. Returns a set."""
+    if concept_id not in cache:
+        cache[concept_id] = set(
+            Trophy.objects.filter(game__concept_id=concept_id)
+            .values_list('trophy_name', flat=True)
+            .iterator(chunk_size=2000)
+        )
+    return cache[concept_id]
+
+
+def _calculate_confidence_and_reason(
+    concept_a, concept_b, name_match_type='exact', precomputed=None, trophy_name_cache=None,
+):
     """Calculate confidence score between two concepts, returning (confidence, reason, signals)."""
     signals = {
         'name_match': name_match_type,
@@ -111,9 +124,13 @@ def _calculate_confidence_and_reason(concept_a, concept_b, name_match_type='exac
     }
 
     if precomputed:
-        # Use pre-computed trophy data (in-memory lookups, no DB queries)
-        names_a = precomputed['trophy_names'].get(concept_a.id, set())
-        names_b = precomputed['trophy_names'].get(concept_b.id, set())
+        # Trophy names loaded lazily and cached per concept
+        if trophy_name_cache is not None:
+            names_a = _get_trophy_names(concept_a.id, trophy_name_cache)
+            names_b = _get_trophy_names(concept_b.id, trophy_name_cache)
+        else:
+            names_a = set()
+            names_b = set()
         if names_a and names_b:
             intersection = names_a & names_b
             name_overlap = len(intersection) / min(len(names_a), len(names_b))
@@ -178,23 +195,24 @@ def _precompute_data(all_concepts):
 
     Replaces per-concept DB queries with in-memory lookups for:
     - Game counts per concept
-    - Trophy names and structural fingerprints
+    - Trophy structural fingerprints
     - Pending proposal concept sets
+
+    Trophy names are NOT precomputed here (loaded lazily via _get_trophy_names)
+    to avoid holding every trophy name string in memory at once.
     """
     # 1. Game counts — from already-prefetched games (no DB hit)
     concept_game_count = {c.id: len(c.games.all()) for c in all_concepts}
 
-    # 2. All trophy data — single bulk query
-    trophy_names = defaultdict(set)
+    # 2. Trophy fingerprints — single bulk query (no trophy names)
     trophy_type_counts = defaultdict(lambda: defaultdict(int))
     trophy_group_ids = defaultdict(set)
 
-    for concept_id, name, trophy_type, group_id in (
+    for concept_id, trophy_type, group_id in (
         Trophy.objects.filter(game__concept__isnull=False)
-        .values_list('game__concept_id', 'trophy_name', 'trophy_type', 'trophy_group_id')
-        .iterator()
+        .values_list('game__concept_id', 'trophy_type', 'trophy_group_id')
+        .iterator(chunk_size=5000)
     ):
-        trophy_names[concept_id].add(name)
         trophy_type_counts[concept_id][trophy_type] += 1
         trophy_group_ids[concept_id].add(group_id)
 
@@ -206,6 +224,9 @@ def _precompute_data(all_concepts):
             'groups': len(trophy_group_ids[concept_id]),
             'total': sum(types.values()),
         }
+
+    # Free intermediate dicts now that fingerprints are built
+    del trophy_type_counts, trophy_group_ids
 
     # 3. Existing proposals — prefetch M2M in 2 queries
     # Track both pending and rejected to avoid re-proposing rejected matches
@@ -219,7 +240,6 @@ def _precompute_data(all_concepts):
 
     return {
         'concept_game_count': concept_game_count,
-        'trophy_names': dict(trophy_names),
         'trophy_fingerprints': trophy_fingerprints,
         'existing_proposals_set': existing_proposals_set,
     }
@@ -250,14 +270,21 @@ def find_matches(dry_run=False, auto_only=False, verbose=False, stdout=None):
 
     stats = {'auto_created': 0, 'proposals_created': 0, 'skipped': 0, 'total_concepts': 0}
 
-    # Get all concepts with their games prefetched
-    all_concepts = list(
-        Concept.objects.prefetch_related('games').all()
+    # Get all concepts with their games prefetched (defer heavy unused fields)
+    _concept_qs = (
+        Concept.objects.prefetch_related('games')
+        .defer(
+            'descriptions', 'media', 'genres', 'subgenres',
+            'content_rating', 'bg_url', 'concept_icon_url',
+            'guide_slug', 'guide_created_at', 'comment_count',
+            'publisher_name', 'release_date', 'title_ids',
+        )
     )
-    stats['total_concepts'] = len(all_concepts)
+    concept_map = {c.id: c for c in _concept_qs}
+    stats['total_concepts'] = len(concept_map)
 
-    # Pre-compute all lookup data in bulk (~4 queries total)
-    precomputed = _precompute_data(all_concepts)
+    # Pre-compute all lookup data in bulk (~3 queries total)
+    precomputed = _precompute_data(concept_map.values())
 
     # Track which concepts have been matched in this run
     matched_concept_ids = set()
@@ -265,27 +292,21 @@ def find_matches(dry_run=False, auto_only=False, verbose=False, stdout=None):
     # ── Pass 1: Name-based grouping ──
     # Group concepts by normalized title (from their games)
     title_groups = defaultdict(set)
-    concept_titles = {}  # concept_id -> set of normalized titles
-
-    for concept in all_concepts:
+    for concept in concept_map.values():
         if concept.family_id is not None:
             continue  # Already in a family
 
-        titles = set()
         for game in concept.games.all():
             normalized = normalize_game_title(game.title_name)
             if normalized:
-                titles.add(normalized)
                 title_groups[normalized].add(concept.id)
         # Also check unified_title
         normalized = normalize_game_title(concept.unified_title)
         if normalized:
-            titles.add(normalized)
             title_groups[normalized].add(concept.id)
-        concept_titles[concept.id] = titles
 
-    # Process name groups
-    concept_map = {c.id: c for c in all_concepts}
+    # Process name groups — trophy names loaded lazily per concept as needed
+    trophy_name_cache = {}
     processed_groups = set()
 
     for normalized_title, concept_ids in title_groups.items():
@@ -328,7 +349,7 @@ def find_matches(dry_run=False, auto_only=False, verbose=False, stdout=None):
         for i, ca in enumerate(concepts_in_group):
             for cb in concepts_in_group[i + 1:]:
                 conf, reason, signals = _calculate_confidence_and_reason(
-                    ca, cb, name_match_type, precomputed
+                    ca, cb, name_match_type, precomputed, trophy_name_cache
                 )
                 if conf > best_confidence:
                     best_confidence = conf
@@ -407,14 +428,24 @@ def diagnose_concept(concept_id, top_n=10, stdout=None):
     except Concept.DoesNotExist:
         return None
 
-    # Load all concepts and precompute data
-    all_concepts = list(Concept.objects.prefetch_related('games').all())
-    precomputed = _precompute_data(all_concepts)
+    # Load all concepts (defer heavy unused fields) and precompute data
+    _concept_qs = (
+        Concept.objects.prefetch_related('games')
+        .defer(
+            'descriptions', 'media', 'genres', 'subgenres',
+            'content_rating', 'bg_url', 'concept_icon_url',
+            'guide_slug', 'guide_created_at', 'comment_count',
+            'publisher_name', 'release_date', 'title_ids',
+        )
+    )
+    concept_map = {c.id: c for c in _concept_qs}
+    precomputed = _precompute_data(concept_map.values())
+    trophy_name_cache = {}
 
     # Build target info header
     game_titles = [g.title_name for g in target.games.all()]
     fp = precomputed['trophy_fingerprints'].get(target.id)
-    trophy_names_count = len(precomputed['trophy_names'].get(target.id, set()))
+    trophy_names_count = len(_get_trophy_names(target.id, trophy_name_cache))
 
     _out(f'Diagnosing concept: {target.concept_id} — "{target.unified_title}"')
     _out(f'  Games: {", ".join(game_titles) if game_titles else "(none)"}')
@@ -447,7 +478,7 @@ def diagnose_concept(concept_id, top_n=10, stdout=None):
 
     # Compare against every other concept
     results = []
-    for other in all_concepts:
+    for other in concept_map.values():
         if other.id == target.id:
             continue
 
@@ -475,7 +506,7 @@ def diagnose_concept(concept_id, top_n=10, stdout=None):
             name_match_type = 'none'
 
         confidence, reason, signals = _calculate_confidence_and_reason(
-            target, other, name_match_type, precomputed
+            target, other, name_match_type, precomputed, trophy_name_cache
         )
 
         if confidence > 0:

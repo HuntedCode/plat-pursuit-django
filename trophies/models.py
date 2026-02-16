@@ -2065,19 +2065,8 @@ class ChecklistItem(models.Model):
         return f"{prefix}{truncated} ({self.section.subtitle})"
 
     def clean(self):
-        """Validate trophy uniqueness across checklist."""
-        from django.core.exceptions import ValidationError
-
-        if self.item_type == 'trophy' and self.trophy_id:
-            # Check if this trophy already exists in the checklist
-            existing = ChecklistItem.objects.filter(
-                section__checklist=self.section.checklist,
-                item_type='trophy',
-                trophy_id=self.trophy_id
-            ).exclude(id=self.id)
-
-            if existing.exists():
-                raise ValidationError("This trophy is already in the checklist.")
+        """Validate item data."""
+        pass
 
     def save(self, *args, **kwargs):
         """Validate image, text_area, and trophy items before saving."""

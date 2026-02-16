@@ -870,6 +870,9 @@
 
                     // Update progress display (API returns fields at top level)
                     updateProgressDisplay(result);
+
+                    // Sync linked trophy copies across all sections
+                    syncCheckboxesFromResponse(result.completed_items);
                 } catch (error) {
                     // Revert checkbox on error
                     this.checked = !isChecked;
@@ -987,6 +990,31 @@
             document.querySelectorAll(`.toc-item[data-section-id="${sectionId}"] .toc-section-count .completed-count`).forEach(tocCount => {
                 tocCount.textContent = completedCount;
             });
+        });
+    }
+
+    /**
+     * Sync all trophy checkboxes across the page based on API completed_items.
+     * Ensures linked trophy copies stay in sync after any progress update.
+     */
+    function syncCheckboxesFromResponse(completedItems) {
+        if (!completedItems) return;
+        const completedSet = new Set(completedItems.map(String));
+        document.querySelectorAll('.checklist-trophy-item[data-item-type="trophy"] .checklist-item-checkbox').forEach(checkbox => {
+            const itemId = checkbox.dataset.itemId;
+            const container = checkbox.closest('.checklist-trophy-item');
+            // Don't modify earned trophies (they're always checked/disabled)
+            if (container?.dataset.earned === 'true') return;
+
+            const shouldBeChecked = completedSet.has(String(itemId));
+            if (checkbox.checked !== shouldBeChecked) {
+                checkbox.checked = shouldBeChecked;
+                const textSpan = container?.querySelector('.checklist-item-text');
+                if (textSpan) {
+                    textSpan.classList.toggle('line-through', shouldBeChecked);
+                    textSpan.classList.toggle('text-base-content/50', shouldBeChecked);
+                }
+            }
         });
     }
 
@@ -3492,8 +3520,8 @@
         }
 
         const html = trophies.map(trophy => {
-            const isDisabled = trophy.is_used ? 'opacity-50 pointer-events-none' : '';
-            const badgeClass = trophy.is_used ? 'badge-ghost' : `badge-${trophy.trophy_type}`;
+            const usedBorder = trophy.is_used ? 'border-l-4 border-accent/40' : '';
+            const badgeClass = `badge-${trophy.trophy_type}`;
             const isSelected = batchSelectionState.has(trophy.id);
 
             // Add DLC badge if not base game
@@ -3501,8 +3529,8 @@
                 ? `<span class="badge badge-sm badge-info">DLC: ${escapeHtml(trophy.trophy_group_name)}</span>`
                 : (!trophy.is_base_game ? '<span class="badge badge-sm badge-info">DLC</span>' : '');
 
-            // Checkbox HTML (only in batch mode and not used)
-            const checkboxHtml = batchSelectionState.enabled && !trophy.is_used
+            // Checkbox HTML (only in batch mode)
+            const checkboxHtml = batchSelectionState.enabled
                 ? `<input type="checkbox"
                           class="checkbox checkbox-primary trophy-batch-checkbox"
                           data-trophy-id="${trophy.id}"
@@ -3512,14 +3540,12 @@
                 : '';
 
             // Click handler: batch mode uses checkbox toggle, single mode uses direct select
-            const clickHandler = trophy.is_used
-                ? ''
-                : (batchSelectionState.enabled
-                    ? `onclick="toggleTrophySelection(${trophy.id}, event)"`
-                    : `onclick="selectTrophy(${trophy.id})"`);
+            const clickHandler = batchSelectionState.enabled
+                ? `onclick="toggleTrophySelection(${trophy.id}, event)"`
+                : `onclick="selectTrophy(${trophy.id})"`;
 
             return `
-                <div class="trophy-select-card flex items-center gap-3 p-3 bg-base-200 rounded-lg hover:bg-base-300 transition-colors cursor-pointer ${isDisabled}"
+                <div class="trophy-select-card flex items-center gap-3 p-3 bg-base-200 rounded-lg hover:bg-base-300 transition-colors cursor-pointer ${usedBorder}"
                      data-trophy-id="${trophy.id}"
                      data-trophy-name="${escapeHtml(trophy.trophy_name)}"
                      data-trophy-type="${trophy.trophy_type}"
@@ -3537,7 +3563,7 @@
                                 ${trophy.trophy_type.charAt(0).toUpperCase() + trophy.trophy_type.slice(1)}
                             </span>
                             ${dlcBadge}
-                            ${trophy.is_used ? '<span class="badge badge-ghost badge-xs">Already Added</span>' : ''}
+                            ${trophy.is_used ? '<span class="badge badge-ghost badge-xs">In Guide</span>' : ''}
                         </div>
                         <p class="text-xs text-base-content/60 line-clamp-2">
                             ${escapeHtml(trophy.trophy_detail || '')}
@@ -3903,16 +3929,18 @@
                 // Update visual state of the trophy card
                 const card = document.querySelector(`.trophy-select-card[data-trophy-id="${trophyId}"]`);
                 if (card) {
-                    card.classList.add('opacity-50', 'pointer-events-none');
                     card.dataset.isUsed = 'true';
-                    card.removeAttribute('onclick');
+                    // Add accent border for visual distinction
+                    if (!card.classList.contains('border-l-4')) {
+                        card.classList.add('border-l-4', 'border-accent/40');
+                    }
 
-                    // Add "Already Added" badge if not present
+                    // Add "In Guide" badge if not present
                     const badgeContainer = card.querySelector('.flex-wrap');
                     if (badgeContainer && !badgeContainer.querySelector('.badge-ghost')) {
                         const badge = document.createElement('span');
                         badge.className = 'badge badge-ghost badge-xs';
-                        badge.textContent = 'Already Added';
+                        badge.textContent = 'In Guide';
                         badgeContainer.appendChild(badge);
                     }
                 }
@@ -4726,7 +4754,7 @@
                 let response;
                 if (itemData instanceof FormData) {
                     // Image upload - use fetch directly for FormData
-                    const res = await fetch(`${API_BASE}/checklists/sections/${sectionId}/items/`, {
+                    const res = await fetch(`${API_BASE}/checklists/sections/${sectionId}/items/image/`, {
                         method: 'POST',
                         headers: {
                             'X-CSRFToken': PlatPursuit.CSRFToken.get()
@@ -4853,6 +4881,9 @@
                         // Update progress bar with correct object format
                         updateProgressDisplay(response);
 
+                        // Sync linked trophy copies across all sections
+                        syncCheckboxesFromResponse(response.completed_items);
+
                         // Update section counts
                         updateSectionCounts();
 
@@ -4943,6 +4974,9 @@
 
                         // Update progress bar with correct object format
                         updateProgressDisplay(response);
+
+                        // Sync linked trophy copies across all sections
+                        syncCheckboxesFromResponse(response.completed_items);
 
                         // Update section counts
                         updateSectionCounts();
