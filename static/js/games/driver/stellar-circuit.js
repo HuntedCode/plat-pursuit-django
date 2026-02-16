@@ -4,9 +4,17 @@
  * This is the last script loaded. It creates the Phaser game instance,
  * registers all scenes, and starts the game.
  *
- * Step 2 Version: Interactive test scene demonstrating the Shell config
- * factory, InputManager, and basic thrust-based space physics. A ship
- * shape responds to keyboard input with momentum-based movement.
+ * Step 3 Version: Track generation test scene. Generates a procedural
+ * track from a seed, renders it with neon edges, places the ship at
+ * the start line, and lets you fly around with on/off-track drag.
+ *
+ * What's new from Step 2:
+ * - TrackGenerator creates full track geometry from a seed string
+ * - TrackRenderer draws the track to a RenderTexture (drawn once, not per-frame)
+ * - Camera follows the ship with smooth lerp (world is larger than screen)
+ * - On/off-track boundary detection changes drag coefficient
+ * - ESC generates a new random track
+ * - Minimap shows track overview in the corner
  *
  * This test scene will be replaced with proper scene registration
  * (MenuScene, RaceScene, ResultsScene) in Step 5+.
@@ -22,513 +30,490 @@ window.PlatPursuit.Games.Driver = window.PlatPursuit.Games.Driver || {};
     // Aliases for readability
     const Shell = PlatPursuit.Games.Shell;
     const InputManager = PlatPursuit.Games.Input.InputManager;
+    const TrackGen = PlatPursuit.Games.Driver.TrackGenerator;
 
     // -----------------------------------------------------------------------
-    // Physics Constants (simplified for Step 2 test)
+    // Physics Constants
     // -----------------------------------------------------------------------
     //
-    // These are tuning values that control how the ship feels to fly.
-    // In Step 4, these will move into the Ship class with the full physics
-    // model from the GDD. For now, we use a simplified subset to prove
-    // the concept works.
-    //
-    // All values are in "design pixels per second" (px/s) or per-second-squared
-    // (px/s^2). Using per-second units makes them frame-rate independent when
-    // multiplied by dt (delta time in seconds).
+    // Same values from Step 2, with the addition of off-track drag.
+    // These will move to the Ship class in Step 4.
 
-    /** How fast the ship rotates, in radians per second.
-     *  At 4.0, a full 360-degree rotation takes ~1.57 seconds (2*PI / 4.0).
-     *  This feels responsive without being twitchy. */
-    const ROTATION_SPEED = 4.0;
-
-    /** Acceleration applied in the ship's facing direction when thrusting.
-     *  500 px/s^2 means after 1 second of continuous thrust from a standstill,
-     *  the ship moves at 500 px/s (fast, but drag limits the actual top speed). */
-    const THRUST_FORCE = 500;
-
-    /** Deceleration applied opposite to velocity when braking.
-     *  60% of thrust force: braking is effective but not instant.
-     *  Players need to plan ahead for turns, not just slam the brakes. */
+    const ROTATION_SPEED = 4.0;       // rad/s
+    const THRUST_FORCE = 500;         // px/s^2
     const BRAKE_FORCE = THRUST_FORCE * 0.6;
+    const DRAG_ON_TRACK = 0.015;      // Very low: space feel
+    const DRAG_OFF_TRACK = 0.08;      // ~5x on-track: penalty for leaving track
+    const MAX_SPEED = 650;            // px/s (soft cap)
+    const MIN_SPEED = 2;             // Below this, snap to zero
 
-    /** Drag coefficient applied every frame.
-     *  velocity *= (1 - DRAG) each frame means velocity decays exponentially.
-     *  0.015 is very low: the ship barely slows down on its own, preserving
-     *  the "floating in space" feel. Over ~3 seconds of no thrust, the ship
-     *  loses about 60% of its speed (0.985^180 for 60fps * 3s = ~0.065). */
-    const DRAG = 0.015;
+    // Camera follow smoothing factor.
+    // 0 = camera doesn't move, 1 = camera instantly snaps to ship.
+    // 0.08 gives a smooth trailing feel: the camera takes about 12 frames
+    // (~200ms at 60fps) to catch up to the ship's position. This is
+    // calculated as: 1 - (1-0.08)^12 = ~0.63, so after 12 frames the
+    // camera has closed 63% of the gap. It never fully catches up
+    // (asymptotic), which gives a natural "elastic" feel.
+    const CAMERA_LERP = 0.08;
 
-    /** Soft speed cap in px/s. Thrust becomes less effective as the ship
-     *  approaches this speed. The diminishing returns formula:
-     *  effectiveThrust = thrust * max(0, 1 - (speed/MAX_SPEED)^2)
-     *  At 90% of max speed, thrust is reduced to ~19%. At max speed, it's 0. */
-    const MAX_SPEED = 650;
+    // Ship visual scale and pre-computed vertices (avoids allocating a
+    // new array every frame in drawShip). These will move to the Ship
+    // class in Step 4.
+    const SHIP_SCALE = 1.5;
+    const SHIP_VERTICES = [
+        { x:  16 * SHIP_SCALE, y:   0 },
+        { x: -12 * SHIP_SCALE, y:  10 * SHIP_SCALE },
+        { x:  -6 * SHIP_SCALE, y:   4 * SHIP_SCALE },
+        { x:  -6 * SHIP_SCALE, y:  -4 * SHIP_SCALE },
+        { x: -12 * SHIP_SCALE, y: -10 * SHIP_SCALE },
+    ];
 
     // -----------------------------------------------------------------------
-    // Step 2 Test Scene
+    // Step 3 Test Scene: Track Generation
     // -----------------------------------------------------------------------
 
     /**
-     * InputTestScene: Verifies Shell + InputManager + basic thrust physics.
+     * TrackTestScene: Generates and renders a procedural track, then lets
+     * you fly the ship around it with camera follow and on/off-track drag.
      *
      * What it demonstrates:
-     * 1. Shell.createConfig() produces a working Phaser config
-     * 2. InputManager correctly reads keyboard input
-     * 3. Thrust-based movement feels "spacey" (momentum, drift, rotation)
-     * 4. The ship's facing direction is independent of its movement direction
+     * 1. SeededRandom produces deterministic tracks (same seed = same track)
+     * 2. Track geometry: control points, splines, curvature, width variation
+     * 3. RenderTexture: track drawn once, displayed as static sprite
+     * 4. isOnTrack() boundary test: different drag on/off track
+     * 5. Smooth camera follow with lerp
+     * 6. Minimap with player position dot
      *
-     * Controls displayed on screen. Press W to thrust, A/D to rotate.
-     * The ship should drift in the direction of its velocity, not the
-     * direction it's facing. This is the core feel of space physics.
+     * Controls:
+     *   WASD / Arrows: Fly the ship (same as Step 2)
+     *   ESC: Generate a new random track
      */
-    class InputTestScene extends Phaser.Scene {
+    class TrackTestScene extends Phaser.Scene {
         constructor() {
-            super({ key: 'InputTestScene' });
+            super({ key: 'TrackTestScene' });
         }
 
         create() {
-            const { width, height } = this.scale;
-
             // Remove the HTML loading indicator
             const loadingEl = document.getElementById('game-loading');
             if (loadingEl) loadingEl.remove();
 
             // ---------------------------------------------------------------
-            // Ship State
+            // Generate Initial Track
             // ---------------------------------------------------------------
-            // In Step 4, this becomes the Ship class. For now, a plain object
-            // holding position, velocity, and rotation.
-
-            this.ship = {
-                x: width / 2,       // Start at center
-                y: height / 2,
-                vx: 0,              // Velocity components (px/s)
-                vy: 0,
-                rotation: -Math.PI / 2,  // Facing UP (Phaser's 0 is right/east)
-                speed: 0,           // Cached magnitude of velocity vector
-            };
-
-            // ---------------------------------------------------------------
-            // Draw boundary markers (FIRST so they render behind everything)
-            // ---------------------------------------------------------------
-            // Phaser draws objects in creation order: first created = drawn
-            // first = rendered behind later objects. Grid dots need to be
-            // behind the ship, so we create them before the ship Graphics.
-
-            const gridGraphics = this.add.graphics();
-            gridGraphics.fillStyle(0x1a1a2e, 0.8);
-            const gridSpacing = 80;
-            for (let gx = 0; gx <= width; gx += gridSpacing) {
-                for (let gy = 0; gy <= height; gy += gridSpacing) {
-                    gridGraphics.fillCircle(gx, gy, 1.5);
-                }
-            }
-
-            // ---------------------------------------------------------------
-            // Graphics Objects (created after grid so they render on top)
-            // ---------------------------------------------------------------
-
-            // Velocity vector indicator: a line showing the direction the
-            // ship is actually moving (as opposed to where it's facing).
-            // This is crucial for space physics. The angle between the ship's
-            // nose and this line IS the "drift angle."
-            // Created before ship so it renders behind the ship body.
-            this.velIndicator = this.add.graphics();
-
-            // Ship graphics: drawn at local origin, positioned each frame.
-            // We learned in Step 1: draw at (0,0) on the Graphics object,
-            // then set the object's position to the ship's world coordinates.
-            // This way rotation tweens/transforms pivot around the ship center.
-            // Created last of the game objects so it renders on top.
-            this.shipGraphics = this.add.graphics();
-
-            // ---------------------------------------------------------------
-            // HUD Text (on top of everything)
-            // ---------------------------------------------------------------
-
-            // Title
-            this.add.text(width / 2, 20, 'S T E L L A R   C I R C U I T', {
-                fontFamily: 'Poppins, sans-serif',
-                fontSize: '24px',
-                fontStyle: 'bold',
-                color: '#2ce8f5',
-            }).setOrigin(0.5, 0);
-
-            // Step indicator
-            this.add.text(width / 2, 50, 'Step 2: Shell + Input + Physics Test', {
-                fontFamily: 'Inter, sans-serif',
-                fontSize: '14px',
-                color: '#40e850',
-            }).setOrigin(0.5, 0);
-
-            // Controls help
-            const controlsText = [
-                'W / Up Arrow: Thrust',
-                'S / Down Arrow: Brake',
-                'A / Left Arrow: Rotate Left',
-                'D / Right Arrow: Rotate Right',
-                'ESC: Reset Ship Position',
-            ].join('\n');
-
-            this.add.text(16, 80, controlsText, {
-                fontFamily: 'Inter, sans-serif',
-                fontSize: '13px',
-                color: '#6b6b8d',
-                lineSpacing: 4,
-            });
-
-            // Dynamic telemetry display (updated each frame)
-            this.telemetryText = this.add.text(16, height - 16, '', {
-                fontFamily: 'monospace',
-                fontSize: '12px',
-                color: '#6b6b8d',
-                lineSpacing: 2,
-            }).setOrigin(0, 1);
-
-            // Input state display (updated each frame)
-            this.inputText = this.add.text(width - 16, height - 16, '', {
-                fontFamily: 'monospace',
-                fontSize: '12px',
-                color: '#6b6b8d',
-                lineSpacing: 2,
-                align: 'right',
-            }).setOrigin(1, 1);
+            // Use today's date as the default seed. This means everyone who
+            // opens the game today sees the same track (daily challenge concept).
+            this.currentSeed = new Date().toISOString().slice(0, 10);
+            this.buildTrack(this.currentSeed);
 
             // ---------------------------------------------------------------
             // Input Manager
             // ---------------------------------------------------------------
-
             this.inputManager = new InputManager(this);
 
-            // Clean up when scene shuts down
-            this.events.on('shutdown', () => {
+            // Clean up InputManager on both shutdown (scene stops but stays
+            // resident) and destroy (scene fully removed from memory, e.g.,
+            // game.destroy()). Without the destroy listener, keyboard event
+            // handlers could leak if the game is hard-destroyed.
+            const cleanup = () => {
                 this.inputManager.destroy();
-            });
+            };
+            this.events.on('shutdown', cleanup);
+            this.events.on('destroy', cleanup);
 
-            console.log('[Stellar Circuit] Step 2 test scene created');
-            console.log('[Stellar Circuit] Use WASD or Arrow keys to fly the ship');
+            console.log('[Stellar Circuit] Step 3 track test scene created');
+            console.log(`[Stellar Circuit] Track seed: "${this.currentSeed}"`);
+            console.log('[Stellar Circuit] Press ESC to generate a new random track');
         }
 
         /**
-         * Game loop: called every frame by Phaser.
+         * Generates a track from a seed and sets up all scene objects.
          *
-         * @param {number} time  - Total elapsed time in milliseconds
-         * @param {number} delta - Time since last frame in milliseconds
+         * This is extracted as a method so ESC can call it to regenerate.
+         * It destroys any existing track objects first, then creates fresh
+         * ones from the new seed.
          *
-         * Why delta matters:
-         * If the game runs at 60fps, delta is ~16.67ms. At 30fps, it's ~33.33ms.
-         * By multiplying all physics values by dt (delta in seconds), the ship
-         * moves the same distance per real-time second regardless of frame rate.
-         * This is "frame-rate independence": the game feels the same whether
-         * the player gets 30fps or 144fps.
+         * @param {string} seed - The track seed string
+         */
+        buildTrack(seed) {
+            // Clean up previous track objects if they exist.
+            // This allows re-calling buildTrack() for regeneration.
+            if (this.trackGraphics) this.trackGraphics.destroy();
+            if (this.velIndicator) this.velIndicator.destroy();
+            if (this.shipGraphics) this.shipGraphics.destroy();
+            if (this.minimap) this.minimap.destroy();
+            if (this.minimapDot) this.minimapDot.destroy();
+            if (this.hudContainer) this.hudContainer.destroy();
+
+            // ----- Step 1: Generate Track Data -----
+            this.trackData = TrackGen.generate(seed);
+            const td = this.trackData;
+
+            console.log(`[Stellar Circuit] Track generated:`,
+                `${td.totalSamples} samples,`,
+                `${td.checkpoints.length} checkpoints,`,
+                `${td.boostPads.length} boost pads,`,
+                `arc length: ${td.totalArcLength.toFixed(0)}px`
+            );
+
+            // ----- Step 2: Set World Bounds -----
+            // Tell Phaser's camera system how big the world is.
+            // The camera will be constrained to these bounds.
+            const bounds = td.bounds;
+            this.cameras.main.setBounds(
+                bounds.minX, bounds.minY,
+                bounds.maxX - bounds.minX,
+                bounds.maxY - bounds.minY
+            );
+
+            // Set the background color for the entire world area
+            this.cameras.main.setBackgroundColor('#0a0a14');
+
+            // ----- Step 3: Render Track -----
+            // This creates a Graphics object with all track visuals drawn
+            // in world coordinates. It must be created FIRST so it renders
+            // behind the ship (Phaser creation order = render order).
+            this.trackGraphics = TrackGen.renderTrack(this, td);
+
+            // ----- Step 4: Create Ship Graphics -----
+            // Velocity indicator first (renders behind ship body)
+            this.velIndicator = this.add.graphics();
+            // Ship graphics on top
+            this.shipGraphics = this.add.graphics();
+
+            // ----- Step 5: Initialize Ship State -----
+            this.ship = {
+                x: td.startPosition.x,
+                y: td.startPosition.y,
+                vx: 0,
+                vy: 0,
+                rotation: td.startAngle,
+                speed: 0,
+                onTrack: true,
+            };
+
+            // ----- Step 6: Set Up Camera -----
+            // Start the camera centered on the ship. After this, the
+            // update loop handles smooth follow.
+            this.cameras.main.scrollX = this.ship.x - Shell.DESIGN_WIDTH / 2;
+            this.cameras.main.scrollY = this.ship.y - Shell.DESIGN_HEIGHT / 2;
+
+            // ----- Step 7: Create HUD (fixed to camera, not world) -----
+            // HUD elements need to stay on screen regardless of camera
+            // position. We create a separate container and use
+            // setScrollFactor(0) which makes it ignore camera scrolling.
+            this.createHUD(seed);
+        }
+
+        /**
+         * Creates the HUD overlay: title, telemetry, minimap.
+         *
+         * setScrollFactor(0) is the key concept here: it tells Phaser
+         * "this object should NOT move when the camera scrolls." A scroll
+         * factor of 1 (default) means the object moves 1:1 with the world.
+         * A factor of 0 means it's pinned to the screen (like a HUD).
+         * Values in between create parallax effects (used for starfield later).
+         *
+         * @param {string} seed - Current seed (displayed in HUD)
+         */
+        createHUD(seed) {
+            const { DESIGN_WIDTH, DESIGN_HEIGHT } = Shell;
+
+            // Container for all HUD elements. Setting scrollFactor on
+            // the container applies to all children.
+            this.hudContainer = this.add.container(0, 0);
+            this.hudContainer.setScrollFactor(0);
+
+            // Title
+            const title = this.add.text(DESIGN_WIDTH / 2, 12, 'S T E L L A R   C I R C U I T', {
+                fontFamily: 'Poppins, sans-serif',
+                fontSize: '20px',
+                fontStyle: 'bold',
+                color: '#2ce8f5',
+            }).setOrigin(0.5, 0);
+
+            // Step + seed info
+            const seedInfo = this.add.text(DESIGN_WIDTH / 2, 36, `Step 3: Track Generator  |  Seed: "${seed}"`, {
+                fontFamily: 'Inter, sans-serif',
+                fontSize: '13px',
+                color: '#40e850',
+            }).setOrigin(0.5, 0);
+
+            // Controls
+            const controlsText = this.add.text(12, 60, [
+                'W/Up: Thrust    A/Left: Rotate Left',
+                'S/Down: Brake   D/Right: Rotate Right',
+                'ESC: New Random Track',
+            ].join('\n'), {
+                fontFamily: 'Inter, sans-serif',
+                fontSize: '11px',
+                color: '#6b6b8d',
+                lineSpacing: 3,
+            });
+
+            // Telemetry (bottom-left, updated each frame)
+            this.telemetryText = this.add.text(12, DESIGN_HEIGHT - 12, '', {
+                fontFamily: 'monospace',
+                fontSize: '11px',
+                color: '#6b6b8d',
+                lineSpacing: 2,
+            }).setOrigin(0, 1);
+
+            // Input display (bottom-right, updated each frame)
+            this.inputText = this.add.text(DESIGN_WIDTH - 12, DESIGN_HEIGHT - 12, '', {
+                fontFamily: 'monospace',
+                fontSize: '11px',
+                color: '#6b6b8d',
+                align: 'right',
+            }).setOrigin(1, 1);
+
+            // Add all to the HUD container
+            this.hudContainer.add([title, seedInfo, controlsText, this.telemetryText, this.inputText]);
+
+            // ----- Minimap -----
+            // The minimap is a separate Graphics object with scrollFactor(0).
+            // We don't put it in the container because the renderMinimap
+            // function creates its own Graphics object.
+            const minimapSize = 140;
+            const minimapX = DESIGN_WIDTH - minimapSize - 12;
+            const minimapY = 12;
+
+            const minimapResult = TrackGen.renderMinimap(
+                this, this.trackData, minimapX, minimapY, minimapSize, minimapSize
+            );
+            this.minimap = minimapResult.graphics;
+            this.minimapMapData = minimapResult.mapData;
+            this.minimap.setScrollFactor(0);
+
+            // Player dot on the minimap (updated each frame)
+            this.minimapDot = this.add.graphics();
+            this.minimapDot.setScrollFactor(0);
+        }
+
+        /**
+         * Game loop: physics, rendering, camera follow.
          */
         update(time, delta) {
-            // Convert milliseconds to seconds for physics calculations.
-            // All our constants (THRUST_FORCE, ROTATION_SPEED, etc.) are
-            // defined in per-second units, so we need dt in seconds.
             const dt = delta / 1000;
-
-            // Poll the input manager for current state
             const input = this.inputManager.getState();
 
-            // Check for reset (using pause key temporarily for the test)
+            // ---------------------------------------------------------------
+            // ESC: Generate New Track
+            // ---------------------------------------------------------------
             if (this.inputManager.isPausePressed()) {
-                this.ship.x = this.scale.width / 2;
-                this.ship.y = this.scale.height / 2;
-                this.ship.vx = 0;
-                this.ship.vy = 0;
-                this.ship.rotation = -Math.PI / 2;
+                // Generate a random seed by combining timestamp with a counter.
+                // This ensures each press gives a different track.
+                this.currentSeed = 'random-' + Date.now();
+                this.buildTrack(this.currentSeed);
+                console.log(`[Stellar Circuit] New track: "${this.currentSeed}"`);
+                return; // Skip this frame (everything was just rebuilt)
             }
 
             // ---------------------------------------------------------------
-            // Physics Update
+            // Physics Update (same as Step 2, with on/off-track drag)
             // ---------------------------------------------------------------
 
             // 1. ROTATION
-            // Rotation is immediate and always available, even without thrust.
-            // In space, you can spin freely (no friction on rotation). Rotation
-            // does NOT change velocity: it only changes which direction the
-            // thruster will push when activated.
             if (input.left)  this.ship.rotation -= ROTATION_SPEED * dt;
             if (input.right) this.ship.rotation += ROTATION_SPEED * dt;
 
-            // 2. THRUST (input.up = thrust in Stellar Circuit)
-            // Apply acceleration in the ship's facing direction.
-            // cos/sin convert the rotation angle into x/y components:
-            //   cos(rotation) = x-component of the facing direction
-            //   sin(rotation) = y-component of the facing direction
-            //
-            // The diminishing returns formula prevents infinite acceleration:
-            // as speed approaches MAX_SPEED, thrust effectiveness drops to 0.
-            // This creates a natural "soft cap" that feels better than a hard
-            // velocity clamp (which would feel like hitting a wall).
+            // 2. THRUST
             if (input.up) {
                 const speedRatio = this.ship.speed / MAX_SPEED;
                 const thrustMultiplier = Math.max(0, 1 - speedRatio * speedRatio);
-
                 this.ship.vx += Math.cos(this.ship.rotation) * THRUST_FORCE * thrustMultiplier * dt;
                 this.ship.vy += Math.sin(this.ship.rotation) * THRUST_FORCE * thrustMultiplier * dt;
             }
 
-            // 3. BRAKE / Retro-thrust (input.down = brake in Stellar Circuit)
-            // Unlike thrust (which pushes in the ship's FACING direction),
-            // braking pushes AGAINST the ship's VELOCITY direction. This means
-            // braking always slows you down, regardless of which way you're
-            // facing. Think of it as "auto-retrograde" thrust.
-            //
-            // Without this, the only way to slow down would be to rotate 180
-            // degrees and thrust. That's realistic but frustrating for gameplay.
-            //
-            // We also clamp to prevent reversing: if the brake force would
-            // push velocity past zero (reversing direction), we just stop.
+            // 3. BRAKE
             if (input.down && this.ship.speed > 1) {
                 const velAngle = Math.atan2(this.ship.vy, this.ship.vx);
-                const brakeDelta = BRAKE_FORCE * dt;
-
-                // Don't apply more braking than needed to reach zero.
-                // Without this, a slow-moving ship would start moving backward.
-                const clampedBrake = Math.min(brakeDelta, this.ship.speed);
-
+                const clampedBrake = Math.min(BRAKE_FORCE * dt, this.ship.speed);
                 this.ship.vx -= Math.cos(velAngle) * clampedBrake;
                 this.ship.vy -= Math.sin(velAngle) * clampedBrake;
             }
 
-            // 4. DRAG
-            // Multiply velocity by (1 - drag) each frame. This causes
-            // exponential decay: fast ships slow faster in absolute terms,
-            // but all ships lose the same PERCENTAGE per frame.
-            //
-            // Why not just subtract a constant? Because subtraction would
-            // slow the ship linearly, meaning a barely-moving ship would
-            // decelerate at the same rate as a fast one (feels wrong).
-            // Multiplicative drag scales naturally with speed.
-            this.ship.vx *= (1 - DRAG);
-            this.ship.vy *= (1 - DRAG);
+            // 4. ON/OFF-TRACK BOUNDARY TEST
+            // This is the new part from Step 3. We check the ship's position
+            // against the track geometry every frame to determine which drag
+            // coefficient to apply.
+            const trackInfo = TrackGen.isOnTrack(
+                this.ship.x, this.ship.y, this.trackData
+            );
+            this.ship.onTrack = trackInfo.onTrack;
 
-            // 5. UPDATE POSITION
+            // 5. DRAG (now varies based on track position)
+            // On-track: very low drag, space feel preserved.
+            // Off-track: heavy drag, the ship slows rapidly. This is the
+            // penalty for missing the track (no hard walls in space).
+            //
+            // Frame-rate independence: multiplicative drag must use
+            // exponential decay scaled by dt. Without this, the ship
+            // would lose more speed at lower frame rates (unfair for
+            // competitive leaderboards). Math.pow(1 - drag, dt * 60)
+            // normalizes the decay to a 60fps baseline.
+            const drag = this.ship.onTrack ? DRAG_ON_TRACK : DRAG_OFF_TRACK;
+            const dragFactor = Math.pow(1 - drag, dt * 60);
+            this.ship.vx *= dragFactor;
+            this.ship.vy *= dragFactor;
+
+            // 6. UPDATE POSITION
             this.ship.x += this.ship.vx * dt;
             this.ship.y += this.ship.vy * dt;
 
-            // 6. WRAP AROUND SCREEN (test scene only)
-            // In the real game, the track provides boundaries. For this test,
-            // wrapping the ship around the edges lets us fly freely without
-            // disappearing forever.
-            const { width, height } = this.scale;
-            const margin = 30;
-            if (this.ship.x < -margin) this.ship.x = width + margin;
-            if (this.ship.x > width + margin) this.ship.x = -margin;
-            if (this.ship.y < -margin) this.ship.y = height + margin;
-            if (this.ship.y > height + margin) this.ship.y = -margin;
-
-            // 7. CACHE SPEED (magnitude of velocity vector)
-            // Used by the diminishing returns formula and telemetry display.
-            // sqrt(vx^2 + vy^2) = Pythagorean theorem for vector magnitude.
+            // 7. CACHE SPEED + snap-to-zero
             this.ship.speed = Math.sqrt(
                 this.ship.vx * this.ship.vx + this.ship.vy * this.ship.vy
             );
+            if (this.ship.speed < MIN_SPEED) {
+                this.ship.vx = 0;
+                this.ship.vy = 0;
+                this.ship.speed = 0;
+            }
+
+            // ---------------------------------------------------------------
+            // Camera Follow (smooth lerp)
+            // ---------------------------------------------------------------
+            // Instead of hard-locking the camera to the ship, we interpolate
+            // (lerp) toward the ship's position each frame. This creates a
+            // smooth trailing effect where the camera gently follows.
+            //
+            // The formula: camera = camera + (target - camera) * lerpFactor
+            //
+            // This is "exponential ease-out": the camera moves quickly when
+            // far from the target and slows as it approaches. The ship is
+            // always slightly ahead of screen center, which feels natural
+            // when driving at speed.
+            //
+            // Frame-rate independence: like drag, the lerp factor must be
+            // dt-corrected so the camera follow speed is consistent across
+            // frame rates. 1 - Math.pow(1 - LERP, dt * 60) gives the
+            // same catch-up rate whether running at 30fps or 144fps.
+            const cam = this.cameras.main;
+            const targetX = this.ship.x - Shell.DESIGN_WIDTH / 2;
+            const targetY = this.ship.y - Shell.DESIGN_HEIGHT / 2;
+            const lerpFactor = 1 - Math.pow(1 - CAMERA_LERP, dt * 60);
+            cam.scrollX += (targetX - cam.scrollX) * lerpFactor;
+            cam.scrollY += (targetY - cam.scrollY) * lerpFactor;
 
             // ---------------------------------------------------------------
             // Rendering
             // ---------------------------------------------------------------
-
             this.drawShip(input);
             this.drawVelocityIndicator();
-            this.updateTelemetry(input);
+            this.updateMinimapDot();
+            this.updateTelemetry(input, trackInfo);
         }
 
-        /**
-         * Draws the ship at its current position and rotation.
-         *
-         * The ship is a 5-vertex arrow shape (same as the GDD spec).
-         * It's drawn on a Graphics object at local origin (0,0), then
-         * the Graphics object is positioned and rotated in world space.
-         *
-         * Visual layers (drawn back to front):
-         * 1. Glow: thick, semi-transparent cyan stroke (simulates bloom)
-         * 2. Body fill: near-white with slight blue tint
-         * 3. Edge stroke: bright cyan outline
-         * 4. Thrust indicator: small flame particles when thrusting
-         *
-         * @param {InputState} input - Current input state (for thrust visual)
-         */
+        // ===================================================================
+        // Ship Drawing (same as Step 2, carried forward)
+        // ===================================================================
+
         drawShip(input) {
             const g = this.shipGraphics;
             g.clear();
-
-            // Position the Graphics object at the ship's world position.
-            // All drawing happens at local (0,0), which maps to this world pos.
             g.setPosition(this.ship.x, this.ship.y);
-
-            // Set rotation on the Graphics object. Phaser's `rotation` property
-            // is in radians. This rotates the entire Graphics object (and
-            // everything drawn on it) around its origin.
             g.setRotation(this.ship.rotation);
 
-            // Ship vertices in local space (from GDD Section 4.2).
-            // The ship points RIGHT (+x direction) by default because
-            // Phaser's 0-degree angle points right. Our rotation math
-            // uses cos/sin which also assume 0 = right.
-            //
-            // Vertex layout (facing right):
-            //           (-12, -10) ---- (-6, -4) ---- (16, 0) NOSE
-            //           (-12,  10) ---- (-6,  4) ----/
-            //                LEFT WING           RIGHT WING
-            const scale = 1.5;
-            const vertices = [
-                { x:  16 * scale, y:   0 },           // Nose (front tip)
-                { x: -12 * scale, y:  10 * scale },   // Bottom wing tip
-                { x:  -6 * scale, y:   4 * scale },   // Bottom notch (inner)
-                { x:  -6 * scale, y:  -4 * scale },   // Top notch (inner)
-                { x: -12 * scale, y: -10 * scale },   // Top wing tip
-            ];
+            const s = SHIP_SCALE;
 
-            // Layer 1: Glow (wider, semi-transparent)
-            this.drawShipPolygon(g, vertices, null, { width: 3, color: 0x2ce8f5, alpha: 0.3 });
+            // Glow layer
+            this.drawShipPolygon(g, SHIP_VERTICES, null, { width: 3, color: 0x2ce8f5, alpha: 0.3 });
+            // Body fill: tint slightly red when off-track as visual feedback
+            const bodyColor = this.ship.onTrack ? 0xe8e8ff : 0xffcccc;
+            this.drawShipPolygon(g, SHIP_VERTICES, { color: bodyColor, alpha: 0.9 }, null);
+            // Edge stroke: changes color when off-track
+            const edgeColor = this.ship.onTrack ? 0x2ce8f5 : 0xe84040;
+            this.drawShipPolygon(g, SHIP_VERTICES, null, { width: 2, color: edgeColor, alpha: 1.0 });
 
-            // Layer 2: Body fill
-            this.drawShipPolygon(g, vertices, { color: 0xe8e8ff, alpha: 0.9 }, null);
-
-            // Layer 3: Edge stroke
-            this.drawShipPolygon(g, vertices, null, { width: 2, color: 0x2ce8f5, alpha: 1.0 });
-
-            // Layer 4: Thrust flame (only when thrusting)
-            // A small triangle behind the ship to show engine fire.
-            // In Step 4, this becomes proper particle effects.
+            // Thrust flame
             if (input.up) {
-                // Flame base is at the ship's rear center, flame tip extends behind.
-                // We randomize the tip length each frame for a flickering effect.
-                const flameLength = (8 + Math.random() * 12) * scale;
-                const flameWidth = 4 * scale;
-
+                const flameLength = (8 + Math.random() * 12) * s;
+                const flameWidth = 4 * s;
                 g.fillStyle(0x2ce8f5, 0.6);
                 g.beginPath();
-                g.moveTo(-6 * scale,  flameWidth);   // Bottom of flame base
-                g.lineTo(-6 * scale, -flameWidth);   // Top of flame base
-                g.lineTo(-6 * scale - flameLength, 0); // Flame tip
+                g.moveTo(-6 * s,  flameWidth);
+                g.lineTo(-6 * s, -flameWidth);
+                g.lineTo(-6 * s - flameLength, 0);
                 g.closePath();
                 g.fillPath();
 
-                // Inner bright core of the flame
                 g.fillStyle(0xffffff, 0.4);
                 g.beginPath();
-                g.moveTo(-6 * scale,  flameWidth * 0.5);
-                g.lineTo(-6 * scale, -flameWidth * 0.5);
-                g.lineTo(-6 * scale - flameLength * 0.6, 0);
+                g.moveTo(-6 * s,  flameWidth * 0.5);
+                g.lineTo(-6 * s, -flameWidth * 0.5);
+                g.lineTo(-6 * s - flameLength * 0.6, 0);
                 g.closePath();
                 g.fillPath();
             }
 
-            // Layer 5: Brake indicator (thrust from the front when braking)
+            // Brake indicator
             if (input.down && this.ship.speed > 1) {
-                const brakeLength = (4 + Math.random() * 6) * scale;
-                const brakeWidth = 2.5 * scale;
-
+                const brakeLength = (4 + Math.random() * 6) * s;
+                const brakeWidth = 2.5 * s;
                 g.fillStyle(0xf5602c, 0.5);
                 g.beginPath();
-                g.moveTo(16 * scale,  brakeWidth);
-                g.lineTo(16 * scale, -brakeWidth);
-                g.lineTo(16 * scale + brakeLength, 0);
+                g.moveTo(16 * s,  brakeWidth);
+                g.lineTo(16 * s, -brakeWidth);
+                g.lineTo(16 * s + brakeLength, 0);
                 g.closePath();
                 g.fillPath();
             }
         }
 
-        /**
-         * Helper: draws the ship polygon with optional fill and/or stroke.
-         *
-         * Extracted to avoid repeating the moveTo/lineTo loop 3 times
-         * (once per visual layer). DRY principle in action.
-         */
         drawShipPolygon(graphics, vertices, fill, stroke) {
             if (fill) graphics.fillStyle(fill.color, fill.alpha);
             if (stroke) graphics.lineStyle(stroke.width, stroke.color, stroke.alpha);
-
             graphics.beginPath();
             graphics.moveTo(vertices[0].x, vertices[0].y);
             for (let i = 1; i < vertices.length; i++) {
                 graphics.lineTo(vertices[i].x, vertices[i].y);
             }
             graphics.closePath();
-
             if (fill) graphics.fillPath();
             if (stroke) graphics.strokePath();
         }
 
-        /**
-         * Draws a line showing the ship's actual movement direction.
-         *
-         * This is the VELOCITY VECTOR indicator from the GDD (Section 5.2).
-         * It's a critical element for space physics games because the ship's
-         * facing direction is often very different from its movement direction.
-         *
-         * Visual: A small arrow extending from the ship in the direction of
-         * its velocity vector. Length is proportional to speed. Color changes
-         * based on the "drift angle" (difference between facing and velocity).
-         *
-         * Why this matters for gameplay:
-         * Without this indicator, players can't tell where they're drifting.
-         * With it, they can see "I'm facing north but moving northeast" and
-         * intuitively understand they need to thrust to correct their course.
-         */
+        // ===================================================================
+        // Velocity Indicator (same as Step 2)
+        // ===================================================================
+
         drawVelocityIndicator() {
             const g = this.velIndicator;
             g.clear();
-
-            // Don't show when barely moving (avoids jittery arrow at near-zero velocity)
             if (this.ship.speed < 5) return;
 
-            // Direction of actual movement
             const velAngle = Math.atan2(this.ship.vy, this.ship.vx);
-
-            // Offset the start point outward from the ship center so the
-            // indicator clears the ship body and is always visible. The ship's
-            // widest point is ~18px from center (wing tips at scale 1.5), so
-            // 25px gives comfortable clearance.
             const startOffset = 25;
             const startX = this.ship.x + Math.cos(velAngle) * startOffset;
             const startY = this.ship.y + Math.sin(velAngle) * startOffset;
-
-            // Arrow length scales with speed, capped for visual clarity.
-            // At max speed, the arrow extends 55px from the start point.
-            // Combined with the 25px offset, the total reach from ship center
-            // is up to 80px, making it clearly visible at all speeds.
             const indicatorLength = Math.min(55, this.ship.speed / MAX_SPEED * 55);
 
-            // Calculate drift angle: difference between facing and velocity.
-            // Normalize to [-PI, PI] range for proper comparison.
             let driftAngle = velAngle - this.ship.rotation;
             while (driftAngle > Math.PI) driftAngle -= 2 * Math.PI;
             while (driftAngle < -Math.PI) driftAngle += 2 * Math.PI;
 
-            // Color based on drift severity:
-            // Small drift (< 30 degrees): green (you're going where you're pointing)
-            // Medium drift (30-90 degrees): yellow (noticeable sideways drift)
-            // Large drift (> 90 degrees): red (going opposite to where you're facing!)
             const absDrift = Math.abs(driftAngle);
             let color;
             if (absDrift < Math.PI / 6) {
-                color = 0x40e850;  // Green: aligned
+                color = 0x40e850;
             } else if (absDrift < Math.PI / 2) {
-                color = 0xe8d040;  // Yellow: drifting
+                color = 0xe8d040;
             } else {
-                color = 0xe84040;  // Red: severe drift
+                color = 0xe84040;
             }
 
-            // Draw from the offset start point outward
             const endX = startX + Math.cos(velAngle) * indicatorLength;
             const endY = startY + Math.sin(velAngle) * indicatorLength;
 
-            // Main line
             g.lineStyle(2, color, 0.7);
             g.beginPath();
             g.moveTo(startX, startY);
             g.lineTo(endX, endY);
             g.strokePath();
 
-            // Arrowhead (small triangle at the tip)
             const headLength = 6;
-            const headAngle = 0.5; // radians (~28 degrees)
-
+            const headAngle = 0.5;
             g.fillStyle(color, 0.7);
             g.beginPath();
             g.moveTo(endX, endY);
@@ -544,46 +529,69 @@ window.PlatPursuit.Games.Driver = window.PlatPursuit.Games.Driver || {};
             g.fillPath();
         }
 
+        // ===================================================================
+        // Minimap Player Dot
+        // ===================================================================
+
         /**
-         * Updates the telemetry display with real-time physics data.
+         * Updates the player position dot on the minimap.
          *
-         * This is a debugging/learning tool, not part of the final HUD.
-         * It shows the raw numbers behind the physics so you can see exactly
-         * what's happening: velocity components, speed, rotation, thrust
-         * multiplier, and how the diminishing returns formula affects thrust.
+         * The minimap coordinate mapping data (scale, offset) is stored
+         * separately in this.minimapMapData. We use this to convert the
+         * ship's world position into minimap screen coordinates.
          */
-        updateTelemetry(input) {
+        updateMinimapDot() {
+            const g = this.minimapDot;
+            g.clear();
+
+            const map = this.minimapMapData;
+            if (!map) return;
+
+            // Convert world position to minimap coordinates
+            const dotX = map.centerX + (this.ship.x - map.trackCenterX) * map.mapScale;
+            const dotY = map.centerY + (this.ship.y - map.trackCenterY) * map.mapScale;
+
+            // Player dot: white, slightly larger than the start marker
+            g.fillStyle(0xffffff, 1.0);
+            g.fillCircle(dotX, dotY, 3);
+
+            // If off-track, add a red ring around the dot
+            if (!this.ship.onTrack) {
+                g.lineStyle(1, 0xe84040, 0.8);
+                g.strokeCircle(dotX, dotY, 5);
+            }
+        }
+
+        // ===================================================================
+        // Telemetry (updated from Step 2 to show track info)
+        // ===================================================================
+
+        updateTelemetry(input, trackInfo) {
             const ship = this.ship;
             const speedRatio = ship.speed / MAX_SPEED;
             const thrustMult = Math.max(0, 1 - speedRatio * speedRatio);
 
-            // Convert rotation to degrees for human readability
             const rotDeg = ((ship.rotation * 180 / Math.PI) % 360 + 360) % 360;
-
-            // Velocity direction in degrees
             const velDeg = ship.speed > 1
                 ? ((Math.atan2(ship.vy, ship.vx) * 180 / Math.PI) % 360 + 360) % 360
                 : 0;
-
-            // Drift angle
             let driftDeg = velDeg - rotDeg;
             if (driftDeg > 180) driftDeg -= 360;
             if (driftDeg < -180) driftDeg += 360;
 
+            // Current drag coefficient (changes with on/off track)
+            const currentDrag = ship.onTrack ? DRAG_ON_TRACK : DRAG_OFF_TRACK;
+
             this.telemetryText.setText([
-                `Position:  (${ship.x.toFixed(0)}, ${ship.y.toFixed(0)})`,
-                `Velocity:  (${ship.vx.toFixed(1)}, ${ship.vy.toFixed(1)})`,
-                `Speed:     ${ship.speed.toFixed(1)} / ${MAX_SPEED} px/s`,
-                `Facing:    ${rotDeg.toFixed(1)} deg`,
-                `Moving:    ${velDeg.toFixed(1)} deg`,
-                `Drift:     ${driftDeg.toFixed(1)} deg`,
-                `Thrust x:  ${(thrustMult * 100).toFixed(0)}%`,
+                `Position: (${ship.x.toFixed(0)}, ${ship.y.toFixed(0)})`,
+                `Speed:    ${ship.speed.toFixed(1)} / ${MAX_SPEED} px/s`,
+                `Drift:    ${driftDeg.toFixed(1)} deg`,
+                `Thrust:   ${(thrustMult * 100).toFixed(0)}%`,
+                `On Track: ${ship.onTrack ? 'YES' : 'NO'}`,
+                `Drag:     ${currentDrag} (${ship.onTrack ? 'on-track' : 'off-track'})`,
+                `Track Dist: ${trackInfo.distFromCenter.toFixed(1)} / ${trackInfo.halfWidth.toFixed(1)}`,
             ].join('\n'));
 
-            // Show active inputs on the right side.
-            // We display game-specific names (THRUST/BRAKE) here since this
-            // is Stellar Circuit code, even though InputManager uses generic
-            // names (up/down). This is the interpretation layer.
             const activeInputs = [];
             if (input.up) activeInputs.push('THRUST');
             if (input.down) activeInputs.push('BRAKE');
@@ -602,15 +610,12 @@ window.PlatPursuit.Games.Driver = window.PlatPursuit.Games.Driver || {};
     // Create Game Instance
     // -----------------------------------------------------------------------
 
-    // Use Shell.createConfig() instead of hardcoding the config.
-    // We only need to provide the scene list; everything else uses defaults.
     const config = Shell.createConfig({
-        scene: [InputTestScene],
+        scene: [TrackTestScene],
     });
 
     const game = new Phaser.Game(config);
 
-    // Store reference for debugging
     PlatPursuit.Games.Driver.gameInstance = game;
 
     console.log('[Stellar Circuit] Game instance created via Shell.createConfig()');
