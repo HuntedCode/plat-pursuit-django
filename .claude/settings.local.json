@@ -9,7 +9,12 @@
       "Bash(python:*)",
       "WebFetch(domain:daisyui.com)",
       "Bash(findstr:*)",
-      "Bash(dir:*)"
+      "Bash(dir:*)",
+      "Bash(powershell:*)",
+      "WebFetch(domain:rexrainbow.github.io)",
+      "Bash(node -e:*)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:docs.phaser.io)"
     ]
   }
 }

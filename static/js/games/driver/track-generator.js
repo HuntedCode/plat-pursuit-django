@@ -210,25 +210,6 @@ window.PlatPursuit.Games.Driver = window.PlatPursuit.Games.Driver || {};
     // floor that only triggers in extreme nudge cases.
     const MIN_CHECKPOINT_SAMPLE_DISTANCE = 15;
 
-    // Boost pad placement rules.
-    const BOOST_CURVATURE_THRESHOLD = 0.15;  // Only on straight-ish sections
-    const MIN_BOOST_SPACING_RATIO = 0.15;    // Min 15% of track between pads
-    const MIN_BOOST_PADS = 3;
-    const MAX_BOOST_PADS = 5;
-
-    // Boost pad lookahead: when evaluating a candidate position, also check
-    // this many samples AHEAD for upcoming curves. Prevents placing boosts
-    // at the end of straightaways right before a sharp turn (which would
-    // feel terrible: you get speed-boosted into an impossible corner).
-    const BOOST_LOOKAHEAD = 45;
-
-    // The lookahead uses a SEPARATE, higher curvature threshold than the
-    // position check. The position itself must be straight-ish (< 0.15),
-    // but the lookahead only rejects if a genuinely SHARP turn is ahead
-    // (>= 0.4). Gentle curves ahead are fine: the player can handle a
-    // boost going into a sweeping turn. It's the hairpins we want to avoid.
-    const BOOST_LOOKAHEAD_THRESHOLD = 0.4;
-
     // How many segments ahead to check for edge self-intersection when
     // clipping loops at render time. Loops on the inside edge of tight
     // corners are typically 5-20 segments long. 50 is conservative.
@@ -303,13 +284,13 @@ window.PlatPursuit.Games.Driver = window.PlatPursuit.Games.Driver || {};
 
         // Enforce minimum distance between adjacent points.
         // If two neighbors are too close, the spline between them would
-        // create an impossibly tight turn. We push the closer point outward
-        // (away from center) to create more space.
+        // create an impossibly tight turn. We push the points apart along
+        // their connecting segment to create more space.
         //
-        // Multiple passes: pushing point N outward can create a new
-        // violation with point N+1, and the wrap-around (last point vs
-        // first) is never rechecked in a single pass. We run up to 3
-        // passes, stopping early if no violations remain.
+        // Multiple passes: pushing point N can create a new violation
+        // with point N+1, and the wrap-around (last point vs first) is
+        // never rechecked in a single pass. We run up to 3 passes,
+        // stopping early if no violations remain.
         for (let pass = 0; pass < 3; pass++) {
             let anyViolation = false;
             for (let i = 0; i < points.length; i++) {
@@ -319,11 +300,30 @@ window.PlatPursuit.Games.Driver = window.PlatPursuit.Games.Driver || {};
                 const dist = Math.sqrt(dx * dx + dy * dy);
 
                 if (dist < MIN_POINT_DISTANCE) {
-                    // Push the next point outward from center by the deficit
-                    const pointAngle = Math.atan2(points[next].y, points[next].x);
-                    const pushDist = (MIN_POINT_DISTANCE - dist) / 2 + 20;
-                    points[next].x += Math.cos(pointAngle) * pushDist;
-                    points[next].y += Math.sin(pointAngle) * pushDist;
+                    // Push both points apart along their connecting segment.
+                    // Each point moves half the deficit + a margin, in
+                    // opposite directions along the segment vector.
+                    const deficit = MIN_POINT_DISTANCE - dist;
+                    const pushDist = deficit / 2 + 10;
+
+                    if (dist > 0.001) {
+                        // Normalize the segment direction
+                        const nx = dx / dist;
+                        const ny = dy / dist;
+                        // Push points[i] backward (toward itself) and
+                        // points[next] forward (away from points[i])
+                        points[i].x -= nx * pushDist;
+                        points[i].y -= ny * pushDist;
+                        points[next].x += nx * pushDist;
+                        points[next].y += ny * pushDist;
+                    } else {
+                        // Degenerate case: points are nearly coincident.
+                        // Push radially outward from the track center as
+                        // a fallback direction.
+                        const angle = Math.atan2(points[next].y, points[next].x);
+                        points[next].x += Math.cos(angle) * pushDist * 2;
+                        points[next].y += Math.sin(angle) * pushDist * 2;
+                    }
                     anyViolation = true;
                 }
             }
@@ -413,8 +413,8 @@ window.PlatPursuit.Games.Driver = window.PlatPursuit.Games.Driver || {};
      *   Segment i uses: P[i-1], P[i], P[i+1], P[i+2]  (all mod N)
      *
      * The result is a smooth closed curve that passes through every
-     * control point. With SAMPLES_PER_SEGMENT=30 and 10 control points,
-     * we get 300 sample points defining the track centerline.
+     * control point. With SAMPLES_PER_SEGMENT=40 and 8-13 control
+     * points, we get 320-520 sample points defining the centerline.
      *
      * @param {Array<{x,y}>} controlPoints - The track skeleton points
      * @returns {Array<{x: number, y: number}>} Dense polyline (centerline)
@@ -636,7 +636,7 @@ window.PlatPursuit.Games.Driver = window.PlatPursuit.Games.Driver || {};
     }
 
     // ===================================================================
-    // TRACK GENERATION: CHECKPOINTS & BOOST PADS
+    // TRACK GENERATION: CHECKPOINTS
     // ===================================================================
 
     /**
@@ -697,13 +697,23 @@ window.PlatPursuit.Games.Driver = window.PlatPursuit.Games.Driver || {};
             // Binary search for the sample index closest to this arc length.
             // arcLengths is sorted (monotonically increasing), so binary
             // search is efficient: O(log n) instead of O(n).
-            let lo = 0, hi = n - 1;
-            while (lo < hi) {
-                const mid = (lo + hi) >> 1;  // Bitwise right shift = floor(div 2)
-                if (arcLengths[mid] < targetArc) {
-                    lo = mid + 1;
-                } else {
-                    hi = mid;
+            //
+            // If targetArc falls in the closing segment (past the last
+            // sample point), map to index 0 since the closing segment
+            // leads back to the start of the loop.
+            let lo;
+            if (targetArc > arcLengths[n - 1]) {
+                lo = 0;
+            } else {
+                lo = 0;
+                let hi = n - 1;
+                while (lo < hi) {
+                    const mid = (lo + hi) >> 1;
+                    if (arcLengths[mid] < targetArc) {
+                        lo = mid + 1;
+                    } else {
+                        hi = mid;
+                    }
                 }
             }
 
@@ -772,99 +782,6 @@ window.PlatPursuit.Games.Driver = window.PlatPursuit.Games.Driver || {};
         }
 
         return { checkpoints, totalArcLength };
-    }
-
-    /**
-     * Places boost pads on straight sections of the track.
-     *
-     * Rules:
-     * 1. Only on sections where curvature is low NOW and for the next
-     *    BOOST_LOOKAHEAD samples (prevents boosts right before turns)
-     * 2. Minimum spacing between pads (prevents clustering)
-     * 3. Not too close to checkpoints (avoids visual clutter)
-     *
-     * The algorithm:
-     * 1. Find all candidate positions (low curvature with lookahead)
-     * 2. Shuffle candidates (using seeded RNG for determinism)
-     * 3. Greedily select pads, rejecting any too close to already-placed ones
-     *
-     * @param {Array<{x,y}>} centerPoints - Track centerline
-     * @param {Array<number>} curvatures - Normalized curvature values
-     * @param {Array<{x,y}>} directions - Tangent directions
-     * @param {Array<number>} widths - Track widths
-     * @param {number} totalSamples - Total number of centerline samples
-     * @param {SeededRandom} rng - For pad count and shuffling
-     * @returns {Array} Boost pad data objects
-     */
-    function placeBoostPads(centerPoints, curvatures, directions, widths, totalSamples, rng) {
-        const targetCount = rng.intRange(MIN_BOOST_PADS, MAX_BOOST_PADS);
-        const minSpacing = Math.floor(totalSamples * MIN_BOOST_SPACING_RATIO);
-
-        // Step 1: Find candidate positions.
-        // Two checks per candidate:
-        //   a) The position itself must be straight-ish (curvature < 0.15)
-        //   b) No SHARP turn (curvature >= 0.4) in the next 45 samples ahead
-        // This allows boosts before gentle curves (the player can handle
-        // those) while preventing boosts before hairpin turns.
-        const candidates = [];
-        for (let i = 0; i < totalSamples; i++) {
-            // Check a: position must be on a straight section
-            if (curvatures[i] >= BOOST_CURVATURE_THRESHOLD) continue;
-
-            // Check b: no sharp turn in the lookahead window
-            let hasSharpTurnAhead = false;
-            for (let look = 1; look <= BOOST_LOOKAHEAD; look++) {
-                if (curvatures[(i + look) % totalSamples] >= BOOST_LOOKAHEAD_THRESHOLD) {
-                    hasSharpTurnAhead = true;
-                    break;
-                }
-            }
-            if (!hasSharpTurnAhead) {
-                candidates.push(i);
-            }
-        }
-
-        // Step 2: Shuffle candidates using Fisher-Yates (seeded)
-        // Fisher-Yates produces a uniformly random permutation.
-        // We use it instead of sort() because sort comparators with
-        // random values don't produce uniform distributions.
-        for (let i = candidates.length - 1; i > 0; i--) {
-            const j = rng.intRange(0, i);
-            const temp = candidates[i];
-            candidates[i] = candidates[j];
-            candidates[j] = temp;
-        }
-
-        // Step 3: Greedily select pads with minimum spacing
-        const boostPads = [];
-        for (const idx of candidates) {
-            if (boostPads.length >= targetCount) break;
-
-            // Check spacing against all already-placed pads.
-            // Distance on the circular track considers wrapping.
-            let tooClose = false;
-            for (const pad of boostPads) {
-                let dist = Math.abs(idx - pad.sampleIndex);
-                // Account for circular track: the "other way around"
-                // might be shorter
-                dist = Math.min(dist, totalSamples - dist);
-                if (dist < minSpacing) {
-                    tooClose = true;
-                    break;
-                }
-            }
-
-            if (!tooClose) {
-                boostPads.push({
-                    sampleIndex: idx,
-                    position: { x: centerPoints[idx].x, y: centerPoints[idx].y },
-                    angle: Math.atan2(directions[idx].y, directions[idx].x),
-                    width: widths[idx] * 0.6,  // Pad is 60% of track width
-                });
-            }
-        }
-
-        return boostPads;
     }
 
     // ===================================================================
@@ -947,17 +864,20 @@ window.PlatPursuit.Games.Driver = window.PlatPursuit.Games.Driver || {};
      * connecting consecutive points), we get continuous coverage.
      *
      * Performance note: This is O(n) where n is the number of centerline
-     * points. For 300 points at 60fps, that's 18,000 distance checks per
-     * second. This is fast enough for a single ship. If we later need
+     * points. For ~500 points at 60fps, that's ~30,000 distance checks
+     * per second. This is fast enough for a single ship. If we later need
      * multiple entities checking simultaneously, we could add a spatial
      * index (grid or quadtree).
      *
      * @param {number} px - Test position X
      * @param {number} py - Test position Y
      * @param {Object} trackData - The full TrackData object
+     * @param {number} [hitboxRadius=0] - Entity collision radius. The entity
+     *     is considered off-track when its edge (center + radius) exceeds
+     *     the track half-width.
      * @returns {{onTrack: boolean, distFromCenter: number, nearestIndex: number}}
      */
-    function isOnTrack(px, py, trackData) {
+    function isOnTrack(px, py, trackData, hitboxRadius = 0) {
         const { centerPoints, widths } = trackData;
         const n = centerPoints.length;
 
@@ -1028,7 +948,7 @@ window.PlatPursuit.Games.Driver = window.PlatPursuit.Games.Driver || {};
         const halfWidth = interpolatedWidth / 2;
 
         return {
-            onTrack: bestDist <= halfWidth,
+            onTrack: bestDist + hitboxRadius <= halfWidth,
             distFromCenter: bestDist,
             halfWidth: halfWidth,
             nearestIndex: bestIndex,
@@ -1052,7 +972,8 @@ window.PlatPursuit.Games.Driver = window.PlatPursuit.Games.Driver || {};
      * but possible with aggressive perturbations on 13+ control points.
      *
      * @param {string} seed - The track seed string
-     * @param {string} [difficulty='medium'] - Reserved for future archetype system
+     * @param {string} [difficulty='medium'] - TODO: Wire up to control track
+     *     parameters (control point count, width range, etc.). Currently unused.
      * @returns {Object} Complete TrackData object (see GDD Section 3.11)
      */
     function generate(seed, difficulty) {
@@ -1087,7 +1008,8 @@ window.PlatPursuit.Games.Driver = window.PlatPursuit.Games.Driver || {};
      * Core track generation logic for a single seed attempt.
      *
      * @param {string} seed - The seed string (may include retry suffix)
-     * @param {string} [difficulty='medium'] - Reserved for future archetype system
+     * @param {string} [difficulty='medium'] - TODO: Wire up to control track
+     *     parameters (control point count, width range, etc.). Currently unused.
      * @returns {Object} Complete TrackData object
      */
     function generateFromSeed(seed, difficulty) {
@@ -1116,12 +1038,7 @@ window.PlatPursuit.Games.Driver = window.PlatPursuit.Games.Driver || {};
             centerPoints, leftEdge, rightEdge, directions, curvatures, rng
         );
 
-        // Step 7: Place boost pads on straight sections
-        const boostPads = placeBoostPads(
-            centerPoints, curvatures, directions, widths, totalSamples, rng
-        );
-
-        // Step 8: Calculate world bounds (bounding box + padding)
+        // Step 7: Calculate world bounds (bounding box + padding)
         let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
         for (let i = 0; i < totalSamples; i++) {
             minX = Math.min(minX, leftEdge[i].x, rightEdge[i].x);
@@ -1137,7 +1054,7 @@ window.PlatPursuit.Games.Driver = window.PlatPursuit.Games.Driver || {};
             maxY: maxY + BOUNDS_PADDING,
         };
 
-        // Step 9: Determine start position and angle from checkpoint 0
+        // Step 8: Determine start position and angle from checkpoint 0
         const startCheckpoint = checkpoints[0];
         const startAngle = Math.atan2(
             directions[startCheckpoint.index].y,
@@ -1153,7 +1070,6 @@ window.PlatPursuit.Games.Driver = window.PlatPursuit.Games.Driver || {};
             curvatures,
             directions,
             checkpoints,
-            boostPads,
             startPosition: { x: startCheckpoint.position.x, y: startCheckpoint.position.y },
             startAngle,
             bounds,
@@ -1335,18 +1251,14 @@ window.PlatPursuit.Games.Driver = window.PlatPursuit.Games.Driver || {};
                     const resumeIdx = (ix.segJ + 1) % n;
 
                     // If resumeIdx wrapped around past 0, the clipped loop
-                    // spans the seam. The points from resumeIdx to segI are
-                    // the non-clipped portion that still needs drawing.
-                    // We draw from resumeIdx to n (end of array), which
-                    // reaches back to edge[0] via the closing lineTo below.
+                    // spans the seam (e.g. segI=50, segJ=498). The clipped
+                    // section covers indices segI+1 through segJ. Since
+                    // we started drawing from edge[0], points 0 through
+                    // segI are already on the canvas. All remaining high
+                    // indices (segI+1 onward) fall within the clip, so
+                    // there is nothing left to draw. Break and close.
                     if (resumeIdx <= ix.segI) {
-                        g.moveTo(ix.x, ix.y);
-                        for (let k = resumeIdx; k <= ix.segI; k++) {
-                            g.lineTo(edge[k].x, edge[k].y);
-                        }
                         intIdx++;
-                        // No more points to draw: the remaining indices are
-                        // inside the clipped section. Fall through to close.
                         break;
                     }
 
@@ -1372,10 +1284,9 @@ window.PlatPursuit.Games.Driver = window.PlatPursuit.Games.Driver || {};
      *
      * Drawing order (back to front):
      * 1. Track surface (quad-based fill, immune to edge self-intersection)
-     * 2. Boost pad arrows
-     * 3. Outer glow edges (wide, dim)
-     * 4. Inner neon edges (narrow, bright)
-     * 5. Checkpoint gates + start/finish line
+     * 2. Outer glow edges (wide, dim)
+     * 3. Inner neon edges (narrow, bright)
+     * 4. Checkpoint gates + start/finish line
      *
      * Why direct Graphics instead of RenderTexture?
      * RenderTexture (draw once, display as sprite) is a performance
@@ -1394,7 +1305,7 @@ window.PlatPursuit.Games.Driver = window.PlatPursuit.Games.Driver || {};
     function renderTrack(scene, trackData) {
         const {
             leftEdge, rightEdge,
-            checkpoints, boostPads, totalSamples,
+            checkpoints, totalSamples,
         } = trackData;
 
         // Draw directly in world coordinates. No offset needed because
@@ -1418,51 +1329,13 @@ window.PlatPursuit.Games.Driver = window.PlatPursuit.Games.Driver || {};
             g.fillPath();
         }
 
-        // ----- Layer 2: Boost Pad Arrows -----
-        // Small directional arrows showing where boost pads are and
-        // which direction they push.
-        for (const pad of boostPads) {
-            const px = pad.position.x;
-            const py = pad.position.y;
-            const angle = pad.angle;
-            const padLen = 30;
-            const padWidth = 8;
-
-            // Arrow body
-            g.fillStyle(0xf77622, 0.5);
-            g.beginPath();
-
-            // Arrow tip
-            const tipX = px + Math.cos(angle) * padLen;
-            const tipY = py + Math.sin(angle) * padLen;
-
-            // Arrow base corners (perpendicular to direction)
-            const perpX = -Math.sin(angle);
-            const perpY = Math.cos(angle);
-            const baseX = px - Math.cos(angle) * padLen * 0.5;
-            const baseY = py - Math.sin(angle) * padLen * 0.5;
-
-            g.moveTo(tipX, tipY);
-            g.lineTo(baseX + perpX * padWidth, baseY + perpY * padWidth);
-            g.lineTo(baseX - perpX * padWidth, baseY - perpY * padWidth);
-            g.closePath();
-            g.fillPath();
-
-            // Bright center line
-            g.lineStyle(2, 0xf77622, 0.8);
-            g.beginPath();
-            g.moveTo(baseX, baseY);
-            g.lineTo(tipX, tipY);
-            g.strokePath();
-        }
-
         // ----- Pre-compute edge self-intersections -----
         // Both the glow and neon passes stroke the same edges, so we
         // compute intersections once per edge instead of 4x total.
         const leftIntersections = findEdgeSelfIntersections(leftEdge, totalSamples);
         const rightIntersections = findEdgeSelfIntersections(rightEdge, totalSamples);
 
-        // ----- Layer 3: Outer Glow Edges -----
+        // ----- Layer 2: Outer Glow Edges -----
         // Wide, dim lines that create the "glow" effect around the track.
         // First pass of the two-pass neon technique. Uses loop clipping
         // to skip any self-intersecting sections on tight corners.
@@ -1470,14 +1343,14 @@ window.PlatPursuit.Games.Driver = window.PlatPursuit.Games.Driver || {};
         strokeEdgeWithLoopClip(g, leftEdge, totalSamples, leftIntersections);
         strokeEdgeWithLoopClip(g, rightEdge, totalSamples, rightIntersections);
 
-        // ----- Layer 4: Inner Neon Edges -----
+        // ----- Layer 3: Inner Neon Edges -----
         // Narrow, bright lines over the glow. The "core" of the neon
         // effect: bright center with dim spread around it.
         g.lineStyle(2, 0x2ce8f5, 1.0);
         strokeEdgeWithLoopClip(g, leftEdge, totalSamples, leftIntersections);
         strokeEdgeWithLoopClip(g, rightEdge, totalSamples, rightIntersections);
 
-        // ----- Layer 5: Checkpoint Gates -----
+        // ----- Layer 4: Checkpoint Gates -----
         // Lines drawn across the track at each checkpoint position.
         // Checkpoint 0 (start/finish) gets special treatment.
         for (let c = 0; c < checkpoints.length; c++) {
@@ -1565,7 +1438,11 @@ window.PlatPursuit.Games.Driver = window.PlatPursuit.Games.Driver || {};
         g.lineStyle(1.5, 0x2ce8f5, 0.4);
         g.beginPath();
 
-        for (let i = 0; i < centerPoints.length; i++) {
+        // Draw every 5th point: at minimap scale (~150px), the full
+        // ~500 points are unnecessary density. Every 5th point (100
+        // segments) is visually identical and 5x fewer draw calls.
+        const step = 5;
+        for (let i = 0; i < centerPoints.length; i += step) {
             const mx = centerX + (centerPoints[i].x - trackCenterX) * mapScale;
             const my = centerY + (centerPoints[i].y - trackCenterY) * mapScale;
 

@@ -4,17 +4,15 @@
  * This is the last script loaded. It creates the Phaser game instance,
  * registers all scenes, and starts the game.
  *
- * Step 3 Version: Track generation test scene. Generates a procedural
- * track from a seed, renders it with neon edges, places the ship at
- * the start line, and lets you fly around with on/off-track drag.
+ * Step 4F Version: Particle systems added to ship.
+ * This file focuses on scene management: track generation, camera
+ * follow, HUD/telemetry, minimap, and CC tier switching controls.
  *
- * What's new from Step 2:
- * - TrackGenerator creates full track geometry from a seed string
- * - TrackRenderer draws the track to a RenderTexture (drawn once, not per-frame)
- * - Camera follows the ship with smooth lerp (world is larger than screen)
- * - On/off-track boundary detection changes drag coefficient
- * - ESC generates a new random track
- * - Minimap shows track overview in the corner
+ * What's new from Step 4D:
+ * - Engine trail particles (cyan, when thrusting)
+ * - Retro-thrust particles (brake color, when braking)
+ * - Off-track sparks (red, speed-proportional)
+ * - brakeColor added to config system (paired with trailColor per skin)
  *
  * This test scene will be replaced with proper scene registration
  * (MenuScene, RaceScene, ResultsScene) in Step 5+.
@@ -31,21 +29,11 @@ window.PlatPursuit.Games.Driver = window.PlatPursuit.Games.Driver || {};
     const Shell = PlatPursuit.Games.Shell;
     const InputManager = PlatPursuit.Games.Input.InputManager;
     const TrackGen = PlatPursuit.Games.Driver.TrackGenerator;
+    const Ship = PlatPursuit.Games.Driver.Ship.Ship;
 
     // -----------------------------------------------------------------------
-    // Physics Constants
+    // Scene Constants
     // -----------------------------------------------------------------------
-    //
-    // Same values from Step 2, with the addition of off-track drag.
-    // These will move to the Ship class in Step 4.
-
-    const ROTATION_SPEED = 4.0;       // rad/s
-    const THRUST_FORCE = 500;         // px/s^2
-    const BRAKE_FORCE = THRUST_FORCE * 0.6;
-    const DRAG_ON_TRACK = 0.015;      // Very low: space feel
-    const DRAG_OFF_TRACK = 0.08;      // ~5x on-track: penalty for leaving track
-    const MAX_SPEED = 650;            // px/s (soft cap)
-    const MIN_SPEED = 2;             // Below this, snap to zero
 
     // Camera follow smoothing factor.
     // 0 = camera doesn't move, 1 = camera instantly snaps to ship.
@@ -56,36 +44,24 @@ window.PlatPursuit.Games.Driver = window.PlatPursuit.Games.Driver || {};
     // (asymptotic), which gives a natural "elastic" feel.
     const CAMERA_LERP = 0.08;
 
-    // Ship visual scale and pre-computed vertices (avoids allocating a
-    // new array every frame in drawShip). These will move to the Ship
-    // class in Step 4.
-    const SHIP_SCALE = 1.5;
-    const SHIP_VERTICES = [
-        { x:  16 * SHIP_SCALE, y:   0 },
-        { x: -12 * SHIP_SCALE, y:  10 * SHIP_SCALE },
-        { x:  -6 * SHIP_SCALE, y:   4 * SHIP_SCALE },
-        { x:  -6 * SHIP_SCALE, y:  -4 * SHIP_SCALE },
-        { x: -12 * SHIP_SCALE, y: -10 * SHIP_SCALE },
-    ];
+    // Design dimensions (from Shell, cached for readability)
+    const { DESIGN_WIDTH, DESIGN_HEIGHT } = Shell;
 
     // -----------------------------------------------------------------------
-    // Step 3 Test Scene: Track Generation
+    // Step 3/4 Test Scene: Track + Ship
     // -----------------------------------------------------------------------
 
     /**
-     * TrackTestScene: Generates and renders a procedural track, then lets
-     * you fly the ship around it with camera follow and on/off-track drag.
+     * TrackTestScene: Generates a procedural track, creates a Ship,
+     * and lets you fly around with camera follow and on/off-track drag.
      *
      * What it demonstrates:
-     * 1. SeededRandom produces deterministic tracks (same seed = same track)
-     * 2. Track geometry: control points, splines, curvature, width variation
-     * 3. RenderTexture: track drawn once, displayed as static sprite
-     * 4. isOnTrack() boundary test: different drag on/off track
-     * 5. Smooth camera follow with lerp
-     * 6. Minimap with player position dot
+     * 1. Ship class handles its own physics and rendering
+     * 2. Scene manages camera, HUD, minimap, and track lifecycle
+     * 3. Clean separation: scene calls ship.update() once per frame
      *
      * Controls:
-     *   WASD / Arrows: Fly the ship (same as Step 2)
+     *   WASD / Arrows: Fly the ship
      *   ESC: Generate a new random track
      */
     class TrackTestScene extends Phaser.Scene {
@@ -111,36 +87,63 @@ window.PlatPursuit.Games.Driver = window.PlatPursuit.Games.Driver || {};
             // ---------------------------------------------------------------
             this.inputManager = new InputManager(this);
 
-            // Clean up InputManager on both shutdown (scene stops but stays
-            // resident) and destroy (scene fully removed from memory, e.g.,
-            // game.destroy()). Without the destroy listener, keyboard event
-            // handlers could leak if the game is hard-destroyed.
+            // ---------------------------------------------------------------
+            // CC Tier Switching (number keys 1/2/3)
+            // ---------------------------------------------------------------
+            // These are dev/test controls for switching physics presets
+            // on the fly. In the final game, CC tier is chosen in the
+            // menu before the race starts.
+            const KeyCodes = Phaser.Input.Keyboard.KeyCodes;
+            this.key1 = this.input.keyboard.addKey(KeyCodes.ONE, true, false);
+            this.key2 = this.input.keyboard.addKey(KeyCodes.TWO, true, false);
+            this.key3 = this.input.keyboard.addKey(KeyCodes.THREE, true, false);
+
+            // ---------------------------------------------------------------
+            // Color Preset Switching (number keys 4-9)
+            // ---------------------------------------------------------------
+            // Dev/test controls for experimenting with outline/glow and
+            // body color combinations. Will be removed when the skin
+            // system is built.
+            this.key4 = this.input.keyboard.addKey(KeyCodes.FOUR, true, false);
+            this.key5 = this.input.keyboard.addKey(KeyCodes.FIVE, true, false);
+            this.key6 = this.input.keyboard.addKey(KeyCodes.SIX, true, false);
+            this.key7 = this.input.keyboard.addKey(KeyCodes.SEVEN, true, false);
+            this.key8 = this.input.keyboard.addKey(KeyCodes.EIGHT, true, false);
+            this.key9 = this.input.keyboard.addKey(KeyCodes.NINE, true, false);
+            this.activeColorPreset = 'Cyan (Default)';
+
+            // Clean up on scene shutdown (once, not on both shutdown + destroy,
+            // since Phaser fires shutdown before destroy and double-cleanup
+            // would attempt to destroy already-destroyed objects).
             const cleanup = () => {
                 this.inputManager.destroy();
+                // Release all dev key captures
+                this.input.keyboard.removeCapture([
+                    KeyCodes.ONE, KeyCodes.TWO, KeyCodes.THREE,
+                    KeyCodes.FOUR, KeyCodes.FIVE, KeyCodes.SIX,
+                    KeyCodes.SEVEN, KeyCodes.EIGHT, KeyCodes.NINE,
+                ]);
             };
-            this.events.on('shutdown', cleanup);
-            this.events.on('destroy', cleanup);
+            this.events.once('shutdown', cleanup);
+            this.events.once('destroy', cleanup);
 
-            console.log('[Stellar Circuit] Step 3 track test scene created');
+            console.log('[Stellar Circuit] Step 4F test scene created');
             console.log(`[Stellar Circuit] Track seed: "${this.currentSeed}"`);
-            console.log('[Stellar Circuit] Press ESC to generate a new random track');
+            console.log('[Stellar Circuit] 1/2/3: CC tier | 4-9: Color preset | ESC: New track');
         }
 
         /**
          * Generates a track from a seed and sets up all scene objects.
          *
          * This is extracted as a method so ESC can call it to regenerate.
-         * It destroys any existing track objects first, then creates fresh
+         * It destroys any existing objects first, then creates fresh
          * ones from the new seed.
          *
          * @param {string} seed - The track seed string
          */
         buildTrack(seed) {
-            // Clean up previous track objects if they exist.
-            // This allows re-calling buildTrack() for regeneration.
+            // Clean up previous objects if they exist
             if (this.trackGraphics) this.trackGraphics.destroy();
-            if (this.velIndicator) this.velIndicator.destroy();
-            if (this.shipGraphics) this.shipGraphics.destroy();
             if (this.minimap) this.minimap.destroy();
             if (this.minimapDot) this.minimapDot.destroy();
             if (this.hudContainer) this.hudContainer.destroy();
@@ -152,75 +155,59 @@ window.PlatPursuit.Games.Driver = window.PlatPursuit.Games.Driver || {};
             console.log(`[Stellar Circuit] Track generated:`,
                 `${td.totalSamples} samples,`,
                 `${td.checkpoints.length} checkpoints,`,
-                `${td.boostPads.length} boost pads,`,
                 `arc length: ${td.totalArcLength.toFixed(0)}px`
             );
 
             // ----- Step 2: Set World Bounds -----
-            // Tell Phaser's camera system how big the world is.
-            // The camera will be constrained to these bounds.
             const bounds = td.bounds;
             this.cameras.main.setBounds(
                 bounds.minX, bounds.minY,
                 bounds.maxX - bounds.minX,
                 bounds.maxY - bounds.minY
             );
-
-            // Set the background color for the entire world area
             this.cameras.main.setBackgroundColor('#0a0a14');
 
             // ----- Step 3: Render Track -----
-            // This creates a Graphics object with all track visuals drawn
-            // in world coordinates. It must be created FIRST so it renders
-            // behind the ship (Phaser creation order = render order).
+            // Created FIRST so it renders behind the ship
             this.trackGraphics = TrackGen.renderTrack(this, td);
 
-            // ----- Step 4: Create Ship Graphics -----
-            // Velocity indicator first (renders behind ship body)
-            this.velIndicator = this.add.graphics();
-            // Ship graphics on top
-            this.shipGraphics = this.add.graphics();
+            // ----- Step 4: Create or Reset Ship -----
+            // On first call, create the ship. On subsequent calls (ESC
+            // rebuild), reuse the existing ship via reset() to avoid
+            // destroying and recreating Graphics/emitter objects.
+            if (this.ship) {
+                this.ship.reset(td.startPosition.x, td.startPosition.y, td.startAngle);
+            } else {
+                this.ship = new Ship(
+                    this,
+                    td.startPosition.x,
+                    td.startPosition.y,
+                    td.startAngle,
+                    {}
+                );
+            }
 
-            // ----- Step 5: Initialize Ship State -----
-            this.ship = {
-                x: td.startPosition.x,
-                y: td.startPosition.y,
-                vx: 0,
-                vy: 0,
-                rotation: td.startAngle,
-                speed: 0,
-                onTrack: true,
-            };
+            // ----- Step 5: Set Up Camera -----
+            // Start the camera centered on the ship
+            this.cameras.main.setScroll(
+                this.ship.x - DESIGN_WIDTH / 2,
+                this.ship.y - DESIGN_HEIGHT / 2
+            );
 
-            // ----- Step 6: Set Up Camera -----
-            // Start the camera centered on the ship. After this, the
-            // update loop handles smooth follow.
-            this.cameras.main.scrollX = this.ship.x - Shell.DESIGN_WIDTH / 2;
-            this.cameras.main.scrollY = this.ship.y - Shell.DESIGN_HEIGHT / 2;
-
-            // ----- Step 7: Create HUD (fixed to camera, not world) -----
-            // HUD elements need to stay on screen regardless of camera
-            // position. We create a separate container and use
-            // setScrollFactor(0) which makes it ignore camera scrolling.
+            // ----- Step 6: Create HUD -----
             this.createHUD(seed);
         }
 
         /**
          * Creates the HUD overlay: title, telemetry, minimap.
          *
-         * setScrollFactor(0) is the key concept here: it tells Phaser
-         * "this object should NOT move when the camera scrolls." A scroll
-         * factor of 1 (default) means the object moves 1:1 with the world.
-         * A factor of 0 means it's pinned to the screen (like a HUD).
-         * Values in between create parallax effects (used for starfield later).
+         * setScrollFactor(0) pins elements to the screen (they don't
+         * move when the camera scrolls).
          *
          * @param {string} seed - Current seed (displayed in HUD)
          */
         createHUD(seed) {
-            const { DESIGN_WIDTH, DESIGN_HEIGHT } = Shell;
-
-            // Container for all HUD elements. Setting scrollFactor on
-            // the container applies to all children.
+            // Container for all HUD text elements
             this.hudContainer = this.add.container(0, 0);
             this.hudContainer.setScrollFactor(0);
 
@@ -233,7 +220,7 @@ window.PlatPursuit.Games.Driver = window.PlatPursuit.Games.Driver || {};
             }).setOrigin(0.5, 0);
 
             // Step + seed info
-            const seedInfo = this.add.text(DESIGN_WIDTH / 2, 36, `Step 3: Track Generator  |  Seed: "${seed}"`, {
+            const seedInfo = this.add.text(DESIGN_WIDTH / 2, 36, `Step 4F: Particles  |  Seed: "${seed}"`, {
                 fontFamily: 'Inter, sans-serif',
                 fontSize: '13px',
                 color: '#40e850',
@@ -243,7 +230,8 @@ window.PlatPursuit.Games.Driver = window.PlatPursuit.Games.Driver || {};
             const controlsText = this.add.text(12, 60, [
                 'W/Up: Thrust    A/Left: Rotate Left',
                 'S/Down: Brake   D/Right: Rotate Right',
-                'ESC: New Random Track',
+                '1: 50cc  2: 100cc  3: 200cc  ESC: New Track',
+                '4: Cyan  5: Orange  6: Purple  7: Green  8: Pink  9: Gold',
             ].join('\n'), {
                 fontFamily: 'Inter, sans-serif',
                 fontSize: '11px',
@@ -271,9 +259,6 @@ window.PlatPursuit.Games.Driver = window.PlatPursuit.Games.Driver || {};
             this.hudContainer.add([title, seedInfo, controlsText, this.telemetryText, this.inputText]);
 
             // ----- Minimap -----
-            // The minimap is a separate Graphics object with scrollFactor(0).
-            // We don't put it in the container because the renderMinimap
-            // function creates its own Graphics object.
             const minimapSize = 140;
             const minimapX = DESIGN_WIDTH - minimapSize - 12;
             const minimapY = 12;
@@ -285,13 +270,15 @@ window.PlatPursuit.Games.Driver = window.PlatPursuit.Games.Driver || {};
             this.minimapMapData = minimapResult.mapData;
             this.minimap.setScrollFactor(0);
 
-            // Player dot on the minimap (updated each frame)
+            // Player dot on the minimap (updated each frame).
+            // Lives outside hudContainer because it is cleared and redrawn
+            // every frame, while the container's other elements are static.
             this.minimapDot = this.add.graphics();
             this.minimapDot.setScrollFactor(0);
         }
 
         /**
-         * Game loop: physics, rendering, camera follow.
+         * Game loop: ship update, camera follow, HUD refresh.
          */
         update(time, delta) {
             const dt = delta / 1000;
@@ -301,245 +288,61 @@ window.PlatPursuit.Games.Driver = window.PlatPursuit.Games.Driver || {};
             // ESC: Generate New Track
             // ---------------------------------------------------------------
             if (this.inputManager.isPausePressed()) {
-                // Generate a random seed by combining timestamp with a counter.
-                // This ensures each press gives a different track.
                 this.currentSeed = 'random-' + Date.now();
                 this.buildTrack(this.currentSeed);
                 console.log(`[Stellar Circuit] New track: "${this.currentSeed}"`);
-                return; // Skip this frame (everything was just rebuilt)
+                return;
             }
 
             // ---------------------------------------------------------------
-            // Physics Update (same as Step 2, with on/off-track drag)
+            // CC Tier Switching (1/2/3 keys)
             // ---------------------------------------------------------------
+            // JustDown for edge detection: one press = one switch
+            const JustDown = Phaser.Input.Keyboard.JustDown;
+            if (JustDown(this.key1)) this.ship.setCCTier('50cc');
+            if (JustDown(this.key2)) this.ship.setCCTier('100cc');
+            if (JustDown(this.key3)) this.ship.setCCTier('200cc');
 
-            // 1. ROTATION
-            if (input.left)  this.ship.rotation -= ROTATION_SPEED * dt;
-            if (input.right) this.ship.rotation += ROTATION_SPEED * dt;
-
-            // 2. THRUST
-            if (input.up) {
-                const speedRatio = this.ship.speed / MAX_SPEED;
-                const thrustMultiplier = Math.max(0, 1 - speedRatio * speedRatio);
-                this.ship.vx += Math.cos(this.ship.rotation) * THRUST_FORCE * thrustMultiplier * dt;
-                this.ship.vy += Math.sin(this.ship.rotation) * THRUST_FORCE * thrustMultiplier * dt;
+            // ---------------------------------------------------------------
+            // Color Preset Switching (4-9 keys)
+            // ---------------------------------------------------------------
+            for (let k = 4; k <= 9; k++) {
+                if (JustDown(this['key' + k])) {
+                    const name = this.ship.setColorPreset(String(k));
+                    if (name) this.activeColorPreset = name;
+                }
             }
 
-            // 3. BRAKE
-            if (input.down && this.ship.speed > 1) {
-                const velAngle = Math.atan2(this.ship.vy, this.ship.vx);
-                const clampedBrake = Math.min(BRAKE_FORCE * dt, this.ship.speed);
-                this.ship.vx -= Math.cos(velAngle) * clampedBrake;
-                this.ship.vy -= Math.sin(velAngle) * clampedBrake;
-            }
-
-            // 4. ON/OFF-TRACK BOUNDARY TEST
-            // This is the new part from Step 3. We check the ship's position
-            // against the track geometry every frame to determine which drag
-            // coefficient to apply.
-            const trackInfo = TrackGen.isOnTrack(
-                this.ship.x, this.ship.y, this.trackData
-            );
-            this.ship.onTrack = trackInfo.onTrack;
-
-            // 5. DRAG (now varies based on track position)
-            // On-track: very low drag, space feel preserved.
-            // Off-track: heavy drag, the ship slows rapidly. This is the
-            // penalty for missing the track (no hard walls in space).
-            //
-            // Frame-rate independence: multiplicative drag must use
-            // exponential decay scaled by dt. Without this, the ship
-            // would lose more speed at lower frame rates (unfair for
-            // competitive leaderboards). Math.pow(1 - drag, dt * 60)
-            // normalizes the decay to a 60fps baseline.
-            const drag = this.ship.onTrack ? DRAG_ON_TRACK : DRAG_OFF_TRACK;
-            const dragFactor = Math.pow(1 - drag, dt * 60);
-            this.ship.vx *= dragFactor;
-            this.ship.vy *= dragFactor;
-
-            // 6. UPDATE POSITION
-            this.ship.x += this.ship.vx * dt;
-            this.ship.y += this.ship.vy * dt;
-
-            // 7. CACHE SPEED + snap-to-zero
-            this.ship.speed = Math.sqrt(
-                this.ship.vx * this.ship.vx + this.ship.vy * this.ship.vy
-            );
-            if (this.ship.speed < MIN_SPEED) {
-                this.ship.vx = 0;
-                this.ship.vy = 0;
-                this.ship.speed = 0;
-            }
+            // ---------------------------------------------------------------
+            // Ship Update (physics + rendering in one call)
+            // ---------------------------------------------------------------
+            this.ship.update(dt, input, this.trackData);
 
             // ---------------------------------------------------------------
             // Camera Follow (smooth lerp)
             // ---------------------------------------------------------------
-            // Instead of hard-locking the camera to the ship, we interpolate
-            // (lerp) toward the ship's position each frame. This creates a
-            // smooth trailing effect where the camera gently follows.
-            //
-            // The formula: camera = camera + (target - camera) * lerpFactor
-            //
-            // This is "exponential ease-out": the camera moves quickly when
-            // far from the target and slows as it approaches. The ship is
-            // always slightly ahead of screen center, which feels natural
-            // when driving at speed.
-            //
-            // Frame-rate independence: like drag, the lerp factor must be
-            // dt-corrected so the camera follow speed is consistent across
-            // frame rates. 1 - Math.pow(1 - LERP, dt * 60) gives the
-            // same catch-up rate whether running at 30fps or 144fps.
+            // Exponential ease-out: camera moves quickly when far from the
+            // ship and slows as it approaches. Frame-rate independent via
+            // the same Math.pow pattern used for drag.
             const cam = this.cameras.main;
-            const targetX = this.ship.x - Shell.DESIGN_WIDTH / 2;
-            const targetY = this.ship.y - Shell.DESIGN_HEIGHT / 2;
+            const targetX = this.ship.x - DESIGN_WIDTH / 2;
+            const targetY = this.ship.y - DESIGN_HEIGHT / 2;
             const lerpFactor = 1 - Math.pow(1 - CAMERA_LERP, dt * 60);
-            cam.scrollX += (targetX - cam.scrollX) * lerpFactor;
-            cam.scrollY += (targetY - cam.scrollY) * lerpFactor;
+            const newScrollX = cam.scrollX + (targetX - cam.scrollX) * lerpFactor;
+            const newScrollY = cam.scrollY + (targetY - cam.scrollY) * lerpFactor;
+            cam.setScroll(newScrollX, newScrollY);
 
             // ---------------------------------------------------------------
-            // Rendering
+            // HUD Updates
             // ---------------------------------------------------------------
-            this.drawShip(input);
-            this.drawVelocityIndicator();
             this.updateMinimapDot();
-            this.updateTelemetry(input, trackInfo);
-        }
-
-        // ===================================================================
-        // Ship Drawing (same as Step 2, carried forward)
-        // ===================================================================
-
-        drawShip(input) {
-            const g = this.shipGraphics;
-            g.clear();
-            g.setPosition(this.ship.x, this.ship.y);
-            g.setRotation(this.ship.rotation);
-
-            const s = SHIP_SCALE;
-
-            // Glow layer
-            this.drawShipPolygon(g, SHIP_VERTICES, null, { width: 3, color: 0x2ce8f5, alpha: 0.3 });
-            // Body fill: tint slightly red when off-track as visual feedback
-            const bodyColor = this.ship.onTrack ? 0xe8e8ff : 0xffcccc;
-            this.drawShipPolygon(g, SHIP_VERTICES, { color: bodyColor, alpha: 0.9 }, null);
-            // Edge stroke: changes color when off-track
-            const edgeColor = this.ship.onTrack ? 0x2ce8f5 : 0xe84040;
-            this.drawShipPolygon(g, SHIP_VERTICES, null, { width: 2, color: edgeColor, alpha: 1.0 });
-
-            // Thrust flame
-            if (input.up) {
-                const flameLength = (8 + Math.random() * 12) * s;
-                const flameWidth = 4 * s;
-                g.fillStyle(0x2ce8f5, 0.6);
-                g.beginPath();
-                g.moveTo(-6 * s,  flameWidth);
-                g.lineTo(-6 * s, -flameWidth);
-                g.lineTo(-6 * s - flameLength, 0);
-                g.closePath();
-                g.fillPath();
-
-                g.fillStyle(0xffffff, 0.4);
-                g.beginPath();
-                g.moveTo(-6 * s,  flameWidth * 0.5);
-                g.lineTo(-6 * s, -flameWidth * 0.5);
-                g.lineTo(-6 * s - flameLength * 0.6, 0);
-                g.closePath();
-                g.fillPath();
-            }
-
-            // Brake indicator
-            if (input.down && this.ship.speed > 1) {
-                const brakeLength = (4 + Math.random() * 6) * s;
-                const brakeWidth = 2.5 * s;
-                g.fillStyle(0xf5602c, 0.5);
-                g.beginPath();
-                g.moveTo(16 * s,  brakeWidth);
-                g.lineTo(16 * s, -brakeWidth);
-                g.lineTo(16 * s + brakeLength, 0);
-                g.closePath();
-                g.fillPath();
-            }
-        }
-
-        drawShipPolygon(graphics, vertices, fill, stroke) {
-            if (fill) graphics.fillStyle(fill.color, fill.alpha);
-            if (stroke) graphics.lineStyle(stroke.width, stroke.color, stroke.alpha);
-            graphics.beginPath();
-            graphics.moveTo(vertices[0].x, vertices[0].y);
-            for (let i = 1; i < vertices.length; i++) {
-                graphics.lineTo(vertices[i].x, vertices[i].y);
-            }
-            graphics.closePath();
-            if (fill) graphics.fillPath();
-            if (stroke) graphics.strokePath();
-        }
-
-        // ===================================================================
-        // Velocity Indicator (same as Step 2)
-        // ===================================================================
-
-        drawVelocityIndicator() {
-            const g = this.velIndicator;
-            g.clear();
-            if (this.ship.speed < 5) return;
-
-            const velAngle = Math.atan2(this.ship.vy, this.ship.vx);
-            const startOffset = 25;
-            const startX = this.ship.x + Math.cos(velAngle) * startOffset;
-            const startY = this.ship.y + Math.sin(velAngle) * startOffset;
-            const indicatorLength = Math.min(55, this.ship.speed / MAX_SPEED * 55);
-
-            let driftAngle = velAngle - this.ship.rotation;
-            while (driftAngle > Math.PI) driftAngle -= 2 * Math.PI;
-            while (driftAngle < -Math.PI) driftAngle += 2 * Math.PI;
-
-            const absDrift = Math.abs(driftAngle);
-            let color;
-            if (absDrift < Math.PI / 6) {
-                color = 0x40e850;
-            } else if (absDrift < Math.PI / 2) {
-                color = 0xe8d040;
-            } else {
-                color = 0xe84040;
-            }
-
-            const endX = startX + Math.cos(velAngle) * indicatorLength;
-            const endY = startY + Math.sin(velAngle) * indicatorLength;
-
-            g.lineStyle(2, color, 0.7);
-            g.beginPath();
-            g.moveTo(startX, startY);
-            g.lineTo(endX, endY);
-            g.strokePath();
-
-            const headLength = 6;
-            const headAngle = 0.5;
-            g.fillStyle(color, 0.7);
-            g.beginPath();
-            g.moveTo(endX, endY);
-            g.lineTo(
-                endX - Math.cos(velAngle - headAngle) * headLength,
-                endY - Math.sin(velAngle - headAngle) * headLength
-            );
-            g.lineTo(
-                endX - Math.cos(velAngle + headAngle) * headLength,
-                endY - Math.sin(velAngle + headAngle) * headLength
-            );
-            g.closePath();
-            g.fillPath();
+            this.updateTelemetry(input);
         }
 
         // ===================================================================
         // Minimap Player Dot
         // ===================================================================
 
-        /**
-         * Updates the player position dot on the minimap.
-         *
-         * The minimap coordinate mapping data (scale, offset) is stored
-         * separately in this.minimapMapData. We use this to convert the
-         * ship's world position into minimap screen coordinates.
-         */
         updateMinimapDot() {
             const g = this.minimapDot;
             g.clear();
@@ -551,11 +354,11 @@ window.PlatPursuit.Games.Driver = window.PlatPursuit.Games.Driver || {};
             const dotX = map.centerX + (this.ship.x - map.trackCenterX) * map.mapScale;
             const dotY = map.centerY + (this.ship.y - map.trackCenterY) * map.mapScale;
 
-            // Player dot: white, slightly larger than the start marker
+            // Player dot: white
             g.fillStyle(0xffffff, 1.0);
             g.fillCircle(dotX, dotY, 3);
 
-            // If off-track, add a red ring around the dot
+            // Red ring when off-track
             if (!this.ship.onTrack) {
                 g.lineStyle(1, 0xe84040, 0.8);
                 g.strokeCircle(dotX, dotY, 5);
@@ -563,12 +366,15 @@ window.PlatPursuit.Games.Driver = window.PlatPursuit.Games.Driver || {};
         }
 
         // ===================================================================
-        // Telemetry (updated from Step 2 to show track info)
+        // Telemetry Display
         // ===================================================================
 
-        updateTelemetry(input, trackInfo) {
+        updateTelemetry(input) {
             const ship = this.ship;
-            const speedRatio = ship.speed / MAX_SPEED;
+            const tier = ship.tier;
+            const trackInfo = ship.trackInfo;
+
+            const speedRatio = ship.speed / tier.maxSpeed;
             const thrustMult = Math.max(0, 1 - speedRatio * speedRatio);
 
             const rotDeg = ((ship.rotation * 180 / Math.PI) % 360 + 360) % 360;
@@ -579,18 +385,25 @@ window.PlatPursuit.Games.Driver = window.PlatPursuit.Games.Driver || {};
             if (driftDeg > 180) driftDeg -= 360;
             if (driftDeg < -180) driftDeg += 360;
 
-            // Current drag coefficient (changes with on/off track)
-            const currentDrag = ship.onTrack ? DRAG_ON_TRACK : DRAG_OFF_TRACK;
+            const currentDrag = ship.onTrack ? tier.dragOnTrack : tier.dragOffTrack;
 
-            this.telemetryText.setText([
+            // Build telemetry lines. Angular velocity shown only when
+            // the tier has angular momentum (100cc/200cc).
+            const lines = [
+                `CC Tier:  ${tier.name}  |  Skin: ${this.activeColorPreset}`,
                 `Position: (${ship.x.toFixed(0)}, ${ship.y.toFixed(0)})`,
-                `Speed:    ${ship.speed.toFixed(1)} / ${MAX_SPEED} px/s`,
+                `Speed:    ${ship.speed.toFixed(1)} / ${tier.maxSpeed} px/s`,
                 `Drift:    ${driftDeg.toFixed(1)} deg`,
                 `Thrust:   ${(thrustMult * 100).toFixed(0)}%`,
                 `On Track: ${ship.onTrack ? 'YES' : 'NO'}`,
                 `Drag:     ${currentDrag} (${ship.onTrack ? 'on-track' : 'off-track'})`,
                 `Track Dist: ${trackInfo.distFromCenter.toFixed(1)} / ${trackInfo.halfWidth.toFixed(1)}`,
-            ].join('\n'));
+            ];
+            if (tier.angularMomentum) {
+                lines.push(`Ang. Vel: ${ship.angularVelocity.toFixed(2)} rad/s`);
+            }
+
+            this.telemetryText.setText(lines.join('\n'));
 
             const activeInputs = [];
             if (input.up) activeInputs.push('THRUST');

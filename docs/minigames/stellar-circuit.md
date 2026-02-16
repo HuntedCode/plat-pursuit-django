@@ -42,10 +42,10 @@ The critical distinction from car physics: **rotation does not change the veloci
 1. Apply rotation from input
 2. Apply thrust force (if thrusting) in facing direction
 3. Apply retro-thrust (if braking) opposite to velocity direction
-4. Apply drag (on-track or off-track coefficient)
-5. Apply boost (if on a boost pad)
-6. Update position from velocity
-7. Check track boundaries, update on/off-track status
+4. Apply drag (on-track or off-track coefficient, using previous frame's boundary state)
+5. Update position from velocity
+6. Check track boundaries, update on/off-track status (using new position)
+7. Cache speed, snap-to-zero
 
 ### 2.2 Core Parameters
 
@@ -57,9 +57,6 @@ The critical distinction from car physics: **rotation does not change the veloci
 | Off-Track Drag | `DRAG_OFF_TRACK` | 0.08 | coefficient | ~5x on-track: meaningful penalty |
 | Max Speed (soft cap) | `MAX_SPEED` | 650 | px/s | Thrust effectiveness diminishes approaching this |
 | Brake Force Ratio | `BRAKE_RATIO` | 0.6 | multiplier | Braking force = THRUST_FORCE * 0.6 |
-| Boost Speed Add | `BOOST_SPEED_ADD` | 250 | px/s | Added in boost pad's direction |
-| Boost Duration | `BOOST_DURATION` | 0.8 | seconds | Visual/audio effect duration |
-| Ship Radius | `SHIP_RADIUS` | 14 | px | Circular hitbox |
 | Min Speed Threshold | `MIN_SPEED` | 2 | px/s | Below this, velocity snaps to zero |
 
 **Tuning notes**: These values are starting points. The key relationships to maintain:
@@ -104,41 +101,23 @@ With `DRAG_OFF_TRACK = 0.08`:
 
 **Snap-to-zero**: When speed drops below `MIN_SPEED` (2 px/s), snap velocity to zero. Prevents infinitesimal crawling.
 
-### 2.5 Boost Pads
+### 2.5 Ship Hitbox & Track Collision
 
-Boost pads are placed on the track surface. When the ship crosses a boost pad:
+The ship uses a **center-point hitbox**: the ship's origin (center of mass) is the sole point tested against track boundaries. The ship's visual body can hang over the track edge without triggering off-track.
 
-1. Add velocity in the boost pad's direction (the direction the pad faces along the track):
-   ```
-   ship.vx += cos(boostPad.angle) * BOOST_SPEED_ADD;
-   ship.vy += sin(boostPad.angle) * BOOST_SPEED_ADD;
-   ```
-2. Set `isBoosted = true` for `BOOST_DURATION` seconds (visual/audio effect)
-3. During boost, ignore the soft speed cap (allow speeds above MAX_SPEED)
-4. After boost duration, the soft cap gradually takes effect again via drag
-
-**Key design choice**: Boost adds velocity in the pad's direction, NOT the ship's facing direction. This means:
-- Hitting a boost pad head-on = maximum speed gain
-- Hitting at an angle = some speed gain + direction change
-- Hitting backwards = actually decelerates you (discourages reverse-racing exploits)
-
-Boost pads are not stackable: crossing multiple pads in rapid succession doesn't multiply the effect. A cooldown of 0.5 seconds between boost activations prevents this.
-
-### 2.6 Ship Hitbox & Track Collision
-
-The ship uses a **circular hitbox** with radius `SHIP_RADIUS` (14px) centered on the ship's position. Circle-vs-corridor collision is simpler and more forgiving than polygon collision.
+**Why center-point, not radius-based**: A radius-based hitbox (where `distance + radius > trackHalfWidth`) felt too punishing: a wingtip clipping the edge would trigger the full off-track penalty. Center-point collision is more forgiving, makes edge-scrubbing viable, and is ship-shape agnostic: different skin body types don't affect the off-track boundary. This keeps skin choice purely cosmetic.
 
 **On/off-track detection**:
-1. Find the nearest point on the track centerline to the ship's position
+1. Find the nearest point on the track centerline to the ship's center position
 2. Calculate the perpendicular distance from ship center to centerline
 3. Get the track half-width at that point
-4. If `distance + SHIP_RADIUS > trackHalfWidth`: ship is off-track
+4. If `distance > trackHalfWidth`: ship is off-track
 
-**No hard walls**: Going off-track does NOT stop the ship or bounce it. The penalty is heavier drag. This feels more "spacey" (there are no walls in space) and is more forgiving than hard collision. Visual feedback (sparks, screen tint) signals to the player they've left the track.
+**No hard walls**: Going off-track does NOT stop the ship or bounce it. The penalty is heavier drag. This feels more "spacey" (there are no walls in space) and is more forgiving than hard collision. Visual feedback (sparks, flicker) signals to the player they've left the track.
 
-**Edge-scrubbing**: A skilled technique where players intentionally clip the track edge to take a tighter line. The brief off-track drag costs some speed but the shorter path may be worth it. This creates depth in racing lines.
+**Edge-scrubbing**: A skilled technique where players intentionally clip the track edge to take a tighter line. The brief off-track drag costs some speed but the shorter path may be worth it. Center-point collision makes this viable: the ship's wings can overhang the edge while the center stays on-track.
 
-### 2.7 Speed Limiting (Soft Cap)
+### 2.6 Speed Limiting (Soft Cap)
 
 The max speed is a soft cap, not a hard wall. As the ship approaches `MAX_SPEED`, thrust becomes less effective:
 
@@ -157,8 +136,6 @@ The squared term (`speedRatio^2`) means:
 - At 100% max speed: 0% thrust effectiveness
 
 This creates a natural speed ceiling without a jarring hard stop. Players feel the ship becoming "heavier" as it approaches top speed.
-
-**Boost exception**: During active boost, the speed cap is temporarily lifted. The ship can exceed MAX_SPEED, but once the boost ends, drag will naturally bring it back below the cap.
 
 ---
 
@@ -181,7 +158,7 @@ function hashString(str) {
         hash = ((hash << 5) - hash) + char;
         hash = hash & hash; // Convert to 32-bit integer
     }
-    return Math.abs(hash);
+    return hash >>> 0;  // Unsigned right-shift: converts to uint32, avoids Math.abs edge cases
 }
 ```
 
@@ -221,8 +198,8 @@ The track is defined by a set of control points arranged in a rough loop. The al
 1. **Determine point count**: `numPoints = rng.intRange(8, 13)`. More points = more complex track.
 
 2. **Base ellipse**: Points are distributed around an ellipse with semi-axes:
-   - `radiusX = rng.range(800, 1200)` pixels
-   - `radiusY = rng.range(600, 1000)` pixels
+   - `radiusX = rng.range(1600, 2400)` pixels
+   - `radiusY = rng.range(1200, 2000)` pixels
 
 3. **Angular distribution**: Each point gets a base angle evenly spaced around the ellipse, with random perturbation:
    ```
@@ -250,15 +227,12 @@ The control points are connected by a Catmull-Rom spline to create smooth curves
 **Catmull-Rom interpolation** between points P1 and P2, with tangent points P0 and P3:
 
 ```javascript
-function catmullRom(p0, p1, p2, p3, t, alpha = 0.5) {
-    // Centripetal Catmull-Rom (alpha = 0.5 prevents cusps and loops)
+function catmullRom(p0, p1, p2, p3, t) {
+    // Uniform Catmull-Rom spline (standard basis matrix formulation)
     const t2 = t * t;
     const t3 = t2 * t;
 
-    // Standard Catmull-Rom basis matrix with tension
-    const s = (1 - alpha) / 2;  // Not used for centripetal; simplified below
-
-    // For centripetal parameterization, use standard formulation:
+    // Standard Catmull-Rom basis with 0.5 tension (uniform parameterization):
     return {
         x: 0.5 * (
             (-t3 + 2*t2 - t) * p0.x +
@@ -288,11 +262,11 @@ This wraps around seamlessly.
 
 **Sampling**: The spline is sampled at high resolution to create the actual track polyline:
 ```
-SAMPLES_PER_SEGMENT = 30
+SAMPLES_PER_SEGMENT = 40
 totalSamples = numPoints * SAMPLES_PER_SEGMENT
 ```
 
-For a 10-point track: 300 sample points. Each sample stores `{ x, y }`.
+For a 10-point track: 400 sample points. Typical range: 320-520. Each sample stores `{ x, y }`.
 
 **Curvature calculation**: At each sample point, curvature is the rate of change of the tangent direction. Approximated using three consecutive points:
 
@@ -323,8 +297,8 @@ Curvature values are normalized to [0, 1] range by dividing by the maximum curva
 Track width varies based on curvature: wider on straights, narrower on curves.
 
 ```javascript
-const TRACK_WIDTH_MIN = 90;   // Tightest curves
-const TRACK_WIDTH_MAX = 220;  // Long straights
+const TRACK_WIDTH_MIN = 140;   // Tightest curves
+const TRACK_WIDTH_MAX = 320;  // Long straights
 
 for (let i = 0; i < totalSamples; i++) {
     const curvature = normalizedCurvatures[i];
@@ -395,38 +369,7 @@ for (let c = 0; c < numCheckpoints; c++) {
 
 **Checkpoint crossing detection** (used during race): A ray from the ship's previous position to current position is tested against each checkpoint's gate line segment. If the ray crosses the gate, the checkpoint is triggered.
 
-### 3.7 Boost Pad Placement
-
-Boost pads are placed on straight sections of track (low curvature) with minimum spacing between them.
-
-```javascript
-const BOOST_PAD_CURVATURE_THRESHOLD = 0.15;  // Only on straight-ish sections
-const MIN_BOOST_SPACING = 0.15;               // Minimum 15% of track between pads
-const NUM_BOOST_PADS = rng.intRange(3, 5);
-
-let candidates = [];
-for (let i = 0; i < totalSamples; i++) {
-    if (normalizedCurvatures[i] < BOOST_PAD_CURVATURE_THRESHOLD) {
-        candidates.push(i);
-    }
-}
-
-// Select pads from candidates with minimum spacing
-let boostPads = [];
-// ... select NUM_BOOST_PADS from candidates, ensuring spacing >= MIN_BOOST_SPACING * totalSamples
-```
-
-Each boost pad stores:
-```javascript
-{
-    sampleIndex: Number,     // Position on track
-    position: { x, y },     // World coordinates
-    angle: Number,           // Direction the pad faces (track tangent at this point)
-    width: Number            // Slightly narrower than track width at this point
-}
-```
-
-### 3.8 Start/Finish Line
+### 3.7 Start/Finish Line
 
 The start/finish line is placed at checkpoint 0. The ship starts here, positioned on the track centerline, facing the track direction at this point.
 
@@ -444,22 +387,21 @@ startAngle = Math.atan2(
 
 The start/finish line is visually distinct from regular checkpoints (brighter, wider, different color).
 
-### 3.9 Difficulty Parameters
+### 3.8 Difficulty Parameters *(Planned)*
 
-Track difficulty is controlled by these knobs:
+The `difficulty` parameter is accepted by `generate()` but not yet wired up. All tracks currently use the values documented in sections 3.2 and 3.5. The planned difficulty tiers:
 
 | Parameter | Easy | Medium | Hard |
 |-----------|------|--------|------|
 | Control points | 8-9 | 10-11 | 12-13 |
 | Radius variance | 0.85-1.15 | 0.7-1.3 | 0.6-1.4 |
 | Angular perturbation | +/-0.15 rad | +/-0.25 rad | +/-0.35 rad |
-| Track width min | 120 px | 90 px | 70 px |
-| Track width max | 240 px | 220 px | 180 px |
-| Boost pad count | 4-5 | 3-4 | 2-3 |
+| Track width min | 180 px | 140 px | 100 px |
+| Track width max | 360 px | 320 px | 260 px |
 
 For the prototype, difficulty defaults to "Medium". The daily challenge system (future backend) will cycle difficulty.
 
-### 3.10 Track Bounds & Validation
+### 3.9 Track Bounds & Validation
 
 **Bounding box**: After generating all edge points, calculate:
 ```javascript
@@ -474,20 +416,20 @@ bounds = {
 `PADDING = 300px` gives room for the starfield background beyond track edges.
 
 **Track validation**: After generation, verify:
-1. No self-intersection (track centerline doesn't cross itself)
-2. Minimum track width never drops below 60px (safety floor)
-3. Total track length is within reasonable range (4000-12000px)
-4. All checkpoints are reachable in order
+1. No self-intersection (track centerline doesn't cross itself) -- **Implemented**
+2. *(Planned)* Minimum track width never drops below 60px (safety floor)
+3. *(Planned)* Total track length is within reasonable range
+4. *(Planned)* All checkpoints are reachable in order
 
-If validation fails, regenerate with a slightly modified seed (`seed + 1`).
+If validation fails, regenerate with a modified seed (`seed + '_retry' + attempt`).
 
-### 3.11 TrackData Object
+### 3.10 TrackData Object
 
 The generator returns this object, consumed by all other systems:
 
 ```javascript
 TrackData = {
-    centerPoints: [{x, y}],      // Spline samples (300+)
+    centerPoints: [{x, y}],      // Spline samples (320-520)
     leftEdge: [{x, y}],          // Left boundary points
     rightEdge: [{x, y}],         // Right boundary points
     widths: [Number],            // Track width at each sample
@@ -500,18 +442,12 @@ TrackData = {
         rightPoint: {x, y},
         direction: {x, y}
     }],
-    boostPads: [{
-        sampleIndex: Number,
-        position: {x, y},
-        angle: Number,
-        width: Number
-    }],
     startPosition: {x, y},
     startAngle: Number,
     bounds: {minX, minY, maxX, maxY},
     totalArcLength: Number,
-    seed: String,
-    numLaps: Number               // 3 for race, 1 for time trial
+    totalSamples: Number,         // centerPoints.length
+    seed: String
 }
 ```
 
@@ -528,18 +464,16 @@ All colors drawn from the gamification system's space theme palette:
 | Track edge (primary) | Cyan Glow | `#2ce8f5` | Inner neon edge line |
 | Track edge (outer glow) | Cyan Glow dim | `#0a8ea0` | Outer wider glow line |
 | Track surface | Deep Space | `#141428` at 70% opacity | Semi-transparent track fill |
-| Ship body | Star White | `#e8e8ff` | Main ship fill |
-| Ship edge | Cyan Glow | `#2ce8f5` | Ship outline |
-| Ship glow | Cyan Glow light | `#b0f8ff` at 30% | ADD blend aura |
-| Engine trail | Cyan gradient | `#2ce8f5` -> `#0a8ea0` | Fading particle trail |
-| Retro-thrust trail | Orange | `#f77622` | Smaller, forward-facing particles |
-| Boost effect | Orange -> Gold | `#f77622` -> `#d4a017` | Stretched speed particles |
+| Ship body (default) | Purple-slate | `#505080` | Config-driven body fill (see 4.10) |
+| Ship edge (default) | Cyan Glow | `#2ce8f5` | Config-driven outline + glow (see 4.10) |
+| Ship cockpit (default) | Cyan Glow | `#2ce8f5` at 50% | Config-driven cockpit window (see 4.10) |
+| Engine trail | Config `trailColor` | Default `#2ce8f5` | Config-driven, fading particle trail |
+| Retro-thrust trail | Config `brakeColor` | Default `#f5602c` | Config-driven, paired with trailColor per skin |
 | Off-track sparks | Red | `#e43b44` | Short-lived sparks |
 | Ghost ship | Void Purple | `#6b2fa0` at 40% opacity | Semi-transparent |
 | Checkpoint gate | Neon Green | `#40e850` | Pulsing gate line |
 | Checkpoint (crossed) | Star White dim | `#e8e8ff` at 20% | Faded after crossing |
 | Start/finish line | Gold | `#d4a017` | Brighter, wider than checkpoints |
-| Boost pad arrows | Orange | `#f77622` | Glowing directional arrows |
 | Background base | Deepest Space | `#0a0a14` | Canvas background color |
 | Starfield (far) | Neutral dim | `#3a3a5c` at 20-40% | Tiny dots, slow parallax |
 | Starfield (mid) | Neutral | `#6b6b8d` at 30-60% | Medium dots |
@@ -567,13 +501,19 @@ Ship vertices (pointing right, angle = 0):
 
 These form a sleek arrow/chevron shape. The notch at the back represents the engine bay.
 
-**Rendering layers** (back to front):
-1. **Glow layer**: Same vertices scaled up 1.3x, filled with ship glow color, blend mode ADD. Creates a soft aura.
-2. **Body layer**: Filled with ship body color (`#e8e8ff`), 90% opacity.
-3. **Edge layer**: Stroked with ship edge color (`#2ce8f5`), 2px line width.
-4. **Engine glow** (when thrusting): Small circle at the engine bay position, orange/cyan gradient, pulsing.
+**Rendering layers** (back to front, all on the same Graphics object):
+1. **Glow**: Outline stroke at width 3, primaryColor at 30% alpha. Soft bloom for visual presence.
+2. **Body fill**: Solid polygon fill with accentColor at 100% alpha. Must contrast with track background (`#0a0a14`).
+3. **Cockpit window**: Diamond shape near the nose, cockpitColor at 50% fill + 90% edge. The ship's most distinctive interior detail.
+4. **Edge stroke**: Outline at width 2, primaryColor at 100% alpha. Defines the ship's shape.
+5. **Thrust flame** (when thrusting): Flickering triangle at engine bay with random length. Outer flame in primaryColor, inner core in white.
+6. **Brake indicator** (when braking): Small triangle at nose, orange (`#f5602c`).
+
+All colors are config-driven (see Section 4.10 for customization points).
 
 The ship's Graphics object is rotated to match `ship.rotation` each frame.
+
+**Off-track feedback**: When the ship leaves the track, the edge stroke and glow alpha oscillate at 8Hz (sine wave), creating a "signal interference" flicker. This is palette-independent: it modulates brightness, not hue, so it works with every color preset. The flicker is complemented by off-track spark particles (Section 4.5) for strong multi-layered feedback.
 
 ### 4.3 Track Surface & Neon Edge Lines
 
@@ -605,49 +545,39 @@ Star positions are generated from the track seed (deterministic). Each layer is 
 
 ### 4.5 Particle Systems
 
-All particles use Phaser's built-in particle emitter system.
+All particles use Phaser 3.60+'s built-in `ParticleEmitter` system. A single 8x8 white circle texture (`shipParticle`) is generated programmatically once and shared by all three emitters. Each emitter uses `tintFill: true` to replace the white with its color while preserving the circle's alpha shape.
 
 **Engine trail** (emitted when thrusting):
-- Spawn point: ship's engine bay position (back of ship)
+- Spawn point: ship's engine bay position (ship-local -6*s, 0)
 - Direction: opposite to ship facing (+/- 15 degrees spread)
 - Speed: 50-100 px/s
 - Lifespan: 300-500ms
-- Size: 3px start, 0px end (shrink to nothing)
-- Color: `#2ce8f5` -> `#0a8ea0` (cyan fade)
+- Scale: 0.4 start, 0 end (shrink to nothing)
+- Color: config `trailColor` (default cyan `#2ce8f5`)
 - Blend mode: ADD
-- Rate: 30 particles/second while thrusting
+- Frequency: 33ms (~30 particles/second while thrusting)
 - Max particles: 60
 
 **Retro-thrust particles** (emitted when braking):
-- Spawn point: ship's nose
+- Spawn point: ship's nose (ship-local 16*s, 0)
 - Direction: ship's facing direction (+/- 20 degrees)
 - Speed: 30-60 px/s
 - Lifespan: 200-300ms
-- Size: 2px start, 0px end
-- Color: `#f77622` (orange)
+- Scale: 0.3 start, 0 end
+- Color: config `brakeColor` (default orange-red `#f5602c`)
 - Blend mode: ADD
-- Rate: 20 particles/second while braking
+- Frequency: 50ms (~20 particles/second while braking)
 - Max particles: 30
 
-**Boost activation** (burst on boost pad hit):
+**Off-track sparks** (emitted while off-track and speed > 50 px/s):
 - Spawn point: ship center
-- Direction: all directions (360 degree burst)
-- Speed: 100-200 px/s
-- Lifespan: 400-600ms
-- Size: 4px start, 0px end
-- Color: `#f77622` -> `#d4a017` (orange to gold)
-- Blend mode: ADD
-- Count: 20 particles (single burst)
-
-**Off-track sparks** (emitted while off-track and moving):
-- Spawn point: ship edges (random around ship radius)
-- Direction: random, biased opposite to velocity
+- Direction: 120-degree cone opposite to velocity
 - Speed: 80-150 px/s
 - Lifespan: 150-250ms
-- Size: 2px, no shrink
-- Color: `#e43b44` (red)
+- Scale: 0.3, no shrink (sharp cutoff)
+- Color: `#e43b44` (red, palette-independent)
 - Blend mode: NORMAL
-- Rate: proportional to speed (faster = more sparks)
+- Rate: proportional to speed (frequency 50ms at low speed, 25ms at max speed)
 - Max particles: 40
 
 **Checkpoint crossing flash** (burst when crossing a checkpoint):
@@ -707,7 +637,43 @@ Uncrossed checkpoints pulse gently to draw attention:
 
 After crossing: dots shrink to 2px, opacity drops to 0.15, line disappears. The checkpoint is "used up."
 
-### 4.10 Screen Vignette
+### 4.10 Ship Customization Points
+
+The ship's visual identity is broken into four customization categories. Each category maps to one or more config properties that a skin overrides. The rendering code reads all colors from `this.config`, so applying a skin is just passing a different config object to the Ship constructor.
+
+| # | Category | Config Properties | What It Controls |
+|---|----------|-------------------|------------------|
+| 1 | **Ship Body** | `accentColor` + vertex shape | Body fill color AND ship silhouette shape. These are paired because a body type defines both its polygon vertices and its base color. Different body types can have different cockpit/detail geometry built into their vertex array. |
+| 2 | **Outline / Glow** | `primaryColor` | The neon edge stroke and the glow bloom around the ship. This is the ship's most visible color at a distance. |
+| 3 | **Cockpit Detail** | `cockpitColor` | The diamond window near the nose. Paired with the body type since different ship shapes may have different cockpit geometry. |
+| 4 | **Engine Trail** | `trailColor` | Thrust flame color and engine trail particle tint. Visible when thrusting. |
+| 5 | **Brake Trail** | `brakeColor` | Brake indicator flame color and retro-thrust particle tint. Paired with `trailColor` per skin so thrust and brake are visually distinct but harmonious. |
+
+**Off-track warning** uses alpha flicker (see Section 4.2), not color changes. This is intentionally palette-independent so it works with every skin.
+
+**Off-track sparks** use hardcoded red (`#e43b44`) regardless of skin. They're a track-state indicator, not ship identity.
+
+**Skin structure** (future):
+```javascript
+{
+    name: 'Nebula Runner',
+    body: {
+        vertices: SHIP_VERTICES_ALT_1,  // Different silhouette
+        accentColor: 0x604080,
+        cockpitColor: 0xb060ff,
+        cockpitVertices: [...],          // Optional custom cockpit shape
+    },
+    outline: {
+        primaryColor: 0xb060ff,
+    },
+    trail: {
+        trailColor: 0xb060ff,            // Engine trail + thrust flame
+        brakeColor: 0xe84040,            // Brake trail + brake indicator
+    },
+}
+```
+
+### 4.11 Screen Vignette
 
 A subtle darkening around the screen edges:
 - Radial gradient overlay on the UI layer
@@ -730,7 +696,6 @@ A subtle darkening around the screen edges:
 - Background: `#141428` (Deep Space 2) with 1px border of `#3a3a5c` (Neutral Dark)
 - Fill: Linear gradient from `#0a8ea0` (left) to `#2ce8f5` (right)
 - Fill width proportional to `currentSpeed / MAX_SPEED`
-- When boosted: fill extends beyond bar (overflow glow effect), color shifts to orange/gold gradient
 
 **Label**: "SPD" text above the bar, 10px, `#6b6b8d` (Neutral Mid)
 
@@ -1055,9 +1020,8 @@ playback(elapsedMs) {
 
 ```javascript
 function lerpAngle(a, b, t) {
-    let diff = b - a;
-    while (diff > Math.PI) diff -= 2 * Math.PI;
-    while (diff < -Math.PI) diff += 2 * Math.PI;
+    const raw = b - a;
+    const diff = ((raw + Math.PI) % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI) - Math.PI;
     return a + diff * t;
 }
 ```
@@ -1129,9 +1093,10 @@ if (speed > MIN_SPEED) {
     targetY = ship.y + Math.sin(ship.rotation) * LOOK_AHEAD_DISTANCE * 0.3;
 }
 
-// Smooth interpolation
-camera.scrollX += (targetX - camera.scrollX - DESIGN_WIDTH/2) * CAMERA_SMOOTHING;
-camera.scrollY += (targetY - camera.scrollY - DESIGN_HEIGHT/2) * CAMERA_SMOOTHING;
+// Smooth interpolation (use setScroll for Phaser's internal dirty-flag system)
+const newX = camera.scrollX + (targetX - camera.scrollX - DESIGN_WIDTH/2) * CAMERA_SMOOTHING;
+const newY = camera.scrollY + (targetY - camera.scrollY - DESIGN_HEIGHT/2) * CAMERA_SMOOTHING;
+camera.setScroll(newX, newY);
 ```
 
 **Why velocity-based**: With space physics, the ship often faces a very different direction than it's moving. A facing-based camera would swing wildly as the player rotates. Velocity-based look-ahead shows what's actually coming up, making gameplay much more readable.
@@ -1165,7 +1130,6 @@ Minimal procedural sounds for the prototype:
 | Checkpoint ding | Crossing a checkpoint | 100ms | Sine wave, ascending 660->880Hz |
 | Finish fanfare | Race complete | 500ms | Chord: C5-E5-G5 arpeggio |
 | Engine hum | While thrusting | Continuous | Sawtooth oscillator, 80-160Hz (pitch = speed) |
-| Boost whoosh | Boost pad hit | 300ms | White noise, band-pass filtered, sweeping down |
 | Off-track crunch | While off-track | Continuous (looped) | Low rumble, 40Hz sine + white noise at low volume |
 
 ### 9.2 Web Audio API Procedural Sounds
@@ -1235,17 +1199,16 @@ updateEngineSound(speedRatio) {
 | Radius variance | Higher = more irregular shape | 0.6-1.4 multiplier |
 | Angular perturbation | Higher = sharper unexpected turns | 0.15-0.35 rad |
 | Track width range | Narrower min = tighter corners | 70-120 px min, 180-240 px max |
-| Boost pad count | Fewer pads = less speed assistance | 2-5 |
 | Base radius | Larger = longer track = longer race | 600-1200 px |
 
 ### 10.2 Track Personality Types
 
 The seed deterministically creates a "personality" for each track. While not explicitly categorized, tracks naturally fall into types based on the random parameters:
 
-- **The Oval**: Low control point count, low variance. Fast, high-speed, few sharp turns. Time is won on optimal boost usage and smooth lines.
+- **The Oval**: Low control point count, low variance. Fast, high-speed, few sharp turns. Time is won on smooth racing lines and momentum management.
 - **The Pretzel**: High point count, high angular perturbation. Lots of twists and hairpins. Rewards rotation management and braking discipline.
 - **The Squeeze**: Normal shape but very narrow sections. Technical, punishes going off-track. Precision over speed.
-- **The Highway**: Wide track with gentle curves. Very fast, few tight spots. Boost pad placement is critical.
+- **The Highway**: Wide track with gentle curves. Very fast, few tight spots. Tests top-speed management and racing line discipline.
 - **The Maze**: High point count, high variance, narrow. The hardest type. Requires mastery of space physics to navigate.
 
 These emerge naturally from the parametric generation, not explicit selection.
@@ -1347,7 +1310,6 @@ If frame rate drops below 30fps: reduce particle count, simplify starfield layer
 | 3-lap race | `race` | Race |
 | Ghost replay | `ghost` | Ghost |
 | Personal best | `personalBest` / `pb` | Personal Best / PB |
-| Boost pad | `boostPad` | Boost |
 | Checkpoint | `checkpoint` | Sector |
 | Off-track | `offTrack` | Off Course |
 
@@ -1356,7 +1318,7 @@ If frame rate drops below 30fps: reduce particle count, simplify starfield layer
 These are documented for future reference but are NOT part of the prototype scope:
 
 1. **Obstacles** (asteroids, debris): Placed on wider track sections. Circular collision with the ship. Hitting one = speed penalty + knockback.
-2. **Ship customization**: Color selection, shape variants (earned via gamification progression).
+2. **Ship customization**: Skin system driven by the customization points defined in Section 4.10.
 3. **Power-ups**: Shield (absorbs one obstacle hit), nitro (extended boost), magnet (pulls toward track center).
 4. **Dynamic weather**: Solar flares (screen effects + drift increase), nebula (reduced visibility), asteroid belt (moving obstacles).
 5. **Lap records by sector**: Track each sector time separately for detailed analysis.
