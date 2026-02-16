@@ -128,6 +128,9 @@ urlpatterns = [
     path('contact/', ContactView.as_view(), name='contact'),
     path('beta-access/', TemplateView.as_view(template_name='pages/beta_access_required.html'), name='beta_access_required'),
 
+    # Arcade (mini-games)
+    path('arcade/stellar-circuit/', TemplateView.as_view(template_name='minigames/stellar-circuit.html'), name='stellar_circuit'),
+
     path('users/', include('users.urls')),
     path('accounts/', include('allauth.urls')),
     path('api/v1/', include('api.urls')),

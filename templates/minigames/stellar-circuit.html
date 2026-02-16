@@ -1,0 +1,140 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Stellar Circuit{% endblock %}
+{% block meta_description %}Stellar Circuit: A top-down space racer. Pilot your spacecraft through procedurally generated circuits in the void of space.{% endblock %}
+
+{% block extra_head %}
+<style>
+    /*
+     * Game page overrides:
+     * - Remove content padding so the game canvas stretches full width
+     * - Hide ad sidebars so the game has maximum horizontal space
+     * - Set a deep space background that matches the Phaser canvas color
+     *   so there's no visual seam between the page and the game
+     */
+    #main-content {
+        max-width: 100% !important;
+        padding: 0 !important;
+    }
+    /* Hide the left and right ad sidebars */
+    .flex-1 > aside {
+        display: none !important;
+    }
+
+    /*
+     * Game wrapper: centers the Phaser canvas on the page.
+     * The deep space background (#0a0a14) matches what Phaser renders,
+     * creating a seamless look even before the game loads.
+     */
+    #game-wrapper {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        width: 100%;
+        min-height: 500px;
+        background: #0a0a14;
+    }
+
+    /*
+     * Phaser canvas container: Phaser's Scale Manager (FIT mode) will
+     * create a <canvas> element inside this div and scale it proportionally
+     * to fill the available space while maintaining 16:9 aspect ratio.
+     *
+     * max-width: 1280px keeps the game from stretching too wide on
+     * ultra-wide monitors (matching our design resolution).
+     */
+    #phaser-canvas {
+        width: 100%;
+        max-width: 1280px;
+    }
+
+    /*
+     * Loading indicator: shown while Phaser scripts are loading.
+     * Once the game boots, Phaser replaces the contents of #phaser-canvas.
+     */
+    #game-loading {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        height: 400px;
+        color: #6b6b8d;
+        font-family: 'Poppins', sans-serif;
+        gap: 16px;
+    }
+    #game-loading .loading-text {
+        font-size: 14px;
+        letter-spacing: 2px;
+        text-transform: uppercase;
+    }
+    #game-loading .loading-bar {
+        width: 200px;
+        height: 4px;
+        background: #141428;
+        border-radius: 2px;
+        overflow: hidden;
+    }
+    #game-loading .loading-bar-fill {
+        height: 100%;
+        width: 30%;
+        background: linear-gradient(90deg, #0a8ea0, #2ce8f5);
+        border-radius: 2px;
+        animation: loading-slide 1.5s ease-in-out infinite;
+    }
+    @keyframes loading-slide {
+        0% { transform: translateX(-100%); }
+        100% { transform: translateX(400%); }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div id="game-wrapper">
+    <div id="phaser-canvas">
+        <!-- This loading indicator is visible while scripts load.
+             Phaser's Scale Manager will inject the <canvas> here,
+             replacing this content. -->
+        <div id="game-loading">
+            <div class="loading-text">Initializing Stellar Circuit</div>
+            <div class="loading-bar">
+                <div class="loading-bar-fill"></div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block js_scripts %}
+<!--
+  Script loading order matters:
+  1. Phaser framework (must be first, everything depends on it)
+  2. Core game utilities (Shell, Input - shared across all future mini-games)
+  3. Driver game modules (track generator, ship, HUD, ghost)
+  4. Scene definitions (menu, race, results)
+  5. Entry point (creates the Phaser game instance, must be last)
+
+  NOTE: We do NOT call PlatPursuit.ZoomScaler.init() on this page.
+  Phaser has its own Scale Manager that handles canvas sizing independently.
+  The ZoomScaler's CSS transforms would conflict with Phaser's coordinate system.
+-->
+<script defer src="{% static 'vendor/phaser.min.js' %}"></script>
+
+<!-- Core (shared across all mini-games) -->
+<script defer src="{% static 'js/games/core/game-shell.js' %}"></script>
+<script defer src="{% static 'js/games/core/game-input.js' %}"></script>
+
+<!-- Driver: Stellar Circuit modules -->
+<script defer src="{% static 'js/games/driver/track-generator.js' %}"></script>
+<script defer src="{% static 'js/games/driver/ship.js' %}"></script>
+<script defer src="{% static 'js/games/driver/hud.js' %}"></script>
+<script defer src="{% static 'js/games/driver/ghost.js' %}"></script>
+
+<!-- Driver: Scenes -->
+<script defer src="{% static 'js/games/driver/scenes/menu-scene.js' %}"></script>
+<script defer src="{% static 'js/games/driver/scenes/race-scene.js' %}"></script>
+<script defer src="{% static 'js/games/driver/scenes/results-scene.js' %}"></script>
+
+<!-- Driver: Entry point (must be last) -->
+<script defer src="{% static 'js/games/driver/stellar-circuit.js' %}"></script>
+{% endblock %}
