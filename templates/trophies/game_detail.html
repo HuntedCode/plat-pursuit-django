@@ -1,6 +1,9 @@
 {% extends 'base.html' %}
 {% load custom_filters humanize static %}
 {% block title %}{{ game.title_name }}{% endblock %}
+{% block og_image %}{% if game.image_url %}{{ game.image_url }}{% else %}{% static 'images/logo.png' %}{% endif %}{% endblock %}
+{% block twitter_image %}{% if game.image_url %}{{ game.image_url }}{% else %}{% static 'images/logo.png' %}{% endif %}{% endblock %}
+{% block twitter_card_type %}summary{% endblock %}
 
 {% block content %}
     <div id="game-detail-container"

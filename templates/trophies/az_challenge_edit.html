@@ -12,7 +12,7 @@
             <div class="flex flex-row items-center justify-between gap-4">
                 <div>
                     <div class="flex items-center gap-2">
-                        <h1 class="text-xl lg:text-2xl font-bold" id="challenge-name-display">
+                        <h1 class="text-xl lg:text-2xl font-bold line-clamp-2" id="challenge-name-display">
                             Edit: <span id="challenge-name-text">{{ challenge.name }}</span>
                         </h1>
                         <button type="button" class="btn btn-ghost btn-xs btn-circle opacity-60 hover:opacity-100 transition-opacity"
@@ -23,9 +23,12 @@
                         </button>
                         <div class="hidden items-center gap-2" id="challenge-name-editor">
                             <span class="text-xl lg:text-2xl font-bold">Edit:</span>
-                            <input type="text" id="challenge-name-input"
-                                   class="input input-bordered input-sm text-lg lg:text-xl font-bold max-w-xs lg:max-w-md"
-                                   maxlength="200" value="{{ challenge.name }}" />
+                            <div class="flex flex-col">
+                                <input type="text" id="challenge-name-input"
+                                       class="input input-bordered input-sm text-lg lg:text-xl font-bold max-w-xs lg:max-w-md"
+                                       maxlength="75" value="{{ challenge.name }}" />
+                                <span class="text-xs text-base-content/50 mt-0.5 ml-1" id="rename-counter">{{ challenge.name|length }}/75</span>
+                            </div>
                             <button type="button" class="btn btn-ghost btn-xs btn-circle text-success" id="challenge-name-save-btn" title="Save">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>
                             </button>

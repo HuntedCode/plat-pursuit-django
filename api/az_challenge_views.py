@@ -147,7 +147,7 @@ class AZChallengeCreateAPIView(APIView):
             if error:
                 return error
 
-            name = (request.data.get('name') or 'My A-Z Challenge').strip()[:200]
+            name = (request.data.get('name') or 'My A-Z Challenge').strip()[:75]
             if not name:
                 name = 'My A-Z Challenge'
 
@@ -215,7 +215,7 @@ class AZChallengeUpdateAPIView(APIView):
 
             name = request.data.get('name')
             if name is not None:
-                name = name.strip()[:200]
+                name = name.strip()[:75]
                 if name:
                     challenge.name = name
                     update_fields.append('name')

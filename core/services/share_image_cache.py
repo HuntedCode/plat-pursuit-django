@@ -1,6 +1,7 @@
 import uuid
 import hashlib
 import time
+import random
 import base64
 import logging
 import threading
@@ -36,6 +37,12 @@ class ShareImageCache:
         """Generate a deterministic filename from a URL using MD5 hash."""
         url_hash = hashlib.md5(url.encode()).hexdigest()
         return f"{url_hash}{ext}"
+
+    @staticmethod
+    def _maybe_cleanup():
+        """Opportunistic cleanup: ~2% chance per fetch, runs in-process on the web server."""
+        if random.random() < 0.02:
+            ShareImageCache.cleanup(max_age_seconds=14400)
 
     @staticmethod
     def fetch_and_cache(url):
@@ -117,6 +124,7 @@ class ShareImageCache:
             with ShareImageCache._url_cache_lock:
                 ShareImageCache._url_cache[url] = (serve_path, time.time())
 
+            ShareImageCache._maybe_cleanup()
             return serve_path
 
         except requests.RequestException as e:

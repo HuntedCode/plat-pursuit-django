@@ -313,10 +313,15 @@ window.PlatPursuit.Games.Driver = window.PlatPursuit.Games.Driver || {};
             // ---------------------------------------------------------------
             // Graphics Objects
             // ---------------------------------------------------------------
-            // Velocity indicator is created FIRST so it renders behind
-            // the ship body (Phaser creation order = render order).
+            // Velocity indicator renders behind ship body, ship body
+            // renders behind particles. Depth values enforce this
+            // regardless of creation order (important for ESC track
+            // regeneration, where the new track Graphics is created
+            // after these objects already exist).
             this.velGraphics = scene.add.graphics();
+            this.velGraphics.setDepth(10);
             this.shipGraphics = scene.add.graphics();
+            this.shipGraphics.setDepth(11);
 
             // ---------------------------------------------------------------
             // Particle Emitters
@@ -324,10 +329,7 @@ window.PlatPursuit.Games.Driver = window.PlatPursuit.Games.Driver || {};
             // Three emitters for visual feedback: engine trail (thrust),
             // retro-thrust (brake), and off-track sparks. All share a
             // single white circle texture that each emitter tints.
-            //
-            // Created AFTER ship graphics so particles render ON TOP of
-            // the ship body. This is correct: particles fly away from the
-            // ship, so they should layer above it.
+            // Depth 12 places them above the ship body.
             this.createParticleEmitters();
         }
 
@@ -443,6 +445,12 @@ window.PlatPursuit.Games.Driver = window.PlatPursuit.Games.Driver || {};
                 maxParticles: 40,
                 emitting: false,
             });
+
+            // Set depth on all emitters so they render above the ship body
+            // regardless of creation order (same reason as Graphics depth).
+            this.engineEmitter.setDepth(12);
+            this.brakeEmitter.setDepth(12);
+            this.sparkEmitter.setDepth(12);
         }
 
         // ===================================================================

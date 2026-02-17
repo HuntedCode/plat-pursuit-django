@@ -196,7 +196,7 @@ class AZChallengeCreateView(LoginRequiredMixin, ProfileHotbarMixin, TemplateView
 
     def post(self, request):
         profile = request.user.profile
-        name = (request.POST.get('name') or 'My A-Z Challenge').strip()[:200]
+        name = (request.POST.get('name') or 'My A-Z Challenge').strip()[:75]
         if not name:
             name = 'My A-Z Challenge'
 

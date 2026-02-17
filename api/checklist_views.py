@@ -1313,7 +1313,7 @@ class SectionImageUploadView(APIView):
     permission_classes = [IsAuthenticated]
     parser_classes = [MultiPartParser, FormParser]
 
-    @method_decorator(ratelimit(key='user', rate='10/h', method='POST', block=True))
+    @method_decorator(ratelimit(key='user', rate='30/h', method='POST', block=True))
     def post(self, request, section_id):
         """POST /api/v1/checklists/sections/<id>/image/"""
         try:
@@ -1365,7 +1365,7 @@ class ItemImageCreateView(APIView):
     permission_classes = [IsAuthenticated]
     parser_classes = [MultiPartParser, FormParser]
 
-    @method_decorator(ratelimit(key='user', rate='20/h', method='POST', block=True))
+    @method_decorator(ratelimit(key='user', rate='60/h', method='POST', block=True))
     def post(self, request, section_id):
         """POST /api/v1/checklists/sections/<id>/items/image/"""
         try:

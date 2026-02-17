@@ -123,7 +123,7 @@ def _increment_parent_view_count(page_type, object_id):
         elif page_type == 'game':
             from trophies.models import Game
             Game.objects.filter(id=int(object_id)).update(view_count=F('view_count') + 1)
-        elif page_type == 'checklist':
+        elif page_type == 'guide':
             from trophies.models import Checklist
             Checklist.objects.filter(id=int(object_id)).update(view_count=F('view_count') + 1)
         elif page_type == 'badge':
@@ -151,7 +151,7 @@ def track_page_view(page_type, object_id, request):
     Session identified by analytics_session_id (set by AnalyticsSessionMiddleware).
 
     Args:
-        page_type: One of 'profile', 'game', 'checklist', 'badge', 'game_list', 'index', etc.
+        page_type: One of 'profile', 'game', 'guide', 'badge', 'game_list', 'index', etc.
         object_id: The object's identifier (int PK for profile/game/checklist/game_list, series_slug str for badge, 'home' for index)
         request: Django HttpRequest object
     """

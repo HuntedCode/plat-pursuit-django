@@ -109,11 +109,18 @@ class DeferredNotificationService:
                 cache.delete(key)
                 return
 
-            # Fetch fresh ProfileGame data for accurate stats
+            # Fetch fresh ProfileGame data for date/duration stats
             profile_game = ProfileGame.objects.filter(
                 profile=profile,
                 game=game
             ).first()
+
+            # Compute trophy counts fresh from EarnedTrophy records
+            # (ProfileGame.earned_trophies_count is stale at this point - not updated until _job_sync_complete)
+            earned_trophy_qs = EarnedTrophy.objects.filter(profile=profile, trophy__game=game)
+            fresh_earned_count = earned_trophy_qs.filter(earned=True).count()
+            fresh_total_count = earned_trophy_qs.count()
+            fresh_progress = round((fresh_earned_count / fresh_total_count) * 100) if fresh_total_count > 0 else 0
 
             # Count user's total platinums (including this one)
             total_plats = EarnedTrophy.objects.filter(
@@ -156,9 +163,9 @@ class DeferredNotificationService:
                 'first_played_date_time': profile_game.first_played_date_time.isoformat() if profile_game and profile_game.first_played_date_time else None,
                 'last_played_date_time': profile_game.last_played_date_time.isoformat() if profile_game and profile_game.last_played_date_time else None,
                 'play_duration_seconds': profile_game.play_duration.total_seconds() if profile_game and profile_game.play_duration else None,
-                'earned_trophies_count': profile_game.earned_trophies_count if profile_game else 0,
-                'total_trophies_count': profile_game.total_trophies if profile_game else 0,
-                'progress_percentage': profile_game.progress if profile_game else 0,
+                'earned_trophies_count': fresh_earned_count,
+                'total_trophies_count': fresh_total_count,
+                'progress_percentage': fresh_progress,
                 'user_total_platinums': total_plats,
                 'user_avatar_url': profile.avatar_url or '',
                 'earned_date_time': data["earned_date_time"],

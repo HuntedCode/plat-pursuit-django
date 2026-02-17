@@ -86,14 +86,20 @@ function _bindInlineRename(challengeId, onRenamed) {
     const input = document.getElementById('challenge-name-input');
     const saveBtn = document.getElementById('challenge-name-save-btn');
     const cancelBtn = document.getElementById('challenge-name-cancel-btn');
+    const renameCounter = document.getElementById('rename-counter');
 
     if (!editBtn || !editor || !input || !saveBtn || !cancelBtn) return;
+
+    function updateCounter() {
+        if (renameCounter) renameCounter.textContent = `${input.value.length}/75`;
+    }
 
     let originalName = nameText ? nameText.textContent.trim() : input.value.trim();
     let isSaving = false;
 
     function openEditor() {
         input.value = originalName;
+        updateCounter();
         display.classList.add('hidden');
         editBtn.classList.add('hidden');
         editor.classList.remove('hidden');
@@ -172,6 +178,7 @@ function _bindInlineRename(challengeId, onRenamed) {
         if (e.key === 'Enter') { e.preventDefault(); saveName(); }
         else if (e.key === 'Escape') { e.preventDefault(); closeEditor(); }
     });
+    input.addEventListener('input', updateCounter);
 }
 
 // ─── Shared Filter State ─────────────────────────────────────────────────────

@@ -164,6 +164,12 @@ class ChecklistDetailView(ProfileHotbarMixin, DetailView):
         if checklist.concept and checklist.concept.bg_url:
             context['image_urls'] = {'bg_url': checklist.concept.bg_url}
 
+        # OG image: prefer checklist thumbnail, fall back to game image
+        if checklist.thumbnail:
+            context['og_image_url'] = self.request.build_absolute_uri(checklist.thumbnail.url)
+        elif context['game'] and context['game'].image_url:
+            context['og_image_url'] = context['game'].image_url
+
         # Comment section context
         context['guidelines_agreed'] = profile.guidelines_agreed if profile else False
 

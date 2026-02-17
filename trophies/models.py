@@ -2551,7 +2551,7 @@ class Challenge(models.Model):
 
     profile = models.ForeignKey(Profile, on_delete=models.CASCADE, related_name='challenges')
     challenge_type = models.CharField(max_length=30, choices=CHALLENGE_TYPES, db_index=True)
-    name = models.CharField(max_length=200)
+    name = models.CharField(max_length=75)
     description = models.TextField(blank=True, default='')
 
     # Progress (meaning varies by type — for AZ: X/26)
