@@ -46,8 +46,9 @@ class NotificationListView(APIView):
             # Parse query parameters
             unread_only = request.GET.get('unread_only', 'false').lower() == 'true'
             notification_type = request.GET.get('type', '')
-            limit = min(int(request.GET.get('limit', 10)), 50)  # Cap at 50
-            offset = int(request.GET.get('offset', 0))
+            from api.utils import safe_int
+            limit = min(safe_int(request.GET.get('limit', 10), 10), 50)
+            offset = max(0, min(safe_int(request.GET.get('offset', 0)), 10000))
 
             # Get notifications using service
             notifications, total_count = NotificationService.get_user_notifications(
@@ -185,6 +186,14 @@ class AdminSendNotificationView(APIView):
                     status=http_status.HTTP_400_BAD_REQUEST
                 )
 
+            # Validate notification_type against allowed choices
+            valid_types = [t[0] for t in Notification.NOTIFICATION_TYPES]
+            if notification_type not in valid_types:
+                return Response(
+                    {'error': f'Invalid notification type. Must be one of: {", ".join(valid_types)}'},
+                    status=http_status.HTTP_400_BAD_REQUEST
+                )
+
             # Validate title and message length
             if len(title) > 255:
                 return Response(
@@ -252,7 +261,7 @@ class AdminSendNotificationView(APIView):
         except Exception as e:
             logger.exception(f"Error sending admin notification: {e}")
             return Response(
-                {'error': f'Failed to send notifications: {str(e)}'},
+                {'error': 'Failed to send notifications. Please try again or check the server logs.'},
                 status=http_status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
@@ -457,9 +466,12 @@ class NotificationShareImageView(APIView):
         ).first()
 
         if share_image:
-            # Increment download count
-            share_image.download_count += 1
-            share_image.save(update_fields=['download_count'])
+            # Increment download count atomically
+            from django.db.models import F
+            PlatinumShareImage.objects.filter(id=share_image.id).update(
+                download_count=F('download_count') + 1
+            )
+            share_image.refresh_from_db(fields=['download_count'])
 
             return Response({
                 'url': share_image.image.url,
@@ -558,7 +570,28 @@ class NotificationShareImageHTMLView(APIView):
                 status=http_status.HTTP_400_BAD_REQUEST
             )
 
-        # Extract metadata
+        context = self._build_share_context(request, notification, format_type)
+
+        # Render the template
+        html = render_to_string('notifications/partials/share_image_card.html', context)
+
+        metadata = notification.metadata or {}
+        response_data = {'html': html}
+
+        # Include same-origin URLs for background images
+        if context.get('game_image'):
+            response_data['game_image_base64'] = context['game_image']
+
+        concept_bg_url = metadata.get('concept_bg_url', '')
+        if concept_bg_url:
+            concept_bg_cached = ShareImageCache.fetch_and_cache(concept_bg_url)
+            if concept_bg_cached:
+                response_data['concept_bg_base64'] = concept_bg_cached
+
+        return Response(response_data)
+
+    def _build_share_context(self, request, notification, format_type):
+        """Build template context for share image card. Used by both HTML and PNG views."""
         metadata = notification.metadata or {}
 
         # Calculate playtime string
@@ -569,10 +602,7 @@ class NotificationShareImageHTMLView(APIView):
                 seconds = float(play_duration_seconds)
                 hours = int(seconds // 3600)
                 minutes = int((seconds % 3600) // 60)
-                if hours > 0:
-                    playtime = f"{hours}h {minutes}m"
-                else:
-                    playtime = f"{minutes}m"
+                playtime = f"{hours}h {minutes}m" if hours > 0 else f"{minutes}m"
             except (ValueError, TypeError):
                 pass
 
@@ -584,7 +614,7 @@ class NotificationShareImageHTMLView(APIView):
             except (ValueError, TypeError):
                 earn_rate = None
 
-        # Cache external images as same-origin temp files (fixes iOS Safari intermittent failures with data URIs)
+        # Cache external images as same-origin temp files
         game_image_url = metadata.get('game_image', '')
         trophy_icon_url = metadata.get('trophy_icon_url', '')
 
@@ -596,20 +626,16 @@ class NotificationShareImageHTMLView(APIView):
         if trophy_icon_url and not trophy_icon_data:
             logger.warning(f"[SHARE] Failed to cache trophy icon: {trophy_icon_url}")
 
-        # Extract badge data - fetch LIVE from database instead of stale metadata
-        # Badge progress is calculated at end of full sync, so metadata may be outdated
+        # Fetch LIVE badge data from database (metadata may be stale)
         badge_xp, tier1_badges = self._get_live_badge_data(request.user.profile, metadata)
         badge_xp = self._to_int(badge_xp)
-
-        # Process badge images - convert to base64 or use default
         processed_badges = self._process_badge_images(tier1_badges)
 
         # Format date strings for display
         first_played_date_time = self._format_date(metadata.get('first_played_date_time'))
         earned_date_time = self._format_date(metadata.get('earned_date_time'))
 
-        # Build context for template
-        context = {
+        return {
             'format': format_type,
             'game_name': metadata.get('game_name', 'Unknown Game'),
             'username': metadata.get('username', 'Player'),
@@ -622,42 +648,17 @@ class NotificationShareImageHTMLView(APIView):
             'rarity_label': metadata.get('rarity_label', ''),
             'earn_rate': earn_rate,
             'playtime': playtime,
-            # Platform and region information
             'title_platform': metadata.get('title_platform', []),
             'region': metadata.get('region', []),
             'is_regional': metadata.get('is_regional', False),
-            # Date information
             'first_played_date_time': first_played_date_time,
             'earned_date_time': earned_date_time,
-            # Yearly platinum stats
             'yearly_plats': self._to_int(metadata.get('yearly_plats', 0)),
             'earned_year': self._to_int(metadata.get('earned_year', 0)),
-            # Badge system data
             'badge_xp': badge_xp,
             'tier1_badges': processed_badges,
-            # User rating data - fetch live from database instead of using stale metadata
             'user_rating': self._get_live_user_rating(request.user.profile, metadata),
         }
-
-        # Render the template
-        html = render_to_string('notifications/partials/share_image_card.html', context)
-
-        # Cache background images as same-origin temp files for JS game art themes
-        concept_bg_url = metadata.get('concept_bg_url', '')
-
-        response_data = {'html': html}
-
-        # Include same-origin URLs for background images
-        # game_image is already cached above, reuse it
-        if game_image_url and game_image_data:
-            response_data['game_image_base64'] = game_image_data
-
-        if concept_bg_url:
-            concept_bg_cached = ShareImageCache.fetch_and_cache(concept_bg_url)
-            if concept_bg_cached:
-                response_data['concept_bg_base64'] = concept_bg_cached
-
-        return Response(response_data)
 
     @staticmethod
     def _to_int(value, default=0):
@@ -844,74 +845,14 @@ class NotificationShareImagePNGView(APIView):
         png_bytes = base64.b64decode(cached) if cached else None
 
         if not png_bytes:
-            # Reuse the existing HTML view's context-building logic
             html_view = NotificationShareImageHTMLView()
-            metadata = notification.metadata or {}
-
-            # Calculate playtime
-            playtime = ''
-            play_duration_seconds = metadata.get('play_duration_seconds')
-            if play_duration_seconds:
-                try:
-                    seconds = float(play_duration_seconds)
-                    hours = int(seconds // 3600)
-                    minutes = int((seconds % 3600) // 60)
-                    playtime = f"{hours}h {minutes}m" if hours > 0 else f"{minutes}m"
-                except (ValueError, TypeError):
-                    pass
-
-            # Format earn rate
-            earn_rate = metadata.get('trophy_earn_rate')
-            if earn_rate:
-                try:
-                    earn_rate = round(float(earn_rate), 2)
-                except (ValueError, TypeError):
-                    earn_rate = None
-
-            # Cache images as local temp files (renderer embeds as base64 data URIs)
-            game_image_url = metadata.get('game_image', '')
-            trophy_icon_url = metadata.get('trophy_icon_url', '')
-
-            game_image_data = ShareImageCache.fetch_and_cache(game_image_url)
-            trophy_icon_data = ShareImageCache.fetch_and_cache(trophy_icon_url)
-
-            # Get live badge data
-            badge_xp, tier1_badges = html_view._get_live_badge_data(request.user.profile, metadata)
-            badge_xp = html_view._to_int(badge_xp)
-            processed_badges = html_view._process_badge_images(tier1_badges)
-
-            first_played_date_time = html_view._format_date(metadata.get('first_played_date_time'))
-            earned_date_time = html_view._format_date(metadata.get('earned_date_time'))
-
-            context = {
-                'format': format_type,
-                'game_name': metadata.get('game_name', 'Unknown Game'),
-                'username': metadata.get('username', 'Player'),
-                'total_plats': html_view._to_int(metadata.get('user_total_platinums', 0)),
-                'progress': html_view._to_int(metadata.get('progress_percentage', 0)),
-                'earned_trophies': html_view._to_int(metadata.get('earned_trophies_count', 0)),
-                'total_trophies': html_view._to_int(metadata.get('total_trophies_count', 0)),
-                'game_image': game_image_data,
-                'trophy_icon': trophy_icon_data,
-                'rarity_label': metadata.get('rarity_label', ''),
-                'earn_rate': earn_rate,
-                'playtime': playtime,
-                'title_platform': metadata.get('title_platform', []),
-                'region': metadata.get('region', []),
-                'is_regional': metadata.get('is_regional', False),
-                'first_played_date_time': first_played_date_time,
-                'earned_date_time': earned_date_time,
-                'yearly_plats': html_view._to_int(metadata.get('yearly_plats', 0)),
-                'earned_year': html_view._to_int(metadata.get('earned_year', 0)),
-                'badge_xp': badge_xp,
-                'tier1_badges': processed_badges,
-                'user_rating': html_view._get_live_user_rating(request.user.profile, metadata),
-            }
+            context = html_view._build_share_context(request, notification, format_type)
 
             html = render_to_string('notifications/partials/share_image_card.html', context)
 
             # Resolve game image paths for game art themes
-            game_image_path = self._resolve_temp_path(game_image_data)
+            game_image_path = self._resolve_temp_path(context.get('game_image'))
+            metadata = notification.metadata or {}
             concept_bg_url = metadata.get('concept_bg_url', '')
             concept_bg_data = ShareImageCache.fetch_and_cache(concept_bg_url) if concept_bg_url else ''
             concept_bg_path = self._resolve_temp_path(concept_bg_data)
@@ -1192,7 +1133,7 @@ class AdminTargetCountView(APIView):
         except Exception as e:
             logger.exception(f"Error getting target count: {e}")
             return Response(
-                {'error': str(e)},
+                {'error': 'Failed to estimate recipient count.'},
                 status=http_status.HTTP_400_BAD_REQUEST
             )
 

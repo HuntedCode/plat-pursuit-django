@@ -23,16 +23,68 @@ from .serializers import (
     SectionImageUploadSerializer, ItemImageCreateSerializer, TrophySerializer, GameSelectionSerializer
 )
 import logging
+from api.utils import safe_int
 
 logger = logging.getLogger('psn_api')
 
 
-def safe_int(value, default=0):
-    """Safely convert a query parameter to int, returning default on failure."""
-    try:
-        return int(value)
-    except (TypeError, ValueError):
-        return default
+def _calculate_adjusted_progress(checklist, profile, progress=None):
+    """Calculate checklist progress including earned trophies.
+
+    Returns a dict with percentage, items_completed, total_items, and completed_items.
+    Returns None if no progress data exists.
+    """
+    from trophies.models import ChecklistItem, EarnedTrophy
+
+    if not profile:
+        return None
+
+    if progress is None:
+        progress = UserChecklistProgress.objects.filter(
+            checklist=checklist, profile=profile
+        ).first()
+
+    completed_items = set(progress.completed_items) if progress else set()
+    earned_trophy_item_ids = set()
+
+    if hasattr(profile, 'is_linked') and profile.is_linked:
+        trophy_items = list(ChecklistItem.objects.filter(
+            section__checklist=checklist,
+            item_type='trophy',
+            trophy_id__isnull=False
+        ).values_list('id', 'trophy_id'))
+
+        if trophy_items:
+            item_to_trophy = {item_id: trophy_id for item_id, trophy_id in trophy_items}
+            trophy_ids = list(item_to_trophy.values())
+
+            earned_trophy_pks = set(
+                EarnedTrophy.objects.filter(
+                    profile=profile,
+                    trophy_id__in=trophy_ids,
+                    earned=True
+                ).values_list('trophy_id', flat=True)
+            )
+
+            earned_trophy_item_ids = {
+                item_id for item_id, trophy_pk in item_to_trophy.items()
+                if trophy_pk in earned_trophy_pks
+            }
+
+    all_completed = completed_items | earned_trophy_item_ids
+    total_items = checklist.total_items or 0
+    items_completed = len(all_completed)
+    percentage = (items_completed / total_items * 100) if total_items > 0 else 0
+
+    if items_completed == 0 and not progress:
+        return None
+
+    return {
+        'percentage': percentage,
+        'items_completed': items_completed,
+        'total_items': total_items,
+        'completed_items': list(completed_items),
+    }
 
 
 class ChecklistListView(APIView):
@@ -74,74 +126,54 @@ class ChecklistListView(APIView):
 
             # If HTML format requested, render cards server-side
             if output_format == 'html':
+                from trophies.models import ProfileGame
+                from django.db.models import Count
+
+                paginated = list(paginated)
+                checklist_ids = [c.id for c in paginated]
+
+                # Batch: voted checklist IDs
+                voted_ids = set()
+                if profile:
+                    voted_ids = set(
+                        ChecklistVote.objects.filter(
+                            checklist_id__in=checklist_ids, profile=profile
+                        ).values_list('checklist_id', flat=True)
+                    )
+
+                # Batch: section counts
+                section_counts = dict(
+                    ChecklistSection.objects.filter(
+                        checklist_id__in=checklist_ids
+                    ).values('checklist_id').annotate(cnt=Count('id')).values_list('checklist_id', 'cnt')
+                )
+
+                # Batch: author platinum status per (profile_id, concept_id)
+                author_plat_keys = set()
+                for cl in paginated:
+                    if cl.concept_id and cl.profile_id:
+                        author_plat_keys.add((cl.profile_id, cl.concept_id))
+
+                author_plat_lookup = {}
+                if author_plat_keys:
+                    from django.db.models import Q as PlatQ
+                    plat_filter = PlatQ()
+                    for pid, cid in author_plat_keys:
+                        plat_filter |= PlatQ(profile_id=pid, game__concept_id=cid)
+                    for row in ProfileGame.objects.filter(plat_filter).order_by('-progress').values_list('profile_id', 'game__concept_id', 'has_plat'):
+                        key = (row[0], row[1])
+                        if key not in author_plat_lookup:
+                            author_plat_lookup[key] = row[2]
+
                 cards_html = []
                 for checklist in paginated:
-                    # Build context for template
-                    user_has_voted = False
-                    user_progress = None
-                    can_edit = False
+                    user_has_voted = checklist.id in voted_ids
+                    can_edit = profile and checklist.profile_id == profile.id
+                    user_progress = _calculate_adjusted_progress(checklist, profile) if profile else None
 
-                    if profile:
-                        user_has_voted = ChecklistVote.objects.filter(checklist=checklist, profile=profile).exists()
-                        progress = UserChecklistProgress.objects.filter(checklist=checklist, profile=profile).first()
-                        can_edit = checklist.profile == profile
-
-                        # Calculate progress including earned trophies
-                        if progress or (hasattr(profile, 'is_linked') and profile.is_linked):
-                            from trophies.models import ChecklistItem, EarnedTrophy
-
-                            # Get manually completed items
-                            completed_items = set(progress.completed_items) if progress else set()
-
-                            # Get earned trophy item IDs
-                            earned_trophy_item_ids = set()
-                            if hasattr(profile, 'is_linked') and profile.is_linked:
-                                trophy_items = ChecklistItem.objects.filter(
-                                    section__checklist=checklist,
-                                    item_type='trophy',
-                                    trophy_id__isnull=False
-                                ).values_list('id', 'trophy_id')
-
-                                if trophy_items:
-                                    item_to_trophy = {item_id: trophy_id for item_id, trophy_id in trophy_items}
-                                    trophy_ids = list(item_to_trophy.values())
-
-                                    earned_trophy_pks = set(
-                                        EarnedTrophy.objects.filter(
-                                            profile=profile,
-                                            trophy_id__in=trophy_ids,
-                                            earned=True
-                                        ).values_list('trophy_id', flat=True)
-                                    )
-
-                                    earned_trophy_item_ids = {
-                                        item_id for item_id, trophy_pk in item_to_trophy.items()
-                                        if trophy_pk in earned_trophy_pks
-                                    }
-
-                            # Combine completed items with earned trophies
-                            all_completed = completed_items | earned_trophy_item_ids
-                            total_items = checklist.total_items or 0
-                            items_completed = len(all_completed)
-                            percentage = (items_completed / total_items * 100) if total_items > 0 else 0
-
-                            if items_completed > 0:
-                                user_progress = {
-                                    'percentage': percentage,
-                                    'items_completed': items_completed,
-                                    'total_items': total_items
-                                }
-
-                    # Check if author has platinum for this game/concept
-                    author_has_platinum = False
-                    if checklist.concept and checklist.profile:
-                        from trophies.models import ProfileGame
-                        pg = ProfileGame.objects.filter(
-                            profile=checklist.profile,
-                            game__concept=checklist.concept
-                        ).order_by('-progress').first()
-                        if pg:
-                            author_has_platinum = pg.has_plat
+                    author_has_platinum = author_plat_lookup.get(
+                        (checklist.profile_id, checklist.concept_id), False
+                    )
 
                     card_context = {
                         'checklist': {
@@ -159,7 +191,7 @@ class ChecklistListView(APIView):
                             'upvote_count': checklist.upvote_count,
                             'progress_save_count': checklist.progress_save_count,
                             'total_items': checklist.total_items,
-                            'section_count': checklist.sections.count(),
+                            'section_count': section_counts.get(checklist.id, 0),
                             'user_has_voted': user_has_voted,
                             'user_progress': user_progress,
                             'can_edit': can_edit
@@ -273,6 +305,8 @@ class ChecklistDetailView(APIView):
 
     def patch(self, request, checklist_id):
         """PATCH /api/v1/checklists/<checklist_id>/"""
+        if not request.user.is_authenticated:
+            return Response({'error': 'Authentication required.'}, status=status.HTTP_401_UNAUTHORIZED)
         try:
             try:
                 checklist = Checklist.objects.get(id=checklist_id, is_deleted=False)
@@ -307,9 +341,11 @@ class ChecklistDetailView(APIView):
 
     def delete(self, request, checklist_id):
         """DELETE /api/v1/checklists/<checklist_id>/"""
+        if not request.user.is_authenticated:
+            return Response({'error': 'Authentication required.'}, status=status.HTTP_401_UNAUTHORIZED)
         try:
             try:
-                checklist = Checklist.objects.get(id=checklist_id)
+                checklist = Checklist.objects.get(id=checklist_id, is_deleted=False)
             except Checklist.DoesNotExist:
                 return Response({'error': 'Checklist not found.'}, status=status.HTTP_404_NOT_FOUND)
 
@@ -491,48 +527,11 @@ class ChecklistProgressToggleView(APIView):
             # Get updated progress
             progress = ChecklistService.get_user_progress(checklist, profile)
 
-            # Calculate adjusted count that includes earned trophies (matching template logic)
-            adjusted_items_completed = progress.items_completed if progress else 0
-            earned_count = 0
-
-            if progress and profile:
-                from trophies.models import ChecklistItem, EarnedTrophy
-
-                # Get all trophy items in this checklist
-                trophy_items = list(ChecklistItem.objects.filter(
-                    section__checklist=checklist,
-                    item_type='trophy'
-                ).values_list('id', 'trophy_id'))
-
-                if trophy_items:
-                    # Build mapping of item_id -> trophy_id
-                    item_to_trophy = {item_id: trophy_id for item_id, trophy_id in trophy_items if trophy_id}
-                    trophy_ids = list(item_to_trophy.values())
-
-                    if trophy_ids:
-                        # Get earned trophy IDs
-                        earned_trophy_pks = set(
-                            EarnedTrophy.objects.filter(
-                                profile=profile,
-                                trophy_id__in=trophy_ids,
-                                earned=True
-                            ).values_list('trophy_id', flat=True)
-                        )
-
-                        # Convert back to ChecklistItem IDs and exclude those already in completed_items
-                        completed_set = set(progress.completed_items)
-                        earned_trophy_item_ids = {
-                            item_id for item_id, trophy_pk in item_to_trophy.items()
-                            if trophy_pk in earned_trophy_pks and item_id not in completed_set
-                        }
-
-                        # Count earned (but not manually checked) trophies
-                        earned_count = len(earned_trophy_item_ids)
-
-            # Always add earned count and recalculate percentage
-            adjusted_items_completed = adjusted_items_completed + earned_count
-            total = progress.total_items if progress else checklist.total_items
-            adjusted_percentage = (adjusted_items_completed / total * 100) if total > 0 else 0
+            # Calculate adjusted progress including earned trophies
+            adjusted = _calculate_adjusted_progress(checklist, profile, progress)
+            adjusted_percentage = adjusted['percentage'] if adjusted else 0
+            adjusted_items_completed = adjusted['items_completed'] if adjusted else 0
+            total = adjusted['total_items'] if adjusted else (checklist.total_items or 0)
 
             return Response({
                 'success': True,
@@ -617,48 +616,11 @@ class ChecklistSectionBulkProgressView(APIView):
             # Get updated progress
             progress = ChecklistService.get_user_progress(checklist, profile)
 
-            # Calculate adjusted count that includes earned trophies (matching template logic)
-            adjusted_items_completed = progress.items_completed if progress else 0
-            earned_count = 0
-
-            if progress and profile:
-                from trophies.models import ChecklistItem, EarnedTrophy
-
-                # Get all trophy items in this checklist
-                trophy_items = list(ChecklistItem.objects.filter(
-                    section__checklist=checklist,
-                    item_type='trophy'
-                ).values_list('id', 'trophy_id'))
-
-                if trophy_items:
-                    # Build mapping of item_id -> trophy_id
-                    item_to_trophy = {item_id: trophy_id for item_id, trophy_id in trophy_items if trophy_id}
-                    trophy_ids = list(item_to_trophy.values())
-
-                    if trophy_ids:
-                        # Get earned trophy IDs
-                        earned_trophy_pks = set(
-                            EarnedTrophy.objects.filter(
-                                profile=profile,
-                                trophy_id__in=trophy_ids,
-                                earned=True
-                            ).values_list('trophy_id', flat=True)
-                        )
-
-                        # Convert back to ChecklistItem IDs and exclude those already in completed_items
-                        completed_set = set(progress.completed_items)
-                        earned_trophy_item_ids = {
-                            item_id for item_id, trophy_pk in item_to_trophy.items()
-                            if trophy_pk in earned_trophy_pks and item_id not in completed_set
-                        }
-
-                        # Count earned (but not manually checked) trophies
-                        earned_count = len(earned_trophy_item_ids)
-
-            # Always add earned count and recalculate percentage
-            adjusted_items_completed = adjusted_items_completed + earned_count
-            total = progress.total_items if progress else checklist.total_items
-            adjusted_percentage = (adjusted_items_completed / total * 100) if total > 0 else 0
+            # Calculate adjusted progress including earned trophies
+            adjusted = _calculate_adjusted_progress(checklist, profile, progress)
+            adjusted_percentage = adjusted['percentage'] if adjusted else 0
+            adjusted_items_completed = adjusted['items_completed'] if adjusted else 0
+            total = adjusted['total_items'] if adjusted else (checklist.total_items or 0)
 
             return Response({
                 'success': True,

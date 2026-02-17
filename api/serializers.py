@@ -117,11 +117,20 @@ class CommentSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
     def get_replies(self, obj):
-        """Recursively serialize replies."""
-        replies = obj.replies.filter(is_deleted=False).order_by('-upvote_count', '-created_at')
+        """Serialize replies using prefetched data when available."""
+        # Use prefetched replies if available (avoids N+1)
+        if hasattr(obj, '_prefetched_objects_cache') and 'replies' in obj._prefetched_objects_cache:
+            replies = [r for r in obj._prefetched_objects_cache['replies'] if not r.is_deleted]
+            replies.sort(key=lambda r: (-r.upvote_count, -r.created_at.timestamp()))
+        else:
+            replies = obj.replies.filter(is_deleted=False).order_by('-upvote_count', '-created_at')
         return CommentSerializer(replies, many=True, context=self.context).data
 
     def get_user_has_voted(self, obj):
+        # Use pre-fetched voted_comment_ids from context when available
+        voted_ids = self.context.get('voted_comment_ids')
+        if voted_ids is not None:
+            return obj.id in voted_ids
         request = self.context.get('request')
         if not request or not request.user.is_authenticated:
             return False

@@ -451,7 +451,7 @@
                                         </div>
                                     {% elif item.item_type == 'trophy' %}
                                         {# Trophy Item Display - Published #}
-                                        {% get_trophy item.trophy_id as trophy %}
+                                        {% with trophy=trophy_map|dict_get:item.trophy_id %}
                                         {% if trophy %}
                                         <div class="flex items-center gap-3 p-3 bg-base-200/50 rounded-lg border-l-4 border-{{ trophy.trophy_type|default:'bronze' }}">
                                             <img src="{{ trophy.trophy_icon_url }}" class="w-10 h-10 rounded shrink-0 object-cover" alt="">
@@ -462,7 +462,7 @@
                                                         {{ trophy.trophy_type|title }}
                                                     </span>
                                                     {% if trophy|is_dlc_trophy %}
-                                                        {% get_trophy_group trophy as trophy_group %}
+                                                        {% get_trophy_group_cached trophy_group_map trophy as trophy_group %}
                                                         {% if trophy_group and trophy_group.trophy_group_name %}
                                                         <span class="badge badge-sm badge-info">DLC: {{ trophy_group.trophy_group_name }}</span>
                                                         {% else %}
@@ -479,6 +479,7 @@
                                             </div>
                                         </div>
                                         {% endif %}
+                                        {% endwith %}
                                     {% else %}
                                         <div class="flex items-center gap-2 p-2 {% if item.item_type == 'sub_header' %}bg-base-300/50 border-l-4 border-secondary{% else %}bg-base-200{% endif %} rounded-lg"
                                              data-item-id="{{ item.id }}"
@@ -625,7 +626,7 @@
 
                                     {% elif item.item_type == 'trophy' %}
                                         {# Trophy Item Display - Editable #}
-                                        {% get_trophy item.trophy_id as trophy %}
+                                        {% with trophy=trophy_map|dict_get:item.trophy_id %}
                                         {% if trophy %}
                                         <div class="checklist-trophy-item-edit my-2 p-3 bg-warning/5 border-2 border-warning/20 rounded-lg hover:bg-warning/10 transition-colors"
                                              data-item-id="{{ item.id }}"
@@ -656,7 +657,7 @@
                                                                 {{ trophy.trophy_type|title }}
                                                             </span>
                                                             {% if trophy|is_dlc_trophy %}
-                                                                {% get_trophy_group trophy as trophy_group %}
+                                                                {% get_trophy_group_cached trophy_group_map trophy as trophy_group %}
                                                                 {% if trophy_group and trophy_group.trophy_group_name %}
                                                                 <span class="badge badge-sm badge-info">DLC: {{ trophy_group.trophy_group_name }}</span>
                                                                 {% else %}
@@ -680,6 +681,7 @@
                                             </div>
                                         </div>
                                         {% endif %}
+                                        {% endwith %}
 
                                     {% else %}
                                         <div class="flex items-center gap-2 p-2 {% if item.item_type == 'sub_header' %}bg-base-300/50 border-l-4 border-secondary{% else %}bg-base-200{% endif %} rounded-lg checklist-item-edit hover:bg-base-300 transition-colors"

@@ -743,8 +743,12 @@ class CommentSignalTest(TestCase):
         self.concept.refresh_from_db()
         self.assertEqual(self.concept.comment_count, initial_count + 1)
 
-    def test_comment_count_incremented_on_trophy(self):
-        """Test that comment_count is incremented when comment is created on trophy."""
+    def test_comment_count_not_incremented_on_trophy(self):
+        """Test that comment_count is NOT incremented for trophy-level comments.
+
+        comment_count only tracks concept-level comments (trophy_id=null, checklist_id=null).
+        Trophy and checklist comments are counted separately.
+        """
         initial_count = self.concept.comment_count
 
         Comment.objects.create(
@@ -755,7 +759,7 @@ class CommentSignalTest(TestCase):
         )
 
         self.concept.refresh_from_db()
-        self.assertEqual(self.concept.comment_count, initial_count + 1)
+        self.assertEqual(self.concept.comment_count, initial_count)
 
     def test_comment_count_not_incremented_for_deleted(self):
         """Test that deleted comments don't increment count via signal."""

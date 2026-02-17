@@ -37,14 +37,12 @@ class ProfileQuerySet(models.QuerySet):
 
     def premium_users(self):
         """
-        Filter to premium user profiles.
+        Filter to premium user profiles using denormalized field.
 
         Returns:
-            QuerySet: Profiles belonging to users with active premium tiers
+            QuerySet: Profiles with active premium status
         """
-        return self.filter(
-            user__premium_tier__in=['premium_monthly', 'premium_yearly', 'supporter']
-        )
+        return self.filter(user_is_premium=True)
 
     def verified(self):
         """
@@ -430,12 +428,17 @@ class MilestoneManager(models.Manager):
         Returns:
             QuerySet: Milestones with progress annotations
         """
-        from django.db.models import F
+        from django.db.models import Case, F, Value, When
+        from django.db.models.functions import Cast
         qs = self.prefetch_related('user_milestones', 'user_milestone_progress').filter(user_milestones__profile=profile)
         if criteria_type:
             qs = qs.filter(criteria_type=criteria_type)
         return qs.annotate(
-            progress_ratio=F('user_milestone_progress__progress_value') / F('required_value')
+            progress_ratio=Case(
+                When(required_value=0, then=Value(0.0)),
+                default=Cast(F('user_milestone_progress__progress_value'), output_field=models.FloatField()) / Cast(F('required_value'), output_field=models.FloatField()),
+                output_field=models.FloatField(),
+            )
         ).order_by('-progress_ratio', 'name')
 
 

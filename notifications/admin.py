@@ -35,10 +35,12 @@ class NotificationTemplateAdmin(admin.ModelAdmin):
 @admin.register(Notification)
 class NotificationAdmin(admin.ModelAdmin):
     list_display = ['recipient', 'notification_type', 'title_short', 'priority', 'is_read', 'created_at']
+    list_select_related = ('recipient',)
     list_filter = ['notification_type', 'is_read', 'priority', 'created_at']
     search_fields = ['recipient__email', 'recipient__username', 'title', 'message']
     date_hierarchy = 'created_at'
     readonly_fields = ['created_at', 'read_at', 'template']
+    raw_id_fields = ('recipient', 'template')
 
     fieldsets = [
         ('Recipient', {
@@ -73,6 +75,7 @@ class NotificationAdmin(admin.ModelAdmin):
 @admin.register(ScheduledNotification)
 class ScheduledNotificationAdmin(admin.ModelAdmin):
     list_display = ['title_short', 'target_type', 'status', 'scheduled_at', 'recipient_count', 'created_by']
+    list_select_related = ('created_by',)
     list_filter = ['status', 'target_type', 'notification_type', 'priority', 'scheduled_at']
     search_fields = ['title', 'message', 'created_by__email']
     readonly_fields = ['created_at', 'sent_at', 'recipient_count', 'error_message']
@@ -114,6 +117,7 @@ class ScheduledNotificationAdmin(admin.ModelAdmin):
 @admin.register(NotificationLog)
 class NotificationLogAdmin(admin.ModelAdmin):
     list_display = ['title_short', 'target_type', 'recipient_count', 'sent_at', 'sent_by', 'was_scheduled']
+    list_select_related = ('sent_by',)
     list_filter = ['was_scheduled', 'notification_type', 'target_type', 'sent_at']
     search_fields = ['title', 'message', 'sent_by__email']
     readonly_fields = ['sent_at', 'scheduled_notification', 'notification_type', 'title', 'message',

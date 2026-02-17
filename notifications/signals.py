@@ -2,6 +2,7 @@
 Signal handlers for automatic notification creation.
 Hooks into existing models using Django signals.
 """
+from django.db import transaction
 from django.db.models.signals import post_save, pre_save
 from django.dispatch import receiver
 from django.utils import timezone
@@ -23,11 +24,15 @@ def capture_earned_trophy_previous_state(sender, instance, **kwargs):
     """
     Capture the previous 'earned' value before saving.
     This allows post_save to detect when earned flips from False to True.
+    Uses .only('earned') to minimize query overhead during bulk sync operations.
     """
-    if instance.pk:
+    if instance.pk and not instance._state.adding:
         try:
-            old_instance = EarnedTrophy.objects.get(pk=instance.pk)
-            instance._previous_earned = old_instance.earned
+            instance._previous_earned = (
+                EarnedTrophy.objects.only('earned')
+                .values_list('earned', flat=True)
+                .get(pk=instance.pk)
+            )
         except EarnedTrophy.DoesNotExist:
             instance._previous_earned = None
     else:
@@ -40,10 +45,13 @@ def capture_profile_previous_state(sender, instance, **kwargs):
     Capture the previous 'is_discord_verified' value before saving.
     This allows post_save to detect when it flips from False to True.
     """
-    if instance.pk:
+    if instance.pk and not instance._state.adding:
         try:
-            old_instance = Profile.objects.get(pk=instance.pk)
-            instance._previous_is_discord_verified = old_instance.is_discord_verified
+            instance._previous_is_discord_verified = (
+                Profile.objects.only('is_discord_verified')
+                .values_list('is_discord_verified', flat=True)
+                .get(pk=instance.pk)
+            )
         except Profile.DoesNotExist:
             instance._previous_is_discord_verified = None
     else:
@@ -287,85 +295,89 @@ def notify_platinum_earned(sender, instance, created, **kwargs):
             logger.exception(f"[SIGNAL] Failed to queue platinum notification: {e}")
     else:
         # Create notification immediately (manual update outside sync)
+        # Wrap in transaction to prevent duplicate creation from concurrent signals
         try:
-            template = NotificationTemplate.objects.get(
-                name='platinum_earned',
-                auto_trigger_enabled=True
-            )
+            with transaction.atomic():
+                # Re-check inside transaction to close TOCTOU window
+                if Notification.objects.filter(
+                    recipient=instance.profile.user,
+                    notification_type='platinum_earned',
+                    metadata__game_id=instance.trophy.game.id
+                ).exists():
+                    logger.info(f"[SIGNAL] Notification created by concurrent signal, skipping")
+                    return
 
-            # Fetch ProfileGame data for enriched metadata
-            profile_game = ProfileGame.objects.filter(
-                profile=profile,
-                game=instance.trophy.game
-            ).first()
+                template = NotificationTemplate.objects.get(
+                    name='platinum_earned',
+                    auto_trigger_enabled=True
+                )
 
-            # Count user's total platinums (including this one)
-            total_plats = EarnedTrophy.objects.filter(
-                profile=profile,
-                earned=True,
-                trophy__trophy_type='platinum'
-            ).count()
+                # Fetch ProfileGame data for enriched metadata
+                profile_game = ProfileGame.objects.filter(
+                    profile=profile,
+                    game=instance.trophy.game
+                ).first()
 
-            # Get the earned date for filtering
-            earned_date = instance.earned_date_time
-
-            # Calculate yearly platinum count
-            yearly_plats = 0
-
-            if earned_date:
-                earned_year = earned_date.year
-
-                # Count platinums earned in the same year
-                yearly_plats = EarnedTrophy.objects.filter(
+                # Count user's total platinums (including this one)
+                total_plats = EarnedTrophy.objects.filter(
                     profile=profile,
                     earned=True,
-                    trophy__trophy_type='platinum',
-                    earned_date_time__year=earned_year
+                    trophy__trophy_type='platinum'
                 ).count()
 
-            # Create notification from template with enhanced context
-            # Note: badge_xp and tier1_badges are intentionally NOT stored here
-            # Badge progress is fetched live when the share card is accessed because
-            # UserBadgeProgress is calculated at the end of full sync, not per-game sync
-            NotificationService.create_from_template(
-                recipient=profile.user,
-                template=template,
-                context={
-                    'username': profile.display_psn_username or profile.psn_username,
-                    'trophy_name': instance.trophy.trophy_name,
-                    'game_name': instance.trophy.game.title_name,
-                    'game_id': instance.trophy.game.id,
-                    'np_communication_id': instance.trophy.game.np_communication_id,
-                    # Concept ID for rating system (may be None for games without concepts)
-                    'concept_id': instance.trophy.game.concept.id if instance.trophy.game.concept else None,
-                    # Rich content fields for detail view
-                    'trophy_detail': instance.trophy.trophy_detail or '',
-                    'trophy_earn_rate': instance.trophy.trophy_earn_rate or 0,
-                    'trophy_rarity': instance.trophy.trophy_rarity,
-                    'trophy_icon_url': instance.trophy.trophy_icon_url or '',
-                    'game_image': instance.trophy.game.title_image or instance.trophy.game.title_icon_url or '',
-                    'rarity_label': ShareableDataService.get_rarity_label(instance.trophy.trophy_rarity),
-                    # Game platform and region info
-                    'title_platform': instance.trophy.game.title_platform,
-                    'region': instance.trophy.game.region,
-                    'is_regional': instance.trophy.game.is_regional,
-                    # ProfileGame data for share image
-                    'first_played_date_time': profile_game.first_played_date_time.isoformat() if profile_game and profile_game.first_played_date_time else None,
-                    'last_played_date_time': profile_game.last_played_date_time.isoformat() if profile_game and profile_game.last_played_date_time else None,
-                    'play_duration_seconds': profile_game.play_duration.total_seconds() if profile_game and profile_game.play_duration else None,
-                    'earned_trophies_count': profile_game.earned_trophies_count if profile_game else 0,
-                    'total_trophies_count': profile_game.total_trophies if profile_game else 0,
-                    'progress_percentage': profile_game.progress if profile_game else 0,
-                    # User global context
-                    'user_total_platinums': total_plats,
-                    'user_avatar_url': profile.avatar_url or '',
-                    # Earned date
-                    'earned_date_time': instance.earned_date_time.isoformat() if instance.earned_date_time else None,
-                    # Yearly platinum stats
-                    'yearly_plats': yearly_plats,
-                    'earned_year': earned_year if earned_date else None,
-                }
-            )
+                # Get the earned date for filtering
+                earned_date = instance.earned_date_time
+
+                # Calculate yearly platinum count
+                yearly_plats = 0
+
+                if earned_date:
+                    earned_year = earned_date.year
+
+                    # Count platinums earned in the same year
+                    yearly_plats = EarnedTrophy.objects.filter(
+                        profile=profile,
+                        earned=True,
+                        trophy__trophy_type='platinum',
+                        earned_date_time__year=earned_year
+                    ).count()
+
+                # Create notification from template with enhanced context
+                # Note: badge_xp and tier1_badges are intentionally NOT stored here
+                # Badge progress is fetched live when the share card is accessed because
+                # UserBadgeProgress is calculated at the end of full sync, not per-game sync
+                NotificationService.create_from_template(
+                    recipient=profile.user,
+                    template=template,
+                    context={
+                        'username': profile.display_psn_username or profile.psn_username,
+                        'trophy_name': instance.trophy.trophy_name,
+                        'game_name': instance.trophy.game.title_name,
+                        'game_id': instance.trophy.game.id,
+                        'np_communication_id': instance.trophy.game.np_communication_id,
+                        'concept_id': instance.trophy.game.concept.id if instance.trophy.game.concept else None,
+                        'trophy_detail': instance.trophy.trophy_detail or '',
+                        'trophy_earn_rate': instance.trophy.trophy_earn_rate or 0,
+                        'trophy_rarity': instance.trophy.trophy_rarity,
+                        'trophy_icon_url': instance.trophy.trophy_icon_url or '',
+                        'game_image': instance.trophy.game.title_image or instance.trophy.game.title_icon_url or '',
+                        'rarity_label': ShareableDataService.get_rarity_label(instance.trophy.trophy_rarity),
+                        'title_platform': instance.trophy.game.title_platform,
+                        'region': instance.trophy.game.region,
+                        'is_regional': instance.trophy.game.is_regional,
+                        'first_played_date_time': profile_game.first_played_date_time.isoformat() if profile_game and profile_game.first_played_date_time else None,
+                        'last_played_date_time': profile_game.last_played_date_time.isoformat() if profile_game and profile_game.last_played_date_time else None,
+                        'play_duration_seconds': profile_game.play_duration.total_seconds() if profile_game and profile_game.play_duration else None,
+                        'earned_trophies_count': profile_game.earned_trophies_count if profile_game else 0,
+                        'total_trophies_count': profile_game.total_trophies if profile_game else 0,
+                        'progress_percentage': profile_game.progress if profile_game else 0,
+                        'user_total_platinums': total_plats,
+                        'user_avatar_url': profile.avatar_url or '',
+                        'earned_date_time': instance.earned_date_time.isoformat() if instance.earned_date_time else None,
+                        'yearly_plats': yearly_plats,
+                        'earned_year': earned_year if earned_date else None,
+                    }
+                )
 
             logger.info(
                 f"[SIGNAL] Created platinum notification immediately for {profile.psn_username} - {instance.trophy.game.title_name}"
@@ -578,14 +590,3 @@ def notify_discord_linked(sender, instance, created, **kwargs):
         logger.warning("Discord verified template not found or not enabled")
     except Exception as e:
         logger.error(f"Failed to create Discord verification notification: {e}")
-
-
-# Explicitly connect signals as a fallback (in case ready() isn't called)
-logger.info("[SIGNAL] Explicitly connecting signal handlers")
-pre_save.connect(capture_earned_trophy_previous_state, sender=EarnedTrophy)
-pre_save.connect(capture_profile_previous_state, sender=Profile)
-post_save.connect(notify_platinum_earned, sender=EarnedTrophy)
-post_save.connect(notify_badge_awarded, sender=UserBadge)
-post_save.connect(notify_milestone_achieved, sender=UserMilestone)
-post_save.connect(notify_discord_linked, sender=Profile)
-logger.info("[SIGNAL] Signal handlers explicitly connected")

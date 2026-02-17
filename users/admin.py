@@ -9,6 +9,7 @@ class CustomUserAdmin(UserAdmin):
 
     # Fields for list view (efficient, searchable)
     list_display = ('email', 'is_linked_to_profile', 'premium_tier', 'email_prefs_summary', 'user_timezone', 'default_region', 'is_staff', 'is_active', 'date_joined')
+    list_select_related = ('profile',)
     list_filter = ('is_staff', 'is_active', 'user_timezone')
     search_fields = ('email',)
     ordering = ('email',)

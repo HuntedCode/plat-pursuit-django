@@ -1,7 +1,8 @@
-from django.db import models, DatabaseError, IntegrityError
+from django.db import models, DatabaseError, IntegrityError, OperationalError
 from django.utils import timezone
 from users.models import CustomUser
 from django.contrib.postgres.fields import ArrayField
+from django.contrib.postgres.indexes import GinIndex
 from django.core.validators import RegexValidator, MinValueValidator, MaxValueValidator
 from django.db import transaction
 from django.db.models import F, IntegerField, Max, Min, Q
@@ -10,14 +11,13 @@ import logging
 
 logger = logging.getLogger("psn_api")
 from datetime import timedelta
-from tenacity import retry, stop_after_attempt, wait_fixed
+from tenacity import retry, stop_after_attempt, wait_fixed, retry_if_exception_type
 from trophies.util_modules.language import count_unique_game_groups, calculate_trimmed_mean
 from trophies.util_modules.constants import (
     TITLE_STATS_SUPPORTED_PLATFORMS, NA_REGION_CODES, EU_REGION_CODES,
     JP_REGION_CODES, AS_REGION_CODES, KR_REGION_CODES, CN_REGION_CODES,
     SHOVELWARE_THRESHOLD
 )
-from trophies.util_modules.cache import redis_client
 from trophies.managers import (
     ProfileManager, GameManager, ProfileGameManager,
     BadgeManager, MilestoneManager, CommentManager, ChecklistManager
@@ -283,46 +283,36 @@ class Profile(models.Model):
         self.psn_history_public = value
         self.save(update_fields=['psn_history_public'])
 
-    def set_sync_status(self, value: str):
-        if value in ['syncing', 'synced', 'error']:
-            if value == 'error' and not self.account_id:
-                self.delete()
-                return
-            self.sync_status = value
-            self.save(update_fields=['sync_status'])
-            self.refresh_from_db(fields=['sync_status'])
+    def set_sync_status(self, value: str) -> bool:
+        """Set the sync status. Returns False if the profile was deleted (no account_id + error state)."""
+        if value not in ['syncing', 'synced', 'error']:
+            return True
+        if value == 'error' and not self.account_id:
+            logger.info(f"Deleting unlinked profile {self.id} (no account_id) after sync error.")
+            self.delete()
+            return False
+        self.sync_status = value
+        self.save(update_fields=['sync_status'])
+        self.refresh_from_db(fields=['sync_status'])
+        return True
     
+    @retry(stop=stop_after_attempt(5), wait=wait_fixed(0.2), retry=retry_if_exception_type(OperationalError))
     def add_to_sync_target(self, value: int):
         if not value:
             return
 
-        lock_key = f"sync_target_lock:{self.id}"
-
-        @retry(stop=stop_after_attempt(5), wait=wait_fixed(0.2))
-        def acquire_lock():
-            lock = redis_client.lock(lock_key, timeout=10)
-            if not lock.acquire(blocking=False):
-                raise ValueError("Could not acquire lock")
-            return lock
-
         try:
-            lock = acquire_lock()
-            try:
-                with transaction.atomic():
-                    # Use nowait=True to fail fast instead of blocking indefinitely
-                    locked_self = Profile.objects.select_for_update(nowait=True).get(id=self.id)
-                    locked_self.sync_progress_target = F('sync_progress_target') + value
-                    locked_self.save(update_fields=['sync_progress_target'])
-                    self.refresh_from_db(fields=['sync_progress_target'])
-            finally:
-                try:
-                    lock.release()
-                except Exception as release_err:
-                    logger.warning(f"Failed to release Redis lock for profile {self.id}: {release_err}")
+            with transaction.atomic():
+                Profile.objects.select_for_update(nowait=True).filter(id=self.id).update(
+                    sync_progress_target=F('sync_progress_target') + value
+                )
+                self.refresh_from_db(fields=['sync_progress_target'])
         except Profile.DoesNotExist:
             logger.error(f"Profile {self.id} not found in add_to_sync_target")
+        except OperationalError:
+            # Re-raise so @retry can handle lock contention
+            raise
         except DatabaseError as db_err:
-            # Log database errors (lock timeout, etc.) instead of swallowing
             logger.warning(f"Database error in add_to_sync_target for profile {self.id}: {db_err}")
         except Exception as e:
             logger.error(f"Unexpected error in add_to_sync_target for profile {self.id}: {e}")
@@ -409,7 +399,7 @@ class Game(models.Model):
             models.Index(fields=["np_communication_id", "title_name"], name="game_idx"),
             models.Index(fields=['played_count'], name='game_played_count_idx'),
             models.Index(fields=['title_name'], name='game_title_idx'),
-            models.Index(fields=['title_platform'], name='game_platform_idx'),
+            GinIndex(fields=['title_platform'], name='game_platform_gin_idx'),
             models.Index(fields=['created_at'], name='game_created_idx'),
             models.Index(fields=['is_obtainable', 'title_platform'], name='game_obtainable_platform_idx'),
             models.Index(fields=['is_shovelware'], name='game_shovelware_idx'),
@@ -593,7 +583,7 @@ class Concept(models.Model):
     concept_icon_url = models.URLField(null=True, blank=True)
     guide_slug = models.CharField(max_length=50, blank=True, null=True)
     guide_created_at = models.DateTimeField(null=True, blank=True)
-    comment_count = models.PositiveIntegerField(default=0, help_text="Denormalized count of all comments on this concept")
+    comment_count = models.PositiveIntegerField(default=0, help_text="Denormalized count of concept-level comments (excludes trophy and checklist comments)")
 
     class Meta:
         indexes = [
@@ -615,18 +605,32 @@ class Concept(models.Model):
     
     @classmethod
     def create_default_concept(cls, game):
-        """Create a stub Concept for games that couldn't be looked up via PSN API."""
+        """Create a stub Concept for games that couldn't be looked up via PSN API.
+
+        Uses a Redis atomic counter for unique ID generation. Falls back to
+        DB-based max+1 with retries if the counter isn't initialized.
+        """
+        from trophies.util_modules.cache import redis_client
+
         platforms = ', '.join(game.title_platform) if game.title_platform else 'Unknown'
-        for attempt in range(5):
+        counter_key = "pp_concept_counter"
+
+        # Initialize counter from DB if it doesn't exist yet
+        if not redis_client.exists(counter_key):
             max_counter = (
                 cls.objects
                 .filter(concept_id__startswith='PP_')
                 .annotate(numeric_suffix=Cast(Substr('concept_id', 4), output_field=IntegerField()))
                 .aggregate(max_val=Max('numeric_suffix'))
             )['max_val'] or 0
+            # SET NX to avoid overwriting if another worker initialized it first
+            redis_client.set(counter_key, max_counter, nx=True)
+
+        for attempt in range(5):
+            next_id = redis_client.incr(counter_key)
             try:
                 return cls.objects.create(
-                    concept_id=f"PP_{max_counter + 1}",
+                    concept_id=f"PP_{next_id}",
                     unified_title=f"{game.title_name} ({platforms})",
                 )
             except IntegrityError:
@@ -960,9 +964,17 @@ class UserTrophySelection(models.Model):
         unique_together = ['profile', 'earned_trophy']
     
     def save(self, *args, **kwargs):
-        if self.profile.trophy_selections.count() >= 10 and not self.pk:
-            raise ValueError("Maximum 10 selections allowed.")
-        super().save(*args, **kwargs)
+        if not self.pk:
+            with transaction.atomic():
+                # Lock the profile's selections to prevent concurrent inserts exceeding the limit
+                count = UserTrophySelection.objects.select_for_update().filter(
+                    profile=self.profile
+                ).count()
+                if count >= 10:
+                    raise ValueError("Maximum 10 selections allowed.")
+                super().save(*args, **kwargs)
+        else:
+            super().save(*args, **kwargs)
 
 class Badge(models.Model):
     TIER_CHOICES = [
@@ -1096,16 +1108,21 @@ class Badge(models.Model):
     def get_stage_completion(self, profile: Profile, type: str) -> dict[int, bool]:
         if not profile:
             return {}
-        
+
         from django.db.models import Q
 
         stages = Stage.objects.filter(Q(series_slug=self.series_slug) & (Q(required_tiers__len=0) | Q(required_tiers__contains=[self.tier]))).prefetch_related('concepts__games')
+
+        is_plat_check = False
+        is_progress_check = False
 
         if type in ['series', 'collection']:
             is_plat_check = self.tier in [1, 3]
             is_progress_check = self.tier in [2, 4]
         elif type == 'megamix':
             is_plat_check = True
+        else:
+            return {}
 
         completion = {}
         for stage in stages:
@@ -1115,8 +1132,15 @@ class Badge(models.Model):
                 continue
 
             games_qs = Game.objects.filter(concept__in=concepts)
-            
-            has_completion = ProfileGame.objects.filter(profile=profile, game__in=games_qs).filter(Q(has_plat=True) if is_plat_check else Q(progress=100) if is_progress_check else Q(pk__isnull=True)).exists()
+
+            if is_plat_check:
+                condition = Q(has_plat=True)
+            elif is_progress_check:
+                condition = Q(progress=100)
+            else:
+                continue
+
+            has_completion = ProfileGame.objects.filter(profile=profile, game__in=games_qs).filter(condition).exists()
             completion[stage.stage_number] = has_completion
         return completion
 
@@ -1370,7 +1394,8 @@ class Milestone(models.Model):
         verbose_name_plural = 'Milestones'
 
     def save(self, *args, **kwargs):
-        self.required_value = self.criteria_details.get('target', 0)
+        if self._state.adding:
+            self.required_value = self.criteria_details.get('target', 0)
         super().save(*args, **kwargs)
 
     def __str__(self):

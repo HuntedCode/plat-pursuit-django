@@ -227,6 +227,7 @@ class TokenKeeper:
 
     def _record_db_lock_error(self):
         """Record a database lock error and trigger restart if threshold exceeded."""
+        should_restart = False
         with self._db_lock_lock:
             if self._shutdown_requested:
                 return  # Already shutting down, don't record more errors
@@ -240,14 +241,20 @@ class TokenKeeper:
             logger.warning(f"Database lock error recorded ({error_count}/{self._db_lock_threshold} in {self._db_lock_window}s window)")
 
             if error_count >= self._db_lock_threshold:
-                self._initiate_restart()
+                self._shutdown_requested = True
+                should_restart = True
+
+        # Perform slow restart OUTSIDE the lock so other threads aren't blocked
+        if should_restart:
+            self._initiate_restart()
 
     def _initiate_restart(self):
-        """Gracefully shutdown, wait, and restart the TokenKeeper."""
-        if self._shutdown_requested:
-            return
-        self._shutdown_requested = True
+        """Gracefully shutdown, wait, and restart the TokenKeeper.
 
+        _shutdown_requested must already be True before calling this method.
+        This method performs slow operations (thread joins, sleep) and must
+        NOT be called while holding _db_lock_lock.
+        """
         logger.critical(f"Database lock threshold exceeded! Initiating restart in {self._restart_cooldown}s...")
 
         # Cleanup current state
@@ -268,9 +275,10 @@ class TokenKeeper:
         logger.info(f"Waiting {self._restart_cooldown}s for database to recover...")
         time.sleep(self._restart_cooldown)
 
-        # Reset shutdown flag and error tracking
-        self._shutdown_requested = False
-        self._db_lock_errors = []
+        # Reset shutdown flag and error tracking (inside lock for thread safety)
+        with self._db_lock_lock:
+            self._shutdown_requested = False
+            self._db_lock_errors = []
 
         logger.info("Reinitializing TokenKeeper...")
         self.initialize_groups()
@@ -743,7 +751,10 @@ class TokenKeeper:
         job_type = 'sync_complete'
 
         try:
-            time.sleep(5)
+            # Brief buffer to ensure the last job's DB writes have fully committed.
+            # Jobs use transaction.atomic() so writes commit before job completion,
+            # but 1s covers any edge cases with connection pooling or replication lag.
+            time.sleep(1)
 
             logger.info(f"Starting complete sync job for {profile_id}...")
 
@@ -859,6 +870,14 @@ class TokenKeeper:
             invalidate_timeline_cache(profile_id)
 
             logger.info(f"{profile.display_psn_username} account has finished syncing!")
+        except Exception as e:
+            logger.exception(f"Error during sync_complete for profile {profile_id}: {e}")
+            try:
+                profile.refresh_from_db()
+                if not profile.set_sync_status('error'):
+                    logger.warning(f"Profile {profile_id} was deleted during error recovery (no account_id).")
+            except Profile.DoesNotExist:
+                logger.warning(f"Profile {profile_id} no longer exists during error recovery.")
         finally:
             # Always clear the sync_complete in-progress flag, even on error
             redis_client.delete(sync_complete_key)
@@ -943,9 +962,11 @@ class TokenKeeper:
         touched_profilegame_ids = []
         num_title_stats = 0
         games_needing_groups = []
+        games_by_comm_id = {}  # Cache games to avoid re-fetching in second pass
 
         for title in trophy_titles:
             game, created, _ = PsnApiService.create_or_update_game(title)
+            games_by_comm_id[title.np_communication_id] = game
             profile_game, _ = PsnApiService.create_or_update_profile_game(profile, game, title)
             touched_profilegame_ids.append(profile_game.id)
             for platform in game.title_platform:
@@ -964,9 +985,9 @@ class TokenKeeper:
         # Set target BEFORE assigning any jobs to prevent race condition
         profile.add_to_sync_target(job_counter)
 
-        # SECOND PASS: Now assign the jobs
+        # SECOND PASS: Now assign the jobs (using cached games from first pass)
         for title in trophy_titles:
-            game = Game.objects.get(np_communication_id=title.np_communication_id)
+            game = games_by_comm_id[title.np_communication_id]
             args = [game.np_communication_id, game.title_platform[0] if not game.title_platform[0] == 'PSPC' else game.title_platform[1]]
 
             if game in games_needing_groups:
@@ -1182,7 +1203,7 @@ class TokenKeeper:
                 logger.warning(f"Couldn't get game_title for Title ID {title_id.title_id}")
         except Exception as e:
             profile.increment_sync_progress()
-            logger.error(f"Error while syncing Title ID {title_id.title_id}: {str(e)}")
+            logger.exception(f"Error while syncing Title ID {title_id.title_id}: {e}")
     
     def _extract_media(self, details: dict) -> list[dict]:
         """Extract and combine unique media (images/videos) from JSON, deduped by URL per type."""

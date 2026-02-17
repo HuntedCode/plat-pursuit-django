@@ -84,6 +84,21 @@ def is_dlc_trophy(trophy):
     return trophy.trophy_group_id != 'default'
 
 
+@register.simple_tag
+def get_trophy_group_cached(trophy_group_map, trophy):
+    """
+    Look up trophy group from a pre-fetched map (built in the view).
+
+    Usage in templates:
+        {% get_trophy_group_cached trophy_group_map trophy as trophy_group %}
+
+    Returns TrophyGroup object or None if not found, default group, or not DLC.
+    """
+    if not trophy or not trophy.trophy_group_id or trophy.trophy_group_id == 'default':
+        return None
+    return trophy_group_map.get((trophy.game_id, trophy.trophy_group_id))
+
+
 @register.filter
 def in_set(value, the_set):
     """

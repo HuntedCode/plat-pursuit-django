@@ -445,13 +445,6 @@ class CommentService:
         return context
 
     @staticmethod
-    def _update_comment_count(concept, delta=1):
-        """Update denormalized comment count on Concept."""
-        concept.comment_count = F('comment_count') + delta
-        concept.save(update_fields=['comment_count'])
-        concept.refresh_from_db(fields=['comment_count'])
-
-    @staticmethod
     def invalidate_cache(concept, trophy_id=None, checklist_id=None):
         """Invalidate cached comments for a concept/trophy/checklist."""
         if checklist_id is not None:

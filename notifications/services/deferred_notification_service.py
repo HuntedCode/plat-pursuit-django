@@ -12,13 +12,13 @@ Uses Redis to queue notifications during sync and creates them at appropriate co
 import json
 import logging
 from collections import defaultdict
-from django.core.cache import cache
 from django.utils import timezone
 from notifications.services.notification_service import NotificationService
 from notifications.services.shareable_data_service import ShareableDataService
-from notifications.models import NotificationTemplate
+from notifications.models import Notification, NotificationTemplate
 from trophies.models import Profile, Game, EarnedTrophy, ProfileGame
 from trophies.models import UserBadge
+from trophies.util_modules.cache import redis_client
 
 logger = logging.getLogger("deferred_notifications")
 
@@ -52,7 +52,7 @@ class DeferredNotificationService:
         }
 
         try:
-            cache.set(key, json.dumps(data), timeout=PENDING_NOTIFICATION_TTL)
+            redis_client.set(key, json.dumps(data), ex=PENDING_NOTIFICATION_TTL)
             logger.info(f"Queued platinum notification for {profile.psn_username} - {game.title_name}")
         except Exception as e:
             logger.exception(f"Failed to queue platinum notification: {e}")
@@ -72,12 +72,12 @@ class DeferredNotificationService:
 
         try:
             # Fetch queued data
-            data_json = cache.get(key)
-            if not data_json:
+            data_raw = redis_client.get(key)
+            if not data_raw:
                 logger.debug(f"No pending platinum notification for profile {profile_id}, game {game_id}")
                 return
 
-            data = json.loads(data_json)
+            data = json.loads(data_raw)
 
             # Fetch fresh database objects
             try:
@@ -89,7 +89,7 @@ class DeferredNotificationService:
                 )
             except (Profile.DoesNotExist, Game.DoesNotExist, EarnedTrophy.DoesNotExist) as e:
                 logger.error(f"Failed to fetch objects for platinum notification: {e}")
-                cache.delete(key)
+                redis_client.delete(key)
                 return
 
             # Get notification template
@@ -100,13 +100,24 @@ class DeferredNotificationService:
                 )
             except NotificationTemplate.DoesNotExist:
                 logger.error("Platinum earned template not found or not enabled")
-                cache.delete(key)
+                redis_client.delete(key)
                 return
 
             # Get user
             if not profile.user:
                 logger.debug(f"No user linked to profile {profile.id}")
-                cache.delete(key)
+                redis_client.delete(key)
+                return
+
+            # Check for existing notification to prevent duplicates
+            existing = Notification.objects.filter(
+                recipient=profile.user,
+                notification_type='platinum_earned',
+                context__game_id=game.id,
+            ).exists()
+            if existing:
+                logger.info(f"Platinum notification already exists for {profile.psn_username} - {game.title_name}, skipping")
+                redis_client.delete(key)
                 return
 
             # Fetch fresh ProfileGame data for date/duration stats
@@ -183,7 +194,7 @@ class DeferredNotificationService:
             logger.info(f"Created platinum notification for {profile.psn_username} - {game.title_name}")
 
             # Delete Redis key after successful creation
-            cache.delete(key)
+            redis_client.delete(key)
 
         except Exception as e:
             logger.exception(f"Failed to create platinum notification for profile {profile_id}, game {game_id}: {e}")
@@ -193,7 +204,7 @@ class DeferredNotificationService:
         """
         Queue a badge notification for later consolidation.
 
-        Stores full context since XP/progress is already calculated at award time.
+        Uses Redis RPUSH for atomic append (no read-modify-write race).
         Processing happens at sync completion (_job_sync_complete) or manually called
         at the end of admin commands (e.g., refresh_badge_series).
 
@@ -205,15 +216,8 @@ class DeferredNotificationService:
         key = f"pending_badges:{profile.id}"
 
         try:
-            # Fetch existing list or create new
-            existing_json = cache.get(key)
-            badge_list = json.loads(existing_json) if existing_json else []
-
-            # Append new badge context
-            badge_list.append(context_data)
-
-            # Save back to Redis with 1 hour TTL (enough for sync or manual operations)
-            cache.set(key, json.dumps(badge_list), timeout=3600)
+            redis_client.rpush(key, json.dumps(context_data))
+            redis_client.expire(key, 3600)
             logger.info(f"Queued badge notification for {profile.psn_username} - {badge.name}")
 
         except Exception as e:
@@ -232,27 +236,27 @@ class DeferredNotificationService:
         key = f"pending_badges:{profile_id}"
 
         try:
-            # Fetch queued badges
-            data_json = cache.get(key)
-            if not data_json:
+            # Atomically fetch all items and delete the key
+            pipe = redis_client.pipeline()
+            pipe.lrange(key, 0, -1)
+            pipe.delete(key)
+            results = pipe.execute()
+
+            raw_items = results[0]
+            if not raw_items:
                 logger.debug(f"No pending badge notifications for profile {profile_id}")
                 return
 
-            badge_list = json.loads(data_json)
-            if not badge_list:
-                cache.delete(key)
-                return
+            badge_list = [json.loads(item) for item in raw_items]
 
             # Get profile and user
             try:
                 profile = Profile.objects.get(id=profile_id)
                 if not profile.user:
                     logger.debug(f"No user linked to profile {profile_id}")
-                    cache.delete(key)
                     return
             except Profile.DoesNotExist:
                 logger.error(f"Profile {profile_id} not found")
-                cache.delete(key)
                 return
 
             # Get notification template
@@ -263,7 +267,6 @@ class DeferredNotificationService:
                 )
             except NotificationTemplate.DoesNotExist:
                 logger.warning("Badge awarded template not found or not enabled")
-                cache.delete(key)
                 return
 
             # Group badges by series_slug
@@ -308,9 +311,6 @@ class DeferredNotificationService:
                     )
                 except Exception as e:
                     logger.exception(f"Failed to create badge notification for series {series_slug}: {e}")
-
-            # Delete Redis key after processing
-            cache.delete(key)
 
         except Exception as e:
             logger.exception(f"Failed to create badge notifications for profile {profile_id}: {e}")

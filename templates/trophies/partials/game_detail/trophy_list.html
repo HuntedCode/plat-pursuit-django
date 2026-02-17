@@ -2,16 +2,16 @@
 <div class="space-y-2">
     {% for trophy in trophies %}
         {% with profile_earned|dict_get:trophy.trophy_id as earned %}
-            <div id="{{ trophy.trophy_id }}" class="card bg-base-100 border-2 border-base-300 shadow-sm shadow-neutral transition-all duration-300 hover:border-{{ trophy|trophy_color_dict }} hover:shadow-{{ trophy|trophy_color_dict }} group">
+            <div id="{{ trophy.trophy_id }}" class="card bg-base-100 border-2 border-base-300 shadow-sm shadow-neutral transition-all duration-300 hover:border-{{ trophy|trophy_color }} hover:shadow-{{ trophy|trophy_color }} group">
                 <div class="w-full{% if earned.earned %} bg-success/15{% endif %}">
                     <div class="card-body {% if earned.earned %}border-l-4 border-success{% endif %} flex flex-row items-center justify-between p-2">
                         <div class="flex flex-row items-center gap-2 lg:gap-3 min-w-0 flex-1">
                             <div class="flex flex-row items-center justify-center gap-3">
-                                <figure class="w-14 h-14 lg:w-16 lg:h-16 flex items-center justify-center overflow-hidden border-2 border-base-300 shadow-sm shadow-neutral transition-all duration-300 group-hover:border-{{ trophy|trophy_color_dict }} group-hover:shadow-{{ trophy|trophy_color_dict }}">
+                                <figure class="w-14 h-14 lg:w-16 lg:h-16 flex items-center justify-center overflow-hidden border-2 border-base-300 shadow-sm shadow-neutral transition-all duration-300 group-hover:border-{{ trophy|trophy_color }} group-hover:shadow-{{ trophy|trophy_color }}">
                                     <img src="{{ trophy.trophy_icon_url }}" alt="{{ trophy.trophy_name }}" class="w-full h-full object-cover hover:scale-105" />
                                 </figure>
-                                <div class="bg-base-100 border-2 border-base-300 shadow-sm shadow-neutral w-10 h-10 hover:scale-105 group-hover:border-{{ trophy|trophy_color_dict }} group-hover:shadow-{{ trophy|trophy_color_dict }} lg:hidden">
-                                    {% include 'partials/icons/trophy_cup.html' with color=trophy|trophy_css_color_dict size='w-full p-2' %}
+                                <div class="bg-base-100 border-2 border-base-300 shadow-sm shadow-neutral w-10 h-10 hover:scale-105 group-hover:border-{{ trophy|trophy_color }} group-hover:shadow-{{ trophy|trophy_color }} lg:hidden">
+                                    {% include 'partials/icons/trophy_cup.html' with color=trophy|trophy_css_color size='w-full p-2' %}
                                 </div>
                             </div>
                             <div class="flex flex-col gap-0">
@@ -50,8 +50,8 @@
                                 </div>
                             </div>
                             <div class="divider divider-horizontal hidden md:block"></div>
-                            <div class="bg-base-100 border-2 border-base-300 shadow-sm shadow-neutral w-10 h-10 hover:scale-105 group-hover:border-{{ trophy|trophy_color_dict }} group-hover:shadow-{{ trophy|trophy_color_dict }} hidden lg:block">
-                                {% include 'partials/icons/trophy_cup.html' with color=trophy|trophy_css_color_dict size='w-full p-2' %}
+                            <div class="bg-base-100 border-2 border-base-300 shadow-sm shadow-neutral w-10 h-10 hover:scale-105 group-hover:border-{{ trophy|trophy_color }} group-hover:shadow-{{ trophy|trophy_color }} hidden lg:block">
+                                {% include 'partials/icons/trophy_cup.html' with color=trophy|trophy_css_color size='w-full p-2' %}
                             </div>
                         </div>
                     </div>

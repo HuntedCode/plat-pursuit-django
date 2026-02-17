@@ -3,6 +3,7 @@ from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.authentication import SessionAuthentication, TokenAuthentication
+from api.permissions import IsDiscordBot
 from .serializers import GenerateCodeSerializer, VerifySerializer, ProfileSerializer, TrophyCaseSerializer, CommentSerializer, CommentCreateSerializer
 from trophies.models import Profile, Comment, Concept
 from trophies.services.comment_service import CommentService
@@ -19,19 +20,14 @@ from trophies.services.milestone_service import check_all_milestones_for_user
 import time
 import math
 import logging
+from api.utils import safe_int
 
 logger = logging.getLogger('psn_api')
 
-def safe_int(value, default=0):
-    """Safely convert a query parameter to int, returning default on failure."""
-    try:
-        return int(value)
-    except (TypeError, ValueError):
-        return default
-
 class GenerateCodeView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsDiscordBot]
 
+    @method_decorator(ratelimit(key='user', rate='5/m', method='POST', block=True))
     def post(self, request):
         serializer = GenerateCodeSerializer(data=request.data)
         if serializer.is_valid():
@@ -56,8 +52,9 @@ class GenerateCodeView(APIView):
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
     
 class VerifyView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsDiscordBot]
 
+    @method_decorator(ratelimit(key='user', rate='3/m', method='POST', block=True))
     def post(self, request):
         serializer = VerifySerializer(data=request.data)
         if serializer.is_valid():
@@ -65,12 +62,12 @@ class VerifyView(APIView):
             psn_username = serializer.validated_data['psn_username'].lower()
             if not all([discord_id, psn_username]):
                 return Response({'error': 'discord_id and psn_username required.'}, status=status.HTTP_400_BAD_REQUEST)
-            
+
             try:
                 profile = Profile.objects.get(psn_username=psn_username)
-                
+
                 start_time = timezone.now()
-                timeout_seconds = 30
+                timeout_seconds = 5
                 poll_interval_seconds = 1
 
                 is_syncing = profile.attempt_sync()
@@ -103,7 +100,7 @@ class VerifyView(APIView):
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 class CheckLinkedView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsDiscordBot]
 
     def get(self, request):
         discord_id = request.query_params.get('discord_id')
@@ -120,13 +117,13 @@ class CheckLinkedView(APIView):
             return Response({'error': 'Internal error.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 class UnlinkView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsDiscordBot]
 
     def post(self, request):
         discord_id = request.data.get('discord_id')
         if not discord_id:
             return Response({'error': 'discord_id required.'}, status=status.HTTP_400_BAD_REQUEST)
-        
+
         try:
             profile = Profile.objects.get(discord_id=discord_id)
             profile.unlink_discord()
@@ -138,25 +135,25 @@ class UnlinkView(APIView):
             return Response({'error': 'Internal error.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 class RefreshView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsDiscordBot]
 
+    @method_decorator(ratelimit(key='user', rate='5/m', method='POST', block=True))
     def post(self, request):
         discord_id = request.data.get('discord_id')
         admin_override = request.data.get('admin_override', False)
 
         if not discord_id:
             return Response({'error': 'discord_id required.'}, status=status.HTTP_400_BAD_REQUEST)
-        
+
         try:
             profile = Profile.objects.get(discord_id=discord_id)
-            time_since_last_sync = profile.get_time_since_last_sync()
             is_syncing = profile.attempt_sync()
             if is_syncing or (admin_override or not profile.psn_history_public):
                 if not is_syncing:
                     PSNManager.profile_refresh(profile)
 
                 start_time = timezone.now()
-                timeout_seconds = 30
+                timeout_seconds = 5
                 poll_interval_seconds = 1
 
                 while (timezone.now() - start_time).total_seconds() < timeout_seconds:
@@ -169,10 +166,17 @@ class RefreshView(APIView):
                             return Response({'linked': True, 'success': False, 'message': "Permissions error. Please make sure the PSN setting 'Gaming History' is set to 'Anyone' and try again."})
                     time.sleep(poll_interval_seconds)
 
+                # Sync timed out
+                return Response({
+                    'linked': True,
+                    'success': False,
+                    'message': 'Sync timed out. Please try again shortly.'
+                }, status=status.HTTP_408_REQUEST_TIMEOUT)
+
             else:
                 total_seconds = profile.get_seconds_to_next_sync()
                 minutes = math.ceil(total_seconds / 60)
-                return Response({'linked': True, 'succes': False, 'message': f"Too many profile refresh requests! Please try again in: {int(minutes)} minutes"})
+                return Response({'linked': True, 'success': False, 'message': f"Too many profile refresh requests! Please try again in: {int(minutes)} minutes"})
         except Profile.DoesNotExist:
             return Response({'linked': False, 'message': 'No linked profile found.'})
         except Exception as e:
@@ -180,8 +184,8 @@ class RefreshView(APIView):
             return Response({'error': 'Internal error.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 class SummaryView(APIView):
-    permission_classes = [IsAuthenticated]
-    
+    permission_classes = [IsAuthenticated, IsDiscordBot]
+
     def get(self, request):
         discord_id = request.query_params.get('discord_id')
         logger.debug(f"Profile request for {discord_id}")
@@ -199,14 +203,14 @@ class SummaryView(APIView):
             return Response({'error': 'Internal error.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 class TrophyCaseView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsDiscordBot]
 
     def get(self, request):
         discord_id = request.query_params.get('discord_id')
         page = safe_int(request.query_params.get('page', 1), 1)
         per_page = safe_int(request.query_params.get('per_page', 10), 10)
         if not discord_id:
-            return Response({'error', 'discord_id required.'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'error': 'discord_id required.'}, status=status.HTTP_400_BAD_REQUEST)
         
         try:
             profile = Profile.objects.get(discord_id=discord_id)
@@ -327,10 +331,30 @@ class CommentListView(APIView):
                     return Response({'error': f'Template rendering failed: {str(html_error)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
             else:
                 # Return JSON (original behavior with pagination)
+                # Pre-fetch voted comment IDs to avoid per-comment vote queries
+                voted_comment_ids = set()
+                if profile:
+                    from trophies.models import CommentVote
+                    comment_ids = [c.id for c in paginated_comments]
+                    # Also need reply IDs, fetch all non-root comments in scope
+                    scope_filter = {'concept_id': concept.id, 'is_deleted': False}
+                    if trophy_id:
+                        scope_filter['trophy_id'] = trophy_id
+                    if checklist_id:
+                        scope_filter['checklist_id'] = checklist_id
+                    from trophies.models import Comment as CommentModel
+                    all_scope_ids = list(CommentModel.objects.filter(**scope_filter).values_list('id', flat=True))
+                    voted_comment_ids = set(
+                        CommentVote.objects.filter(
+                            comment_id__in=all_scope_ids,
+                            profile=profile
+                        ).values_list('comment_id', flat=True)
+                    )
+
                 serializer = CommentSerializer(
                     paginated_comments,
                     many=True,
-                    context={'request': request}
+                    context={'request': request, 'voted_comment_ids': voted_comment_ids}
                 )
 
                 return Response({
@@ -472,10 +496,39 @@ class CommentListView(APIView):
         return context
 
     def _get_all_descendants(self, comment):
-        """Recursively get all descendants of a comment."""
-        descendants = list(comment.replies.all())
-        for child in comment.replies.all():
-            descendants.extend(self._get_all_descendants(child))
+        """Get all descendants of a comment using a single query instead of recursive N+1.
+
+        Fetches all non-root replies in the same comment scope (concept + trophy_id +
+        checklist_id), then walks the parent chain in Python to find this comment's subtree.
+        """
+        from trophies.models import Comment
+
+        # Single query for all replies in the same scope
+        scope_filter = {
+            'concept_id': comment.concept_id,
+            'trophy_id': comment.trophy_id,
+            'checklist_id': comment.checklist_id,
+            'parent__isnull': False,
+            'is_deleted': False,
+        }
+        all_replies = list(
+            Comment.objects.filter(**scope_filter)
+            .select_related('profile', 'profile__user')
+        )
+
+        # Build parent-to-children mapping
+        parent_to_children = {}
+        for reply in all_replies:
+            parent_to_children.setdefault(reply.parent_id, []).append(reply)
+
+        # BFS from the target comment to collect all descendants
+        descendants = []
+        queue = [comment.id]
+        while queue:
+            current_id = queue.pop(0)
+            for child in parent_to_children.get(current_id, []):
+                descendants.append(child)
+                queue.append(child.id)
 
         return descendants
 

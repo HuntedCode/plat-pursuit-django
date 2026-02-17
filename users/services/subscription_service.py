@@ -13,6 +13,7 @@ import logging
 import stripe
 from typing import Optional, Dict, Tuple
 from django.conf import settings
+from django.db import transaction
 from djstripe.models import Subscription, Customer, Price
 from users.constants import (
     STRIPE_PRODUCTS,
@@ -146,21 +147,23 @@ class SubscriptionService:
 
             user.premium_tier = None
 
-        # Update linked profile
-        if hasattr(user, 'profile'):
-            user.profile.update_profile_premium(is_premium)
+        # Update user and profile atomically
+        with transaction.atomic():
+            user.save()
+            if hasattr(user, 'profile'):
+                user.profile.update_profile_premium(is_premium)
 
-            # Handle Discord notifications and role assignments for new subscriptions
-            if event_type == 'customer.subscription.created' and is_premium:
-                send_subscription_notification(user)
+        # Handle Discord notifications and role assignments for new subscriptions
+        # (side effects run after DB transaction succeeds)
+        if hasattr(user, 'profile') and event_type == 'customer.subscription.created' and is_premium:
+            send_subscription_notification(user)
 
-                # Assign Discord roles based on tier
-                if user.premium_tier in PREMIUM_DISCORD_ROLE_TIERS:
-                    notify_bot_role_earned(user.profile, settings.DISCORD_PREMIUM_ROLE)
-                elif user.premium_tier in SUPPORTER_DISCORD_ROLE_TIERS:
-                    notify_bot_role_earned(user.profile, settings.DISCORD_PREMIUM_PLUS_ROLE)
+            # Assign Discord roles based on tier
+            if user.premium_tier in PREMIUM_DISCORD_ROLE_TIERS:
+                notify_bot_role_earned(user.profile, settings.DISCORD_PREMIUM_ROLE)
+            elif user.premium_tier in SUPPORTER_DISCORD_ROLE_TIERS:
+                notify_bot_role_earned(user.profile, settings.DISCORD_PREMIUM_PLUS_ROLE)
 
-        user.save()
         return is_premium
 
     @staticmethod
@@ -253,19 +256,23 @@ class SubscriptionService:
         """
         Process Stripe webhook events.
 
-        Currently handles:
+        Handles:
+        - checkout.session.completed
         - customer.subscription.created
         - customer.subscription.updated
         - customer.subscription.deleted
+        - invoice.paid
 
         Args:
             event_type: Stripe event type
             event_data: Event data from Stripe
         """
         if event_type in [
+            'checkout.session.completed',
             'customer.subscription.created',
             'customer.subscription.updated',
-            'customer.subscription.deleted'
+            'customer.subscription.deleted',
+            'invoice.paid',
         ]:
             customer_id = event_data.get('customer')
             if not customer_id:

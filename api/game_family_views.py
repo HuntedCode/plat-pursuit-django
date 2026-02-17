@@ -7,6 +7,7 @@ import logging
 
 from collections import defaultdict
 
+from django.db import transaction
 from django.db.models import Q
 from django.db.models.functions import Lower
 from django.utils import timezone
@@ -68,11 +69,6 @@ def _bulk_serialize_concepts(concepts):
     return results
 
 
-def _serialize_concept_brief(concept):
-    """Serialize a single concept. For small result sets (e.g., search)."""
-    return _bulk_serialize_concepts([concept])[0]
-
-
 def _serialize_family(family):
     """Serialize a GameFamily with its member concepts."""
     concepts = list(family.concepts.prefetch_related('games').all())
@@ -117,32 +113,33 @@ class ProposalApproveView(APIView):
 
         canonical_name = request.data.get('canonical_name', proposal.proposed_name)
 
-        # Check if any concept has since joined a family
-        concepts = list(proposal.concepts.all())
-        already_in_family = [c for c in concepts if c.family_id is not None]
+        with transaction.atomic():
+            # Check if any concept has since joined a family
+            concepts = list(proposal.concepts.all())
+            already_in_family = [c for c in concepts if c.family_id is not None]
 
-        if already_in_family:
-            # Add remaining concepts to existing family
-            existing_family = already_in_family[0].family
-            for c in concepts:
-                if c.family_id is None:
-                    c.family = existing_family
+            if already_in_family:
+                # Add remaining concepts to existing family
+                existing_family = already_in_family[0].family
+                for c in concepts:
+                    if c.family_id is None:
+                        c.family = existing_family
+                        c.save(update_fields=['family'])
+                family = existing_family
+            else:
+                family = GameFamily.objects.create(
+                    canonical_name=canonical_name,
+                    is_verified=True,
+                )
+                for c in concepts:
+                    c.family = family
                     c.save(update_fields=['family'])
-            family = existing_family
-        else:
-            family = GameFamily.objects.create(
-                canonical_name=canonical_name,
-                is_verified=True,
-            )
-            for c in concepts:
-                c.family = family
-                c.save(update_fields=['family'])
 
-        proposal.status = 'approved'
-        proposal.reviewed_by = request.user
-        proposal.reviewed_at = timezone.now()
-        proposal.resulting_family = family
-        proposal.save(update_fields=['status', 'reviewed_by', 'reviewed_at', 'resulting_family'])
+            proposal.status = 'approved'
+            proposal.reviewed_by = request.user
+            proposal.reviewed_at = timezone.now()
+            proposal.resulting_family = family
+            proposal.save(update_fields=['status', 'reviewed_by', 'reviewed_at', 'resulting_family'])
 
         return Response({
             'message': 'Proposal approved.',

@@ -26,19 +26,12 @@ from trophies.services.challenge_service import (
     auto_set_cover_letter,
 )
 from trophies.util_modules.constants import ALL_PLATFORMS, REGIONS
+from api.utils import safe_int
 
 logger = logging.getLogger('psn_api')
 
 
 # ─── Helpers ─────────────────────────────────────────────────────────────────────
-
-def safe_int(value, default=0):
-    """Safely convert a query parameter to int, returning default on failure."""
-    try:
-        return int(value)
-    except (TypeError, ValueError):
-        return default
-
 
 def _get_profile_or_error(request):
     """Return (profile, None) or (None, Response) for error."""

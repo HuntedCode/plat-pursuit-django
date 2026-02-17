@@ -1,8 +1,15 @@
+import json
+import re
+
 from django import template
 from django.utils import timezone
+from django.utils.html import escape
+from django.utils.safestring import mark_safe
 from datetime import datetime, timedelta
 from humanize import naturaltime
+from plat_pursuit.middleware import get_current_request
 from trophies.util_modules.constants import BRONZE_STAGE_XP, SILVER_STAGE_XP, GOLD_STAGE_XP, PLAT_STAGE_XP
+
 register = template.Library()
 
 @register.filter
@@ -103,75 +110,42 @@ def region_color_hex(region_str):
 
 @register.filter
 def trophy_color(trophy):
-    type = trophy.trophy_type
-    if type == 'bronze':
-        return 'trophy-bronze'
-    elif type == 'silver':
-        return 'trophy-silver'
-    elif type == 'gold':
-        return 'trophy-gold'
-    elif type == 'platinum':
-        return 'trophy-platinum'
+    """Returns CSS class for trophy type. Accepts model instances or dicts."""
+    trophy_type = trophy['trophy_type'] if isinstance(trophy, dict) else trophy.trophy_type
+    colors = {'bronze': 'trophy-bronze', 'silver': 'trophy-silver', 'gold': 'trophy-gold', 'platinum': 'trophy-platinum'}
+    return colors.get(trophy_type, '')
 
 @register.filter
 def trophy_css_color(trophy):
-    """Returns the full CSS variable for a trophy's color, e.g. 'var(--color-trophy-gold)'.
-    Useful for passing as a color parameter to icon partials."""
+    """Returns full CSS variable, e.g. 'var(--color-trophy-gold)'. Accepts model instances or dicts."""
     return f'var(--color-{trophy_color(trophy)})'
 
 @register.filter
-def trophy_color_dict(trophy):
-    type = trophy['trophy_type']
-    if type == 'bronze':
-        return 'trophy-bronze'
-    elif type == 'silver':
-        return 'trophy-silver'
-    elif type == 'gold':
-        return 'trophy-gold'
-    elif type == 'platinum':
-        return 'trophy-platinum'
-
-@register.filter
-def trophy_css_color_dict(trophy):
-    """Returns the full CSS variable for a trophy dict's color, e.g. 'var(--color-trophy-gold)'.
-    Useful for passing as a color parameter to icon partials when trophy is a dict."""
-    return f'var(--color-{trophy_color_dict(trophy)})'
-
-@register.filter
 def badge_color(tier):
-    tier = int(tier)
-    if tier == 1:
-        return 'warning'
-    elif tier == 2:
-        return 'secondary'
-    elif tier == 3:
-        return 'error'
-    elif tier == 4:
-        return 'primary'
+    try:
+        tier = int(tier)
+    except (TypeError, ValueError):
+        return ''
+    colors = {1: 'warning', 2: 'secondary', 3: 'error', 4: 'primary'}
+    return colors.get(tier, '')
 
 @register.filter
 def badge_tier(tier):
-    tier = int(tier)
-    if tier == 1:
-        return 'Bronze'
-    elif tier == 2:
-        return 'Silver'
-    elif tier == 3:
-        return 'Gold'
-    elif tier == 4:
-        return 'Platinum'
+    try:
+        tier = int(tier)
+    except (TypeError, ValueError):
+        return ''
+    tiers = {1: 'Bronze', 2: 'Silver', 3: 'Gold', 4: 'Platinum'}
+    return tiers.get(tier, '')
 
 @register.filter
 def badge_tier_xp(tier):
-    tier = int(tier)
-    if tier == 1:
-        return BRONZE_STAGE_XP
-    elif tier == 2:
-        return SILVER_STAGE_XP
-    elif tier == 3:
-        return GOLD_STAGE_XP
-    elif tier == 4:
-        return PLAT_STAGE_XP
+    try:
+        tier = int(tier)
+    except (TypeError, ValueError):
+        return 0
+    xp = {1: BRONZE_STAGE_XP, 2: SILVER_STAGE_XP, 3: GOLD_STAGE_XP, 4: PLAT_STAGE_XP}
+    return xp.get(tier, 0)
 
 @register.filter
 def multiply(value, arg):
@@ -182,14 +156,8 @@ def multiply(value, arg):
 
 @register.filter
 def psn_rarity(rarity_int):
-    if rarity_int == 0:
-        return 'Ultra Rare'
-    elif rarity_int == 1:
-        return 'Rare'
-    elif rarity_int == 2:
-        return 'Uncommon'
-    elif rarity_int == 3:
-        return 'Common'
+    labels = {0: 'Ultra Rare', 1: 'Very Rare', 2: 'Rare', 3: 'Common'}
+    return labels.get(rarity_int, '')
 
 
 @register.filter
@@ -273,12 +241,10 @@ def format_date(value, arg=None):
     # Try to get the current authenticated user's 24hr preference
     use_24hr = False
     try:
-        from plat_pursuit.middleware import get_current_request
         request = get_current_request()
         if request and hasattr(request, 'user') and request.user.is_authenticated:
             use_24hr = getattr(request.user, 'use_24hr_clock', False)
-    except (ImportError, AttributeError):
-        # Fallback: if we can't get the user, default to 12-hour format
+    except AttributeError:
         pass
 
     # Determine format string based on arg and user preference
@@ -323,11 +289,11 @@ def parse_spoilers(text):
     if not text:
         return text
 
-    import re
-    from django.utils.safestring import mark_safe
-    from django.utils.html import escape
-
-    # First escape the entire text for safety
+    # SAFETY: escape() is called FIRST on the entire input, converting all HTML
+    # special characters to entities (< > & " '). The regex then operates on the
+    # already-escaped text. The captured spoiler content is already entity-encoded,
+    # so injecting it into the HTML output is safe (no raw user HTML reaches the DOM).
+    # mark_safe() is valid here because ALL user content was escaped before processing.
     escaped_text = escape(text)
 
     # Then replace ||spoiler|| tags with HTML
@@ -376,22 +342,20 @@ def moderator_display_name(user):
 def tojson(value):
     """
     Convert a Python object to JSON string for use in HTML data attributes.
-
     Use with single-quoted attributes: data-attr='{{ value|tojson }}'
 
-    Args:
-        value: Any JSON-serializable Python object
-
-    Returns:
-        JSON string suitable for single-quoted HTML attributes
+    Returns mark_safe output with HTML-critical characters escaped to
+    prevent XSS while preserving valid JSON structure.
     """
-    import json
     try:
-        # Convert to JSON - no escaping needed when used in single-quoted attributes
-        # since JSON uses double quotes internally
-        return json.dumps(value)
+        result = json.dumps(value)
     except (TypeError, ValueError):
-        return '[]'
+        return mark_safe('[]')
+    # Escape characters that could break out of HTML context:
+    # < > prevent </script> injection, & prevents entity confusion,
+    # ' prevents breaking out of single-quoted attributes
+    result = result.replace('&', '\\u0026').replace('<', '\\u003c').replace('>', '\\u003e').replace("'", '\\u0027')
+    return mark_safe(result)
 
 
 @register.simple_tag
@@ -408,8 +372,7 @@ def gradient_themes_json():
             window.GRADIENT_THEMES = {% gradient_themes_json %};
         </script>
     """
-    import json
-    from django.utils.safestring import mark_safe
+    # Deferred import to avoid circular imports (templatetags loading before models)
     from trophies.themes import get_themes_for_js
 
     return mark_safe(json.dumps(get_themes_for_js()))

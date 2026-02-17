@@ -18,6 +18,7 @@ from djstripe.models import Event as DJStripeEvent
 import stripe
 import logging
 from users.forms import UserSettingsForm, CustomPasswordChangeForm
+from users.services.subscription_service import SubscriptionService
 from users.models import CustomUser
 from trophies.forms import PremiumSettingsForm, ProfileSettingsForm
 from trophies.utils import update_profile_trophy_counts
@@ -218,7 +219,9 @@ def subscribe_success(request):
 @require_POST
 def stripe_webhook(request):
     payload = request.body
-    sig_header = request.META['HTTP_STRIPE_SIGNATURE']
+    sig_header = request.META.get('HTTP_STRIPE_SIGNATURE')
+    if not sig_header:
+        return HttpResponse(status=400)
     event = None
 
     try:
@@ -232,26 +235,8 @@ def stripe_webhook(request):
     
     dj_event = DJStripeEvent.process(event)
 
-    if event.type in ['checkout.session.completed', 'customer.subscription.created', 'invoice.paid', 'customer.subscription.updated']:
-        customer_id = event.data.object.get('customer')
-        if customer_id:
-            user = CustomUser.objects.filter(stripe_customer_id=customer_id).first()
-            if user:
-                user.update_subscription_status(event.type)
-                logger.info(f"Updated tier for user {user.id}")
-    
-    elif event.type == 'customer.subscription.deleted':
-        customer_id = event.data.object.get('customer')
-        if customer_id:
-            user = CustomUser.objects.filter(stripe_customer_id=customer_id).first()
-            if user:
-                subscription = event.data.object
-                if subscription:
-                    user.premium_tier = None
-                    user.save()
-                    if hasattr(user, 'profile'):
-                        user.profile.update_profile_premium(False)
-                    logger.info(f"Revoked tier for user {user.id}")
+    # Delegate all subscription-related events to SubscriptionService
+    SubscriptionService.handle_webhook_event(event.type, event.data.object)
 
     return HttpResponse(status=200)
 

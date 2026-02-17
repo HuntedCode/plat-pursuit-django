@@ -329,7 +329,7 @@
 
                             {% elif item.item_type == 'trophy' %}
                                 {# Trophy Item - with checkbox and trophy metadata #}
-                                {% get_trophy item.trophy_id as trophy %}
+                                {% with trophy=trophy_map|dict_get:item.trophy_id %}
                                 {% if trophy %}
                                 {% with is_earned=item.id|in_set:earned_trophy_item_ids %}
                                 <div class="flex items-center gap-3 p-3 bg-base-200/50 rounded-lg hover:bg-base-300 transition-colors checklist-item checklist-trophy-item border-l-4 {% if is_earned %}border-success{% else %}border-{{ trophy.trophy_type|default:'bronze' }}{% endif %}"
@@ -363,7 +363,7 @@
                                                 <span class="badge badge-sm badge-success">Earned</span>
                                                 {% endif %}
                                                 {% if trophy|is_dlc_trophy %}
-                                                    {% get_trophy_group trophy as trophy_group %}
+                                                    {% get_trophy_group_cached trophy_group_map trophy as trophy_group %}
                                                     {% if trophy_group and trophy_group.trophy_group_name %}
                                                     <span class="badge badge-sm badge-info">DLC: {{ trophy_group.trophy_group_name }}</span>
                                                     {% else %}
@@ -382,6 +382,7 @@
                                 </div>
                                 {% endwith %}
                                 {% endif %}
+                                {% endwith %}
 
                             {% elif item.item_type == 'sub_header' %}
                                 {# Sub-header - no checkbox, distinct styling with visual separation #}

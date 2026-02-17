@@ -12,7 +12,7 @@ from django.utils import timezone
 from django.views.generic import View, DetailView, TemplateView, ListView
 
 from trophies.mixins import ProfileHotbarMixin
-from ..models import Game, Profile, EarnedTrophy, ProfileGame, Concept, Checklist
+from ..models import Game, Profile, EarnedTrophy, ProfileGame, Concept, Checklist, Trophy, TrophyGroup
 from trophies.services.checklist_service import ChecklistService
 
 logger = logging.getLogger("psn_api")
@@ -125,6 +125,31 @@ class ChecklistDetailView(ProfileHotbarMixin, DetailView):
         context['adjusted_items_completed'] = total_completed_count
         context['adjusted_total_items'] = total_items_count
         context['adjusted_progress_percentage'] = adjusted_progress_percentage
+
+        # Pre-fetch all Trophy and TrophyGroup objects for template rendering
+        # (eliminates N+1 queries from get_trophy/get_trophy_group template tags)
+        trophy_ids = set()
+        for section in sections:
+            for item in section.items.all():
+                if item.item_type == 'trophy' and item.trophy_id:
+                    trophy_ids.add(item.trophy_id)
+
+        if trophy_ids:
+            trophies_qs = Trophy.objects.filter(id__in=trophy_ids).select_related('game')
+            context['trophy_map'] = {t.id: t for t in trophies_qs}
+
+            dlc_trophies = [t for t in trophies_qs if t.trophy_group_id and t.trophy_group_id != 'default']
+            if dlc_trophies:
+                group_filters = Q()
+                for t in dlc_trophies:
+                    group_filters |= Q(game_id=t.game_id, trophy_group_id=t.trophy_group_id)
+                groups = TrophyGroup.objects.filter(group_filters)
+                context['trophy_group_map'] = {(g.game_id, g.trophy_group_id): g for g in groups}
+            else:
+                context['trophy_group_map'] = {}
+        else:
+            context['trophy_map'] = {}
+            context['trophy_group_map'] = {}
 
         # Check permissions
         context['can_edit'] = profile and checklist.profile == profile and not checklist.is_deleted
@@ -287,6 +312,31 @@ class ChecklistEditView(LoginRequiredMixin, ProfileHotbarMixin, DetailView):
         context['concept_games'] = []
         if checklist.concept:
             context['concept_games'] = checklist.concept.games.all().order_by(Lower('title_name'))
+
+        # Pre-fetch all Trophy and TrophyGroup objects for template rendering
+        # (eliminates N+1 queries from get_trophy/get_trophy_group template tags)
+        trophy_ids = set()
+        for section in checklist.sections.all():
+            for item in section.items.all():
+                if item.item_type == 'trophy' and item.trophy_id:
+                    trophy_ids.add(item.trophy_id)
+
+        if trophy_ids:
+            trophies_qs = Trophy.objects.filter(id__in=trophy_ids).select_related('game')
+            context['trophy_map'] = {t.id: t for t in trophies_qs}
+
+            dlc_trophies = [t for t in trophies_qs if t.trophy_group_id and t.trophy_group_id != 'default']
+            if dlc_trophies:
+                group_filters = Q()
+                for t in dlc_trophies:
+                    group_filters |= Q(game_id=t.game_id, trophy_group_id=t.trophy_group_id)
+                groups = TrophyGroup.objects.filter(group_filters)
+                context['trophy_group_map'] = {(g.game_id, g.trophy_group_id): g for g in groups}
+            else:
+                context['trophy_group_map'] = {}
+        else:
+            context['trophy_map'] = {}
+            context['trophy_group_map'] = {}
 
         # Breadcrumbs
         breadcrumb = [

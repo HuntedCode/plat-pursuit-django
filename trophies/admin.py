@@ -1,7 +1,7 @@
 from django.contrib import admin, messages
 from django.contrib.admin import SimpleListFilter
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import Count, Q
 from datetime import timedelta
 from .models import Profile, Game, Trophy, EarnedTrophy, ProfileGame, APIAuditLog, FeaturedGame, FeaturedProfile, Concept, TitleID, TrophyGroup, UserTrophySelection, UserConceptRating, Badge, UserBadge, UserBadgeProgress, FeaturedGuide, Stage, PublisherBlacklist, Title, UserTitle, Milestone, UserMilestone, UserMilestoneProgress, Comment, CommentVote, CommentReport, ModerationLog, BannedWord, Checklist, ChecklistSection, ChecklistItem, ChecklistVote, UserChecklistProgress, ChecklistReport, ProfileGamification, StatType, StageStatValue, MonthlyRecap, GameList, GameListItem, GameListLike, Challenge, AZChallengeSlot, GameFamily, GameFamilyProposal
 
@@ -118,6 +118,7 @@ class GameAdmin(admin.ModelAdmin):
         "is_delisted",
         "has_online_trophies",
     )
+    list_select_related = ('concept',)
     list_filter = ("has_trophy_groups", "is_regional", RegionListFilter, 'concept_lock', 'concept_stale', 'is_shovelware', 'is_delisted', 'is_obtainable', "has_online_trophies")
     search_fields = ("title_name", "np_communication_id")
     ordering = ("title_name",)
@@ -198,16 +199,22 @@ class ProfileGameAdmin(admin.ModelAdmin):
     list_display = (
         "profile",
         "game",
-        "game__played_count",
+        "game_played_count",
         "progress",
         "play_duration",
         "last_played_date_time",
         "last_updated_datetime",
     )
+    list_select_related = ('profile', 'game')
     list_filter = ("hidden_flag",)
     search_fields = ("profile__psn_username", "game__title_name")
     raw_id_fields = ("profile", "game")
     ordering = ("-last_updated_datetime",)
+
+    def game_played_count(self, obj):
+        return obj.game.played_count
+    game_played_count.short_description = 'Played Count'
+    game_played_count.admin_order_field = 'game__played_count'
 
 
 @admin.register(Trophy)
@@ -221,6 +228,7 @@ class TrophyAdmin(admin.ModelAdmin):
         "earned_count",
         "earn_rate",
     )
+    list_select_related = ('game',)
     list_filter = ("trophy_type", "game__title_platform")
     search_fields = ("trophy_name", "trophy_detail")
     raw_id_fields = ("game",)
@@ -256,10 +264,6 @@ class TrophyAdmin(admin.ModelAdmin):
         ),
     )
 
-    def earned_by_count(self, obj):
-        return obj.earned_by.count()
-
-    earned_by_count.short_description = "Earned By"
 
 
 @admin.register(EarnedTrophy)
@@ -267,22 +271,34 @@ class EarnedTrophyAdmin(admin.ModelAdmin):
     list_display = (
         "profile",
         "trophy",
-        "trophy__trophy_type",
+        "trophy_type_display",
         "earned",
         'progress',
-        "trophy__earned_count",
+        "trophy_earned_count",
         "earned_date_time",
         "last_updated",
     )
+    list_select_related = ('profile', 'trophy')
     list_filter = ("earned", "trophy_hidden", "earned_date_time", "trophy__trophy_type")
     search_fields = ("profile__psn_username", "trophy__trophy_name", "trophy__game__title_name")
     raw_id_fields = ("profile", "trophy")
     ordering = ("-last_updated",)
 
+    def trophy_type_display(self, obj):
+        return obj.trophy.trophy_type
+    trophy_type_display.short_description = 'Trophy Type'
+    trophy_type_display.admin_order_field = 'trophy__trophy_type'
+
+    def trophy_earned_count(self, obj):
+        return obj.trophy.earned_count
+    trophy_earned_count.short_description = 'Earned Count'
+    trophy_earned_count.admin_order_field = 'trophy__earned_count'
+
 
 @admin.register(APIAuditLog)
 class APIAuditLogAdmin(admin.ModelAdmin):
     list_display = ("timestamp", "endpoint", "profile", "status_code", "response_time", "calls_remaining")
+    list_select_related = ('profile',)
     list_filter = ("status_code", "timestamp")
     search_fields = ("endpoint", "profile__psn_username")
     ordering = ("-timestamp",)
@@ -290,14 +306,18 @@ class APIAuditLogAdmin(admin.ModelAdmin):
 @admin.register(FeaturedGame)
 class FeaturedGameAdmin(admin.ModelAdmin):
     list_display = ('game', 'priority', 'reason', 'start_date', 'end_date')
+    list_select_related = ('game',)
     search_fields = ('game__title_name',)
     list_filter = ('reason',)
+    raw_id_fields = ('game',)
 
 @admin.register(FeaturedProfile)
 class FeaturedProfileAdmin(admin.ModelAdmin):
     list_display = ('profile', 'priority', 'reason', 'start_date', 'end_date')
+    list_select_related = ('profile',)
     search_fields = ('profile__psn_username',)
     list_filter = ('reason',)
+    raw_id_fields = ('profile',)
 
 @admin.register(TitleID)
 class TitleIDAdmin(admin.ModelAdmin):
@@ -330,35 +350,52 @@ class ConceptAdmin(admin.ModelAdmin):
     @admin.action(description="Duplicate selected concepts")
     def duplicate_concept(self, request, queryset):
         for concept in queryset:
-            new_concept = concept
+            original_id = concept.concept_id
+            # Fetch a fresh copy to avoid mutating the original queryset object
+            new_concept = Concept.objects.get(pk=concept.pk)
             new_concept.pk = None
+            # Clear title_ids to prevent sync ambiguity (duplicate title_ids
+            # would cause game lookups to match against the wrong concept)
+            new_concept.title_ids = []
 
-            original_id  = concept.concept_id
             i = 1
             while True:
                 new_id = f"{original_id}-{i}"
                 if not Concept.objects.filter(concept_id=new_id).exists():
                     break
                 i += 1
-            
+
             new_concept.concept_id = new_id
             new_concept.save()
 
 @admin.register(TrophyGroup)
 class TrophyGroupAdmin(admin.ModelAdmin):
     list_display = ('game', 'trophy_group_id', 'trophy_group_name')
+    list_select_related = ('game',)
     search_fields = ('game__title_name', 'trophy_group_name')
+    raw_id_fields = ('game',)
 
 @admin.register(UserTrophySelection)
 class UserTrophySelectionAdmin(admin.ModelAdmin):
-    list_display = ('profile', 'earned_trophy__trophy__trophy_name', 'earned_trophy__trophy__game__title_name')
+    list_display = ('profile', 'trophy_name_display', 'game_name_display')
+    list_select_related = ('profile', 'earned_trophy__trophy__game')
     search_fields = ('profile__psn_username',)
+
+    def trophy_name_display(self, obj):
+        return obj.earned_trophy.trophy.trophy_name
+    trophy_name_display.short_description = 'Trophy Name'
+
+    def game_name_display(self, obj):
+        return obj.earned_trophy.trophy.game.title_name
+    game_name_display.short_description = 'Game'
 
 @admin.register(UserConceptRating)
 class UserConceptRatingAdmin(admin.ModelAdmin):
     list_display = ('profile', 'concept', 'difficulty', 'grindiness', 'hours_to_platinum', 'fun_ranking', 'overall_rating', 'created_at', 'updated_at')
+    list_select_related = ('profile', 'concept')
     list_filter = ('created_at', 'updated_at')
     search_fields = ('profile__psn_username', 'concept__unified_title')
+    raw_id_fields = ('profile', 'concept')
 
 class StageInline(admin.TabularInline):
     model = Stage
@@ -369,6 +406,7 @@ class StageInline(admin.TabularInline):
 @admin.register(Badge)
 class BadgeAdmin(admin.ModelAdmin):
     list_display = ['name', 'tier', 'badge_type', 'series_slug', 'title', 'display_series', 'required_stages', 'requires_all', 'min_required', 'earned_count', 'most_recent_concept']
+    list_select_related = ('most_recent_concept', 'title')
     list_filter = ['tier', 'badge_type']
     search_fields = ['name', 'series_slug']
     fields = ['name', 'series_slug', 'description', 'badge_image', 'base_badge', 'tier', 'badge_type', 'title', 'display_title', 'display_series', 'discord_role_id', 'requires_all', 'min_required', 'requirements', 'earned_count']
@@ -388,19 +426,25 @@ class StageAdmin(admin.ModelAdmin):
 @admin.register(UserBadge)
 class UserBadgeAdmin(admin.ModelAdmin):
     list_display = ['profile', 'badge', 'earned_at', 'is_displayed']
+    list_select_related = ('profile', 'badge')
     list_filter = ['is_displayed', 'earned_at']
     search_fields = ['profile__psn_username']
+    raw_id_fields = ('profile', 'badge')
 
 @admin.register(UserBadgeProgress)
 class UserBadgeProgressAdmin(admin.ModelAdmin):
     list_display = ['profile', 'badge', 'completed_concepts', 'progress_value', 'last_checked']
+    list_select_related = ('profile', 'badge')
     search_fields = ['profile__psn_username']
+    raw_id_fields = ('profile', 'badge')
     
 @admin.register(FeaturedGuide)
 class FeaturedGuideAdmin(admin.ModelAdmin):
     list_display = ['concept', 'start_date', 'end_date', 'priority']
+    list_select_related = ('concept',)
     list_filter = ['start_date', 'end_date']
     search_fields = ['concept__unified_title']
+    raw_id_fields = ('concept',)
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         if db_field.name == 'concept':
@@ -418,6 +462,8 @@ class TitleAdmin(admin.ModelAdmin):
 @admin.register(UserTitle)
 class UserTitleAdmin(admin.ModelAdmin):
     list_display = ['profile', 'title', 'source_type', 'source_id', 'earned_at', 'is_displayed']
+    list_select_related = ('profile', 'title')
+    raw_id_fields = ('profile', 'title')
 
 @admin.register(Milestone)
 class MilestoneAdmin(admin.ModelAdmin):
@@ -426,12 +472,16 @@ class MilestoneAdmin(admin.ModelAdmin):
 @admin.register(UserMilestone)
 class UserMilestoneAdmin(admin.ModelAdmin):
     list_display = ['profile', 'milestone', 'earned_at']
+    list_select_related = ('profile', 'milestone')
     search_fields = ['profile__psn_username', 'milestone__name']
+    raw_id_fields = ('profile', 'milestone')
 
 @admin.register(UserMilestoneProgress)
 class UserMilestoneProgressAdmin(admin.ModelAdmin):
     list_display = ['profile', 'milestone', 'progress_value', 'last_checked']
+    list_select_related = ('profile', 'milestone')
     search_fields = ['profile__psn_username', 'milestone__name']
+    raw_id_fields = ('profile', 'milestone')
 
 
 @admin.register(Comment)
@@ -448,6 +498,7 @@ class CommentAdmin(admin.ModelAdmin):
         'is_deleted',
         'created_at',
     ]
+    list_select_related = ('profile', 'concept')
     list_filter = [
         'is_deleted',
         'is_edited',
@@ -520,9 +571,17 @@ class CommentAdmin(admin.ModelAdmin):
             messages.SUCCESS
         )
 
-    @admin.action(description='Permanently delete selected comments')
+    @admin.action(description='Permanently delete selected comments (must be soft-deleted first)')
     def bulk_delete_comments(self, request, queryset):
-        """Hard delete comments from database."""
+        """Hard delete comments from database. Only operates on already soft-deleted comments."""
+        not_soft_deleted = queryset.filter(is_deleted=False).count()
+        if not_soft_deleted:
+            self.message_user(
+                request,
+                f"{not_soft_deleted} comment(s) are not soft-deleted. Soft-delete them first before permanently deleting.",
+                messages.ERROR
+            )
+            return
         count = queryset.count()
         queryset.delete()
         self.message_user(
@@ -541,6 +600,7 @@ class CommentVoteAdmin(admin.ModelAdmin):
         'profile',
         'created_at',
     ]
+    list_select_related = ('comment', 'profile')
     list_filter = ['created_at']
     search_fields = [
         'profile__psn_username',
@@ -579,6 +639,7 @@ class CommentReportAdmin(admin.ModelAdmin):
         'reviewed_by',
         'reviewed_at',
     ]
+    list_select_related = ('comment', 'reporter', 'reviewed_by')
     list_filter = [
         ReportStatusFilter,
         'reason',
@@ -687,6 +748,7 @@ class ModerationLogAdmin(admin.ModelAdmin):
         'comment_preview_short',
         'concept',
     ]
+    list_select_related = ('moderator', 'comment_author', 'concept')
     list_filter = [
         'action_type',
         'moderator',
@@ -740,6 +802,7 @@ class BannedWordAdmin(admin.ModelAdmin):
         'added_by',
         'added_at',
     ]
+    list_select_related = ('added_by',)
     list_filter = [
         'is_active',
         'use_word_boundaries',
@@ -796,6 +859,7 @@ class ChecklistAdmin(admin.ModelAdmin):
         'is_deleted',
         'created_at',
     ]
+    list_select_related = ('profile', 'concept')
     list_filter = [
         'status',
         'is_deleted',
@@ -820,9 +884,19 @@ class ChecklistAdmin(admin.ModelAdmin):
     date_hierarchy = 'created_at'
     actions = ['soft_delete_checklists', 'restore_checklists']
 
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        return qs.annotate(
+            _total_items=Count(
+                'sections__items',
+                filter=Q(sections__items__item_type__in=['item', 'trophy'])
+            )
+        )
+
     def total_items_display(self, obj):
-        return obj.total_items
+        return obj._total_items
     total_items_display.short_description = 'Items'
+    total_items_display.admin_order_field = '_total_items'
 
     @admin.action(description='Soft delete selected checklists')
     def soft_delete_checklists(self, request, queryset):
@@ -858,9 +932,19 @@ class ChecklistSectionAdmin(admin.ModelAdmin):
     raw_id_fields = ['checklist']
     ordering = ['checklist', 'order']
 
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        return qs.annotate(
+            _item_count=Count(
+                'items',
+                filter=Q(items__item_type__in=['item', 'trophy'])
+            )
+        )
+
     def item_count_display(self, obj):
-        return obj.item_count
+        return obj._item_count
     item_count_display.short_description = 'Items'
+    item_count_display.admin_order_field = '_item_count'
 
 
 @admin.register(ChecklistItem)
@@ -873,6 +957,7 @@ class ChecklistItemAdmin(admin.ModelAdmin):
         'trophy_id',
         'order',
     ]
+    list_select_related = ('section',)
     list_filter = [
         'created_at',
     ]
@@ -898,6 +983,7 @@ class ChecklistVoteAdmin(admin.ModelAdmin):
         'profile',
         'created_at',
     ]
+    list_select_related = ('checklist', 'profile')
     list_filter = [
         'created_at',
     ]
@@ -922,6 +1008,7 @@ class UserChecklistProgressAdmin(admin.ModelAdmin):
         'progress_percentage_display',
         'last_activity',
     ]
+    list_select_related = ('profile', 'checklist')
     list_filter = [
         'last_activity',
     ]
@@ -955,6 +1042,7 @@ class ChecklistReportAdmin(admin.ModelAdmin):
         'created_at',
         'reviewed_by',
     ]
+    list_select_related = ('checklist', 'reporter', 'reviewed_by')
     list_filter = [
         'status',
         'reason',
@@ -1018,7 +1106,9 @@ class ProfileGamificationAdmin(admin.ModelAdmin):
         'total_badges_earned',
         'last_updated',
     ]
+    list_select_related = ('profile',)
     search_fields = ['profile__psn_username']
+    raw_id_fields = ('profile',)
     readonly_fields = ['last_updated']
     ordering = ['-total_badge_xp']
     actions = ['recalculate_selected']
@@ -1054,9 +1144,10 @@ class StageStatValueAdmin(admin.ModelAdmin):
         'gold_value',
         'platinum_value',
     ]
+    list_select_related = ('stage', 'stat_type')
     list_filter = ['stat_type', 'stage__series_slug']
     search_fields = ['stage__series_slug', 'stage__title']
-    raw_id_fields = ['stage']
+    raw_id_fields = ('stage', 'stat_type')
 
 
 # ---------- Monthly Recap Admin ----------
@@ -1078,6 +1169,7 @@ class MonthlyRecapAdmin(admin.ModelAdmin):
         'generated_at',
         'updated_at',
     ]
+    list_select_related = ('profile',)
     list_filter = [
         'year',
         'month',
@@ -1366,6 +1458,7 @@ class GameListAdmin(admin.ModelAdmin):
         'is_deleted',
         'created_at',
     ]
+    list_select_related = ('profile',)
     list_filter = [
         'is_public',
         'is_deleted',
@@ -1407,6 +1500,7 @@ class GameListAdmin(admin.ModelAdmin):
 @admin.register(GameListLike)
 class GameListLikeAdmin(admin.ModelAdmin):
     list_display = ['id', 'game_list', 'profile', 'created_at']
+    list_select_related = ('game_list', 'profile')
     list_filter = ['created_at']
     search_fields = ['profile__psn_username', 'game_list__name']
     raw_id_fields = ['game_list', 'profile']
@@ -1426,6 +1520,7 @@ class AZChallengeSlotInline(admin.TabularInline):
 @admin.register(Challenge)
 class ChallengeAdmin(admin.ModelAdmin):
     list_display = ['id', 'name', 'profile', 'challenge_type', 'filled_count', 'completed_count', 'is_complete', 'is_deleted', 'created_at']
+    list_select_related = ('profile',)
     list_filter = ['challenge_type', 'is_complete', 'is_deleted']
     search_fields = ['name', 'profile__psn_username']
     raw_id_fields = ['profile']
@@ -1437,6 +1532,7 @@ class ChallengeAdmin(admin.ModelAdmin):
 @admin.register(AZChallengeSlot)
 class AZChallengeSlotAdmin(admin.ModelAdmin):
     list_display = ['id', 'challenge', 'letter', 'game', 'is_completed', 'assigned_at']
+    list_select_related = ('challenge', 'game')
     list_filter = ['is_completed', 'letter']
     search_fields = ['challenge__name', 'challenge__profile__psn_username', 'game__title_name']
     raw_id_fields = ['challenge', 'game']
@@ -1452,14 +1548,20 @@ class GameFamilyAdmin(admin.ModelAdmin):
     readonly_fields = ['created_at', 'updated_at']
     ordering = ['canonical_name']
 
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        return qs.annotate(_concept_count=Count('concepts'))
+
     def concept_count(self, obj):
-        return obj.concepts.count()
+        return obj._concept_count
     concept_count.short_description = 'Concepts'
+    concept_count.admin_order_field = '_concept_count'
 
 
 @admin.register(GameFamilyProposal)
 class GameFamilyProposalAdmin(admin.ModelAdmin):
     list_display = ['proposed_name', 'confidence_pct', 'status', 'concept_count', 'reviewed_by', 'created_at']
+    list_select_related = ('reviewed_by',)
     list_filter = ['status', 'created_at']
     search_fields = ['proposed_name', 'match_reason']
     raw_id_fields = ['resulting_family', 'reviewed_by']
@@ -1467,10 +1569,15 @@ class GameFamilyProposalAdmin(admin.ModelAdmin):
     date_hierarchy = 'created_at'
     ordering = ['-confidence', '-created_at']
 
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        return qs.annotate(_concept_count=Count('concepts'))
+
     def confidence_pct(self, obj):
         return f"{obj.confidence:.0%}"
     confidence_pct.short_description = 'Confidence'
 
     def concept_count(self, obj):
-        return obj.concepts.count()
+        return obj._concept_count
     concept_count.short_description = 'Concepts'
+    concept_count.admin_order_field = '_concept_count'

@@ -5,7 +5,7 @@ Handles all REST endpoints for game lists: CRUD, items, reordering, likes, and g
 """
 import logging
 
-from django.db import IntegrityError
+from django.db import IntegrityError, transaction
 from django.db.models import F, Q, Exists, OuterRef
 from django.db.models.functions import Lower
 from django.utils.decorators import method_decorator
@@ -21,16 +21,9 @@ from trophies.models import (
     GAME_LIST_FREE_MAX_LISTS, GAME_LIST_FREE_MAX_ITEMS,
 )
 from trophies.util_modules.constants import ALL_PLATFORMS, REGIONS
+from api.utils import safe_int
 
 logger = logging.getLogger('psn_api')
-
-
-def safe_int(value, default=0):
-    """Safely convert a query parameter to int, returning default on failure."""
-    try:
-        return int(value)
-    except (TypeError, ValueError):
-        return default
 
 
 def _get_profile_or_error(request):
@@ -396,16 +389,17 @@ class GameListRemoveItemView(APIView):
             except GameListItem.DoesNotExist:
                 return Response({'error': 'Item not found.'}, status=status.HTTP_404_NOT_FOUND)
 
-            removed_position = item.position
-            item.delete()
+            with transaction.atomic():
+                removed_position = item.position
+                item.delete()
 
-            # Re-compact positions for items after the removed one
-            GameListItem.objects.filter(
-                game_list=game_list, position__gt=removed_position
-            ).update(position=F('position') - 1)
+                # Re-compact positions for items after the removed one
+                GameListItem.objects.filter(
+                    game_list=game_list, position__gt=removed_position
+                ).update(position=F('position') - 1)
 
-            # Update denormalized count
-            GameList.objects.filter(id=game_list.id).update(game_count=F('game_count') - 1)
+                # Update denormalized count
+                GameList.objects.filter(id=game_list.id).update(game_count=F('game_count') - 1)
             game_list.refresh_from_db(fields=['game_count'])
 
             return Response({
@@ -509,23 +503,24 @@ class GameListReorderView(APIView):
             if old_position == new_position:
                 return Response({'success': True, 'position': new_position})
 
-            if old_position < new_position:
-                # Moving down: shift items in between up
-                GameListItem.objects.filter(
-                    game_list=game_list,
-                    position__gt=old_position,
-                    position__lte=new_position,
-                ).update(position=F('position') - 1)
-            else:
-                # Moving up: shift items in between down
-                GameListItem.objects.filter(
-                    game_list=game_list,
-                    position__gte=new_position,
-                    position__lt=old_position,
-                ).update(position=F('position') + 1)
+            with transaction.atomic():
+                if old_position < new_position:
+                    # Moving down: shift items in between up
+                    GameListItem.objects.filter(
+                        game_list=game_list,
+                        position__gt=old_position,
+                        position__lte=new_position,
+                    ).update(position=F('position') - 1)
+                else:
+                    # Moving up: shift items in between down
+                    GameListItem.objects.filter(
+                        game_list=game_list,
+                        position__gte=new_position,
+                        position__lt=old_position,
+                    ).update(position=F('position') + 1)
 
-            item.position = new_position
-            item.save(update_fields=['position'])
+                item.position = new_position
+                item.save(update_fields=['position'])
 
             return Response({'success': True, 'position': new_position})
 
@@ -558,15 +553,16 @@ class GameListLikeView(APIView):
             if game_list.profile_id == profile.id:
                 return Response({'error': "You can't like your own list."}, status=status.HTTP_400_BAD_REQUEST)
 
-            existing = GameListLike.objects.filter(game_list=game_list, profile=profile)
-            if existing.exists():
-                existing.delete()
-                GameList.objects.filter(id=game_list.id).update(like_count=F('like_count') - 1)
-                liked = False
-            else:
-                GameListLike.objects.create(game_list=game_list, profile=profile)
-                GameList.objects.filter(id=game_list.id).update(like_count=F('like_count') + 1)
-                liked = True
+            with transaction.atomic():
+                existing = GameListLike.objects.select_for_update().filter(game_list=game_list, profile=profile)
+                if existing.exists():
+                    existing.delete()
+                    GameList.objects.filter(id=game_list.id).update(like_count=F('like_count') - 1)
+                    liked = False
+                else:
+                    GameListLike.objects.create(game_list=game_list, profile=profile)
+                    GameList.objects.filter(id=game_list.id).update(like_count=F('like_count') + 1)
+                    liked = True
 
             game_list.refresh_from_db(fields=['like_count'])
 
@@ -616,17 +612,18 @@ class GameListQuickAddView(APIView):
                 return Response({'error': 'Game not found.'}, status=status.HTTP_404_NOT_FOUND)
 
             if action == 'remove':
-                deleted_count, _ = GameListItem.objects.filter(
-                    game_list=game_list, game=game
-                ).delete()
-                if deleted_count:
-                    # Re-compact positions
-                    for idx, item in enumerate(game_list.items.order_by('position')):
-                        if item.position != idx:
-                            item.position = idx
-                            item.save(update_fields=['position'])
-                    GameList.objects.filter(id=game_list.id).update(game_count=F('game_count') - 1)
-                    game_list.refresh_from_db(fields=['game_count'])
+                with transaction.atomic():
+                    deleted_count, _ = GameListItem.objects.filter(
+                        game_list=game_list, game=game
+                    ).delete()
+                    if deleted_count:
+                        # Re-compact positions
+                        for idx, item in enumerate(game_list.items.order_by('position')):
+                            if item.position != idx:
+                                item.position = idx
+                                item.save(update_fields=['position'])
+                        GameList.objects.filter(id=game_list.id).update(game_count=F('game_count') - 1)
+                game_list.refresh_from_db(fields=['game_count'])
                 return Response({
                     'success': True,
                     'action': 'removed',
@@ -685,6 +682,15 @@ class UserGameListsView(APIView):
 
             game_id = safe_int(request.query_params.get('game_id'), None)
 
+            # Batch lookup for has_game instead of per-list queries
+            lists_with_game = set()
+            if game_id:
+                lists_with_game = set(
+                    GameListItem.objects.filter(
+                        game_list__in=lists, game_id=game_id
+                    ).values_list('game_list_id', flat=True)
+                )
+
             results = []
             for gl in lists:
                 data = {
@@ -694,9 +700,7 @@ class UserGameListsView(APIView):
                     'is_public': gl.is_public,
                 }
                 if game_id:
-                    data['has_game'] = GameListItem.objects.filter(
-                        game_list=gl, game_id=game_id
-                    ).exists()
+                    data['has_game'] = gl.id in lists_with_game
                 results.append(data)
 
             is_premium = _is_premium(request.user)

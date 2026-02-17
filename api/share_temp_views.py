@@ -9,6 +9,15 @@ def serve_share_temp_image(request, filename):
     """
     Serve a temporary cached share image by UUID filename.
     Images are created by ShareImageCache when generating share card HTML.
+
+    SECURITY NOTE: This endpoint is intentionally public (no authentication).
+    Playwright's headless browser fetches these images via localhost when
+    rendering share card PNGs server-side, and cannot pass session cookies.
+    The security model relies on:
+      1. UUID filenames (32 hex chars): unguessable, providing secrecy-based access control
+      2. Strict regex validation: only [a-f0-9]{32}.(png|jpg|webp), preventing path traversal
+      3. Short-lived files: temporary cache entries, cleaned up periodically
+      4. Scoped directory: only serves from SHARE_TEMP_DIR, not arbitrary filesystem paths
     """
     # Validate filename: UUID hex + extension only (prevents path traversal)
     if not re.match(r'^[a-f0-9]{32}\.(png|jpg|webp)$', filename):
