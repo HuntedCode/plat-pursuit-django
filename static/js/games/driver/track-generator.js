@@ -1106,7 +1106,7 @@ window.PlatPursuit.Games.Driver = window.PlatPursuit.Games.Driver || {};
      * @param {{x,y}} p2 - End of segment 1
      * @param {{x,y}} p3 - Start of segment 2
      * @param {{x,y}} p4 - End of segment 2
-     * @returns {{x: number, y: number}|null} Intersection point or null
+     * @returns {{x: number, y: number, t: number}|null} Intersection point + parameter along segment 1, or null
      */
     function segmentIntersection(p1, p2, p3, p4) {
         const d1x = p2.x - p1.x;
@@ -1132,6 +1132,7 @@ window.PlatPursuit.Games.Driver = window.PlatPursuit.Games.Driver || {};
             return {
                 x: p1.x + t * d1x,
                 y: p1.y + t * d1y,
+                t: t, // Parameter along segment 1 (0-1), used for sub-frame timing
             };
         }
 

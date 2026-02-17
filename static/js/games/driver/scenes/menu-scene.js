@@ -6,7 +6,7 @@
  * - Enter a track seed (or use "Today's Track" / "Random")
  * - Preview the generated track
  * - Select CC tier (50cc / 100cc / 200cc)
- * - Select game mode (3-Lap Race / Time Trial coming soon)
+ * - Select game mode (3-Lap Race / Time Trial)
  * - Launch the race
  *
  * Layout (1280x720 design resolution):
@@ -28,8 +28,9 @@ window.PlatPursuit.Games.Driver.Scenes = window.PlatPursuit.Games.Driver.Scenes 
     const Shell = PlatPursuit.Games.Shell;
     const TrackGen = PlatPursuit.Games.Driver.TrackGenerator;
     const UI = PlatPursuit.Games.Driver.UI;
+    const Ghost = PlatPursuit.Games.Driver.Ghost;
     const { DESIGN_WIDTH, DESIGN_HEIGHT } = Shell;
-    const { COLOR, CSS, createButton } = UI;
+    const { COLOR, CSS, createButton, formatTime } = UI;
 
     // ===================================================================
     // LAYOUT CONSTANTS
@@ -78,6 +79,7 @@ window.PlatPursuit.Games.Driver.Scenes = window.PlatPursuit.Games.Driver.Scenes 
             // State
             this.currentSeed = this.todaysSeed();
             this.selectedCCTier = '50cc';
+            this.selectedMode = 'race';
             this.launching = false;
 
             // Build UI
@@ -274,7 +276,7 @@ window.PlatPursuit.Games.Driver.Scenes = window.PlatPursuit.Games.Driver.Scenes 
                 width: 130,
                 height: 32,
                 fontSize: 13,
-                onClick: () => {}, // Already selected, no-op
+                onClick: () => this.selectMode('race'),
             });
             this.raceModeBtn.setSelected(true);
 
@@ -282,21 +284,85 @@ window.PlatPursuit.Games.Driver.Scenes = window.PlatPursuit.Games.Driver.Scenes 
                 width: 130,
                 height: 32,
                 fontSize: 13,
-                disabled: true,
+                onClick: () => this.selectMode('timetrial'),
             });
 
-            // "Coming Soon" label under Time Trial
-            this.add.text(sx + 80, sy + 24, 'COMING SOON', {
-                fontFamily: 'Inter, sans-serif',
-                fontSize: '9px',
+            // Best time display (below mode buttons, updated dynamically)
+            sy += 30;
+
+            this.bestTimeText = this.add.text(sx, sy, '', {
+                fontFamily: 'monospace',
+                fontSize: '11px',
                 color: CSS.STEEL_DARK,
             }).setOrigin(0.5, 0).setScrollFactor(0);
+
+            // Ghost toggle
+            sy += 40;
+
+            this.add.text(sx, sy, 'GHOST', {
+                fontFamily: 'Poppins, sans-serif',
+                fontSize: '12px',
+                fontStyle: '600',
+                color: CSS.NEUTRAL_MID,
+            }).setOrigin(0.5, 0).setScrollFactor(0);
+
+            sy += 38;
+
+            this.ghostEnabled = true;
+            this.ghostToggleBtn = createButton(this, sx, sy, 'ON', {
+                width: 80,
+                height: 32,
+                fontSize: 13,
+                onClick: () => this.toggleGhost(),
+            });
+            this.ghostToggleBtn.setSelected(true);
+
+            // Show initial best time
+            this.updateBestTimeDisplay();
         }
 
         selectCCTier(tier) {
             this.selectedCCTier = tier;
             for (const { btn, tier: t } of this.tierButtons) {
                 btn.setSelected(t === tier);
+            }
+            this.updateBestTimeDisplay();
+        }
+
+        selectMode(mode) {
+            this.selectedMode = mode;
+            this.raceModeBtn.setSelected(mode === 'race');
+            this.ttModeBtn.setSelected(mode === 'timetrial');
+            this.updateBestTimeDisplay();
+        }
+
+        toggleGhost() {
+            this.ghostEnabled = !this.ghostEnabled;
+            this.ghostToggleBtn.text.setText(this.ghostEnabled ? 'ON' : 'OFF');
+            this.ghostToggleBtn.setSelected(this.ghostEnabled);
+        }
+
+        /**
+         * Updates the best time display below the mode buttons.
+         * Shows "BEST RACE: X:XX.XXX" for race mode,
+         * "BEST LAP: X:XX.XXX" for time trial mode.
+         */
+        updateBestTimeDisplay() {
+            const tier = this.selectedCCTier;
+            if (this.selectedMode === 'timetrial') {
+                const bestLapMs = Ghost.GhostStorage.getBestLapTime(this.currentSeed, 'timetrial', tier);
+                if (bestLapMs) {
+                    this.bestTimeText.setText(`Best Lap: ${formatTime(bestLapMs / 1000)}`);
+                } else {
+                    this.bestTimeText.setText('No data');
+                }
+            } else {
+                const bestTimeMs = Ghost.GhostStorage.getBestTime(this.currentSeed, 'race', tier);
+                if (bestTimeMs) {
+                    this.bestTimeText.setText(`Best Race: ${formatTime(bestTimeMs / 1000)}`);
+                } else {
+                    this.bestTimeText.setText('No data');
+                }
             }
         }
 
@@ -458,6 +524,7 @@ window.PlatPursuit.Games.Driver.Scenes = window.PlatPursuit.Games.Driver.Scenes 
         setSeed(seed) {
             this.currentSeed = seed;
             this.updatePreview(seed);
+            this.updateBestTimeDisplay();
         }
 
         updatePreview(seed) {
@@ -535,13 +602,16 @@ window.PlatPursuit.Games.Driver.Scenes = window.PlatPursuit.Games.Driver.Scenes 
 
             const seed = this.currentSeed || this.todaysSeed();
             const ccTier = this.selectedCCTier;
+            const mode = this.selectedMode;
+            const ghostEnabled = this.ghostEnabled;
 
             this.cameras.main.fadeOut(200, 0, 0, 0);
             this.cameras.main.once('camerafadeoutcomplete', () => {
                 this.scene.start('RaceScene', {
                     seed: seed,
-                    laps: 3,
+                    mode: mode,
                     ccTier: ccTier,
+                    ghostEnabled: ghostEnabled,
                 });
             });
         }

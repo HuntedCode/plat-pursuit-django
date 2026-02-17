@@ -7,22 +7,24 @@
  *
  * Elements (GDD Section 5):
  * - Speed bar: horizontal fill bar with color gradient (cyan -> green)
- * - Lap counter: "LAP 2/3" with completed lap times listed below
- * - Timer display: total time, current lap time, best lap time
- * - Checkpoint deltas: +/- time vs best lap at each checkpoint
- * - Minimap: track outline, checkpoint dots, player dot
+ * - Lap counter: "LAP 2/3" (race) or "LAP 5" (time trial)
+ * - Timer display: total time, current lap time, best lap time, ghost delta
+ * - Minimap: track outline, checkpoint dots, player dot, ghost dots
  * - CC tier label: current speed class
+ *
+ * Ghost Delta System:
+ * The delta is pre-computed by RaceScene at each checkpoint crossing.
+ * RaceScene compares the player's time at a checkpoint against the
+ * ghost's pre-computed time at the same checkpoint, then passes the
+ * result as `ghostDelta` in the HUD state. The HUD simply displays
+ * whatever delta value it receives. Positive = behind, negative = ahead.
  *
  * Architecture:
  * - RaceScene creates one HUD instance in create(), passing (scene, trackData)
  * - RaceScene calls hud.update(stateSnapshot) every frame
- * - RaceScene calls hud.onCheckpointCrossed(index, splitTime) when a checkpoint is passed
- * - RaceScene calls hud.onLapComplete(lapNumber, lapTime, isBest) on lap finish
+ * - RaceScene calls hud.onCheckpointCrossed(index) when a checkpoint is passed
+ * - RaceScene calls hud.onLapComplete(lapNumber, lapTime) on lap finish
  * - RaceScene calls hud.destroy() in the shutdown handler
- *
- * The HUD reads a plain state snapshot object each frame, so it has no
- * dependency on Ship or RaceScene classes. This keeps it decoupled and
- * easy to test.
  *
  * Color Palette: All colors from gamification-design.md.
  */
@@ -83,19 +85,6 @@ window.PlatPursuit.Games.Driver = window.PlatPursuit.Games.Driver || {};
             // Checkpoint crossing state for minimap dot rendering.
             // Tracks which checkpoints have been crossed this lap.
             this.crossedCheckpoints = new Set();
-
-            // Per-checkpoint split times for delta display.
-            // splitTimes[lapIndex] = { cpIndex: elapsedTime, ... }
-            // bestSplits = { cpIndex: elapsedTime, ... } (from best lap)
-            this.splitTimes = [];
-            this.currentSplits = {};
-            this.bestSplits = null;
-            this.bestLapIndex = -1;
-
-            // Cached index of the most recently crossed checkpoint this lap.
-            // Updated in onCheckpointCrossed(), used by updateDeltaDisplay()
-            // and the best-lap pulse check to avoid per-frame Object.keys().
-            this.lastCrossedCPIndex = -1;
 
             // Completed lap times for display under lap counter
             this.completedLapTimes = [];
@@ -280,9 +269,19 @@ window.PlatPursuit.Games.Driver = window.PlatPursuit.Games.Driver || {};
             ).setOrigin(1, 0).setScrollFactor(0).setDepth(DEPTH.HUD);
         }
 
+        /**
+         * Updates the lap counter display.
+         * Race mode: "LAP 2/3"
+         * Time Trial (totalLaps === null): "LAP 5"
+         */
         updateLapCounter(currentLap, totalLaps, bestLapTime) {
-            const displayLap = Math.min(currentLap + 1, totalLaps);
-            this.lapText.setText(`LAP ${displayLap}/${totalLaps}`);
+            if (totalLaps === null) {
+                // Time Trial: no denominator
+                this.lapText.setText(`LAP ${currentLap + 1}`);
+            } else {
+                const displayLap = Math.min(currentLap + 1, totalLaps);
+                this.lapText.setText(`LAP ${displayLap}/${totalLaps}`);
+            }
 
             // Build the completed lap times list
             if (this.completedLapTimes.length > 0) {
@@ -293,11 +292,6 @@ window.PlatPursuit.Games.Driver = window.PlatPursuit.Games.Driver || {};
                     return isBest ? `L${i + 1} ${timeStr} *` : `L${i + 1} ${timeStr}`;
                 });
                 this.lapTimesText.setText(lines.join('\n'));
-
-                // Color the text: we can't color individual lines in a
-                // single Text object, so we use gold if the most recent
-                // lap was best, neutral otherwise. The star marker still
-                // indicates which lap is best even without per-line color.
                 this.lapTimesText.setColor(CSS.NEUTRAL_MID);
             } else {
                 this.lapTimesText.setText('');
@@ -337,9 +331,9 @@ window.PlatPursuit.Games.Driver = window.PlatPursuit.Games.Driver || {};
                 }
             ).setOrigin(0.5, 0).setScrollFactor(0).setDepth(DEPTH.HUD);
 
-            // Live delta vs best lap (below best lap time).
-            // Shows the running time difference: green when ahead, red behind.
-            // Updates every frame by interpolating between checkpoint splits.
+            // Continuous ghost delta display (below best lap time).
+            // Shows the running time difference vs ghost: green when ahead, red behind.
+            // Updated every frame based on elapsed time comparison.
             this.deltaText = this.scene.add.text(
                 DESIGN_WIDTH / 2, 78, '', {
                     fontFamily: 'monospace',
@@ -350,7 +344,19 @@ window.PlatPursuit.Games.Driver = window.PlatPursuit.Games.Driver || {};
             ).setOrigin(0.5, 0).setScrollFactor(0).setDepth(DEPTH.HUD);
         }
 
-        updateTimerDisplay(raceState, raceTime, currentLapTime, bestLapTime) {
+        /**
+         * Updates the timer display every frame.
+         * Accepts the full state object from RaceScene.
+         *
+         * Ghost delta is checkpoint-based: computed by RaceScene when the
+         * player crosses a checkpoint, passed as `ghostDelta` in state.
+         * Negative = player is ahead (green). Positive = behind (red).
+         *
+         * @param {Object} state - Full HUD state snapshot
+         */
+        updateTimerDisplay(state) {
+            const { raceState, raceTime, currentLapTime, bestLapTime, ghostDelta } = state;
+
             // Total time
             this.totalTimeText.setText(formatTime(raceTime));
 
@@ -361,74 +367,33 @@ window.PlatPursuit.Games.Driver = window.PlatPursuit.Games.Driver || {};
                 this.lapTimeText.setText('');
             }
 
-            // Best lap time (only shown after first completed lap)
+            // Best lap time display
             if (bestLapTime !== null) {
                 this.bestLapText.setText(`BEST ${formatTime(bestLapTime)}`);
+            } else {
+                this.bestLapText.setText('');
+            }
 
-                // Pulse effect: gently oscillate alpha when on pace to beat
-                // best lap. Only activates after crossing a checkpoint with
-                // a better split than the best lap's split at that same CP.
-                if (raceState === RACE_STATE.RACING && this.isOnPace()) {
-                    const pulse = 0.85 + Math.sin(Date.now() * 0.004) * 0.15;
+            // Ghost delta (updated at checkpoint crossings by RaceScene)
+            if (raceState === RACE_STATE.RACING && ghostDelta !== null && ghostDelta !== undefined) {
+                const ahead = ghostDelta < 0;
+                const sign = ahead ? '-' : '+';
+                const color = ahead ? CSS.NEON_GREEN : '#e43b44';
+
+                this.deltaText.setText(`${sign}${Math.abs(ghostDelta).toFixed(3)}`);
+                this.deltaText.setColor(color);
+
+                // Pulse best lap text when player is ahead of ghost
+                if (ahead && bestLapTime !== null) {
+                    const pulse = 0.85 + Math.sin(raceTime * 4) * 0.15;
                     this.bestLapText.setAlpha(pulse);
                 } else {
                     this.bestLapText.setAlpha(1.0);
                 }
-
-                // Live delta vs best lap
-                if (raceState === RACE_STATE.RACING) {
-                    this.updateDeltaDisplay();
-                } else {
-                    this.deltaText.setText('');
-                }
             } else {
-                this.bestLapText.setText('');
                 this.deltaText.setText('');
+                this.bestLapText.setAlpha(1.0);
             }
-        }
-
-        /**
-         * Returns true if the player is currently on pace to beat their
-         * best lap, based on the most recent checkpoint split comparison.
-         * Returns false if no checkpoints have been crossed this lap or
-         * no best lap data exists.
-         */
-        isOnPace() {
-            if (!this.bestSplits || this.lastCrossedCPIndex < 0) return false;
-            const currentTime = this.currentSplits[this.lastCrossedCPIndex];
-            const bestTime = this.bestSplits[this.lastCrossedCPIndex];
-            if (currentTime === undefined || bestTime === undefined) return false;
-            return currentTime < bestTime;
-        }
-
-        /**
-         * Updates the live delta display by comparing current lap elapsed
-         * time against the best lap's checkpoint splits.
-         *
-         * The delta is held constant between checkpoints (updated on each
-         * CP crossing via lastCrossedCPIndex).
-         */
-        updateDeltaDisplay() {
-            if (!this.bestSplits || this.lastCrossedCPIndex < 0) {
-                this.deltaText.setText('');
-                return;
-            }
-
-            const currentTime = this.currentSplits[this.lastCrossedCPIndex];
-            const bestTime = this.bestSplits[this.lastCrossedCPIndex];
-
-            if (bestTime === undefined) {
-                this.deltaText.setText('');
-                return;
-            }
-
-            const delta = currentTime - bestTime;
-            const ahead = delta < 0;
-            const sign = ahead ? '-' : '+';
-            const color = ahead ? CSS.NEON_GREEN : '#e43b44';
-
-            this.deltaText.setText(`${sign}${Math.abs(delta).toFixed(3)}`);
-            this.deltaText.setColor(color);
         }
 
         // ---------------------------------------------------------------
@@ -454,7 +419,7 @@ window.PlatPursuit.Games.Driver = window.PlatPursuit.Games.Driver || {};
             this.minimapOverlay.setDepth(DEPTH.MINIMAP_OVERLAY);
         }
 
-        updateMinimap(shipX, shipY, onTrack, nextCheckpoint, allCheckpointsPassed) {
+        updateMinimap(shipX, shipY, onTrack, nextCheckpoint, allCheckpointsPassed, ghosts, raceTime) {
             const g = this.minimapOverlay;
             g.clear();
 
@@ -499,9 +464,20 @@ window.PlatPursuit.Games.Driver = window.PlatPursuit.Games.Driver || {};
                 const sy = map.centerY + (startCP.position.y - map.trackCenterY) * map.mapScale;
 
                 // Gentle pulse: ring radius oscillates between 5 and 7
-                const pulse = 6 + Math.sin(Date.now() * 0.005) * 1;
+                const pulse = 6 + Math.sin(raceTime * 5) * 1;
                 g.lineStyle(1.5, COLOR.GOLD, 0.8);
                 g.strokeCircle(sx, sy, pulse);
+            }
+
+            // --- Ghost dots (drawn before player so player is always on top) ---
+            if (ghosts) {
+                for (let gi = 0; gi < ghosts.length; gi++) {
+                    const ghost = ghosts[gi];
+                    const gx = map.centerX + (ghost.x - map.trackCenterX) * map.mapScale;
+                    const gy = map.centerY + (ghost.y - map.trackCenterY) * map.mapScale;
+                    g.fillStyle(ghost.color, 0.6);
+                    g.fillCircle(gx, gy, 3);
+                }
             }
 
             // --- Player dot ---
@@ -547,24 +523,24 @@ window.PlatPursuit.Games.Driver = window.PlatPursuit.Games.Driver || {};
          * @param {boolean} state.onTrack - Whether ship is on the track
          * @param {string} state.raceState - 'COUNTDOWN' | 'RACING' | 'FINISHED'
          * @param {number} state.currentLap - Current lap number (0-based during race)
-         * @param {number} state.totalLaps - Total laps in race
+         * @param {number|null} state.totalLaps - Total laps in race (null for TT)
          * @param {number} state.raceTime - Total elapsed race time in seconds
          * @param {number} state.currentLapTime - Current lap elapsed time in seconds
          * @param {number|null} state.bestLapTime - Best completed lap time, or null
          * @param {number} state.nextCheckpoint - Index of next expected checkpoint
          * @param {boolean} state.allCheckpointsPassed - Whether all CPs are crossed
          * @param {string} state.ccTier - Current CC tier name
+         * @param {Array<{x:number,y:number,color:number}>|null} state.ghosts - Ghost positions for minimap
+         * @param {number|null} state.ghostDelta - Checkpoint-based ghost delta (positive=behind, negative=ahead), or null
          */
         update(state) {
             this.updateSpeedBar(state.speed);
             this.updateLapCounter(state.currentLap, state.totalLaps, state.bestLapTime);
-            this.updateTimerDisplay(
-                state.raceState, state.raceTime,
-                state.currentLapTime, state.bestLapTime
-            );
+            this.updateTimerDisplay(state);
             this.updateMinimap(
                 state.shipX, state.shipY, state.onTrack,
-                state.nextCheckpoint, state.allCheckpointsPassed
+                state.nextCheckpoint, state.allCheckpointsPassed,
+                state.ghosts, state.raceTime
             );
             this.tierText.setText(state.ccTier);
         }
@@ -575,20 +551,12 @@ window.PlatPursuit.Games.Driver = window.PlatPursuit.Games.Driver || {};
 
         /**
          * Called when a checkpoint is correctly crossed.
-         * Updates the minimap state and records the split time.
-         * If a best lap exists, shows the delta (ahead/behind).
+         * Updates the minimap dot state.
          *
          * @param {number} index - Checkpoint index that was crossed
-         * @param {number} splitTime - Elapsed time within the current lap
          */
-        onCheckpointCrossed(index, splitTime) {
+        onCheckpointCrossed(index) {
             this.crossedCheckpoints.add(index);
-            this.lastCrossedCPIndex = index;
-
-            // Record split time for this checkpoint.
-            // The persistent delta display (updateDeltaDisplay) reads
-            // from currentSplits each frame to show the live delta.
-            this.currentSplits[index] = splitTime;
         }
 
         /**
@@ -597,27 +565,13 @@ window.PlatPursuit.Games.Driver = window.PlatPursuit.Games.Driver || {};
          *
          * @param {number} lapNumber - The lap that was just completed (1-based)
          * @param {number} lapTime - The lap's time in seconds
-         * @param {boolean} isBest - Whether this is a new best lap time
          */
-        onLapComplete(lapNumber, lapTime, isBest) {
-            // Store this lap's split times and update best if applicable
-            const lapIndex = this.splitTimes.length;
-            this.splitTimes.push({ ...this.currentSplits });
-
-            if (isBest) {
-                this.bestSplits = { ...this.currentSplits };
-                this.bestLapIndex = lapIndex;
-            }
-
-            // Reset splits for the new lap
-            this.currentSplits = {};
-
+        onLapComplete(lapNumber, lapTime) {
             // Track completed lap time for display
             this.completedLapTimes.push(lapTime);
 
-            // Clear crossed checkpoints and split cache for the new lap
+            // Clear crossed checkpoints for the new lap
             this.crossedCheckpoints.clear();
-            this.lastCrossedCPIndex = -1;
 
             // Lap counter animation: scale up 120% and flash cyan
             // Kill any existing tweens first (Step 5 lesson)
@@ -634,7 +588,7 @@ window.PlatPursuit.Games.Driver = window.PlatPursuit.Games.Driver || {};
                 duration: 500,
                 ease: 'Power2',
                 onComplete: () => {
-                    this.lapText.setColor(CSS.STAR_WHITE);
+                    if (this.lapText) this.lapText.setColor(CSS.STAR_WHITE);
                 },
             });
         }
@@ -649,20 +603,20 @@ window.PlatPursuit.Games.Driver = window.PlatPursuit.Games.Driver || {};
          */
         destroy() {
             // Text objects
-            if (this.spdLabel) this.spdLabel.destroy();
-            if (this.speedText) this.speedText.destroy();
-            if (this.lapText) this.lapText.destroy();
-            if (this.lapTimesText) this.lapTimesText.destroy();
-            if (this.totalTimeText) this.totalTimeText.destroy();
-            if (this.lapTimeText) this.lapTimeText.destroy();
-            if (this.bestLapText) this.bestLapText.destroy();
-            if (this.tierText) this.tierText.destroy();
-            if (this.deltaText) this.deltaText.destroy();
+            if (this.spdLabel) { this.spdLabel.destroy(); this.spdLabel = null; }
+            if (this.speedText) { this.speedText.destroy(); this.speedText = null; }
+            if (this.lapText) { this.lapText.destroy(); this.lapText = null; }
+            if (this.lapTimesText) { this.lapTimesText.destroy(); this.lapTimesText = null; }
+            if (this.totalTimeText) { this.totalTimeText.destroy(); this.totalTimeText = null; }
+            if (this.lapTimeText) { this.lapTimeText.destroy(); this.lapTimeText = null; }
+            if (this.bestLapText) { this.bestLapText.destroy(); this.bestLapText = null; }
+            if (this.tierText) { this.tierText.destroy(); this.tierText = null; }
+            if (this.deltaText) { this.deltaText.destroy(); this.deltaText = null; }
 
             // Graphics objects
-            if (this.speedBarGfx) this.speedBarGfx.destroy();
-            if (this.minimapGfx) this.minimapGfx.destroy();
-            if (this.minimapOverlay) this.minimapOverlay.destroy();
+            if (this.speedBarGfx) { this.speedBarGfx.destroy(); this.speedBarGfx = null; }
+            if (this.minimapGfx) { this.minimapGfx.destroy(); this.minimapGfx = null; }
+            if (this.minimapOverlay) { this.minimapOverlay.destroy(); this.minimapOverlay = null; }
 
             this.scene = null;
         }

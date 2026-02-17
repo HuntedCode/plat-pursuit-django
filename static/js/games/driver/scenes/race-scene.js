@@ -4,6 +4,14 @@
  * Core gameplay scene for Stellar Circuit.
  * Manages the race state machine: COUNTDOWN -> RACING -> FINISHED
  *
+ * Supports two modes:
+ * - Race (3 laps): Ghost plays full 3-lap recording.
+ * - Time Trial (infinite laps): Ghost plays best single lap, resets each lap.
+ *   Saves new best lap automatically. ESC exits to session summary.
+ *
+ * Ghost delta is checkpoint-based: computed at each checkpoint crossing as
+ * playerTime - ghostTime at that same checkpoint.
+ *
  * Responsibilities:
  * - Generate and render the track from seed
  * - Place ship at start position
@@ -11,19 +19,23 @@
  * - Game loop: input -> physics -> checkpoints -> HUD -> camera
  * - Detect checkpoint crossings (sequential, with wrong-way warnings)
  * - Track lap completion and race finish
+ * - Ghost recording, playback, and auto-save
  * - On finish: fade transition to ResultsScene with race data
  *
  * Architecture:
- * - Receives config via init(data): { seed, laps, ccTier }
+ * - Receives config via init(data): { seed, mode, ccTier }
  * - Ship.update() runs in ALL states (keeps particles alive)
  * - Input is frozen (FROZEN_INPUT) during COUNTDOWN and FINISHED
  * - Camera uses velocity look-ahead (GDD 8.2)
- * - ESC fades to MenuScene; finish fades to ResultsScene
+ * - ESC: Race mode -> MenuScene; TT mode -> ResultsScene (session summary)
+ * - Ghost recording runs during RACING; auto-saves on new personal best
+ * - Ghost playback renders a semi-transparent ship with "Personal Best" label
  *
  * Controls:
  *   WASD / Arrows: Fly the ship
+ *   G: Toggle ghost visibility
  *   1/2/3: Switch CC tier (dev testing)
- *   ESC: Return to menu (COUNTDOWN/RACING states)
+ *   ESC: Return to menu (race) or show session summary (TT)
  */
 
 window.PlatPursuit = window.PlatPursuit || {};
@@ -38,12 +50,14 @@ window.PlatPursuit.Games.Driver.Scenes = window.PlatPursuit.Games.Driver.Scenes 
     const Shell = PlatPursuit.Games.Shell;
     const InputManager = PlatPursuit.Games.Input.InputManager;
     const TrackGen = PlatPursuit.Games.Driver.TrackGenerator;
-    const Ship = PlatPursuit.Games.Driver.Ship.Ship;
+    const ShipModule = PlatPursuit.Games.Driver.Ship;
+    const Ship = ShipModule.Ship;
     const HUD = PlatPursuit.Games.Driver.HUD;
     const UI = PlatPursuit.Games.Driver.UI;
+    const Ghost = PlatPursuit.Games.Driver.Ghost;
 
     const { DESIGN_WIDTH, DESIGN_HEIGHT } = Shell;
-    const { RACE_STATE, DEPTH, formatTime } = UI;
+    const { RACE_STATE, DEPTH, CSS, formatTime } = UI;
 
     // ===================================================================
     // CONSTANTS
@@ -65,11 +79,11 @@ window.PlatPursuit.Games.Driver.Scenes = window.PlatPursuit.Games.Driver.Scenes 
         up: false, down: false, left: false, right: false,
     });
 
-    /** Default number of laps per race */
+    /** Default number of laps for race mode */
     const DEFAULT_LAPS = 3;
 
-    /** How long the "WRONG WAY" warning stays visible (seconds) */
-    const WRONG_WAY_DURATION = 2.0;
+    /** How long warning messages stay visible (seconds) */
+    const WARNING_DURATION = 2.0;
 
     /** How long the lap completion flash stays visible (seconds) */
     const LAP_FLASH_DURATION = 1.5;
@@ -93,13 +107,18 @@ window.PlatPursuit.Games.Driver.Scenes = window.PlatPursuit.Games.Driver.Scenes 
          *
          * @param {Object} data - Race configuration
          * @param {string} [data.seed] - Track seed (default: today's date)
-         * @param {number} [data.laps] - Number of laps (default: 3)
+         * @param {string} [data.mode] - 'race' or 'timetrial' (default: 'race')
          * @param {string} [data.ccTier] - CC tier name (default: '50cc')
+         * @param {boolean} [data.ghostEnabled] - Whether ghost is visible (default: true)
          */
         init(data) {
             this.raceSeed = data.seed || new Date().toISOString().slice(0, 10);
-            this.totalLaps = data.laps || DEFAULT_LAPS;
+            this.mode = data.mode || 'race';
             this.ccTier = data.ccTier || '50cc';
+            this.ghostVisible = data.ghostEnabled !== false; // default true
+
+            // Race mode: fixed 3 laps. Time Trial: infinite (null for HUD display).
+            this.totalLaps = this.mode === 'timetrial' ? null : DEFAULT_LAPS;
         }
 
         // ---------------------------------------------------------------
@@ -155,6 +174,54 @@ window.PlatPursuit.Games.Driver.Scenes = window.PlatPursuit.Games.Driver.Scenes 
             // ----- HUD (speed bar, timers, minimap, etc.) -----
             this.hud = new HUD(this, this.trackData);
 
+            // ----- Ghost System -----
+            this.ghostRecorder = new Ghost.GhostRecorder();
+            this.ghostPlayback = null;
+            this.ghostGfx = null;
+            this.ghostLabel = null;
+
+            // Load ghost data for this seed + mode + tier
+            const ghostData = Ghost.GhostStorage.load(this.raceSeed, this.mode, this.ccTier);
+
+            if (this.mode === 'timetrial') {
+                // Time Trial: ghost stores a single best lap
+                this.storedBestLapMs = ghostData ? ghostData.bestLapMs : null;
+                this.storedBestTimeMs = null; // Not used in TT
+            } else {
+                // Race mode: ghost stores full 3-lap race
+                this.storedBestTimeMs = ghostData ? ghostData.totalTimeMs : null;
+                this.storedBestLapMs = null; // Not used in race mode
+            }
+
+            // Total recording time in seconds (used for TT ghost replacement tracking)
+            this.ghostTotalTimeSec = null;
+
+            // Pre-computed ghost checkpoint crossing times (for delta display).
+            // Ordered array of { cpIndex, elapsed } records.
+            this.ghostCheckpointTimes = null;
+
+            // Cursor into ghostCheckpointTimes: the next crossing to match
+            this.ghostCrossingCursor = 0;
+
+            // Current ghost delta displayed in HUD (updated at checkpoint crossings).
+            // Positive = player is behind ghost, negative = player is ahead.
+            this.currentGhostDelta = null;
+
+            // Create playback visuals if ghost data exists
+            if (ghostData && ghostData.frames && ghostData.frames.length > 0) {
+                this.ghostPlayback = new Ghost.GhostPlayback(
+                    ghostData.frames, Ghost.GHOST_COLORS[0]
+                );
+                this.createGhostVisuals();
+
+                this.ghostTotalTimeSec = ghostData.totalTimeMs / 1000;
+
+                // Pre-compute when the ghost crosses each checkpoint
+                this.ghostCheckpointTimes = this.computeGhostCheckpointTimes(
+                    ghostData.frames, this.trackData.checkpoints
+                );
+            }
+
             // ----- Race State -----
             this.raceState = RACE_STATE.COUNTDOWN;
             this.nextCheckpoint = 1;  // Ship starts ON cp 0; first target is cp 1
@@ -169,10 +236,26 @@ window.PlatPursuit.Games.Driver.Scenes = window.PlatPursuit.Games.Driver.Scenes 
             this.prevShipX = this.ship.x;
             this.prevShipY = this.ship.y;
 
+            // ----- Time Trial Session Tracking -----
+            this.ttSessionBestLapTime = null;
+            this.ttSessionBestLapIndex = -1;
+            this.ttTotalLapsCompleted = 0;
+            this.ttSessionStartTime = 0; // Set when racing starts
+
             // Pre-allocated objects reused every frame (avoid GC pressure)
             this._hudState = {};
-            this._prevPos = { x: 0, y: 0 };
-            this._currPos = { x: 0, y: 0 };
+
+            // Checkpoint crossing uses 3 test points (nose + wingtips)
+            // so any part of the ship touching a gate triggers the crossing.
+            // Store previous rotation for transforming old extremity positions.
+            this.prevShipRotation = this.ship.rotation;
+            this._cpTestPrev = [{ x: 0, y: 0 }, { x: 0, y: 0 }, { x: 0, y: 0 }];
+            this._cpTestCurr = [{ x: 0, y: 0 }, { x: 0, y: 0 }, { x: 0, y: 0 }];
+
+            // Last correctly-crossed checkpoint index. Used to suppress false
+            // "MISSED CHECKPOINT" warnings from trailing wingtip rays crossing
+            // the same gate on subsequent frames after the nose already triggered it.
+            this._lastCrossedCP = -1;
 
             // ----- Countdown -----
             this.startCountdown();
@@ -183,13 +266,22 @@ window.PlatPursuit.Games.Driver.Scenes = window.PlatPursuit.Games.Driver.Scenes 
             this.key2 = this.input.keyboard.addKey(KeyCodes.TWO, true, false);
             this.key3 = this.input.keyboard.addKey(KeyCodes.THREE, true, false);
 
+            // ----- Ghost Toggle (G key) -----
+            this.keyG = this.input.keyboard.addKey(KeyCodes.G, true, false);
+
             // ----- Cleanup Handler -----
             this.events.once('shutdown', () => {
+                this.input.setDefaultCursor('default');
+
                 // Cancel any in-flight countdown timers (prevents callbacks
                 // firing after shutdown when ESC is pressed during countdown)
                 if (this.countdownTimers) {
                     this.countdownTimers.forEach(t => t.remove(false));
                     this.countdownTimers = null;
+                }
+                if (this.finishTimer) {
+                    this.finishTimer.remove(false);
+                    this.finishTimer = null;
                 }
                 if (this.countdownText) {
                     this.countdownText.destroy();
@@ -203,13 +295,16 @@ window.PlatPursuit.Games.Driver.Scenes = window.PlatPursuit.Games.Driver.Scenes 
                 if (this.inputManager) this.inputManager.destroy();
                 if (this.hud) this.hud.destroy();
                 if (this.trackGraphics) this.trackGraphics.destroy();
-                if (this.warningText) this.warningText.destroy();
+                if (this.warningText) { this.warningText.destroy(); this.warningText = null; }
+                if (this.ghostGfx) { this.ghostGfx.destroy(); this.ghostGfx = null; }
+                if (this.ghostLabel) { this.ghostLabel.destroy(); this.ghostLabel = null; }
                 this.input.keyboard.removeCapture([
-                    KeyCodes.ONE, KeyCodes.TWO, KeyCodes.THREE,
+                    KeyCodes.ONE, KeyCodes.TWO, KeyCodes.THREE, KeyCodes.G,
                 ]);
             });
 
-            console.log(`[RaceScene] Created: seed="${this.raceSeed}", laps=${this.totalLaps}, cc=${this.ccTier}`);
+            const modeLabel = this.mode === 'timetrial' ? 'Time Trial' : `${this.totalLaps}-Lap Race`;
+            console.log(`[RaceScene] Created: seed="${this.raceSeed}", mode=${modeLabel}, cc=${this.ccTier}`);
             console.log(`[RaceScene] Track: ${td.checkpoints.length} checkpoints, arc=${td.totalArcLength.toFixed(0)}px`);
         }
 
@@ -222,7 +317,7 @@ window.PlatPursuit.Games.Driver.Scenes = window.PlatPursuit.Games.Driver.Scenes 
             // corruption and ship teleportation on tab-switch spikes.
             const dt = Math.min(delta / 1000, 0.1);
 
-            // --- ESC: Return to menu (COUNTDOWN/RACING, not transitioning) ---
+            // --- ESC handling ---
             if (!this.transitioning
                 && this.raceState !== RACE_STATE.FINISHED
                 && this.inputManager.isPausePressed()) {
@@ -236,9 +331,20 @@ window.PlatPursuit.Games.Driver.Scenes = window.PlatPursuit.Games.Driver.Scenes 
             if (JustDown(this.key2)) { this.ccTier = '100cc'; this.ship.setCCTier('100cc'); }
             if (JustDown(this.key3)) { this.ccTier = '200cc'; this.ship.setCCTier('200cc'); }
 
-            // --- Capture previous position BEFORE ship update ---
+            // --- Ghost visibility toggle (G key) ---
+            if (JustDown(this.keyG)) {
+                this.ghostVisible = !this.ghostVisible;
+                if (!this.ghostVisible) {
+                    // Hide ghost visuals immediately
+                    if (this.ghostGfx) this.ghostGfx.clear();
+                    if (this.ghostLabel) this.ghostLabel.setAlpha(0);
+                }
+            }
+
+            // --- Capture previous position/rotation BEFORE ship update ---
             this.prevShipX = this.ship.x;
             this.prevShipY = this.ship.y;
+            this.prevShipRotation = this.ship.rotation;
 
             // --- Determine input based on state ---
             const input = (this.raceState === RACE_STATE.RACING)
@@ -253,6 +359,34 @@ window.PlatPursuit.Games.Driver.Scenes = window.PlatPursuit.Games.Driver.Scenes 
                 this.raceTime += dt;
                 this.checkCheckpointCrossing();
                 this.updateWarning(dt);
+                this.ghostRecorder.update(dt, this.ship);
+            }
+
+            // --- Ghost playback (RACING state only) ---
+            // Always advance ghost playback (needed for delta computation),
+            // but only render visuals when ghostVisible is true.
+            if (this.ghostPlayback && this.raceState === RACE_STATE.RACING) {
+                this.ghostPlayback.update(dt);
+
+                if (this.ghostVisible) {
+                    Ghost.drawGhost(
+                        this.ghostGfx, this.ghostPlayback,
+                        ShipModule.SHIP_VERTICES
+                    );
+
+                    // Position "Personal Best" label above ghost ship
+                    if (this.ghostLabel) {
+                        if (this.ghostPlayback.finished || this.ghostPlayback.alpha <= 0) {
+                            this.ghostLabel.setAlpha(0);
+                        } else {
+                            this.ghostLabel.setAlpha(0.4);
+                            this.ghostLabel.setPosition(
+                                this.ghostPlayback.x,
+                                this.ghostPlayback.y - 25
+                            );
+                        }
+                    }
+                }
             }
 
             // --- Camera (all states) ---
@@ -273,6 +407,20 @@ window.PlatPursuit.Games.Driver.Scenes = window.PlatPursuit.Games.Driver.Scenes 
             hs.nextCheckpoint = this.nextCheckpoint;
             hs.allCheckpointsPassed = this.allCheckpointsPassed;
             hs.ccTier = this.ccTier;
+            hs.mode = this.mode;
+
+            // Ghost data for HUD minimap dots and delta display.
+            // Minimap dots only shown when ghostVisible is true.
+            // Delta is checkpoint-based (updated in updateGhostDelta).
+            if (this.ghostPlayback && !this.ghostPlayback.finished) {
+                hs.ghosts = this.ghostVisible
+                    ? [{ x: this.ghostPlayback.x, y: this.ghostPlayback.y, color: this.ghostPlayback.color }]
+                    : null;
+            } else {
+                hs.ghosts = null;
+            }
+            hs.ghostDelta = this.currentGhostDelta;
+
             this.hud.update(hs);
         }
 
@@ -370,6 +518,7 @@ window.PlatPursuit.Games.Driver.Scenes = window.PlatPursuit.Games.Driver.Scenes 
             // Transition to RACING after countdown completes
             this.countdownTimers.push(this.time.delayedCall(delay, () => {
                 this.raceState = RACE_STATE.RACING;
+                this.ttSessionStartTime = this.raceTime; // TT: mark session start
                 this.countdownTimers = null;
                 if (this.countdownText) {
                     this.countdownText.destroy();
@@ -387,8 +536,12 @@ window.PlatPursuit.Games.Driver.Scenes = window.PlatPursuit.Games.Driver.Scenes 
         // ---------------------------------------------------------------
 
         /**
-         * Tests the ship's movement ray (prevPosition -> currentPosition)
-         * against all checkpoint gate segments.
+         * Tests the ship against all checkpoint gate segments.
+         *
+         * Uses 3 test points (nose + both wingtips) so that any part
+         * of the ship touching a checkpoint gate triggers detection.
+         * Each test point's movement ray (previous -> current world
+         * position) is tested against every checkpoint gate segment.
          *
          * For each crossing detected:
          * - Backward crossings (dot product <= 0): show "WRONG WAY"
@@ -398,38 +551,67 @@ window.PlatPursuit.Games.Driver.Scenes = window.PlatPursuit.Games.Driver.Scenes 
         checkCheckpointCrossing() {
             const checkpoints = this.trackData.checkpoints;
             const segInt = TrackGen.segmentIntersection;
+            const vertices = ShipModule.SHIP_VERTICES;
 
-            const prevPos = this._prevPos;
-            const currPos = this._currPos;
-            prevPos.x = this.prevShipX;
-            prevPos.y = this.prevShipY;
-            currPos.x = this.ship.x;
-            currPos.y = this.ship.y;
+            // Ship-local test points: nose (vertex 0), right wing (1), left wing (4)
+            const localPoints = [vertices[0], vertices[1], vertices[4]];
+
+            // Transform test points to world space for previous and current frames
+            const prevCos = Math.cos(this.prevShipRotation);
+            const prevSin = Math.sin(this.prevShipRotation);
+            const currCos = Math.cos(this.ship.rotation);
+            const currSin = Math.sin(this.ship.rotation);
+
+            for (let p = 0; p < 3; p++) {
+                const lx = localPoints[p].x;
+                const ly = localPoints[p].y;
+
+                this._cpTestPrev[p].x = this.prevShipX + lx * prevCos - ly * prevSin;
+                this._cpTestPrev[p].y = this.prevShipY + lx * prevSin + ly * prevCos;
+                this._cpTestCurr[p].x = this.ship.x + lx * currCos - ly * currSin;
+                this._cpTestCurr[p].y = this.ship.y + lx * currSin + ly * currCos;
+            }
 
             for (let i = 0; i < checkpoints.length; i++) {
                 const cp = checkpoints[i];
-                const hit = segInt(prevPos, currPos, cp.leftPoint, cp.rightPoint);
 
-                if (!hit) continue;
+                // Test each of the 3 rays against this checkpoint gate.
+                // Break on first hit (one crossing per checkpoint per frame).
+                let crossed = false;
+                let moveX = 0;
+                let moveY = 0;
+
+                for (let p = 0; p < 3; p++) {
+                    const prev = this._cpTestPrev[p];
+                    const curr = this._cpTestCurr[p];
+                    const hit = segInt(prev, curr, cp.leftPoint, cp.rightPoint);
+
+                    if (hit) {
+                        moveX = curr.x - prev.x;
+                        moveY = curr.y - prev.y;
+                        crossed = true;
+                        break;
+                    }
+                }
+
+                if (!crossed) continue;
 
                 // Direction check: dot product of movement against
                 // checkpoint direction. Positive = correct direction.
-                const moveX = currPos.x - prevPos.x;
-                const moveY = currPos.y - prevPos.y;
                 const dot = moveX * cp.direction.x + moveY * cp.direction.y;
 
                 if (dot <= 0) {
-                    // Crossed a gate backwards: traveling the wrong way
                     this.showWarning('WRONG WAY');
                     continue;
                 }
 
                 if (i === this.nextCheckpoint) {
+                    this._lastCrossedCP = i;
                     this.onCheckpointCrossed(i);
-                } else if (i !== 0) {
-                    // Crossed a checkpoint that isn't the current target:
-                    // either behind (skipped back) or ahead (cut across).
-                    // Either way the player needs to return to nextCheckpoint.
+                    return; // One correct crossing per frame; remaining hits are trailing wingtip artifacts
+                } else if (i !== 0 && i !== this._lastCrossedCP) {
+                    // Crossed a checkpoint that isn't the current target
+                    // and isn't the one we just handled (trailing wingtip).
                     this.showWarning('MISSED CHECKPOINT');
                 }
             }
@@ -443,20 +625,27 @@ window.PlatPursuit.Games.Driver.Scenes = window.PlatPursuit.Games.Driver.Scenes 
          * to 0 (start/finish line). Crossing checkpoint 0 with that flag
          * set completes a lap.
          *
+         * Lap completion behavior differs by mode:
+         * - Race: increment lap counter, check for race finish
+         * - Time Trial: save best lap, reset ghost, never finish
+         *
          * @param {number} index - The checkpoint index that was crossed
          */
         onCheckpointCrossed(index) {
             const checkpoints = this.trackData.checkpoints;
 
-            // Current lap elapsed time (used for split tracking)
-            const currentLapTime = this.raceTime - this.lapStartTime;
+            // Notify HUD for minimap checkpoint dot tracking
+            this.hud.onCheckpointCrossed(index);
 
-            // Notify HUD for minimap checkpoint dot tracking + split times
-            this.hud.onCheckpointCrossed(index, currentLapTime);
+            // Update ghost delta at this checkpoint crossing
+            this.updateGhostDelta(index);
 
             if (index === 0) {
                 // Start/finish line
                 if (this.allCheckpointsPassed) {
+                    // Mark lap boundary in ghost recorder
+                    this.ghostRecorder.markLapBoundary();
+
                     // Lap complete
                     this.currentLap++;
                     const lapTime = this.raceTime - this.lapStartTime;
@@ -473,14 +662,35 @@ window.PlatPursuit.Games.Driver.Scenes = window.PlatPursuit.Games.Driver.Scenes 
                     this.allCheckpointsPassed = false;
 
                     // Notify HUD of lap completion (triggers animation, clears CP state)
-                    this.hud.onLapComplete(this.currentLap, lapTime, isBest);
+                    this.hud.onLapComplete(this.currentLap, lapTime);
 
                     // Show lap completion flash
                     this.showLapFlash(this.currentLap, lapTime);
 
-                    if (this.currentLap >= this.totalLaps) {
-                        this.onRaceFinished();
-                        return;
+                    if (this.mode === 'timetrial') {
+                        this.onTimeTrialLapComplete(lapTime);
+                    } else {
+                        // Race mode: check for finish
+                        if (this.currentLap >= this.totalLaps) {
+                            this.onRaceFinished();
+                            return;
+                        }
+
+                        // Advance ghost cursor to the next lap's first crossing.
+                        // The ghost checkpoint times array contains ALL crossings
+                        // across all laps. Find the next checkpoint-1 crossing
+                        // (start of the ghost's next lap) so delta comparisons
+                        // stay aligned with the correct lap.
+                        if (this.ghostCheckpointTimes) {
+                            const crossings = this.ghostCheckpointTimes;
+                            for (let i = this.ghostCrossingCursor; i < crossings.length; i++) {
+                                if (crossings[i].cpIndex === 1) {
+                                    this.ghostCrossingCursor = i;
+                                    break;
+                                }
+                            }
+                        }
+                        this.currentGhostDelta = null;
                     }
 
                     // Reset for next lap
@@ -500,6 +710,211 @@ window.PlatPursuit.Games.Driver.Scenes = window.PlatPursuit.Games.Driver.Scenes 
                     this.allCheckpointsPassed = true;
                 }
             }
+        }
+
+        // ---------------------------------------------------------------
+        // Time Trial Lap Completion
+        // ---------------------------------------------------------------
+
+        /**
+         * Handles Time Trial-specific logic when a lap is completed.
+         * Saves new best lap ghost, replaces playback, resets ghost position.
+         *
+         * @param {number} lapTime - The completed lap's time in seconds
+         */
+        onTimeTrialLapComplete(lapTime) {
+            this.ttTotalLapsCompleted++;
+
+            // Track session best
+            if (this.ttSessionBestLapTime === null || lapTime <= this.ttSessionBestLapTime) {
+                this.ttSessionBestLapTime = lapTime;
+                this.ttSessionBestLapIndex = this.ttTotalLapsCompleted;
+            }
+
+            // Check against stored best (from localStorage)
+            const lapTimeMs = Math.round(lapTime * 1000);
+            const isNewStoredBest = !this.storedBestLapMs || lapTimeMs < this.storedBestLapMs;
+
+            if (isNewStoredBest) {
+                // Extract this lap's frames from the recorder
+                const lapIndex = this.lapTimes.length - 1; // Just pushed above
+                const lapFrames = this.ghostRecorder.getLapFrames(lapIndex);
+
+                // Save to localStorage
+                Ghost.GhostStorage.save(this.raceSeed, 'timetrial', this.ccTier, {
+                    frames: lapFrames,
+                    totalTimeMs: lapTimeMs,
+                    bestLapMs: lapTimeMs,
+                    lapTimes: [lapTime],
+                    recordedAt: new Date().toISOString(),
+                    version: 1,
+                });
+
+                this.storedBestLapMs = lapTimeMs;
+                this.ghostTotalTimeSec = lapTime;
+
+                // Replace ghost playback with the new best lap
+                this.ghostPlayback = new Ghost.GhostPlayback(
+                    lapFrames, Ghost.GHOST_COLORS[0]
+                );
+                this.createGhostVisuals();
+
+                // Recompute ghost checkpoint times for the new recording
+                this.ghostCheckpointTimes = this.computeGhostCheckpointTimes(
+                    lapFrames, this.trackData.checkpoints
+                );
+
+                console.log(`[RaceScene] TT new best: ${formatTime(lapTime)} (${lapFrames.length / Ghost.VALUES_PER_FRAME} frames)`);
+            } else if (this.ghostPlayback) {
+                // Not a new best: just reset ghost playback for the next lap
+                this.ghostPlayback.reset();
+            }
+
+            // Reset delta tracking for the new lap
+            this.ghostCrossingCursor = 0;
+            this.currentGhostDelta = null;
+        }
+
+        // ---------------------------------------------------------------
+        // Ghost Checkpoint Times
+        // ---------------------------------------------------------------
+
+        /**
+         * Creates the ghost ship's Graphics and label objects.
+         * Called when ghost data first loads (create) or when a new
+         * TT best lap replaces the ghost (onTimeTrialLapComplete).
+         * Idempotent: skips creation if objects already exist.
+         */
+        createGhostVisuals() {
+            if (!this.ghostGfx) {
+                this.ghostGfx = this.add.graphics();
+                this.ghostGfx.setDepth(9); // Below player ship (depth 11)
+            }
+            if (!this.ghostLabel) {
+                this.ghostLabel = this.add.text(0, 0, 'Personal Best', {
+                    fontFamily: 'Inter, sans-serif',
+                    fontSize: '10px',
+                    color: CSS.STAR_WHITE,
+                }).setOrigin(0.5, 1).setDepth(9).setAlpha(0.4);
+            }
+        }
+
+        // ---------------------------------------------------------------
+        // Ghost Checkpoint Times
+        // ---------------------------------------------------------------
+
+        /**
+         * Pre-computes when the ghost crosses each checkpoint by ray-testing
+         * consecutive ghost frames against checkpoint gate segments.
+         *
+         * Uses the same 3-ray polygon approach as player checkpoint detection:
+         * nose, right wing, and left wing extremity points are tested against
+         * each checkpoint gate. This ensures ghost crossing times match what
+         * the player would experience on the same racing line.
+         *
+         * Returns a flat array of crossing records sorted by elapsed time.
+         * Each record: { cpIndex, elapsed } where elapsed is in seconds.
+         *
+         * For a 3-lap race, checkpoints are crossed multiple times. The
+         * array contains ALL crossings in order (e.g., cp1 appears 3 times).
+         *
+         * @param {number[]} frames - Flat ghost frame array [x,y,r,t,s,...]
+         * @param {Object[]} checkpoints - Track checkpoint data
+         * @returns {Array<{cpIndex: number, elapsed: number}>} Ordered crossing records
+         */
+        computeGhostCheckpointTimes(frames, checkpoints) {
+            const segInt = TrackGen.segmentIntersection;
+            const vpf = Ghost.VALUES_PER_FRAME;
+            const interval = Ghost.SAMPLE_INTERVAL;
+            const totalFrames = frames.length / vpf;
+            const crossings = [];
+            const vertices = ShipModule.SHIP_VERTICES;
+
+            // Same 3 test points as player checkpoint detection (nose, right wing, left wing)
+            const localPoints = [vertices[0], vertices[1], vertices[4]];
+
+            // Temporary point objects to avoid allocations in the loop
+            const prev = { x: 0, y: 0 };
+            const curr = { x: 0, y: 0 };
+
+            for (let f = 0; f < totalFrames - 1; f++) {
+                const a = f * vpf;
+                const b = (f + 1) * vpf;
+
+                // Ghost position and rotation at frames f and f+1
+                const ax = frames[a], ay = frames[a + 1], aRot = frames[a + 2];
+                const bx = frames[b], by = frames[b + 1], bRot = frames[b + 2];
+
+                const prevCos = Math.cos(aRot), prevSin = Math.sin(aRot);
+                const currCos = Math.cos(bRot), currSin = Math.sin(bRot);
+
+                for (let ci = 0; ci < checkpoints.length; ci++) {
+                    const cp = checkpoints[ci];
+                    let hit = null;
+
+                    // Test each of the 3 extremity rays (same as player detection)
+                    for (let p = 0; p < 3; p++) {
+                        const lx = localPoints[p].x;
+                        const ly = localPoints[p].y;
+
+                        prev.x = ax + lx * prevCos - ly * prevSin;
+                        prev.y = ay + lx * prevSin + ly * prevCos;
+                        curr.x = bx + lx * currCos - ly * currSin;
+                        curr.y = by + lx * currSin + ly * currCos;
+
+                        hit = segInt(prev, curr, cp.leftPoint, cp.rightPoint);
+                        if (hit) break;
+                    }
+
+                    if (!hit) continue;
+
+                    // Direction check (same as player checkpoint detection)
+                    const moveX = curr.x - prev.x;
+                    const moveY = curr.y - prev.y;
+                    const dot = moveX * cp.direction.x + moveY * cp.direction.y;
+                    if (dot <= 0) continue; // Wrong direction
+
+                    // Sub-frame precision: use intersection t parameter for exact crossing time
+                    const elapsed = (f + hit.t) * interval;
+                    crossings.push({ cpIndex: ci, elapsed });
+                }
+            }
+
+            console.log(`[RaceScene] Ghost checkpoint crossings: ${crossings.length}`);
+            return crossings;
+        }
+
+        /**
+         * Updates the ghost delta when the player crosses a checkpoint.
+         *
+         * Searches forward from the cursor in ghostCheckpointTimes for
+         * the next crossing record matching this checkpoint index.
+         * Computes delta as playerTime - ghostTime at that checkpoint.
+         *
+         * For Time Trial, uses current lap time instead of total race time.
+         *
+         * @param {number} cpIndex - The checkpoint index the player just crossed
+         */
+        updateGhostDelta(cpIndex) {
+            if (!this.ghostCheckpointTimes || this.ghostCheckpointTimes.length === 0) return;
+
+            const crossings = this.ghostCheckpointTimes;
+
+            // Find the next ghost crossing matching this checkpoint index
+            for (let i = this.ghostCrossingCursor; i < crossings.length; i++) {
+                if (crossings[i].cpIndex === cpIndex) {
+                    const ghostTime = crossings[i].elapsed;
+                    const playerTime = (this.mode === 'timetrial')
+                        ? (this.raceTime - this.lapStartTime) // Current lap time for TT
+                        : this.raceTime;                       // Total race time for race mode
+
+                    this.currentGhostDelta = playerTime - ghostTime;
+                    this.ghostCrossingCursor = i + 1;
+                    return;
+                }
+            }
+
+            // No matching crossing found (ghost may have ended earlier)
         }
 
         // ---------------------------------------------------------------
@@ -567,7 +982,7 @@ window.PlatPursuit.Games.Driver.Scenes = window.PlatPursuit.Games.Driver.Scenes 
          * @param {string} message - The warning text to display
          */
         showWarning(message) {
-            this.warningTimer = WRONG_WAY_DURATION;
+            this.warningTimer = WARNING_DURATION;
 
             if (!this.warningText) {
                 this.warningText = this.add.text(
@@ -597,7 +1012,40 @@ window.PlatPursuit.Games.Driver.Scenes = window.PlatPursuit.Games.Driver.Scenes 
         }
 
         // ---------------------------------------------------------------
-        // Race Finish
+        // Results Payload
+        // ---------------------------------------------------------------
+
+        /**
+         * Builds the data object passed to ResultsScene.
+         * Core fields are always included; callers pass mode-specific overrides.
+         *
+         * Only passes the trackData fields that renderMinimap needs, not the
+         * full trackData (avoids carrying 6 large arrays through the transition).
+         *
+         * @param {Object} [overrides={}] - Additional/override fields (isNewRecord, tt* fields, etc.)
+         * @returns {Object} Complete ResultsScene init data
+         */
+        buildResultsPayload(overrides = {}) {
+            return {
+                totalTime: this.raceTime,
+                lapTimes: this.lapTimes,
+                bestLapTime: this.bestLapTime,
+                bestLapIndex: this.bestLapIndex,
+                seed: this.raceSeed,
+                ccTier: this.ccTier,
+                mode: this.mode,
+                ghostEnabled: this.ghostVisible,
+                trackData: {
+                    centerPoints: this.trackData.centerPoints,
+                    bounds: this.trackData.bounds,
+                    checkpoints: this.trackData.checkpoints,
+                },
+                ...overrides,
+            };
+        }
+
+        // ---------------------------------------------------------------
+        // Race Finish (Race Mode Only)
         // ---------------------------------------------------------------
 
         /**
@@ -611,26 +1059,29 @@ window.PlatPursuit.Games.Driver.Scenes = window.PlatPursuit.Games.Driver.Scenes 
 
             console.log(`[RaceScene] Race finished: ${formatTime(this.raceTime)}`);
 
+            // --- Ghost auto-save ---
+            const raceTimeMs = Math.round(this.raceTime * 1000);
+            const isNewRecord = !this.storedBestTimeMs || raceTimeMs < this.storedBestTimeMs;
+
+            if (isNewRecord) {
+                Ghost.GhostStorage.save(this.raceSeed, 'race', this.ccTier, {
+                    frames: this.ghostRecorder.getFrames(),
+                    totalTimeMs: raceTimeMs,
+                    lapTimes: this.lapTimes,
+                    bestLapMs: this.bestLapTime ? Math.round(this.bestLapTime * 1000) : null,
+                    recordedAt: new Date().toISOString(),
+                    version: 1,
+                });
+                console.log(`[RaceScene] Ghost saved: ${raceTimeMs}ms (${this.ghostRecorder.getFrameCount()} frames)`);
+            }
+
             // Brief delay so the player sees the finish, then transition
-            this.time.delayedCall(1500, () => {
+            this.finishTimer = this.time.delayedCall(1500, () => {
                 this.cameras.main.fadeOut(200, 0, 0, 0);
                 this.cameras.main.once('camerafadeoutcomplete', () => {
-                    this.scene.start('ResultsScene', {
-                        totalTime: this.raceTime,
-                        lapTimes: this.lapTimes,
-                        bestLapTime: this.bestLapTime,
-                        bestLapIndex: this.bestLapIndex,
-                        seed: this.raceSeed,
-                        ccTier: this.ccTier,
-                        // Only pass the fields renderMinimap needs, not the
-                        // full trackData (avoids carrying 6 large arrays
-                        // through the scene transition).
-                        trackData: {
-                            centerPoints: this.trackData.centerPoints,
-                            bounds: this.trackData.bounds,
-                            checkpoints: this.trackData.checkpoints,
-                        },
-                    });
+                    this.scene.start('ResultsScene', this.buildResultsPayload({
+                        isNewRecord: isNewRecord,
+                    }));
                 });
             });
         }
@@ -679,18 +1130,33 @@ window.PlatPursuit.Games.Driver.Scenes = window.PlatPursuit.Games.Driver.Scenes 
         // ---------------------------------------------------------------
 
         /**
-         * ESC returns to the menu scene. Only active during
-         * COUNTDOWN and RACING states (FINISHED auto-transitions
-         * to ResultsScene).
+         * ESC behavior depends on mode and state:
+         * - Race mode (any state): fade to MenuScene
+         * - Time Trial (COUNTDOWN): fade to MenuScene
+         * - Time Trial (RACING): fade to ResultsScene with session summary
          */
         handleEscape() {
             if (this.transitioning) return;
             this.transitioning = true;
 
-            this.cameras.main.fadeOut(200, 0, 0, 0);
-            this.cameras.main.once('camerafadeoutcomplete', () => {
-                this.scene.start('MenuScene');
-            });
+            // Time Trial during RACING: show session summary
+            if (this.mode === 'timetrial' && this.raceState === RACE_STATE.RACING && this.ttTotalLapsCompleted > 0) {
+                this.cameras.main.fadeOut(200, 0, 0, 0);
+                this.cameras.main.once('camerafadeoutcomplete', () => {
+                    this.scene.start('ResultsScene', this.buildResultsPayload({
+                        isNewRecord: false, // TT saves incrementally, no single "record" moment
+                        ttTotalLapsCompleted: this.ttTotalLapsCompleted,
+                        ttSessionBestLapTime: this.ttSessionBestLapTime,
+                        ttSessionBestLapIndex: this.ttSessionBestLapIndex,
+                    }));
+                });
+            } else {
+                // Race mode or TT during countdown: go to menu
+                this.cameras.main.fadeOut(200, 0, 0, 0);
+                this.cameras.main.once('camerafadeoutcomplete', () => {
+                    this.scene.start('MenuScene');
+                });
+            }
         }
 
     }

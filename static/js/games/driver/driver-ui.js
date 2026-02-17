@@ -60,6 +60,7 @@ window.PlatPursuit.Games.Driver = window.PlatPursuit.Games.Driver || {};
         MINIMAP:         90,
         MINIMAP_OVERLAY: 91,
         HUD:             95,
+        HUD_TEXT:         96,
         OVERLAY:         100,
     };
 

@@ -1075,6 +1075,10 @@ window.PlatPursuit.Games.Driver = window.PlatPursuit.Games.Driver || {};
     PlatPursuit.Games.Driver.Ship = {
         /** The Ship class. Create one instance per race. */
         Ship,
+        /** Vertex coordinates for the ship polygon (shared with Ghost rendering) */
+        SHIP_VERTICES,
+        /** Scale multiplier for ship vertex coordinates */
+        SHIP_SCALE,
     };
 
     console.log('[Stellar Circuit] Ship loaded');
