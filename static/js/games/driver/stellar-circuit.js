@@ -4,18 +4,13 @@
  * This is the last script loaded. It creates the Phaser game instance,
  * registers all scenes, and starts the game.
  *
- * Step 4F Version: Particle systems added to ship.
- * This file focuses on scene management: track generation, camera
- * follow, HUD/telemetry, minimap, and CC tier switching controls.
+ * Scene registration:
+ * - RaceScene (default): Core gameplay with countdown, checkpoints, laps
+ * - TrackTestScene: Dev sandbox for testing physics, visuals, track gen
  *
- * What's new from Step 4D:
- * - Engine trail particles (cyan, when thrusting)
- * - Retro-thrust particles (brake color, when braking)
- * - Off-track sparks (red, speed-proportional)
- * - brakeColor added to config system (paired with trailColor per skin)
- *
- * This test scene will be replaced with proper scene registration
- * (MenuScene, RaceScene, ResultsScene) in Step 5+.
+ * RaceScene is listed first so Phaser auto-starts it. TrackTestScene
+ * remains registered and accessible via the browser console:
+ *   PlatPursuit.Games.Driver.gameInstance.scene.start('TrackTestScene')
  */
 
 window.PlatPursuit = window.PlatPursuit || {};
@@ -423,13 +418,17 @@ window.PlatPursuit.Games.Driver = window.PlatPursuit.Games.Driver || {};
     // Create Game Instance
     // -----------------------------------------------------------------------
 
+    // RaceScene is listed first so Phaser auto-starts it.
+    // TrackTestScene stays registered for dev testing via console.
+    const RaceScene = PlatPursuit.Games.Driver.Scenes.RaceScene;
+
     const config = Shell.createConfig({
-        scene: [TrackTestScene],
+        scene: [RaceScene, TrackTestScene],
     });
 
     const game = new Phaser.Game(config);
 
     PlatPursuit.Games.Driver.gameInstance = game;
 
-    console.log('[Stellar Circuit] Game instance created via Shell.createConfig()');
+    console.log('[Stellar Circuit] Game instance created. RaceScene starting.');
 })();

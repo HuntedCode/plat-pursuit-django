@@ -1495,6 +1495,9 @@ window.PlatPursuit.Games.Driver = window.PlatPursuit.Games.Driver || {};
 
         /** Render a minimap of the track */
         renderMinimap,
+
+        /** Test if two line segments intersect. Returns {x,y} or null. */
+        segmentIntersection,
     };
 
     console.log('[Stellar Circuit] TrackGenerator loaded');
