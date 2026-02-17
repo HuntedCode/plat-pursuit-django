@@ -992,20 +992,27 @@ window.PlatPursuit.Games.Driver = window.PlatPursuit.Games.Driver || {};
         }
 
         /**
-         * Updates particle emitter tint colors to match the current config.
+         * Destroys all particle emitters. Used before recreating them
+         * with new colors (Phaser 3.60+ EmitterOps are immutable after
+         * creation, so the only reliable way to change tint is to
+         * recreate the emitter).
+         */
+        destroyParticleEmitters() {
+            if (this.engineEmitter) { this.engineEmitter.destroy(); this.engineEmitter = null; }
+            if (this.brakeEmitter) { this.brakeEmitter.destroy(); this.brakeEmitter = null; }
+            if (this.sparkEmitter) { this.sparkEmitter.destroy(); this.sparkEmitter = null; }
+        }
+
+        /**
+         * Recreates particle emitters to match the current config colors.
          *
          * Called when the color preset changes so particles immediately
          * use the new trail/brake colors. Off-track sparks stay red
          * regardless of skin (they're a track-state indicator, not identity).
          */
         updateParticleColors() {
-            if (this.engineEmitter) {
-                this.engineEmitter.particleTint = this.config.trailColor;
-            }
-            if (this.brakeEmitter) {
-                this.brakeEmitter.particleTint = this.config.brakeColor;
-            }
-            // Spark emitter stays red (0xe43b44) always: palette-independent
+            this.destroyParticleEmitters();
+            this.createParticleEmitters();
         }
 
         // ===================================================================
@@ -1056,18 +1063,7 @@ window.PlatPursuit.Games.Driver = window.PlatPursuit.Games.Driver || {};
                 this.velGraphics.destroy();
                 this.velGraphics = null;
             }
-            if (this.engineEmitter) {
-                this.engineEmitter.destroy();
-                this.engineEmitter = null;
-            }
-            if (this.brakeEmitter) {
-                this.brakeEmitter.destroy();
-                this.brakeEmitter = null;
-            }
-            if (this.sparkEmitter) {
-                this.sparkEmitter.destroy();
-                this.sparkEmitter = null;
-            }
+            this.destroyParticleEmitters();
             this.scene = null;
         }
     }

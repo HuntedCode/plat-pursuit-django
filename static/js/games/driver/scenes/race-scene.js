@@ -40,6 +40,7 @@ window.PlatPursuit.Games.Driver.Scenes = window.PlatPursuit.Games.Driver.Scenes 
     const InputManager = PlatPursuit.Games.Input.InputManager;
     const TrackGen = PlatPursuit.Games.Driver.TrackGenerator;
     const Ship = PlatPursuit.Games.Driver.Ship.Ship;
+    const HUD = PlatPursuit.Games.Driver.HUD;
 
     const { DESIGN_WIDTH, DESIGN_HEIGHT } = Shell;
 
@@ -68,14 +69,11 @@ window.PlatPursuit.Games.Driver.Scenes = window.PlatPursuit.Games.Driver.Scenes 
     const LOOK_AHEAD_DISTANCE = 120;     // Max pixels ahead in velocity direction
 
     /**
-     * Depth layers for UI elements.
-     * Ship layers use 10-12 (set in ship.js via setDepth).
-     * Track uses default depth 0.
-     * UI must be above both.
+     * Depth layers for RaceScene's own UI elements (countdown, warnings,
+     * checkpoint/lap flashes, finish overlay). The HUD module defines its
+     * own depth constants for minimap and HUD text elements.
      */
     const UI_DEPTH = {
-        MINIMAP: 90,
-        MINIMAP_DOT: 91,
         HUD_TEXT: 95,
         OVERLAY: 100,
     };
@@ -169,11 +167,8 @@ window.PlatPursuit.Games.Driver.Scenes = window.PlatPursuit.Games.Driver.Scenes 
             // ----- Input -----
             this.inputManager = new InputManager(this);
 
-            // ----- Minimap -----
-            this.createMinimap();
-
-            // ----- Minimal HUD -----
-            this.createHUD();
+            // ----- HUD (speed bar, timers, minimap, etc.) -----
+            this.hud = new HUD(this, this.trackData);
 
             // ----- Race State -----
             this.raceState = RACE_STATE.COUNTDOWN;
@@ -181,11 +176,18 @@ window.PlatPursuit.Games.Driver.Scenes = window.PlatPursuit.Games.Driver.Scenes 
             this.currentLap = 0;
             this.raceTime = 0;
             this.lapTimes = [];
+            this.bestLapTime = null;
+            this.bestLapIndex = -1;
             this.lapStartTime = 0;
             this.allCheckpointsPassed = false;
             this.warningTimer = 0;
             this.prevShipX = this.ship.x;
             this.prevShipY = this.ship.y;
+
+            // Pre-allocated objects reused every frame (avoid GC pressure)
+            this._hudState = {};
+            this._prevPos = { x: 0, y: 0 };
+            this._currPos = { x: 0, y: 0 };
 
             // ----- Countdown -----
             this.startCountdown();
@@ -203,6 +205,9 @@ window.PlatPursuit.Games.Driver.Scenes = window.PlatPursuit.Games.Driver.Scenes 
             this.events.once('shutdown', () => {
                 if (this.ship) this.ship.destroy();
                 if (this.inputManager) this.inputManager.destroy();
+                if (this.hud) this.hud.destroy();
+                if (this.trackGraphics) this.trackGraphics.destroy();
+                if (this.warningText) this.warningText.destroy();
                 this.input.keyboard.removeCapture([
                     KeyCodes.ONE, KeyCodes.TWO, KeyCodes.THREE,
                     KeyCodes.ENTER,
@@ -218,7 +223,9 @@ window.PlatPursuit.Games.Driver.Scenes = window.PlatPursuit.Games.Driver.Scenes 
         // ---------------------------------------------------------------
 
         update(time, delta) {
-            const dt = delta / 1000;
+            // Clamp dt to 100ms (10fps equivalent) to prevent timer
+            // corruption and ship teleportation on tab-switch spikes.
+            const dt = Math.min(delta / 1000, 0.1);
 
             // --- ESC: New track (all states) ---
             if (this.inputManager.isPausePressed()) {
@@ -267,8 +274,21 @@ window.PlatPursuit.Games.Driver.Scenes = window.PlatPursuit.Games.Driver.Scenes 
             this.updateCamera(dt);
 
             // --- HUD (all states) ---
-            this.updateMinimapDot();
-            this.updateHUDText();
+            const hs = this._hudState;
+            hs.speed = this.ship.speed;
+            hs.shipX = this.ship.x;
+            hs.shipY = this.ship.y;
+            hs.onTrack = this.ship.onTrack;
+            hs.raceState = this.raceState;
+            hs.currentLap = this.currentLap;
+            hs.totalLaps = this.totalLaps;
+            hs.raceTime = this.raceTime;
+            hs.currentLapTime = this.raceTime - this.lapStartTime;
+            hs.bestLapTime = this.bestLapTime;
+            hs.nextCheckpoint = this.nextCheckpoint;
+            hs.allCheckpointsPassed = this.allCheckpointsPassed;
+            hs.ccTier = this.ccTier;
+            this.hud.update(hs);
         }
 
         // ---------------------------------------------------------------
@@ -299,9 +319,9 @@ window.PlatPursuit.Games.Driver.Scenes = window.PlatPursuit.Games.Driver.Scenes 
             this.flashOverlay.setAlpha(0);
 
             const steps = [
-                { text: '3', color: '#2ce8f5', scale: 1.5 },
-                { text: '2', color: '#2ce8f5', scale: 1.5 },
-                { text: '1', color: '#2ce8f5', scale: 1.5 },
+                { text: '3', color: '#ffffff', scale: 1.5 },
+                { text: '2', color: '#ffffff', scale: 1.5 },
+                { text: '1', color: '#ffffff', scale: 1.5 },
                 { text: 'GO', color: '#40e850', scale: 2.0 },
             ];
 
@@ -389,8 +409,12 @@ window.PlatPursuit.Games.Driver.Scenes = window.PlatPursuit.Games.Driver.Scenes 
             const checkpoints = this.trackData.checkpoints;
             const segInt = TrackGen.segmentIntersection;
 
-            const prevPos = { x: this.prevShipX, y: this.prevShipY };
-            const currPos = { x: this.ship.x, y: this.ship.y };
+            const prevPos = this._prevPos;
+            const currPos = this._currPos;
+            prevPos.x = this.prevShipX;
+            prevPos.y = this.prevShipY;
+            currPos.x = this.ship.x;
+            currPos.y = this.ship.y;
 
             for (let i = 0; i < checkpoints.length; i++) {
                 const cp = checkpoints[i];
@@ -412,10 +436,12 @@ window.PlatPursuit.Games.Driver.Scenes = window.PlatPursuit.Games.Driver.Scenes 
 
                 if (i === this.nextCheckpoint) {
                     this.onCheckpointCrossed(i);
-                } else {
-                    // Crossed a forward checkpoint that isn't the next one
+                } else if (i < this.nextCheckpoint && i !== 0) {
+                    // Crossed a checkpoint behind the current target: skipped it
                     this.showWarning('MISSED CHECKPOINT');
                 }
+                // Checkpoints ahead of nextCheckpoint or cp 0 mid-lap:
+                // ignore silently (player hasn't reached them yet)
             }
         }
 
@@ -432,23 +458,40 @@ window.PlatPursuit.Games.Driver.Scenes = window.PlatPursuit.Games.Driver.Scenes 
         onCheckpointCrossed(index) {
             const checkpoints = this.trackData.checkpoints;
 
+            // Current lap elapsed time (used for split tracking)
+            const currentLapTime = this.raceTime - this.lapStartTime;
+
+            // Notify HUD for minimap checkpoint dot tracking + split times
+            this.hud.onCheckpointCrossed(index, currentLapTime);
+
             if (index === 0) {
                 // Start/finish line
                 if (this.allCheckpointsPassed) {
                     // Lap complete
                     this.currentLap++;
                     const lapTime = this.raceTime - this.lapStartTime;
+
+                    // Determine best BEFORE pushing (otherwise isBest is always true)
+                    const isBest = this.bestLapTime === null || lapTime <= this.bestLapTime;
+                    if (isBest) {
+                        this.bestLapTime = lapTime;
+                        this.bestLapIndex = this.lapTimes.length; // index of this lap
+                    }
+
                     this.lapTimes.push(lapTime);
                     this.lapStartTime = this.raceTime;
                     this.allCheckpointsPassed = false;
+
+                    // Notify HUD of lap completion (triggers animation, clears CP state)
+                    this.hud.onLapComplete(this.currentLap, lapTime, isBest);
+
+                    // Show lap completion flash
+                    this.showLapFlash(this.currentLap, lapTime);
 
                     if (this.currentLap >= this.totalLaps) {
                         this.onRaceFinished();
                         return;
                     }
-
-                    // Show lap completion flash
-                    this.showLapFlash(this.currentLap, lapTime);
 
                     // Reset for next lap
                     this.nextCheckpoint = 1;
@@ -479,7 +522,7 @@ window.PlatPursuit.Games.Driver.Scenes = window.PlatPursuit.Games.Driver.Scenes 
          */
         showCheckpointFlash(index) {
             const cpFlash = this.add.text(
-                DESIGN_WIDTH / 2, 90, `CP ${index}`, {
+                DESIGN_WIDTH / 2, 105, `CP ${index}`, {
                     fontFamily: 'Poppins, sans-serif',
                     fontSize: '18px',
                     fontStyle: '700',
@@ -491,7 +534,7 @@ window.PlatPursuit.Games.Driver.Scenes = window.PlatPursuit.Games.Driver.Scenes 
             this.tweens.add({
                 targets: cpFlash,
                 alpha: 0,
-                y: 80,
+                y: 95,
                 duration: 500,
                 ease: 'Power2',
                 onComplete: () => cpFlash.destroy(),
@@ -542,7 +585,7 @@ window.PlatPursuit.Games.Driver.Scenes = window.PlatPursuit.Games.Driver.Scenes 
                         fontFamily: 'Poppins, sans-serif',
                         fontSize: '28px',
                         fontStyle: '700',
-                        color: '#e84040',
+                        color: '#e43b44',
                     }
                 ).setOrigin(0.5).setScrollFactor(0).setDepth(UI_DEPTH.OVERLAY);
             }
@@ -603,8 +646,8 @@ window.PlatPursuit.Games.Driver.Scenes = window.PlatPursuit.Games.Driver.Scenes 
 
             // Per-lap breakdown
             const lapLines = this.lapTimes.map((t, i) => {
-                const best = Math.min(...this.lapTimes);
-                const marker = (t === best && this.lapTimes.length > 1) ? '  *best' : '';
+                const marker = (i === this.bestLapIndex && this.lapTimes.length > 1)
+                    ? '  *best' : '';
                 return `Lap ${i + 1}: ${this.formatTime(t)}${marker}`;
             });
 
@@ -624,7 +667,7 @@ window.PlatPursuit.Games.Driver.Scenes = window.PlatPursuit.Games.Driver.Scenes 
                 `Seed: "${this.raceSeed}"  |  ${this.ccTier}`, {
                     fontFamily: 'Inter, sans-serif',
                     fontSize: '12px',
-                    color: '#4a4a6a',
+                    color: '#4a5568',
                 }
             ).setOrigin(0.5).setScrollFactor(0).setDepth(UI_DEPTH.OVERLAY);
 
@@ -678,129 +721,6 @@ window.PlatPursuit.Games.Driver.Scenes = window.PlatPursuit.Games.Driver.Scenes 
                 cam.scrollX + (targetX - cam.scrollX) * lerpFactor,
                 cam.scrollY + (targetY - cam.scrollY) * lerpFactor
             );
-        }
-
-        // ---------------------------------------------------------------
-        // Minimap
-        // ---------------------------------------------------------------
-
-        createMinimap() {
-            const minimapSize = 140;
-            const minimapX = DESIGN_WIDTH - minimapSize - 12;
-            const minimapY = 12;
-
-            const result = TrackGen.renderMinimap(
-                this, this.trackData, minimapX, minimapY, minimapSize, minimapSize
-            );
-            this.minimap = result.graphics;
-            this.minimapMapData = result.mapData;
-            this.minimap.setScrollFactor(0);
-            this.minimap.setDepth(UI_DEPTH.MINIMAP);
-
-            this.minimapDot = this.add.graphics();
-            this.minimapDot.setScrollFactor(0);
-            this.minimapDot.setDepth(UI_DEPTH.MINIMAP_DOT);
-        }
-
-        updateMinimapDot() {
-            const g = this.minimapDot;
-            g.clear();
-
-            const map = this.minimapMapData;
-            if (!map) return;
-
-            const dotX = map.centerX + (this.ship.x - map.trackCenterX) * map.mapScale;
-            const dotY = map.centerY + (this.ship.y - map.trackCenterY) * map.mapScale;
-
-            g.fillStyle(0xffffff, 1.0);
-            g.fillCircle(dotX, dotY, 3);
-
-            if (!this.ship.onTrack) {
-                g.lineStyle(1, 0xe84040, 0.8);
-                g.strokeCircle(dotX, dotY, 5);
-            }
-        }
-
-        // ---------------------------------------------------------------
-        // Minimal HUD (replaced by proper HUD module in Step 6)
-        // ---------------------------------------------------------------
-
-        createHUD() {
-            this.hudContainer = this.add.container(0, 0);
-            this.hudContainer.setScrollFactor(0);
-            this.hudContainer.setDepth(UI_DEPTH.HUD_TEXT);
-
-            // Lap counter (top-left)
-            this.lapText = this.add.text(16, 16, '', {
-                fontFamily: 'Poppins, sans-serif',
-                fontSize: '22px',
-                fontStyle: '700',
-                color: '#2ce8f5',
-            });
-
-            // Race timer (top-center)
-            this.timerText = this.add.text(DESIGN_WIDTH / 2, 16, '0:00.000', {
-                fontFamily: 'monospace',
-                fontSize: '26px',
-                fontStyle: 'bold',
-                color: '#ffffff',
-            }).setOrigin(0.5, 0);
-
-            // Current lap time (below race timer, smaller)
-            this.currentLapText = this.add.text(DESIGN_WIDTH / 2, 46, '', {
-                fontFamily: 'monospace',
-                fontSize: '14px',
-                color: '#6b6b8d',
-            }).setOrigin(0.5, 0);
-
-            // CC tier indicator (top-left, below lap counter)
-            this.tierText = this.add.text(16, 44, '', {
-                fontFamily: 'Inter, sans-serif',
-                fontSize: '12px',
-                color: '#4a4a6a',
-            });
-
-            // Checkpoint progress (below minimap)
-            this.checkpointText = this.add.text(DESIGN_WIDTH - 16, 160, '', {
-                fontFamily: 'Inter, sans-serif',
-                fontSize: '12px',
-                color: '#40e850',
-                align: 'right',
-            }).setOrigin(1, 0);
-
-            this.hudContainer.add([
-                this.lapText, this.timerText, this.currentLapText,
-                this.tierText, this.checkpointText,
-            ]);
-        }
-
-        updateHUDText() {
-            // Lap display
-            const displayLap = Math.min(this.currentLap + 1, this.totalLaps);
-            this.lapText.setText(`Lap ${displayLap} / ${this.totalLaps}`);
-
-            // Total race time
-            this.timerText.setText(this.formatTime(this.raceTime));
-
-            // Current lap time
-            if (this.raceState === RACE_STATE.RACING && this.currentLap < this.totalLaps) {
-                const currentLapTime = this.raceTime - this.lapStartTime;
-                this.currentLapText.setText(`Lap: ${this.formatTime(currentLapTime)}`);
-            } else if (this.raceState === RACE_STATE.COUNTDOWN) {
-                this.currentLapText.setText('');
-            }
-
-            // CC tier
-            this.tierText.setText(this.ccTier);
-
-            // Checkpoint progress
-            if (this.raceState === RACE_STATE.RACING) {
-                const total = this.trackData.checkpoints.length;
-                const passed = this.allCheckpointsPassed ? total : this.nextCheckpoint;
-                this.checkpointText.setText(`CP ${passed} / ${total}`);
-            } else {
-                this.checkpointText.setText('');
-            }
         }
 
         // ---------------------------------------------------------------

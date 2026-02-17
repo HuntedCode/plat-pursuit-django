@@ -686,34 +686,33 @@ A subtle darkening around the screen edges:
 
 ## 5. HUD Design
 
+All HUD elements use `scrollFactor(0)` so they stay fixed on screen regardless of camera position. All colors from gamification-design.md palette. Implementation: `static/js/games/driver/hud.js`.
+
 ### 5.1 Speed/Thrust Indicator
 
-**Type**: Horizontal bar, bottom-left corner.
+**Type**: Horizontal bar, bottom-left corner (y=690).
 
 **Dimensions**: 180px wide, 12px tall, rounded corners (3px radius).
 
 **Structure**:
 - Background: `#141428` (Deep Space 2) with 1px border of `#3a3a5c` (Neutral Dark)
-- Fill: Linear gradient from `#0a8ea0` (left) to `#2ce8f5` (right)
-- Fill width proportional to `currentSpeed / MAX_SPEED`
+- Fill: Color gradient drawn as ~3px rect segments, interpolating through three stops:
+  - Left (0%): `#0a8ea0` (Cyan Shadow)
+  - Middle (50%): `#2ce8f5` (Cyan Glow)
+  - Right (100%): `#40e850` (Neon Green)
+- Fill width proportional to `currentSpeed / peakSpeed` (self-calibrating: tracks highest speed observed during the race, so the bar naturally fills to 100% at the ship's actual top speed regardless of CC tier)
 
 **Label**: "SPD" text above the bar, 10px, `#6b6b8d` (Neutral Mid)
 
 **Numeric readout**: Current speed value to the right of the bar, 14px monospace, `#e8e8f0`
 
+**CC tier label**: Below the bar, 12px, `#4a5568` (Steel Dark)
+
+**Design note**: The quadratic thrust soft cap means the ship's equilibrium speed varies per tier (~57% of maxSpeed for 50cc, ~68% for 200cc). A fixed ratio wouldn't work across tiers, so the self-calibrating peakSpeed approach was chosen instead.
+
 ### 5.2 Velocity Vector Indicator
 
-**Unique to space physics.** A small arrow near the ship (or on the HUD) showing the actual direction of travel vs. the direction the ship faces.
-
-**Implementation**: A small arrow icon on the HUD, bottom-left area (below speed bar):
-- Arrow rotates to show velocity direction relative to screen
-- Color: `#2ce8f5` when velocity aligns with facing (within 30 degrees)
-- Color: `#f77622` when velocity diverges significantly (> 60 degrees)
-- Color gradient between these based on angle difference
-- Size: 30x30px
-- Label: "VEL" text, 10px
-
-This helps new players understand the space physics. When the arrow and ship disagree strongly, the player knows they need to correct their trajectory.
+**Removed from HUD.** The ship's world-space velocity arrow (drawn directly on the ship in ship.js) provides better spatial context than a HUD-based indicator. The HUD version was tested and cut in favor of the ship-attached arrow.
 
 ### 5.3 Lap Counter
 
@@ -723,7 +722,14 @@ This helps new players understand the space physics. When the arrow and ship dis
 
 **Font**: Poppins 600, 22px, `#e8e8f0`
 
-**Animation on lap complete**: Text scales up 120% and flashes cyan for 500ms, then returns to normal.
+**Animation on lap complete**: Text scales up 120% and flashes cyan (`#2ce8f5`) for 500ms, then returns to normal.
+
+**Completed lap times**: Listed below the counter in monospace 12px, `#6b6b8d`, right-aligned. Best lap marked with `*`. Example:
+```
+  LAP 2/3
+  L1 0:42.123
+  L2 0:41.567 *
+```
 
 ### 5.4 Timer Display
 
@@ -731,55 +737,63 @@ This helps new players understand the space physics. When the arrow and ship dis
 
 **Layout** (stacked):
 ```
-  01:23.456        <- Total time (20px, Poppins 600, #e8e8f0)
-  LAP  00:28.123   <- Current lap time (14px, monospace, #6b6b8d)
-  BEST 00:27.891   <- Best lap time (14px, monospace, #d4a017 gold)
+  0:42.123         <- Total time (20px, Poppins 600, #e8e8f0)
+  LAP  0:28.123    <- Current lap time (14px, monospace, #6b6b8d)
+  BEST 0:27.891    <- Best lap time (14px, monospace, #d4a017 gold)
+  -0.234           <- Live delta vs best (14px bold monospace, green/red)
 ```
 
-**Format**: `MM:SS.mmm` (minutes, seconds, milliseconds)
+**Format**: `M:SS.mmm` (minutes, seconds, milliseconds)
 
-**Best lap**: Only shown after completing the first lap. Highlighted in gold. If current lap is on pace to beat best, current lap time pulses gently.
+**Best lap**: Only shown after completing the first lap. Highlighted in gold. If current lap is on pace to beat best, the best lap text pulses gently (alpha oscillates 0.7-1.0).
 
-**On race complete**: Total time flashes and scales up. Final time is emphasized.
+**Checkpoint deltas**: A persistent line below the best lap time showing the time difference at the most recently crossed checkpoint vs the best lap's split at that same checkpoint. Green with `-` prefix when ahead, red (`#e43b44`) with `+` prefix when behind. Appears starting on lap 2 once best lap splits exist. Updates on each checkpoint crossing and holds until the next one.
+
+**Checkpoint flash**: "CP X" text appears at y=105 on each correct checkpoint crossing, fading up and out over 500ms. Positioned below the delta line to avoid overlap.
 
 ### 5.5 Minimap
 
-**Position**: Bottom-right corner.
+**Position**: Bottom-right corner, 12px from edges.
 
 **Size**: 150x150px.
 
 **Elements**:
-- Background: `#0a0a14` at 80% opacity (semi-transparent dark overlay)
-- Border: 1px `#3a3a5c`
-- Track outline: simplified polyline (every 10th center point), 1px, `#2ce8f5` at 40%
+- Background: `#0a0a14` at 70% opacity
+- Border: 1px `#2ce8f5` at 30% opacity
+- Track outline: simplified polyline (every 5th center point), 1.5px, `#2ce8f5` at 40%
 - Player dot: 4px circle, `#ffffff`, solid
-- Ghost dots: 3px circles, ghost colors (see 4.8), 60% opacity
-- Checkpoint markers: 2px dots, `#40e850` at 30% (uncrossed) / 10% (crossed)
-- Next checkpoint: brightest green dot (helps player know where to go)
+- Off-track indicator: 6px red (`#e43b44`) ring around player dot when off-track
+- Start/finish: 3px gold (`#d4a017`) dot (drawn by TrackGenerator.renderMinimap)
+- Checkpoint dots:
+  - Next target: 3px, `#40e850` at 100% (brightest)
+  - Uncrossed: 2px, `#40e850` at 30%
+  - Crossed this lap: 2px, `#40e850` at 10% (very dim)
+- Start/finish highlight: When all intermediate checkpoints are crossed and the start/finish line is the next target, a pulsing gold ring (radius oscillates 5-7px) appears around the gold dot
+- Ghost dots: 3px circles, ghost colors (see 4.8), 60% opacity (future: Step 8)
 
-**Coordinate mapping**: Track bounds are scaled to fit the 150x150 minimap. Ship and ghost positions are transformed to minimap coordinates each frame.
+**Implementation detail**: The minimap uses two layers. The static track outline (DEPTH 90) is drawn once by TrackGenerator.renderMinimap(). A dynamic overlay (DEPTH 91) is redrawn each frame for checkpoint dots and the player dot, avoiding the cost of redrawing the ~100 track segments every frame.
 
 ### 5.6 Layout at 1280x720
 
 ```
 +------------------------------------------------------------------+
-|  [SPD label]                    01:23.456                LAP 2/3 |
-|  [====Speed Bar====]          LAP  00:28.123                      |
-|  [Velocity Arrow]             BEST 00:27.891                      |
-|                                                                    |
-|                                                                    |
-|                         (Game World)                               |
-|                                                                    |
-|                                                                    |
-|                                                                    |
-|  [SPD label]                                        +----------+  |
-|  [====Speed Bar====]                                | Minimap  |  |
-|  [Velocity Arrow]                                   |          |  |
-|                                                     +----------+  |
+|                               0:42.123                  LAP 2/3  |
+|                             LAP  0:28.123            L1 0:42.123 |
+|                             BEST 0:27.891            L2 0:41.567 |
+|                              -0.234                              |
+|                               CP 4                               |
+|                                                                  |
+|                          (Game World)                            |
+|                                                                  |
+|                                                                  |
+|  SPD                                                +----------+ |
+|  [====Speed Bar====] 587                            | Minimap  | |
+|  50cc                                               |          | |
+|                                                     +----------+ |
 +------------------------------------------------------------------+
 ```
 
-All HUD elements are on a fixed camera layer (Phaser's UI camera) so they don't move with the game world camera.
+Speed bar and CC tier label are bottom-left. Timer stack and delta are top-center. Lap counter and completed lap times are top-right. Minimap is bottom-right.
 
 ---
 
