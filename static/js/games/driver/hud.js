@@ -37,54 +37,10 @@ window.PlatPursuit.Games.Driver = window.PlatPursuit.Games.Driver || {};
     // Aliases
     const Shell = PlatPursuit.Games.Shell;
     const TrackGen = PlatPursuit.Games.Driver.TrackGenerator;
+    const UI = PlatPursuit.Games.Driver.UI;
 
     const { DESIGN_WIDTH, DESIGN_HEIGHT } = Shell;
-
-    // ===================================================================
-    // COLORS (gamification-design.md palette)
-    // ===================================================================
-
-    const COLOR = {
-        DEEP_SPACE_1:  0x0a0a14,   // Background
-        DEEP_SPACE_2:  0x141428,   // Speed bar background
-        NEUTRAL_DARK:  0x3a3a5c,   // Borders
-        NEUTRAL_MID:   0x6b6b8d,   // Labels, secondary text
-        STAR_WHITE:    0xe8e8f0,   // Primary HUD text
-        CYAN_GLOW:     0x2ce8f5,   // Speed bar fill, accents
-        GOLD:          0xd4a017,   // Best lap, start/finish
-        NEON_GREEN:    0x40e850,   // Checkpoints
-        RED:           0xe43b44,   // Off-track indicator
-        STEEL_DARK:    0x4a5568,   // Muted text (CC tier)
-    };
-
-    // CSS hex strings for Phaser Text objects (which need string colors)
-    const CSS = {
-        STAR_WHITE:  '#e8e8f0',
-        NEUTRAL_MID: '#6b6b8d',
-        CYAN_GLOW:   '#2ce8f5',
-        GOLD:        '#d4a017',
-        STEEL_DARK:  '#4a5568',
-        NEON_GREEN:  '#40e850',
-    };
-
-    // ===================================================================
-    // DEPTH LAYERS
-    // ===================================================================
-    // Same values as RaceScene's UI_DEPTH, defined independently so the
-    // HUD module stays self-contained.
-
-    const DEPTH = {
-        MINIMAP:         90,
-        MINIMAP_OVERLAY: 91,
-        HUD:             95,
-    };
-
-    // Race states (must match RaceScene's RACE_STATE values)
-    const RACE_STATE = {
-        COUNTDOWN: 'COUNTDOWN',
-        RACING:    'RACING',
-        FINISHED:  'FINISHED',
-    };
+    const { COLOR, CSS, DEPTH, RACE_STATE, formatTime } = UI;
 
     // ===================================================================
     // LAYOUT CONSTANTS
@@ -331,7 +287,7 @@ window.PlatPursuit.Games.Driver = window.PlatPursuit.Games.Driver || {};
             // Build the completed lap times list
             if (this.completedLapTimes.length > 0) {
                 const lines = this.completedLapTimes.map((t, i) => {
-                    const timeStr = this.formatTime(t);
+                    const timeStr = formatTime(t);
                     const isBest = (bestLapTime !== null && t === bestLapTime);
                     // Best lap gets a star marker
                     return isBest ? `L${i + 1} ${timeStr} *` : `L${i + 1} ${timeStr}`;
@@ -396,18 +352,18 @@ window.PlatPursuit.Games.Driver = window.PlatPursuit.Games.Driver || {};
 
         updateTimerDisplay(raceState, raceTime, currentLapTime, bestLapTime) {
             // Total time
-            this.totalTimeText.setText(this.formatTime(raceTime));
+            this.totalTimeText.setText(formatTime(raceTime));
 
             // Current lap time
             if (raceState === RACE_STATE.RACING) {
-                this.lapTimeText.setText(`LAP  ${this.formatTime(currentLapTime)}`);
+                this.lapTimeText.setText(`LAP  ${formatTime(currentLapTime)}`);
             } else if (raceState === RACE_STATE.COUNTDOWN) {
                 this.lapTimeText.setText('');
             }
 
             // Best lap time (only shown after first completed lap)
             if (bestLapTime !== null) {
-                this.bestLapText.setText(`BEST ${this.formatTime(bestLapTime)}`);
+                this.bestLapText.setText(`BEST ${formatTime(bestLapTime)}`);
 
                 // Pulse effect: gently oscillate alpha when on pace to beat
                 // best lap. Only activates after crossing a checkpoint with
@@ -681,22 +637,6 @@ window.PlatPursuit.Games.Driver = window.PlatPursuit.Games.Driver || {};
                     this.lapText.setColor(CSS.STAR_WHITE);
                 },
             });
-        }
-
-        // ---------------------------------------------------------------
-        // Utility
-        // ---------------------------------------------------------------
-
-        /**
-         * Formats a time in seconds to M:SS.mmm display string.
-         * Duplicated from RaceScene (5 lines, not worth a shared utility).
-         */
-        formatTime(seconds) {
-            const mins = Math.floor(seconds / 60);
-            const secs = seconds % 60;
-            const wholeSecs = Math.floor(secs);
-            const ms = Math.floor((secs - wholeSecs) * 1000);
-            return `${mins}:${String(wholeSecs).padStart(2, '0')}.${String(ms).padStart(3, '0')}`;
         }
 
         // ---------------------------------------------------------------

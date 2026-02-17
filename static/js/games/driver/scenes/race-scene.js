@@ -11,20 +11,19 @@
  * - Game loop: input -> physics -> checkpoints -> HUD -> camera
  * - Detect checkpoint crossings (sequential, with wrong-way warnings)
  * - Track lap completion and race finish
- * - Display finish overlay with per-lap breakdown
+ * - On finish: fade transition to ResultsScene with race data
  *
  * Architecture:
  * - Receives config via init(data): { seed, laps, ccTier }
  * - Ship.update() runs in ALL states (keeps particles alive)
  * - Input is frozen (FROZEN_INPUT) during COUNTDOWN and FINISHED
  * - Camera uses velocity look-ahead (GDD 8.2)
- * - scene.restart() handles all restarts cleanly
+ * - ESC fades to MenuScene; finish fades to ResultsScene
  *
  * Controls:
  *   WASD / Arrows: Fly the ship
  *   1/2/3: Switch CC tier (dev testing)
- *   ENTER: Restart same track (FINISHED state only)
- *   ESC: New random track (any state)
+ *   ESC: Return to menu (COUNTDOWN/RACING states)
  */
 
 window.PlatPursuit = window.PlatPursuit || {};
@@ -41,24 +40,14 @@ window.PlatPursuit.Games.Driver.Scenes = window.PlatPursuit.Games.Driver.Scenes 
     const TrackGen = PlatPursuit.Games.Driver.TrackGenerator;
     const Ship = PlatPursuit.Games.Driver.Ship.Ship;
     const HUD = PlatPursuit.Games.Driver.HUD;
+    const UI = PlatPursuit.Games.Driver.UI;
 
     const { DESIGN_WIDTH, DESIGN_HEIGHT } = Shell;
+    const { RACE_STATE, DEPTH, formatTime } = UI;
 
     // ===================================================================
     // CONSTANTS
     // ===================================================================
-
-    /**
-     * Race state machine states.
-     * COUNTDOWN: Ship visible but frozen, countdown overlay playing
-     * RACING: Ship controllable, timer running, checkpoints active
-     * FINISHED: Ship coasts on momentum, finish overlay displayed
-     */
-    const RACE_STATE = {
-        COUNTDOWN: 'COUNTDOWN',
-        RACING: 'RACING',
-        FINISHED: 'FINISHED',
-    };
 
     // Countdown timing (GDD 4.6)
     const COUNTDOWN_STEP_MS = 800;       // Duration per number (3, 2, 1)
@@ -67,16 +56,6 @@ window.PlatPursuit.Games.Driver.Scenes = window.PlatPursuit.Games.Driver.Scenes 
     // Camera (GDD 8.2): velocity look-ahead
     const CAMERA_SMOOTHING = 0.06;       // Lerp factor (lower = smoother trail)
     const LOOK_AHEAD_DISTANCE = 120;     // Max pixels ahead in velocity direction
-
-    /**
-     * Depth layers for RaceScene's own UI elements (countdown, warnings,
-     * checkpoint/lap flashes, finish overlay). The HUD module defines its
-     * own depth constants for minimap and HUD text elements.
-     */
-    const UI_DEPTH = {
-        HUD_TEXT: 95,
-        OVERLAY: 100,
-    };
 
     /**
      * Frozen input object: passed to Ship.update() during COUNTDOWN
@@ -109,8 +88,8 @@ window.PlatPursuit.Games.Driver.Scenes = window.PlatPursuit.Games.Driver.Scenes 
         // ---------------------------------------------------------------
 
         /**
-         * Called before create(). Receives data from scene.start() or
-         * scene.restart(). Sets up race configuration.
+         * Called before create(). Receives data from MenuScene or
+         * ResultsScene via scene.start(). Sets up race configuration.
          *
          * @param {Object} data - Race configuration
          * @param {string} [data.seed] - Track seed (default: today's date)
@@ -131,6 +110,12 @@ window.PlatPursuit.Games.Driver.Scenes = window.PlatPursuit.Games.Driver.Scenes 
             // Remove HTML loading indicator (only exists on first load)
             const loadingEl = document.getElementById('game-loading');
             if (loadingEl) loadingEl.remove();
+
+            // Camera fade in from menu/results transition
+            this.cameras.main.fadeIn(200, 0, 0, 0);
+
+            // Prevents double-navigation during fade transitions
+            this.transitioning = false;
 
             // ----- Track Generation -----
             this.trackData = TrackGen.generate(this.raceSeed);
@@ -198,11 +183,22 @@ window.PlatPursuit.Games.Driver.Scenes = window.PlatPursuit.Games.Driver.Scenes 
             this.key2 = this.input.keyboard.addKey(KeyCodes.TWO, true, false);
             this.key3 = this.input.keyboard.addKey(KeyCodes.THREE, true, false);
 
-            // ----- ENTER Key (restart same track in FINISHED state) -----
-            this.enterKey = this.input.keyboard.addKey(KeyCodes.ENTER, true, false);
-
             // ----- Cleanup Handler -----
             this.events.once('shutdown', () => {
+                // Cancel any in-flight countdown timers (prevents callbacks
+                // firing after shutdown when ESC is pressed during countdown)
+                if (this.countdownTimers) {
+                    this.countdownTimers.forEach(t => t.remove(false));
+                    this.countdownTimers = null;
+                }
+                if (this.countdownText) {
+                    this.countdownText.destroy();
+                    this.countdownText = null;
+                }
+                if (this.flashOverlay) {
+                    this.flashOverlay.destroy();
+                    this.flashOverlay = null;
+                }
                 if (this.ship) this.ship.destroy();
                 if (this.inputManager) this.inputManager.destroy();
                 if (this.hud) this.hud.destroy();
@@ -210,7 +206,6 @@ window.PlatPursuit.Games.Driver.Scenes = window.PlatPursuit.Games.Driver.Scenes 
                 if (this.warningText) this.warningText.destroy();
                 this.input.keyboard.removeCapture([
                     KeyCodes.ONE, KeyCodes.TWO, KeyCodes.THREE,
-                    KeyCodes.ENTER,
                 ]);
             });
 
@@ -227,8 +222,10 @@ window.PlatPursuit.Games.Driver.Scenes = window.PlatPursuit.Games.Driver.Scenes 
             // corruption and ship teleportation on tab-switch spikes.
             const dt = Math.min(delta / 1000, 0.1);
 
-            // --- ESC: New track (all states) ---
-            if (this.inputManager.isPausePressed()) {
+            // --- ESC: Return to menu (COUNTDOWN/RACING, not transitioning) ---
+            if (!this.transitioning
+                && this.raceState !== RACE_STATE.FINISHED
+                && this.inputManager.isPausePressed()) {
                 this.handleEscape();
                 return;
             }
@@ -256,18 +253,6 @@ window.PlatPursuit.Games.Driver.Scenes = window.PlatPursuit.Games.Driver.Scenes 
                 this.raceTime += dt;
                 this.checkCheckpointCrossing();
                 this.updateWarning(dt);
-            }
-
-            if (this.raceState === RACE_STATE.FINISHED) {
-                if (JustDown(this.enterKey)) {
-                    // Restart same track
-                    this.scene.restart({
-                        seed: this.raceSeed,
-                        laps: this.totalLaps,
-                        ccTier: this.ccTier,
-                    });
-                    return;
-                }
             }
 
             // --- Camera (all states) ---
@@ -303,6 +288,10 @@ window.PlatPursuit.Games.Driver.Scenes = window.PlatPursuit.Games.Driver.Scenes 
          * "GO" uses green color and a larger initial scale.
          */
         startCountdown() {
+            // Store delayed call references so the shutdown handler can
+            // cancel them if ESC is pressed during the countdown.
+            this.countdownTimers = [];
+
             this.countdownText = this.add.text(
                 DESIGN_WIDTH / 2, DESIGN_HEIGHT / 2, '', {
                     fontFamily: 'Poppins, sans-serif',
@@ -310,12 +299,12 @@ window.PlatPursuit.Games.Driver.Scenes = window.PlatPursuit.Games.Driver.Scenes 
                     fontStyle: '700',
                     color: '#2ce8f5',
                 }
-            ).setOrigin(0.5).setScrollFactor(0).setDepth(UI_DEPTH.OVERLAY).setAlpha(0);
+            ).setOrigin(0.5).setScrollFactor(0).setDepth(DEPTH.OVERLAY).setAlpha(0);
 
             // Screen flash overlay (brief white flash on each beat)
             this.flashOverlay = this.add.graphics();
             this.flashOverlay.setScrollFactor(0);
-            this.flashOverlay.setDepth(UI_DEPTH.OVERLAY - 1);
+            this.flashOverlay.setDepth(DEPTH.OVERLAY - 1);
             this.flashOverlay.setAlpha(0);
 
             const steps = [
@@ -332,7 +321,7 @@ window.PlatPursuit.Games.Driver.Scenes = window.PlatPursuit.Games.Driver.Scenes 
                 const isGo = step.text === 'GO';
                 const duration = isGo ? COUNTDOWN_GO_LINGER_MS : COUNTDOWN_STEP_MS;
 
-                this.time.delayedCall(delay, () => {
+                this.countdownTimers.push(this.time.delayedCall(delay, () => {
                     // Kill any lingering tweens from the previous step.
                     // Without this, the previous fade-out tween fights the
                     // new alpha: 1, making the text invisible for steps 2/1/GO.
@@ -373,14 +362,15 @@ window.PlatPursuit.Games.Driver.Scenes = window.PlatPursuit.Games.Driver.Scenes 
                         duration: 150,
                         ease: 'Linear',
                     });
-                });
+                }));
 
                 delay += duration;
             }
 
             // Transition to RACING after countdown completes
-            this.time.delayedCall(delay, () => {
+            this.countdownTimers.push(this.time.delayedCall(delay, () => {
                 this.raceState = RACE_STATE.RACING;
+                this.countdownTimers = null;
                 if (this.countdownText) {
                     this.countdownText.destroy();
                     this.countdownText = null;
@@ -389,7 +379,7 @@ window.PlatPursuit.Games.Driver.Scenes = window.PlatPursuit.Games.Driver.Scenes 
                     this.flashOverlay.destroy();
                     this.flashOverlay = null;
                 }
-            });
+            }));
         }
 
         // ---------------------------------------------------------------
@@ -436,12 +426,12 @@ window.PlatPursuit.Games.Driver.Scenes = window.PlatPursuit.Games.Driver.Scenes 
 
                 if (i === this.nextCheckpoint) {
                     this.onCheckpointCrossed(i);
-                } else if (i < this.nextCheckpoint && i !== 0) {
-                    // Crossed a checkpoint behind the current target: skipped it
+                } else if (i !== 0) {
+                    // Crossed a checkpoint that isn't the current target:
+                    // either behind (skipped back) or ahead (cut across).
+                    // Either way the player needs to return to nextCheckpoint.
                     this.showWarning('MISSED CHECKPOINT');
                 }
-                // Checkpoints ahead of nextCheckpoint or cp 0 mid-lap:
-                // ignore silently (player hasn't reached them yet)
             }
         }
 
@@ -528,7 +518,7 @@ window.PlatPursuit.Games.Driver.Scenes = window.PlatPursuit.Games.Driver.Scenes 
                     fontStyle: '700',
                     color: '#40e850',
                 }
-            ).setOrigin(0.5).setScrollFactor(0).setDepth(UI_DEPTH.HUD_TEXT);
+            ).setOrigin(0.5).setScrollFactor(0).setDepth(DEPTH.HUD_TEXT);
 
             // Fade out and destroy
             this.tweens.add({
@@ -551,13 +541,13 @@ window.PlatPursuit.Games.Driver.Scenes = window.PlatPursuit.Games.Driver.Scenes 
 
             const lapFlash = this.add.text(
                 DESIGN_WIDTH / 2, DESIGN_HEIGHT / 2 - 100,
-                `Lap ${lapNumber}: ${this.formatTime(lapTime)}`, {
+                `Lap ${lapNumber}: ${formatTime(lapTime)}`, {
                     fontFamily: 'monospace',
                     fontSize: '28px',
                     fontStyle: 'bold',
                     color: trailHex,
                 }
-            ).setOrigin(0.5).setScrollFactor(0).setDepth(UI_DEPTH.OVERLAY);
+            ).setOrigin(0.5).setScrollFactor(0).setDepth(DEPTH.OVERLAY);
 
             // Hold briefly, then fade out
             this.tweens.add({
@@ -587,7 +577,7 @@ window.PlatPursuit.Games.Driver.Scenes = window.PlatPursuit.Games.Driver.Scenes 
                         fontStyle: '700',
                         color: '#e43b44',
                     }
-                ).setOrigin(0.5).setScrollFactor(0).setDepth(UI_DEPTH.OVERLAY);
+                ).setOrigin(0.5).setScrollFactor(0).setDepth(DEPTH.OVERLAY);
             }
             this.warningText.setText(message);
             this.warningText.setAlpha(1);
@@ -611,77 +601,38 @@ window.PlatPursuit.Games.Driver.Scenes = window.PlatPursuit.Games.Driver.Scenes 
         // ---------------------------------------------------------------
 
         /**
-         * Transitions to FINISHED state. Creates a semi-transparent
-         * overlay with race results: total time, per-lap breakdown,
-         * and restart instructions.
+         * Transitions to FINISHED state. After a brief delay (so the
+         * player sees the finish line crossing), fades to the
+         * ResultsScene with the race data.
          */
         onRaceFinished() {
             this.raceState = RACE_STATE.FINISHED;
+            this.transitioning = true;
 
-            // Semi-transparent dark overlay
-            const overlayBg = this.add.graphics();
-            overlayBg.setScrollFactor(0);
-            overlayBg.setDepth(UI_DEPTH.OVERLAY - 1);
-            overlayBg.fillStyle(0x0a0a14, 0.75);
-            overlayBg.fillRect(0, 0, DESIGN_WIDTH, DESIGN_HEIGHT);
+            console.log(`[RaceScene] Race finished: ${formatTime(this.raceTime)}`);
 
-            // "RACE COMPLETE" title
-            this.add.text(
-                DESIGN_WIDTH / 2, DESIGN_HEIGHT / 2 - 80, 'RACE COMPLETE', {
-                    fontFamily: 'Poppins, sans-serif',
-                    fontSize: '48px',
-                    fontStyle: '700',
-                    color: '#d4a017',
-                }
-            ).setOrigin(0.5).setScrollFactor(0).setDepth(UI_DEPTH.OVERLAY);
-
-            // Total time
-            this.add.text(
-                DESIGN_WIDTH / 2, DESIGN_HEIGHT / 2 - 20, this.formatTime(this.raceTime), {
-                    fontFamily: 'monospace',
-                    fontSize: '36px',
-                    color: '#2ce8f5',
-                }
-            ).setOrigin(0.5).setScrollFactor(0).setDepth(UI_DEPTH.OVERLAY);
-
-            // Per-lap breakdown
-            const lapLines = this.lapTimes.map((t, i) => {
-                const marker = (i === this.bestLapIndex && this.lapTimes.length > 1)
-                    ? '  *best' : '';
-                return `Lap ${i + 1}: ${this.formatTime(t)}${marker}`;
+            // Brief delay so the player sees the finish, then transition
+            this.time.delayedCall(1500, () => {
+                this.cameras.main.fadeOut(200, 0, 0, 0);
+                this.cameras.main.once('camerafadeoutcomplete', () => {
+                    this.scene.start('ResultsScene', {
+                        totalTime: this.raceTime,
+                        lapTimes: this.lapTimes,
+                        bestLapTime: this.bestLapTime,
+                        bestLapIndex: this.bestLapIndex,
+                        seed: this.raceSeed,
+                        ccTier: this.ccTier,
+                        // Only pass the fields renderMinimap needs, not the
+                        // full trackData (avoids carrying 6 large arrays
+                        // through the scene transition).
+                        trackData: {
+                            centerPoints: this.trackData.centerPoints,
+                            bounds: this.trackData.bounds,
+                            checkpoints: this.trackData.checkpoints,
+                        },
+                    });
+                });
             });
-
-            this.add.text(
-                DESIGN_WIDTH / 2, DESIGN_HEIGHT / 2 + 30, lapLines.join('\n'), {
-                    fontFamily: 'monospace',
-                    fontSize: '16px',
-                    color: '#6b6b8d',
-                    align: 'center',
-                    lineSpacing: 6,
-                }
-            ).setOrigin(0.5, 0).setScrollFactor(0).setDepth(UI_DEPTH.OVERLAY);
-
-            // Seed info
-            this.add.text(
-                DESIGN_WIDTH / 2, DESIGN_HEIGHT / 2 + 130,
-                `Seed: "${this.raceSeed}"  |  ${this.ccTier}`, {
-                    fontFamily: 'Inter, sans-serif',
-                    fontSize: '12px',
-                    color: '#4a5568',
-                }
-            ).setOrigin(0.5).setScrollFactor(0).setDepth(UI_DEPTH.OVERLAY);
-
-            // Restart prompt
-            this.add.text(
-                DESIGN_WIDTH / 2, DESIGN_HEIGHT / 2 + 170,
-                'ENTER: Retry  |  ESC: New Track', {
-                    fontFamily: 'Inter, sans-serif',
-                    fontSize: '14px',
-                    color: '#6b6b8d',
-                }
-            ).setOrigin(0.5).setScrollFactor(0).setDepth(UI_DEPTH.OVERLAY);
-
-            console.log(`[RaceScene] Race finished: ${this.formatTime(this.raceTime)}`);
         }
 
         // ---------------------------------------------------------------
@@ -728,33 +679,20 @@ window.PlatPursuit.Games.Driver.Scenes = window.PlatPursuit.Games.Driver.Scenes 
         // ---------------------------------------------------------------
 
         /**
-         * ESC restarts with a new random track in all states.
-         * This is a testing convenience; will become a pause menu later.
+         * ESC returns to the menu scene. Only active during
+         * COUNTDOWN and RACING states (FINISHED auto-transitions
+         * to ResultsScene).
          */
         handleEscape() {
-            this.scene.restart({
-                seed: 'random-' + Date.now(),
-                laps: this.totalLaps,
-                ccTier: this.ccTier,
+            if (this.transitioning) return;
+            this.transitioning = true;
+
+            this.cameras.main.fadeOut(200, 0, 0, 0);
+            this.cameras.main.once('camerafadeoutcomplete', () => {
+                this.scene.start('MenuScene');
             });
         }
 
-        // ---------------------------------------------------------------
-        // Utility
-        // ---------------------------------------------------------------
-
-        /**
-         * Formats a time in seconds to M:SS.mmm display string.
-         * @param {number} seconds - Time in seconds
-         * @returns {string} Formatted time string
-         */
-        formatTime(seconds) {
-            const mins = Math.floor(seconds / 60);
-            const secs = seconds % 60;
-            const wholeSecs = Math.floor(secs);
-            const ms = Math.floor((secs - wholeSecs) * 1000);
-            return `${mins}:${String(wholeSecs).padStart(2, '0')}.${String(ms).padStart(3, '0')}`;
-        }
     }
 
     // ===================================================================

@@ -4,12 +4,11 @@
  * This is the last script loaded. It creates the Phaser game instance,
  * registers all scenes, and starts the game.
  *
- * Scene registration:
- * - RaceScene (default): Core gameplay with countdown, checkpoints, laps
- * - TrackTestScene: Dev sandbox for testing physics, visuals, track gen
+ * Scene flow:
+ *   MenuScene -> RaceScene -> ResultsScene -> (Menu/Retry/New Track)
  *
- * RaceScene is listed first so Phaser auto-starts it. TrackTestScene
- * remains registered and accessible via the browser console:
+ * MenuScene is listed first so Phaser auto-starts it.
+ * TrackTestScene remains registered for dev testing via console:
  *   PlatPursuit.Games.Driver.gameInstance.scene.start('TrackTestScene')
  */
 
@@ -107,10 +106,12 @@ window.PlatPursuit.Games.Driver = window.PlatPursuit.Games.Driver || {};
             this.key9 = this.input.keyboard.addKey(KeyCodes.NINE, true, false);
             this.activeColorPreset = 'Cyan (Default)';
 
-            // Clean up on scene shutdown (once, not on both shutdown + destroy,
-            // since Phaser fires shutdown before destroy and double-cleanup
-            // would attempt to destroy already-destroyed objects).
+            // Clean up on scene shutdown or destroy. Guard prevents
+            // double-execution when Phaser fires shutdown then destroy.
+            let cleanedUp = false;
             const cleanup = () => {
+                if (cleanedUp) return;
+                cleanedUp = true;
                 this.inputManager.destroy();
                 // Release all dev key captures
                 this.input.keyboard.removeCapture([
@@ -418,17 +419,19 @@ window.PlatPursuit.Games.Driver = window.PlatPursuit.Games.Driver || {};
     // Create Game Instance
     // -----------------------------------------------------------------------
 
-    // RaceScene is listed first so Phaser auto-starts it.
+    // MenuScene is listed first so Phaser auto-starts it.
     // TrackTestScene stays registered for dev testing via console.
+    const MenuScene = PlatPursuit.Games.Driver.Scenes.MenuScene;
     const RaceScene = PlatPursuit.Games.Driver.Scenes.RaceScene;
+    const ResultsScene = PlatPursuit.Games.Driver.Scenes.ResultsScene;
 
     const config = Shell.createConfig({
-        scene: [RaceScene, TrackTestScene],
+        scene: [MenuScene, RaceScene, ResultsScene, TrackTestScene],
     });
 
     const game = new Phaser.Game(config);
 
     PlatPursuit.Games.Driver.gameInstance = game;
 
-    console.log('[Stellar Circuit] Game instance created. RaceScene starting.');
+    console.log('[Stellar Circuit] Game instance created. MenuScene starting.');
 })();
