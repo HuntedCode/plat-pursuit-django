@@ -14,7 +14,21 @@
             {% include 'trophies/partials/game_detail/game_detail_header.html' %}
 
             {% if user.is_authenticated and user.profile %}
-            <div class="mt-4 flex justify-end">
+            <div class="mt-4 flex justify-end gap-2">
+                {% if earned_trophy_id %}
+                <button id="share-card-btn"
+                        class="btn btn-sm btn-outline btn-secondary"
+                        aria-label="Create Share Card"
+                        data-earned-trophy-id="{{ earned_trophy_id }}"
+                        data-game-name="{{ game.title_name }}"
+                        data-game-image="{{ game.title_image|default:game.title_icon_url|default:'' }}"
+                        data-concept-bg-url="{{ concept_bg_url }}">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"/>
+                    </svg>
+                    Share Card
+                </button>
+                {% endif %}
                 <div class="relative" id="quick-add-container" data-game-id="{{ game.id }}">
                     <button class="btn btn-sm btn-outline btn-info quick-add-trigger" aria-label="Add to List">
                         <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -72,7 +86,7 @@
                     <form id="filter-form" method="get" class="mb-4">
                         <fieldset>
                             <legend class="sr-only">Filter and Sort Trophies</legend>
-                            <div class="grid grid-cols-1 lg:grid-cols-[1fr_1fr_auto] gap-4 items-end mx-auto">
+                            <div class="grid grid-cols-[1fr_1fr_auto] gap-4 items-end mx-auto">
                                 <div class="form-control w-full">
                                     <label for="id_sort" class="label">
                                         <span class="label-text text-base lg:text-lg italic">Sort By</span>
@@ -134,6 +148,34 @@
         {% endfor %}
     {% endif %}
     </div>
+
+{% if earned_trophy_id %}
+{# Share Card Modal #}
+<dialog id="share-modal" class="modal">
+    <div class="modal-box max-w-4xl bg-base-200">
+        <form method="dialog">
+            <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+            </button>
+        </form>
+        <h3 class="font-bold text-lg mb-4" id="share-modal-title">Create Share Image</h3>
+        <div id="share-modal-content">
+            <div class="flex justify-center items-center py-12">
+                <span class="loading loading-spinner loading-lg"></span>
+            </div>
+        </div>
+    </div>
+    <form method="dialog" class="modal-backdrop">
+        <button>close</button>
+    </form>
+</dialog>
+
+{# Color Grid Modal - for background selection #}
+{% include 'partials/color_grid_modal.html' with available_themes=available_themes %}
+{% endif %}
+
 {% endblock %}
 
 {% block js_scripts %}
@@ -142,6 +184,20 @@
     <script src="{% static 'js/submit_shimmer.js' %}"></script>
     <script src="{% static 'js/comments.js' %}"></script>
     <script src="{% static 'js/checklist.js' %}"></script>
+    {% if earned_trophy_id %}
+    <script>window.GRADIENT_THEMES = {% gradient_themes_json %};</script>
+    <script src="{% static 'js/share-image.js' %}"></script>
+    <script src="{% static 'js/color-grid-modal.js' %}"></script>
+    <script src="{% static 'js/shareable-manager.js' %}"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const shareBtn = document.getElementById('share-card-btn');
+            if (shareBtn) {
+                shareBtn.addEventListener('click', () => openShareModal(shareBtn));
+            }
+        });
+    </script>
+    {% endif %}
     {% if user.is_authenticated and user.profile %}
     <script src="{% static 'js/game-lists.js' %}"></script>
     <script>

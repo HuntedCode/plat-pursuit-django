@@ -402,7 +402,7 @@ class GameDetailView(ProfileHotbarMixin, DetailView):
             return image_urls
 
         except Exception as e:
-            logger.error(f"Game images cache failed for {game.np_communication_id}: {e}")
+            logger.exception(f"Game images cache failed for {game.np_communication_id}")
             return {}
 
     def _build_game_stats_context(self, game):
@@ -447,7 +447,7 @@ class GameDetailView(ProfileHotbarMixin, DetailView):
             return stats
 
         except Exception as e:
-            logger.error(f"Game stats cache failed for {game.np_communication_id}: {e}")
+            logger.exception(f"Game stats cache failed for {game.np_communication_id}")
             return {}
 
     def _build_trophy_context(self, game, form, profile_earned):
@@ -486,7 +486,7 @@ class GameDetailView(ProfileHotbarMixin, DetailView):
                 } for t in trophies_qs
             ]
         except Exception as e:
-            logger.error(f"Game trophies query failed for {game.np_communication_id}: {e}")
+            logger.exception(f"Game trophies query failed for {game.np_communication_id}")
             full_trophies = []
 
         # Get trophy comment counts if game has a concept
@@ -625,10 +625,24 @@ class GameDetailView(ProfileHotbarMixin, DetailView):
             return {}
 
         user_rating = game.concept.user_ratings.filter(profile=profile).first()
-        return {
+        result = {
             'has_platinum': has_platinum,
-            'rating_form': UserConceptRatingForm(instance=user_rating)
+            'rating_form': UserConceptRatingForm(instance=user_rating),
         }
+
+        # Query earned trophy ID for share card button
+        earned_trophy_id = EarnedTrophy.objects.filter(
+            profile=profile,
+            trophy__game=game,
+            trophy__trophy_type='platinum',
+            earned=True
+        ).values_list('id', flat=True).first()
+
+        if earned_trophy_id:
+            result['earned_trophy_id'] = earned_trophy_id
+            result['concept_bg_url'] = game.concept.bg_url or ''
+
+        return result
 
     def _build_breadcrumbs(self, game, target_profile):
         """
@@ -732,6 +746,11 @@ class GameDetailView(ProfileHotbarMixin, DetailView):
         # Build user rating context (if earned platinum)
         rating_context = self._build_rating_context(user, game)
         context.update(rating_context)
+
+        # Add share card dependencies if user has earned platinum
+        if rating_context.get('earned_trophy_id'):
+            from trophies.themes import get_available_themes_for_grid
+            context['available_themes'] = get_available_themes_for_grid(include_game_art=True)
 
         # Build breadcrumbs
         context['breadcrumb'] = self._build_breadcrumbs(game, target_profile)
