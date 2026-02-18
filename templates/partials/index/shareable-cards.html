@@ -3,7 +3,7 @@
 <section class="card shadow-lg shadow-neutral w-full bg-base-200 rounded-box border-2 border-base-300 transition duration-300 hover:shadow-primary hover:border-primary">
     <div class="rounded-box p-4 bg-base-200 w-full transition duration-300 hover:bg-base-300">
         <h2 class="text-3xl lg:text-4xl font-bold text-center italic">Share Your Achievements</h2>
-        <p class="text-center text-base-content/70 mt-1">Generate beautiful share cards for your platinums and monthly recaps</p>
+        <p class="text-center text-base-content/70 mt-1">Generate beautiful share cards for your platinums, monthly recaps, and challenges</p>
         <div class="divider mt-2"></div>
 
         <div class="grid grid-cols-2 gap-6 items-center">
@@ -64,6 +64,38 @@
                     <img src="{% static 'images/showcase/plat_card_example.png' %}"
                          alt="Platinum Share Card Example"
                          class="w-full h-auto" loading="lazy" />
+                </div>
+            </div>
+        </div>
+
+        <div class="divider mt-6"></div>
+
+        <div class="grid grid-cols-2 gap-6 items-center">
+            <!-- Example Card Image -->
+            <div class="space-y-4">
+                <div class="rounded-box overflow-hidden border-2 border-base-300 shadow-lg transition-all duration-300 hover:shadow-primary hover:border-primary hover:scale-[1.01] cursor-pointer shareable-image-clickable"
+                     data-image-src="{% static 'images/showcase/challenge_card_example.png' %}"
+                     data-image-alt="Challenge Share Card Example">
+                    <img src="{% static 'images/showcase/challenge_card_example.png' %}"
+                         alt="Challenge Share Card Example"
+                         class="w-full h-auto" loading="lazy" />
+                </div>
+            </div>
+
+            <!-- Description & CTA -->
+            <div class="flex flex-col items-center gap-4 text-center px-4">
+                <h3 class="text-2xl font-bold italic">Challenge Cards</h3>
+                <p class="text-base-content/70 text-base max-w-md">
+                    Track your progress across unique trophy hunting challenges and show off the results.
+                    From the A-Z Platinum Challenge to the Platinum Calendar, generate share cards
+                    that capture your journey from first letter to final day.
+                </p>
+                <div class="flex flex-row gap-3">
+                    {% if user.is_authenticated %}
+                        <a href="{% url 'challenges_browse' %}" class="btn btn-primary">Explore Challenges</a>
+                    {% else %}
+                        <a href="{% url 'account_signup' %}" class="btn btn-primary">Sign Up to Take On a Challenge</a>
+                    {% endif %}
                 </div>
             </div>
         </div>
