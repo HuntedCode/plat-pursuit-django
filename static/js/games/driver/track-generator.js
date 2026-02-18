@@ -181,16 +181,14 @@ window.PlatPursuit.Games.Driver = window.PlatPursuit.Games.Driver || {};
     // reduce the frequency of extreme tight turns that cause edge overlap.
     const MIN_POINT_DISTANCE = 350;
 
-    // Track width bounds (in pixels). Width varies with curvature:
-    // straights are wide (easy to go fast), curves are narrow (technical).
-    // Increased from 90/220 to 140/320 to give more room for the drifty
-    // space physics. Players need width to express momentum management.
-    const TRACK_WIDTH_MIN = 140;
-    const TRACK_WIDTH_MAX = 320;
+    // Track width bounds moved to DIFFICULTY_PRESETS below. Width varies
+    // with curvature: straights are wide (easy to go fast), curves are
+    // narrow (technical). Easy tracks are wider overall for forgiving play,
+    // Hard tracks are narrower for precision racing.
 
     // Width smoothing window: how many samples to average when smoothing
-    // the width transitions. Prevents jarring width changes.
-    const WIDTH_SMOOTHING_WINDOW = 10;
+    // the width transitions. Must be odd for a symmetric centered window.
+    const WIDTH_SMOOTHING_WINDOW = 11;
 
     // Checkpoint count range. More checkpoints = more validation points
     // that the player must pass through each lap.
@@ -220,6 +218,33 @@ window.PlatPursuit.Games.Driver = window.PlatPursuit.Games.Driver || {};
     const BOUNDS_PADDING = 300;
 
     // ===================================================================
+    // DIFFICULTY PRESETS
+    // ===================================================================
+    // Each preset defines how track generation parameters vary by difficulty.
+    // See GDD Section 3.8 for the design rationale behind these values.
+
+    const DIFFICULTY_PRESETS = {
+        easy: {
+            numPointsMin: 8, numPointsMax: 9,
+            radiusVarianceMin: 0.85, radiusVarianceMax: 1.15,
+            angularPerturbation: 0.15,
+            trackWidthMin: 180, trackWidthMax: 360,
+        },
+        medium: {
+            numPointsMin: 10, numPointsMax: 11,
+            radiusVarianceMin: 0.7, radiusVarianceMax: 1.3,
+            angularPerturbation: 0.25,
+            trackWidthMin: 140, trackWidthMax: 320,
+        },
+        hard: {
+            numPointsMin: 12, numPointsMax: 13,
+            radiusVarianceMin: 0.6, radiusVarianceMax: 1.4,
+            angularPerturbation: 0.35,
+            trackWidthMin: 100, trackWidthMax: 260,
+        },
+    };
+
+    // ===================================================================
     // TRACK GENERATION: CONTROL POINTS
     // ===================================================================
 
@@ -241,12 +266,13 @@ window.PlatPursuit.Games.Driver = window.PlatPursuit.Games.Driver || {};
      * cross itself (as long as perturbations are reasonable).
      *
      * @param {SeededRandom} rng - The seeded random generator
+     * @param {Object} params - Difficulty preset parameters
      * @returns {Array<{x: number, y: number}>} Control points in order
      */
-    function generateControlPoints(rng) {
+    function generateControlPoints(rng, params) {
         // Number of control points determines track complexity.
-        // 8 points = simple oval-ish track, 13 = complex twisty track.
-        const numPoints = rng.intRange(8, 13);
+        // Easy: 8-9 (simple ovals), Medium: 10-11, Hard: 12-13 (complex twists).
+        const numPoints = rng.intRange(params.numPointsMin, params.numPointsMax);
 
         // Base ellipse dimensions. Not a circle because asymmetry makes
         // tracks more interesting (some sections are stretched, others compressed).
@@ -265,16 +291,16 @@ window.PlatPursuit.Games.Driver = window.PlatPursuit.Games.Driver || {};
 
             // Angular perturbation: shift the point around the ellipse.
             // This breaks the even spacing, creating longer and shorter
-            // segments. +/- 0.25 radians (~14 degrees) is enough to create
-            // variety without risking points swapping order.
-            const anglePerturbation = rng.range(-0.25, 0.25);
+            // segments. Easy uses +/- 0.15 rad (~9 deg) for gentle curves,
+            // Hard uses +/- 0.35 rad (~20 deg) for aggressive shape variation.
+            const anglePerturbation = rng.range(-params.angularPerturbation, params.angularPerturbation);
             const angle = baseAngle + anglePerturbation;
 
             // Radial perturbation: push the point closer to or farther from
-            // the center. 0.7 = 30% closer, 1.3 = 30% farther.
+            // the center. Easy: 0.85-1.15 (subtle), Hard: 0.6-1.4 (dramatic).
             // This creates the interesting bumps and indentations in the
             // track shape. Without this, every track would be an ellipse.
-            const radiusMult = rng.range(0.7, 1.3);
+            const radiusMult = rng.range(params.radiusVarianceMin, params.radiusVarianceMax);
 
             points.push({
                 x: Math.cos(angle) * radiusX * radiusMult,
@@ -536,11 +562,14 @@ window.PlatPursuit.Games.Driver = window.PlatPursuit.Games.Driver || {};
      * gradually, not jump between wide and narrow.
      *
      * @param {Array<number>} curvatures - Normalized curvature [0, 1]
+     * @param {Object} params - Difficulty preset parameters
      * @returns {Array<number>} Track width at each point (pixels)
      */
-    function calculateWidths(curvatures) {
+    function calculateWidths(curvatures, params) {
         const n = curvatures.length;
         const rawWidths = new Array(n);
+        const widthMax = params.trackWidthMax;
+        const widthMin = params.trackWidthMin;
 
         // Initial mapping: curvature → width via smoothstep
         for (let i = 0; i < n; i++) {
@@ -548,7 +577,7 @@ window.PlatPursuit.Games.Driver = window.PlatPursuit.Games.Driver || {};
             // Smoothstep: S-curve that maps [0,1] to [0,1] smoothly
             const t = c * c * (3 - 2 * c);
             // Invert: high curvature = narrow (low width)
-            rawWidths[i] = TRACK_WIDTH_MAX - (TRACK_WIDTH_MAX - TRACK_WIDTH_MIN) * t;
+            rawWidths[i] = widthMax - (widthMax - widthMin) * t;
         }
 
         // Smoothing pass: moving average to prevent abrupt width changes.
@@ -972,20 +1001,22 @@ window.PlatPursuit.Games.Driver = window.PlatPursuit.Games.Driver || {};
      * but possible with aggressive perturbations on 13+ control points.
      *
      * @param {string} seed - The track seed string
-     * @param {string} [difficulty='medium'] - TODO: Wire up to control track
-     *     parameters (control point count, width range, etc.). Currently unused.
+     * @param {string} [difficulty='medium'] - Controls track complexity (point
+     *     count, angular perturbation, radial variance) and width range
      * @returns {Object} Complete TrackData object (see GDD Section 3.11)
      */
     function generate(seed, difficulty) {
+        let lastResult = null;
+
         for (let attempt = 0; attempt <= MAX_GENERATION_RETRIES; attempt++) {
             const effectiveSeed = attempt === 0 ? seed : seed + '_retry' + attempt;
-            const result = generateFromSeed(effectiveSeed, difficulty);
+            lastResult = generateFromSeed(effectiveSeed, difficulty);
 
-            if (!hasCenterlineSelfIntersection(result.centerPoints)) {
+            if (!hasCenterlineSelfIntersection(lastResult.centerPoints)) {
                 // Valid track: store the original seed for display purposes
                 // (players see "daily-2026-02-16", not "daily-2026-02-16_retry1")
-                result.seed = seed;
-                return result;
+                lastResult.seed = seed;
+                return lastResult;
             }
 
             console.warn(
@@ -999,24 +1030,23 @@ window.PlatPursuit.Games.Driver = window.PlatPursuit.Games.Driver || {};
         console.warn(
             `[TrackGenerator] All retries exhausted for seed "${seed}", using last attempt`
         );
-        const fallback = generateFromSeed(seed + '_retry' + MAX_GENERATION_RETRIES, difficulty);
-        fallback.seed = seed;
-        return fallback;
+        lastResult.seed = seed;
+        return lastResult;
     }
 
     /**
      * Core track generation logic for a single seed attempt.
      *
      * @param {string} seed - The seed string (may include retry suffix)
-     * @param {string} [difficulty='medium'] - TODO: Wire up to control track
-     *     parameters (control point count, width range, etc.). Currently unused.
+     * @param {string} [difficulty='medium'] - Controls track complexity and width
      * @returns {Object} Complete TrackData object
      */
     function generateFromSeed(seed, difficulty) {
+        const params = DIFFICULTY_PRESETS[difficulty] || DIFFICULTY_PRESETS.medium;
         const rng = new SeededRandom(seed);
 
         // Step 1: Generate the track skeleton (control points)
-        const controlPoints = generateControlPoints(rng);
+        const controlPoints = generateControlPoints(rng, params);
 
         // Step 2: Smooth the skeleton into a dense polyline
         const centerPoints = interpolateSpline(controlPoints);
@@ -1026,7 +1056,7 @@ window.PlatPursuit.Games.Driver = window.PlatPursuit.Games.Driver || {};
         const curvatures = calculateCurvatures(centerPoints);
 
         // Step 4: Map curvature to track width (with smoothing)
-        const widths = calculateWidths(curvatures);
+        const widths = calculateWidths(curvatures, params);
 
         // Step 5: Generate left/right edge points and tangent directions
         const { leftEdge, rightEdge, directions } = generateEdgePoints(
@@ -1362,22 +1392,31 @@ window.PlatPursuit.Games.Driver = window.PlatPursuit.Games.Driver || {};
             const ry = cp.rightPoint.y;
 
             if (c === 0) {
-                // Start/finish line: gold, thicker
+                // Start/finish line: solid gold base
                 g.lineStyle(4, 0xd4a017, 0.9);
                 g.beginPath();
                 g.moveTo(lx, ly);
                 g.lineTo(rx, ry);
                 g.strokePath();
 
-                // Dashed center line effect (3 short segments)
-                g.lineStyle(2, 0xffffff, 0.6);
+                // Gold dashed center line: walk along the gate at
+                // regular intervals, drawing 4px dashes with 4px gaps
                 const dx = rx - lx;
                 const dy = ry - ly;
-                for (let d = 0.2; d < 0.9; d += 0.3) {
+                const gateLen = Math.sqrt(dx * dx + dy * dy);
+                const dashLen = 4;
+                const gapLen = 4;
+                const ux = dx / gateLen;
+                const uy = dy / gateLen;
+                let walked = dashLen; // Start one dash-width in from the edge
+
+                g.lineStyle(2, 0xd4a017, 0.7);
+                while (walked + dashLen < gateLen - dashLen) {
                     g.beginPath();
-                    g.moveTo(lx + dx * d, ly + dy * d);
-                    g.lineTo(lx + dx * (d + 0.1), ly + dy * (d + 0.1));
+                    g.moveTo(lx + ux * walked, ly + uy * walked);
+                    g.lineTo(lx + ux * (walked + dashLen), ly + uy * (walked + dashLen));
                     g.strokePath();
+                    walked += dashLen + gapLen;
                 }
             } else {
                 // Regular checkpoint: green, thinner

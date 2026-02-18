@@ -657,6 +657,25 @@ window.PlatPursuit.Games.Driver = window.PlatPursuit.Games.Driver || {};
             this.drawShip(input);
             this.drawVelocityIndicator();
             this.updateParticles(input);
+
+            // ----- Audio hooks -----
+            const soundManager = PlatPursuit.Games.Driver.soundManager;
+            if (soundManager) {
+                // Engine thruster: start/update/stop based on thrust
+                if (input.up) {
+                    if (!soundManager.engineNoise) soundManager.startEngine();
+                    soundManager.updateEngine(this.speed / this.tier.maxSpeed);
+                } else {
+                    if (soundManager.engineNoise) soundManager.stopEngine();
+                }
+
+                // Off-track rumble: start/stop based on track state
+                if (!this.onTrack && this.speed > 50) {
+                    if (!soundManager.offTrackOsc) soundManager.startOffTrack();
+                } else {
+                    if (soundManager.offTrackOsc) soundManager.stopOffTrack();
+                }
+            }
         }
 
         // ===================================================================

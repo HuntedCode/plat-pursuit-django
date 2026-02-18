@@ -37,19 +37,21 @@ window.PlatPursuit.Games.Driver.Scenes = window.PlatPursuit.Games.Driver.Scenes 
     // ===================================================================
 
     // Track preview (left column)
-    const PREVIEW_X = 180;
-    const PREVIEW_Y = 210;
+    const PREVIEW_X = 300;
+    const PREVIEW_Y = 330;
     const PREVIEW_SIZE = 250;
 
-    // Settings panel (right column)
-    const SETTINGS_X = 700;
-    const SETTINGS_Y = 220;
+    // Settings panel (right of preview)
+    const SETTINGS_X = 640;
+    const SETTINGS_Y = 150;
 
-    // Seed controls (center-bottom area)
-    const SEED_ROW_Y = 510;
+    // Seed controls (bottom area, below preview)
+    const SEED_ROW_Y = 540;
 
     // Launch button
-    const LAUNCH_Y = 620;
+    const LAUNCH_Y = 630;
+    const LAUNCH_W = 220;
+    const LAUNCH_H = 50;
 
     // Starfield
     const NUM_STARS = 150;
@@ -80,6 +82,7 @@ window.PlatPursuit.Games.Driver.Scenes = window.PlatPursuit.Games.Driver.Scenes 
             this.currentSeed = this.todaysSeed();
             this.selectedCCTier = '50cc';
             this.selectedMode = 'race';
+            this.selectedDifficulty = 'medium';
             this.launching = false;
 
             // Build UI
@@ -150,13 +153,27 @@ window.PlatPursuit.Games.Driver.Scenes = window.PlatPursuit.Games.Driver.Scenes 
         // ---------------------------------------------------------------
 
         createTitle() {
+            // Glow layer: blurred duplicate behind the title for neon bloom effect
             this.add.text(
                 DESIGN_WIDTH / 2, 50,
                 'S T E L L A R   C I R C U I T',
                 {
                     fontFamily: 'Poppins, sans-serif',
                     fontSize: '36px',
-                    fontStyle: '700',
+                    fontStyle: 'bold',
+                    color: CSS.CYAN_GLOW,
+                }
+            ).setOrigin(0.5).setScrollFactor(0).setAlpha(0.4)
+                .setShadow(0, 0, CSS.CYAN_GLOW, 16, true, true);
+
+            // Core title text (crisp, on top)
+            this.add.text(
+                DESIGN_WIDTH / 2, 50,
+                'S T E L L A R   C I R C U I T',
+                {
+                    fontFamily: 'Poppins, sans-serif',
+                    fontSize: '36px',
+                    fontStyle: 'bold',
                     color: CSS.CYAN_GLOW,
                 }
             ).setOrigin(0.5).setScrollFactor(0);
@@ -232,26 +249,26 @@ window.PlatPursuit.Games.Driver.Scenes = window.PlatPursuit.Games.Driver.Scenes 
             const sx = SETTINGS_X;
             let sy = SETTINGS_Y;
 
-            // CC Tier
+            // --- CC Tier ---
             this.add.text(sx, sy, 'CC TIER', {
                 fontFamily: 'Poppins, sans-serif',
-                fontSize: '12px',
+                fontSize: '11px',
                 fontStyle: '600',
                 color: CSS.NEUTRAL_MID,
             }).setOrigin(0.5, 0).setScrollFactor(0);
 
-            sy += 40;
+            sy += 28;
 
             const tierNames = ['50cc', '100cc', '200cc'];
             this.tierButtons = [];
 
             for (let i = 0; i < tierNames.length; i++) {
                 const tierName = tierNames[i];
-                const bx = sx - 100 + i * 100;
+                const bx = sx - 90 + i * 90;
                 const btn = createButton(this, bx, sy, tierName, {
-                    width: 80,
-                    height: 32,
-                    fontSize: 13,
+                    width: 75,
+                    height: 28,
+                    fontSize: 12,
                     onClick: () => this.selectCCTier(tierName),
                 });
                 this.tierButtons.push({ btn, tier: tierName });
@@ -260,62 +277,114 @@ window.PlatPursuit.Games.Driver.Scenes = window.PlatPursuit.Games.Driver.Scenes 
             // Highlight default (50cc)
             this.tierButtons[0].btn.setSelected(true);
 
-            // Mode selector
-            sy += 60;
+            // --- Difficulty ---
+            sy += 48;
 
-            this.add.text(sx, sy, 'MODE', {
+            this.add.text(sx, sy, 'DIFFICULTY', {
                 fontFamily: 'Poppins, sans-serif',
-                fontSize: '12px',
+                fontSize: '11px',
                 fontStyle: '600',
                 color: CSS.NEUTRAL_MID,
             }).setOrigin(0.5, 0).setScrollFactor(0);
 
-            sy += 40;
+            sy += 28;
 
-            this.raceModeBtn = createButton(this, sx - 80, sy, '3-Lap Race', {
-                width: 130,
-                height: 32,
-                fontSize: 13,
+            const diffNames = ['easy', 'medium', 'hard'];
+            const diffLabels = ['EASY', 'MEDIUM', 'HARD'];
+            this.diffButtons = [];
+
+            for (let i = 0; i < diffNames.length; i++) {
+                const diffName = diffNames[i];
+                const bx = sx - 90 + i * 90;
+                const btn = createButton(this, bx, sy, diffLabels[i], {
+                    width: 75,
+                    height: 28,
+                    fontSize: 12,
+                    onClick: () => this.selectDifficulty(diffName),
+                });
+                this.diffButtons.push({ btn, difficulty: diffName });
+            }
+
+            // Highlight default (medium)
+            this.diffButtons[1].btn.setSelected(true);
+
+            // --- Mode ---
+            sy += 48;
+
+            this.add.text(sx, sy, 'MODE', {
+                fontFamily: 'Poppins, sans-serif',
+                fontSize: '11px',
+                fontStyle: '600',
+                color: CSS.NEUTRAL_MID,
+            }).setOrigin(0.5, 0).setScrollFactor(0);
+
+            sy += 28;
+
+            this.raceModeBtn = createButton(this, sx - 70, sy, '3-Lap Race', {
+                width: 120,
+                height: 28,
+                fontSize: 12,
                 onClick: () => this.selectMode('race'),
             });
             this.raceModeBtn.setSelected(true);
 
-            this.ttModeBtn = createButton(this, sx + 80, sy, 'Time Trial', {
-                width: 130,
-                height: 32,
-                fontSize: 13,
+            this.ttModeBtn = createButton(this, sx + 70, sy, 'Time Trial', {
+                width: 120,
+                height: 28,
+                fontSize: 12,
                 onClick: () => this.selectMode('timetrial'),
             });
 
-            // Best time display (below mode buttons, updated dynamically)
-            sy += 30;
+            // Best time display
+            sy += 24;
 
             this.bestTimeText = this.add.text(sx, sy, '', {
                 fontFamily: 'monospace',
-                fontSize: '11px',
+                fontSize: '10px',
                 color: CSS.STEEL_DARK,
             }).setOrigin(0.5, 0).setScrollFactor(0);
 
-            // Ghost toggle
+            // --- Ghost + Sound toggles (side by side) ---
             sy += 40;
 
-            this.add.text(sx, sy, 'GHOST', {
+            // Ghost label + button
+            const toggleLeftX = sx - 60;
+            const toggleRightX = sx + 60;
+
+            this.add.text(toggleLeftX, sy, 'GHOST', {
                 fontFamily: 'Poppins, sans-serif',
-                fontSize: '12px',
+                fontSize: '11px',
                 fontStyle: '600',
                 color: CSS.NEUTRAL_MID,
             }).setOrigin(0.5, 0).setScrollFactor(0);
 
-            sy += 38;
+            this.add.text(toggleRightX, sy, 'SOUND', {
+                fontFamily: 'Poppins, sans-serif',
+                fontSize: '11px',
+                fontStyle: '600',
+                color: CSS.NEUTRAL_MID,
+            }).setOrigin(0.5, 0).setScrollFactor(0);
+
+            sy += 26;
 
             this.ghostEnabled = true;
-            this.ghostToggleBtn = createButton(this, sx, sy, 'ON', {
-                width: 80,
-                height: 32,
-                fontSize: 13,
+            this.ghostToggleBtn = createButton(this, toggleLeftX, sy, 'ON', {
+                width: 70,
+                height: 28,
+                fontSize: 12,
                 onClick: () => this.toggleGhost(),
             });
             this.ghostToggleBtn.setSelected(true);
+
+            const soundManager = PlatPursuit.Games.Driver.soundManager;
+            const soundOn = soundManager ? !soundManager.muted : true;
+            this.soundToggleBtn = createButton(this, toggleRightX, sy, soundOn ? 'ON' : 'OFF', {
+                width: 70,
+                height: 28,
+                fontSize: 12,
+                onClick: () => this.toggleSound(),
+            });
+            this.soundToggleBtn.setSelected(soundOn);
 
             // Show initial best time
             this.updateBestTimeDisplay();
@@ -342,6 +411,24 @@ window.PlatPursuit.Games.Driver.Scenes = window.PlatPursuit.Games.Driver.Scenes 
             this.ghostToggleBtn.setSelected(this.ghostEnabled);
         }
 
+        toggleSound() {
+            const soundManager = PlatPursuit.Games.Driver.soundManager;
+            if (!soundManager) return;
+            const muted = soundManager.toggleMute();
+            this.soundToggleBtn.text.setText(muted ? 'OFF' : 'ON');
+            this.soundToggleBtn.setSelected(!muted);
+        }
+
+        selectDifficulty(difficulty) {
+            this.selectedDifficulty = difficulty;
+            for (const { btn, difficulty: d } of this.diffButtons) {
+                btn.setSelected(d === difficulty);
+            }
+            // Regenerate preview with new difficulty
+            this.updatePreview(this.currentSeed);
+            this.updateBestTimeDisplay();
+        }
+
         /**
          * Updates the best time display below the mode buttons.
          * Shows "BEST RACE: X:XX.XXX" for race mode,
@@ -349,15 +436,16 @@ window.PlatPursuit.Games.Driver.Scenes = window.PlatPursuit.Games.Driver.Scenes 
          */
         updateBestTimeDisplay() {
             const tier = this.selectedCCTier;
+            const diff = this.selectedDifficulty;
             if (this.selectedMode === 'timetrial') {
-                const bestLapMs = Ghost.GhostStorage.getBestLapTime(this.currentSeed, 'timetrial', tier);
+                const bestLapMs = Ghost.GhostStorage.getBestLapTime(this.currentSeed, 'timetrial', tier, diff);
                 if (bestLapMs) {
                     this.bestTimeText.setText(`Best Lap: ${formatTime(bestLapMs / 1000)}`);
                 } else {
                     this.bestTimeText.setText('No data');
                 }
             } else {
-                const bestTimeMs = Ghost.GhostStorage.getBestTime(this.currentSeed, 'race', tier);
+                const bestTimeMs = Ghost.GhostStorage.getBestTime(this.currentSeed, 'race', tier, diff);
                 if (bestTimeMs) {
                     this.bestTimeText.setText(`Best Race: ${formatTime(bestTimeMs / 1000)}`);
                 } else {
@@ -477,7 +565,7 @@ window.PlatPursuit.Games.Driver.Scenes = window.PlatPursuit.Games.Driver.Scenes 
             if (!this.seedInput) return;
 
             const canvas = this.game.canvas;
-            if (!canvas) return;
+            if (!canvas?.parentElement) return;
 
             // Scale factor from design resolution to actual canvas
             const scaleX = canvas.width / DESIGN_WIDTH;
@@ -535,7 +623,7 @@ window.PlatPursuit.Games.Driver.Scenes = window.PlatPursuit.Games.Driver.Scenes 
             }
 
             // Generate track and render minimap at preview size
-            const trackData = TrackGen.generate(seed);
+            const trackData = TrackGen.generate(seed, this.selectedDifficulty);
             const result = TrackGen.renderMinimap(
                 this, trackData,
                 PREVIEW_X - PREVIEW_SIZE / 2,
@@ -558,18 +646,13 @@ window.PlatPursuit.Games.Driver.Scenes = window.PlatPursuit.Games.Driver.Scenes 
         // ---------------------------------------------------------------
 
         createLaunchButton() {
-            const x = DESIGN_WIDTH / 2;
-            const y = LAUNCH_Y;
-            const w = 220;
-            const h = 50;
-
             // Glow effect (drawn behind the main button)
             this.launchGlow = this.add.graphics().setScrollFactor(0);
 
             // Main button
-            this.launchBtn = createButton(this, x, y, 'L A U N C H', {
-                width: w,
-                height: h,
+            this.launchBtn = createButton(this, DESIGN_WIDTH / 2, LAUNCH_Y, 'L A U N C H', {
+                width: LAUNCH_W,
+                height: LAUNCH_H,
                 fontSize: 20,
                 onClick: () => this.launch(),
             });
@@ -580,15 +663,11 @@ window.PlatPursuit.Games.Driver.Scenes = window.PlatPursuit.Games.Driver.Scenes 
             const g = this.launchGlow;
             g.clear();
 
-            const x = DESIGN_WIDTH / 2;
-            const y = LAUNCH_Y;
-            const w = 220;
-            const h = 50;
-
             const pulse = 0.15 + Math.sin(time * 0.003) * 0.1;
+            const x = DESIGN_WIDTH / 2;
 
             g.lineStyle(2, COLOR.CYAN_GLOW, pulse);
-            g.strokeRoundedRect(x - w / 2 - 4, y - h / 2 - 4, w + 8, h + 8, 6);
+            g.strokeRoundedRect(x - LAUNCH_W / 2 - 4, LAUNCH_Y - LAUNCH_H / 2 - 4, LAUNCH_W + 8, LAUNCH_H + 8, 6);
         }
 
         // ---------------------------------------------------------------
@@ -600,10 +679,15 @@ window.PlatPursuit.Games.Driver.Scenes = window.PlatPursuit.Games.Driver.Scenes 
             if (this.launching) return;
             this.launching = true;
 
-            const seed = this.currentSeed || this.todaysSeed();
+            // Initialize audio (requires user gesture, first LAUNCH click)
+            const soundManager = PlatPursuit.Games.Driver.soundManager;
+            if (soundManager) soundManager.init();
+
+            const seed = this.currentSeed;
             const ccTier = this.selectedCCTier;
             const mode = this.selectedMode;
             const ghostEnabled = this.ghostEnabled;
+            const difficulty = this.selectedDifficulty;
 
             this.cameras.main.fadeOut(200, 0, 0, 0);
             this.cameras.main.once('camerafadeoutcomplete', () => {
@@ -612,6 +696,7 @@ window.PlatPursuit.Games.Driver.Scenes = window.PlatPursuit.Games.Driver.Scenes 
                     mode: mode,
                     ccTier: ccTier,
                     ghostEnabled: ghostEnabled,
+                    difficulty: difficulty,
                 });
             });
         }

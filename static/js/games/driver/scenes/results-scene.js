@@ -39,6 +39,7 @@ window.PlatPursuit.Games.Driver.Scenes = window.PlatPursuit.Games.Driver.Scenes 
     const Shell = PlatPursuit.Games.Shell;
     const TrackGen = PlatPursuit.Games.Driver.TrackGenerator;
     const UI = PlatPursuit.Games.Driver.UI;
+    const Ghost = PlatPursuit.Games.Driver.Ghost;
     const { DESIGN_WIDTH, DESIGN_HEIGHT } = Shell;
     const { COLOR, CSS, createButton, formatTime } = UI;
 
@@ -72,6 +73,9 @@ window.PlatPursuit.Games.Driver.Scenes = window.PlatPursuit.Games.Driver.Scenes 
             // Background: faint track outline
             this.createBackground(d.trackData);
 
+            // Ghost racing line overlay on the track background
+            this.createGhostPathOverlay(d);
+
             // Fork display based on mode
             if (this.mode === 'timetrial') {
                 this.createTimeTrialResults(d);
@@ -83,7 +87,7 @@ window.PlatPursuit.Games.Driver.Scenes = window.PlatPursuit.Games.Driver.Scenes 
             this.createInfoLine(d.seed, d.ccTier);
 
             // Action buttons
-            this.createButtons(d);
+            this.createButtons();
 
             // Keyboard shortcuts
             this.createKeyboardShortcuts();
@@ -132,6 +136,63 @@ window.PlatPursuit.Games.Driver.Scenes = window.PlatPursuit.Games.Driver.Scenes 
                 result.graphics.setScrollFactor(0);
                 result.graphics.setAlpha(0.15);
             }
+        }
+
+        /**
+         * Draws the ghost's racing line as a faint polyline on the
+         * background track minimap. Shows the path the player took
+         * during their best recorded run.
+         */
+        createGhostPathOverlay(data) {
+            if (!data.trackData) return;
+
+            // Load ghost data for this configuration
+            const ghostData = Ghost.GhostStorage.load(
+                data.seed, data.mode, data.ccTier, data.difficulty
+            );
+            if (!ghostData || !ghostData.frames || ghostData.frames.length < 10) return;
+
+            // Map coordinates: same transform as the background minimap
+            // (centered at DESIGN_WIDTH/2, DESIGN_HEIGHT/2, size 400x400)
+            const mapSize = 400;
+            const mapX = DESIGN_WIDTH / 2 - mapSize / 2;
+            const mapY = DESIGN_HEIGHT / 2 - mapSize / 2;
+
+            // Compute the same mapping as renderMinimap uses
+            const td = data.trackData;
+            const bounds = td.bounds;
+            const trackW = bounds.maxX - bounds.minX;
+            const trackH = bounds.maxY - bounds.minY;
+            const trackCX = (bounds.minX + bounds.maxX) / 2;
+            const trackCY = (bounds.minY + bounds.maxY) / 2;
+            const scale = Math.min(mapSize / trackW, mapSize / trackH) * 0.9;
+            const centerX = mapX + mapSize / 2;
+            const centerY = mapY + mapSize / 2;
+
+            const vpf = Ghost.VALUES_PER_FRAME;
+            const totalFrames = ghostData.frames.length / vpf;
+            const step = 5; // Sample every 5th frame for smoothness
+
+            const g = this.add.graphics().setScrollFactor(0).setAlpha(0.25);
+            g.lineStyle(1.5, 0x2ce8f5, 1.0);
+            g.beginPath();
+
+            let started = false;
+            for (let f = 0; f < totalFrames; f += step) {
+                const idx = f * vpf;
+                const wx = ghostData.frames[idx];
+                const wy = ghostData.frames[idx + 1];
+                const mx = centerX + (wx - trackCX) * scale;
+                const my = centerY + (wy - trackCY) * scale;
+
+                if (!started) {
+                    g.moveTo(mx, my);
+                    started = true;
+                } else {
+                    g.lineTo(mx, my);
+                }
+            }
+            g.strokePath();
         }
 
         // ---------------------------------------------------------------
@@ -258,7 +319,7 @@ window.PlatPursuit.Games.Driver.Scenes = window.PlatPursuit.Games.Driver.Scenes 
                 {
                     fontFamily: 'Poppins, sans-serif',
                     fontSize: '42px',
-                    fontStyle: '700',
+                    fontStyle: 'bold',
                     color: CSS.GOLD,
                 }
             ).setOrigin(0.5).setScrollFactor(0);
@@ -281,7 +342,7 @@ window.PlatPursuit.Games.Driver.Scenes = window.PlatPursuit.Games.Driver.Scenes 
                 {
                     fontFamily: 'Poppins, sans-serif',
                     fontSize: '16px',
-                    fontStyle: '700',
+                    fontStyle: 'bold',
                     color: CSS.GOLD,
                 }
             ).setOrigin(0.5).setScrollFactor(0);
@@ -296,6 +357,57 @@ window.PlatPursuit.Games.Driver.Scenes = window.PlatPursuit.Games.Driver.Scenes 
                 duration: 400,
                 ease: 'Back.easeOut',
             });
+
+            // Expanding gold ring starburst effect
+            const ring = this.add.graphics().setScrollFactor(0);
+            ring.lineStyle(2, 0xd4a017, 0.8);
+            ring.strokeCircle(DESIGN_WIDTH / 2, y, 10);
+            ring.setScale(0);
+            ring.setAlpha(1);
+
+            this.tweens.add({
+                targets: ring,
+                scaleX: 8,
+                scaleY: 4,
+                alpha: 0,
+                delay: 700, // After scale-in completes
+                duration: 600,
+                ease: 'Power2',
+                onComplete: () => ring.destroy(),
+            });
+
+            // Gold particle burst (if shipParticle texture is available)
+            this.ensureParticleTexture();
+            if (this.textures.exists('shipParticle')) {
+                this.time.delayedCall(700, () => {
+                    const burst = this.add.particles(DESIGN_WIDTH / 2, y, 'shipParticle', {
+                        speed: { min: 40, max: 100 },
+                        lifespan: 400,
+                        scale: { start: 0.4, end: 0 },
+                        tint: 0xd4a017,
+                        tintFill: true,
+                        blendMode: 'ADD',
+                        emitting: false,
+                    }).setScrollFactor(0);
+
+                    burst.explode(20);
+                    this.time.delayedCall(500, () => burst.destroy());
+                });
+            }
+        }
+
+        /**
+         * Creates the shipParticle texture if it doesn't exist yet.
+         * ResultsScene doesn't create a Ship, so the texture may not exist.
+         */
+        ensureParticleTexture() {
+            if (this.textures.exists('shipParticle')) return;
+
+            const gfx = this.make.graphics({ x: 0, y: 0, add: false });
+            gfx.fillStyle(0xffffff);
+            gfx.fillCircle(4, 4, 4);
+            gfx.generateTexture('shipParticle', 8, 8);
+            gfx.destroy();
         }
 
         createLapBreakdown(lapTimes, bestLapIndex, startY) {
@@ -328,10 +440,11 @@ window.PlatPursuit.Games.Driver.Scenes = window.PlatPursuit.Games.Driver.Scenes 
                 : seed;
 
             const modeLabel = this.mode === 'timetrial' ? 'Time Trial' : '3-Lap Race';
+            const diffLabel = (this.raceData.difficulty || 'medium').toUpperCase();
 
             this.add.text(
                 DESIGN_WIDTH / 2, 430,
-                `Seed: "${displaySeed}"  |  ${ccTier}  |  ${modeLabel}`,
+                `Seed: "${displaySeed}"  |  ${ccTier}  |  ${modeLabel}  |  ${diffLabel}`,
                 {
                     fontFamily: 'Inter, sans-serif',
                     fontSize: '12px',
@@ -344,7 +457,7 @@ window.PlatPursuit.Games.Driver.Scenes = window.PlatPursuit.Games.Driver.Scenes 
         // Action Buttons
         // ---------------------------------------------------------------
 
-        createButtons(data) {
+        createButtons() {
             const y = 500;
             const spacing = 180;
 
@@ -417,6 +530,7 @@ window.PlatPursuit.Games.Driver.Scenes = window.PlatPursuit.Games.Driver.Scenes 
                 seed: this.raceData.seed,
                 mode: this.mode,
                 ccTier: this.raceData.ccTier,
+                difficulty: this.raceData.difficulty,
                 ghostEnabled: this.raceData.ghostEnabled,
             });
         }
@@ -426,6 +540,7 @@ window.PlatPursuit.Games.Driver.Scenes = window.PlatPursuit.Games.Driver.Scenes 
                 seed: 'random-' + Date.now(),
                 mode: this.mode,
                 ccTier: this.raceData.ccTier,
+                difficulty: this.raceData.difficulty,
                 ghostEnabled: this.raceData.ghostEnabled,
             });
         }

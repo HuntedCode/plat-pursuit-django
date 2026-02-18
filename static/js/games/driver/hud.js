@@ -378,7 +378,7 @@ window.PlatPursuit.Games.Driver = window.PlatPursuit.Games.Driver || {};
             if (raceState === RACE_STATE.RACING && ghostDelta !== null && ghostDelta !== undefined) {
                 const ahead = ghostDelta < 0;
                 const sign = ahead ? '-' : '+';
-                const color = ahead ? CSS.NEON_GREEN : '#e43b44';
+                const color = ahead ? CSS.NEON_GREEN : CSS.RED;
 
                 this.deltaText.setText(`${sign}${Math.abs(ghostDelta).toFixed(3)}`);
                 this.deltaText.setColor(color);
@@ -428,7 +428,7 @@ window.PlatPursuit.Games.Driver = window.PlatPursuit.Games.Driver || {};
 
             const checkpoints = this.trackData.checkpoints;
 
-            // --- Checkpoint dots ---
+            // --- Checkpoint dots + gate lines ---
             for (let i = 1; i < checkpoints.length; i++) {
                 const cp = checkpoints[i];
                 const cx = map.centerX + (cp.position.x - map.trackCenterX) * map.mapScale;
@@ -440,17 +440,29 @@ window.PlatPursuit.Games.Driver = window.PlatPursuit.Games.Driver || {};
                     alpha = 1.0;
                     radius = 3;
                 } else if (this.crossedCheckpoints.has(i)) {
-                    // Already crossed this lap: very dim
-                    alpha = 0.1;
+                    // Already crossed this lap: very dim and small
+                    alpha = 0.15;
                     radius = 2;
                 } else {
-                    // Uncrossed (not yet reached): medium brightness
-                    alpha = 0.3;
+                    // Uncrossed: gentle pulse on a 2-second sine wave
+                    alpha = 0.5 + Math.sin(raceTime * Math.PI) * 0.2;
                     radius = 2;
                 }
 
                 g.fillStyle(COLOR.NEON_GREEN, alpha);
                 g.fillCircle(cx, cy, radius);
+
+                // Faint gate line connecting the two gate endpoints
+                const lx = map.centerX + (cp.leftPoint.x - map.trackCenterX) * map.mapScale;
+                const ly = map.centerY + (cp.leftPoint.y - map.trackCenterY) * map.mapScale;
+                const rx = map.centerX + (cp.rightPoint.x - map.trackCenterX) * map.mapScale;
+                const ry = map.centerY + (cp.rightPoint.y - map.trackCenterY) * map.mapScale;
+
+                g.lineStyle(1, COLOR.NEON_GREEN, 0.15);
+                g.beginPath();
+                g.moveTo(lx, ly);
+                g.lineTo(rx, ry);
+                g.strokePath();
             }
 
             // --- Start/finish highlight when it's the next target ---

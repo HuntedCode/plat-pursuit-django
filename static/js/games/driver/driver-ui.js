@@ -48,6 +48,7 @@ window.PlatPursuit.Games.Driver = window.PlatPursuit.Games.Driver || {};
         STEEL_DARK:   '#4a5568',
         GOLD:         '#d4a017',
         NEON_GREEN:   '#40e850',
+        RED:          '#e43b44',
     };
 
     // ===================================================================
@@ -72,6 +73,7 @@ window.PlatPursuit.Games.Driver = window.PlatPursuit.Games.Driver || {};
     const RACE_STATE = {
         COUNTDOWN: 'COUNTDOWN',
         RACING:    'RACING',
+        PAUSED:    'PAUSED',
         FINISHED:  'FINISHED',
     };
 

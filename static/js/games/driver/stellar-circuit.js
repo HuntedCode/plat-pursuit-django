@@ -25,6 +25,9 @@ window.PlatPursuit.Games.Driver = window.PlatPursuit.Games.Driver || {};
     const TrackGen = PlatPursuit.Games.Driver.TrackGenerator;
     const Ship = PlatPursuit.Games.Driver.Ship.Ship;
 
+    // Create shared audio manager (initialized lazily on first LAUNCH click)
+    PlatPursuit.Games.Driver.soundManager = new PlatPursuit.Games.Audio.SoundManager();
+
     // -----------------------------------------------------------------------
     // Scene Constants
     // -----------------------------------------------------------------------

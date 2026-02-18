@@ -34,7 +34,6 @@
  * Controls:
  *   WASD / Arrows: Fly the ship
  *   G: Toggle ghost visibility
- *   1/2/3: Switch CC tier (dev testing)
  *   ESC: Return to menu (race) or show session summary (TT)
  */
 
@@ -69,7 +68,8 @@ window.PlatPursuit.Games.Driver.Scenes = window.PlatPursuit.Games.Driver.Scenes 
 
     // Camera (GDD 8.2): velocity look-ahead
     const CAMERA_SMOOTHING = 0.06;       // Lerp factor (lower = smoother trail)
-    const LOOK_AHEAD_DISTANCE = 120;     // Max pixels ahead in velocity direction
+    const LOOK_AHEAD_DISTANCE = 200;     // Max pixels ahead in velocity direction
+    const CAMERA_ZOOM = 0.85;            // Slight zoom out to show more track ahead
 
     /**
      * Frozen input object: passed to Ship.update() during COUNTDOWN
@@ -110,11 +110,13 @@ window.PlatPursuit.Games.Driver.Scenes = window.PlatPursuit.Games.Driver.Scenes 
          * @param {string} [data.mode] - 'race' or 'timetrial' (default: 'race')
          * @param {string} [data.ccTier] - CC tier name (default: '50cc')
          * @param {boolean} [data.ghostEnabled] - Whether ghost is visible (default: true)
+         * @param {string} [data.difficulty] - 'easy', 'medium', or 'hard' (default: 'medium')
          */
         init(data) {
             this.raceSeed = data.seed || new Date().toISOString().slice(0, 10);
             this.mode = data.mode || 'race';
             this.ccTier = data.ccTier || '50cc';
+            this.difficulty = data.difficulty || 'medium';
             this.ghostVisible = data.ghostEnabled !== false; // default true
 
             // Race mode: fixed 3 laps. Time Trial: infinite (null for HUD display).
@@ -137,7 +139,7 @@ window.PlatPursuit.Games.Driver.Scenes = window.PlatPursuit.Games.Driver.Scenes 
             this.transitioning = false;
 
             // ----- Track Generation -----
-            this.trackData = TrackGen.generate(this.raceSeed);
+            this.trackData = TrackGen.generate(this.raceSeed, this.difficulty);
             const td = this.trackData;
 
             // Set camera world bounds from track extents
@@ -148,6 +150,16 @@ window.PlatPursuit.Games.Driver.Scenes = window.PlatPursuit.Games.Driver.Scenes 
                 bounds.maxY - bounds.minY
             );
             this.cameras.main.setBackgroundColor('#0a0a14');
+            this.cameras.main.setZoom(CAMERA_ZOOM);
+
+            // ----- Camera PostFX (WebGL only, silently no-op on Canvas) -----
+            if (this.cameras.main.postFX) {
+                this.cameras.main.postFX.addBloom(0xffffff, 1, 1, 1, 1.2);
+            }
+
+            // ----- Atmosphere (behind track) -----
+            this.createStarfield(td.bounds);
+            this.createNebulae(td.bounds);
 
             // Render track at default depth (0)
             this.trackGraphics = TrackGen.renderTrack(this, td);
@@ -168,6 +180,9 @@ window.PlatPursuit.Games.Driver.Scenes = window.PlatPursuit.Games.Driver.Scenes 
                 this.ship.y - DESIGN_HEIGHT / 2
             );
 
+            // ----- Audio -----
+            this.soundManager = PlatPursuit.Games.Driver.soundManager;
+
             // ----- Input -----
             this.inputManager = new InputManager(this);
 
@@ -180,8 +195,8 @@ window.PlatPursuit.Games.Driver.Scenes = window.PlatPursuit.Games.Driver.Scenes 
             this.ghostGfx = null;
             this.ghostLabel = null;
 
-            // Load ghost data for this seed + mode + tier
-            const ghostData = Ghost.GhostStorage.load(this.raceSeed, this.mode, this.ccTier);
+            // Load ghost data for this seed + mode + tier + difficulty
+            const ghostData = Ghost.GhostStorage.load(this.raceSeed, this.mode, this.ccTier, this.difficulty);
 
             if (this.mode === 'timetrial') {
                 // Time Trial: ghost stores a single best lap
@@ -260,14 +275,37 @@ window.PlatPursuit.Games.Driver.Scenes = window.PlatPursuit.Games.Driver.Scenes 
             // ----- Countdown -----
             this.startCountdown();
 
-            // ----- Dev Keys: CC Tier Switching (1/2/3) -----
             const KeyCodes = Phaser.Input.Keyboard.KeyCodes;
-            this.key1 = this.input.keyboard.addKey(KeyCodes.ONE, true, false);
-            this.key2 = this.input.keyboard.addKey(KeyCodes.TWO, true, false);
-            this.key3 = this.input.keyboard.addKey(KeyCodes.THREE, true, false);
 
             // ----- Ghost Toggle (G key) -----
             this.keyG = this.input.keyboard.addKey(KeyCodes.G, true, false);
+
+            // ----- Sound Mute Toggle -----
+            this.createSoundToggle();
+
+            // ----- Speed Lines (near max speed effect) -----
+            this.speedLinesEmitter = null;
+            this.speedLinesActive = false;
+            if (this.textures.exists('shipParticle')) {
+                this.speedLinesEmitter = this.add.particles(0, 0, 'shipParticle', {
+                    x: { min: 0, max: DESIGN_WIDTH },
+                    y: -10,
+                    scaleX: 0.2,
+                    scaleY: { min: 2, max: 4 },
+                    speedY: { min: 400, max: 700 },
+                    lifespan: 300,
+                    tint: 0xe8e8ff,
+                    tintFill: true,
+                    alpha: 0.15,
+                    blendMode: 'ADD',
+                    frequency: 40,
+                    emitting: false,
+                }).setScrollFactor(0).setDepth(DEPTH.HUD - 1);
+            }
+
+            // ----- Checkpoint Approach Particles -----
+            this.cpApproachEmitter = null;
+            this.cpApproachActive = false;
 
             // ----- Cleanup Handler -----
             this.events.once('shutdown', () => {
@@ -291,6 +329,11 @@ window.PlatPursuit.Games.Driver.Scenes = window.PlatPursuit.Games.Driver.Scenes 
                     this.flashOverlay.destroy();
                     this.flashOverlay = null;
                 }
+                // Stop persistent audio (engine hum, off-track rumble)
+                if (this.soundManager) {
+                    this.soundManager.stopEngine();
+                    this.soundManager.stopOffTrack();
+                }
                 if (this.ship) this.ship.destroy();
                 if (this.inputManager) this.inputManager.destroy();
                 if (this.hud) this.hud.destroy();
@@ -298,13 +341,17 @@ window.PlatPursuit.Games.Driver.Scenes = window.PlatPursuit.Games.Driver.Scenes 
                 if (this.warningText) { this.warningText.destroy(); this.warningText = null; }
                 if (this.ghostGfx) { this.ghostGfx.destroy(); this.ghostGfx = null; }
                 if (this.ghostLabel) { this.ghostLabel.destroy(); this.ghostLabel = null; }
-                this.input.keyboard.removeCapture([
-                    KeyCodes.ONE, KeyCodes.TWO, KeyCodes.THREE, KeyCodes.G,
-                ]);
+                if (this.soundToggleText) { this.soundToggleText.destroy(); this.soundToggleText = null; }
+                if (this.soundToggleZone) { this.soundToggleZone.destroy(); this.soundToggleZone = null; }
+                if (this.speedLinesEmitter) { this.speedLinesEmitter.destroy(); this.speedLinesEmitter = null; }
+                if (this.cpApproachEmitter) { this.cpApproachEmitter.destroy(); this.cpApproachEmitter = null; }
+                if (this.startShimmer) { this.startShimmer.destroy(); this.startShimmer = null; }
+                this.destroyPauseMenu();
+                this.input.keyboard.removeCapture([KeyCodes.G]);
             });
 
             const modeLabel = this.mode === 'timetrial' ? 'Time Trial' : `${this.totalLaps}-Lap Race`;
-            console.log(`[RaceScene] Created: seed="${this.raceSeed}", mode=${modeLabel}, cc=${this.ccTier}`);
+            console.log(`[RaceScene] Created: seed="${this.raceSeed}", mode=${modeLabel}, cc=${this.ccTier}, difficulty=${this.difficulty}`);
             console.log(`[RaceScene] Track: ${td.checkpoints.length} checkpoints, arc=${td.totalArcLength.toFixed(0)}px`);
         }
 
@@ -325,13 +372,8 @@ window.PlatPursuit.Games.Driver.Scenes = window.PlatPursuit.Games.Driver.Scenes 
                 return;
             }
 
-            // --- Dev: CC tier switching ---
-            const JustDown = Phaser.Input.Keyboard.JustDown;
-            if (JustDown(this.key1)) { this.ccTier = '50cc';  this.ship.setCCTier('50cc'); }
-            if (JustDown(this.key2)) { this.ccTier = '100cc'; this.ship.setCCTier('100cc'); }
-            if (JustDown(this.key3)) { this.ccTier = '200cc'; this.ship.setCCTier('200cc'); }
-
             // --- Ghost visibility toggle (G key) ---
+            const JustDown = Phaser.Input.Keyboard.JustDown;
             if (JustDown(this.keyG)) {
                 this.ghostVisible = !this.ghostVisible;
                 if (!this.ghostVisible) {
@@ -360,6 +402,8 @@ window.PlatPursuit.Games.Driver.Scenes = window.PlatPursuit.Games.Driver.Scenes 
                 this.checkCheckpointCrossing();
                 this.updateWarning(dt);
                 this.ghostRecorder.update(dt, this.ship);
+                this.updateSpeedLines();
+                this.updateCheckpointApproach();
             }
 
             // --- Ghost playback (RACING state only) ---
@@ -440,11 +484,14 @@ window.PlatPursuit.Games.Driver.Scenes = window.PlatPursuit.Games.Driver.Scenes 
             // cancel them if ESC is pressed during the countdown.
             this.countdownTimers = [];
 
+            // Gold particle shimmer along the start/finish line during countdown
+            this.createStartLineShimmer();
+
             this.countdownText = this.add.text(
                 DESIGN_WIDTH / 2, DESIGN_HEIGHT / 2, '', {
                     fontFamily: 'Poppins, sans-serif',
                     fontSize: '120px',
-                    fontStyle: '700',
+                    fontStyle: 'bold',
                     color: '#2ce8f5',
                 }
             ).setOrigin(0.5).setScrollFactor(0).setDepth(DEPTH.OVERLAY).setAlpha(0);
@@ -475,22 +522,23 @@ window.PlatPursuit.Games.Driver.Scenes = window.PlatPursuit.Games.Driver.Scenes 
                     // new alpha: 1, making the text invisible for steps 2/1/GO.
                     this.tweens.killTweensOf(this.countdownText);
 
-                    // Set text content and style
+                    // Set text content and style (start invisible + scaled up)
                     this.countdownText.setText(step.text);
                     this.countdownText.setColor(step.color);
-                    this.countdownText.setAlpha(1);
+                    this.countdownText.setAlpha(0);
                     this.countdownText.setScale(step.scale);
 
-                    // Scale down to 1.0
+                    // Fade in + scale down simultaneously (first 40% of duration)
                     this.tweens.add({
                         targets: this.countdownText,
+                        alpha: 1,
                         scaleX: 1.0,
                         scaleY: 1.0,
-                        duration: duration * 0.5,
+                        duration: duration * 0.4,
                         ease: 'Power2',
                     });
 
-                    // Fade out
+                    // Fade out (last 40%, starts at 60%)
                     this.tweens.add({
                         targets: this.countdownText,
                         alpha: 0,
@@ -510,6 +558,15 @@ window.PlatPursuit.Games.Driver.Scenes = window.PlatPursuit.Games.Driver.Scenes 
                         duration: 150,
                         ease: 'Linear',
                     });
+
+                    // Countdown sound
+                    if (this.soundManager) {
+                        if (isGo) {
+                            this.soundManager.playCountdownGo();
+                        } else {
+                            this.soundManager.playCountdownBeep();
+                        }
+                    }
                 }));
 
                 delay += duration;
@@ -528,6 +585,7 @@ window.PlatPursuit.Games.Driver.Scenes = window.PlatPursuit.Games.Driver.Scenes 
                     this.flashOverlay.destroy();
                     this.flashOverlay = null;
                 }
+                this.destroyStartLineShimmer();
             }));
         }
 
@@ -637,6 +695,12 @@ window.PlatPursuit.Games.Driver.Scenes = window.PlatPursuit.Games.Driver.Scenes 
             // Notify HUD for minimap checkpoint dot tracking
             this.hud.onCheckpointCrossed(index);
 
+            // Checkpoint ding sound
+            if (this.soundManager) this.soundManager.playCheckpointDing();
+
+            // Clear checkpoint approach particles (we've arrived)
+            this.clearCheckpointApproach();
+
             // Update ghost delta at this checkpoint crossing
             this.updateGhostDelta(index);
 
@@ -664,8 +728,9 @@ window.PlatPursuit.Games.Driver.Scenes = window.PlatPursuit.Games.Driver.Scenes 
                     // Notify HUD of lap completion (triggers animation, clears CP state)
                     this.hud.onLapComplete(this.currentLap, lapTime);
 
-                    // Show lap completion flash
+                    // Show lap completion flash + particle ring
                     this.showLapFlash(this.currentLap, lapTime);
+                    this.showLapParticleRing();
 
                     if (this.mode === 'timetrial') {
                         this.onTimeTrialLapComplete(lapTime);
@@ -683,11 +748,19 @@ window.PlatPursuit.Games.Driver.Scenes = window.PlatPursuit.Games.Driver.Scenes 
                         // stay aligned with the correct lap.
                         if (this.ghostCheckpointTimes) {
                             const crossings = this.ghostCheckpointTimes;
+                            let found = false;
                             for (let i = this.ghostCrossingCursor; i < crossings.length; i++) {
                                 if (crossings[i].cpIndex === 1) {
                                     this.ghostCrossingCursor = i;
+                                    found = true;
                                     break;
                                 }
+                            }
+                            // Ghost data exhausted (ghost finished before player).
+                            // Mark cursor as exhausted so updateGhostDelta returns
+                            // null for all subsequent checkpoint crossings.
+                            if (!found) {
+                                this.ghostCrossingCursor = crossings.length;
                             }
                         }
                         this.currentGhostDelta = null;
@@ -741,7 +814,7 @@ window.PlatPursuit.Games.Driver.Scenes = window.PlatPursuit.Games.Driver.Scenes 
                 const lapFrames = this.ghostRecorder.getLapFrames(lapIndex);
 
                 // Save to localStorage
-                Ghost.GhostStorage.save(this.raceSeed, 'timetrial', this.ccTier, {
+                Ghost.GhostStorage.save(this.raceSeed, 'timetrial', this.ccTier, this.difficulty, {
                     frames: lapFrames,
                     totalTimeMs: lapTimeMs,
                     bestLapMs: lapTimeMs,
@@ -776,7 +849,7 @@ window.PlatPursuit.Games.Driver.Scenes = window.PlatPursuit.Games.Driver.Scenes 
         }
 
         // ---------------------------------------------------------------
-        // Ghost Checkpoint Times
+        // Ghost Visuals
         // ---------------------------------------------------------------
 
         /**
@@ -922,20 +995,21 @@ window.PlatPursuit.Games.Driver.Scenes = window.PlatPursuit.Games.Driver.Scenes 
         // ---------------------------------------------------------------
 
         /**
-         * Brief green flash when crossing a checkpoint correctly.
-         * Shows "CP X" briefly near the top of the screen.
+         * Checkpoint crossing feedback: HUD text + world-space gate effects.
+         * Shows "CP X" at top of screen, plus expansion lines and particle
+         * bursts at the checkpoint gate endpoints in world space.
          */
         showCheckpointFlash(index) {
+            // HUD text popup
             const cpFlash = this.add.text(
                 DESIGN_WIDTH / 2, 105, `CP ${index}`, {
                     fontFamily: 'Poppins, sans-serif',
                     fontSize: '18px',
-                    fontStyle: '700',
+                    fontStyle: 'bold',
                     color: '#40e850',
                 }
             ).setOrigin(0.5).setScrollFactor(0).setDepth(DEPTH.HUD_TEXT);
 
-            // Fade out and destroy
             this.tweens.add({
                 targets: cpFlash,
                 alpha: 0,
@@ -944,6 +1018,84 @@ window.PlatPursuit.Games.Driver.Scenes = window.PlatPursuit.Games.Driver.Scenes 
                 ease: 'Power2',
                 onComplete: () => cpFlash.destroy(),
             });
+
+            // World-space gate effects at checkpoint endpoints
+            const cp = this.trackData.checkpoints[index];
+            if (!cp) return;
+
+            const lp = cp.leftPoint;
+            const rp = cp.rightPoint;
+
+            // Gate center (used as Graphics origin so scale tween works correctly)
+            const gateCX = (lp.x + rp.x) / 2;
+            const gateCY = (lp.y + rp.y) / 2;
+
+            // Gate expansion lines: short lines at each endpoint that scale outward
+            const gateGfx = this.add.graphics({ x: gateCX, y: gateCY }).setDepth(8);
+            const lineLen = 20;
+
+            // Gate direction unit vector (along the gate)
+            const gateDir = { x: rp.x - lp.x, y: rp.y - lp.y };
+            const gateMag = Math.sqrt(gateDir.x * gateDir.x + gateDir.y * gateDir.y) || 1;
+            const nx = gateDir.x / gateMag;
+            const ny = gateDir.y / gateMag;
+
+            // Draw relative to Graphics origin (gate center)
+            const lpLocal = { x: lp.x - gateCX, y: lp.y - gateCY };
+            const rpLocal = { x: rp.x - gateCX, y: rp.y - gateCY };
+
+            gateGfx.lineStyle(2, 0x40e850, 0.7);
+            gateGfx.beginPath();
+            gateGfx.moveTo(lpLocal.x - nx * lineLen, lpLocal.y - ny * lineLen);
+            gateGfx.lineTo(lpLocal.x + nx * lineLen, lpLocal.y + ny * lineLen);
+            gateGfx.strokePath();
+            gateGfx.beginPath();
+            gateGfx.moveTo(rpLocal.x - nx * lineLen, rpLocal.y - ny * lineLen);
+            gateGfx.lineTo(rpLocal.x + nx * lineLen, rpLocal.y + ny * lineLen);
+            gateGfx.strokePath();
+
+            // Animate: expand from gate center and fade out
+            this.tweens.add({
+                targets: gateGfx,
+                scaleX: 1.5,
+                scaleY: 1.5,
+                alpha: 0,
+                duration: 200,
+                ease: 'Power2',
+                onComplete: () => gateGfx.destroy(),
+            });
+
+            // Particle bursts at each gate endpoint (6 particles per side)
+            if (this.textures.exists('shipParticle')) {
+                const emitterLeft = this.add.particles(lp.x, lp.y, 'shipParticle', {
+                    speed: { min: 30, max: 80 },
+                    lifespan: 150,
+                    scale: { start: 0.3, end: 0 },
+                    tint: 0x40e850,
+                    tintFill: true,
+                    blendMode: 'ADD',
+                    emitting: false,
+                }).setDepth(8);
+
+                const emitterRight = this.add.particles(rp.x, rp.y, 'shipParticle', {
+                    speed: { min: 30, max: 80 },
+                    lifespan: 150,
+                    scale: { start: 0.3, end: 0 },
+                    tint: 0x40e850,
+                    tintFill: true,
+                    blendMode: 'ADD',
+                    emitting: false,
+                }).setDepth(8);
+
+                emitterLeft.explode(6);
+                emitterRight.explode(6);
+
+                // Clean up after particles are done (guard for scene shutdown)
+                this.time.delayedCall(300, () => {
+                    if (emitterLeft.scene) emitterLeft.destroy();
+                    if (emitterRight.scene) emitterRight.destroy();
+                });
+            }
         }
 
         /**
@@ -962,7 +1114,16 @@ window.PlatPursuit.Games.Driver.Scenes = window.PlatPursuit.Games.Driver.Scenes 
                     fontStyle: 'bold',
                     color: trailHex,
                 }
-            ).setOrigin(0.5).setScrollFactor(0).setDepth(DEPTH.OVERLAY);
+            ).setOrigin(0.5).setScrollFactor(0).setDepth(DEPTH.OVERLAY).setScale(1.3);
+
+            // Scale down from 1.3 to 1.0
+            this.tweens.add({
+                targets: lapFlash,
+                scaleX: 1.0,
+                scaleY: 1.0,
+                duration: 300,
+                ease: 'Power2',
+            });
 
             // Hold briefly, then fade out
             this.tweens.add({
@@ -972,6 +1133,20 @@ window.PlatPursuit.Games.Driver.Scenes = window.PlatPursuit.Games.Driver.Scenes 
                 duration: LAP_FLASH_DURATION * 1000 * 0.4,
                 ease: 'Linear',
                 onComplete: () => lapFlash.destroy(),
+            });
+
+            // Brief screen flash (5% white, 150ms)
+            const lapScreenFlash = this.add.graphics();
+            lapScreenFlash.setScrollFactor(0);
+            lapScreenFlash.setDepth(DEPTH.OVERLAY - 1);
+            lapScreenFlash.fillStyle(0xffffff, 0.05);
+            lapScreenFlash.fillRect(0, 0, DESIGN_WIDTH, DESIGN_HEIGHT);
+            this.tweens.add({
+                targets: lapScreenFlash,
+                alpha: 0,
+                duration: 150,
+                ease: 'Linear',
+                onComplete: () => lapScreenFlash.destroy(),
             });
         }
 
@@ -989,7 +1164,7 @@ window.PlatPursuit.Games.Driver.Scenes = window.PlatPursuit.Games.Driver.Scenes 
                     DESIGN_WIDTH / 2, 120, '', {
                         fontFamily: 'Poppins, sans-serif',
                         fontSize: '28px',
-                        fontStyle: '700',
+                        fontStyle: 'bold',
                         color: '#e43b44',
                     }
                 ).setOrigin(0.5).setScrollFactor(0).setDepth(DEPTH.OVERLAY);
@@ -1034,6 +1209,7 @@ window.PlatPursuit.Games.Driver.Scenes = window.PlatPursuit.Games.Driver.Scenes 
                 seed: this.raceSeed,
                 ccTier: this.ccTier,
                 mode: this.mode,
+                difficulty: this.difficulty,
                 ghostEnabled: this.ghostVisible,
                 trackData: {
                     centerPoints: this.trackData.centerPoints,
@@ -1057,14 +1233,67 @@ window.PlatPursuit.Games.Driver.Scenes = window.PlatPursuit.Games.Driver.Scenes 
             this.raceState = RACE_STATE.FINISHED;
             this.transitioning = true;
 
+            // Finish audio
+            if (this.soundManager) {
+                this.soundManager.playFinishFanfare();
+                this.soundManager.stopEngine();
+                this.soundManager.stopOffTrack();
+            }
+
             console.log(`[RaceScene] Race finished: ${formatTime(this.raceTime)}`);
+
+            // --- Celebration Effects ---
+
+            // Screen flash: white overlay at 10% opacity, fades over 500ms
+            const finishFlash = this.add.graphics();
+            finishFlash.setScrollFactor(0);
+            finishFlash.setDepth(DEPTH.OVERLAY - 1);
+            finishFlash.fillStyle(0xffffff, 0.10);
+            finishFlash.fillRect(0, 0, DESIGN_WIDTH, DESIGN_HEIGHT);
+            this.tweens.add({
+                targets: finishFlash,
+                alpha: 0,
+                duration: 500,
+                ease: 'Linear',
+                onComplete: () => finishFlash.destroy(),
+            });
+
+            // Gold particle burst at ship position
+            if (this.textures.exists('shipParticle')) {
+                const finishBurst = this.add.particles(this.ship.x, this.ship.y, 'shipParticle', {
+                    speed: { min: 60, max: 150 },
+                    lifespan: 600,
+                    scale: { start: 0.5, end: 0 },
+                    tint: 0xd4a017,
+                    tintFill: true,
+                    blendMode: 'ADD',
+                    emitting: false,
+                }).setDepth(12);
+
+                finishBurst.explode(40);
+
+                this.time.delayedCall(700, () => { if (finishBurst.scene) finishBurst.destroy(); });
+            }
+
+            // HUD timer pulse: scale 1.0 -> 1.3 -> 1.0 yoyo, 3 times
+            if (this.hud && this.hud.totalTimeText) {
+                this.tweens.add({
+                    targets: this.hud.totalTimeText,
+                    scaleX: 1.3,
+                    scaleY: 1.3,
+                    duration: 200,
+                    yoyo: true,
+                    repeat: 2,
+                    ease: 'Sine.easeInOut',
+                });
+            }
 
             // --- Ghost auto-save ---
             const raceTimeMs = Math.round(this.raceTime * 1000);
             const isNewRecord = !this.storedBestTimeMs || raceTimeMs < this.storedBestTimeMs;
 
             if (isNewRecord) {
-                Ghost.GhostStorage.save(this.raceSeed, 'race', this.ccTier, {
+                Ghost.GhostStorage.save(this.raceSeed, this.mode, this.ccTier, this.difficulty, {
                     frames: this.ghostRecorder.getFrames(),
                     totalTimeMs: raceTimeMs,
                     lapTimes: this.lapTimes,
@@ -1075,8 +1304,8 @@ window.PlatPursuit.Games.Driver.Scenes = window.PlatPursuit.Games.Driver.Scenes 
                 console.log(`[RaceScene] Ghost saved: ${raceTimeMs}ms (${this.ghostRecorder.getFrameCount()} frames)`);
             }
 
-            // Brief delay so the player sees the finish, then transition
-            this.finishTimer = this.time.delayedCall(1500, () => {
+            // Extended delay for celebration effects, then transition
+            this.finishTimer = this.time.delayedCall(2000, () => {
                 this.cameras.main.fadeOut(200, 0, 0, 0);
                 this.cameras.main.once('camerafadeoutcomplete', () => {
                     this.scene.start('ResultsScene', this.buildResultsPayload({
@@ -1084,6 +1313,213 @@ window.PlatPursuit.Games.Driver.Scenes = window.PlatPursuit.Games.Driver.Scenes 
                     }));
                 });
             });
+        }
+
+        // ---------------------------------------------------------------
+        // Atmosphere
+        // ---------------------------------------------------------------
+
+        /**
+         * Creates a 3-layer parallax starfield using deterministic seeds.
+         * Stars are scattered across the world bounds and rendered at
+         * different scrollFactors for parallax depth.
+         *
+         * Zero per-frame draw cost: drawn once, Phaser handles parallax
+         * automatically via scrollFactor on camera movement.
+         */
+        createStarfield(bounds) {
+            const rng = new TrackGen.SeededRandom(this.raceSeed + '_stars');
+            const w = bounds.maxX - bounds.minX;
+            const h = bounds.maxY - bounds.minY;
+
+            const layers = [
+                { count: 200, sizeMin: 0.5, sizeMax: 1,   alphaMin: 0.2, alphaMax: 0.4, scroll: 0.1, color: 0x3a3a5c },
+                { count: 100, sizeMin: 1,   sizeMax: 2,   alphaMin: 0.3, alphaMax: 0.6, scroll: 0.3, color: 0x6b6b8d },
+                { count: 50,  sizeMin: 2,   sizeMax: 3,   alphaMin: 0.5, alphaMax: 0.8, scroll: 0.6, color: 0xe8e8ff },
+            ];
+
+            for (const layer of layers) {
+                const g = this.add.graphics().setDepth(-10).setScrollFactor(layer.scroll);
+                for (let i = 0; i < layer.count; i++) {
+                    const x = bounds.minX + rng.range(0, w);
+                    const y = bounds.minY + rng.range(0, h);
+                    const size = rng.range(layer.sizeMin, layer.sizeMax);
+                    const alpha = rng.range(layer.alphaMin, layer.alphaMax);
+                    g.fillStyle(layer.color, alpha);
+                    g.fillCircle(x, y, size);
+                }
+            }
+        }
+
+        /**
+         * Creates 3-5 subtle nebula accent blobs behind the track.
+         * Approximated as concentric circles with decreasing alpha
+         * (no radial gradient in Phaser Graphics).
+         */
+        createNebulae(bounds) {
+            const rng = new TrackGen.SeededRandom(this.raceSeed + '_nebula');
+            const w = bounds.maxX - bounds.minX;
+            const h = bounds.maxY - bounds.minY;
+            const nebulaCount = rng.intRange(3, 5);
+
+            const colors = [0x2ce8f5, 0xcc55cc, 0xe8a030, 0x4b3d8f];
+            const g = this.add.graphics().setDepth(-9).setScrollFactor(0.2);
+
+            for (let n = 0; n < nebulaCount; n++) {
+                const cx = bounds.minX + rng.range(0, w);
+                const cy = bounds.minY + rng.range(0, h);
+                const baseRadius = rng.range(150, 400);
+                const color = colors[n % colors.length];
+
+                // 8 concentric circles with decreasing alpha
+                for (let ring = 0; ring < 8; ring++) {
+                    const r = baseRadius * (1 - ring * 0.1);
+                    const alpha = 0.03 * (1 - ring / 8);
+                    g.fillStyle(color, alpha);
+                    g.fillCircle(cx, cy, r);
+                }
+            }
+        }
+
+        // ---------------------------------------------------------------
+        // Particle Effects
+        // ---------------------------------------------------------------
+
+        /**
+         * Toggles speed line particles when near max speed (>85%).
+         * Called every frame during RACING state.
+         */
+        updateSpeedLines() {
+            if (!this.speedLinesEmitter) return;
+
+            const speedRatio = this.ship.speed / this.ship.tier.maxSpeed;
+            const shouldBeActive = speedRatio > 0.85;
+
+            if (shouldBeActive && !this.speedLinesActive) {
+                this.speedLinesEmitter.start();
+                this.speedLinesActive = true;
+            } else if (!shouldBeActive && this.speedLinesActive) {
+                this.speedLinesEmitter.stop();
+                this.speedLinesActive = false;
+            }
+        }
+
+        /**
+         * Creates/destroys checkpoint approach particles when the ship
+         * is within 200px of the next checkpoint gate.
+         */
+        updateCheckpointApproach() {
+            if (!this.textures.exists('shipParticle')) return;
+
+            const checkpoints = this.trackData.checkpoints;
+            const nextCP = this.nextCheckpoint;
+            if (nextCP < 0 || nextCP >= checkpoints.length) return;
+
+            const cp = checkpoints[nextCP];
+            const dx = cp.position.x - this.ship.x;
+            const dy = cp.position.y - this.ship.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+
+            if (dist < 200 && !this.cpApproachActive) {
+                // Create approach emitter at checkpoint gate
+                this.cpApproachEmitter = this.add.particles(cp.position.x, cp.position.y, 'shipParticle', {
+                    speed: { min: 10, max: 40 },
+                    lifespan: 300,
+                    scale: { start: 0.2, end: 0 },
+                    tint: 0x40e850,
+                    tintFill: true,
+                    alpha: 0.20,
+                    blendMode: 'ADD',
+                    frequency: 200,
+                }).setDepth(8);
+                this.cpApproachActive = true;
+            } else if (dist >= 200 && this.cpApproachActive) {
+                // Moved away or crossed: destroy emitter
+                if (this.cpApproachEmitter) {
+                    this.cpApproachEmitter.destroy();
+                    this.cpApproachEmitter = null;
+                }
+                this.cpApproachActive = false;
+            }
+        }
+
+        /**
+         * Destroys the checkpoint approach emitter. Called when a
+         * checkpoint is crossed (resets approach tracking).
+         */
+        clearCheckpointApproach() {
+            if (this.cpApproachEmitter) {
+                this.cpApproachEmitter.destroy();
+                this.cpApproachEmitter = null;
+            }
+            this.cpApproachActive = false;
+        }
+
+        /**
+         * Spawns a ring of particles around the ship when a lap is completed.
+         */
+        showLapParticleRing() {
+            if (!this.textures.exists('shipParticle')) return;
+
+            const ring = this.add.particles(this.ship.x, this.ship.y, 'shipParticle', {
+                angle: { min: 0, max: 360 },
+                speed: { min: 80, max: 120 },
+                lifespan: 400,
+                scale: { start: 0.3, end: 0 },
+                tint: 0xffffff,
+                tintFill: true,
+                blendMode: 'ADD',
+                emitting: false,
+            }).setDepth(12);
+
+            ring.explode(20);
+            this.time.delayedCall(500, () => { if (ring.scene) ring.destroy(); });
+        }
+
+        /**
+         * Creates a gold particle shimmer along the start/finish gate
+         * during the countdown sequence. Stopped when racing begins.
+         */
+        createStartLineShimmer() {
+            if (!this.textures.exists('shipParticle')) return;
+
+            const cp = this.trackData.checkpoints[0];
+            if (!cp) return;
+
+            // Emitter positioned along the gate (left to right)
+            this.startShimmer = this.add.particles(0, 0, 'shipParticle', {
+                emitZone: {
+                    type: 'random',
+                    source: new Phaser.Geom.Line(
+                        cp.leftPoint.x, cp.leftPoint.y,
+                        cp.rightPoint.x, cp.rightPoint.y
+                    ),
+                },
+                speed: { min: 5, max: 20 },
+                lifespan: { min: 300, max: 600 },
+                scale: { start: 0.25, end: 0 },
+                tint: 0xd4a017,
+                tintFill: true,
+                alpha: 0.30,
+                blendMode: 'ADD',
+                frequency: 80,
+            }).setDepth(5);
+        }
+
+        /**
+         * Stops and cleans up the start line shimmer when the countdown ends.
+         */
+        destroyStartLineShimmer() {
+            if (this.startShimmer) {
+                this.startShimmer.stop();
+                // Let existing particles fade out, then destroy
+                this.time.delayedCall(700, () => {
+                    if (this.startShimmer) {
+                        this.startShimmer.destroy();
+                        this.startShimmer = null;
+                    }
+                });
+            }
         }
 
         // ---------------------------------------------------------------
@@ -1126,37 +1562,169 @@ window.PlatPursuit.Games.Driver.Scenes = window.PlatPursuit.Games.Driver.Scenes 
         }
 
         // ---------------------------------------------------------------
-        // ESC Handling
+        // Sound Toggle
         // ---------------------------------------------------------------
 
         /**
-         * ESC behavior depends on mode and state:
-         * - Race mode (any state): fade to MenuScene
-         * - Time Trial (COUNTDOWN): fade to MenuScene
-         * - Time Trial (RACING): fade to ResultsScene with session summary
+         * Creates a small sound toggle icon at the top-right corner.
+         * Allows muting/unmuting during gameplay.
+         */
+        createSoundToggle() {
+            const sm = this.soundManager;
+            const isMuted = sm ? sm.muted : false;
+
+            this.soundToggleText = this.add.text(
+                DESIGN_WIDTH - 24, 16, isMuted ? 'MUTE' : 'SND',
+                {
+                    fontFamily: 'Poppins, sans-serif',
+                    fontSize: '10px',
+                    fontStyle: '600',
+                    color: isMuted ? '#4a5568' : '#6b6b8d',
+                }
+            ).setOrigin(0.5).setScrollFactor(0).setDepth(DEPTH.HUD_TEXT);
+
+            this.soundToggleZone = this.add.zone(
+                DESIGN_WIDTH - 24, 16, 44, 28
+            ).setScrollFactor(0).setInteractive().setDepth(DEPTH.HUD_TEXT);
+
+            this.soundToggleZone.on('pointerdown', () => {
+                if (!sm) return;
+                const muted = sm.toggleMute();
+                this.soundToggleText.setText(muted ? 'MUTE' : 'SND');
+                this.soundToggleText.setColor(muted ? '#4a5568' : '#6b6b8d');
+            });
+        }
+
+        // ---------------------------------------------------------------
+        // ESC / Pause Handling
+        // ---------------------------------------------------------------
+
+        /**
+         * ESC behavior depends on current state:
+         * - RACING: show pause menu
+         * - PAUSED: resume from pause
+         * - COUNTDOWN: go to menu directly (no pause needed)
          */
         handleEscape() {
             if (this.transitioning) return;
+
+            if (this.raceState === RACE_STATE.PAUSED) {
+                this.hidePauseMenu();
+                return;
+            }
+
+            if (this.raceState === RACE_STATE.RACING) {
+                this.showPauseMenu();
+                return;
+            }
+
+            // COUNTDOWN: exit to menu directly
+            this.transitioning = true;
+            this.cameras.main.fadeOut(200, 0, 0, 0);
+            this.cameras.main.once('camerafadeoutcomplete', () => {
+                this.scene.start('MenuScene');
+            });
+        }
+
+        /**
+         * Pauses the game and shows an overlay with RESUME and QUIT buttons.
+         */
+        showPauseMenu() {
+            this.raceState = RACE_STATE.PAUSED;
+
+            // Stop persistent audio while paused
+            if (this.soundManager) {
+                this.soundManager.stopEngine();
+                this.soundManager.stopOffTrack();
+            }
+
+            // Dark overlay
+            this.pauseOverlay = this.add.graphics();
+            this.pauseOverlay.setScrollFactor(0);
+            this.pauseOverlay.setDepth(DEPTH.OVERLAY);
+            this.pauseOverlay.fillStyle(0x000000, 0.5);
+            this.pauseOverlay.fillRect(0, 0, DESIGN_WIDTH, DESIGN_HEIGHT);
+
+            // "PAUSED" text
+            this.pauseText = this.add.text(
+                DESIGN_WIDTH / 2, DESIGN_HEIGHT / 2 - 60,
+                'P A U S E D',
+                {
+                    fontFamily: 'Poppins, sans-serif',
+                    fontSize: '42px',
+                    fontStyle: 'bold',
+                    color: CSS.STAR_WHITE,
+                }
+            ).setOrigin(0.5).setScrollFactor(0).setDepth(DEPTH.OVERLAY + 1);
+
+            // RESUME button
+            this.pauseResumeBtn = UI.createButton(this,
+                DESIGN_WIDTH / 2, DESIGN_HEIGHT / 2 + 10,
+                'RESUME', {
+                    width: 160, height: 44, fontSize: 18,
+                    onClick: () => this.hidePauseMenu(),
+                }
+            );
+            this.pauseResumeBtn.gfx.setScrollFactor(0).setDepth(DEPTH.OVERLAY + 1);
+            this.pauseResumeBtn.text.setScrollFactor(0).setDepth(DEPTH.OVERLAY + 2);
+            this.pauseResumeBtn.zone.setScrollFactor(0).setDepth(DEPTH.OVERLAY + 2);
+
+            // QUIT button
+            this.pauseQuitBtn = UI.createButton(this,
+                DESIGN_WIDTH / 2, DESIGN_HEIGHT / 2 + 65,
+                'QUIT', {
+                    width: 160, height: 44, fontSize: 18,
+                    onClick: () => this.quitFromPause(),
+                }
+            );
+            this.pauseQuitBtn.gfx.setScrollFactor(0).setDepth(DEPTH.OVERLAY + 1);
+            this.pauseQuitBtn.text.setScrollFactor(0).setDepth(DEPTH.OVERLAY + 2);
+            this.pauseQuitBtn.zone.setScrollFactor(0).setDepth(DEPTH.OVERLAY + 2);
+        }
+
+        /**
+         * Resume from pause: destroy overlay and return to RACING.
+         */
+        hidePauseMenu() {
+            this.raceState = RACE_STATE.RACING;
+            this.destroyPauseMenu();
+        }
+
+        /**
+         * Quit from the pause menu: exit to results or menu.
+         */
+        quitFromPause() {
+            this.destroyPauseMenu();
             this.transitioning = true;
 
-            // Time Trial during RACING: show session summary
-            if (this.mode === 'timetrial' && this.raceState === RACE_STATE.RACING && this.ttTotalLapsCompleted > 0) {
+            // Time Trial with completed laps: show session summary
+            if (this.mode === 'timetrial' && this.ttTotalLapsCompleted > 0) {
                 this.cameras.main.fadeOut(200, 0, 0, 0);
                 this.cameras.main.once('camerafadeoutcomplete', () => {
                     this.scene.start('ResultsScene', this.buildResultsPayload({
-                        isNewRecord: false, // TT saves incrementally, no single "record" moment
+                        isNewRecord: false,
                         ttTotalLapsCompleted: this.ttTotalLapsCompleted,
                         ttSessionBestLapTime: this.ttSessionBestLapTime,
                         ttSessionBestLapIndex: this.ttSessionBestLapIndex,
                     }));
                 });
             } else {
-                // Race mode or TT during countdown: go to menu
+                // Race mode or TT with no laps: go to menu
                 this.cameras.main.fadeOut(200, 0, 0, 0);
                 this.cameras.main.once('camerafadeoutcomplete', () => {
                     this.scene.start('MenuScene');
                 });
             }
+        }
+
+        /**
+         * Destroys all pause menu UI elements.
+         */
+        destroyPauseMenu() {
+            if (this.pauseOverlay) { this.pauseOverlay.destroy(); this.pauseOverlay = null; }
+            if (this.pauseText) { this.pauseText.destroy(); this.pauseText = null; }
+            if (this.pauseResumeBtn) { this.pauseResumeBtn.destroy(); this.pauseResumeBtn = null; }
+            if (this.pauseQuitBtn) { this.pauseQuitBtn.destroy(); this.pauseQuitBtn = null; }
         }
 
     }

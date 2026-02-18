@@ -6,7 +6,7 @@
  * Why this exists:
  * Game logic should ask "is the player pressing up?" not "is the W key down?"
  * This decoupling lets us:
- * 1. Support multiple input methods (keyboard now, touch in Step 10)
+ * 1. Support multiple input methods (keyboard + touch)
  * 2. Change key bindings without touching game logic
  * 3. Keep all input-related code in one place
  *
@@ -32,6 +32,11 @@
  *   Left:  A  or  Left Arrow
  *   Right: D  or  Right Arrow
  *   Pause: Escape (edge-detected via isPausePressed())
+ *
+ * Touch mapping (auto-enabled on touch devices):
+ *   Left half: Virtual joystick (touch = thrust, drag = steer)
+ *   Right bottom: Brake zone (touch/hold = brake)
+ *   Top-right: Pause button (44x44 tap target)
  */
 
 window.PlatPursuit = window.PlatPursuit || {};
@@ -39,6 +44,198 @@ window.PlatPursuit.Games = window.PlatPursuit.Games || {};
 
 (function() {
     'use strict';
+
+    // -----------------------------------------------------------------------
+    // Touch Controller (Mobile Virtual Controls)
+    // -----------------------------------------------------------------------
+
+    /**
+     * Virtual joystick + brake zone for touch devices.
+     *
+     * Layout (1280x720 design space, Phaser Scale.FIT handles mapping):
+     *   Left half of screen: Virtual joystick area
+     *     - Touch = thrust (up: true)
+     *     - Horizontal drag from touch origin: left/right steering
+     *     - 20px dead zone before steering activates
+     *   Right bottom quadrant: Brake zone
+     *     - Touch/hold = brake (down: true)
+     *   Top-right: Pause button (44x44 touch target)
+     *     - Single tap = edge-detected pause press
+     *
+     * Multi-touch: tracks separate pointer IDs for joystick + brake.
+     * Visual feedback: faint origin circle + position dot on joystick.
+     */
+    class TouchController {
+        /**
+         * @param {Phaser.Scene} scene - The active scene
+         */
+        constructor(scene) {
+            this.scene = scene;
+
+            const Shell = PlatPursuit.Games.Shell;
+            this.designW = Shell.DESIGN_WIDTH;
+            this.designH = Shell.DESIGN_HEIGHT;
+
+            // Touch state
+            this.joystickPointerId = null;
+            this.joystickOrigin = null;  // { x, y } in design space
+            this.joystickCurrent = null; // { x, y } in design space
+            this.brakePointerId = null;
+            this._pausePressed = false;
+
+            // Dead zone for steering (pixels in design space)
+            this.deadZone = 20;
+
+            // Visual feedback graphics (UI layer, not affected by camera)
+            this.gfx = scene.add.graphics();
+            this.gfx.setScrollFactor(0);
+            this.gfx.setDepth(85); // Below HUD (95) but above track
+
+            // Register pointer events
+            scene.input.on('pointerdown', this.onPointerDown, this);
+            scene.input.on('pointermove', this.onPointerMove, this);
+            scene.input.on('pointerup', this.onPointerUp, this);
+            scene.input.on('pointerupoutside', this.onPointerUp, this);
+        }
+
+        /**
+         * Converts a Phaser pointer to design-space coordinates.
+         * Phaser's Scale.FIT handles the canvas-to-design mapping for us
+         * via pointer.x / pointer.y (already in game coordinates).
+         */
+        _toDesign(pointer) {
+            return { x: pointer.x, y: pointer.y };
+        }
+
+        /**
+         * Checks if a design-space point is in the pause button zone.
+         * 52x52 touch target at top-right corner (exceeds 44px minimum).
+         */
+        _isPauseZone(x, y) {
+            return x >= this.designW - 52 && y <= 52;
+        }
+
+        /**
+         * Checks if a design-space point is in the brake zone.
+         * Right half, bottom 60% of screen.
+         */
+        _isBrakeZone(x, y) {
+            return x >= this.designW / 2 && y >= this.designH * 0.4;
+        }
+
+        onPointerDown(pointer) {
+            const pos = this._toDesign(pointer);
+
+            // Pause button: top-right corner
+            if (this._isPauseZone(pos.x, pos.y)) {
+                this._pausePressed = true;
+                return;
+            }
+
+            // Left half: joystick (thrust + steering)
+            if (pos.x < this.designW / 2 && this.joystickPointerId === null) {
+                this.joystickPointerId = pointer.id;
+                this.joystickOrigin = { x: pos.x, y: pos.y };
+                this.joystickCurrent = { x: pos.x, y: pos.y };
+                return;
+            }
+
+            // Right half (non-pause): brake
+            if (pos.x >= this.designW / 2 && this.brakePointerId === null) {
+                if (!this._isPauseZone(pos.x, pos.y)) {
+                    this.brakePointerId = pointer.id;
+                }
+            }
+        }
+
+        onPointerMove(pointer) {
+            if (pointer.id === this.joystickPointerId) {
+                const pos = this._toDesign(pointer);
+                this.joystickCurrent = { x: pos.x, y: pos.y };
+            }
+        }
+
+        onPointerUp(pointer) {
+            if (pointer.id === this.joystickPointerId) {
+                this.joystickPointerId = null;
+                this.joystickOrigin = null;
+                this.joystickCurrent = null;
+            }
+            if (pointer.id === this.brakePointerId) {
+                this.brakePointerId = null;
+            }
+        }
+
+        /**
+         * Returns the current touch input state.
+         * OR'd with keyboard state in InputManager.getState().
+         */
+        getState() {
+            const state = { up: false, down: false, left: false, right: false };
+
+            // Joystick: thrust + steering
+            if (this.joystickOrigin && this.joystickCurrent) {
+                state.up = true; // Any joystick touch = thrust
+
+                const dx = this.joystickCurrent.x - this.joystickOrigin.x;
+                if (dx < -this.deadZone) state.left = true;
+                if (dx > this.deadZone) state.right = true;
+            }
+
+            // Brake zone
+            if (this.brakePointerId !== null) {
+                state.down = true;
+            }
+
+            return state;
+        }
+
+        /**
+         * Consumes the pause pressed flag. Returns true once per press.
+         */
+        consumePause() {
+            if (this._pausePressed) {
+                this._pausePressed = false;
+                return true;
+            }
+            return false;
+        }
+
+        /**
+         * Draws visual feedback for the virtual joystick.
+         * Called from InputManager or externally each frame.
+         */
+        draw() {
+            this.gfx.clear();
+
+            if (!this.joystickOrigin || !this.joystickCurrent) return;
+
+            // Origin circle: faint ring at touch start
+            this.gfx.lineStyle(1, 0xffffff, 0.15);
+            this.gfx.strokeCircle(this.joystickOrigin.x, this.joystickOrigin.y, 40);
+
+            // Current position dot
+            this.gfx.fillStyle(0xffffff, 0.20);
+            this.gfx.fillCircle(this.joystickCurrent.x, this.joystickCurrent.y, 8);
+        }
+
+        /**
+         * Cleans up event listeners and graphics.
+         */
+        destroy() {
+            if (this.scene && this.scene.input) {
+                this.scene.input.off('pointerdown', this.onPointerDown, this);
+                this.scene.input.off('pointermove', this.onPointerMove, this);
+                this.scene.input.off('pointerup', this.onPointerUp, this);
+                this.scene.input.off('pointerupoutside', this.onPointerUp, this);
+            }
+            if (this.gfx) {
+                this.gfx.destroy();
+                this.gfx = null;
+            }
+            this.scene = null;
+        }
+    }
 
     // -----------------------------------------------------------------------
     // InputManager Class
@@ -141,6 +338,12 @@ window.PlatPursuit.Games = window.PlatPursuit.Games || {};
             // it as a Key object but handle it via JustDown (edge detection)
             // rather than isDown (level detection).
             this.keyEsc = kb.addKey(KeyCodes.ESC, true, false);
+
+            // Touch controller: created on touch-capable devices
+            this.touch = null;
+            if (scene.sys.game.device.input.touch) {
+                this.touch = new TouchController(scene);
+            }
         }
 
         // -------------------------------------------------------------------
@@ -167,12 +370,24 @@ window.PlatPursuit.Games = window.PlatPursuit.Games || {};
          * @property {boolean} right - True if right key is held (D or Right Arrow)
          */
         getState() {
-            return {
+            const kb = {
                 up:    this.keyW.isDown || this.keyUp.isDown,
                 down:  this.keyS.isDown || this.keyDown.isDown,
                 left:  this.keyA.isDown || this.keyLeft.isDown,
                 right: this.keyD.isDown || this.keyRight.isDown,
             };
+
+            // OR touch state on top of keyboard
+            if (this.touch) {
+                const ts = this.touch.getState();
+                kb.up    = kb.up    || ts.up;
+                kb.down  = kb.down  || ts.down;
+                kb.left  = kb.left  || ts.left;
+                kb.right = kb.right || ts.right;
+                this.touch.draw();
+            }
+
+            return kb;
         }
 
         /**
@@ -192,7 +407,9 @@ window.PlatPursuit.Games = window.PlatPursuit.Games || {};
          * @returns {boolean} True if Escape was pressed this frame
          */
         isPausePressed() {
-            return Phaser.Input.Keyboard.JustDown(this.keyEsc);
+            const kbPause = Phaser.Input.Keyboard.JustDown(this.keyEsc);
+            const touchPause = this.touch ? this.touch.consumePause() : false;
+            return kbPause || touchPause;
         }
 
         // -------------------------------------------------------------------
@@ -219,7 +436,14 @@ window.PlatPursuit.Games = window.PlatPursuit.Games || {};
          *   });
          */
         destroy() {
+            // Clean up touch controller first (has its own scene references)
+            if (this.touch) {
+                this.touch.destroy();
+                this.touch = null;
+            }
+
             if (!this.scene || !this.scene.input || !this.scene.input.keyboard) {
+                this.scene = null;
                 return;
             }
 

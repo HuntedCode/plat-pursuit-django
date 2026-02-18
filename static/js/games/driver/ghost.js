@@ -13,8 +13,11 @@
  * Visual spec:
  * - Same 5-vertex arrow shape as player ship
  * - Fill only (no stroke, no glow, no particles)
- * - White (#ffffff) at 30% opacity, pulsing 25-35%
+ * - White (#ffffff) at 40% opacity, pulsing 35-45%
  * - Minimap dot: 3px, white, 50% opacity
+ *
+ * Ghost storage key: stellar_circuit_{seed}_{mode}_{ccTier}_{difficulty}
+ * Different difficulties produce different tracks from the same seed.
  */
 
 window.PlatPursuit = window.PlatPursuit || {};
@@ -222,8 +225,8 @@ window.PlatPursuit.Games.Driver = window.PlatPursuit.Games.Driver || {};
             this.rotation = lerpAngle(this.frames[a + 2], this.frames[b + 2], t);
             this.speed = this.frames[a + 4] + (this.frames[b + 4] - this.frames[a + 4]) * t;
 
-            // Pulsing opacity: 25-35% via sine wave
-            this.alpha = 0.30 + Math.sin(this.elapsed * 3) * 0.05;
+            // Pulsing opacity: 35-45% via sine wave (GDD 4.8)
+            this.alpha = 0.40 + Math.sin(this.elapsed * 3) * 0.05;
         }
 
         /** Resets playback to the beginning (used for retry / new lap in TT) */
@@ -239,9 +242,10 @@ window.PlatPursuit.Games.Driver = window.PlatPursuit.Games.Driver || {};
     /**
      * Persistence layer for ghost data using localStorage.
      *
-     * Key pattern: stellar_circuit_{seed}_{mode}_{ccTier}
-     * Stores one ghost per seed+mode+tier combination. Each CC tier
-     * gets its own ghost since speeds differ dramatically.
+     * Key pattern: stellar_circuit_{seed}_{mode}_{ccTier}_{difficulty}
+     * Stores one ghost per seed+mode+tier+difficulty combination.
+     * Each CC tier and difficulty gets its own ghost since speeds
+     * differ dramatically and difficulty changes the track shape.
      *
      * Stored data format:
      *   frames: Number[]     - Flat array [x,y,r,t,s, ...]
@@ -253,15 +257,16 @@ window.PlatPursuit.Games.Driver = window.PlatPursuit.Games.Driver || {};
      */
     const GhostStorage = {
         /**
-         * Builds the localStorage key for a seed+mode+tier combination.
+         * Builds the localStorage key for a seed+mode+tier+difficulty combination.
          *
          * @param {string} seed - Track seed
          * @param {string} mode - Game mode ('race' or 'timetrial')
          * @param {string} ccTier - CC tier ('50cc', '100cc', '200cc')
+         * @param {string} difficulty - Difficulty ('easy', 'medium', 'hard')
          * @returns {string} localStorage key
          */
-        _key(seed, mode, ccTier) {
-            return `stellar_circuit_${seed}_${mode}_${ccTier}`;
+        _key(seed, mode, ccTier, difficulty) {
+            return `stellar_circuit_${seed}_${mode}_${ccTier}_${difficulty || 'medium'}`;
         },
 
         /**
@@ -271,11 +276,12 @@ window.PlatPursuit.Games.Driver = window.PlatPursuit.Games.Driver || {};
          * @param {string} seed - Track seed
          * @param {string} mode - Game mode
          * @param {string} ccTier - CC tier
+         * @param {string} difficulty - Difficulty tier
          * @param {Object} data - Ghost data to store
          */
-        save(seed, mode, ccTier, data) {
+        save(seed, mode, ccTier, difficulty, data) {
             try {
-                localStorage.setItem(this._key(seed, mode, ccTier), JSON.stringify(data));
+                localStorage.setItem(this._key(seed, mode, ccTier, difficulty), JSON.stringify(data));
             } catch (e) {
                 console.warn('[Ghost] localStorage save failed:', e.message);
             }
@@ -287,11 +293,12 @@ window.PlatPursuit.Games.Driver = window.PlatPursuit.Games.Driver || {};
          * @param {string} seed - Track seed
          * @param {string} mode - Game mode
          * @param {string} ccTier - CC tier
+         * @param {string} difficulty - Difficulty tier
          * @returns {Object|null} Ghost data or null if not found
          */
-        load(seed, mode, ccTier) {
+        load(seed, mode, ccTier, difficulty) {
             try {
-                const raw = localStorage.getItem(this._key(seed, mode, ccTier));
+                const raw = localStorage.getItem(this._key(seed, mode, ccTier, difficulty));
                 return raw ? JSON.parse(raw) : null;
             } catch (e) {
                 console.warn('[Ghost] localStorage load failed:', e.message);
@@ -300,29 +307,31 @@ window.PlatPursuit.Games.Driver = window.PlatPursuit.Games.Driver || {};
         },
 
         /**
-         * Gets the best time for a seed+mode+tier without loading full data.
+         * Gets the best time for a seed+mode+tier+difficulty without loading full data.
          *
          * @param {string} seed - Track seed
          * @param {string} mode - Game mode
          * @param {string} ccTier - CC tier
+         * @param {string} difficulty - Difficulty tier
          * @returns {number|null} Total time in ms, or null
          */
-        getBestTime(seed, mode, ccTier) {
-            const data = this.load(seed, mode, ccTier);
+        getBestTime(seed, mode, ccTier, difficulty) {
+            const data = this.load(seed, mode, ccTier, difficulty);
             return data ? data.totalTimeMs : null;
         },
 
         /**
-         * Gets the best lap time for a seed+mode+tier.
+         * Gets the best lap time for a seed+mode+tier+difficulty.
          * Primarily used for Time Trial display in the menu.
          *
          * @param {string} seed - Track seed
          * @param {string} mode - Game mode
          * @param {string} ccTier - CC tier
+         * @param {string} difficulty - Difficulty tier
          * @returns {number|null} Best lap time in ms, or null
          */
-        getBestLapTime(seed, mode, ccTier) {
-            const data = this.load(seed, mode, ccTier);
+        getBestLapTime(seed, mode, ccTier, difficulty) {
+            const data = this.load(seed, mode, ccTier, difficulty);
             return data ? data.bestLapMs : null;
         },
 
