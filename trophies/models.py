@@ -2682,6 +2682,9 @@ class CalendarChallengeDay(models.Model):
     # The actual earned_date_time of the platinum that filled this day
     platinum_earned_at = models.DateTimeField(null=True, blank=True)
 
+    # Total platinums earned on this calendar day (month/day) across all years
+    plat_count = models.PositiveSmallIntegerField(default=0)
+
     class Meta:
         unique_together = ['challenge', 'month', 'day']
         ordering = ['month', 'day']

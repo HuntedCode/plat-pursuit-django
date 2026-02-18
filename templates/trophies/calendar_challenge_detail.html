@@ -144,7 +144,7 @@
 {# Stats cards #}
 {% if stats.total_filled > 0 %}
 <section class="shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 w-full p-0 lg:p-4 mt-6">
-    <div class="grid grid-cols-3 gap-3 p-4">
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 p-4">
         <div class="card bg-base-100 border border-base-300 p-3 text-center">
             <div class="text-2xl lg:text-3xl font-bold text-primary">{{ stats.best_month_filled }}/{{ stats.best_month_total }}</div>
             <div class="text-xs text-base-content/60 mt-1">Best Month: {{ stats.best_month_name }}</div>
@@ -156,6 +156,10 @@
         <div class="card bg-base-100 border border-base-300 p-3 text-center">
             <div class="text-2xl lg:text-3xl font-bold text-primary">{{ stats.worst_month_filled }}/{{ stats.worst_month_total }}</div>
             <div class="text-xs text-base-content/60 mt-1">Weakest Month: {{ stats.worst_month_name }}</div>
+        </div>
+        <div class="card bg-base-100 border border-base-300 p-3 text-center">
+            <div class="text-2xl lg:text-3xl font-bold text-primary">{{ stats.max_plat_day_count }}</div>
+            <div class="text-xs text-base-content/60 mt-1">Most in a Day: {{ stats.max_plat_day_label }}</div>
         </div>
     </div>
 </section>
@@ -170,10 +174,16 @@
                 <div class="w-3 h-3 rounded-sm border-2 border-warning/70" style="box-shadow: 0 0 4px rgba(251, 191, 36, 0.25);"></div>
                 <span>Holiday</span>
             </div>
-            <label class="flex items-center gap-2 cursor-pointer text-xs text-base-content/60">
-                <span>US Holidays</span>
-                <input type="checkbox" id="us-holiday-toggle" class="toggle toggle-xs toggle-primary" />
-            </label>
+            <div class="flex items-center gap-4">
+                <label class="flex items-center gap-2 cursor-pointer text-xs text-base-content/60">
+                    <span>Platinum Counts</span>
+                    <input type="checkbox" id="plat-count-toggle" class="toggle toggle-xs toggle-primary" />
+                </label>
+                <label class="flex items-center gap-2 cursor-pointer text-xs text-base-content/60">
+                    <span>US Holidays</span>
+                    <input type="checkbox" id="us-holiday-toggle" class="toggle toggle-xs toggle-primary" />
+                </label>
+            </div>
         </div>
 
         <div class="grid grid-cols-3 lg:grid-cols-4 gap-4 lg:gap-6">
@@ -212,6 +222,7 @@
                          {% if day.is_filled %}
                          data-filled="true"
                          data-game-name="{{ day.game_name }}"
+                         data-plat-count="{{ day.plat_count }}"
                          title="{{ day.game_name }}"
                          {% endif %}>
                         {{ day.day }}

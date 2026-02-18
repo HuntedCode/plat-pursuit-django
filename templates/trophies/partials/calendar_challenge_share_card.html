@@ -23,6 +23,7 @@ Variables available:
   - best_month_name, best_month_filled, best_month_total
   - worst_month_name, worst_month_filled, worst_month_total
   - longest_streak
+  - max_plat_day_count, max_plat_day_label
 
 Color reference (converted from oklch):
 - base-100: #3d4047
@@ -143,7 +144,7 @@ Empty day cells: rgba(245, 247, 252, 0.08)
                 <span style="font-size: 11px; color: rgba(245, 247, 252, 0.3);">|</span>
                 <span style="font-size: 11px; color: rgba(245, 247, 252, 0.6);">Longest Streak: <span style="color: #fbbf24; font-weight: bold;">{{ stats.longest_streak }} days</span></span>
                 <span style="font-size: 11px; color: rgba(245, 247, 252, 0.3);">|</span>
-                <span style="font-size: 11px; color: rgba(245, 247, 252, 0.6);">Weakest Month: <span style="color: #67d1f8; font-weight: bold;">{{ stats.worst_month_name }} ({{ stats.worst_month_filled }}/{{ stats.worst_month_total }})</span></span>
+                <span style="font-size: 11px; color: rgba(245, 247, 252, 0.6);">Most in a Day: <span style="color: #67d1f8; font-weight: bold;">{{ stats.max_plat_day_count }} ({{ stats.max_plat_day_label }})</span></span>
             </div>
             <div style="display: flex; align-items: center; gap: 10px;">
                 <div style="flex: 1; height: 8px; background: #1a1b1f; border-radius: 4px; overflow: hidden;">
@@ -211,20 +212,25 @@ Empty day cells: rgba(245, 247, 252, 0.08)
             </div>
             {% endif %}
 
-            {# Stats Row: 3 cards #}
+            {# Stats Row: 4 cards #}
             <div style="display: flex; gap: 12px; justify-content: center; margin-bottom: 16px;">
-                <div style="flex: 1; background: rgba(42, 46, 52, 0.8); border: 3px solid #1a1b1f; border-radius: 8px; padding: 14px 16px; text-align: center; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.6); box-sizing: border-box;">
+                <div style="flex: 1; background: rgba(42, 46, 52, 0.8); border: 3px solid #1a1b1f; border-radius: 8px; padding: 14px 12px; text-align: center; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.6); box-sizing: border-box;">
                     <div style="font-size: 12px; color: #67f8c8; text-transform: uppercase; letter-spacing: 0.05em; font-weight: bold; font-style: italic; margin-bottom: 4px;">Best Month</div>
                     <div style="font-size: 32px; font-weight: bold; color: #f5f7fc;">{{ stats.best_month_filled }}<span style="font-size: 18px; color: rgba(245, 247, 252, 0.4);">/{{ stats.best_month_total }}</span></div>
                     <div style="font-size: 11px; color: rgba(245, 247, 252, 0.5); margin-top: 2px;">{{ stats.best_month_name }}</div>
                 </div>
-                <div style="flex: 1; background: rgba(42, 46, 52, 0.8); border: 3px solid #1a1b1f; border-radius: 8px; padding: 14px 16px; text-align: center; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.6); box-sizing: border-box;">
+                <div style="flex: 1; background: rgba(42, 46, 52, 0.8); border: 3px solid #1a1b1f; border-radius: 8px; padding: 14px 12px; text-align: center; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.6); box-sizing: border-box;">
                     <div style="font-size: 12px; color: #fbbf24; text-transform: uppercase; letter-spacing: 0.05em; font-weight: bold; font-style: italic; margin-bottom: 4px;">Longest Streak</div>
                     <div style="font-size: 32px; font-weight: bold; color: #f5f7fc;">{{ stats.longest_streak }}</div>
                     <div style="font-size: 11px; color: rgba(245, 247, 252, 0.5); margin-top: 2px;">consecutive days</div>
                 </div>
-                <div style="flex: 1; background: rgba(42, 46, 52, 0.8); border: 3px solid #1a1b1f; border-radius: 8px; padding: 14px 16px; text-align: center; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.6); box-sizing: border-box;">
-                    <div style="font-size: 12px; color: #67d1f8; text-transform: uppercase; letter-spacing: 0.05em; font-weight: bold; font-style: italic; margin-bottom: 4px;">Weakest Month</div>
+                <div style="flex: 1; background: rgba(42, 46, 52, 0.8); border: 3px solid #1a1b1f; border-radius: 8px; padding: 14px 12px; text-align: center; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.6); box-sizing: border-box;">
+                    <div style="font-size: 12px; color: #67d1f8; text-transform: uppercase; letter-spacing: 0.05em; font-weight: bold; font-style: italic; margin-bottom: 4px;">Most in a Day</div>
+                    <div style="font-size: 32px; font-weight: bold; color: #f5f7fc;">{{ stats.max_plat_day_count }}</div>
+                    <div style="font-size: 11px; color: rgba(245, 247, 252, 0.5); margin-top: 2px;">{{ stats.max_plat_day_label }}</div>
+                </div>
+                <div style="flex: 1; background: rgba(42, 46, 52, 0.8); border: 3px solid #1a1b1f; border-radius: 8px; padding: 14px 12px; text-align: center; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.6); box-sizing: border-box;">
+                    <div style="font-size: 12px; color: rgba(245, 247, 252, 0.5); text-transform: uppercase; letter-spacing: 0.05em; font-weight: bold; font-style: italic; margin-bottom: 4px;">Weakest Month</div>
                     <div style="font-size: 32px; font-weight: bold; color: #f5f7fc;">{{ stats.worst_month_filled }}<span style="font-size: 18px; color: rgba(245, 247, 252, 0.4);">/{{ stats.worst_month_total }}</span></div>
                     <div style="font-size: 11px; color: rgba(245, 247, 252, 0.5); margin-top: 2px;">{{ stats.worst_month_name }}</div>
                 </div>

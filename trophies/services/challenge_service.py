@@ -3,6 +3,7 @@ Challenge Service — Core service for challenge creation, progress checking, an
 Handles A-Z Platinum Challenges and Platinum Calendar Challenges.
 """
 import calendar as cal_module
+from collections import Counter
 import random
 import logging
 
@@ -289,39 +290,58 @@ def backfill_calendar_from_history(challenge):
         user_hidden=False,
     ).select_related('trophy__game').order_by('earned_date_time')
 
-    # Group by (month, day) in user's timezone: take the first per day
-    day_map = {}  # (month, day) -> EarnedTrophy
+    # Group by (month, day) in user's timezone: take the first per day,
+    # and count total platinums per day for plat_count
+    day_map = {}  # (month, day) -> EarnedTrophy (first/earliest)
+    plat_counter = Counter()  # (month, day) -> total count
     for et in platinums:
         local_dt = et.earned_date_time.astimezone(user_tz)
         key = (local_dt.month, local_dt.day)
         # Skip leap day
         if key == (2, 29):
             continue
+        plat_counter[key] += 1
         if key not in day_map:
             day_map[key] = et
 
     if not day_map:
         return
 
-    # Fetch all unfilled days and match
-    unfilled_days = {
+    # Fetch all days (not just unfilled) to set plat_count on all of them
+    all_days = {
         (d.month, d.day): d
-        for d in challenge.calendar_days.filter(is_filled=False)
+        for d in challenge.calendar_days.all()
     }
 
     to_update = []
-    for key, et in day_map.items():
-        day_obj = unfilled_days.get(key)
-        if day_obj:
+    for key in set(day_map.keys()) | set(plat_counter.keys()):
+        day_obj = all_days.get(key)
+        if not day_obj:
+            continue
+        changed = False
+
+        # Fill unfilled days
+        et = day_map.get(key)
+        if et and not day_obj.is_filled:
             day_obj.is_filled = True
             day_obj.filled_at = now
             day_obj.platinum_earned_at = et.earned_date_time
             day_obj.game_id = et.trophy.game_id
+            changed = True
+
+        # Set plat_count
+        count = plat_counter.get(key, 0)
+        if day_obj.plat_count != count:
+            day_obj.plat_count = count
+            changed = True
+
+        if changed:
             to_update.append(day_obj)
 
     if to_update:
         CalendarChallengeDay.objects.bulk_update(
-            to_update, ['is_filled', 'filled_at', 'platinum_earned_at', 'game_id']
+            to_update,
+            ['is_filled', 'filled_at', 'platinum_earned_at', 'game_id', 'plat_count'],
         )
 
     recalculate_challenge_counts(challenge)
@@ -346,13 +366,6 @@ def check_calendar_challenge_progress(profile):
     )
 
     for challenge in challenges:
-        unfilled_keys = set(
-            challenge.calendar_days.filter(is_filled=False)
-            .values_list('month', 'day')
-        )
-        if not unfilled_keys:
-            continue
-
         user_tz = _get_user_tz(profile)
         now = timezone.now()
 
@@ -366,40 +379,56 @@ def check_calendar_challenge_progress(profile):
             user_hidden=False,
         ).select_related('trophy__game').order_by('earned_date_time')
 
-        # Build map: (month, day) -> first EarnedTrophy for unfilled days only
-        day_map = {}
+        # Build map for unfilled days + count ALL platinums per day for plat_count
+        all_days = {
+            (d.month, d.day): d
+            for d in challenge.calendar_days.all()
+        }
+        unfilled_keys = {k for k, d in all_days.items() if not d.is_filled}
+
+        day_map = {}  # (month, day) -> first EarnedTrophy (for unfilled days only)
+        plat_counter = Counter()  # (month, day) -> total count
         for et in platinums:
             local_dt = et.earned_date_time.astimezone(user_tz)
             key = (local_dt.month, local_dt.day)
             if key == (2, 29):
                 continue
+            plat_counter[key] += 1
             if key in unfilled_keys and key not in day_map:
                 day_map[key] = et
 
-        if not day_map:
-            continue
-
-        # Fetch unfilled day objects and match
-        unfilled_days = {
-            (d.month, d.day): d
-            for d in challenge.calendar_days.filter(is_filled=False)
-        }
-
+        # Update plat_count on all days + fill newly matched days
         to_update = []
-        for key, et in day_map.items():
-            day_obj = unfilled_days.get(key)
-            if day_obj:
+        newly_filled = False
+        for key, day_obj in all_days.items():
+            changed = False
+
+            # Fill unfilled days
+            et = day_map.get(key)
+            if et and not day_obj.is_filled:
                 day_obj.is_filled = True
                 day_obj.filled_at = now
                 day_obj.platinum_earned_at = et.earned_date_time
                 day_obj.game_id = et.trophy.game_id
+                changed = True
+                newly_filled = True
+
+            # Update plat_count if changed
+            count = plat_counter.get(key, 0)
+            if day_obj.plat_count != count:
+                day_obj.plat_count = count
+                changed = True
+
+            if changed:
                 to_update.append(day_obj)
 
         if to_update:
             CalendarChallengeDay.objects.bulk_update(
-                to_update, ['is_filled', 'filled_at', 'platinum_earned_at', 'game_id']
+                to_update,
+                ['is_filled', 'filled_at', 'platinum_earned_at', 'game_id', 'plat_count'],
             )
 
+        if newly_filled:
             recalculate_challenge_counts(challenge)
 
             if challenge.completed_count >= challenge.total_items:
@@ -434,7 +463,7 @@ def get_calendar_month_data(challenge):
       - month_num, month_name, num_days, weekday_offset
       - days: list of day dicts with day_num, is_filled, game info
     """
-    # Prefetch all days for this challenge
+    # Prefetch all days for this challenge (plat_count is precomputed on the model)
     all_days = {
         (d.month, d.day): d
         for d in challenge.calendar_days.select_related('game').all()
@@ -460,6 +489,7 @@ def get_calendar_month_data(challenge):
                     (day_obj.game.title_icon_url or day_obj.game.title_image or '')
                     if day_obj and day_obj.game else ''
                 ),
+                'plat_count': day_obj.plat_count if day_obj else 0,
             })
 
         months.append({
@@ -493,6 +523,9 @@ def get_calendar_stats(challenge, month_data=None):
     # Longest streak of consecutive filled days (across the whole year)
     longest_streak = 0
     current_streak = 0
+    # Most platinums earned on a single calendar day
+    max_plat_count = 0
+    max_plat_day_label = 'N/A'
     for m in month_data:
         for d in m['days']:
             if d['is_filled']:
@@ -500,6 +533,9 @@ def get_calendar_stats(challenge, month_data=None):
                 longest_streak = max(longest_streak, current_streak)
             else:
                 current_streak = 0
+            if d.get('plat_count', 0) > max_plat_count:
+                max_plat_count = d['plat_count']
+                max_plat_day_label = f"{m['month_name']} {d['day']}"
 
     return {
         'total_filled': total_filled,
@@ -511,4 +547,6 @@ def get_calendar_stats(challenge, month_data=None):
         'worst_month_filled': worst_month['filled_count'],
         'worst_month_total': worst_month['num_days'],
         'longest_streak': longest_streak,
+        'max_plat_day_count': max_plat_count,
+        'max_plat_day_label': max_plat_day_label,
     }

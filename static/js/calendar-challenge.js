@@ -25,7 +25,9 @@ const CalendarChallengeDetail = (() => {
         _bindShareUrl();
         _bindShareImageButton();
         _bindHolidayToggle();
+        _bindPlatCountToggle();
         _applyHolidayHighlights();
+        _applyPlatCounts();
     }
 
     // ─── Day Cell Click → Modal ────────────────────────────────────────────
@@ -367,6 +369,37 @@ const CalendarChallengeDetail = (() => {
                 if (isFilled && gameName) {
                     cell.setAttribute('title', gameName);
                 }
+            }
+        });
+    }
+
+    // ─── Platinum Counts Toggle ──────────────────────────────────────────
+
+    function _bindPlatCountToggle() {
+        const toggle = document.getElementById('plat-count-toggle');
+        if (!toggle) return;
+
+        // Restore saved preference
+        toggle.checked = localStorage.getItem('calendarShowPlatCounts') === 'true';
+
+        toggle.addEventListener('change', () => {
+            localStorage.setItem('calendarShowPlatCounts', toggle.checked);
+            _applyPlatCounts();
+        });
+    }
+
+    function _applyPlatCounts() {
+        const showCounts = document.getElementById('plat-count-toggle')?.checked || false;
+
+        document.querySelectorAll('.cal-day[data-month][data-day]').forEach(cell => {
+            const isFilled = cell.dataset.filled === 'true';
+            const dayNum = cell.dataset.day;
+
+            if (showCounts && isFilled) {
+                const count = parseInt(cell.dataset.platCount, 10) || 0;
+                cell.textContent = count > 0 ? count : dayNum;
+            } else {
+                cell.textContent = dayNum;
             }
         });
     }
