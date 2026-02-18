@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load static %}
 
 {% block title %}User Settings{% endblock %}
 {% block content %}
@@ -93,11 +94,9 @@
                             {% csrf_token %}
                             <input type="hidden" name="action" value="update_premium">
                             <div class="form-control mb-2">
-                                <label class="label" for="{{ premium_form.selected_background.id_for_label }}">Profile Background</label>
-                                {{ premium_form.selected_background }}
-                                {% if premium_form.selected_background.errors %}
-                                    <div class="alert alert-error mt-1">{{ premium_form.selected_background.errors }}</div>
-                                {% endif %}
+                                <label class="label" for="settings-bg-input">Profile Background</label>
+                                <div id="settings-bg-picker-container" class="{% if not profile.user_is_premium %}opacity-50 pointer-events-none{% endif %}"></div>
+                                <input type="hidden" name="selected_background" id="settings-bg-input" value="{{ profile.selected_background_id|default:'' }}">
                             </div>
                             <p class="text-center text-accent font-bold pr-1 italic mb-4">Earn Plats to unlock more backgrounds!</p>
 
@@ -235,8 +234,38 @@
 {% endblock %}
 
 {% block js_scripts %}
+<script src="{% static 'js/game-background-picker.js' %}"></script>
+<script>
+    const initialBgData = {{ initial_background_json|safe }};
+</script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
+    // ==========================================
+    // Game Background Picker
+    // ==========================================
+    const isPremium = {% if profile and profile.user_is_premium %}true{% else %}false{% endif %};
+
+    if (typeof GameBackgroundPicker !== 'undefined') {
+        const bgPicker = new GameBackgroundPicker('settings-bg-picker-container', {
+            initialValue: initialBgData,
+            disabled: !isPremium,
+            onSelect: function(concept) {
+                const input = document.getElementById('settings-bg-input');
+                if (input) {
+                    input.value = concept.concept_id;
+                    input.dispatchEvent(new Event('change', { bubbles: true }));
+                }
+            },
+            onClear: function() {
+                const input = document.getElementById('settings-bg-input');
+                if (input) {
+                    input.value = '';
+                    input.dispatchEvent(new Event('change', { bubbles: true }));
+                }
+            }
+        });
+    }
+
     // ==========================================
     // Theme Grid Handler
     // ==========================================

@@ -1,0 +1,10 @@
+{% comment %}AJAX partial: returns only challenge cards for infinite scroll pagination.{% endcomment %}
+{% load static custom_filters %}
+
+{% for challenge in challenges %}
+    {% if current_type == 'calendar' %}
+        {% include 'partials/calendar_challenge/challenge_card.html' with challenge=challenge %}
+    {% else %}
+        {% include 'partials/az_challenge/challenge_card.html' with challenge=challenge %}
+    {% endif %}
+{% endfor %}

@@ -1,0 +1,93 @@
+{% comment %}Shared panel partial for Challenge Hub tabs. Included inside each tab-content panel.{% endcomment %}
+{% load static custom_filters %}
+
+{# ─── Search + Sort ──────────────────────────────────────────────────── #}
+<div class="p-4 pb-0">
+    <form method="GET" class="flex flex-row gap-2">
+        <input type="hidden" name="type" value="{{ current_type }}" />
+        <input type="hidden" name="tab" value="{{ current_tab }}" />
+        <input
+            type="text"
+            name="q"
+            value="{{ search_query }}"
+            placeholder="Search by name or hunter..."
+            class="input input-bordered flex-1"
+            aria-label="Search challenges"
+        />
+        <select name="sort" class="select select-bordered w-auto">
+            <option value="progress" {% if current_sort == 'progress' %}selected{% endif %}>Most Progress</option>
+            <option value="recent" {% if current_sort == 'recent' %}selected{% endif %}>Most Recent</option>
+        </select>
+        <button type="submit" class="btn btn-primary">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 mr-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="11" cy="11" r="8"></circle>
+                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+            </svg>
+            Search
+        </button>
+    </form>
+</div>
+
+{# ─── In Progress / Hall of Fame Sub-Tabs ────────────────────────────── #}
+<div class="p-4 pb-0">
+    <div class="tabs tabs-box bg-base-200 inline-flex">
+        <a href="?type={{ current_type }}&tab=active{% if search_query %}&q={{ search_query }}{% endif %}{% if current_sort != 'progress' %}&sort={{ current_sort }}{% endif %}"
+           class="tab {% if current_tab == 'active' %}tab-active{% endif %}">
+            In Progress
+            {% if active_count %}<span class="badge badge-sm ml-1">{{ active_count }}</span>{% endif %}
+        </a>
+        <a href="?type={{ current_type }}&tab=hall_of_fame{% if search_query %}&q={{ search_query }}{% endif %}{% if current_sort != 'progress' %}&sort={{ current_sort }}{% endif %}"
+           class="tab {% if current_tab == 'hall_of_fame' %}tab-active{% endif %}">
+            Hall of Fame
+            {% if hof_count %}<span class="badge badge-sm badge-warning ml-1">{{ hof_count }}</span>{% endif %}
+        </a>
+    </div>
+</div>
+
+{# ─── Card Grid ──────────────────────────────────────────────────────── #}
+{% if challenges %}
+    <div id="hub-card-grid" class="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 p-4">
+        {% for challenge in challenges %}
+            {% if current_type == 'calendar' %}
+                {% include 'partials/calendar_challenge/challenge_card.html' with challenge=challenge %}
+            {% else %}
+                {% include 'partials/az_challenge/challenge_card.html' with challenge=challenge %}
+            {% endif %}
+        {% endfor %}
+    </div>
+    {# Infinite scroll sentinel + loading indicator #}
+    <div id="hub-scroll-sentinel" class="h-4"></div>
+    <div id="hub-scroll-loading" class="hidden flex justify-center py-4">
+        <span class="loading loading-spinner loading-md text-primary"></span>
+    </div>
+{% else %}
+    {# ─── Empty States ───────────────────────────────────────────────── #}
+    <div class="text-center py-8 px-4">
+        {% if search_query %}
+            <p class="text-base-content/50">No challenges found for "{{ search_query }}"</p>
+            <a href="?type={{ current_type }}&tab={{ current_tab }}" class="btn btn-ghost btn-sm mt-2">Clear search</a>
+
+        {% elif current_tab == 'hall_of_fame' %}
+            {% if current_type == 'calendar' %}
+                <p class="text-base-content/50 font-bold">365 days of platinum. The Hall of Fame awaits its first entry.</p>
+                <p class="text-base-content/40 text-sm">Fill every day of the year to claim your spot.</p>
+            {% else %}
+                <p class="text-base-content/50 font-bold">The Hall of Fame awaits its first legend.</p>
+                <p class="text-base-content/40 text-sm">Complete all 26 platinums to earn your place.</p>
+            {% endif %}
+
+        {% else %}
+            {% if current_type == 'calendar' %}
+                <p class="text-base-content/50 font-bold">No calendars yet. Be the first to fill the year!</p>
+                {% if user.is_authenticated %}
+                    <a href="{% url 'calendar_challenge_create' %}" class="btn btn-primary btn-sm mt-3">Start Your Platinum Calendar</a>
+                {% endif %}
+            {% else %}
+                <p class="text-base-content/50 font-bold">No A-Z challenges yet. Be the first to take on the alphabet!</p>
+                {% if user.is_authenticated %}
+                    <a href="{% url 'az_challenge_create' %}" class="btn btn-primary btn-sm mt-3">Start Your A-Z Challenge</a>
+                {% endif %}
+            {% endif %}
+        {% endif %}
+    </div>
+{% endif %}

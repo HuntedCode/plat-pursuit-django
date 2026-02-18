@@ -206,13 +206,7 @@ class TrophyCaseForm(forms.Form):
     query = forms.CharField(required=False, label='Search by game name')
 
 class PremiumSettingsForm(forms.ModelForm):
-    selected_background = forms.ModelChoiceField(
-        queryset=Concept.objects.none(),
-        label='Profile Background',
-        empty_label='Default Background',
-        required=False,
-        widget=forms.Select(attrs={'class': 'select w-full'})
-    )
+    # selected_background is handled by GameBackgroundPicker JS widget + hidden input
     title = forms.ModelChoiceField(
         queryset=Title.objects.none(),
         label='User Title',
@@ -229,8 +223,8 @@ class PremiumSettingsForm(forms.ModelForm):
 
     class Meta:
         model = Profile
-        fields = ['selected_background', 'selected_theme']
-    
+        fields = ['selected_theme']
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -240,10 +234,6 @@ class PremiumSettingsForm(forms.ModelForm):
 
         if self.instance:
             if self.instance.user_is_premium:
-                eligible_games = ProfileGame.objects.filter(profile=self.instance).filter(Q(has_plat=True) | Q(progress=100))
-                eligible_game_ids = eligible_games.values_list('game__id', flat=True)
-                self.fields['selected_background'].queryset = Concept.objects.filter(games__id__in=eligible_game_ids, bg_url__isnull=False).distinct().order_by('unified_title')
-
                 self.fields['title'].queryset = self.instance.get_earned_titles()
 
                 current_title = Title.objects.filter(user_titles__profile=self.instance, user_titles__is_displayed=True).first()

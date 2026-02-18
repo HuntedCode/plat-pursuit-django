@@ -857,11 +857,17 @@ class TokenKeeper:
             logger.info(f"Milestones checked for {profile_id} successfully!")
 
             # Check A-Z challenge progress
+            from trophies.services.challenge_service import check_az_challenge_progress, check_calendar_challenge_progress
             try:
-                from trophies.services.challenge_service import check_az_challenge_progress
                 check_az_challenge_progress(profile)
-            except Exception as e:
-                logger.exception(f"Failed to check challenge progress for profile {profile_id}: {e}")
+            except Exception:
+                logger.exception(f"Failed to check A-Z challenge progress for profile {profile_id}")
+
+            # Check Calendar challenge progress
+            try:
+                check_calendar_challenge_progress(profile)
+            except Exception:
+                logger.exception(f"Failed to check calendar challenge progress for profile {profile_id}")
 
             update_profile_trophy_counts(profile)
             profile.set_sync_status('synced')

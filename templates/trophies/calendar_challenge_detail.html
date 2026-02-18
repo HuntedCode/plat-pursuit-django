@@ -1,0 +1,306 @@
+{% extends 'base.html' %}
+{% load static custom_filters %}
+
+{% block title %}{{ challenge.name }} - Platinum Calendar - Platinum Pursuit{% endblock %}
+{% block og_image %}{% if challenge.profile.avatar_url %}{{ challenge.profile.avatar_url }}{% else %}{% static 'images/logo.png' %}{% endif %}{% endblock %}
+{% block twitter_image %}{% if challenge.profile.avatar_url %}{{ challenge.profile.avatar_url }}{% else %}{% static 'images/logo.png' %}{% endif %}{% endblock %}
+{% block twitter_card_type %}summary{% endblock %}
+
+{% block content %}
+<section class="shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 w-full p-0 lg:p-4">
+    {% include 'partials/breadcrumb.html' with items=breadcrumb %}
+
+    <div class="card bg-base-100 border-4 border-base-300 shadow-md shadow-neutral">
+        <div class="card-body">
+            <div class="flex flex-row items-start justify-between gap-4">
+                <div class="flex-1">
+                    {# Author + Hall of Fame badge #}
+                    <div class="flex items-center gap-2 mb-1">
+                        <a href="{% url 'profile_detail' challenge.profile.psn_username %}" class="flex items-center gap-2 hover:text-primary transition-colors">
+                            {% if challenge.profile.avatar_url %}
+                                <img src="{{ challenge.profile.avatar_url }}" alt="" class="w-6 h-6 rounded-full" />
+                            {% endif %}
+                            <span class="text-sm font-medium">{{ challenge.profile.psn_username }}</span>
+                        </a>
+                        {% if challenge.is_complete %}
+                            <span class="badge badge-warning gap-1">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+                                Hall of Fame
+                            </span>
+                        {% endif %}
+                    </div>
+
+                    {# Challenge name (inline-editable for owner) #}
+                    {% if is_owner %}
+                    <div class="flex items-center gap-2">
+                        <h1 class="text-2xl lg:text-3xl font-bold line-clamp-2" id="challenge-name-display">
+                            <span id="challenge-name-text">{{ challenge.name }}</span>
+                        </h1>
+                        <button type="button" class="btn btn-ghost btn-xs btn-circle opacity-60 hover:opacity-100 transition-opacity"
+                                id="challenge-name-edit-btn" title="Rename challenge">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+                            </svg>
+                        </button>
+                        <div class="hidden items-center gap-2" id="challenge-name-editor">
+                            <div class="flex flex-col">
+                                <input type="text" id="challenge-name-input"
+                                       class="input input-bordered input-sm text-xl lg:text-2xl font-bold max-w-xs lg:max-w-md"
+                                       maxlength="75" value="{{ challenge.name }}" />
+                                <span class="text-xs text-base-content/50 mt-0.5 ml-1" id="rename-counter">{{ challenge.name|length }}/75</span>
+                            </div>
+                            <button type="button" class="btn btn-ghost btn-xs btn-circle text-success" id="challenge-name-save-btn" title="Save">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>
+                            </button>
+                            <button type="button" class="btn btn-ghost btn-xs btn-circle text-error" id="challenge-name-cancel-btn" title="Cancel">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                            </button>
+                        </div>
+                    </div>
+                    {% else %}
+                    <h1 class="text-2xl lg:text-3xl font-bold line-clamp-2">{{ challenge.name }}</h1>
+                    {% endif %}
+
+                    {# Progress bar #}
+                    <div class="mt-3">
+                        <div class="flex justify-between text-sm mb-1">
+                            <span class="font-medium">{{ challenge.completed_count }}/{{ challenge.total_items }} Days Filled</span>
+                            <span class="text-base-content/60">{{ challenge.progress_percentage }}%</span>
+                        </div>
+                        <progress class="progress {% if challenge.is_complete %}progress-warning{% else %}progress-primary{% endif %} w-full h-3"
+                                  value="{{ challenge.completed_count }}" max="{{ challenge.total_items }}"></progress>
+                    </div>
+
+                    {# Stats row #}
+                    <div class="flex items-center gap-4 mt-2 text-xs text-base-content/50">
+                        <span>{{ challenge.view_count }} view{{ challenge.view_count|pluralize }}</span>
+                        {% if stats.longest_streak > 0 %}
+                            <span>Longest streak: {{ stats.longest_streak }} day{{ stats.longest_streak|pluralize }}</span>
+                        {% endif %}
+                    </div>
+                </div>
+
+                {# Owner action buttons #}
+                {% if is_owner %}
+                <div class="flex flex-col gap-2 items-end">
+                    <div class="flex gap-2">
+                        <button id="share-url-btn" class="btn btn-ghost btn-sm" title="Copy link">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg>
+                            Share Link
+                        </button>
+                        <button id="share-image-btn" class="btn btn-ghost btn-sm" data-challenge-name="{{ challenge.name }}">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/>
+                            </svg>
+                            Share Image
+                        </button>
+                        <button id="delete-challenge-btn" class="btn btn-ghost btn-sm text-error hover:bg-error/10" data-challenge-id="{{ challenge.id }}">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
+                            Delete
+                        </button>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</section>
+
+{# Shovelware info banner #}
+{% if not challenge.is_complete %}
+<div class="flex items-center gap-2 mt-4 px-4 py-2.5 rounded-box bg-info/10 border border-info/20 text-xs text-base-content/70">
+    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-info flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="10"></circle>
+        <line x1="12" y1="16" x2="12" y2="12"></line>
+        <line x1="12" y1="8" x2="12.01" y2="8"></line>
+    </svg>
+    <span>Shovelware platinums don't count toward your calendar. Only legitimate platinums fill days.</span>
+</div>
+{% endif %}
+
+{# Share Card CTA Banner (owner only) #}
+{% if is_owner %}
+<section class="mt-4">
+    <div class="bg-gradient-to-r from-warning/10 to-transparent border-2 border-warning/30 rounded-box p-4 lg:p-5 flex items-center gap-4 shadow-md shadow-warning/10">
+        <div class="bg-warning/20 rounded-full p-3 flex-shrink-0">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 text-warning" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+            </svg>
+        </div>
+        <div class="flex-1">
+            <h3 class="font-bold text-base lg:text-lg text-warning">Share Your Calendar</h3>
+            <p class="text-sm text-base-content/60">Generate a beautiful share card to show off your Platinum Calendar progress</p>
+        </div>
+        <button id="banner-share-image-btn" class="btn btn-warning btn-sm lg:btn-md gap-2" data-challenge-name="{{ challenge.name }}">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/>
+            </svg>
+            Create Share Card
+        </button>
+    </div>
+</section>
+{% endif %}
+
+{# Stats cards #}
+{% if stats.total_filled > 0 %}
+<section class="shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 w-full p-0 lg:p-4 mt-6">
+    <div class="grid grid-cols-3 gap-3 p-4">
+        <div class="card bg-base-100 border border-base-300 p-3 text-center">
+            <div class="text-2xl lg:text-3xl font-bold text-primary">{{ stats.best_month_filled }}/{{ stats.best_month_total }}</div>
+            <div class="text-xs text-base-content/60 mt-1">Best Month: {{ stats.best_month_name }}</div>
+        </div>
+        <div class="card bg-base-100 border border-base-300 p-3 text-center">
+            <div class="text-2xl lg:text-3xl font-bold text-primary">{{ stats.longest_streak }}</div>
+            <div class="text-xs text-base-content/60 mt-1">Longest Streak (days)</div>
+        </div>
+        <div class="card bg-base-100 border border-base-300 p-3 text-center">
+            <div class="text-2xl lg:text-3xl font-bold text-primary">{{ stats.worst_month_filled }}/{{ stats.worst_month_total }}</div>
+            <div class="text-xs text-base-content/60 mt-1">Weakest Month: {{ stats.worst_month_name }}</div>
+        </div>
+    </div>
+</section>
+{% endif %}
+
+{# 12-month calendar grid #}
+<section class="shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 w-full p-0 lg:p-4 mt-6">
+    <div class="p-4">
+        {# Holiday toggle + legend bar #}
+        <div class="flex items-center justify-between mb-3">
+            <div class="flex items-center gap-2 text-xs text-base-content/60">
+                <div class="w-3 h-3 rounded-sm border-2 border-warning/70" style="box-shadow: 0 0 4px rgba(251, 191, 36, 0.25);"></div>
+                <span>Holiday</span>
+            </div>
+            <label class="flex items-center gap-2 cursor-pointer text-xs text-base-content/60">
+                <span>US Holidays</span>
+                <input type="checkbox" id="us-holiday-toggle" class="toggle toggle-xs toggle-primary" />
+            </label>
+        </div>
+
+        <div class="grid grid-cols-3 lg:grid-cols-4 gap-4 lg:gap-6">
+            {% for month in months %}
+            <div class="bg-base-100 rounded-lg border border-base-300 p-2 lg:p-3">
+                {# Month header #}
+                <div class="flex items-center justify-between mb-2">
+                    <h3 class="text-xs lg:text-sm font-bold">{{ month.month_name }}</h3>
+                    <span class="text-[0.65rem] text-base-content/50">{{ month.filled_count }}/{{ month.num_days }}</span>
+                </div>
+
+                {# Weekday headers #}
+                <div class="grid grid-cols-7 gap-[2px] mb-1">
+                    <div class="text-[0.55rem] text-base-content/30 text-center">S</div>
+                    <div class="text-[0.55rem] text-base-content/30 text-center">M</div>
+                    <div class="text-[0.55rem] text-base-content/30 text-center">T</div>
+                    <div class="text-[0.55rem] text-base-content/30 text-center">W</div>
+                    <div class="text-[0.55rem] text-base-content/30 text-center">T</div>
+                    <div class="text-[0.55rem] text-base-content/30 text-center">F</div>
+                    <div class="text-[0.55rem] text-base-content/30 text-center">S</div>
+                </div>
+
+                {# Day cells grid #}
+                <div class="grid grid-cols-7 gap-[2px]">
+                    {# Empty offset cells for weekday alignment #}
+                    {% for i in month.offset_range %}
+                        <div></div>
+                    {% endfor %}
+
+                    {# Day cells #}
+                    {% for day in month.days %}
+                    <div class="cal-day aspect-square rounded-sm flex items-center justify-center text-[0.6rem] lg:text-[0.7rem] font-medium cursor-pointer transition-all duration-150
+                                {% if day.is_filled %}bg-success/25 text-success hover:bg-success/40 hover:scale-110 cal-day-filled{% else %}bg-base-200/60 text-base-content/25 hover:bg-base-200{% endif %}"
+                         data-month="{{ month.month_num }}"
+                         data-day="{{ day.day }}"
+                         {% if day.is_filled %}
+                         data-filled="true"
+                         data-game-name="{{ day.game_name }}"
+                         title="{{ day.game_name }}"
+                         {% endif %}>
+                        {{ day.day }}
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</section>
+
+{# Day detail modal (populated via JS) #}
+<dialog id="day-detail-modal" class="modal">
+    <div class="modal-box max-w-md">
+        <form method="dialog">
+            <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+        </form>
+        <h3 class="font-bold text-lg" id="day-modal-title">Loading...</h3>
+        <div id="day-modal-content" class="mt-4">
+            <div class="flex justify-center py-4">
+                <span class="loading loading-spinner loading-md"></span>
+            </div>
+        </div>
+    </div>
+    <form method="dialog" class="modal-backdrop">
+        <button>close</button>
+    </form>
+</dialog>
+
+{# Share Image modal (owner only) #}
+{% if is_owner %}
+<dialog id="calendar-share-modal" class="modal">
+    <div class="modal-box max-w-4xl bg-base-200">
+        <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2" onclick="this.closest('dialog').close()">&#x2715;</button>
+        <h3 class="font-bold text-lg mb-2" id="calendar-share-modal-title">Share: {{ challenge.name }}</h3>
+        <div id="calendar-share-modal-content">
+            <div class="flex justify-center items-center py-12">
+                <span class="loading loading-spinner loading-lg"></span>
+            </div>
+        </div>
+    </div>
+    <form method="dialog" class="modal-backdrop"><button>close</button></form>
+</dialog>
+{% include 'partials/color_grid_modal.html' with available_themes=available_themes %}
+{% endif %}
+
+{# Delete confirmation modal #}
+<dialog id="delete-confirm-modal" class="modal">
+    <div class="modal-box">
+        <h3 class="font-bold text-lg text-error">Delete Challenge</h3>
+        <p class="py-4 text-base-content/70">
+            Are you sure you want to delete this Platinum Calendar? This can't be undone,
+            but completed calendars will still appear in your history.
+        </p>
+        <div class="modal-action">
+            <form method="dialog">
+                <button class="btn btn-ghost">Cancel</button>
+            </form>
+            <button id="delete-confirm-btn" class="btn btn-error">Delete</button>
+        </div>
+    </div>
+    <form method="dialog" class="modal-backdrop">
+        <button>close</button>
+    </form>
+</dialog>
+{% endblock %}
+
+{% block js_scripts %}
+<script>PlatPursuit.ZoomScaler.init();</script>
+{% if is_owner %}
+<script>window.GRADIENT_THEMES = {% gradient_themes_json %};</script>
+<script src="{% static 'js/share-image.js' %}"></script>
+<script src="{% static 'js/color-grid-modal.js' %}"></script>
+<script src="{% static 'js/game-background-picker.js' %}"></script>
+<script src="{% static 'js/calendar-challenge-share.js' %}"></script>
+{% endif %}
+<script>
+    window.__CALENDAR_HOLIDAYS = {
+        intl: {{ intl_holidays_json|safe }},
+        us: {{ us_holidays_json|safe }}
+    };
+</script>
+<script src="{% static 'js/calendar-challenge.js' %}"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        CalendarChallengeDetail.init({{ challenge.id }});
+    });
+</script>
+{% endblock %}

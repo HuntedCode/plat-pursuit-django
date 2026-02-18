@@ -4,6 +4,7 @@
 {% block title %}Challenges - Platinum Pursuit{% endblock %}
 
 {% block content %}
+{# ─── Header ─────────────────────────────────────────────────────────── #}
 <section class="shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 w-full p-0 lg:p-4">
     {% include 'partials/breadcrumb.html' with items=breadcrumb %}
 
@@ -13,7 +14,7 @@
                 <div>
                     <h1 class="text-2xl lg:text-3xl font-bold">Challenge Hub</h1>
                     <p class="text-base-content/70">
-                        From A to Z, the hunt never ends. Track your challenge or find inspiration from the community.
+                        Push your limits, track your progress, and find inspiration from the community.
                     </p>
                 </div>
                 {% if user.is_authenticated and user.profile %}
@@ -29,95 +30,82 @@
     </div>
 </section>
 
-<section class="shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 w-full p-0 lg:p-4 mt-6">
-    {# Tabs #}
-    <div class="p-4 pb-0">
-        <div class="tabs tabs-boxed bg-base-200 inline-flex">
-            <a href="?tab=active{% if search_query %}&q={{ search_query }}{% endif %}"
-               class="tab {% if active_tab == 'active' %}tab-active{% endif %}">
-                In Progress
-                {% if active_count %}<span class="badge badge-sm ml-1">{{ active_count }}</span>{% endif %}
-            </a>
-            <a href="?tab=hall_of_fame{% if search_query %}&q={{ search_query }}{% endif %}"
-               class="tab {% if active_tab == 'hall_of_fame' %}tab-active{% endif %}">
-                Hall of Fame
-                {% if hall_of_fame_count %}<span class="badge badge-sm badge-warning ml-1">{{ hall_of_fame_count }}</span>{% endif %}
-            </a>
-        </div>
-    </div>
+{# ─── Challenge Type Tabs ────────────────────────────────────────────── #}
+<div class="tabs tabs-box mt-6 bg-base-300/80" role="tablist" aria-label="Challenge types">
 
-    {# Search and Sort #}
-    <div class="p-4 pb-0">
-        <form method="GET" class="flex flex-row gap-2">
-            <input type="hidden" name="tab" value="{{ active_tab }}" />
-            <input
-                type="text"
-                name="q"
-                value="{{ search_query }}"
-                placeholder="Search by name or hunter..."
-                class="input input-bordered flex-1"
-            />
-            <select name="sort" class="select select-bordered w-auto">
-                <option value="progress" {% if current_sort == 'progress' %}selected{% endif %}>Most Progress</option>
-                <option value="recent" {% if current_sort == 'recent' %}selected{% endif %}>Most Recent</option>
-            </select>
-            <button type="submit" class="btn btn-primary">
-                <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 mr-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <circle cx="11" cy="11" r="8"></circle>
-                    <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-                </svg>
-                Search
-            </button>
-        </form>
-    </div>
-
-    {# Challenge cards grid #}
-    {% if challenges %}
-        <div class="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 p-4">
-            {% for challenge in challenges %}
-                {% include 'partials/az_challenge/challenge_card.html' with challenge=challenge %}
-            {% endfor %}
-        </div>
-
-        {# Pagination #}
-        {% if is_paginated %}
-            <div class="flex flex-wrap justify-center gap-2 px-4 pb-4">
-                {% if page_obj.has_previous %}
-                    <a href="?page=1&tab={{ active_tab }}{% if search_query %}&q={{ search_query }}{% endif %}{% if current_sort %}&sort={{ current_sort }}{% endif %}" class="btn btn-sm">First</a>
-                    <a href="?page={{ page_obj.previous_page_number }}&tab={{ active_tab }}{% if search_query %}&q={{ search_query }}{% endif %}{% if current_sort %}&sort={{ current_sort }}{% endif %}" class="btn btn-sm">Previous</a>
-                {% endif %}
-                <span class="btn btn-sm btn-disabled">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
-                {% if page_obj.has_next %}
-                    <a href="?page={{ page_obj.next_page_number }}&tab={{ active_tab }}{% if search_query %}&q={{ search_query }}{% endif %}{% if current_sort %}&sort={{ current_sort }}{% endif %}" class="btn btn-sm">Next</a>
-                    <a href="?page={{ page_obj.paginator.num_pages }}&tab={{ active_tab }}{% if search_query %}&q={{ search_query }}{% endif %}{% if current_sort %}&sort={{ current_sort }}{% endif %}" class="btn btn-sm">Last</a>
-                {% endif %}
-            </div>
+    {# ── A-Z Platinum Tab ────────────────────────────────────────────── #}
+    <a href="?type=az" id="az-tab"
+       class="tab {% if current_type == 'az' %}tab-active{% endif %}"
+       role="tab"
+       aria-selected="{% if current_type == 'az' %}true{% else %}false{% endif %}"
+       aria-controls="az-panel">
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 mr-2" viewBox="0 0 24 24" aria-hidden="true">
+            <text x="3" y="18" font-size="16" font-weight="bold" font-family="system-ui, sans-serif"
+                  fill="var(--color-accent)" letter-spacing="-1">AZ</text>
+        </svg>
+        A-Z Platinum
+        {% if az_total_count %}<span class="badge badge-sm ml-1">{{ az_total_count }}</span>{% endif %}
+    </a>
+    <div id="az-panel"
+         class="tab-content bg-base-100/90 border-2 border-base-300 shadow-md shadow-neutral p-0"
+         role="tabpanel" aria-labelledby="az-tab">
+        {% if current_type == 'az' %}
+            {% include 'partials/challenge_hub_panel.html' %}
         {% endif %}
-    {% else %}
-        <div class="text-center py-12 px-4">
-            {% if search_query %}
-                <svg xmlns="http://www.w3.org/2000/svg" class="w-16 h-16 text-base-content/20 mx-auto mb-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-                    <circle cx="11" cy="11" r="8"></circle>
-                    <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-                </svg>
-                <p class="text-base-content/50 text-lg">No challenges found for "{{ search_query }}"</p>
-                <a href="?tab={{ active_tab }}" class="btn btn-ghost btn-sm mt-2">Clear search</a>
-            {% elif active_tab == 'hall_of_fame' %}
-                <p class="text-4xl mb-2">&#127942;</p>
-                <p class="text-base-content/50 text-lg font-bold">The Hall of Fame awaits its first legend.</p>
-                <p class="text-base-content/40 text-sm">Complete all 26 platinums to earn your place.</p>
-            {% else %}
-                <p class="text-4xl mb-2">&#127775;</p>
-                <p class="text-base-content/50 text-lg font-bold">No challenges yet. Be the first to take on the alphabet!</p>
-                {% if user.is_authenticated %}
-                    <a href="{% url 'az_challenge_create' %}" class="btn btn-primary btn-sm mt-3">Start Your A-Z Challenge</a>
-                {% endif %}
-            {% endif %}
-        </div>
-    {% endif %}
-</section>
+    </div>
+
+    {# ── Platinum Calendar Tab ───────────────────────────────────────── #}
+    <a href="?type=calendar" id="calendar-tab"
+       class="tab {% if current_type == 'calendar' %}tab-active{% endif %}"
+       role="tab"
+       aria-selected="{% if current_type == 'calendar' %}true{% else %}false{% endif %}"
+       aria-controls="calendar-panel">
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 mr-2" viewBox="0 0 24 24" fill="none"
+             stroke="var(--color-warning)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+            <line x1="16" y1="2" x2="16" y2="6"></line>
+            <line x1="8" y1="2" x2="8" y2="6"></line>
+            <line x1="3" y1="10" x2="21" y2="10"></line>
+        </svg>
+        Platinum Calendar
+        {% if cal_total_count %}<span class="badge badge-sm ml-1">{{ cal_total_count }}</span>{% endif %}
+    </a>
+    <div id="calendar-panel"
+         class="tab-content bg-base-100/90 border-2 border-base-300 shadow-md shadow-neutral p-0"
+         role="tabpanel" aria-labelledby="calendar-tab">
+        {% if current_type == 'calendar' %}
+            {% include 'partials/challenge_hub_panel.html' %}
+        {% endif %}
+    </div>
+
+</div>
 {% endblock %}
 
 {% block js_scripts %}
 <script>PlatPursuit.ZoomScaler.init();</script>
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const scrollKey = 'challengeHubScrollPos';
+        const saved = sessionStorage.getItem(scrollKey);
+        if (saved !== null) {
+            sessionStorage.removeItem(scrollKey);
+            window.scrollTo(0, parseInt(saved, 10));
+        }
+        document.querySelectorAll('.tabs [role="tab"]').forEach(tab => {
+            tab.addEventListener('click', () => {
+                sessionStorage.setItem(scrollKey, window.scrollY);
+            });
+        });
+
+        // Infinite scroll for challenge cards
+        PlatPursuit.InfiniteScroller.create({
+            gridId: 'hub-card-grid',
+            sentinelId: 'hub-scroll-sentinel',
+            loadingId: 'hub-scroll-loading',
+            paginateBy: 12,
+            cardSelector: '.card',
+            scrollKey: scrollKey
+        });
+    });
+</script>
 {% endblock %}

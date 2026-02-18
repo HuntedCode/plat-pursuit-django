@@ -1,0 +1,351 @@
+{% load static %}
+{% comment %}
+Platinum Calendar Challenge Share Image Card Template
+Used for both preview and final image generation via Playwright (server-side).
+Uses inline styles with hex colors for maximum rendering compatibility.
+
+Variables available:
+- format: 'landscape' or 'portrait'
+- challenge_name: Name of the challenge
+- username: Player's PSN username
+- avatar_url: Cached avatar image URL
+- total_filled: Number of filled days
+- total_days: 365 (constant)
+- progress_percentage: Overall completion percentage
+- is_complete: Boolean, whether all 365 are done
+- completed_at: Formatted completion date string or ''
+- months: List of 12 month dicts with:
+  - month_num, month_name, month_abbr, num_days, weekday_offset, offset_range
+  - days: list of day dicts with day, is_filled, game_name, holiday_color
+  - filled_count
+- stats: Dict with:
+  - total_filled, total_days
+  - best_month_name, best_month_filled, best_month_total
+  - worst_month_name, worst_month_filled, worst_month_total
+  - longest_streak
+
+Color reference (converted from oklch):
+- base-100: #3d4047
+- base-200: #32363d
+- base-300: #2a2e34
+- base-content: #f5f7fc
+- primary: #67d1f8
+- success: #67f8c8
+- neutral: #1a1b1f
+- warning/gold: #fbbf24 (calendar accent)
+
+Filled day cells: #67f8c8 (success green)
+Empty day cells: rgba(245, 247, 252, 0.08)
+{% endcomment %}
+
+{% if format == 'landscape' %}
+{# ═══════════════════════════════════════════════════════ #}
+{# Landscape Card: 1200x630                               #}
+{# Layout: Header → Name+Stats → Stat Cards → 2x6 Month Grid → Bottom Bar → Footer #}
+{# ═══════════════════════════════════════════════════════ #}
+<div class="share-image-content" style="width: 1200px; height: 630px; background: linear-gradient(to bottom right, #2a2e34, #32363d, #2a2e34); padding: 20px; font-family: system-ui, -apple-system, sans-serif; box-sizing: border-box;">
+    <div style="width: 1160px; height: 590px; border: 3px solid #fbbf24; border-radius: 8px; box-shadow: 0 10px 15px -3px rgba(251, 191, 36, 0.2); overflow: hidden; display: flex; flex-direction: column; box-sizing: border-box;">
+
+        {# Header Banner #}
+        <div data-element="challenge-banner" style="padding: 8px 24px; background: linear-gradient(to right, rgba(251, 191, 36, 0.15), rgba(251, 191, 36, 0.05)), rgba(42, 46, 52, 0.85); border-bottom: 2px solid #1a1b1f; border-left: 4px solid #fbbf24; display: flex; align-items: center; justify-content: space-between; flex-shrink: 0;">
+            <div style="display: flex; align-items: center; gap: 12px;">
+                <svg style="height: 24px; width: 24px; flex-shrink: 0;" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                <span style="font-size: 20px; font-weight: bold; color: #fbbf24; text-transform: uppercase; letter-spacing: 0.1em; font-style: italic;">Platinum Calendar</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 10px;">
+                {% if avatar_url %}
+                <img src="{{ avatar_url }}" style="width: 32px; height: 32px; border-radius: 50%; border: 2px solid #1a1b1f;" />
+                {% endif %}
+                <span style="font-size: 18px; color: #fbbf24; font-weight: 600;">{{ username }}</span>
+            </div>
+        </div>
+
+        {# Main Content Area #}
+        <div style="flex: 1; padding: 8px 24px 6px; display: flex; flex-direction: column; box-sizing: border-box;">
+
+            {# Challenge Name + Stats Pills #}
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
+                <h1 style="font-size: 22px; font-weight: bold; color: #f5f7fc; line-height: 1.2; margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; margin-right: 16px;">{{ challenge_name }}</h1>
+                <div style="display: flex; gap: 10px; flex-shrink: 0;">
+                    <span style="display: inline-flex; align-items: center; gap: 6px; background: rgba(42, 46, 52, 0.8); border: 2px solid #fbbf24; color: #fbbf24; padding: 5px 12px; border-radius: 9999px; font-size: 13px; font-weight: bold;">
+                        <svg style="width: 14px; height: 14px; flex-shrink: 0;" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                        {{ total_filled }}/{{ total_days }} Days
+                    </span>
+                    <span style="display: inline-flex; align-items: center; background: rgba(42, 46, 52, 0.8); border: 2px solid #67f8c8; color: #67f8c8; padding: 5px 12px; border-radius: 9999px; font-size: 13px; font-weight: bold;">
+                        {{ progress_percentage }}% Complete
+                    </span>
+                </div>
+            </div>
+
+            {# 2x6 Month Heat Map Grid (weekday-aligned) #}
+            <div style="display: flex; flex-direction: column; gap: 5px; flex: 1; justify-content: center;">
+                {# Row 1: Jan-Jun #}
+                <div style="display: flex; gap: 5px;">
+                    {% for month in months %}{% if forloop.counter <= 6 %}
+                    <div style="flex: 1; background: rgba(42, 46, 52, 0.85); border-radius: 4px; padding: 4px 5px; box-sizing: border-box;
+                        {% if month.filled_count == month.num_days %}border: 2px solid rgba(251, 191, 36, 0.5); box-shadow: 0 0 8px rgba(251, 191, 36, 0.15);{% else %}border: 1px solid #1a1b1f;{% endif %}">
+                        <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 2px;">
+                            <span style="font-size: 9px; font-weight: bold; {% if month.filled_count == month.num_days %}color: #fbbf24;{% else %}color: rgba(245, 247, 252, 0.7);{% endif %}">{{ month.month_abbr }}</span>
+                            <span style="font-size: 7px; color: rgba(245, 247, 252, 0.35);">{{ month.filled_count }}/{{ month.num_days }}</span>
+                        </div>
+                        <div style="display: grid; grid-template-columns: repeat(7, 1fr); gap: 1px; margin-bottom: 1px;">
+                            <div style="font-size: 6px; color: rgba(245, 247, 252, 0.25); text-align: center;">S</div>
+                            <div style="font-size: 6px; color: rgba(245, 247, 252, 0.25); text-align: center;">M</div>
+                            <div style="font-size: 6px; color: rgba(245, 247, 252, 0.25); text-align: center;">T</div>
+                            <div style="font-size: 6px; color: rgba(245, 247, 252, 0.25); text-align: center;">W</div>
+                            <div style="font-size: 6px; color: rgba(245, 247, 252, 0.25); text-align: center;">T</div>
+                            <div style="font-size: 6px; color: rgba(245, 247, 252, 0.25); text-align: center;">F</div>
+                            <div style="font-size: 6px; color: rgba(245, 247, 252, 0.25); text-align: center;">S</div>
+                        </div>
+                        <div style="display: grid; grid-template-columns: repeat(7, 1fr); gap: 1px;">
+                            {% for i in month.offset_range %}<div></div>{% endfor %}
+                            {% for day in month.days %}
+                            <div style="aspect-ratio: 1; border-radius: 2px; display: flex; align-items: center; justify-content: center; font-size: 7px; font-weight: 600;
+                                {% if day.is_filled %}background: rgba(103, 248, 200, 0.4); color: #67f8c8;{% else %}background: rgba(245, 247, 252, 0.1); color: rgba(245, 247, 252, 0.2);{% endif %}{% if day.holiday_color %} border: 1px solid {{ day.holiday_color }}; box-shadow: 0 0 3px {{ day.holiday_color }}40;{% endif %}">{{ day.day }}</div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% endif %}{% endfor %}
+                </div>
+                {# Row 2: Jul-Dec #}
+                <div style="display: flex; gap: 5px;">
+                    {% for month in months %}{% if forloop.counter > 6 %}
+                    <div style="flex: 1; background: rgba(42, 46, 52, 0.85); border-radius: 4px; padding: 4px 5px; box-sizing: border-box;
+                        {% if month.filled_count == month.num_days %}border: 2px solid rgba(251, 191, 36, 0.5); box-shadow: 0 0 8px rgba(251, 191, 36, 0.15);{% else %}border: 1px solid #1a1b1f;{% endif %}">
+                        <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 2px;">
+                            <span style="font-size: 9px; font-weight: bold; {% if month.filled_count == month.num_days %}color: #fbbf24;{% else %}color: rgba(245, 247, 252, 0.7);{% endif %}">{{ month.month_abbr }}</span>
+                            <span style="font-size: 7px; color: rgba(245, 247, 252, 0.35);">{{ month.filled_count }}/{{ month.num_days }}</span>
+                        </div>
+                        <div style="display: grid; grid-template-columns: repeat(7, 1fr); gap: 1px; margin-bottom: 1px;">
+                            <div style="font-size: 6px; color: rgba(245, 247, 252, 0.25); text-align: center;">S</div>
+                            <div style="font-size: 6px; color: rgba(245, 247, 252, 0.25); text-align: center;">M</div>
+                            <div style="font-size: 6px; color: rgba(245, 247, 252, 0.25); text-align: center;">T</div>
+                            <div style="font-size: 6px; color: rgba(245, 247, 252, 0.25); text-align: center;">W</div>
+                            <div style="font-size: 6px; color: rgba(245, 247, 252, 0.25); text-align: center;">T</div>
+                            <div style="font-size: 6px; color: rgba(245, 247, 252, 0.25); text-align: center;">F</div>
+                            <div style="font-size: 6px; color: rgba(245, 247, 252, 0.25); text-align: center;">S</div>
+                        </div>
+                        <div style="display: grid; grid-template-columns: repeat(7, 1fr); gap: 1px;">
+                            {% for i in month.offset_range %}<div></div>{% endfor %}
+                            {% for day in month.days %}
+                            <div style="aspect-ratio: 1; border-radius: 2px; display: flex; align-items: center; justify-content: center; font-size: 7px; font-weight: 600;
+                                {% if day.is_filled %}background: rgba(103, 248, 200, 0.4); color: #67f8c8;{% else %}background: rgba(245, 247, 252, 0.1); color: rgba(245, 247, 252, 0.2);{% endif %}{% if day.holiday_color %} border: 1px solid {{ day.holiday_color }}; box-shadow: 0 0 3px {{ day.holiday_color }}40;{% endif %}">{{ day.day }}</div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% endif %}{% endfor %}
+                </div>
+            </div>
+
+            {# Bottom Bar: Stats + Progress + Hall of Fame #}
+            <div style="display: flex; justify-content: center; gap: 24px; margin-top: 6px; margin-bottom: 4px;">
+                <span style="font-size: 11px; color: rgba(245, 247, 252, 0.6);">Best Month: <span style="color: #67f8c8; font-weight: bold;">{{ stats.best_month_name }} ({{ stats.best_month_filled }}/{{ stats.best_month_total }})</span></span>
+                <span style="font-size: 11px; color: rgba(245, 247, 252, 0.3);">|</span>
+                <span style="font-size: 11px; color: rgba(245, 247, 252, 0.6);">Longest Streak: <span style="color: #fbbf24; font-weight: bold;">{{ stats.longest_streak }} days</span></span>
+                <span style="font-size: 11px; color: rgba(245, 247, 252, 0.3);">|</span>
+                <span style="font-size: 11px; color: rgba(245, 247, 252, 0.6);">Weakest Month: <span style="color: #67d1f8; font-weight: bold;">{{ stats.worst_month_name }} ({{ stats.worst_month_filled }}/{{ stats.worst_month_total }})</span></span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 10px;">
+                <div style="flex: 1; height: 8px; background: #1a1b1f; border-radius: 4px; overflow: hidden;">
+                    <div style="height: 100%; width: {{ progress_percentage }}%; background: linear-gradient(to right, {% if is_complete %}#fbbf24, #f59e0b{% else %}#67f8c8, #67d1f8{% endif %}); border-radius: 4px;"></div>
+                </div>
+                <span style="font-size: 13px; font-weight: bold; color: {% if is_complete %}#fbbf24{% else %}rgba(245, 247, 252, 0.7){% endif %}; flex-shrink: 0;">{{ progress_percentage }}%</span>
+                {% if is_complete %}
+                <div style="display: flex; align-items: center; gap: 6px; background: rgba(251, 191, 36, 0.1); border: 2px solid #fbbf24; border-radius: 9999px; padding: 4px 14px; flex-shrink: 0;">
+                    <svg style="width: 14px; height: 14px;" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#fbbf24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+                    <span style="font-size: 13px; font-weight: bold; color: #fbbf24;">Hall of Fame</span>
+                    {% if completed_at %}
+                    <span style="font-size: 12px; color: rgba(245, 247, 252, 0.5);">{{ completed_at }}</span>
+                    {% endif %}
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        {# Footer #}
+        <div style="border-top: 2px solid #1a1b1f; background: rgba(42, 46, 52, 0.85); height: 42px; box-sizing: border-box; line-height: 42px; padding: 0 24px; flex-shrink: 0;">
+            <img src="{% static 'images/logo.png' %}" style="display: inline-block; width: 26px; height: 26px; vertical-align: middle; margin-right: 8px;" /><span style="font-size: 16px; color: #67d1f8; font-weight: bold; font-style: italic; vertical-align: middle;">platpursuit.com</span>
+            <span style="float: right; font-size: 12px; color: rgba(245, 247, 252, 0.5); font-style: italic;">Every day is a chance for platinum</span>
+        </div>
+    </div>
+</div>
+
+{% else %}
+{# ═══════════════════════════════════════════════════════ #}
+{# Portrait Card: 1080x1350                               #}
+{# Layout: Header → Name → HoF → Stats → 3x4 Month Grid → Progress → Footer #}
+{# ═══════════════════════════════════════════════════════ #}
+<div class="share-image-content" style="width: 1080px; height: 1350px; background: linear-gradient(to bottom right, #2a2e34, #32363d, #2a2e34); padding: 20px; font-family: system-ui, -apple-system, sans-serif; box-sizing: border-box;">
+    <div style="width: 1040px; height: 1310px; border: 3px solid #fbbf24; border-radius: 8px; box-shadow: 0 10px 15px -3px rgba(251, 191, 36, 0.2); overflow: hidden; display: flex; flex-direction: column; box-sizing: border-box;">
+
+        {# Header Banner #}
+        <div data-element="challenge-banner" style="padding: 14px 28px; background: linear-gradient(to right, rgba(251, 191, 36, 0.15), rgba(251, 191, 36, 0.05)), rgba(42, 46, 52, 0.85); border-bottom: 2px solid #1a1b1f; border-left: 4px solid #fbbf24; display: flex; align-items: center; justify-content: space-between; flex-shrink: 0;">
+            <div style="display: flex; align-items: center; gap: 12px;">
+                <svg style="height: 32px; width: 32px; flex-shrink: 0;" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                <span style="font-size: 26px; font-weight: bold; color: #fbbf24; text-transform: uppercase; letter-spacing: 0.1em; font-style: italic;">Platinum Calendar</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 10px;">
+                {% if avatar_url %}
+                <img src="{{ avatar_url }}" style="width: 34px; height: 34px; border-radius: 50%; border: 2px solid #1a1b1f;" />
+                {% endif %}
+                <span style="font-size: 18px; color: #fbbf24; font-weight: 600;">{{ username }}</span>
+            </div>
+        </div>
+
+        {# Main Content Area #}
+        <div style="flex: 1; padding: 20px 28px 16px; display: flex; flex-direction: column; box-sizing: border-box;">
+
+            {# Challenge Name #}
+            <h1 style="font-size: 34px; font-weight: bold; color: #f5f7fc; line-height: 1.2; margin: 0 0 16px 0; text-align: center;">{{ challenge_name }}</h1>
+
+            {# Hall of Fame Panel (if complete) #}
+            {% if is_complete %}
+            <div style="background: rgba(42, 46, 52, 0.8); border: 4px solid #fbbf24; border-radius: 8px; display: flex; align-items: center; justify-content: center; gap: 16px; padding: 20px; margin-bottom: 16px; box-sizing: border-box; box-shadow: 0 0 20px rgba(251, 191, 36, 0.15);">
+                <svg style="width: 44px; height: 44px; flex-shrink: 0;" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#fbbf24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+                <div>
+                    <div style="font-size: 24px; font-weight: bold; color: #fbbf24; text-transform: uppercase; letter-spacing: 0.05em;">Hall of Fame</div>
+                    {% if completed_at %}
+                    <div style="font-size: 14px; color: rgba(245, 247, 252, 0.6); margin-top: 4px;">Completed {{ completed_at }}</div>
+                    {% endif %}
+                </div>
+            </div>
+            {% endif %}
+
+            {# Stats Row: 3 cards #}
+            <div style="display: flex; gap: 12px; justify-content: center; margin-bottom: 16px;">
+                <div style="flex: 1; background: rgba(42, 46, 52, 0.8); border: 3px solid #1a1b1f; border-radius: 8px; padding: 14px 16px; text-align: center; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.6); box-sizing: border-box;">
+                    <div style="font-size: 12px; color: #67f8c8; text-transform: uppercase; letter-spacing: 0.05em; font-weight: bold; font-style: italic; margin-bottom: 4px;">Best Month</div>
+                    <div style="font-size: 32px; font-weight: bold; color: #f5f7fc;">{{ stats.best_month_filled }}<span style="font-size: 18px; color: rgba(245, 247, 252, 0.4);">/{{ stats.best_month_total }}</span></div>
+                    <div style="font-size: 11px; color: rgba(245, 247, 252, 0.5); margin-top: 2px;">{{ stats.best_month_name }}</div>
+                </div>
+                <div style="flex: 1; background: rgba(42, 46, 52, 0.8); border: 3px solid #1a1b1f; border-radius: 8px; padding: 14px 16px; text-align: center; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.6); box-sizing: border-box;">
+                    <div style="font-size: 12px; color: #fbbf24; text-transform: uppercase; letter-spacing: 0.05em; font-weight: bold; font-style: italic; margin-bottom: 4px;">Longest Streak</div>
+                    <div style="font-size: 32px; font-weight: bold; color: #f5f7fc;">{{ stats.longest_streak }}</div>
+                    <div style="font-size: 11px; color: rgba(245, 247, 252, 0.5); margin-top: 2px;">consecutive days</div>
+                </div>
+                <div style="flex: 1; background: rgba(42, 46, 52, 0.8); border: 3px solid #1a1b1f; border-radius: 8px; padding: 14px 16px; text-align: center; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.6); box-sizing: border-box;">
+                    <div style="font-size: 12px; color: #67d1f8; text-transform: uppercase; letter-spacing: 0.05em; font-weight: bold; font-style: italic; margin-bottom: 4px;">Weakest Month</div>
+                    <div style="font-size: 32px; font-weight: bold; color: #f5f7fc;">{{ stats.worst_month_filled }}<span style="font-size: 18px; color: rgba(245, 247, 252, 0.4);">/{{ stats.worst_month_total }}</span></div>
+                    <div style="font-size: 11px; color: rgba(245, 247, 252, 0.5); margin-top: 2px;">{{ stats.worst_month_name }}</div>
+                </div>
+            </div>
+
+            {# 3x4 Month Heat Map Grid (weekday-aligned) #}
+            <div style="display: flex; flex-direction: column; gap: 8px; flex: 1; justify-content: center;">
+                {# Row 1: Jan-Apr #}
+                <div style="display: flex; gap: 8px;">
+                    {% for month in months %}{% if forloop.counter <= 4 %}
+                    <div style="flex: 1; background: rgba(42, 46, 52, 0.85); border-radius: 6px; padding: 8px; box-sizing: border-box;
+                        {% if month.filled_count == month.num_days %}border: 2px solid rgba(251, 191, 36, 0.5); box-shadow: 0 0 10px rgba(251, 191, 36, 0.15);{% else %}border: 1px solid #1a1b1f;{% endif %}">
+                        <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 4px;">
+                            <span style="font-size: 12px; font-weight: bold; {% if month.filled_count == month.num_days %}color: #fbbf24;{% else %}color: rgba(245, 247, 252, 0.8);{% endif %}">{{ month.month_name }}</span>
+                            <span style="font-size: 9px; color: rgba(245, 247, 252, 0.35);">{{ month.filled_count }}/{{ month.num_days }}</span>
+                        </div>
+                        {# Weekday headers #}
+                        <div style="display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; margin-bottom: 2px;">
+                            <div style="font-size: 8px; color: rgba(245, 247, 252, 0.25); text-align: center;">S</div>
+                            <div style="font-size: 8px; color: rgba(245, 247, 252, 0.25); text-align: center;">M</div>
+                            <div style="font-size: 8px; color: rgba(245, 247, 252, 0.25); text-align: center;">T</div>
+                            <div style="font-size: 8px; color: rgba(245, 247, 252, 0.25); text-align: center;">W</div>
+                            <div style="font-size: 8px; color: rgba(245, 247, 252, 0.25); text-align: center;">T</div>
+                            <div style="font-size: 8px; color: rgba(245, 247, 252, 0.25); text-align: center;">F</div>
+                            <div style="font-size: 8px; color: rgba(245, 247, 252, 0.25); text-align: center;">S</div>
+                        </div>
+                        {# Day cells with weekday offset #}
+                        <div style="display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px;">
+                            {% for i in month.offset_range %}<div></div>{% endfor %}
+                            {% for day in month.days %}
+                            <div style="aspect-ratio: 1; border-radius: 3px; display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 600;
+                                {% if day.is_filled %}background: rgba(103, 248, 200, 0.4); color: #67f8c8;{% else %}background: rgba(245, 247, 252, 0.1); color: rgba(245, 247, 252, 0.2);{% endif %}{% if day.holiday_color %} border: 2px solid {{ day.holiday_color }}; box-shadow: 0 0 4px {{ day.holiday_color }}40;{% endif %}">{{ day.day }}</div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% endif %}{% endfor %}
+                </div>
+                {# Row 2: May-Aug #}
+                <div style="display: flex; gap: 8px;">
+                    {% for month in months %}{% if forloop.counter > 4 and forloop.counter <= 8 %}
+                    <div style="flex: 1; background: rgba(42, 46, 52, 0.85); border-radius: 6px; padding: 8px; box-sizing: border-box;
+                        {% if month.filled_count == month.num_days %}border: 2px solid rgba(251, 191, 36, 0.5); box-shadow: 0 0 10px rgba(251, 191, 36, 0.15);{% else %}border: 1px solid #1a1b1f;{% endif %}">
+                        <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 4px;">
+                            <span style="font-size: 12px; font-weight: bold; {% if month.filled_count == month.num_days %}color: #fbbf24;{% else %}color: rgba(245, 247, 252, 0.8);{% endif %}">{{ month.month_name }}</span>
+                            <span style="font-size: 9px; color: rgba(245, 247, 252, 0.35);">{{ month.filled_count }}/{{ month.num_days }}</span>
+                        </div>
+                        <div style="display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; margin-bottom: 2px;">
+                            <div style="font-size: 8px; color: rgba(245, 247, 252, 0.25); text-align: center;">S</div>
+                            <div style="font-size: 8px; color: rgba(245, 247, 252, 0.25); text-align: center;">M</div>
+                            <div style="font-size: 8px; color: rgba(245, 247, 252, 0.25); text-align: center;">T</div>
+                            <div style="font-size: 8px; color: rgba(245, 247, 252, 0.25); text-align: center;">W</div>
+                            <div style="font-size: 8px; color: rgba(245, 247, 252, 0.25); text-align: center;">T</div>
+                            <div style="font-size: 8px; color: rgba(245, 247, 252, 0.25); text-align: center;">F</div>
+                            <div style="font-size: 8px; color: rgba(245, 247, 252, 0.25); text-align: center;">S</div>
+                        </div>
+                        <div style="display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px;">
+                            {% for i in month.offset_range %}<div></div>{% endfor %}
+                            {% for day in month.days %}
+                            <div style="aspect-ratio: 1; border-radius: 3px; display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 600;
+                                {% if day.is_filled %}background: rgba(103, 248, 200, 0.4); color: #67f8c8;{% else %}background: rgba(245, 247, 252, 0.1); color: rgba(245, 247, 252, 0.2);{% endif %}{% if day.holiday_color %} border: 2px solid {{ day.holiday_color }}; box-shadow: 0 0 4px {{ day.holiday_color }}40;{% endif %}">{{ day.day }}</div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% endif %}{% endfor %}
+                </div>
+                {# Row 3: Sep-Dec #}
+                <div style="display: flex; gap: 8px;">
+                    {% for month in months %}{% if forloop.counter > 8 %}
+                    <div style="flex: 1; background: rgba(42, 46, 52, 0.85); border-radius: 6px; padding: 8px; box-sizing: border-box;
+                        {% if month.filled_count == month.num_days %}border: 2px solid rgba(251, 191, 36, 0.5); box-shadow: 0 0 10px rgba(251, 191, 36, 0.15);{% else %}border: 1px solid #1a1b1f;{% endif %}">
+                        <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 4px;">
+                            <span style="font-size: 12px; font-weight: bold; {% if month.filled_count == month.num_days %}color: #fbbf24;{% else %}color: rgba(245, 247, 252, 0.8);{% endif %}">{{ month.month_name }}</span>
+                            <span style="font-size: 9px; color: rgba(245, 247, 252, 0.35);">{{ month.filled_count }}/{{ month.num_days }}</span>
+                        </div>
+                        <div style="display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; margin-bottom: 2px;">
+                            <div style="font-size: 8px; color: rgba(245, 247, 252, 0.25); text-align: center;">S</div>
+                            <div style="font-size: 8px; color: rgba(245, 247, 252, 0.25); text-align: center;">M</div>
+                            <div style="font-size: 8px; color: rgba(245, 247, 252, 0.25); text-align: center;">T</div>
+                            <div style="font-size: 8px; color: rgba(245, 247, 252, 0.25); text-align: center;">W</div>
+                            <div style="font-size: 8px; color: rgba(245, 247, 252, 0.25); text-align: center;">T</div>
+                            <div style="font-size: 8px; color: rgba(245, 247, 252, 0.25); text-align: center;">F</div>
+                            <div style="font-size: 8px; color: rgba(245, 247, 252, 0.25); text-align: center;">S</div>
+                        </div>
+                        <div style="display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px;">
+                            {% for i in month.offset_range %}<div></div>{% endfor %}
+                            {% for day in month.days %}
+                            <div style="aspect-ratio: 1; border-radius: 3px; display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 600;
+                                {% if day.is_filled %}background: rgba(103, 248, 200, 0.4); color: #67f8c8;{% else %}background: rgba(245, 247, 252, 0.1); color: rgba(245, 247, 252, 0.2);{% endif %}{% if day.holiday_color %} border: 2px solid {{ day.holiday_color }}; box-shadow: 0 0 4px {{ day.holiday_color }}40;{% endif %}">{{ day.day }}</div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% endif %}{% endfor %}
+                </div>
+            </div>
+
+            {# Progress Bar #}
+            <div style="margin-top: 14px; display: flex; align-items: center; gap: 12px;">
+                <div style="flex: 1; height: 12px; background: #1a1b1f; border-radius: 6px; overflow: hidden;">
+                    <div style="height: 100%; width: {{ progress_percentage }}%; background: linear-gradient(to right, {% if is_complete %}#fbbf24, #f59e0b{% else %}#67f8c8, #67d1f8{% endif %}); border-radius: 6px;"></div>
+                </div>
+                <span style="font-size: 16px; font-weight: bold; color: {% if is_complete %}#fbbf24{% else %}rgba(245, 247, 252, 0.7){% endif %};">{{ progress_percentage }}%</span>
+            </div>
+
+            {% if is_complete %}
+            <div style="margin-top: 12px; text-align: center;">
+                <div style="display: inline-flex; align-items: center; gap: 8px; background: rgba(251, 191, 36, 0.1); border: 2px solid #fbbf24; border-radius: 9999px; padding: 8px 20px;">
+                    <svg style="width: 18px; height: 18px;" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#fbbf24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+                    <span style="font-size: 16px; font-weight: bold; color: #fbbf24;">Hall of Fame</span>
+                    {% if completed_at %}
+                    <span style="font-size: 14px; color: rgba(245, 247, 252, 0.5);">{{ completed_at }}</span>
+                    {% endif %}
+                </div>
+            </div>
+            {% endif %}
+        </div>
+
+        {# Footer #}
+        <div style="border-top: 2px solid #1a1b1f; background: rgba(42, 46, 52, 0.85); height: 60px; box-sizing: border-box; line-height: 60px; padding: 0 28px; flex-shrink: 0;">
+            <img src="{% static 'images/logo.png' %}" style="display: inline-block; width: 36px; height: 36px; vertical-align: middle; margin-right: 10px;" /><span style="font-size: 20px; color: #67d1f8; font-weight: bold; font-style: italic; vertical-align: middle;">platpursuit.com</span>
+            <span style="float: right; font-size: 14px; color: rgba(245, 247, 252, 0.5); font-style: italic;">Every day is a chance for platinum</span>
+        </div>
+    </div>
+</div>
+{% endif %}

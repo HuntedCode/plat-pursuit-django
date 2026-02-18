@@ -16,6 +16,7 @@ from .list_views import BrowseListsView, GameListDetailView, GameListEditView, G
 from .challenge_views import (
     ChallengeHubView, MyChallengesView, AZChallengeCreateView,
     AZChallengeSetupView, AZChallengeDetailView, AZChallengeEditView,
+    CalendarChallengeCreateView, CalendarChallengeDetailView,
 )
 
 __all__ = [
@@ -41,4 +42,5 @@ __all__ = [
     # Challenge views
     'ChallengeHubView', 'MyChallengesView', 'AZChallengeCreateView',
     'AZChallengeSetupView', 'AZChallengeDetailView', 'AZChallengeEditView',
+    'CalendarChallengeCreateView', 'CalendarChallengeDetailView',
 ]

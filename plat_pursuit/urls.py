@@ -30,7 +30,7 @@ sitemaps = {
     'games': GameSitemap,
     'profiles': ProfileSitemap,
 }
-from trophies.views import GamesListView, TrophiesListView, ProfilesListView, SearchView, GameDetailView, ProfileDetailView, TrophyCaseView, ToggleSelectionView, BadgeListView, BadgeDetailView, GuideListView, ProfileSyncStatusView, TriggerSyncView, SearchSyncProfileView, AddSyncStatusView, LinkPSNView, ProfileVerifyView, TokenMonitoringView, BadgeCreationView, BadgeLeaderboardsView, OverallBadgeLeaderboardsView, MilestoneListView, CommentModerationView, ModerationActionView, ModerationLogView, ChecklistDetailView, ChecklistCreateView, ChecklistEditView, MyChecklistsView, MyShareablesView, BrowseGuidesView, BrowseListsView, GameListDetailView, GameListEditView, GameListCreateView, MyListsView, ChallengeHubView, MyChallengesView, AZChallengeCreateView, AZChallengeSetupView, AZChallengeDetailView, AZChallengeEditView, GameFamilyManagementView
+from trophies.views import GamesListView, TrophiesListView, ProfilesListView, SearchView, GameDetailView, ProfileDetailView, TrophyCaseView, ToggleSelectionView, BadgeListView, BadgeDetailView, GuideListView, ProfileSyncStatusView, TriggerSyncView, SearchSyncProfileView, AddSyncStatusView, LinkPSNView, ProfileVerifyView, TokenMonitoringView, BadgeCreationView, BadgeLeaderboardsView, OverallBadgeLeaderboardsView, MilestoneListView, CommentModerationView, ModerationActionView, ModerationLogView, ChecklistDetailView, ChecklistCreateView, ChecklistEditView, MyChecklistsView, MyShareablesView, BrowseGuidesView, BrowseListsView, GameListDetailView, GameListEditView, GameListCreateView, MyListsView, ChallengeHubView, MyChallengesView, AZChallengeCreateView, AZChallengeSetupView, AZChallengeDetailView, AZChallengeEditView, CalendarChallengeCreateView, CalendarChallengeDetailView, GameFamilyManagementView
 from trophies.recap_views import RecapIndexView, RecapSlideView
 from users.views import CustomConfirmEmailView, stripe_webhook
 from notifications.views import (
@@ -84,6 +84,8 @@ urlpatterns = [
     path('challenges/az/<int:challenge_id>/', AZChallengeDetailView.as_view(), name='az_challenge_detail'),
     path('challenges/az/<int:challenge_id>/setup/', AZChallengeSetupView.as_view(), name='az_challenge_setup'),
     path('challenges/az/<int:challenge_id>/edit/', AZChallengeEditView.as_view(), name='az_challenge_edit'),
+    path('challenges/calendar/create/', CalendarChallengeCreateView.as_view(), name='calendar_challenge_create'),
+    path('challenges/calendar/<int:challenge_id>/', CalendarChallengeDetailView.as_view(), name='calendar_challenge_detail'),
     path('my-challenges/', MyChallengesView.as_view(), name='my_challenges'),
 
     # Monthly Recap URLs

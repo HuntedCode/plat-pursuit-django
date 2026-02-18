@@ -1,0 +1,101 @@
+{% extends 'base.html' %}
+
+{% block title %}New Platinum Calendar - Platinum Pursuit{% endblock %}
+
+{% block content %}
+<section class="shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 w-full p-0 lg:p-4">
+    {% include 'partials/breadcrumb.html' with items=breadcrumb %}
+
+    <div class="card bg-base-100 border-4 border-base-300 shadow-md shadow-neutral">
+        <div class="card-body items-center text-center">
+            <div class="text-5xl lg:text-6xl font-black text-primary tracking-tight">365</div>
+            <h1 class="text-2xl lg:text-3xl font-bold mt-2">Start Your Platinum Calendar</h1>
+            <p class="text-base-content/70 max-w-lg">
+                One platinum for every day of the year. Can you fill the entire calendar?
+            </p>
+        </div>
+    </div>
+</section>
+
+<section class="shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 w-full p-0 lg:p-4 mt-6">
+    <div class="max-w-xl mx-auto p-4">
+        <div class="card bg-base-100 border-2 border-base-300 shadow-md shadow-neutral">
+            <div class="card-body">
+                <form method="POST" action="{% url 'calendar_challenge_create' %}">
+                    {% csrf_token %}
+                    <div class="form-control mb-4">
+                        <label class="label" for="challenge-name">
+                            <span class="label-text font-bold">Calendar Name</span>
+                        </label>
+                        <input type="text"
+                               id="challenge-name"
+                               name="name"
+                               class="input input-bordered w-full"
+                               maxlength="75"
+                               value="My Platinum Calendar"
+                               placeholder="e.g., My Platinum Calendar, 365 Days of Glory..." />
+                        <div class="label">
+                            <span class="label-text-alt text-base-content/50"><span id="name-counter">20</span>/75</span>
+                        </div>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary w-full">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 mr-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                            <line x1="16" y1="2" x2="16" y2="6"></line>
+                            <line x1="8" y1="2" x2="8" y2="6"></line>
+                            <line x1="3" y1="10" x2="21" y2="10"></line>
+                        </svg>
+                        Start the Calendar
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <div class="text-center mt-6">
+            <div class="card bg-base-100/50 border border-base-300 p-4">
+                <h3 class="font-bold text-sm mb-2">How it works</h3>
+                <div class="grid grid-cols-3 gap-3 text-xs text-base-content/70">
+                    <div>
+                        <div class="text-2xl mb-1">&#128197;</div>
+                        <p><strong>Sign up</strong> and we scan your entire trophy history</p>
+                    </div>
+                    <div>
+                        <div class="text-2xl mb-1">&#127775;</div>
+                        <p><strong>Every</strong> day you've earned a platinum gets filled automatically</p>
+                    </div>
+                    <div>
+                        <div class="text-2xl mb-1">&#127942;</div>
+                        <p><strong>Fill</strong> all 365 days to enter the Hall of Fame</p>
+                    </div>
+                </div>
+                <p class="text-xs text-base-content/50 mt-3">
+                    No setup needed. Just sign up and keep earning platinums. New platinums fill new days during every sync. Feb 29 not included.
+                </p>
+                <div class="flex items-start gap-2 mt-3 p-2 rounded-lg bg-warning/10 border border-warning/20 text-xs text-base-content/70">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-warning flex-shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <line x1="12" y1="8" x2="12" y2="12"></line>
+                        <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                    </svg>
+                    <span>Games flagged as shovelware won't count toward your calendar. Only legitimate platinums fill days.</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}
+
+{% block js_scripts %}
+<script>PlatPursuit.ZoomScaler.init();</script>
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const nameInput = document.getElementById('challenge-name');
+        const counter = document.getElementById('name-counter');
+        if (nameInput && counter) {
+            counter.textContent = nameInput.value.length;
+            nameInput.addEventListener('input', () => counter.textContent = nameInput.value.length);
+        }
+    });
+</script>
+{% endblock %}

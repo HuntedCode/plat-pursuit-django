@@ -2572,6 +2572,7 @@ class Challenge(models.Model):
     """
     CHALLENGE_TYPES = [
         ('az', 'A-Z Platinum Challenge'),
+        ('calendar', 'Platinum Calendar'),
     ]
 
     profile = models.ForeignKey(Profile, on_delete=models.CASCADE, related_name='challenges')
@@ -2648,3 +2649,50 @@ class AZChallengeSlot(models.Model):
         status = 'completed' if self.is_completed else ('assigned' if self.game else 'empty')
         game_name = self.game.title_name if self.game else 'empty'
         return f"{self.letter}: {game_name} ({status})"
+
+
+# Non-leap-year day counts per month (Feb 29 excluded from calendar challenge)
+CALENDAR_DAYS_PER_MONTH = {
+    1: 31, 2: 28, 3: 31, 4: 30, 5: 31, 6: 30,
+    7: 31, 8: 31, 9: 30, 10: 31, 11: 30, 12: 31,
+}
+
+
+class CalendarChallengeDay(models.Model):
+    """
+    One of 365 day slots (Jan 1 - Dec 31, no Feb 29) in a Platinum Calendar Challenge.
+    Filled automatically when the user earns a platinum on a matching calendar day.
+    """
+    challenge = models.ForeignKey(
+        Challenge, on_delete=models.CASCADE, related_name='calendar_days'
+    )
+    month = models.PositiveSmallIntegerField()   # 1-12
+    day = models.PositiveSmallIntegerField()      # 1-31
+
+    # The first game whose platinum filled this day
+    game = models.ForeignKey(
+        Game, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='calendar_day_slots'
+    )
+
+    # Fill status
+    is_filled = models.BooleanField(default=False)
+    filled_at = models.DateTimeField(null=True, blank=True)
+
+    # The actual earned_date_time of the platinum that filled this day
+    platinum_earned_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        unique_together = ['challenge', 'month', 'day']
+        ordering = ['month', 'day']
+        indexes = [
+            models.Index(
+                fields=['challenge', 'is_filled'],
+                name='calday_challenge_filled_idx'
+            ),
+        ]
+
+    def __str__(self):
+        status = 'filled' if self.is_filled else 'empty'
+        game_name = self.game.title_name if self.game else 'none'
+        return f"{self.month:02d}/{self.day:02d}: {game_name} ({status})"

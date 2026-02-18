@@ -1,4 +1,6 @@
 # users/views.py
+import json
+
 from allauth.account.views import ConfirmEmailView
 from core.services.tracking import track_page_view
 from django.conf import settings
@@ -6,6 +8,7 @@ from django.contrib import messages
 from django.contrib.auth import update_session_auth_hash
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.db.models import Q
 from django.http import HttpResponse
 from django.shortcuts import render, redirect
 from django.urls import reverse
@@ -21,6 +24,7 @@ from users.forms import UserSettingsForm, CustomPasswordChangeForm
 from users.services.subscription_service import SubscriptionService
 from users.models import CustomUser
 from trophies.forms import PremiumSettingsForm, ProfileSettingsForm
+from trophies.models import Concept, ProfileGame
 from trophies.utils import update_profile_trophy_counts
 
 logger = logging.getLogger('psn_api')
@@ -54,6 +58,16 @@ class SettingsView(LoginRequiredMixin, View):
         from trophies.themes import get_available_themes_for_grid
         available_themes = get_available_themes_for_grid(include_game_art=False)
 
+        # Serialize current background for the JS picker
+        initial_bg_data = 'null'
+        if profile and profile.selected_background:
+            bg = profile.selected_background
+            initial_bg_data = json.dumps({
+                'concept_id': bg.id,
+                'title_name': bg.unified_title or '',
+                'icon_url': bg.concept_icon_url or '',
+            })
+
         context = {
             'user_form': user_form,
             'password_form': password_form,
@@ -61,6 +75,7 @@ class SettingsView(LoginRequiredMixin, View):
             'profile_form': profile_form,
             'profile': profile,
             'available_themes': available_themes,
+            'initial_background_json': initial_bg_data,
         }
         track_page_view('settings', 'user', request)
         return render(request, self.template_name, context)
@@ -100,9 +115,30 @@ class SettingsView(LoginRequiredMixin, View):
             if not hasattr(request.user, 'profile') or not request.user.profile.user_is_premium:
                 messages.error(request, 'This feature is for premium users only!')
                 return redirect('settings')
-            premium_form = PremiumSettingsForm(request.POST, instance=request.user.profile)
+            profile = request.user.profile
+            premium_form = PremiumSettingsForm(request.POST, instance=profile)
             if premium_form.is_valid():
                 premium_form.save()
+
+                # Handle selected_background from the JS picker (hidden input)
+                bg_id = request.POST.get('selected_background', '').strip()
+                if bg_id:
+                    try:
+                        concept = Concept.objects.get(id=int(bg_id), bg_url__isnull=False)
+                        # Validate the user has earned this background
+                        has_access = ProfileGame.objects.filter(
+                            profile=profile, game__concept=concept,
+                        ).filter(Q(has_plat=True) | Q(progress=100)).exists()
+                        if has_access:
+                            profile.selected_background = concept
+                        else:
+                            profile.selected_background = None
+                    except (ValueError, Concept.DoesNotExist):
+                        profile.selected_background = None
+                else:
+                    profile.selected_background = None
+                profile.save(update_fields=['selected_background'])
+
                 messages.success(request, 'Premium settings updated successfully!')
             else:
                 messages.error(request, 'Error updating premium settings.')

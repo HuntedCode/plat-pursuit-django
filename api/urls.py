@@ -42,6 +42,15 @@ from .az_challenge_views import (
     AZGameSearchAPIView,
 )
 from .az_challenge_share_views import AZChallengeShareHTMLView, AZChallengeSharePNGView
+from .calendar_challenge_views import (
+    CalendarChallengeCreateAPIView, CalendarChallengeDetailAPIView,
+    CalendarChallengeUpdateAPIView, CalendarChallengeDeleteAPIView,
+    CalendarDayDetailAPIView,
+)
+from .calendar_challenge_share_views import (
+    CalendarChallengeShareHTMLView, CalendarChallengeSharePNGView,
+    GameBackgroundSearchView,
+)
 from .game_family_views import (
     ProposalApproveView, ProposalRejectView,
     GameFamilyCreateView, GameFamilyUpdateView, GameFamilyDeleteView,
@@ -182,6 +191,18 @@ urlpatterns = [
     path('challenges/az/<int:challenge_id>/slots/<str:letter>/clear/', AZSlotClearAPIView.as_view(), name='az-slot-clear'),
     path('challenges/az/<int:challenge_id>/share/html/', AZChallengeShareHTMLView.as_view(), name='az-challenge-share-html'),
     path('challenges/az/<int:challenge_id>/share/png/', AZChallengeSharePNGView.as_view(), name='az-challenge-share-png'),
+
+    # Game background search (shared by share card + settings)
+    path('game-backgrounds/', GameBackgroundSearchView.as_view(), name='game-background-search'),
+
+    # Platinum Calendar Challenge endpoints
+    path('challenges/calendar/', CalendarChallengeCreateAPIView.as_view(), name='calendar-challenge-create'),
+    path('challenges/calendar/<int:challenge_id>/', CalendarChallengeDetailAPIView.as_view(), name='calendar-challenge-detail'),
+    path('challenges/calendar/<int:challenge_id>/update/', CalendarChallengeUpdateAPIView.as_view(), name='calendar-challenge-update'),
+    path('challenges/calendar/<int:challenge_id>/delete/', CalendarChallengeDeleteAPIView.as_view(), name='calendar-challenge-delete'),
+    path('challenges/calendar/<int:challenge_id>/day/<int:month>/<int:day>/', CalendarDayDetailAPIView.as_view(), name='calendar-day-detail'),
+    path('challenges/calendar/<int:challenge_id>/share/html/', CalendarChallengeShareHTMLView.as_view(), name='calendar-challenge-share-html'),
+    path('challenges/calendar/<int:challenge_id>/share/png/', CalendarChallengeSharePNGView.as_view(), name='calendar-challenge-share-png'),
 
     # Game Family endpoints (staff-only)
     path('game-families/', GameFamilyCreateView.as_view(), name='game-family-create'),

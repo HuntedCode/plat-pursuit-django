@@ -231,7 +231,8 @@ def _build_font_faces():
     return _cached_font_faces
 
 
-def _get_background_css(theme_key, game_image_path=None, concept_bg_path=None):
+def _get_background_css(theme_key, game_image_path=None, concept_bg_path=None,
+                        format_type='landscape'):
     """
     Build CSS background properties for a theme.
 
@@ -244,6 +245,10 @@ def _get_background_css(theme_key, game_image_path=None, concept_bg_path=None):
 
     requires_game_image = theme.get('requires_game_image', False)
     game_image_source = theme.get('game_image_source', 'game_image')
+
+    # Portrait cards use top-center positioning so wide game art images
+    # show their upper portion (where logos/characters usually are)
+    bg_position = 'center top' if format_type == 'portrait' else 'center'
 
     # All properties need !important to override the template's inline styles
     # (the .share-image-content div has a default background in its style="" attribute)
@@ -264,7 +269,7 @@ def _get_background_css(theme_key, game_image_path=None, concept_bg_path=None):
                     css = f"""
                         background: linear-gradient(rgba(0, 0, 0, 0.55), rgba(0, 0, 0, 0.55)), url("{data_uri}") !important;
                         background-size: cover !important;
-                        background-position: center !important;
+                        background-position: {bg_position} !important;
                         filter: none;
                     """
                 else:
@@ -272,7 +277,7 @@ def _get_background_css(theme_key, game_image_path=None, concept_bg_path=None):
                     css = f"""
                         background: linear-gradient(rgba(0, 0, 0, 0.45), rgba(0, 0, 0, 0.45)), url("{data_uri}") !important;
                         background-size: cover !important;
-                        background-position: center !important;
+                        background-position: {bg_position} !important;
                     """
                 return css
 
@@ -302,13 +307,16 @@ def _get_banner_css(theme_key):
 
 
 def _build_full_html(inner_html, width, height, theme_key='default',
-                     game_image_path=None, concept_bg_path=None):
+                     game_image_path=None, concept_bg_path=None,
+                     format_type='landscape'):
     """
     Wrap card HTML in a full HTML document with embedded fonts, reset, and theme CSS.
     All external resources are inlined as base64 data URIs.
     """
     font_faces = _build_font_faces()
-    background_css = _get_background_css(theme_key, game_image_path, concept_bg_path)
+    background_css = _get_background_css(
+        theme_key, game_image_path, concept_bg_path, format_type=format_type,
+    )
     banner_css = _get_banner_css(theme_key)
 
     # Convert all relative URLs in the card HTML to base64 data URIs.
@@ -345,6 +353,7 @@ def _build_full_html(inner_html, width, height, theme_key='default',
 
         /* Theme banner styling */
         [data-element="platinum-banner"],
+        [data-element="challenge-banner"],
         [data-element="recap-header"] {{
             {banner_css}
         }}
@@ -383,6 +392,7 @@ def render_png(html, format_type='landscape', theme_key='default',
         theme_key=theme_key,
         game_image_path=game_image_path,
         concept_bg_path=concept_bg_path,
+        format_type=format_type,
     )
 
     # Submit the Playwright render to the dedicated thread and wait for result.

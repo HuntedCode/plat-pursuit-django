@@ -1,0 +1,87 @@
+{# Reusable calendar challenge card for browse and history #}
+{# Required context: challenge (Challenge instance with card_month_data attached) #}
+
+<a href="{% url 'calendar_challenge_detail' challenge_id=challenge.id %}" class="card bg-base-200 border-2 border-base-300 rounded-2xl shadow-lg shadow-neutral transition-all duration-300 hover:shadow-xl hover:border-primary hover:scale-[1.02] cursor-pointer group {% if challenge.profile.user_is_premium %}shimmer{% endif %}">
+
+    {# Mini calendar month grid cover #}
+    <div class="relative bg-gradient-to-b from-base-300 to-base-300/80 rounded-t-2xl p-4 pb-3">
+        <div class="w-3/4 mx-auto rounded-xl overflow-hidden border-4 border-base-100/50 shadow-lg shadow-neutral ring-1 ring-base-content/10 bg-gradient-to-br from-base-200 to-base-300 p-3">
+            <div class="grid grid-cols-4 gap-x-2 gap-y-1.5 w-full">
+                {% for month in challenge.card_month_data %}
+                <div class="flex flex-col items-center py-1 rounded-md {% if month.filled_count == month.total_days %}bg-warning/10 ring-1 ring-warning/30{% endif %}">
+                    <div class="text-[0.6rem] lg:text-xs font-bold {% if month.filled_count == month.total_days %}text-warning{% elif month.filled_count > 0 %}text-base-content/70{% else %}text-base-content/30{% endif %}">{{ month.month_abbr }}</div>
+                    <div class="text-[0.55rem] lg:text-[0.65rem] {% if month.filled_count == month.total_days %}text-warning/80{% elif month.filled_count > 0 %}text-success{% else %}text-base-content/20{% endif %} font-medium">{{ month.filled_count }}/{{ month.total_days }}</div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        {# Progress badge #}
+        <div class="absolute top-2 right-2">
+            <div class="badge badge-neutral shadow-lg font-bold gap-1">
+                {{ challenge.completed_count }}/{{ challenge.total_items }}
+            </div>
+        </div>
+
+        {# Status badge: Deleted takes priority over Complete #}
+        {% if challenge.is_deleted %}
+            <div class="absolute top-2 left-2">
+                <span class="badge badge-error badge-sm shadow-lg">Deleted</span>
+            </div>
+        {% elif challenge.is_complete %}
+            <div class="absolute top-2 left-2">
+                <div class="badge badge-warning shadow-lg font-bold gap-1">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+                    Complete
+                </div>
+            </div>
+        {% endif %}
+    </div>
+
+    <div class="card-body p-4">
+        {# Challenge name #}
+        <h3 class="card-title text-base font-bold line-clamp-2 min-h-[3rem] group-hover:text-primary transition-colors duration-300">
+            {{ challenge.name }}
+        </h3>
+
+        {# Author info #}
+        <div class="flex items-center gap-2 text-sm text-base-content/60 mt-2">
+            <div class="avatar">
+                <div class="w-6 rounded-full ring-1 ring-base-300 group-hover:ring-primary transition-all duration-300">
+                    {% if challenge.profile.avatar_url %}
+                        <img src="{{ challenge.profile.avatar_url }}" alt="{{ challenge.profile.psn_username }}" loading="lazy" />
+                    {% else %}
+                        <div class="w-full h-full bg-base-300 flex items-center justify-center">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3 text-base-content/30" viewBox="0 0 24 24" fill="currentColor"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+            <span class="truncate">
+                by <span class="font-medium {% if challenge.profile.user_is_premium %}legendary-title{% else %}text-secondary{% endif %}">{{ challenge.profile.psn_username }}</span>
+            </span>
+        </div>
+
+        {# Progress bar #}
+        <div class="mt-3">
+            <div class="flex justify-between text-xs text-base-content/60 mb-1">
+                <span>{{ challenge.completed_count }}/{{ challenge.total_items }} Days</span>
+                <span>{{ challenge.progress_percentage }}%</span>
+            </div>
+            <progress class="progress {% if challenge.is_complete %}progress-warning{% else %}progress-primary{% endif %} w-full h-2"
+                      value="{{ challenge.completed_count }}"
+                      max="{{ challenge.total_items }}"></progress>
+        </div>
+
+        {# Stats row #}
+        <div class="flex items-center justify-between text-xs text-base-content/50 mt-3 pt-3 border-t border-base-300/50">
+            <div class="flex items-center gap-3">
+                <span class="flex items-center gap-1">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                    {{ challenge.view_count }}
+                </span>
+            </div>
+            <span>{{ challenge.created_at|timesince }} ago</span>
+        </div>
+    </div>
+</a>

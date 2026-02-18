@@ -14,7 +14,8 @@
       "WebFetch(domain:rexrainbow.github.io)",
       "Bash(node -e:*)",
       "WebFetch(domain:github.com)",
-      "WebFetch(domain:docs.phaser.io)"
+      "WebFetch(domain:docs.phaser.io)",
+      "Bash(node --check:*)"
     ]
   }
 }
