@@ -489,7 +489,7 @@
         <h3 class="font-bold text-lg mb-4">Additional Versions</h3>
         <div class="flex flex-col gap-2 max-h-[60vh] overflow-y-auto">
             {% for version in other_versions %}
-                <a href="{% url 'game_detail' version.np_communication_id %}"
+                <a href="{% if url_psn_username %}{% url 'game_detail_with_profile' version.np_communication_id url_psn_username %}{% else %}{% url 'game_detail' version.np_communication_id %}{% endif %}"
                    class="card card-compact bg-base-100 border border-base-300 p-3 hover:border-primary hover:shadow-sm transition-all" aria-label="View {{ version.title_name }}">
                     <div class="flex flex-row gap-3 items-center">
                         <figure class="w-10 h-10 flex-shrink-0 rounded overflow-hidden border border-base-300">

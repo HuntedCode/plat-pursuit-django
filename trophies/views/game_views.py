@@ -663,6 +663,7 @@ class GameDetailView(ProfileHotbarMixin, DetailView):
         # Get target profile (from URL or authenticated user)
         target_profile = self._get_target_profile()
         psn_username = self.kwargs.get('psn_username')
+        context['url_psn_username'] = psn_username
         logger.info(f"Target Profile: {target_profile} | Profile Username: {psn_username}")
 
         # Build profile-specific context (progress, timeline events, earned trophies)
