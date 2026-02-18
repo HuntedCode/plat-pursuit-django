@@ -1,17 +1,18 @@
 """
-Subscription service - Handles all Stripe subscription-related business logic.
+Subscription service: handles subscription lifecycle for all payment providers.
 
 This service manages:
-- Mapping Stripe product IDs to premium tiers
-- Creating checkout sessions
-- Processing subscription webhooks
-- Updating user subscription status
+- Provider-agnostic subscription activation and deactivation
+- Stripe-specific product/price mapping and checkout sessions
+- Processing Stripe webhook events
 - Discord role assignments for premium users
+- Double-subscribe guard (only one active sub across providers)
 """
-import time
 import logging
 import stripe
 from typing import Optional, Dict, Tuple
+from datetime import datetime
+from django.utils import timezone
 from django.conf import settings
 from django.db import transaction
 from djstripe.models import Subscription, Customer, Price
@@ -30,7 +31,7 @@ logger = logging.getLogger('psn_api')
 
 
 class SubscriptionService:
-    """Handles all Stripe subscription-related business logic."""
+    """Handles subscription lifecycle for all payment providers."""
 
     @staticmethod
     def get_tier_from_product_id(product_id: str, is_live: bool = None) -> Optional[str]:
@@ -93,17 +94,135 @@ class SubscriptionService:
         """
         return tier in ACTIVE_PREMIUM_TIERS
 
+    # ── Provider-agnostic subscription lifecycle ──────────────────────────
+
+    @staticmethod
+    def activate_subscription(user, tier: str, provider: str, event_type: str = None) -> bool:
+        """
+        Activate a subscription for a user, regardless of payment provider.
+
+        Called by both Stripe and PayPal webhook handlers when a subscription
+        becomes active. Sets premium_tier, subscription_provider, updates
+        profile premium status, and handles Discord notifications/roles.
+
+        Args:
+            user: CustomUser instance
+            tier: Subscription tier name ('ad_free', 'premium_monthly', etc.)
+            provider: 'stripe' or 'paypal'
+            event_type: Original webhook event type (for Discord notification logic)
+
+        Returns:
+            bool: True if tier grants premium features
+        """
+        user.premium_tier = tier
+        user.subscription_provider = provider
+        is_premium = SubscriptionService.is_tier_premium(tier)
+
+        update_fields = ['premium_tier', 'subscription_provider']
+        if provider == 'paypal':
+            user.paypal_cancel_at = None  # Clear any previous cancellation
+            update_fields += ['paypal_cancel_at', 'paypal_subscription_id']
+
+        with transaction.atomic():
+            user.save(update_fields=update_fields)
+            if hasattr(user, 'profile'):
+                user.profile.update_profile_premium(is_premium)
+
+        # Discord notifications for new subscriptions (side effects after commit)
+        activation_events = [
+            'customer.subscription.created',       # Stripe
+            'BILLING.SUBSCRIPTION.ACTIVATED',       # PayPal
+        ]
+        if hasattr(user, 'profile') and event_type in activation_events and is_premium:
+            send_subscription_notification(user)
+            if user.premium_tier in PREMIUM_DISCORD_ROLE_TIERS:
+                notify_bot_role_earned(user.profile, settings.DISCORD_PREMIUM_ROLE)
+            elif user.premium_tier in SUPPORTER_DISCORD_ROLE_TIERS:
+                notify_bot_role_earned(user.profile, settings.DISCORD_PREMIUM_PLUS_ROLE)
+
+        return is_premium
+
+    @staticmethod
+    def deactivate_subscription(user, provider: str, event_type: str = None) -> None:
+        """
+        Deactivate a subscription for a user.
+
+        Called by both Stripe and PayPal when a subscription actually ends
+        (Stripe deleted, PayPal EXPIRED/SUSPENDED).
+
+        Args:
+            user: CustomUser instance
+            provider: 'stripe' or 'paypal'
+            event_type: Original webhook event type for logging
+        """
+        user.premium_tier = None
+        user.subscription_provider = None
+        update_fields = ['premium_tier', 'subscription_provider']
+        if provider == 'paypal':
+            user.paypal_subscription_id = None
+            user.paypal_cancel_at = None
+            update_fields += ['paypal_subscription_id', 'paypal_cancel_at']
+
+        with transaction.atomic():
+            user.save(update_fields=update_fields)
+            if hasattr(user, 'profile'):
+                user.profile.update_profile_premium(False)
+
+        logger.info(f"Deactivated {provider} subscription for user {user.email} ({event_type})")
+
+    @staticmethod
+    def mark_subscription_cancelling(user, cancel_at: Optional[datetime] = None) -> None:
+        """
+        Mark a PayPal subscription as cancelling (user cancelled but still has paid time).
+
+        Premium is NOT removed here. The EXPIRED webhook will handle that.
+
+        Args:
+            user: CustomUser instance
+            cancel_at: When the subscription will actually expire
+        """
+        user.paypal_cancel_at = cancel_at
+        with transaction.atomic():
+            user.save(update_fields=['paypal_cancel_at'])
+
+    @staticmethod
+    def has_active_subscription(user) -> Tuple[bool, Optional[str]]:
+        """
+        Check if user has an active subscription from ANY provider.
+
+        Used as a double-subscribe guard to prevent users from subscribing
+        through multiple providers simultaneously.
+
+        Returns:
+            tuple: (has_active, provider_name) e.g. (True, 'stripe') or (False, None)
+        """
+        # Check Stripe
+        if user.stripe_customer_id:
+            active_stripe = Subscription.objects.filter(
+                customer__id=user.stripe_customer_id,
+                stripe_data__status='active'
+            ).exists()
+            if active_stripe:
+                return (True, 'stripe')
+
+        # Check PayPal (trust our stored state, set by webhooks)
+        if user.paypal_subscription_id and user.premium_tier and user.subscription_provider == 'paypal':
+            return (True, 'paypal')
+
+        return (False, None)
+
+    # ── Stripe-specific methods ──────────────────────────────────────────
+
     @staticmethod
     def update_user_subscription(user, event_type: str = None) -> bool:
         """
         Update user's subscription status based on Stripe data.
 
-        This function:
-        1. Checks for active Stripe subscriptions
+        This Stripe-specific method:
+        1. Checks for active Stripe subscriptions via djstripe
         2. Maps product ID to premium tier
-        3. Updates user's premium_tier field
-        4. Updates linked profile's premium status
-        5. Sends Discord notifications and assigns roles if applicable
+        3. Delegates to activate_subscription() or deactivate_subscription()
+        4. Handles Stripe grace period for cancelled subscriptions
 
         Args:
             user: CustomUser instance to update
@@ -113,58 +232,44 @@ class SubscriptionService:
             bool: True if user has active premium subscription
         """
         if not user.stripe_customer_id:
-            user.premium_tier = None
-            user.save()
+            SubscriptionService.deactivate_subscription(user, 'stripe', event_type)
             return False
 
         # Find active subscription
-        subs = Subscription.objects.filter(customer__id=user.stripe_customer_id)
-        active_sub = next((sub for sub in subs if sub.status == 'active'), None)
+        active_sub = Subscription.objects.filter(
+            customer__id=user.stripe_customer_id,
+            stripe_data__status='active'
+        ).first()
 
-        is_premium = False
         if active_sub:
-            # Map product ID to tier
-            product_id = active_sub.plan['product']
+            # Map product ID to tier via stripe_data JSON
+            stripe_data = active_sub.stripe_data or {}
+            plan = stripe_data.get('plan', {})
+            product_id = plan.get('product')
             tier = SubscriptionService.get_tier_from_product_id(product_id)
 
             if tier:
-                user.premium_tier = tier
-                is_premium = SubscriptionService.is_tier_premium(tier)
+                return SubscriptionService.activate_subscription(user, tier, 'stripe', event_type)
             else:
                 logger.warning(f"Unknown product ID {product_id} for user {user.email}")
-                user.premium_tier = None
-                is_premium = False
+                SubscriptionService.deactivate_subscription(user, 'stripe', event_type)
+                return False
         else:
             # Check if subscription is canceled but still in grace period
             canceled_sub = Subscription.objects.filter(
                 customer__id=user.stripe_customer_id,
-                status='canceled'
+                stripe_data__status='canceled'
             ).first()
 
-            if canceled_sub and canceled_sub.current_period_end > int(time.time()):
-                # Still in grace period, don't update
-                return SubscriptionService.is_tier_premium(user.premium_tier) if user.premium_tier else False
+            if canceled_sub:
+                canceled_data = canceled_sub.stripe_data or {}
+                period_end_ts = canceled_data.get('current_period_end')
+                if period_end_ts and datetime.fromtimestamp(period_end_ts, tz=timezone.utc) > timezone.now():
+                    # Still in grace period, keep premium active
+                    return SubscriptionService.is_tier_premium(user.premium_tier) if user.premium_tier else False
 
-            user.premium_tier = None
-
-        # Update user and profile atomically
-        with transaction.atomic():
-            user.save()
-            if hasattr(user, 'profile'):
-                user.profile.update_profile_premium(is_premium)
-
-        # Handle Discord notifications and role assignments for new subscriptions
-        # (side effects run after DB transaction succeeds)
-        if hasattr(user, 'profile') and event_type == 'customer.subscription.created' and is_premium:
-            send_subscription_notification(user)
-
-            # Assign Discord roles based on tier
-            if user.premium_tier in PREMIUM_DISCORD_ROLE_TIERS:
-                notify_bot_role_earned(user.profile, settings.DISCORD_PREMIUM_ROLE)
-            elif user.premium_tier in SUPPORTER_DISCORD_ROLE_TIERS:
-                notify_bot_role_earned(user.profile, settings.DISCORD_PREMIUM_PLUS_ROLE)
-
-        return is_premium
+            SubscriptionService.deactivate_subscription(user, 'stripe', event_type)
+            return False
 
     @staticmethod
     def get_price_ids(is_live: bool) -> Dict[str, str]:

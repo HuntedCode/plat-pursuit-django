@@ -15,7 +15,8 @@
       "Bash(node -e:*)",
       "WebFetch(domain:github.com)",
       "WebFetch(domain:docs.phaser.io)",
-      "Bash(node --check:*)"
+      "Bash(node --check:*)",
+      "Bash(set DJANGO_SETTINGS_MODULE=plat_pursuit.settings)"
     ]
   }
 }

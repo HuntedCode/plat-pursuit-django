@@ -8,7 +8,7 @@ class CustomUserAdmin(UserAdmin):
     add_form = CustomUserCreationForm
 
     # Fields for list view (efficient, searchable)
-    list_display = ('email', 'is_linked_to_profile', 'premium_tier', 'email_prefs_summary', 'user_timezone', 'default_region', 'is_staff', 'is_active', 'date_joined')
+    list_display = ('email', 'is_linked_to_profile', 'premium_tier', 'subscription_provider', 'email_prefs_summary', 'user_timezone', 'default_region', 'is_staff', 'is_active', 'date_joined')
     list_select_related = ('profile',)
     list_filter = ('is_staff', 'is_active', 'user_timezone')
     search_fields = ('email',)
@@ -17,6 +17,7 @@ class CustomUserAdmin(UserAdmin):
     fieldsets = (
         (None, {'fields': ('email', 'password')}),
         ('Personal Info', {'fields': ('user_timezone', 'default_region', 'premium_tier')}),
+        ('Subscription', {'fields': ('subscription_provider', 'stripe_customer_id', 'paypal_subscription_id', 'paypal_cancel_at')}),
         ('Email Preferences', {'fields': ('email_preferences',)}),
         ('Permissions', {'fields': ('is_active', 'is_staff', 'is_superuser', 'groups', 'user_permissions')}),
         ('Important Dates', {'fields': ('last_login', 'date_joined')}),

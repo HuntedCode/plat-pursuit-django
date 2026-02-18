@@ -40,6 +40,19 @@ DJSTRIPE_WEBHOOK_VALIDATION = 'verify_signature'
 DJSTRIPE_WEBHOOK_URL = r"^stripe/webhook/$"
 stripe.api_key = STRIPE_SECRET_KEY
 
+# PayPal Configuration
+PAYPAL_MODE = os.getenv('PAYPAL_MODE', 'sandbox')  # 'sandbox' or 'live'
+
+if PAYPAL_MODE == 'live':
+    PAYPAL_CLIENT_ID = os.getenv('PAYPAL_LIVE_CLIENT_ID')
+    PAYPAL_CLIENT_SECRET = os.getenv('PAYPAL_LIVE_CLIENT_SECRET')
+else:
+    PAYPAL_CLIENT_ID = os.getenv('PAYPAL_SANDBOX_CLIENT_ID')
+    PAYPAL_CLIENT_SECRET = os.getenv('PAYPAL_SANDBOX_CLIENT_SECRET')
+
+PAYPAL_WEBHOOK_ID = os.getenv(f"PAYPAL_{PAYPAL_MODE.upper()}_WEBHOOK_ID")
+PAYPAL_API_BASE = 'https://api-m.paypal.com' if PAYPAL_MODE == 'live' else 'https://api-m.sandbox.paypal.com'
+
 # Discord Bot Integration
 BOT_API_URL = os.getenv('BOT_API_URL', 'http://127.0.0.1:5000')
 BOT_API_KEY = os.getenv('BOT_API_KEY')
@@ -84,7 +97,7 @@ ALLOWED_HOSTS = [host.strip() for host in ALLOWED_HOSTS if host.strip()]
 CSRF_TRUSTED_ORIGINS = os.getenv('CSRF_TRUSTED_ORIGINS', 'http://localhost:8000,http://127.0.0.1:8000').split(',')
 CSRF_TRUSTED_ORIGINS = [origin.strip() for origin in CSRF_TRUSTED_ORIGINS if origin.strip()]
 CSRF_TRUSTED_ORIGINS = [
-    f"https://{origin.lstrip('http://').lstrip('https://')}" if not origin.startswith('http') else origin
+    f"https://{origin.removeprefix('http://').removeprefix('https://')}" if not origin.startswith('http') else origin
     for origin in CSRF_TRUSTED_ORIGINS
 ]
 

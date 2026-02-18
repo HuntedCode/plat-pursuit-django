@@ -3,7 +3,7 @@
 
 {% block content %}
 {% if not is_live %}
-    TEST MODE ACTIVE
+    <div class="alert alert-warning text-center font-bold text-sm py-2" role="alert">TEST MODE ACTIVE</div>
 {% endif %}
 <div class="max-w-6xl mx-auto px-4 md:px-8 py-6 space-y-12">
 
@@ -31,7 +31,7 @@
         <p class="text-base-content/70 text-sm md:text-base lg:text-lg max-w-2xl mx-auto">Manage your plan, view your perks, and keep your trophy pursuit going strong.</p>
     </div>
 
-    {% if portal_url %}
+    {% if subscription_provider %}
     <!-- ===== SECTION 2: Subscription Status (Active Subscriber) ===== -->
     <div class="flex justify-center">
         <div class="card bg-base-200/60 w-full max-w-lg {% if premium_tier_slug == 'supporter' %}shimmer{% else %}card-interactive{% endif %}">
@@ -54,18 +54,44 @@
                         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>
                         {{ status }}
                     </span>
+                    <span class="badge badge-outline badge-lg gap-1">
+                        via {{ subscription_provider|title }}
+                    </span>
                 </div>
 
                 <div class="text-sm text-base-content/60">
+                    {% if paypal_cancel_at %}
+                    <span class="text-warning">Cancels on: <span class="font-semibold">{{ paypal_cancel_at }}</span></span>
+                    {% else %}
                     <span>Next billing: <span class="font-semibold text-base-content/80">{{ next_billing }}</span></span>
+                    {% endif %}
                 </div>
 
                 <div class="divider my-0"></div>
 
+                {% if subscription_provider == 'stripe' and portal_url %}
                 <a href="{{ portal_url }}" class="btn btn-primary btn-wide gap-2">
                     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
                     Manage Billing
                 </a>
+                {% elif subscription_provider == 'paypal' %}
+                <div class="flex flex-col gap-3 w-full items-center">
+                    <a href="{{ paypal_manage_url }}" target="_blank" rel="noopener" class="btn btn-primary btn-wide gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7.076 21.337H2.47a.641.641 0 0 1-.633-.74L4.944 3.72a.77.77 0 0 1 .757-.65h6.803c2.269 0 3.865.62 4.746 1.842.379.526.618 1.1.718 1.71.104.636.065 1.39-.118 2.304l-.005.023v.06c-.534 3.425-3.078 4.93-5.997 4.93H10.41a.774.774 0 0 0-.764.654l-.902 5.744z"/><path d="M18.429 7.747c-.042.27-.09.546-.147.831-1.073 4.19-4.322 5.716-8.6 5.716H8.109a.95.95 0 0 0-.937.804l-1.15 7.301a.505.505 0 0 0 .499.584h3.505a.77.77 0 0 0 .76-.647l.031-.165.601-3.818.039-.21a.77.77 0 0 1 .76-.648h.48c3.1 0 5.527-1.26 6.236-4.9.296-1.52.143-2.79-.64-3.682a3.068 3.068 0 0 0-.864-.766z"/></svg>
+                        Manage on PayPal
+                    </a>
+                    {% if not paypal_cancel_at %}
+                    <form method="post" action="{% url 'paypal_cancel_subscription' %}">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn-outline btn-error btn-wide gap-2"
+                                onclick="return confirm('Are you sure you want to cancel your subscription? You will retain access until the end of your current billing period.')">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+                            Cancel Subscription
+                        </button>
+                    </form>
+                    {% endif %}
+                </div>
+                {% endif %}
             </div>
         </div>
     </div>

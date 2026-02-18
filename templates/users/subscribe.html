@@ -3,7 +3,7 @@
 
 {% block content %}
 {% if not is_live %}
-    TEST MODE ACTIVE
+    <div class="alert alert-warning text-center font-bold text-sm py-2" role="alert">TEST MODE ACTIVE</div>
 {% endif %}
 <div class="max-w-6xl mx-auto px-4 md:px-8 py-6 space-y-12">
 
@@ -188,8 +188,31 @@
         <h2 class="text-2xl md:text-3xl font-bold text-center">Choose Your <span class="text-primary">Plan</span></h2>
         <p class="text-center text-base-content/60 text-sm md:text-base">All plans include supporting PlatPursuit's continued development.</p>
 
-        <form method="post" class="grid grid-cols-2 2xl:grid-cols-4 gap-6">
+        <form method="post" id="subscribe-form">
             {% csrf_token %}
+            <input type="hidden" name="provider" id="provider-input" value="stripe">
+
+            {% if paypal_available %}
+            <!-- Provider Selection -->
+            <div class="flex justify-center gap-6 mb-8">
+                <label class="flex items-center gap-3 cursor-pointer px-5 py-3 rounded-xl border-2 transition-all provider-option border-primary bg-primary/10" data-provider="stripe">
+                    <input type="radio" name="provider_radio" value="stripe" class="radio radio-primary radio-sm" checked>
+                    <span class="flex items-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/></svg>
+                        <span class="font-medium text-sm md:text-base">Card / Bank / Other</span>
+                    </span>
+                </label>
+                <label class="flex items-center gap-3 cursor-pointer px-5 py-3 rounded-xl border-2 transition-all provider-option border-base-300" data-provider="paypal">
+                    <input type="radio" name="provider_radio" value="paypal" class="radio radio-primary radio-sm">
+                    <span class="flex items-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7.076 21.337H2.47a.641.641 0 0 1-.633-.74L4.944 3.72a.77.77 0 0 1 .757-.65h6.803c2.269 0 3.865.62 4.746 1.842.379.526.618 1.1.718 1.71.104.636.065 1.39-.118 2.304l-.005.023v.06c-.534 3.425-3.078 4.93-5.997 4.93H10.41a.774.774 0 0 0-.764.654l-.902 5.744z"/><path d="M18.429 7.747c-.042.27-.09.546-.147.831-1.073 4.19-4.322 5.716-8.6 5.716H8.109a.95.95 0 0 0-.937.804l-1.15 7.301a.505.505 0 0 0 .499.584h3.505a.77.77 0 0 0 .76-.647l.031-.165.601-3.818.039-.21a.77.77 0 0 1 .76-.648h.48c3.1 0 5.527-1.26 6.236-4.9.296-1.52.143-2.79-.64-3.682a3.068 3.068 0 0 0-.864-.766z"/></svg>
+                        <span class="font-medium text-sm md:text-base">PayPal</span>
+                    </span>
+                </label>
+            </div>
+            {% endif %}
+
+        <div class="grid grid-cols-2 2xl:grid-cols-4 gap-6">
 
             <!-- Ad-Free Tier -->
             <div class="card bg-base-100 card-interactive card-hover-primary">
@@ -399,13 +422,14 @@
                     <button type="submit" name="tier" value="supporter" class="btn btn-warning mt-4">Become a Supporter</button>
                 </div>
             </div>
+        </div>
         </form>
     </div>
 
     <!-- ===== SECTION 4: Trust / Community ===== -->
     <div class="text-center space-y-2 text-sm text-base-content/60 italic max-w-2xl mx-auto">
         <p>Built by trophy hunters, for trophy hunters. PlatPursuit is an independent project, and your support keeps us building and improving.</p>
-        <p>Pay with card, Amazon Pay, or bank. Availability varies by region and device.</p>
+        <p>Pay with card, Amazon Pay, bank, or PayPal. Availability varies by region and device.</p>
     </div>
 
     <!-- ===== SECTION 5: Footer Notes ===== -->
@@ -418,6 +442,40 @@
 </div>
 
 <script>
+// Provider selection toggle
+(function() {
+    const providerInput = document.getElementById('provider-input');
+    const options = document.querySelectorAll('.provider-option');
+    if (!options.length) return;
+
+    options.forEach(option => {
+        const radio = option.querySelector('input[type="radio"]');
+        option.addEventListener('click', () => {
+            const provider = option.dataset.provider;
+            providerInput.value = provider;
+            radio.checked = true;
+            options.forEach(o => {
+                o.classList.remove('border-primary', 'bg-primary/10');
+                o.classList.add('border-base-300');
+            });
+            option.classList.remove('border-base-300');
+            option.classList.add('border-primary', 'bg-primary/10');
+        });
+    });
+
+    // Prevent double-submit
+    const form = document.getElementById('subscribe-form');
+    if (form) {
+        form.addEventListener('submit', () => {
+            const buttons = form.querySelectorAll('button[type="submit"]');
+            buttons.forEach(btn => {
+                btn.disabled = true;
+                btn.classList.add('loading');
+            });
+        });
+    }
+})();
+
 (function() {
     const swatches = document.querySelectorAll('[data-theme-preview], [data-theme-image]');
     if (!swatches.length) return;
@@ -434,7 +492,7 @@
     function applyTheme(btn) {
         if (btn.dataset.themeImage) {
             body.style.background = '';
-            body.style.backgroundImage = 'url(' + btn.dataset.themeImage + ')';
+            body.style.backgroundImage = 'url("' + btn.dataset.themeImage + '")';
             body.style.backgroundSize = 'cover';
             body.style.backgroundPosition = 'center';
             body.style.backgroundAttachment = 'fixed';

@@ -61,3 +61,28 @@ SUPPORTER_DISCORD_ROLE_TIERS = ['supporter']
 
 # Premium tiers that actually grant premium features (ad_free doesn't)
 ACTIVE_PREMIUM_TIERS = ['premium_monthly', 'premium_yearly', 'supporter']
+
+# PayPal Plan ID Mappings
+# Maps subscription tiers to their PayPal plan IDs for both sandbox and live modes.
+# Create Products and Plans in the PayPal Developer Dashboard, then paste IDs here.
+PAYPAL_PLANS = {
+    'sandbox': {
+        'ad_free': '',
+        'premium_monthly': '',
+        'premium_yearly': '',
+        'supporter': '',
+    },
+    'live': {
+        'ad_free': 'P-51097223GD3632526NGLBPBA',
+        'premium_monthly': 'P-6FE79903U4175840ENGLBP2A',
+        'premium_yearly': 'P-3SY42188DC612830VNGLBQMY',
+        'supporter': 'P-5PM309711C131563TNGLBQ3Q',
+    }
+}
+
+# Reverse lookup: PayPal plan ID -> tier name (built at import time for O(1) webhooks)
+PAYPAL_PLAN_TO_TIER = {}
+for _mode_plans in PAYPAL_PLANS.values():
+    for _tier, _plan_id in _mode_plans.items():
+        if _plan_id:
+            PAYPAL_PLAN_TO_TIER[_plan_id] = _tier

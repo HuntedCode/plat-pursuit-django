@@ -1,9 +1,11 @@
 # users/views.py
 import json
+from datetime import datetime
 
 from allauth.account.views import ConfirmEmailView
 from core.services.tracking import track_page_view
 from django.conf import settings
+from django.utils import timezone
 from django.contrib import messages
 from django.contrib.auth import update_session_auth_hash
 from django.contrib.auth.decorators import login_required
@@ -31,15 +33,15 @@ logger = logging.getLogger('psn_api')
 
 class CustomConfirmEmailView(ConfirmEmailView):
     def get(self, *args, **kwargs):
-        logger.debug(f"Confirmation request received: key={kwargs.get('key')}")
+        logger.info(f"Confirmation request received: key={kwargs.get('key')}")
         response = super().get(*args, **kwargs)
-        logger.debug(f"Confirmation response: {response.status_code}")
+        logger.info(f"Confirmation response: {response.status_code}")
         return response
 
     def post(self, *args, **kwargs):
-        logger.debug(f"POST confirmation: key={kwargs.get('key')}")
+        logger.info(f"POST confirmation: key={kwargs.get('key')}")
         response = super().post(*args, **kwargs)
-        logger.debug(f"POST response: {response.status_code}")
+        logger.info(f"POST response: {response.status_code}")
         return response
     
 class SettingsView(LoginRequiredMixin, View):
@@ -165,67 +167,65 @@ class SettingsView(LoginRequiredMixin, View):
 def subscribe(request):
     is_live = settings.STRIPE_MODE == 'live'
 
-    if Subscription.objects.filter(customer__subscriber=request.user).exists():
-        subs = Subscription.objects.filter(customer__subscriber=request.user)
-        if any(sub.status == 'active' for sub in subs):
-            messages.info(request, 'You already have an active subscription. Manage it here.')
-            return redirect('subscription_management')
+    # Double-subscribe guard: check ALL providers
+    has_active, active_provider = SubscriptionService.has_active_subscription(request.user)
+    if has_active:
+        messages.info(request, 'You already have an active subscription. Manage it here.')
+        return redirect('subscription_management')
 
     try:
-        if is_live:
-            prices = {
-                'ad_free': Price.objects.get(id='price_1SkR4XR5jhcbjB325xchFZm5'),
-                'premium_monthly': Price.objects.get(id='price_1SkR3wR5jhcbjB32vEaltpEJ'),
-                'premium_yearly': Price.objects.get(id='price_1SkR7jR5jhcbjB32BmKo4iQQ'),
-                'supporter': Price.objects.get(id='price_1SkRCuR5jhcbjB32yBFBm1h3'),
-            }
-        else:
-            prices = {
-                'ad_free': Price.objects.get(id='price_1SkTknR5jhcbjB32fnM6oP5A'),
-                'premium_monthly': Price.objects.get(id='price_1SkSXpR5jhcbjB32BA08Bv0o'),
-                'premium_yearly': Price.objects.get(id='price_1SkSY0R5jhcbjB327fYUtaJN'),
-                'supporter': Price.objects.get(id='price_1SkTlHR5jhcbjB32zjcM2I4P'),
-            }
+        prices = SubscriptionService.get_prices_from_stripe(is_live)
     except Price.DoesNotExist as e:
         messages.error(request, "Pricing not available in current mode. Contact support.")
         logger.error(f"Price fetch error: {e} in mode {settings.STRIPE_MODE}")
         return redirect('home')
 
+    valid_tiers = list(prices.keys())
+
     if request.method == 'POST':
-        logger.info('POST request received')
         tier = request.POST.get('tier')
-        logger.info(f"Selected tier: {tier}")
-        if tier not in prices:
+        provider = request.POST.get('provider', 'stripe')
+
+        if tier not in valid_tiers:
             messages.error(request, "Invalid tier selected.")
-            logger.warning(f"Invalid tier: {tier}")
             return redirect('subscribe')
-        
-        price = prices[tier]
 
-        customer, created = Customer.get_or_create(subscriber=request.user)
-        if created:
-            customer.email = request.user.email
-            customer.save()
-        request.user.stripe_customer_id = customer.id
-        request.user.save()
+        if provider == 'paypal':
+            from users.services.paypal_service import PayPalService
+            try:
+                approval_url = PayPalService.create_subscription(
+                    user=request.user,
+                    tier=tier,
+                    return_url=request.build_absolute_uri('/users/subscribe/success/?provider=paypal'),
+                    cancel_url=request.build_absolute_uri('/users/subscribe/'),
+                )
+                return redirect(approval_url)
+            except Exception:
+                logger.exception("PayPal subscription creation failed")
+                messages.error(request, "Error creating PayPal subscription. Please try again.")
+                return redirect('subscribe')
+        else:
+            # Stripe checkout
+            try:
+                session_url = SubscriptionService.create_checkout_session(
+                    user=request.user,
+                    tier=tier,
+                    success_url=request.build_absolute_uri('/users/subscribe/success/') + "?session_id={CHECKOUT_SESSION_ID}",
+                    cancel_url=request.build_absolute_uri('/users/subscribe/'),
+                )
+                return redirect(session_url, code=303)
+            except stripe.error.StripeError as e:
+                messages.error(request, f"Error creating checkout: {str(e)}")
+                return redirect('subscribe')
 
-        try:
-            session = stripe.checkout.Session.create(
-                customer=customer.id,
-                payment_method_types=['card', 'us_bank_account', 'amazon_pay', 'cashapp', 'link'],
-                line_items=[{'price': price.id, 'quantity': 1}],
-                mode='subscription',
-                success_url=request.build_absolute_uri('/users/subscribe/success/') + "?session_id={CHECKOUT_SESSION_ID}",
-                cancel_url=request.build_absolute_uri('/users/subscribe/'),
-                metadata={'tier': tier},
-            )
-            return redirect(session.url, code=303)
-        except stripe.error.StripeError as e:
-            messages.error(request, f"Error creating checkout: {str(e)}")
-            return redirect('subscribe')
-        
-    context = {'prices': {k: v.unit_amount / 100 for k, v in prices.items()}}
+    context = {'prices': {k: (v.stripe_data or {}).get('unit_amount', 0) / 100 for k, v in prices.items()}}
     context['is_live'] = is_live
+    paypal_mode = 'live' if getattr(settings, 'PAYPAL_MODE', '') == 'live' else 'sandbox'
+    from users.constants import PAYPAL_PLANS
+    context['paypal_available'] = (
+        bool(getattr(settings, 'PAYPAL_CLIENT_ID', None))
+        and any(PAYPAL_PLANS.get(paypal_mode, {}).values())
+    )
 
     # Hand-picked themes for the "Try it!" preview swatches
     import re
@@ -242,13 +242,24 @@ def subscribe(request):
 
 @login_required
 def subscribe_success(request):
-    session_id = request.GET.get('session_id')
-    if session_id:
-        try:
-            session = stripe.checkout.Session.retrieve(session_id)
-            messages.success(request, "Subscription activated! Enjoy premium features.")
-        except stripe.error.StripeError as e:
-            messages.error(request, f"Error verifying subscription: {str(e)}")
+    provider = request.GET.get('provider', 'stripe')
+
+    if provider == 'paypal':
+        # PayPal redirects here after user approves. Activation happens via webhook.
+        messages.success(request, "PayPal subscription initiated! Your premium features will activate shortly.")
+    else:
+        # Stripe checkout session verification
+        session_id = request.GET.get('session_id')
+        if session_id:
+            try:
+                session = stripe.checkout.Session.retrieve(session_id)
+                if session.payment_status == 'paid':
+                    messages.success(request, "Subscription activated! Enjoy premium features.")
+                else:
+                    messages.warning(request, "Your payment is still being processed. Premium features will activate shortly.")
+            except stripe.error.StripeError as e:
+                messages.error(request, f"Error verifying subscription: {str(e)}")
+
     return redirect('home')
 
 @csrf_exempt
@@ -276,6 +287,66 @@ def stripe_webhook(request):
 
     return HttpResponse(status=200)
 
+@csrf_exempt
+@require_POST
+def paypal_webhook(request):
+    """Handle incoming PayPal webhook events."""
+    from django.core.cache import cache
+    from users.services.paypal_service import PayPalService
+
+    raw_body = request.body
+    try:
+        event_data = json.loads(raw_body)
+    except json.JSONDecodeError:
+        logger.error("PayPal webhook: invalid JSON payload")
+        return HttpResponse(status=400)
+
+    if not PayPalService.verify_webhook_signature(request.META, raw_body):
+        logger.error("PayPal webhook: signature verification failed")
+        return HttpResponse(status=400)
+
+    # Idempotency: skip duplicate webhook deliveries (PayPal guarantees at-least-once)
+    transmission_id = request.META.get('HTTP_PAYPAL_TRANSMISSION_ID', '')
+    if transmission_id:
+        cache_key = f'paypal_webhook:{transmission_id}'
+        if cache.get(cache_key):
+            logger.info(f"PayPal webhook duplicate skipped: {transmission_id}")
+            return HttpResponse(status=200)
+        cache.set(cache_key, True, timeout=60 * 60 * 24 * 7)  # 7 day TTL
+
+    event_type = event_data.get('event_type', '')
+    resource = event_data.get('resource', {})
+
+    logger.info(f"PayPal webhook received: {event_type}")
+
+    try:
+        PayPalService.handle_webhook_event(event_type, resource)
+    except Exception:
+        logger.exception(f"Error processing PayPal webhook event {event_type}")
+
+    return HttpResponse(status=200)
+
+
+@login_required
+@require_POST
+def paypal_cancel_subscription(request):
+    """Cancel the user's active PayPal subscription."""
+    from users.services.paypal_service import PayPalService
+
+    user = request.user
+    if not user.paypal_subscription_id or user.subscription_provider != 'paypal':
+        messages.error(request, "No active PayPal subscription found.")
+        return redirect('subscription_management')
+
+    success = PayPalService.cancel_subscription(user.paypal_subscription_id)
+    if success:
+        messages.success(request, "Your subscription has been cancelled. You will retain access until the end of your current billing period.")
+    else:
+        messages.error(request, "Error cancelling subscription. Please try through PayPal directly.")
+
+    return redirect('subscription_management')
+
+
 class SubscriptionManagementView(LoginRequiredMixin, TemplateView):
     template_name = 'users/subscription_management.html'
 
@@ -284,22 +355,77 @@ class SubscriptionManagementView(LoginRequiredMixin, TemplateView):
 
         context = super().get_context_data(**kwargs)
         user = self.request.user
-        sub = Subscription.objects.filter(customer__subscriber=user).first()
-        if sub and sub.status == 'active':
+
+        has_active, provider = SubscriptionService.has_active_subscription(user)
+        context['subscription_provider'] = provider
+        context['is_live'] = is_live
+
+        if provider == 'stripe':
+            sub = Subscription.objects.filter(
+                customer__id=user.stripe_customer_id, stripe_data__status='active'
+            ).first()
+            if sub:
+                stripe_data = sub.stripe_data or {}
+                context['tier'] = user.get_premium_tier()
+                context['premium_tier_slug'] = user.premium_tier
+                context['status'] = str(stripe_data.get('status', 'unknown')).capitalize()
+                period_end_ts = stripe_data.get('current_period_end')
+                if period_end_ts:
+                    context['next_billing'] = datetime.fromtimestamp(period_end_ts, tz=timezone.utc)
+                else:
+                    context['next_billing'] = 'N/A'
+
+                try:
+                    return_url = self.request.build_absolute_uri(
+                        reverse('subscription_management')
+                    )
+                    portal_session = stripe.billing_portal.Session.create(
+                        customer=user.stripe_customer_id,
+                        return_url=return_url,
+                    )
+                    context['portal_url'] = portal_session.url
+                except stripe.error.StripeError:
+                    logger.exception("Failed to create Stripe billing portal session")
+                    context['portal_url'] = None
+            else:
+                context['tier'] = 'None'
+                context['status'] = 'No Subscription'
+
+        elif provider == 'paypal':
+            from users.services.paypal_service import PayPalService
             context['tier'] = user.get_premium_tier()
             context['premium_tier_slug'] = user.premium_tier
-            context['status'] = sub.status.capitalize()
-            context['next_billing'] = sub.current_period_end if sub.current_period_end else 'N/A'
 
-            portal_session = stripe.billing_portal.Session.create(
-                customer=user.stripe_customer_id,
-                return_url=self.request.build_absolute_uri(reverse('profile_detail', kwargs={'psn_username': user.profile.psn_username if hasattr(user, 'profile') else ''}))
+            try:
+                sub_details = PayPalService.get_subscription_details(user.paypal_subscription_id)
+                paypal_status = sub_details.get('status', 'UNKNOWN')
+                context['status'] = paypal_status.capitalize()
+
+                billing_info = sub_details.get('billing_info', {})
+                next_billing = billing_info.get('next_billing_time')
+                if next_billing:
+                    try:
+                        context['next_billing'] = datetime.fromisoformat(
+                            next_billing.replace('Z', '+00:00')
+                        )
+                    except (ValueError, AttributeError):
+                        context['next_billing'] = next_billing
+                else:
+                    context['next_billing'] = 'N/A'
+            except Exception:
+                logger.exception("Error fetching PayPal subscription details")
+                context['status'] = 'Active'
+                context['next_billing'] = 'N/A'
+
+            context['paypal_cancel_at'] = user.paypal_cancel_at
+            context['paypal_manage_url'] = (
+                'https://www.paypal.com/myaccount/autopay/'
+                if settings.PAYPAL_MODE == 'live'
+                else 'https://www.sandbox.paypal.com/myaccount/autopay/'
             )
-            context['portal_url'] = portal_session.url
         else:
             context['tier'] = 'None'
-            context['status'] = 'Inactive' if sub else 'No Subscription'
-        context['is_live'] = is_live
+            context['status'] = 'No Subscription'
 
         track_page_view('subscription', 'user', self.request)
         return context
