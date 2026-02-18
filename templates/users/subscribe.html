@@ -463,12 +463,22 @@
         });
     });
 
-    // Prevent double-submit
+    // Prevent double-submit (preserve clicked button's name/value before disabling)
     const form = document.getElementById('subscribe-form');
     if (form) {
+        let clickedBtn = null;
+        form.querySelectorAll('button[type="submit"]').forEach(btn => {
+            btn.addEventListener('click', () => { clickedBtn = btn; });
+        });
         form.addEventListener('submit', () => {
-            const buttons = form.querySelectorAll('button[type="submit"]');
-            buttons.forEach(btn => {
+            if (clickedBtn) {
+                const hidden = document.createElement('input');
+                hidden.type = 'hidden';
+                hidden.name = clickedBtn.name;
+                hidden.value = clickedBtn.value;
+                form.appendChild(hidden);
+            }
+            form.querySelectorAll('button[type="submit"]').forEach(btn => {
                 btn.disabled = true;
                 btn.classList.add('loading');
             });
