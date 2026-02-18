@@ -62,7 +62,7 @@
         <legend class="fieldset-legend text-lg lg:text-xl italic">Filter By Letter</legend>
         <div class="flex flex-row flex-wrap w-full justify-center gap-2 p-1 overflow-x-auto">
             {% for value, display in form.fields.letter.choices %}
-                <a href="?{% query_transform letter=value %}" class="btn btn-sm 2xl:btn-md btn-square transition-all duration-200 cursor-pointer flex-shrink-0 {% if request.GET.letter == value %}btn-primary font-bold transform scale-105{% else %}hover:btn-primary{% endif %}">
+                <a href="?{% query_transform letter=value page=1 %}" class="btn btn-sm 2xl:btn-md btn-square transition-all duration-200 cursor-pointer flex-shrink-0 {% if request.GET.letter == value %}btn-primary font-bold transform scale-105{% else %}hover:btn-primary{% endif %}">
                     {{ display }}
                 </a>
             {% endfor %}
