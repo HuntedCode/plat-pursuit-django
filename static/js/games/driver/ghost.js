@@ -89,6 +89,19 @@ window.PlatPursuit.Games.Driver = window.PlatPursuit.Games.Driver || {};
          * @param {Object} ship - Ship instance (reads x, y, rotation, speed, tier.maxSpeed)
          */
         update(dt, ship) {
+            // Record initial frame at t=0 (before any elapsed time accumulates).
+            // Without this, the first frame would be at ~0.1s when the ship already
+            // has velocity, making the ghost appear to get a "head start."
+            if (this.frames.length === 0) {
+                this.frames.push(
+                    ship.x,
+                    ship.y,
+                    ship.rotation,
+                    ship.speed > 10 ? 1 : 0,
+                    Math.min(ship.speed / ship.tier.maxSpeed, 1)
+                );
+            }
+
             this.elapsed += dt;
 
             if (this.elapsed >= SAMPLE_INTERVAL) {
