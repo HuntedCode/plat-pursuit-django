@@ -279,6 +279,8 @@ class PsnApiService:
                 profile_game.last_played_date_time = title_stats.last_played_date_time
                 profile_game.play_duration = title_stats.play_duration
                 profile_game.save(update_fields=['play_count', 'first_played_date_time', 'last_played_date_time', 'play_duration'])
+            if game.concept_lock:
+                return True
             if game.concept and not game.concept.concept_id.startswith('PP_'):
                 if game.concept_stale:
                     logger.info(f"Game {game} marked as concept_stale. Queuing for concept refresh.")

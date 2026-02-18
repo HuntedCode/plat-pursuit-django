@@ -276,7 +276,7 @@ class CalendarDayDetailAPIView(APIView):
                         'title_platform': game.title_platform or [],
                         'earned_date_time': et.earned_date_time.isoformat(),
                         'earned_year': local_dt.year,
-                        'game_url': f'/games/{game.np_communication_id}/',
+                        'game_url': f'/games/{game.np_communication_id}/{challenge.profile.psn_username}/',
                     })
 
             return Response({
