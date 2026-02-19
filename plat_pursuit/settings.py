@@ -369,6 +369,11 @@ LOGGING = {
             'level': 'ERROR',
             'propagate': False,
         },
+        'users': {
+            'handlers': ['console'],
+            'level': 'INFO',
+            'propagate': False,
+        },
     },
 }
 

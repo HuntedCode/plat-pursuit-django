@@ -8,7 +8,7 @@ Provides:
 import logging
 
 from rest_framework import status
-from rest_framework.authentication import SessionAuthentication
+from rest_framework.authentication import SessionAuthentication, TokenAuthentication
 from rest_framework.permissions import IsAuthenticated, IsAdminUser
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -23,7 +23,7 @@ logger = logging.getLogger('users.admin')
 
 class SubscriptionAdminActionView(APIView):
     """Staff-only actions: resend emails, resend notifications, force deactivate."""
-    authentication_classes = [SessionAuthentication]
+    authentication_classes = [SessionAuthentication, TokenAuthentication]
     permission_classes = [IsAuthenticated, IsAdminUser]
 
     def post(self, request):
@@ -103,7 +103,7 @@ class SubscriptionAdminActionView(APIView):
 
 class SubscriptionAdminUserDetailView(APIView):
     """Staff-only: fetch a user's notification + email history for the detail modal."""
-    authentication_classes = [SessionAuthentication]
+    authentication_classes = [SessionAuthentication, TokenAuthentication]
     permission_classes = [IsAuthenticated, IsAdminUser]
 
     def get(self, request, user_id):
