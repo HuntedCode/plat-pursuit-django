@@ -1,0 +1,134 @@
+{% extends "emails/base_email.html" %}
+
+{% block extra_styles %}
+    <style>
+        /* Celebration box */
+        .welcome-box {
+            background-color: #667eea;
+            background: linear-gradient(135deg, #f6d365 0%, #fda085 50%, #667eea 100%);
+            border-radius: 12px;
+            padding: 30px;
+            margin: 25px 0;
+            color: #ffffff;
+            text-align: center;
+        }
+
+        .welcome-box .welcome-icon {
+            font-size: 42px;
+            margin-bottom: 10px;
+            display: block;
+        }
+
+        .welcome-box h2 {
+            margin: 0 0 10px 0;
+            font-size: 22px;
+            font-weight: 700;
+        }
+
+        .welcome-box p {
+            margin: 0;
+            font-size: 15px;
+            opacity: 0.95;
+            line-height: 1.6;
+        }
+
+        /* Features list */
+        .features-unlocked {
+            background-color: #f0f4ff;
+            border-radius: 8px;
+            padding: 20px 25px;
+            margin: 25px 0;
+            border-left: 4px solid #667eea;
+        }
+
+        .features-unlocked h3 {
+            margin: 0 0 12px 0;
+            font-size: 16px;
+            color: #333333;
+        }
+
+        .features-unlocked ul {
+            margin: 0;
+            padding-left: 20px;
+            color: #555555;
+        }
+
+        .features-unlocked li {
+            margin-bottom: 8px;
+            font-size: 14px;
+        }
+
+        .features-unlocked li strong {
+            color: #333333;
+        }
+
+        /* Flavor text */
+        .flavor-text {
+            text-align: center;
+            font-style: italic;
+            color: #777777;
+            font-size: 15px;
+            margin: 30px 0 10px 0;
+            line-height: 1.6;
+        }
+
+        @media only screen and (max-width: 600px) {
+            .welcome-box {
+                padding: 20px 15px;
+            }
+        }
+    </style>
+{% endblock %}
+
+{% block title %}Welcome to PlatPursuit Premium!{% endblock %}
+
+{% block header_content %}
+    <h1>Welcome Aboard!</h1>
+    <p>Your {{ tier_name }} subscription is now active</p>
+{% endblock %}
+
+{% block content %}
+    <p class="greeting">Hey {{ username }},</p>
+
+    <div class="welcome-box">
+        <span class="welcome-icon">&#127942;</span>
+        <h2>You just leveled up!</h2>
+        <p>
+            Thank you for subscribing to PlatPursuit. Your support keeps our community
+            thriving and helps us build the best trophy hunting platform out there.
+        </p>
+    </div>
+
+    <p class="intro">
+        Your {{ tier_name }} subscription is live. Here's what you've unlocked:
+    </p>
+
+    <div class="features-unlocked">
+        <h3>Your premium perks:</h3>
+        <ul>
+            <li><strong>Priority sync scheduling</strong> and faster profile updates</li>
+            <li><strong>Premium badges, themes,</strong> and customization options</li>
+            <li><strong>Premium checklists</strong> and advanced features</li>
+            <li><strong>Discord premium role</strong> (if verified)</li>
+            <li><strong>The Arcade</strong> with exclusive mini-games</li>
+            <li><strong>Shareable trophy cards</strong> and monthly recaps</li>
+        </ul>
+    </div>
+
+    <p class="intro">
+        Everything is ready to go. Head to your profile to start exploring your new features!
+    </p>
+
+    <div class="cta-container">
+        <a href="{{ profile_url }}" class="cta-button">Explore Premium Features</a>
+    </div>
+
+    <p class="flavor-text">
+        Time to hunt in style. Welcome aboard, trophy hunter!
+    </p>
+{% endblock %}
+
+{% block footer_note %}
+    You're receiving this because you subscribed to PlatPursuit Premium.<br>
+    <a href="{{ preference_url }}" style="color: #999999; text-decoration: underline;">Manage your email preferences</a>.
+{% endblock %}

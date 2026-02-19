@@ -4,7 +4,7 @@ from django.contrib import admin
 from django.http import HttpResponse
 from django.utils import timezone
 
-from .models import AnalyticsSession, PageView, SiteEvent
+from .models import AnalyticsSession, EmailLog, PageView, SiteEvent
 
 
 def _export_pageviews_csv(modeladmin, request, queryset):
@@ -91,6 +91,21 @@ class SiteEventAdmin(admin.ModelAdmin):
     list_per_page = 100
     actions = [_export_siteevents_csv]
     readonly_fields = ('event_type', 'object_id', 'occurred_at', 'user_id')
+
+    def has_add_permission(self, request):
+        return False
+
+
+@admin.register(EmailLog)
+class EmailLogAdmin(admin.ModelAdmin):
+    list_display = ('recipient_email', 'email_type', 'subject', 'status', 'triggered_by', 'created_at')
+    list_filter = ('email_type', 'status', 'triggered_by')
+    search_fields = ('recipient_email', 'user__email', 'subject')
+    raw_id_fields = ('user',)
+    readonly_fields = ('user', 'recipient_email', 'email_type', 'subject', 'status', 'triggered_by', 'created_at', 'metadata')
+    ordering = ('-created_at',)
+    date_hierarchy = 'created_at'
+    list_per_page = 100
 
     def has_add_permission(self, request):
         return False

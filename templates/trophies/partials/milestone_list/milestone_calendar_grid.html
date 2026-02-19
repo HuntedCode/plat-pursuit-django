@@ -40,6 +40,13 @@
 
                     {# Milestone name #}
                     <span class="text-xs text-base-content/50 line-clamp-1">{{ month.milestone.name }}</span>
+
+                    {# Title reward #}
+                    {% if month.milestone.title %}
+                        <span class="text-xs legendary-title italic line-clamp-1 {% if not month.is_earned %}grayscale{% endif %}">
+                            {{ month.milestone.title.name }}
+                        </span>
+                    {% endif %}
                 </div>
             </div>
         {% endfor %}

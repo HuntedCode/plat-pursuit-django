@@ -14,6 +14,8 @@ Usage:
     python manage.py test_email_system your.email@example.com --payment-failed-preview
     python manage.py test_email_system your.email@example.com --payment-failed-final-preview
     python manage.py test_email_system your.email@example.com --cancelled-preview
+    python manage.py test_email_system your.email@example.com --welcome-preview
+    python manage.py test_email_system your.email@example.com --payment-succeeded-preview
 """
 from django.core.management.base import BaseCommand, CommandError
 from django.conf import settings
@@ -59,6 +61,16 @@ class Command(BaseCommand):
             action='store_true',
             help='Send a preview of the subscription cancelled farewell email'
         )
+        parser.add_argument(
+            '--welcome-preview',
+            action='store_true',
+            help='Send a preview of the subscription welcome email'
+        )
+        parser.add_argument(
+            '--payment-succeeded-preview',
+            action='store_true',
+            help='Send a preview of the payment succeeded / renewal confirmation email'
+        )
 
     def handle(self, *args, **options):
         recipient_email = options['recipient_email']
@@ -68,6 +80,8 @@ class Command(BaseCommand):
         payment_failed_preview = options.get('payment_failed_preview', False)
         payment_failed_final_preview = options.get('payment_failed_final_preview', False)
         cancelled_preview = options.get('cancelled_preview', False)
+        welcome_preview = options.get('welcome_preview', False)
+        payment_succeeded_preview = options.get('payment_succeeded_preview', False)
 
         self.stdout.write("=" * 70)
         self.stdout.write("Email System Test")
@@ -88,6 +102,10 @@ class Command(BaseCommand):
             self._send_payment_failed_preview(recipient_email, is_final=True)
         elif cancelled_preview:
             self._send_cancelled_preview(recipient_email)
+        elif welcome_preview:
+            self._send_welcome_preview(recipient_email)
+        elif payment_succeeded_preview:
+            self._send_payment_succeeded_preview(recipient_email)
         else:
             self._send_simple_test(recipient_email)
 
@@ -371,5 +389,100 @@ class Command(BaseCommand):
         except Exception as e:
             self.stdout.write(
                 self.style.ERROR(f'✗ Failed to send cancelled preview: {e}')
+            )
+            raise CommandError(f'Email sending failed: {e}')
+
+    def _send_welcome_preview(self, recipient_email):
+        """Send a preview of the subscription welcome email."""
+        from users.services.email_preference_service import EmailPreferenceService
+
+        self.stdout.write("\nSending subscription welcome email preview...")
+
+        sample_user_id = 1
+        try:
+            preference_token = EmailPreferenceService.generate_preference_token(sample_user_id)
+            preference_url = f"{settings.SITE_URL}/users/email-preferences/?token={preference_token}"
+        except Exception as e:
+            self.stdout.write(self.style.WARNING(f"Failed to generate preference token: {e}"))
+            preference_url = f"{settings.SITE_URL}/users/email-preferences/"
+
+        context = {
+            'username': 'TestUser',
+            'tier_name': 'Premium Monthly',
+            'site_url': settings.SITE_URL,
+            'profile_url': f'{settings.SITE_URL}/profiles/TestUser/',
+            'preference_url': preference_url,
+        }
+
+        try:
+            sent_count = EmailService.send_html_email(
+                subject='[PREVIEW] Welcome to PlatPursuit Premium!',
+                to_emails=[recipient_email],
+                template_name='emails/subscription_welcome.html',
+                context=context,
+                fail_silently=False,
+            )
+
+            if sent_count > 0:
+                self.stdout.write(
+                    self.style.SUCCESS('✓ Welcome preview sent successfully!')
+                )
+                self.stdout.write('\nCheck your inbox to see how the welcome email looks.')
+            else:
+                self.stdout.write(
+                    self.style.ERROR('✗ Email was not sent (no errors but send count is 0)')
+                )
+
+        except Exception as e:
+            self.stdout.write(
+                self.style.ERROR(f'✗ Failed to send welcome preview: {e}')
+            )
+            raise CommandError(f'Email sending failed: {e}')
+
+    def _send_payment_succeeded_preview(self, recipient_email):
+        """Send a preview of the payment succeeded / renewal confirmation email."""
+        from users.services.email_preference_service import EmailPreferenceService
+
+        self.stdout.write("\nSending payment succeeded email preview...")
+
+        sample_user_id = 1
+        try:
+            preference_token = EmailPreferenceService.generate_preference_token(sample_user_id)
+            preference_url = f"{settings.SITE_URL}/users/email-preferences/?token={preference_token}"
+        except Exception as e:
+            self.stdout.write(self.style.WARNING(f"Failed to generate preference token: {e}"))
+            preference_url = f"{settings.SITE_URL}/users/email-preferences/"
+
+        context = {
+            'username': 'TestUser',
+            'tier_name': 'Premium Monthly',
+            'next_billing_date': 'March 19, 2026',
+            'manage_url': f'{settings.SITE_URL}/users/subscription-management/',
+            'site_url': settings.SITE_URL,
+            'preference_url': preference_url,
+        }
+
+        try:
+            sent_count = EmailService.send_html_email(
+                subject='[PREVIEW] Payment confirmed for your PlatPursuit subscription',
+                to_emails=[recipient_email],
+                template_name='emails/payment_succeeded.html',
+                context=context,
+                fail_silently=False,
+            )
+
+            if sent_count > 0:
+                self.stdout.write(
+                    self.style.SUCCESS('✓ Payment succeeded preview sent successfully!')
+                )
+                self.stdout.write('\nCheck your inbox to see how the payment confirmation email looks.')
+            else:
+                self.stdout.write(
+                    self.style.ERROR('✗ Email was not sent (no errors but send count is 0)')
+                )
+
+        except Exception as e:
+            self.stdout.write(
+                self.style.ERROR(f'✗ Failed to send payment succeeded preview: {e}')
             )
             raise CommandError(f'Email sending failed: {e}')

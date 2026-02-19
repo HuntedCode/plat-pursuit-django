@@ -15,6 +15,7 @@ from datetime import datetime, timedelta
 from typing import Optional
 from django.conf import settings
 from django.core.cache import cache
+from django.utils import timezone
 from users.constants import PAYPAL_PLANS, PAYPAL_PLAN_TO_TIER
 
 logger = logging.getLogger('psn_api')
@@ -258,7 +259,6 @@ class PayPalService:
             else:
                 # No expiry date from PayPal: use a 30-day safety fallback so the user
                 # doesn't stay premium forever if the EXPIRED webhook is never received.
-                from django.utils import timezone
                 cancel_at = timezone.now() + timedelta(days=30)
                 logger.warning(
                     f"PayPal CANCELLED event for user {user.email} has no next_billing_time, "
@@ -281,4 +281,17 @@ class PayPalService:
             logger.info(f"PayPal subscription expired for user {user.email}")
 
         elif event_type == 'PAYMENT.SALE.COMPLETED':
+            # Send payment succeeded email for renewals (skip if just activated).
+            # PayPal fires ACTIVATED then SALE.COMPLETED in quick succession on
+            # first payment, so check if a welcome email was logged in the last
+            # 5 minutes to avoid double-emailing.
+            from core.models import EmailLog
+            recent_welcome = EmailLog.objects.filter(
+                user=user,
+                email_type='subscription_welcome',
+                created_at__gte=timezone.now() - timedelta(minutes=5),
+            ).exists()
+            if not recent_welcome:
+                tier_name = SubscriptionService.get_tier_display_name(user.premium_tier) if user.premium_tier else 'Premium'
+                SubscriptionService._send_payment_succeeded_email(user, tier_name)
             logger.info(f"PayPal renewal payment for user {user.email}")

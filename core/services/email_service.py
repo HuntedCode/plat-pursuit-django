@@ -22,7 +22,11 @@ class EmailService:
         template_name,
         context,
         from_email=None,
-        fail_silently=False
+        fail_silently=False,
+        log_email_type=None,
+        log_user=None,
+        log_triggered_by='system',
+        log_metadata=None,
     ):
         """
         Send an HTML email using a Django template.
@@ -34,6 +38,10 @@ class EmailService:
             context: Dictionary of template context variables
             from_email: Sender email (defaults to DEFAULT_FROM_EMAIL)
             fail_silently: If True, don't raise exceptions on send failure
+            log_email_type: If set, auto-creates an EmailLog entry (e.g., 'payment_failed')
+            log_user: User instance for the EmailLog entry (nullable)
+            log_triggered_by: Origin for the EmailLog entry ('system', 'webhook', 'admin_manual', 'management_command')
+            log_metadata: Optional dict of extra metadata for the EmailLog entry
 
         Returns:
             int: Number of emails successfully sent (0 or 1)
@@ -44,6 +52,9 @@ class EmailService:
                 to_emails=['user@example.com'],
                 template_name='emails/monthly_recap.html',
                 context={'username': 'John', 'month': 'January'},
+                log_email_type='monthly_recap',
+                log_user=user,
+                log_triggered_by='management_command',
             )
         """
         if from_email is None:
@@ -79,13 +90,73 @@ class EmailService:
                 + (f" (+{len(to_emails)-1} more)" if len(to_emails) > 1 else "")
             )
 
+            # Auto-log if email_type provided
+            if log_email_type:
+                EmailService._log_email(
+                    email_type=log_email_type,
+                    to_emails=to_emails,
+                    subject=subject,
+                    status='sent' if sent_count > 0 else 'failed',
+                    user=log_user,
+                    triggered_by=log_triggered_by,
+                    metadata=log_metadata,
+                )
+
             return sent_count
 
         except Exception as e:
             logger.exception(f"Failed to send email '{subject}' to {to_emails}: {e}")
+
+            # Log the failure if email_type provided
+            if log_email_type:
+                EmailService._log_email(
+                    email_type=log_email_type,
+                    to_emails=to_emails,
+                    subject=subject,
+                    status='failed',
+                    user=log_user,
+                    triggered_by=log_triggered_by,
+                    metadata=log_metadata,
+                )
+
             if not fail_silently:
                 raise
             return 0
+
+    @staticmethod
+    def _log_email(email_type, to_emails, subject, status, user=None, triggered_by='system', metadata=None):
+        """Create EmailLog entries for each recipient."""
+        try:
+            from core.models import EmailLog
+            for email_addr in to_emails:
+                EmailLog.objects.create(
+                    user=user,
+                    recipient_email=email_addr,
+                    email_type=email_type,
+                    subject=subject,
+                    status=status,
+                    triggered_by=triggered_by,
+                    metadata=metadata or {},
+                )
+        except Exception:
+            logger.exception("Failed to create EmailLog entry")
+
+    @staticmethod
+    def log_suppressed(email_type, user, subject, triggered_by='system', metadata=None):
+        """Log that an email was suppressed by user preferences."""
+        try:
+            from core.models import EmailLog
+            EmailLog.objects.create(
+                user=user,
+                recipient_email=user.email,
+                email_type=email_type,
+                subject=subject,
+                status='suppressed',
+                triggered_by=triggered_by,
+                metadata=metadata or {},
+            )
+        except Exception:
+            logger.exception("Failed to create suppressed EmailLog entry")
 
     @staticmethod
     def send_bulk_html_email(

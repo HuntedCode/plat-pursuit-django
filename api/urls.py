@@ -57,6 +57,7 @@ from .game_family_views import (
     GameFamilyAddConceptView, GameFamilyRemoveConceptView,
     ConceptSearchView as GameFamilyConceptSearchView,
 )
+from .subscription_admin_views import SubscriptionAdminActionView, SubscriptionAdminUserDetailView
 
 app_name = 'api'
 
@@ -213,4 +214,8 @@ urlpatterns = [
     path('game-families/proposals/<int:proposal_id>/approve/', ProposalApproveView.as_view(), name='game-family-proposal-approve'),
     path('game-families/proposals/<int:proposal_id>/reject/', ProposalRejectView.as_view(), name='game-family-proposal-reject'),
     path('game-families/search-concepts/', GameFamilyConceptSearchView.as_view(), name='game-family-search-concepts'),
+
+    # Subscription admin endpoints (staff-only)
+    path('admin/subscriptions/action/', SubscriptionAdminActionView.as_view(), name='subscription-admin-action'),
+    path('admin/subscriptions/user/<int:user_id>/', SubscriptionAdminUserDetailView.as_view(), name='subscription-admin-user-detail'),
 ]

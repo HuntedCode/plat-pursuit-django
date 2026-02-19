@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.db import models
 from django.utils import timezone
 
@@ -199,3 +200,59 @@ class SiteSettings(models.Model):
         """Get or create the singleton settings instance."""
         obj, created = cls.objects.get_or_create(id=1)
         return obj
+
+
+class EmailLog(models.Model):
+    """
+    Audit trail for all emails sent from the platform.
+
+    Tracks subscription emails, account emails (verification, password reset),
+    content emails (monthly recaps), and admin announcements. Used by the
+    subscription admin dashboard and for general email audit purposes.
+    """
+    EMAIL_TYPES = [
+        # Subscription lifecycle
+        ('payment_failed', 'Payment Failed Warning'),
+        ('payment_failed_final', 'Payment Failed Final Warning'),
+        ('subscription_cancelled', 'Subscription Cancelled'),
+        ('subscription_welcome', 'Subscription Welcome'),
+        ('payment_succeeded', 'Payment Succeeded'),
+        # Account
+        ('email_verification', 'Email Verification'),
+        ('password_reset', 'Password Reset'),
+        # Content
+        ('monthly_recap', 'Monthly Recap'),
+        # Admin
+        ('admin_announcement', 'Admin Announcement'),
+    ]
+    STATUS_CHOICES = [
+        ('sent', 'Sent'),
+        ('suppressed', 'Suppressed (Preference)'),
+        ('failed', 'Failed'),
+    ]
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
+        related_name='email_logs', null=True, blank=True,
+    )
+    recipient_email = models.EmailField()
+    email_type = models.CharField(max_length=50, choices=EMAIL_TYPES, db_index=True)
+    subject = models.CharField(max_length=255)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    triggered_by = models.CharField(
+        max_length=30, default='system',
+        help_text="Origin: system, webhook, admin_manual, management_command",
+    )
+    metadata = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['user', '-created_at']),
+            models.Index(fields=['email_type', '-created_at']),
+        ]
+
+    def __str__(self):
+        target = self.user.email if self.user else self.recipient_email
+        return f"{self.get_email_type_display()} -> {target} ({self.status})"

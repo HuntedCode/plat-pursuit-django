@@ -170,6 +170,11 @@ class SubscriptionService:
             elif user.premium_tier in SUPPORTER_DISCORD_ROLE_TIERS:
                 notify_bot_role_earned(user.profile, settings.DISCORD_PREMIUM_PLUS_ROLE)
 
+        # Welcome email for new subscriptions (not upgrades/recoveries)
+        if hasattr(user, 'profile') and event_type in activation_events and is_premium:
+            tier_name = SubscriptionService.get_tier_display_name(tier)
+            SubscriptionService._send_subscription_welcome_email(user, tier_name)
+
         # Check is_premium and subscription_months milestones
         if is_premium and hasattr(user, 'profile'):
             from trophies.services.milestone_service import check_all_milestones_for_user
@@ -472,13 +477,14 @@ class SubscriptionService:
     # ── Payment failure and cancellation notifications ───────────────────
 
     @staticmethod
-    def _send_payment_failed_email(user, is_final_warning: bool) -> bool:
+    def _send_payment_failed_email(user, is_final_warning: bool, triggered_by: str = 'webhook') -> bool:
         """
         Send payment failure email via EmailService.
 
         Args:
             user: CustomUser instance
             is_final_warning: True for final attempt (premium at risk), False for first warning
+            triggered_by: Origin of the email ('webhook', 'admin_manual', etc.)
 
         Returns:
             bool: True if email was sent successfully
@@ -486,8 +492,16 @@ class SubscriptionService:
         from users.services.email_preference_service import EmailPreferenceService
         from core.services.email_service import EmailService
 
+        email_type = 'payment_failed_final' if is_final_warning else 'payment_failed'
+        subject = (
+            "Action Required: Your PlatPursuit subscription is at risk"
+            if is_final_warning
+            else "Heads up: We couldn't process your payment"
+        )
+
         if not EmailPreferenceService.should_send_email(user, 'subscription_notifications'):
             logger.info(f"Skipping payment failed email for {user.email}: preference disabled")
+            EmailService.log_suppressed(email_type, user, subject, triggered_by)
             return False
 
         # Generate billing portal URL for Stripe users, fallback to management page
@@ -516,18 +530,16 @@ class SubscriptionService:
             'preference_url': f"{settings.SITE_URL}/users/email-preferences/?token={preference_token}",
         }
 
-        subject = (
-            "Action Required: Your PlatPursuit subscription is at risk"
-            if is_final_warning
-            else "Heads up: We couldn't process your payment"
-        )
-
         try:
             sent = EmailService.send_html_email(
                 subject=subject,
                 to_emails=[user.email],
                 template_name='emails/payment_failed.html',
                 context=context,
+                log_email_type=email_type,
+                log_user=user,
+                log_triggered_by=triggered_by,
+                log_metadata={'is_final_warning': is_final_warning},
             )
             if sent:
                 logger.info(f"Sent payment failed email to {user.email} (final={is_final_warning})")
@@ -537,7 +549,10 @@ class SubscriptionService:
             return False
 
     @staticmethod
-    def _send_payment_failed_notification(user, attempt_count: int, is_final: bool) -> None:
+    def _send_payment_failed_notification(
+        user, attempt_count: int, is_final: bool,
+        next_retry_at=None, triggered_by: str = 'webhook',
+    ) -> None:
         """
         Send in-app notification for payment failure.
 
@@ -545,6 +560,8 @@ class SubscriptionService:
             user: CustomUser instance
             attempt_count: Which payment attempt failed
             is_final: True if Stripe has given up retrying
+            next_retry_at: Unix timestamp of next Stripe retry (or None)
+            triggered_by: Origin ('webhook', 'admin_manual', etc.)
         """
         from notifications.services.notification_service import NotificationService
 
@@ -573,19 +590,25 @@ class SubscriptionService:
                 action_text='Manage Subscription',
                 icon='💳',
                 priority=priority,
-                metadata={'attempt_count': attempt_count, 'is_final': is_final},
+                metadata={
+                    'attempt_count': attempt_count,
+                    'is_final': is_final,
+                    'next_retry_at': next_retry_at,
+                    'triggered_by': triggered_by,
+                },
             )
         except Exception:
             logger.exception(f"Failed to create payment failed notification for {user.email}")
 
     @staticmethod
-    def _send_subscription_cancelled_email(user, tier_name: str) -> bool:
+    def _send_subscription_cancelled_email(user, tier_name: str, triggered_by: str = 'webhook') -> bool:
         """
         Send farewell email when a subscription ends.
 
         Args:
             user: CustomUser instance
             tier_name: Display name of the tier that just ended
+            triggered_by: Origin of the email ('webhook', 'admin_manual', etc.)
 
         Returns:
             bool: True if email was sent successfully
@@ -593,8 +616,11 @@ class SubscriptionService:
         from users.services.email_preference_service import EmailPreferenceService
         from core.services.email_service import EmailService
 
+        subject = "We're sorry to see you go"
+
         if not EmailPreferenceService.should_send_email(user, 'subscription_notifications'):
             logger.info(f"Skipping cancellation email for {user.email}: preference disabled")
+            EmailService.log_suppressed('subscription_cancelled', user, subject, triggered_by)
             return False
 
         username = user.profile.psn_username if hasattr(user, 'profile') else user.email.split('@')[0]
@@ -610,10 +636,13 @@ class SubscriptionService:
 
         try:
             sent = EmailService.send_html_email(
-                subject="We're sorry to see you go",
+                subject=subject,
                 to_emails=[user.email],
                 template_name='emails/subscription_cancelled.html',
                 context=context,
+                log_email_type='subscription_cancelled',
+                log_user=user,
+                log_triggered_by=triggered_by,
             )
             if sent:
                 logger.info(f"Sent subscription cancelled email to {user.email}")
@@ -628,7 +657,8 @@ class SubscriptionService:
         Handle a Stripe invoice.payment_failed event.
 
         Sends in-app notifications on every attempt and emails on first
-        failure and final warning only.
+        failure and final warning only. Stores Stripe's next retry timestamp
+        in notification metadata for the admin dashboard.
 
         Args:
             user: CustomUser instance
@@ -644,12 +674,158 @@ class SubscriptionService:
             f"next_attempt={'none' if next_attempt is None else 'scheduled'}"
         )
 
-        # In-app notification on every attempt
-        SubscriptionService._send_payment_failed_notification(user, attempt_count, is_final)
+        # In-app notification on every attempt (includes next retry timestamp for dashboard)
+        SubscriptionService._send_payment_failed_notification(
+            user, attempt_count, is_final, next_retry_at=next_attempt,
+        )
 
         # Email only on first failure or final warning
         if is_first or is_final:
             SubscriptionService._send_payment_failed_email(user, is_final)
+
+    # ── Positive lifecycle emails ─────────────────────────────────────────
+
+    @staticmethod
+    def _send_subscription_welcome_email(user, tier_name: str, triggered_by: str = 'webhook') -> bool:
+        """
+        Send welcome email when a user first subscribes.
+
+        Args:
+            user: CustomUser instance
+            tier_name: Display name of the tier they subscribed to
+            triggered_by: Origin of the send (webhook, admin_manual, etc.)
+
+        Returns:
+            bool: True if email was sent successfully
+        """
+        from users.services.email_preference_service import EmailPreferenceService
+        from core.services.email_service import EmailService
+
+        subject = "Welcome to PlatPursuit Premium!"
+
+        if not EmailPreferenceService.should_send_email(user, 'subscription_notifications'):
+            logger.info(f"Skipping welcome email for {user.email}: preference disabled")
+            EmailService.log_suppressed('subscription_welcome', user, subject, triggered_by)
+            return False
+
+        username = user.profile.psn_username if hasattr(user, 'profile') else user.email.split('@')[0]
+        preference_token = EmailPreferenceService.generate_preference_token(user.id)
+
+        context = {
+            'username': username,
+            'tier_name': tier_name,
+            'site_url': settings.SITE_URL,
+            'profile_url': f"{settings.SITE_URL}/profiles/{user.profile.psn_username}/" if hasattr(user, 'profile') else settings.SITE_URL,
+            'preference_url': f"{settings.SITE_URL}/users/email-preferences/?token={preference_token}",
+        }
+
+        try:
+            sent = EmailService.send_html_email(
+                subject=subject,
+                to_emails=[user.email],
+                template_name='emails/subscription_welcome.html',
+                context=context,
+                log_email_type='subscription_welcome',
+                log_user=user,
+                log_triggered_by=triggered_by,
+            )
+            if sent:
+                logger.info(f"Sent welcome email to {user.email}")
+            return sent > 0
+        except Exception:
+            logger.exception(f"Failed to send welcome email to {user.email}")
+            return False
+
+    @staticmethod
+    def _send_payment_succeeded_email(user, tier_name: str, next_billing_date=None, triggered_by: str = 'webhook') -> bool:
+        """
+        Send payment confirmation email on successful renewal.
+
+        Args:
+            user: CustomUser instance
+            tier_name: Display name of the subscription tier
+            next_billing_date: Formatted date string for next billing (or None)
+            triggered_by: Origin of the send (webhook, admin_manual, etc.)
+
+        Returns:
+            bool: True if email was sent successfully
+        """
+        from users.services.email_preference_service import EmailPreferenceService
+        from core.services.email_service import EmailService
+
+        subject = "Payment confirmed for your PlatPursuit subscription"
+
+        if not EmailPreferenceService.should_send_email(user, 'subscription_notifications'):
+            logger.info(f"Skipping payment succeeded email for {user.email}: preference disabled")
+            EmailService.log_suppressed('payment_succeeded', user, subject, triggered_by)
+            return False
+
+        username = user.profile.psn_username if hasattr(user, 'profile') else user.email.split('@')[0]
+        preference_token = EmailPreferenceService.generate_preference_token(user.id)
+
+        context = {
+            'username': username,
+            'tier_name': tier_name,
+            'next_billing_date': next_billing_date,
+            'manage_url': f"{settings.SITE_URL}/users/subscription-management/",
+            'site_url': settings.SITE_URL,
+            'preference_url': f"{settings.SITE_URL}/users/email-preferences/?token={preference_token}",
+        }
+
+        try:
+            sent = EmailService.send_html_email(
+                subject=subject,
+                to_emails=[user.email],
+                template_name='emails/payment_succeeded.html',
+                context=context,
+                log_email_type='payment_succeeded',
+                log_user=user,
+                log_triggered_by=triggered_by,
+            )
+            if sent:
+                logger.info(f"Sent payment succeeded email to {user.email}")
+            return sent > 0
+        except Exception:
+            logger.exception(f"Failed to send payment succeeded email to {user.email}")
+            return False
+
+    @staticmethod
+    def handle_payment_succeeded(user, invoice_data: dict) -> None:
+        """
+        Handle a successful payment (Stripe invoice.paid or PayPal PAYMENT.SALE.COMPLETED).
+
+        Only sends the payment succeeded email for renewal payments, not the
+        initial subscription charge (which is handled by the welcome email).
+
+        Args:
+            user: CustomUser instance
+            invoice_data: Stripe Invoice object data (or empty dict for PayPal)
+        """
+        # Skip initial subscription invoices (welcome email handles that)
+        billing_reason = invoice_data.get('billing_reason', '')
+        if billing_reason == 'subscription_create':
+            logger.info(f"Skipping payment succeeded email for {user.email}: initial subscription (welcome email sent instead)")
+            return
+
+        # Skip $0 invoices (setup, prorations, trials)
+        amount_paid = invoice_data.get('amount_paid', 0)
+        if amount_paid is not None and amount_paid <= 0:
+            return
+
+        tier_name = SubscriptionService.get_tier_display_name(user.premium_tier) if user.premium_tier else 'Premium'
+
+        # Extract next billing date from invoice line items
+        next_billing_date = None
+        lines = invoice_data.get('lines', {}).get('data', [])
+        if lines:
+            period_end = lines[0].get('period', {}).get('end')
+            if period_end:
+                try:
+                    next_billing_date = datetime.fromtimestamp(period_end, tz=timezone.utc).strftime('%B %d, %Y')
+                except (ValueError, OSError):
+                    pass
+
+        SubscriptionService._send_payment_succeeded_email(user, tier_name, next_billing_date)
 
     # ── Stripe webhook handling ───────────────────────────────────────────
 
@@ -685,12 +861,28 @@ class SubscriptionService:
                 logger.warning(f"No user found with stripe_customer_id {customer_id}")
             return
 
+        # invoice.paid: update subscription status AND send payment succeeded email
+        if event_type == 'invoice.paid':
+            customer_id = event_data.get('customer')
+            if not customer_id:
+                logger.warning(f"No customer_id in webhook event {event_type}")
+                return
+
+            try:
+                from users.models import CustomUser
+                user = CustomUser.objects.get(stripe_customer_id=customer_id)
+                SubscriptionService.update_user_subscription(user, event_type)
+                SubscriptionService.handle_payment_succeeded(user, event_data)
+                logger.info(f"Updated subscription for user {user.email} from webhook {event_type}")
+            except CustomUser.DoesNotExist:
+                logger.warning(f"No user found with stripe_customer_id {customer_id}")
+            return
+
         if event_type in [
             'checkout.session.completed',
             'customer.subscription.created',
             'customer.subscription.updated',
             'customer.subscription.deleted',
-            'invoice.paid',
         ]:
             customer_id = event_data.get('customer')
             if not customer_id:

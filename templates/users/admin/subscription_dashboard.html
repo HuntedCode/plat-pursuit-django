@@ -1,0 +1,340 @@
+{% extends 'base.html' %}
+{% load static humanize %}
+
+{% block title %}Subscription Dashboard - PlatPursuit{% endblock %}
+
+{% block content %}
+<div class="container mx-auto p-4">
+
+    <!-- Header -->
+    <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-6">
+        <h1 class="text-3xl font-bold mb-4 md:mb-0">Subscription Dashboard</h1>
+        <div class="flex gap-2">
+            <a href="{% url 'admin_notification_center' %}" class="btn btn-ghost btn-sm">Notifications</a>
+            <a href="{% url 'comment_moderation' %}" class="btn btn-ghost btn-sm">Moderation</a>
+            <a href="{% url 'game_family_management' %}" class="btn btn-ghost btn-sm">Game Families</a>
+        </div>
+    </div>
+
+    <!-- Stats Cards -->
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        <div class="stat bg-base-100 border-2 border-base-300 rounded-box">
+            <div class="stat-title">Active Subscribers</div>
+            <div class="stat-value text-success">{{ total_active }}</div>
+            <div class="stat-desc">{{ stripe_count }} Stripe, {{ paypal_count }} PayPal</div>
+        </div>
+        <div class="stat bg-base-100 border-2 border-base-300 rounded-box">
+            <div class="stat-title">Past Due</div>
+            <div class="stat-value text-error">{{ past_due_count }}</div>
+            <div class="stat-desc">Payment retries in progress</div>
+        </div>
+        <div class="stat bg-base-100 border-2 border-base-300 rounded-box">
+            <div class="stat-title">Deactivated (30d)</div>
+            <div class="stat-value text-warning">{{ deactivated_count }}</div>
+            <div class="stat-desc">Subscriptions ended</div>
+        </div>
+        <div class="stat bg-base-100 border-2 border-base-300 rounded-box">
+            <div class="stat-title">Emails Suppressed</div>
+            <div class="stat-value text-info">{{ suppressed_count }}</div>
+            <div class="stat-desc">Opted out of sub emails</div>
+        </div>
+    </div>
+
+    <!-- Tier Breakdown -->
+    {% if tier_breakdown %}
+    <div class="grid gap-3 mb-6" style="grid-template-columns: repeat({{ tier_breakdown|length }}, minmax(0, 1fr))">
+        {% for tier in tier_breakdown %}
+        <div class="bg-base-100 border border-base-300 rounded-box px-4 py-3 text-center">
+            <div class="text-sm opacity-70">{{ tier.display }}</div>
+            <div class="text-xl font-bold">{{ tier.count }}</div>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <!-- Tabs -->
+    <div id="sub-tabs" class="tabs tabs-boxed mb-6">
+        <button class="tab tab-active" data-tab="attention">Attention Needed ({{ past_due_count }})</button>
+        <button class="tab" data-tab="all">All Subscribers ({{ total_active }})</button>
+        <button class="tab" data-tab="activity">Recent Activity ({{ deactivated_count }})</button>
+    </div>
+
+    <!-- Tab: Attention Needed -->
+    <div id="tab-attention" class="sub-tab-panel">
+        {% if past_due_users %}
+        <p class="text-sm opacity-70 mb-4">
+            Stripe users with past-due payments. PayPal payment failures deactivate immediately and appear in Recent Activity.
+        </p>
+        <div class="space-y-4">
+            {% for user in past_due_users %}
+            <div class="bg-base-100 border-2 border-base-300 rounded-box p-4">
+                <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
+                    <!-- User info -->
+                    <div class="flex-1">
+                        <div class="flex items-center gap-2 mb-1">
+                            <span class="font-bold text-lg">{{ user.psn_username }}</span>
+                            <span class="badge badge-error badge-sm">past_due</span>
+                            <span class="badge badge-outline badge-sm">{{ user.tier_display }}</span>
+                            <span class="badge badge-ghost badge-sm">{{ user.provider }}</span>
+                        </div>
+                        <div class="text-sm opacity-70">
+                            {{ user.email }}
+                            {% if not user.emails_enabled %}
+                                <span class="badge badge-warning badge-xs ml-1">emails disabled</span>
+                            {% endif %}
+                        </div>
+                        <div class="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-sm">
+                            {% if user.attempt_count %}
+                            <span>Payment attempts: <strong>{{ user.attempt_count }}</strong></span>
+                            {% endif %}
+                            {% if user.last_notification_at %}
+                            <span>Last notification: <strong>{{ user.last_notification_at|timesince }} ago</strong></span>
+                            {% endif %}
+                            {% if user.last_email_at %}
+                            <span>Last email: <strong>{{ user.last_email_at|timesince }} ago</strong>
+                                {% if user.last_email_status == 'suppressed' %}
+                                    <span class="badge badge-warning badge-xs">suppressed</span>
+                                {% elif user.last_email_status == 'failed' %}
+                                    <span class="badge badge-error badge-xs">failed</span>
+                                {% endif %}
+                            </span>
+                            {% endif %}
+                            {% if user.next_retry_at %}
+                            <span>Stripe retries: <strong>{{ user.next_retry_at|date:"M d, Y g:i A" }}</strong></span>
+                            {% elif user.is_final %}
+                            <span class="text-error font-semibold">No more retries (final)</span>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <!-- Actions -->
+                    <div class="flex flex-wrap gap-2">
+                        <button class="btn btn-warning btn-sm"
+                                onclick="PlatPursuit.SubAdmin.resendEmail({{ user.id }}, false, event)">
+                            Resend Email
+                        </button>
+                        <button class="btn btn-error btn-sm"
+                                onclick="PlatPursuit.SubAdmin.resendEmail({{ user.id }}, true, event)">
+                            Final Warning
+                        </button>
+                        <button class="btn btn-ghost btn-sm"
+                                onclick="PlatPursuit.SubAdmin.showUserDetail({{ user.id }})">
+                            View History
+                        </button>
+                        <button class="btn btn-outline btn-error btn-sm"
+                                onclick="PlatPursuit.SubAdmin.confirmDeactivate({{ user.id }}, '{{ user.psn_username|escapejs }}')">
+                            Force Deactivate
+                        </button>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="text-center py-12 opacity-60">
+            <p class="text-2xl mb-2">All clear!</p>
+            <p>No users need attention. All subscription payments are current.</p>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Tab: All Subscribers -->
+    <div id="tab-all" class="sub-tab-panel hidden">
+        {% if all_subscribers %}
+        <div class="overflow-x-auto">
+            <table class="table table-zebra w-full">
+                <thead>
+                    <tr>
+                        <th>PSN Username</th>
+                        <th>Email</th>
+                        <th>Tier</th>
+                        <th>Provider</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for sub in all_subscribers %}
+                    <tr>
+                        <td class="font-semibold">{{ sub.psn_username }}</td>
+                        <td>{{ sub.email }}</td>
+                        <td><span class="badge badge-outline badge-sm">{{ sub.tier_display }}</span></td>
+                        <td><span class="badge badge-ghost badge-sm">{{ sub.provider }}</span></td>
+                        <td>
+                            <button class="btn btn-ghost btn-xs"
+                                    onclick="PlatPursuit.SubAdmin.showUserDetail({{ sub.id }})">
+                                View
+                            </button>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="text-center py-12 opacity-60">
+            <p>No active subscribers found.</p>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Tab: Recent Activity -->
+    <div id="tab-activity" class="sub-tab-panel hidden">
+        {% if recent_activity %}
+        <div class="overflow-x-auto">
+            <table class="table table-zebra w-full">
+                <thead>
+                    <tr>
+                        <th>PSN Username</th>
+                        <th>Email</th>
+                        <th>Provider</th>
+                        <th>Duration</th>
+                        <th>Ended</th>
+                        <th>Notes</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for entry in recent_activity %}
+                    <tr>
+                        <td class="font-semibold">{{ entry.psn_username }}</td>
+                        <td>{{ entry.email }}</td>
+                        <td><span class="badge badge-ghost badge-sm">{{ entry.provider }}</span></td>
+                        <td>{{ entry.duration_days }} days</td>
+                        <td>{{ entry.ended_at|timesince }} ago</td>
+                        <td class="text-sm opacity-70">{{ entry.notes }}</td>
+                        <td>
+                            <button class="btn btn-ghost btn-xs"
+                                    onclick="PlatPursuit.SubAdmin.showUserDetail({{ entry.id }})">
+                                View
+                            </button>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="text-center py-12 opacity-60">
+            <p>No subscription activity in the last 30 days.</p>
+        </div>
+        {% endif %}
+    </div>
+
+</div>
+
+<!-- User Detail Modal -->
+<dialog id="user-detail-modal" class="modal">
+    <div class="modal-box max-w-3xl">
+        <form method="dialog">
+            <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2">X</button>
+        </form>
+        <h3 class="font-bold text-lg mb-4" id="detail-modal-title">User Details</h3>
+
+        <div id="detail-modal-loading" class="text-center py-8">
+            <span class="loading loading-spinner loading-lg"></span>
+        </div>
+
+        <div id="detail-modal-content" class="hidden">
+            <!-- User info -->
+            <div class="mb-4 p-3 bg-base-200 rounded-box">
+                <div id="detail-user-info"></div>
+            </div>
+
+            <!-- Notification History -->
+            <h4 class="font-semibold mb-2">Notification History</h4>
+            <div class="overflow-x-auto mb-4">
+                <table class="table table-compact table-zebra w-full">
+                    <thead>
+                        <tr>
+                            <th>Type</th>
+                            <th>Title</th>
+                            <th>Priority</th>
+                            <th>Read</th>
+                            <th>Date</th>
+                        </tr>
+                    </thead>
+                    <tbody id="detail-notifications"></tbody>
+                </table>
+            </div>
+
+            <!-- Email Log -->
+            <h4 class="font-semibold mb-2">Email Log</h4>
+            <div class="overflow-x-auto mb-4">
+                <table class="table table-compact table-zebra w-full">
+                    <thead>
+                        <tr>
+                            <th>Type</th>
+                            <th>Status</th>
+                            <th>Triggered By</th>
+                            <th>Date</th>
+                        </tr>
+                    </thead>
+                    <tbody id="detail-emails"></tbody>
+                </table>
+            </div>
+
+            <!-- Subscription Periods -->
+            <h4 class="font-semibold mb-2">Subscription Periods</h4>
+            <div class="overflow-x-auto">
+                <table class="table table-compact table-zebra w-full">
+                    <thead>
+                        <tr>
+                            <th>Provider</th>
+                            <th>Started</th>
+                            <th>Ended</th>
+                            <th>Duration</th>
+                            <th>Notes</th>
+                        </tr>
+                    </thead>
+                    <tbody id="detail-periods"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    <form method="dialog" class="modal-backdrop">
+        <button>close</button>
+    </form>
+</dialog>
+
+<!-- Force Deactivate Confirmation Modal -->
+<dialog id="deactivate-modal" class="modal">
+    <div class="modal-box">
+        <form method="dialog">
+            <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2">X</button>
+        </form>
+        <h3 class="font-bold text-lg mb-4">Force Deactivate Subscription</h3>
+        <p class="mb-2">
+            Are you sure you want to deactivate the subscription for
+            <strong id="deactivate-username"></strong>?
+        </p>
+        <p class="text-sm opacity-70 mb-4">
+            This will immediately remove their premium status, close their subscription period,
+            and remove Discord roles. This action cannot be undone.
+        </p>
+        <div class="form-control mb-4">
+            <label class="label">
+                <span class="label-text">Admin Notes (optional)</span>
+            </label>
+            <textarea id="deactivate-notes" class="textarea textarea-bordered"
+                      placeholder="Reason for manual deactivation..." rows="3"></textarea>
+        </div>
+        <input type="hidden" id="deactivate-user-id" value="">
+        <div class="modal-action">
+            <form method="dialog">
+                <button class="btn btn-ghost">Cancel</button>
+            </form>
+            <button class="btn btn-error" onclick="PlatPursuit.SubAdmin.executeDeactivate(event)">Deactivate</button>
+        </div>
+    </div>
+    <form method="dialog" class="modal-backdrop">
+        <button>close</button>
+    </form>
+</dialog>
+{% endblock %}
+
+{% block js_scripts %}
+<script src="{% static 'js/subscription-admin.js' %}"></script>
+<script>
+    PlatPursuit.ZoomScaler.init();
+</script>
+{% endblock %}

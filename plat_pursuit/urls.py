@@ -33,6 +33,7 @@ sitemaps = {
 from trophies.views import GamesListView, TrophiesListView, ProfilesListView, SearchView, GameDetailView, ProfileDetailView, TrophyCaseView, ToggleSelectionView, BadgeListView, BadgeDetailView, GuideListView, ProfileSyncStatusView, TriggerSyncView, SearchSyncProfileView, AddSyncStatusView, LinkPSNView, ProfileVerifyView, TokenMonitoringView, BadgeCreationView, BadgeLeaderboardsView, OverallBadgeLeaderboardsView, MilestoneListView, CommentModerationView, ModerationActionView, ModerationLogView, ChecklistDetailView, ChecklistCreateView, ChecklistEditView, MyChecklistsView, MyShareablesView, BrowseGuidesView, BrowseListsView, GameListDetailView, GameListEditView, GameListCreateView, MyListsView, ChallengeHubView, MyChallengesView, AZChallengeCreateView, AZChallengeSetupView, AZChallengeDetailView, AZChallengeEditView, CalendarChallengeCreateView, CalendarChallengeDetailView, GameFamilyManagementView
 from trophies.recap_views import RecapIndexView, RecapSlideView
 from users.views import CustomConfirmEmailView, stripe_webhook, paypal_webhook
+from users.subscription_admin_views import SubscriptionAdminView
 from notifications.views import (
     NotificationInboxView,
     AdminNotificationCenterView,
@@ -107,6 +108,7 @@ urlpatterns = [
     path('staff/notifications/history/', AdminNotificationHistoryView.as_view(), name='admin_notification_history'),
     path('staff/notifications/scheduled/', AdminScheduledNotificationsView.as_view(), name='admin_scheduled_notifications'),
     path('staff/notifications/scheduled/<int:pk>/cancel/', AdminCancelScheduledView.as_view(), name='admin_cancel_scheduled'),
+    path('staff/subscriptions/', SubscriptionAdminView.as_view(), name='subscription_admin'),
 
     path('api/profile-verify/', ProfileVerifyView.as_view(), name='profile_verify'),
     path('api/trigger-sync/', TriggerSyncView.as_view(), name='trigger_sync'),
