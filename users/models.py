@@ -180,6 +180,8 @@ class SubscriptionPeriod(models.Model):
     @property
     def duration_days(self):
         """Return the number of days in this period (open periods count to now)."""
+        if not self.started_at:
+            return 0
         end = self.ended_at or timezone.now()
         return (end - self.started_at).days
 
