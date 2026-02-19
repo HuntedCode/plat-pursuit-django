@@ -390,16 +390,6 @@ class MilestoneQuerySet(models.QuerySet):
         """
         return self.filter(premium_only=True)
 
-    def manual_award(self):
-        """
-        Filter to manually awarded milestones.
-
-        Returns:
-            QuerySet: Milestones that are manually awarded by admins
-        """
-        return self.filter(manual_award=True)
-
-
 class MilestoneManager(models.Manager):
     """Custom manager for Milestone model."""
 
@@ -414,33 +404,6 @@ class MilestoneManager(models.Manager):
     def ordered_by_value(self):
         """Proxy to queryset method."""
         return self.get_queryset().ordered_by_value()
-
-    def get_for_user(self, profile, criteria_type=None):
-        """
-        Fetch milestones for user, optionally filtered by criteria, with progress ratio.
-
-        This method preserves the existing functionality from the old MilestoneManager.
-
-        Args:
-            profile: Profile instance
-            criteria_type: Optional criteria type filter
-
-        Returns:
-            QuerySet: Milestones with progress annotations
-        """
-        from django.db.models import Case, F, Value, When
-        from django.db.models.functions import Cast
-        qs = self.prefetch_related('user_milestones', 'user_milestone_progress').filter(user_milestones__profile=profile)
-        if criteria_type:
-            qs = qs.filter(criteria_type=criteria_type)
-        return qs.annotate(
-            progress_ratio=Case(
-                When(required_value=0, then=Value(0.0)),
-                default=Cast(F('user_milestone_progress__progress_value'), output_field=models.FloatField()) / Cast(F('required_value'), output_field=models.FloatField()),
-                output_field=models.FloatField(),
-            )
-        ).order_by('-progress_ratio', 'name')
-
 
 class CommentQuerySet(models.QuerySet):
     """Custom queryset for Comment model."""

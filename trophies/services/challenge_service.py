@@ -100,6 +100,10 @@ def check_az_challenge_progress(profile):
                     'completed_count', 'filled_count', 'updated_at',
                 ])
 
+            # Check A-Z milestone progress
+            from trophies.services.milestone_service import check_all_milestones_for_user
+            check_all_milestones_for_user(profile, criteria_type='az_progress')
+
 
 def recalculate_challenge_counts(challenge):
     """Refresh filled_count and completed_count from actual slot data (type-aware)."""
@@ -354,6 +358,9 @@ def backfill_calendar_from_history(challenge):
         challenge.save(update_fields=['is_complete', 'completed_at', 'updated_at'])
         _create_completion_notification(challenge)
 
+    # Check calendar milestone progress (backfill path)
+    _check_calendar_milestones(challenge.profile)
+
 
 def check_calendar_challenge_progress(profile):
     """
@@ -443,6 +450,22 @@ def check_calendar_challenge_progress(profile):
                 challenge.save(update_fields=[
                     'completed_count', 'filled_count', 'updated_at',
                 ])
+
+            # Check calendar milestone progress (sync path)
+            _check_calendar_milestones(profile)
+
+
+def _check_calendar_milestones(profile):
+    """Check all calendar-related milestones for a profile in a single batch."""
+    # Skip entirely if user has no calendar challenge
+    if not Challenge.objects.filter(
+        profile=profile, challenge_type='calendar', is_deleted=False
+    ).exists():
+        return
+
+    from trophies.milestone_constants import ALL_CALENDAR_TYPES
+    from trophies.services.milestone_service import check_all_milestones_for_user
+    check_all_milestones_for_user(profile, criteria_types=ALL_CALENDAR_TYPES)
 
 
 def _get_calendar_year():

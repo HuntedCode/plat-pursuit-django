@@ -443,8 +443,8 @@ def _build_milestone_context(user_milestone_instance):
         current_progress = result.get('progress', 0)
 
     # Determine if this is a "one-off" milestone type (no progression)
-    one_off_types = {'psn_linked', 'discord_linked', 'manual'}
-    is_one_off = milestone.criteria_type in one_off_types
+    from trophies.milestone_constants import ONE_OFF_TYPES, CALENDAR_MONTH_TYPES
+    is_one_off = milestone.criteria_type in ONE_OFF_TYPES
 
     # Get all milestones of the same criteria type, ordered by required_value
     same_type_milestones = list(
@@ -462,8 +462,9 @@ def _build_milestone_context(user_milestone_instance):
 
     # Find next milestone (higher required_value in same criteria_type)
     earned_milestone_ids = set(
-        UserMilestone.objects.filter(profile=profile)
-        .values_list('milestone_id', flat=True)
+        UserMilestone.objects.filter(
+            profile=profile, milestone__criteria_type=milestone.criteria_type
+        ).values_list('milestone_id', flat=True)
     )
 
     next_milestone_data = None
@@ -488,6 +489,30 @@ def _build_milestone_context(user_milestone_instance):
                 is_max_tier = False
                 break
 
+    # Build pre-formatted tier and next milestone text for the notification template
+    if is_one_off:
+        tier_text = ''
+        next_milestone_text = ''
+    else:
+        tier_text = f" (Tier {current_tier}/{total_tiers})"
+        if is_max_tier:
+            next_milestone_text = " You've reached the highest tier!"
+        elif next_milestone_data:
+            next_milestone_text = (
+                f" Next up: {next_milestone_data['name']}"
+                f" ({next_milestone_data['progress_percentage']}% complete)."
+            )
+        else:
+            next_milestone_text = ''
+
+    # Map criteria_type to milestone page category tab slug
+    from trophies.milestone_constants import MILESTONE_CATEGORIES
+    category_slug = 'overview'
+    for slug, cat_data in MILESTONE_CATEGORIES.items():
+        if milestone.criteria_type in cat_data.get('criteria_types', []):
+            category_slug = slug
+            break
+
     return {
         # Basic milestone info (backward compatible)
         'username': profile.display_psn_username or profile.psn_username,
@@ -498,52 +523,55 @@ def _build_milestone_context(user_milestone_instance):
         'milestone_criteria': milestone.get_criteria_type_display(),
         'milestone_target': milestone.required_value,
 
-        # New enhanced fields
-        'criteria_type': milestone.criteria_type,
+        # Enhanced fields (calendar month types use 'calendar_months' anchor
+        # to match the element ID in milestone_calendar_grid.html)
+        'criteria_type': 'calendar_months' if milestone.criteria_type in CALENDAR_MONTH_TYPES else milestone.criteria_type,
+        'milestone_category': category_slug,
         'current_progress': current_progress,
         'next_milestone': next_milestone_data,
         'current_tier': current_tier,
         'total_tiers': total_tiers,
         'is_max_tier': is_max_tier,
         'is_one_off': is_one_off,
+        'tier_text': tier_text,
+        'next_milestone_text': next_milestone_text,
     }
 
 
-@receiver(post_save, sender=UserMilestone)
-def notify_milestone_achieved(sender, instance, created, **kwargs):
+def create_milestone_notification(user_milestone_instance):
     """
-    Triggered when a milestone is achieved by a user.
-    Creates a notification with rich context including next milestone progress.
+    Create an in-app notification for a milestone achievement.
+
+    Called from milestone_service.py instead of via post_save signal so that
+    notifications can be consolidated (only the highest tier per criteria type
+    in a batch).
     """
-    if created:
-        try:
-            template = NotificationTemplate.objects.get(
-                name='milestone_achieved',
-                auto_trigger_enabled=True
-            )
+    try:
+        template = NotificationTemplate.objects.get(
+            name='milestone_achieved',
+            auto_trigger_enabled=True
+        )
 
-            # Get user from profile
-            if not instance.profile.user:
-                return  # No user linked to profile
+        if not user_milestone_instance.profile.user:
+            return
 
-            # Build rich context with next milestone progress
-            context = _build_milestone_context(instance)
+        context = _build_milestone_context(user_milestone_instance)
 
-            # Create notification from template
-            NotificationService.create_from_template(
-                recipient=instance.profile.user,
-                template=template,
-                context=context
-            )
+        NotificationService.create_from_template(
+            recipient=user_milestone_instance.profile.user,
+            template=template,
+            context=context
+        )
 
-            logger.info(
-                f"Created milestone notification for {instance.profile.psn_username} - {instance.milestone.name}"
-            )
+        logger.info(
+            f"Created milestone notification for {user_milestone_instance.profile.psn_username}"
+            f" - {user_milestone_instance.milestone.name}"
+        )
 
-        except NotificationTemplate.DoesNotExist:
-            logger.warning("Milestone achieved template not found or not enabled")
-        except Exception as e:
-            logger.error(f"Failed to create milestone notification: {e}")
+    except NotificationTemplate.DoesNotExist:
+        logger.warning("Milestone achieved template not found or not enabled")
+    except Exception as e:
+        logger.exception(f"Failed to create milestone notification: {e}")
 
 
 @receiver(post_save, sender=Profile)

@@ -1,0 +1,96 @@
+{% load humanize %}
+
+<div class="tabs tabs-box mt-4 bg-base-300/80" role="tablist" aria-label="Milestone categories">
+
+{% for tab in tab_data %}
+    {# ── Tab Link ──────────────────────────────────────────────────────── #}
+    <a href="?cat={{ tab.slug }}" id="{{ tab.slug }}-tab"
+       class="tab {% if current_cat == tab.slug %}tab-active{% endif %}"
+       role="tab"
+       aria-selected="{% if current_cat == tab.slug %}true{% else %}false{% endif %}"
+       aria-controls="{{ tab.slug }}-panel">
+
+        {# Icon per category (category color when inactive, base-content when active) #}
+        {% if tab.icon == 'overview' %}
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 mr-1.5 shrink-0 {% if current_cat == tab.slug %}text-base-content{% else %}text-info{% endif %}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <circle cx="12" cy="12" r="10"></circle>
+                <polyline points="12 6 12 12 16 14"></polyline>
+            </svg>
+        {% elif tab.icon == 'trophy' %}
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 mr-1.5 shrink-0 {% if current_cat == tab.slug %}text-base-content{% else %}text-warning{% endif %}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"></path>
+                <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"></path>
+                <path d="M4 22h16"></path>
+                <path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20 7 22"></path>
+                <path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20 17 22"></path>
+                <path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"></path>
+            </svg>
+        {% elif tab.icon == 'community' %}
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 mr-1.5 shrink-0 {% if current_cat == tab.slug %}text-base-content{% else %}text-secondary{% endif %}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path>
+                <circle cx="9" cy="7" r="4"></circle>
+                <path d="M22 21v-2a4 4 0 0 0-3-3.87"></path>
+                <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+            </svg>
+        {% elif tab.icon == 'collection' %}
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 mr-1.5 shrink-0 {% if current_cat == tab.slug %}text-base-content{% else %}text-accent{% endif %}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <rect x="3" y="3" width="7" height="7"></rect>
+                <rect x="14" y="3" width="7" height="7"></rect>
+                <rect x="14" y="14" width="7" height="7"></rect>
+                <rect x="3" y="14" width="7" height="7"></rect>
+            </svg>
+        {% elif tab.icon == 'challenges' %}
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 mr-1.5 shrink-0 {% if current_cat == tab.slug %}text-base-content{% else %}text-error{% endif %}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"></path>
+                <line x1="4" y1="22" x2="4" y2="15"></line>
+            </svg>
+        {% elif tab.icon == 'rocket' %}
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 mr-1.5 shrink-0 {% if current_cat == tab.slug %}text-base-content{% else %}text-success{% endif %}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z"></path>
+                <path d="m12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z"></path>
+                <path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0"></path>
+                <path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5"></path>
+            </svg>
+        {% elif tab.icon == 'supporter' %}
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 mr-1.5 shrink-0 {% if current_cat == tab.slug %}text-base-content{% else %}text-pink-400{% endif %}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"></path>
+            </svg>
+        {% elif tab.icon == 'sparkle' %}
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 mr-1.5 shrink-0 {% if current_cat == tab.slug %}text-base-content{% else %}text-amber-400{% endif %}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"></path>
+            </svg>
+        {% endif %}
+
+        <span class="hidden lg:inline">{{ tab.name }}</span>
+        <span class="lg:hidden text-xs">{{ tab.name }}</span>
+
+        {% if tab.slug != 'overview' %}
+            {% if tab.is_feats_of_strength %}
+                {# Feats of Strength: show earned count only, no denominator #}
+                {% if user.is_authenticated and tab.earned > 0 %}
+                    <span class="badge badge-sm badge-warning ml-1">{{ tab.earned }}</span>
+                {% endif %}
+            {% else %}
+                <span class="badge badge-sm ml-1 {% if user.is_authenticated and tab.earned == tab.total and tab.total > 0 %}badge-success{% endif %}">
+                    {% if user.is_authenticated %}{{ tab.earned }}/{% endif %}{{ tab.total }}
+                </span>
+            {% endif %}
+        {% endif %}
+    </a>
+
+    {# ── Tab Content Panel ─────────────────────────────────────────────── #}
+    <div id="{{ tab.slug }}-panel"
+         class="tab-content bg-base-100/90 border-2 border-base-300 shadow-md shadow-neutral p-4 lg:p-6"
+         role="tabpanel" aria-labelledby="{{ tab.slug }}-tab">
+        {% if current_cat == tab.slug %}
+            {% if tab.slug == 'overview' %}
+                {% include 'trophies/partials/milestone_list/milestone_overview.html' %}
+            {% else %}
+                {% include 'trophies/partials/milestone_list/milestone_category_content.html' %}
+            {% endif %}
+        {% endif %}
+    </div>
+
+{% endfor %}
+
+</div>

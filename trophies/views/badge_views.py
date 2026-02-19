@@ -19,8 +19,13 @@ from trophies.mixins import ProfileHotbarMixin
 from ..models import (
     Game, Profile, ProfileGame, Badge, UserBadge, UserBadgeProgress,
     Concept, Stage, Milestone, UserMilestone, UserMilestoneProgress,
+    UserTitle,
 )
 from ..forms import BadgeSearchForm
+from trophies.milestone_constants import (
+    MILESTONE_CATEGORIES, CRITERIA_TYPE_DISPLAY_NAMES,
+    CALENDAR_MONTH_TYPES, ONE_OFF_TYPES,
+)
 
 logger = logging.getLogger("psn_api")
 
@@ -249,13 +254,12 @@ class BadgeDetailView(ProfileHotbarMixin, DetailView):
         is_earned = True
         if target_profile:
             highest_tier_earned = UserBadge.objects.filter(profile=target_profile, badge__series_slug=self.kwargs['series_slug']).aggregate(max_tier=Max('badge__tier'))['max_tier'] or 0
+            max_tier = series_badges.aggregate(max_tier=Max('tier'))['max_tier'] or 0
             badge = series_badges.filter(tier=highest_tier_earned).first()
             if not badge:
                 badge = series_badges.order_by('tier').first()
-                context['is_maxed'] = True
                 is_earned = False
-            else:
-                context['is_maxed'] = False
+            context['is_maxed'] = highest_tier_earned > 0 and highest_tier_earned == max_tier
 
             context['badge'] = badge
 
@@ -314,8 +318,12 @@ class BadgeDetailView(ProfileHotbarMixin, DetailView):
         context['badge_requirements'] = badge_requirements
         context['is_earned'] = is_earned
 
-        context['image_urls'] = {'bg_url': badge.most_recent_concept.bg_url, 'recent_concept_icon_url': badge.most_recent_concept.concept_icon_url}
-        context['recent_concept_name'] = badge.most_recent_concept.unified_title
+        if badge.most_recent_concept:
+            context['image_urls'] = {'bg_url': badge.most_recent_concept.bg_url, 'recent_concept_icon_url': badge.most_recent_concept.concept_icon_url}
+            context['recent_concept_name'] = badge.most_recent_concept.unified_title
+        else:
+            context['image_urls'] = {'bg_url': '', 'recent_concept_icon_url': ''}
+            context['recent_concept_name'] = ''
 
         context['breadcrumb'] = [
             {'text': 'Home', 'url': reverse_lazy('home')},
@@ -392,7 +400,10 @@ class BadgeLeaderboardsView(ProfileHotbarMixin, DetailView):
         context['lb_progress_paginator'] = lb_progress_paginator
 
         context['badge'] = badge
-        context['image_urls'] = {'bg_url': badge.most_recent_concept.bg_url, 'recent_concept_icon_url': badge.most_recent_concept.concept_icon_url}
+        if badge.most_recent_concept:
+            context['image_urls'] = {'bg_url': badge.most_recent_concept.bg_url, 'recent_concept_icon_url': badge.most_recent_concept.concept_icon_url}
+        else:
+            context['image_urls'] = {'bg_url': '', 'recent_concept_icon_url': ''}
         context['breadcrumb'] = [
             {'text': 'Home', 'url': reverse_lazy('home')},
             {'text': 'Badges', 'url': reverse_lazy('badges_list')},
@@ -464,181 +475,281 @@ class OverallBadgeLeaderboardsView(ProfileHotbarMixin, TemplateView):
         return context
 
 
+
 class MilestoneListView(ProfileHotbarMixin, ListView):
     """
-    Display list of all milestones with progress tracking for authenticated users.
+    Display milestones organized by category tabs with tier ladder progression.
 
-    Shows all milestones ordered by required value, with earned status and
-    completion progress for logged-in users. Basic info shown for guests.
+    Tabs: Overview, Trophy Hunting, Community, Collection, Challenges,
+    Getting Started, Special. Each category shows tier ladders for its
+    criteria types with earned/active/locked visual states.
     """
     model = Milestone
     template_name = 'trophies/milestone_list.html'
     context_object_name = 'milestones'
 
     def get_queryset(self):
-        """
-        Fetch milestones ordered by required_value.
+        return Milestone.objects.select_related('title').ordered_by_value()
 
-        Returns:
-            QuerySet: All milestones ordered by required value ascending
-        """
-        return Milestone.objects.ordered_by_value()
+    def _get_user_data(self, profile, milestones):
+        """Fetch earned milestones, progress, and earned dates for a profile."""
+        if not profile:
+            return set(), {}, {}
 
-    def _build_milestone_display_data(self, milestones, profile=None):
-        """
-        Build display data for milestones with optional progress tracking.
-
-        For authenticated users, filters milestones to show only:
-        - All earned milestones
-        - The next unearned milestone for each criteria_type
-
-        Args:
-            milestones: QuerySet of Milestone objects
-            profile: Profile instance or None
-
-        Returns:
-            list: Display data dicts for each milestone
-        """
-        display_data = []
-
-        # Get user progress/earned data if authenticated
+        earned_qs = UserMilestone.objects.filter(
+            profile=profile, milestone__in=milestones
+        ).select_related('milestone')
         earned_milestone_ids = set()
-        progress_dict = {}
+        earned_dates = {}
+        for um in earned_qs:
+            earned_milestone_ids.add(um.milestone_id)
+            earned_dates[um.milestone_id] = um.earned_at
 
-        if profile:
-            # Get earned milestones
-            earned_milestone_ids = set(
-                UserMilestone.objects.filter(profile=profile)
-                .values_list('milestone_id', flat=True)
-            )
+        progress_qs = UserMilestoneProgress.objects.filter(
+            profile=profile, milestone__in=milestones
+        )
+        progress_dict = {p.milestone_id: p.progress_value for p in progress_qs}
 
-            # Get progress for all milestones
-            progress_qs = UserMilestoneProgress.objects.filter(
-                profile=profile,
-                milestone__in=milestones
-            )
-            progress_dict = {p.milestone_id: p.progress_value for p in progress_qs}
+        return earned_milestone_ids, progress_dict, earned_dates
 
-        # Group milestones by criteria_type
-        milestones_by_type = {}
-        for milestone in milestones:
-            criteria_type = milestone.criteria_type
-            if criteria_type not in milestones_by_type:
-                milestones_by_type[criteria_type] = []
-            milestones_by_type[criteria_type].append(milestone)
+    def _build_tier_ladder(self, type_milestones, earned_ids, progress_dict, earned_dates, profile):
+        """Build tier ladder data for a single criteria_type group."""
+        sorted_ms = sorted(type_milestones, key=lambda m: m.required_value)
+        total_tiers = len(sorted_ms)
+        tiers = []
+        found_active = False
 
-        # Calculate tier info for each milestone type (total tiers and current tier)
-        tier_info = {}
-        for criteria_type, type_milestones in milestones_by_type.items():
-            # Sort by required_value to ensure proper ordering
-            sorted_milestones = sorted(type_milestones, key=lambda m: m.required_value)
-            total_tiers = len(sorted_milestones)
-
-            # Find current tier (1-indexed) - the tier the user is working on
-            current_tier = 1
-            for idx, m in enumerate(sorted_milestones, start=1):
-                if m.id in earned_milestone_ids:
-                    # User has completed this tier, move to next
-                    current_tier = idx + 1
-                else:
-                    # Found first unearned tier - this is what they're working on
-                    current_tier = idx
-                    break
-
-            # If all tiers are earned, current_tier will be total_tiers + 1
-            # Cap it at total_tiers
-            if current_tier > total_tiers:
-                current_tier = total_tiers
-
-            tier_info[criteria_type] = {
-                'total_tiers': total_tiers,
-                'current_tier': current_tier
-            }
-
-        # Filter to show only earned + next unearned per criteria_type (only for authenticated users)
-        if profile:
-            filtered_milestones = []
-            for criteria_type, type_milestones in milestones_by_type.items():
-                # Sort by required_value to ensure proper ordering
-                type_milestones.sort(key=lambda m: m.required_value)
-
-                # Add all earned milestones and track if we found the next unearned
-                found_next_unearned = False
-                for milestone in type_milestones:
-                    is_earned = milestone.id in earned_milestone_ids
-
-                    if is_earned:
-                        # Include all earned milestones
-                        filtered_milestones.append(milestone)
-                    elif not found_next_unearned:
-                        # Include the first unearned milestone (the next one to work towards)
-                        filtered_milestones.append(milestone)
-                        found_next_unearned = True
-                    # Skip all other unearned milestones
-        else:
-            # For guests, show all milestones
-            filtered_milestones = list(milestones)
-
-        # Build display data for filtered milestones
-        for milestone in filtered_milestones:
-            is_earned = milestone.id in earned_milestone_ids
+        for idx, milestone in enumerate(sorted_ms, start=1):
+            is_earned = milestone.id in earned_ids
             progress_value = progress_dict.get(milestone.id, 0)
             required_value = milestone.required_value
 
-            # Calculate progress percentage
             if required_value > 0:
-                progress_percentage = min((progress_value / required_value) * 100, 100)
+                progress_pct = min((progress_value / required_value) * 100, 100)
             else:
-                progress_percentage = 100 if is_earned else 0
+                progress_pct = 100 if is_earned else 0
 
-            # Get tier information for this milestone
-            criteria_type = milestone.criteria_type
-            milestone_tier_info = tier_info.get(criteria_type, {'total_tiers': 1, 'current_tier': 1})
+            # Determine state: earned, active (next target), locked, or preview (guest)
+            if is_earned:
+                state = 'earned'
+            elif not profile:
+                state = 'preview'
+            elif not found_active:
+                state = 'active'
+                found_active = True
+            else:
+                state = 'locked'
 
-            display_data.append({
+            tiers.append({
                 'milestone': milestone,
+                'tier_number': idx,
+                'total_tiers': total_tiers,
+                'state': state,
                 'is_earned': is_earned,
                 'progress_value': progress_value,
                 'required_value': required_value,
-                'progress_percentage': round(progress_percentage, 1),
+                'progress_percentage': round(progress_pct, 1),
                 'earned_count': milestone.earned_count,
-                'total_tiers': milestone_tier_info['total_tiers'],
-                'current_tier': milestone_tier_info['current_tier'],
+                'earned_at': earned_dates.get(milestone.id),
             })
 
-        return display_data
+        earned_count = sum(1 for t in tiers if t['is_earned'])
+        return {
+            'tiers': tiers,
+            'total_tiers': total_tiers,
+            'earned_tiers': earned_count,
+        }
+
+    def _build_category_data(self, milestones, category_config, profile,
+                             earned_ids, progress_dict, earned_dates):
+        """Build tier ladders for all criteria_types in a category."""
+        criteria_types = category_config['criteria_types']
+
+        # Group milestones by criteria_type
+        by_type = defaultdict(list)
+        for m in milestones:
+            if m.criteria_type in criteria_types:
+                by_type[m.criteria_type].append(m)
+
+        # Build ladders, preserving the order from criteria_types
+        # Separate tiered types from calendar month types
+        tiered_ladders = []
+        calendar_months = []
+        oneoff_cards = []
+
+        for ct in criteria_types:
+            if ct not in by_type:
+                continue
+            display_name = CRITERIA_TYPE_DISPLAY_NAMES.get(ct, ct)
+
+            if ct in CALENDAR_MONTH_TYPES:
+                # Calendar months go into the grid
+                ms = by_type[ct][0]  # One milestone per month
+                calendar_months.append({
+                    'milestone': ms,
+                    'criteria_type': ct,
+                    'month_abbr': ct.replace('calendar_month_', '').upper(),
+                    'is_earned': ms.id in earned_ids,
+                    'earned_at': earned_dates.get(ms.id),
+                })
+            elif ct in ONE_OFF_TYPES:
+                # One-off milestones (calendar_complete, psn_linked, etc.)
+                ms = by_type[ct][0]
+                progress_value = progress_dict.get(ms.id, 0)
+                required_value = ms.required_value
+                if required_value > 0:
+                    pct = min((progress_value / required_value) * 100, 100)
+                else:
+                    pct = 100 if ms.id in earned_ids else 0
+                oneoff_cards.append({
+                    'milestone': ms,
+                    'criteria_type': ct,
+                    'display_name': display_name,
+                    'is_earned': ms.id in earned_ids,
+                    'earned_at': earned_dates.get(ms.id),
+                    'progress_value': progress_value,
+                    'required_value': required_value,
+                    'progress_percentage': round(pct, 1),
+                    'earned_count': ms.earned_count,
+                })
+            else:
+                # Tiered ladder
+                ladder = self._build_tier_ladder(
+                    by_type[ct], earned_ids, progress_dict, earned_dates, profile
+                )
+                ladder['criteria_type'] = ct
+                ladder['display_name'] = display_name
+                tiered_ladders.append(ladder)
+
+        calendar_months_earned = sum(1 for m in calendar_months if m['is_earned'])
+        return {
+            'tiered_ladders': tiered_ladders,
+            'calendar_months': calendar_months,
+            'calendar_months_earned': calendar_months_earned,
+            'oneoff_cards': oneoff_cards,
+        }
+
+    def _build_overview_data(self, milestones, profile, earned_ids, earned_dates):
+        """Build overview tab data with per-category stats."""
+        # Per-category earned/total counts
+        category_stats = []
+        for slug, config in MILESTONE_CATEGORIES.items():
+            if slug == 'overview':
+                continue
+            types = config['criteria_types']
+            cat_milestones = [m for m in milestones if m.criteria_type in types]
+            total = len(cat_milestones)
+            earned = sum(1 for m in cat_milestones if m.id in earned_ids) if profile else 0
+            pct = round((earned / total * 100), 1) if total > 0 else 0
+
+            # Find most recently earned milestones in this category
+            recent_earned = []
+            if profile:
+                cat_earned = [
+                    (m, earned_dates[m.id])
+                    for m in cat_milestones
+                    if m.id in earned_ids and m.id in earned_dates
+                ]
+                cat_earned.sort(key=lambda x: x[1], reverse=True)
+                recent_earned = [item[0] for item in cat_earned[:2]]
+
+            # Special/manual milestones are "Feats of Strength": they exist and
+            # can be earned, but don't count toward totals or show a denominator
+            is_feats = (slug == 'special')
+
+            category_stats.append({
+                'slug': slug,
+                'name': config['name'],
+                'icon': config['icon'],
+                'total': total,
+                'earned': earned,
+                'percentage': pct,
+                'recent_earned': recent_earned,
+                'is_feats_of_strength': is_feats,
+            })
+
+        # Overall stats (exclude special/manual milestones from totals)
+        countable = [m for m in milestones if m.criteria_type != 'manual']
+        total_milestones = len(countable)
+        total_earned = sum(1 for m in countable if m.id in earned_ids) if profile else 0
+        overall_pct = round((total_earned / total_milestones * 100), 1) if total_milestones > 0 else 0
+
+        # Titles unlocked from milestones
+        titles_unlocked = 0
+        if profile:
+            titles_unlocked = UserTitle.objects.filter(
+                profile=profile, source_type='milestone'
+            ).count()
+
+        # Most recently earned milestone (derived from earned_dates, no extra query)
+        latest_milestone = None
+        if profile and earned_dates:
+            latest_id = max(earned_dates, key=earned_dates.get)
+            latest_ms = next((m for m in milestones if m.id == latest_id), None)
+            if latest_ms:
+                latest_milestone = {
+                    'milestone': latest_ms,
+                    'earned_at': earned_dates[latest_id],
+                }
+
+        return {
+            'category_stats': category_stats,
+            'total_milestones': total_milestones,
+            'total_earned': total_earned,
+            'overall_percentage': overall_pct,
+            'titles_unlocked': titles_unlocked,
+            'latest_milestone': latest_milestone,
+        }
 
     def get_context_data(self, **kwargs):
-        """
-        Build context for milestone list page.
-
-        Returns:
-            dict: Context with milestone display data
-        """
         context = super().get_context_data(**kwargs)
-        milestones = context['object_list']
+        milestones = list(context['object_list'])
 
-        # Get profile for authenticated users
         user = self.request.user
         profile = user.profile if user.is_authenticated and hasattr(user, 'profile') else None
 
-        # Build display data
-        display_data = self._build_milestone_display_data(milestones, profile)
+        # Get current category tab
+        current_cat = self.request.GET.get('cat', 'overview')
+        if current_cat not in MILESTONE_CATEGORIES:
+            current_cat = 'overview'
 
-        # Sort display data: unearned milestones first (by progress % descending),
-        # then earned milestones (by required_value ascending)
-        if profile:
-            display_data.sort(
-                key=lambda x: (
-                    x['is_earned'],  # False (0) before True (1) - unearned first
-                    -x['progress_percentage'] if not x['is_earned'] else 0,  # Higher progress first for unearned
-                    x['milestone'].required_value if x['is_earned'] else 0  # Lower required_value first for earned
-                )
+        # Fetch user data once
+        earned_ids, progress_dict, earned_dates = self._get_user_data(profile, milestones)
+
+        # Build tab badge counts for all categories
+        tab_data = []
+        for slug, config in MILESTONE_CATEGORIES.items():
+            if slug == 'overview':
+                tab_data.append({'slug': slug, 'name': config['name'], 'icon': config['icon']})
+                continue
+            types = config['criteria_types']
+            cat_ms = [m for m in milestones if m.criteria_type in types]
+            total = len(cat_ms)
+            earned = sum(1 for m in cat_ms if m.id in earned_ids) if profile else 0
+            tab_data.append({
+                'slug': slug,
+                'name': config['name'],
+                'icon': config['icon'],
+                'total': total,
+                'earned': earned,
+                'is_feats_of_strength': (slug == 'special'),
+            })
+
+        context['current_cat'] = current_cat
+        context['tab_data'] = tab_data
+
+        if current_cat == 'overview':
+            context['overview_data'] = self._build_overview_data(
+                milestones, profile, earned_ids, earned_dates
+            )
+        else:
+            category_config = MILESTONE_CATEGORIES[current_cat]
+            context['category_name'] = category_config['name']
+            context['category_data'] = self._build_category_data(
+                milestones, category_config, profile,
+                earned_ids, progress_dict, earned_dates
             )
 
-        context['display_data'] = display_data
-
-        # Breadcrumbs
         context['breadcrumb'] = [
             {'text': 'Home', 'url': reverse_lazy('home')},
             {'text': 'Badges', 'url': reverse_lazy('badges_list')},

@@ -1,6 +1,6 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
-from .models import CustomUser
+from .models import CustomUser, SubscriptionPeriod
 from .forms import CustomUserCreationForm
 
 @admin.register(CustomUser)
@@ -64,3 +64,17 @@ class CustomUserAdmin(UserAdmin):
             return f"◐ {enabled}/4 Enabled"
 
     email_prefs_summary.short_description = "Email Preferences"
+
+
+@admin.register(SubscriptionPeriod)
+class SubscriptionPeriodAdmin(admin.ModelAdmin):
+    list_display = ('user', 'started_at', 'ended_at', 'provider', 'duration_days_display', 'notes')
+    list_filter = ('provider', 'ended_at')
+    search_fields = ('user__email', 'notes')
+    raw_id_fields = ('user',)
+    readonly_fields = ('duration_days_display',)
+    ordering = ('-started_at',)
+
+    def duration_days_display(self, obj):
+        return f"{obj.duration_days} days"
+    duration_days_display.short_description = "Duration"

@@ -1,0 +1,55 @@
+{% load humanize %}
+
+{# ─── Category Header ─────────────────────────────────────────────────── #}
+<h2 class="text-xl lg:text-2xl font-bold italic mb-4">{{ category_name }}</h2>
+
+{% if not user.is_authenticated %}
+    <div class="card bg-base-200 border-2 border-base-300 shadow-md mb-6">
+        <div class="card-body p-4 text-center">
+            <p class="text-base-content/70">
+                <a href="{% url 'account_login' %}" class="btn btn-primary btn-sm">Log in</a>
+                to track your milestone progress and see your current tier.
+            </p>
+        </div>
+    </div>
+{% endif %}
+
+{# ─── Tiered Ladders ──────────────────────────────────────────────────── #}
+{% for ladder in category_data.tiered_ladders %}
+    {% include 'trophies/partials/milestone_list/milestone_tier_ladder.html' with ladder=ladder %}
+    {% if not forloop.last or category_data.calendar_months or category_data.oneoff_cards %}
+        <div class="divider my-2"></div>
+    {% endif %}
+{% endfor %}
+
+{# ─── Calendar Month Grid (Challenges tab only) ──────────────────────── #}
+{% if category_data.calendar_months %}
+    {% include 'trophies/partials/milestone_list/milestone_calendar_grid.html' with months=category_data.calendar_months calendar_months_earned=category_data.calendar_months_earned %}
+    {% if category_data.oneoff_cards %}
+        <div class="divider my-2"></div>
+    {% endif %}
+{% endif %}
+
+{# ─── One-Off Cards ───────────────────────────────────────────────────── #}
+{% if category_data.oneoff_cards %}
+    <div class="grid grid-cols-2 lg:grid-cols-3 gap-3 lg:gap-4">
+        {% for item in category_data.oneoff_cards %}
+            {% include 'trophies/partials/milestone_list/milestone_oneoff_card.html' with item=item %}
+        {% endfor %}
+    </div>
+{% endif %}
+
+{# ─── Empty State (Special tab) ───────────────────────────────────────── #}
+{% if not category_data.tiered_ladders and not category_data.calendar_months and not category_data.oneoff_cards %}
+    <div class="flex flex-col items-center justify-center py-12 text-center">
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-16 h-16 text-base-content/20 mb-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"></path>
+        </svg>
+        <p class="text-lg font-bold text-base-content/50 italic">Something special awaits...</p>
+        <p class="text-sm text-base-content/40 mt-2 max-w-md">
+            These milestones are rare and special, awarded by the Platinum Pursuit team
+            for extraordinary contributions to the community.
+        </p>
+        <p class="text-sm text-base-content/40 italic mt-1">Keep hunting, and who knows what might happen...</p>
+    </div>
+{% endif %}

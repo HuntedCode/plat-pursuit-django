@@ -129,3 +129,57 @@ class CustomUser(AbstractUser):
         from users.services.subscription_service import SubscriptionService
         SubscriptionService.update_user_subscription(self, event_type)
 
+
+class SubscriptionPeriod(models.Model):
+    """
+    Tracks individual subscription periods for loyalty milestone calculations.
+
+    A new period is created when a subscription activates and closed (ended_at set)
+    when the subscription deactivates. Gaps between periods are expected and handled.
+    Total accumulated subscription time = sum of all period durations.
+    """
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='subscription_periods',
+    )
+    started_at = models.DateTimeField(help_text="When this subscription period began.")
+    ended_at = models.DateTimeField(
+        null=True, blank=True,
+        help_text="When this period ended. NULL means currently active.",
+    )
+    provider = models.CharField(
+        max_length=10,
+        choices=[('stripe', 'Stripe'), ('paypal', 'PayPal')],
+        help_text="Which payment provider for this period.",
+    )
+    notes = models.CharField(
+        max_length=255, blank=True, default='',
+        help_text="Admin notes (e.g., 'backfilled from launch').",
+    )
+
+    class Meta:
+        ordering = ['-started_at']
+        indexes = [
+            models.Index(fields=['user', 'ended_at'], name='subperiod_user_active_idx'),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=['user'],
+                condition=models.Q(ended_at__isnull=True),
+                name='one_open_period_per_user',
+            ),
+        ]
+        verbose_name = 'Subscription Period'
+        verbose_name_plural = 'Subscription Periods'
+
+    def __str__(self):
+        end = self.ended_at.strftime('%Y-%m-%d') if self.ended_at else 'active'
+        return f"{self.user.email}: {self.started_at.strftime('%Y-%m-%d')} -> {end}"
+
+    @property
+    def duration_days(self):
+        """Return the number of days in this period (open periods count to now)."""
+        end = self.ended_at or timezone.now()
+        return (end - self.started_at).days
+

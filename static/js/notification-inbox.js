@@ -1015,7 +1015,7 @@ class NotificationInboxManager {
 
     /**
      * Get progress bar color class based on percentage.
-     * Uses the same color scheme as milestone_list_items.html template.
+     * Uses the same color scheme as milestone category templates.
      *
      * @param {number} percentage - Progress percentage (0-100)
      * @returns {string} Tailwind CSS background class

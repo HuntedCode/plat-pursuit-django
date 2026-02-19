@@ -1,0 +1,178 @@
+{% load humanize %}
+
+{# ─── Stats Row ────────────────────────────────────────────────────────── #}
+{% if user.is_authenticated and user.profile %}
+<div class="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4 mb-6">
+
+    {# Total Earned #}
+    <div class="card bg-base-200 border-2 border-base-300 shadow-md">
+        <div class="card-body p-4 items-center text-center gap-1">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-8 h-8 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                <polyline points="22 4 12 14.01 9 11.01"></polyline>
+            </svg>
+            <p class="text-2xl lg:text-3xl font-bold text-primary">{{ overview_data.total_earned }}</p>
+            <p class="text-xs lg:text-sm text-base-content/70">of {{ overview_data.total_milestones }} Milestones</p>
+        </div>
+    </div>
+
+    {# Titles Unlocked #}
+    <div class="card bg-base-200 border-2 border-base-300 shadow-md">
+        <div class="card-body p-4 items-center text-center gap-1">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-8 h-8 text-warning" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+            </svg>
+            <p class="text-2xl lg:text-3xl font-bold text-warning">{{ overview_data.titles_unlocked }}</p>
+            <p class="text-xs lg:text-sm text-base-content/70">Titles Unlocked</p>
+        </div>
+    </div>
+
+    {# Latest Milestone #}
+    <div class="card bg-base-200 border-2 border-base-300 shadow-md">
+        <div class="card-body p-4 items-center text-center gap-1">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-8 h-8 text-success" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="13 17 18 12 13 7"></polyline>
+                <polyline points="6 17 11 12 6 7"></polyline>
+            </svg>
+            {% if overview_data.latest_milestone %}
+                <p class="text-sm lg:text-base font-bold line-clamp-1">{{ overview_data.latest_milestone.milestone.name }}</p>
+                <p class="text-xs text-base-content/60">Most Recent</p>
+            {% else %}
+                <p class="text-sm font-bold text-base-content/50">None Yet</p>
+                <p class="text-xs text-base-content/60">Earn your first milestone!</p>
+            {% endif %}
+        </div>
+    </div>
+
+    {# Completion % #}
+    <div class="card bg-base-200 border-2 border-base-300 shadow-md">
+        <div class="card-body p-4 items-center text-center gap-1">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-8 h-8 text-info" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="12" y1="20" x2="12" y2="10"></line>
+                <line x1="18" y1="20" x2="18" y2="4"></line>
+                <line x1="6" y1="20" x2="6" y2="16"></line>
+            </svg>
+            <p class="text-2xl lg:text-3xl font-bold {% if overview_data.overall_percentage >= 100 %}text-success{% elif overview_data.overall_percentage >= 50 %}text-info{% elif overview_data.overall_percentage >= 25 %}text-warning{% else %}text-base-content{% endif %}">
+                {{ overview_data.overall_percentage }}%
+            </p>
+            <p class="text-xs lg:text-sm text-base-content/70">Completion</p>
+        </div>
+    </div>
+
+</div>
+
+{# ─── Overall Progress Bar ──────────────────────────────────────────── #}
+<div class="mb-6">
+    <div class="flex items-center justify-between mb-1">
+        <h3 class="text-base lg:text-lg font-bold">Overall Progress</h3>
+        <span class="text-sm font-semibold {% if overview_data.overall_percentage >= 100 %}text-success{% else %}text-base-content/70{% endif %}">
+            {{ overview_data.overall_percentage }}%
+        </span>
+    </div>
+    <progress class="progress {% if overview_data.overall_percentage >= 100 %}progress-success{% elif overview_data.overall_percentage >= 50 %}progress-info{% elif overview_data.overall_percentage >= 25 %}progress-warning{% else %}progress-primary{% endif %} w-full h-3"
+              value="{{ overview_data.overall_percentage }}" max="100"></progress>
+    <p class="text-xs text-base-content/50 mt-1">{{ overview_data.total_earned }} of {{ overview_data.total_milestones }} milestones earned</p>
+</div>
+{% else %}
+    <div class="card bg-base-200 border-2 border-base-300 shadow-md mb-6">
+        <div class="card-body p-4 text-center">
+            <p class="text-base-content/70">
+                <a href="{% url 'account_login' %}" class="btn btn-primary btn-sm">Log in</a>
+                to track your milestone progress and earn titles.
+            </p>
+        </div>
+    </div>
+{% endif %}
+
+{# ─── Category Cards ──────────────────────────────────────────────────── #}
+<h2 class="text-xl lg:text-2xl font-bold italic mb-4">Categories</h2>
+
+<div class="grid grid-cols-2 lg:grid-cols-3 gap-3 lg:gap-4">
+{% for cat in overview_data.category_stats %}
+    <a href="?cat={{ cat.slug }}"
+       class="card bg-base-200 border-2 border-base-300 shadow-md shadow-neutral transition-all duration-300 hover:border-primary hover:shadow-primary hover:scale-[1.02] cursor-pointer">
+        <div class="card-body p-4 gap-2">
+            <div class="flex items-center gap-2">
+                {# Category icon (distinct color per category) #}
+                {% if cat.icon == 'trophy' %}
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 text-warning shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"></path><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"></path><path d="M4 22h16"></path><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20 7 22"></path><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20 17 22"></path><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"></path>
+                    </svg>
+                {% elif cat.icon == 'community' %}
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 text-secondary shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M22 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                    </svg>
+                {% elif cat.icon == 'collection' %}
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 text-accent shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect>
+                    </svg>
+                {% elif cat.icon == 'challenges' %}
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 text-error shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"></path><line x1="4" y1="22" x2="4" y2="15"></line>
+                    </svg>
+                {% elif cat.icon == 'rocket' %}
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 text-success shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z"></path>
+                        <path d="m12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z"></path>
+                        <path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0"></path>
+                        <path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5"></path>
+                    </svg>
+                {% elif cat.icon == 'supporter' %}
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 text-pink-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"></path>
+                    </svg>
+                {% elif cat.icon == 'sparkle' %}
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 text-amber-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"></path>
+                    </svg>
+                {% endif %}
+
+                <h3 class="text-base lg:text-lg font-bold">{{ cat.name }}</h3>
+            </div>
+
+            {% if cat.is_feats_of_strength %}
+                {# Feats of Strength: earned count only, no progress bar or denominator #}
+                {% if user.is_authenticated and user.profile %}
+                    {% if cat.earned > 0 %}
+                        <p class="text-sm font-semibold text-warning">{{ cat.earned }} Earned</p>
+                        {% if cat.recent_earned %}
+                            <div class="mt-1">
+                                {% for ms in cat.recent_earned %}
+                                    <p class="text-xs text-base-content/60 line-clamp-1 italic">{{ ms.name }}</p>
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+                    {% else %}
+                        <p class="text-xs text-base-content/40 italic mt-1">Something special awaits...</p>
+                    {% endif %}
+                {% else %}
+                    <p class="text-xs text-base-content/60 italic">Rare and unique awards</p>
+                {% endif %}
+            {% elif user.is_authenticated and user.profile %}
+                {# Progress bar #}
+                <div class="flex flex-col gap-1">
+                    <progress class="progress {% if cat.percentage >= 100 %}progress-success{% elif cat.percentage >= 66 %}progress-info{% elif cat.percentage >= 33 %}progress-warning{% else %}progress-primary{% endif %} w-full h-2"
+                              value="{{ cat.percentage }}" max="100"></progress>
+                    <div class="flex justify-between items-center">
+                        <span class="text-xs text-base-content/70">{{ cat.earned }} / {{ cat.total }}</span>
+                        <span class="text-xs font-semibold {% if cat.percentage >= 100 %}text-success{% else %}text-base-content/70{% endif %}">{{ cat.percentage }}%</span>
+                    </div>
+                </div>
+
+                {# Recent earned #}
+                {% if cat.recent_earned %}
+                    <div class="mt-1">
+                        {% for ms in cat.recent_earned %}
+                            <p class="text-xs text-base-content/60 line-clamp-1 italic">{{ ms.name }}</p>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <p class="text-xs text-base-content/40 italic mt-1">Not started yet</p>
+                {% endif %}
+            {% else %}
+                <p class="text-xs text-base-content/60">{{ cat.total }} milestone{{ cat.total|pluralize }}</p>
+            {% endif %}
+        </div>
+    </a>
+{% endfor %}
+</div>

@@ -1365,6 +1365,26 @@ class Milestone(models.Model):
         ('trophy_count', 'Total Trophies Earned'),
         ('comment_upvotes', 'Comment Upvotes Received'),
         ('checklist_upvotes', 'Checklist Upvotes Received'),
+        ('badge_count', 'Badges Earned'),
+        ('completion_count', 'Games 100% Completed'),
+        ('stage_count', 'Badge Stages Completed'),
+        ('az_progress', 'A-Z Challenge Letters'),
+        ('calendar_month_jan', 'Calendar: January Complete'),
+        ('calendar_month_feb', 'Calendar: February Complete'),
+        ('calendar_month_mar', 'Calendar: March Complete'),
+        ('calendar_month_apr', 'Calendar: April Complete'),
+        ('calendar_month_may', 'Calendar: May Complete'),
+        ('calendar_month_jun', 'Calendar: June Complete'),
+        ('calendar_month_jul', 'Calendar: July Complete'),
+        ('calendar_month_aug', 'Calendar: August Complete'),
+        ('calendar_month_sep', 'Calendar: September Complete'),
+        ('calendar_month_oct', 'Calendar: October Complete'),
+        ('calendar_month_nov', 'Calendar: November Complete'),
+        ('calendar_month_dec', 'Calendar: December Complete'),
+        ('calendar_months_total', 'Calendar Months Completed'),
+        ('calendar_complete', 'Calendar Challenge Complete'),
+        ('is_premium', 'Premium Subscriber'),
+        ('subscription_months', 'Subscription Months'),
     ]
 
     name = models.CharField(max_length=255, unique=True, help_text="Unique name")
@@ -1372,12 +1392,9 @@ class Milestone(models.Model):
     image = models.ImageField(upload_to='milestones/', blank=True, null=True, help_text='Visual icon')
     title = models.ForeignKey(Title, on_delete=models.SET_NULL, null=True, blank=True, related_name='milestones')
     discord_role_id = models.BigIntegerField(null=True, blank=True, help_text="Discord role ID to assign upon earning")
-    criteria_type = models.CharField(max_length=20, choices=CRITERIA_TYPES, default='manual')
+    criteria_type = models.CharField(max_length=30, choices=CRITERIA_TYPES, default='manual')
     criteria_details = models.JSONField(default=dict, blank=True, help_text="Flexible details")
-    manual_award = models.BooleanField(default=False, help_text="If True, admins award manually.")
     premium_only = models.BooleanField(default=False, help_text="If True, can only be earned by current premium users")
-    requires_all = models.BooleanField(default=True, help_text="For multi-part criteria. False allowed min_required")
-    min_required = models.PositiveIntegerField(default=0, help_text="Minimum items needed if not requires_all")
     required_value = models.PositiveIntegerField(default=0, help_text="Target for milestone")
     earned_count = models.PositiveIntegerField(default=0, help_text="Counter for user earns")
     created_at = models.DateTimeField(auto_now_add=True)
@@ -1394,8 +1411,10 @@ class Milestone(models.Model):
         verbose_name_plural = 'Milestones'
 
     def save(self, *args, **kwargs):
-        if self._state.adding:
-            self.required_value = self.criteria_details.get('target', 0)
+        # Intentionally set on every save (not just creation) so required_value
+        # always stays in sync with criteria_details['target']. Admin edits to
+        # required_value alone will be overwritten: update criteria_details instead.
+        self.required_value = self.criteria_details.get('target', 0)
         super().save(*args, **kwargs)
 
     def __str__(self):
@@ -1426,7 +1445,6 @@ class UserMilestoneProgress(models.Model):
     class Meta:
         unique_together = ['profile', 'milestone']
         indexes = [
-            models.Index(fields=['profile', 'milestone'], name='usermilestoneprogress_idx'),
             models.Index(fields=['last_checked'], name='usermilestoneprog_checked_idx'),
         ]
         verbose_name = 'User Milestone Progress'

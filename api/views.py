@@ -17,6 +17,7 @@ from datetime import timedelta
 from trophies.psn_manager import PSNManager
 from trophies.services.badge_service import initial_badge_check
 from trophies.services.milestone_service import check_all_milestones_for_user
+from trophies.milestone_constants import ALL_CALENDAR_TYPES
 import time
 import math
 import logging
@@ -88,9 +89,7 @@ class VerifyView(APIView):
                 if profile.verify_code(profile.about_me):
                     profile.link_discord(discord_id)
                     initial_badge_check(profile)
-                    check_all_milestones_for_user(profile, criteria_type='plat_count')
-                    check_all_milestones_for_user(profile, criteria_type='playtime_hours')
-                    check_all_milestones_for_user(profile, criteria_type='trophy_count')
+                    check_all_milestones_for_user(profile, exclude_types=ALL_CALENDAR_TYPES)
                     return Response({'success': True, 'message': 'Verified and linked successfully!'})
                 else:
                     return Response({'success': False, 'message': 'Verification failed. Check code and try again.'})
@@ -391,7 +390,7 @@ class CommentListView(APIView):
                 'user_is_premium': author_profile.user_is_premium,
             },
             'user_has_voted': False,
-            'user_is_moderator': False,
+            'is_moderator': False,
             'can_edit': False,
             'can_delete': False,
             'parent_id': parent_id,
@@ -834,13 +833,12 @@ class AgreeToGuidelinesView(APIView):
     def post(self, request):
         """Record user's agreement to community guidelines."""
         try:
-            profile = request.user.profile
-
-            if not profile:
+            if not hasattr(request.user, 'profile'):
                 return Response(
                     {'error': 'Profile not found.'},
                     status=status.HTTP_404_NOT_FOUND
                 )
+            profile = request.user.profile
 
             if not profile.is_linked:
                 return Response(

@@ -68,7 +68,7 @@ class ProxiedPSNAWP(BasePSNAWP):
             "Mozilla/5.0 (Linux; Android 5.0; SM-G900P Build/LRX21T) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/39.0.5707.1741 Mobile Safari/537.36",
             "Mozilla/5.0 (Android 14; Mobile; rv:137.0) Gecko/137.0 Firefox/137.0",
             "Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 "
-            "(KHTML, like Gecko) Chrome/55.0.9318.1385 Mobile Safari/537.36"
+            "(KHTML, like Gecko) Chrome/55.0.9318.1385 Mobile Safari/537.36",
             "Mozilla/5.0 (iPhone; CPU iPhone OS 18_3_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/135.0.7049.83 Mobile/15E148 Safari/604.1",
             "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Mobile/15E148 Safari/604.1",
             "Mozilla/5.0 (iPhone; CPU iPhone OS 11_0 like Mac OS X) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/44.0.2469.1901 Mobile Safari/537.36",
@@ -851,9 +851,10 @@ class TokenKeeper:
                 logger.error(f"Failed to create badge notifications for profile {profile_id}: {e}", exc_info=True)
 
             logger.info(f"ProfileGame Stats updated for {profile_id} successfully! | {len(touched_profilegame_ids)} profilegames updated")
-            check_all_milestones_for_user(profile, criteria_type='plat_count')
-            check_all_milestones_for_user(profile, criteria_type='playtime_hours')
-            check_all_milestones_for_user(profile, criteria_type='trophy_count')
+            from trophies.milestone_constants import ALL_CALENDAR_TYPES
+            # az_progress is excluded here because it's checked separately
+            # by check_az_challenge_progress() below
+            check_all_milestones_for_user(profile, exclude_types=ALL_CALENDAR_TYPES | {'az_progress'})
             logger.info(f"Milestones checked for {profile_id} successfully!")
 
             # Check A-Z challenge progress

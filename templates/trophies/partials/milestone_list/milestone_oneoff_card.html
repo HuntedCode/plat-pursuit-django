@@ -1,0 +1,63 @@
+{% load humanize %}
+
+<div id="{{ item.criteria_type }}" class="card bg-base-200 border-2 transition-all duration-300
+            {% if item.is_earned %}border-success/50 hover:border-success hover:shadow-success/30 hover:shadow-md{% else %}border-base-300 hover:border-primary hover:shadow-primary/30 hover:shadow-md{% endif %}
+            {% if not item.is_earned and user.is_authenticated %}opacity-60 hover:opacity-100{% endif %}">
+    <div class="card-body p-4 gap-2 items-center text-center">
+
+        {# Milestone Image #}
+        <div class="w-14 h-14 lg:w-16 lg:h-16">
+            {% if item.milestone.image %}
+                <img src="{{ item.milestone.image.url }}"
+                     alt="{{ item.milestone.name }}"
+                     class="w-full h-full object-contain rounded-lg {% if not item.is_earned %}grayscale{% endif %}" />
+            {% else %}
+                <div class="w-full h-full bg-base-300 rounded-lg flex items-center justify-center">
+                    {% if item.is_earned %}
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-8 h-8 text-success" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <polyline points="9 11 12 14 22 4"></polyline>
+                            <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>
+                        </svg>
+                    {% else %}
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-8 h-8 text-base-content/30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                            <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                        </svg>
+                    {% endif %}
+                </div>
+            {% endif %}
+        </div>
+
+        {# Name #}
+        <div class="flex flex-row items-center gap-1.5 justify-center">
+            <h3 class="text-sm lg:text-base font-bold line-clamp-2">{{ item.milestone.name }}</h3>
+            {% if item.milestone.premium_only %}
+                <span class="badge badge-warning badge-xs">Premium</span>
+            {% endif %}
+        </div>
+
+        {# Description #}
+        <p class="text-xs text-base-content/60 line-clamp-2">{{ item.milestone.description }}</p>
+
+        {# Title reward #}
+        {% if item.milestone.title %}
+            <span class="text-sm legendary-title italic {% if not item.is_earned %}grayscale{% endif %}">
+                {{ item.milestone.title.name }}
+            </span>
+        {% endif %}
+
+        {# Status #}
+        {% if item.is_earned %}
+            <span class="badge badge-success badge-sm">Earned</span>
+            {% if item.earned_at %}
+                <span class="text-xs text-base-content/40">{{ item.earned_at|date:"M j, Y" }}</span>
+            {% endif %}
+        {% elif user.is_authenticated and user.profile %}
+            <span class="badge badge-ghost badge-sm">Not Earned</span>
+        {% endif %}
+
+        {% if item.earned_count > 0 %}
+            <p class="text-xs text-base-content/40">{{ item.earned_count|intcomma }} hunter{{ item.earned_count|pluralize }}</p>
+        {% endif %}
+    </div>
+</div>

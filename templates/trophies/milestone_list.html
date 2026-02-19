@@ -1,26 +1,31 @@
 {% extends 'base.html' %}
 {% load static %}
-{% block title %}Milestones{% endblock %}
+
+{% block title %}Milestones - Platinum Pursuit{% endblock %}
 
 {% block content %}
     {% include 'partials/breadcrumb.html' with items=breadcrumb %}
 
-    {% include 'trophies/partials/milestone_list/milestone_list_header.html' %}
-
-    <div class="divider divider-vertical"></div>
-
-    <h1 class="text-2xl lg:text-3xl xl:text-4xl text-base-content text-start italic self-end mb-4">
-        All Milestones
-    </h1>
-
-    <div id="items-grid" class="space-y-2">
-        {% include 'trophies/partials/milestone_list/milestone_list_items.html' %}
-    </div>
-
+    {# ─── Tab Bar + Content ────────────────────────────────────────────── #}
+    {% include 'trophies/partials/milestone_list/milestone_tabs.html' %}
 {% endblock %}
 
 {% block js_scripts %}
 <script>
     PlatPursuit.ZoomScaler.init();
+
+    document.addEventListener('DOMContentLoaded', function() {
+        const scrollKey = 'milestoneScrollPos';
+        const saved = sessionStorage.getItem(scrollKey);
+        if (saved !== null) {
+            sessionStorage.removeItem(scrollKey);
+            window.scrollTo(0, parseInt(saved, 10));
+        }
+        document.querySelectorAll('.tabs [role="tab"]').forEach(tab => {
+            tab.addEventListener('click', () => {
+                sessionStorage.setItem(scrollKey, window.scrollY);
+            });
+        });
+    });
 </script>
 {% endblock %}

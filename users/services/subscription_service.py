@@ -128,6 +128,21 @@ class SubscriptionService:
             if hasattr(user, 'profile'):
                 user.profile.update_profile_premium(is_premium)
 
+            # Open a new SubscriptionPeriod if one isn't already open (inside
+            # transaction to prevent duplicate periods from concurrent webhooks;
+            # DB partial unique constraint is the ultimate guard)
+            if is_premium:
+                from users.models import SubscriptionPeriod
+                open_period = SubscriptionPeriod.objects.filter(
+                    user=user, ended_at__isnull=True
+                ).exists()
+                if not open_period:
+                    SubscriptionPeriod.objects.create(
+                        user=user,
+                        started_at=timezone.now(),
+                        provider=provider,
+                    )
+
         # Discord notifications for new subscriptions (side effects after commit)
         activation_events = [
             'customer.subscription.created',       # Stripe
@@ -139,6 +154,14 @@ class SubscriptionService:
                 notify_bot_role_earned(user.profile, settings.DISCORD_PREMIUM_ROLE)
             elif user.premium_tier in SUPPORTER_DISCORD_ROLE_TIERS:
                 notify_bot_role_earned(user.profile, settings.DISCORD_PREMIUM_PLUS_ROLE)
+
+        # Check is_premium and subscription_months milestones
+        if is_premium and hasattr(user, 'profile'):
+            from trophies.services.milestone_service import check_all_milestones_for_user
+            check_all_milestones_for_user(
+                user.profile,
+                criteria_types=['is_premium', 'subscription_months'],
+            )
 
         return is_premium
 
@@ -167,6 +190,13 @@ class SubscriptionService:
             user.save(update_fields=update_fields)
             if hasattr(user, 'profile'):
                 user.profile.update_profile_premium(False)
+
+            # Close any open SubscriptionPeriod (inside transaction so
+            # deactivation and period close are atomic)
+            from users.models import SubscriptionPeriod
+            SubscriptionPeriod.objects.filter(
+                user=user, ended_at__isnull=True
+            ).update(ended_at=timezone.now())
 
         logger.info(f"Deactivated {provider} subscription for user {user.email} ({event_type})")
 
@@ -341,7 +371,7 @@ class SubscriptionService:
 
         # Update user's stored customer ID
         user.stripe_customer_id = customer.id
-        user.save()
+        user.save(update_fields=['stripe_customer_id'])
 
         # Create checkout session
         session = stripe.checkout.Session.create(
