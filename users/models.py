@@ -81,11 +81,6 @@ class CustomUser(AbstractUser):
 
     objects = UserManager()
 
-    class Meta:
-        indexes = [
-            models.Index(fields=["email"]),
-        ]
-    
     def is_premium(self):
         """
         Check if user has an active premium subscription from any provider.
@@ -96,7 +91,7 @@ class CustomUser(AbstractUser):
         if self.subscription_provider == 'stripe' and self.stripe_customer_id:
             return Subscription.objects.filter(
                 customer__id=self.stripe_customer_id,
-                stripe_data__status='active'
+                stripe_data__status__in=['active', 'past_due']
             ).exists()
         elif self.subscription_provider == 'paypal' and self.paypal_subscription_id:
             if self.paypal_cancel_at and self.paypal_cancel_at < timezone.now():

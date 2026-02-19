@@ -1,0 +1,186 @@
+{% extends "emails/base_email.html" %}
+
+{% block extra_styles %}
+    <style>
+        /* Alert box */
+        .alert-box {
+            border-radius: 12px;
+            padding: 25px 30px;
+            margin: 25px 0;
+            text-align: center;
+        }
+
+        .alert-box-warning {
+            background-color: #fff8f0;
+            border: 2px solid #f59e0b;
+        }
+
+        .alert-box-urgent {
+            background-color: #fef2f2;
+            border: 2px solid #ef4444;
+        }
+
+        .alert-icon {
+            font-size: 36px;
+            margin-bottom: 10px;
+            display: block;
+        }
+
+        .alert-title {
+            font-size: 18px;
+            font-weight: 700;
+            margin: 0 0 8px 0;
+            color: #333333;
+        }
+
+        .alert-message {
+            font-size: 15px;
+            color: #555555;
+            margin: 0;
+            line-height: 1.6;
+        }
+
+        /* What you might lose */
+        .features-list {
+            background-color: #f8f9fa;
+            border-radius: 8px;
+            padding: 20px 25px;
+            margin: 25px 0;
+        }
+
+        .features-list h3 {
+            margin: 0 0 12px 0;
+            font-size: 16px;
+            color: #333333;
+        }
+
+        .features-list ul {
+            margin: 0;
+            padding-left: 20px;
+            color: #555555;
+        }
+
+        .features-list li {
+            margin-bottom: 8px;
+            font-size: 14px;
+        }
+
+        /* CTA override for urgent */
+        .cta-button-urgent {
+            display: inline-block;
+            background: #ef4444;
+            color: #ffffff !important;
+            text-decoration: none;
+            padding: 16px 40px;
+            border-radius: 8px;
+            font-size: 18px;
+            font-weight: 700;
+            box-shadow: 0 4px 15px rgba(239, 68, 68, 0.3);
+            border: none;
+        }
+
+        .cta-button-warning {
+            display: inline-block;
+            background: #f59e0b;
+            color: #ffffff !important;
+            text-decoration: none;
+            padding: 16px 40px;
+            border-radius: 8px;
+            font-size: 18px;
+            font-weight: 700;
+            box-shadow: 0 4px 15px rgba(245, 158, 11, 0.3);
+            border: none;
+        }
+
+        @media only screen and (max-width: 600px) {
+            .alert-box {
+                padding: 20px 15px;
+            }
+
+            .cta-button-urgent,
+            .cta-button-warning {
+                padding: 14px 30px;
+                font-size: 16px;
+            }
+        }
+    </style>
+{% endblock %}
+
+{% block title %}{% if is_final_warning %}Action Required: Subscription at Risk{% else %}Payment Update Needed{% endif %}{% endblock %}
+
+{% block header_content %}
+    {% if is_final_warning %}
+        <h1>Action Required</h1>
+        <p>Your subscription needs your attention</p>
+    {% else %}
+        <h1>Payment Update Needed</h1>
+        <p>A quick heads up about your {{ tier_name }} subscription</p>
+    {% endif %}
+{% endblock %}
+
+{% block content %}
+    <p class="greeting">Hey {{ username }},</p>
+
+    {% if is_final_warning %}
+        <div class="alert-box alert-box-urgent">
+            <span class="alert-icon">&#9888;&#65039;</span>
+            <p class="alert-title">Your premium access is at risk</p>
+            <p class="alert-message">
+                We've been unable to process your payment after multiple attempts.
+                Your {{ tier_name }} subscription will be cancelled unless you update your payment method.
+            </p>
+        </div>
+
+        <p class="intro">
+            We don't want to see you lose access to the features you love. Updating your payment
+            method only takes a minute and will keep everything running smoothly.
+        </p>
+
+        <div class="features-list">
+            <h3>What you'll lose without an active subscription:</h3>
+            <ul>
+                <li>Priority sync scheduling and faster profile updates</li>
+                <li>Premium badges, themes, and customization options</li>
+                <li>Access to premium checklists and advanced features</li>
+                <li>Your Discord premium role</li>
+            </ul>
+        </div>
+
+        <div class="cta-container">
+            <a href="{{ portal_url }}" class="cta-button-urgent">Update Payment Method</a>
+        </div>
+
+        <p class="intro" style="margin-top: 25px; text-align: center; font-size: 14px; color: #777777;">
+            Don't let your trophy hunting setup slip away. We're rooting for you!
+        </p>
+
+    {% else %}
+        <div class="alert-box alert-box-warning">
+            <span class="alert-icon">&#128179;</span>
+            <p class="alert-title">We couldn't process your payment</p>
+            <p class="alert-message">
+                Your most recent payment for the {{ tier_name }} plan didn't go through.
+                This can happen for a number of reasons: an expired card, insufficient funds, or a temporary bank issue.
+            </p>
+        </div>
+
+        <p class="intro">
+            No worries! We'll automatically retry in a few days. In the meantime, your premium
+            access remains active. However, we recommend updating your payment method to avoid
+            any interruption to your subscription.
+        </p>
+
+        <div class="cta-container">
+            <a href="{{ portal_url }}" class="cta-button-warning">Update Payment Method</a>
+        </div>
+
+        <p class="intro" style="margin-top: 25px; text-align: center; font-size: 14px; color: #777777;">
+            No trophy hunter should be left behind. Let's keep your streak alive!
+        </p>
+    {% endif %}
+{% endblock %}
+
+{% block footer_note %}
+    You're receiving this because you have an active subscription on PlatPursuit.<br>
+    <a href="{{ preference_url }}" style="color: #999999; text-decoration: underline;">Manage your email preferences</a>.
+{% endblock %}

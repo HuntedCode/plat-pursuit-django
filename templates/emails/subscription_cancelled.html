@@ -1,0 +1,129 @@
+{% extends "emails/base_email.html" %}
+
+{% block extra_styles %}
+    <style>
+        /* Thank you box */
+        .thank-you-box {
+            background-color: #667eea;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 12px;
+            padding: 30px;
+            margin: 25px 0;
+            color: #ffffff;
+            text-align: center;
+        }
+
+        .thank-you-box .thank-icon {
+            font-size: 36px;
+            margin-bottom: 10px;
+            display: block;
+        }
+
+        .thank-you-box h2 {
+            margin: 0 0 10px 0;
+            font-size: 22px;
+            font-weight: 700;
+        }
+
+        .thank-you-box p {
+            margin: 0;
+            font-size: 15px;
+            opacity: 0.95;
+            line-height: 1.6;
+        }
+
+        /* What you had */
+        .features-had {
+            background-color: #f8f9fa;
+            border-radius: 8px;
+            padding: 20px 25px;
+            margin: 25px 0;
+        }
+
+        .features-had h3 {
+            margin: 0 0 12px 0;
+            font-size: 16px;
+            color: #333333;
+        }
+
+        .features-had ul {
+            margin: 0;
+            padding-left: 20px;
+            color: #555555;
+        }
+
+        .features-had li {
+            margin-bottom: 8px;
+            font-size: 14px;
+        }
+
+        /* Flavor text */
+        .flavor-text {
+            text-align: center;
+            font-style: italic;
+            color: #777777;
+            font-size: 15px;
+            margin: 30px 0 10px 0;
+            line-height: 1.6;
+        }
+
+        @media only screen and (max-width: 600px) {
+            .thank-you-box {
+                padding: 20px 15px;
+            }
+        }
+    </style>
+{% endblock %}
+
+{% block title %}We're sorry to see you go{% endblock %}
+
+{% block header_content %}
+    <h1>Until Next Time</h1>
+    <p>Your {{ tier_name }} subscription has ended</p>
+{% endblock %}
+
+{% block content %}
+    <p class="greeting">Hey {{ username }},</p>
+
+    <div class="thank-you-box">
+        <span class="thank-icon">&#128156;</span>
+        <h2>Thank you for being a subscriber</h2>
+        <p>
+            Your support means the world to us and helps keep PlatPursuit running.
+            We truly appreciate every moment you've been part of the premium community.
+        </p>
+    </div>
+
+    <p class="intro">
+        Your {{ tier_name }} subscription has come to an end. While you'll still have full access
+        to your profile, trophies, and core features, some premium perks are no longer active.
+    </p>
+
+    <div class="features-had">
+        <h3>Premium features that are now inactive:</h3>
+        <ul>
+            <li>Priority sync scheduling and faster profile updates</li>
+            <li>Premium badges, themes, and customization options</li>
+            <li>Access to premium checklists and advanced features</li>
+            <li>Discord premium role</li>
+        </ul>
+    </div>
+
+    <p class="intro">
+        If you ever want to come back, we'll be here with open arms. Resubscribing
+        is quick and easy, and all your data is waiting right where you left it.
+    </p>
+
+    <div class="cta-container">
+        <a href="{{ subscribe_url }}" class="cta-button">Resubscribe</a>
+    </div>
+
+    <p class="flavor-text">
+        Your trophies aren't going anywhere. We'll be here when you're ready to hunt again.
+    </p>
+{% endblock %}
+
+{% block footer_note %}
+    You're receiving this because your PlatPursuit subscription has ended.<br>
+    <a href="{{ preference_url }}" style="color: #999999; text-decoration: underline;">Manage your email preferences</a>.
+{% endblock %}

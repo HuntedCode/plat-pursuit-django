@@ -242,6 +242,24 @@
                         </label>
                     </div>
 
+                    <!-- Subscription & Billing -->
+                    <div class="preference-item">
+                        <label class="preference-label">
+                            <input
+                                type="checkbox"
+                                name="subscription_notifications"
+                                class="preference-checkbox checkbox checkbox-primary"
+                                {% if form.subscription_notifications.value %}checked{% endif %}
+                            >
+                            <div class="preference-content">
+                                <div class="preference-title">Subscription & Billing Emails</div>
+                                <div class="preference-description">
+                                    Payment failure alerts, subscription changes, and billing updates
+                                </div>
+                            </div>
+                        </label>
+                    </div>
+
                     <!-- Admin Announcements -->
                     <div class="preference-item">
                         <label class="preference-label">

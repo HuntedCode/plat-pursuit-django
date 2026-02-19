@@ -11,7 +11,7 @@ This service manages:
 import logging
 import stripe
 from typing import Optional, Dict, Tuple
-from datetime import datetime
+from datetime import datetime, timedelta
 from django.utils import timezone
 from django.conf import settings
 from django.db import transaction
@@ -27,7 +27,7 @@ from users.constants import (
 from trophies.discord_utils.discord_notifications import send_subscription_notification
 from trophies.services.badge_service import notify_bot_role_earned
 
-logger = logging.getLogger('psn_api')
+logger = logging.getLogger('users.services.subscription')
 
 
 class SubscriptionService:
@@ -128,20 +128,35 @@ class SubscriptionService:
             if hasattr(user, 'profile'):
                 user.profile.update_profile_premium(is_premium)
 
-            # Open a new SubscriptionPeriod if one isn't already open (inside
-            # transaction to prevent duplicate periods from concurrent webhooks;
-            # DB partial unique constraint is the ultimate guard)
+            # Ensure a SubscriptionPeriod is open (inside transaction to prevent
+            # duplicate periods from concurrent webhooks; DB partial unique
+            # constraint is the ultimate guard).
+            # On payment recovery (past_due -> active), re-open the most recently
+            # closed period rather than creating a new one.
             if is_premium:
                 from users.models import SubscriptionPeriod
                 open_period = SubscriptionPeriod.objects.filter(
                     user=user, ended_at__isnull=True
                 ).exists()
                 if not open_period:
-                    SubscriptionPeriod.objects.create(
-                        user=user,
-                        started_at=timezone.now(),
-                        provider=provider,
-                    )
+                    # Try to re-open the most recently closed period (payment recovery).
+                    # Only reopen if closed within last 14 days (covers Stripe's retry
+                    # window). Older periods get a fresh start to keep milestone
+                    # calculations accurate.
+                    recent_threshold = timezone.now() - timedelta(days=14)
+                    recent_closed = SubscriptionPeriod.objects.filter(
+                        user=user, provider=provider, ended_at__isnull=False,
+                        ended_at__gte=recent_threshold,
+                    ).order_by('-ended_at').first()
+                    if recent_closed:
+                        recent_closed.ended_at = None
+                        recent_closed.save(update_fields=['ended_at'])
+                    else:
+                        SubscriptionPeriod.objects.create(
+                            user=user,
+                            started_at=timezone.now(),
+                            provider=provider,
+                        )
 
         # Discord notifications for new subscriptions (side effects after commit)
         activation_events = [
@@ -178,6 +193,9 @@ class SubscriptionService:
             provider: 'stripe' or 'paypal'
             event_type: Original webhook event type for logging
         """
+        # Capture tier before clearing for cancellation email
+        original_tier = user.premium_tier
+
         user.premium_tier = None
         user.subscription_provider = None
         update_fields = ['premium_tier', 'subscription_provider']
@@ -199,6 +217,41 @@ class SubscriptionService:
             ).update(ended_at=timezone.now())
 
         logger.info(f"Deactivated {provider} subscription for user {user.email} ({event_type})")
+
+        # Side effects after commit: Discord role removal (only the role matching the user's tier)
+        if hasattr(user, 'profile') and user.profile.is_discord_verified and user.profile.discord_id:
+            from trophies.services.badge_service import notify_bot_role_removed
+            if original_tier in PREMIUM_DISCORD_ROLE_TIERS and settings.DISCORD_PREMIUM_ROLE:
+                notify_bot_role_removed(user.profile, settings.DISCORD_PREMIUM_ROLE)
+            elif original_tier in SUPPORTER_DISCORD_ROLE_TIERS and settings.DISCORD_PREMIUM_PLUS_ROLE:
+                notify_bot_role_removed(user.profile, settings.DISCORD_PREMIUM_PLUS_ROLE)
+
+        # Send cancellation email and notification for voluntary cancellations.
+        # Payment failures (SUSPENDED) are handled separately by handle_payment_failed
+        # and the PayPal SUSPENDED handler in paypal_service.py.
+        cancellation_events = [
+            'customer.subscription.deleted',          # Stripe
+            'BILLING.SUBSCRIPTION.EXPIRED',           # PayPal
+        ]
+        if event_type in cancellation_events:
+            tier_name = SubscriptionService.get_tier_display_name(original_tier) if original_tier else 'Premium'
+            SubscriptionService._send_subscription_cancelled_email(user, tier_name)
+
+            # In-app notification
+            try:
+                from notifications.services.notification_service import NotificationService
+                NotificationService.create_notification(
+                    recipient=user,
+                    notification_type='subscription_updated',
+                    title="Your subscription has ended",
+                    message="Your premium subscription has expired. Thank you for your support! You can resubscribe anytime.",
+                    action_url='/users/subscribe/',
+                    action_text='Resubscribe',
+                    priority='normal',
+                    metadata={'previous_tier': original_tier},
+                )
+            except Exception:
+                logger.exception(f"Failed to create cancellation notification for {user.email}")
 
     @staticmethod
     def mark_subscription_cancelling(user, cancel_at: Optional[datetime] = None) -> None:
@@ -226,17 +279,20 @@ class SubscriptionService:
         Returns:
             tuple: (has_active, provider_name) e.g. (True, 'stripe') or (False, None)
         """
-        # Check Stripe
+        # Check Stripe (include past_due to prevent double-subscribe during retry)
         if user.stripe_customer_id:
             active_stripe = Subscription.objects.filter(
                 customer__id=user.stripe_customer_id,
-                stripe_data__status='active'
+                stripe_data__status__in=['active', 'past_due']
             ).exists()
             if active_stripe:
                 return (True, 'stripe')
 
-        # Check PayPal (trust our stored state, set by webhooks)
+        # Check PayPal (trust our stored state, set by webhooks).
+        # Must mirror is_premium() logic: respect paypal_cancel_at expiry.
         if user.paypal_subscription_id and user.premium_tier and user.subscription_provider == 'paypal':
+            if user.paypal_cancel_at and user.paypal_cancel_at < timezone.now():
+                return (False, None)
             return (True, 'paypal')
 
         return (False, None)
@@ -285,6 +341,33 @@ class SubscriptionService:
                 SubscriptionService.deactivate_subscription(user, 'stripe', event_type)
                 return False
         else:
+            # Check for past_due (payment failing, Stripe still retrying).
+            # Keep premium features active but close SubscriptionPeriod
+            # to stop milestone time accumulation during unpaid window.
+            past_due_sub = Subscription.objects.filter(
+                customer__id=user.stripe_customer_id,
+                stripe_data__status='past_due'
+            ).first()
+
+            if past_due_sub:
+                with transaction.atomic():
+                    from users.models import SubscriptionPeriod
+                    SubscriptionPeriod.objects.filter(
+                        user=user, ended_at__isnull=True
+                    ).update(ended_at=timezone.now())
+                logger.info(f"Subscription past_due for {user.email}: period paused, premium retained")
+                return SubscriptionService.is_tier_premium(user.premium_tier) if user.premium_tier else False
+
+            # Check for unpaid (Stripe exhausted retries, configured to leave as unpaid)
+            unpaid_sub = Subscription.objects.filter(
+                customer__id=user.stripe_customer_id,
+                stripe_data__status='unpaid'
+            ).first()
+
+            if unpaid_sub:
+                SubscriptionService.deactivate_subscription(user, 'stripe', event_type)
+                return False
+
             # Check if subscription is canceled but still in grace period
             canceled_sub = Subscription.objects.filter(
                 customer__id=user.stripe_customer_id,
@@ -386,6 +469,190 @@ class SubscriptionService:
 
         return session.url
 
+    # ── Payment failure and cancellation notifications ───────────────────
+
+    @staticmethod
+    def _send_payment_failed_email(user, is_final_warning: bool) -> bool:
+        """
+        Send payment failure email via EmailService.
+
+        Args:
+            user: CustomUser instance
+            is_final_warning: True for final attempt (premium at risk), False for first warning
+
+        Returns:
+            bool: True if email was sent successfully
+        """
+        from users.services.email_preference_service import EmailPreferenceService
+        from core.services.email_service import EmailService
+
+        if not EmailPreferenceService.should_send_email(user, 'subscription_notifications'):
+            logger.info(f"Skipping payment failed email for {user.email}: preference disabled")
+            return False
+
+        # Generate billing portal URL for Stripe users, fallback to management page
+        portal_url = f"{settings.SITE_URL}/users/subscription-management/"
+        if user.stripe_customer_id:
+            try:
+                portal_session = stripe.billing_portal.Session.create(
+                    customer=user.stripe_customer_id,
+                    return_url=f"{settings.SITE_URL}/users/subscription-management/",
+                )
+                portal_url = portal_session.url
+            except stripe.error.StripeError:
+                logger.exception("Failed to create billing portal session for payment failed email")
+
+        tier_name = SubscriptionService.get_tier_display_name(user.premium_tier) if user.premium_tier else 'Premium'
+        username = user.profile.psn_username if hasattr(user, 'profile') else user.email.split('@')[0]
+
+        preference_token = EmailPreferenceService.generate_preference_token(user.id)
+
+        context = {
+            'username': username,
+            'is_final_warning': is_final_warning,
+            'portal_url': portal_url,
+            'tier_name': tier_name,
+            'site_url': settings.SITE_URL,
+            'preference_url': f"{settings.SITE_URL}/users/email-preferences/?token={preference_token}",
+        }
+
+        subject = (
+            "Action Required: Your PlatPursuit subscription is at risk"
+            if is_final_warning
+            else "Heads up: We couldn't process your payment"
+        )
+
+        try:
+            sent = EmailService.send_html_email(
+                subject=subject,
+                to_emails=[user.email],
+                template_name='emails/payment_failed.html',
+                context=context,
+            )
+            if sent:
+                logger.info(f"Sent payment failed email to {user.email} (final={is_final_warning})")
+            return sent > 0
+        except Exception:
+            logger.exception(f"Failed to send payment failed email to {user.email}")
+            return False
+
+    @staticmethod
+    def _send_payment_failed_notification(user, attempt_count: int, is_final: bool) -> None:
+        """
+        Send in-app notification for payment failure.
+
+        Args:
+            user: CustomUser instance
+            attempt_count: Which payment attempt failed
+            is_final: True if Stripe has given up retrying
+        """
+        from notifications.services.notification_service import NotificationService
+
+        if is_final:
+            title = "Payment failed: subscription at risk"
+            message = (
+                "We were unable to process your payment after multiple attempts. "
+                "Please update your payment method to keep your premium features."
+            )
+            priority = 'urgent'
+        else:
+            title = "Payment issue with your subscription"
+            message = (
+                f"We couldn't process your latest payment (attempt {attempt_count}). "
+                "We'll retry automatically, but you may want to check your payment method."
+            )
+            priority = 'high'
+
+        try:
+            NotificationService.create_notification(
+                recipient=user,
+                notification_type='payment_failed',
+                title=title,
+                message=message,
+                action_url='/users/subscription-management/',
+                action_text='Manage Subscription',
+                icon='💳',
+                priority=priority,
+                metadata={'attempt_count': attempt_count, 'is_final': is_final},
+            )
+        except Exception:
+            logger.exception(f"Failed to create payment failed notification for {user.email}")
+
+    @staticmethod
+    def _send_subscription_cancelled_email(user, tier_name: str) -> bool:
+        """
+        Send farewell email when a subscription ends.
+
+        Args:
+            user: CustomUser instance
+            tier_name: Display name of the tier that just ended
+
+        Returns:
+            bool: True if email was sent successfully
+        """
+        from users.services.email_preference_service import EmailPreferenceService
+        from core.services.email_service import EmailService
+
+        if not EmailPreferenceService.should_send_email(user, 'subscription_notifications'):
+            logger.info(f"Skipping cancellation email for {user.email}: preference disabled")
+            return False
+
+        username = user.profile.psn_username if hasattr(user, 'profile') else user.email.split('@')[0]
+        preference_token = EmailPreferenceService.generate_preference_token(user.id)
+
+        context = {
+            'username': username,
+            'tier_name': tier_name,
+            'subscribe_url': f"{settings.SITE_URL}/users/subscribe/",
+            'site_url': settings.SITE_URL,
+            'preference_url': f"{settings.SITE_URL}/users/email-preferences/?token={preference_token}",
+        }
+
+        try:
+            sent = EmailService.send_html_email(
+                subject="We're sorry to see you go",
+                to_emails=[user.email],
+                template_name='emails/subscription_cancelled.html',
+                context=context,
+            )
+            if sent:
+                logger.info(f"Sent subscription cancelled email to {user.email}")
+            return sent > 0
+        except Exception:
+            logger.exception(f"Failed to send cancellation email to {user.email}")
+            return False
+
+    @staticmethod
+    def handle_payment_failed(user, invoice_data: dict) -> None:
+        """
+        Handle a Stripe invoice.payment_failed event.
+
+        Sends in-app notifications on every attempt and emails on first
+        failure and final warning only.
+
+        Args:
+            user: CustomUser instance
+            invoice_data: Stripe Invoice object data
+        """
+        attempt_count = invoice_data.get('attempt_count', 1)
+        next_attempt = invoice_data.get('next_payment_attempt')
+        is_first = (attempt_count == 1)
+        is_final = (next_attempt is None and attempt_count > 1)
+
+        logger.info(
+            f"Payment failed for {user.email}: attempt {attempt_count}, "
+            f"next_attempt={'none' if next_attempt is None else 'scheduled'}"
+        )
+
+        # In-app notification on every attempt
+        SubscriptionService._send_payment_failed_notification(user, attempt_count, is_final)
+
+        # Email only on first failure or final warning
+        if is_first or is_final:
+            SubscriptionService._send_payment_failed_email(user, is_final)
+
+    # ── Stripe webhook handling ───────────────────────────────────────────
+
     @staticmethod
     def handle_webhook_event(event_type: str, event_data: dict) -> None:
         """
@@ -397,11 +664,27 @@ class SubscriptionService:
         - customer.subscription.updated
         - customer.subscription.deleted
         - invoice.paid
+        - invoice.payment_failed
 
         Args:
             event_type: Stripe event type
             event_data: Event data from Stripe
         """
+        # Payment failure events use Invoice object (different shape than Subscription)
+        if event_type == 'invoice.payment_failed':
+            customer_id = event_data.get('customer')
+            if not customer_id:
+                logger.warning(f"No customer_id in webhook event {event_type}")
+                return
+
+            try:
+                from users.models import CustomUser
+                user = CustomUser.objects.get(stripe_customer_id=customer_id)
+                SubscriptionService.handle_payment_failed(user, event_data)
+            except CustomUser.DoesNotExist:
+                logger.warning(f"No user found with stripe_customer_id {customer_id}")
+            return
+
         if event_type in [
             'checkout.session.completed',
             'customer.subscription.created',

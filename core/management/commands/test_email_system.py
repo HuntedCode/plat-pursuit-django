@@ -11,6 +11,9 @@ Usage:
     python manage.py test_email_system your.email@example.com --recap-preview
     python manage.py test_email_system your.email@example.com --verification-preview
     python manage.py test_email_system your.email@example.com --password-reset-preview
+    python manage.py test_email_system your.email@example.com --payment-failed-preview
+    python manage.py test_email_system your.email@example.com --payment-failed-final-preview
+    python manage.py test_email_system your.email@example.com --cancelled-preview
 """
 from django.core.management.base import BaseCommand, CommandError
 from django.conf import settings
@@ -41,12 +44,30 @@ class Command(BaseCommand):
             action='store_true',
             help='Send a preview of the password reset template'
         )
+        parser.add_argument(
+            '--payment-failed-preview',
+            action='store_true',
+            help='Send a preview of the payment failed email (first warning, friendly tone)'
+        )
+        parser.add_argument(
+            '--payment-failed-final-preview',
+            action='store_true',
+            help='Send a preview of the payment failed email (final warning, urgent tone)'
+        )
+        parser.add_argument(
+            '--cancelled-preview',
+            action='store_true',
+            help='Send a preview of the subscription cancelled farewell email'
+        )
 
     def handle(self, *args, **options):
         recipient_email = options['recipient_email']
         recap_preview = options.get('recap_preview', False)
         verification_preview = options.get('verification_preview', False)
         password_reset_preview = options.get('password_reset_preview', False)
+        payment_failed_preview = options.get('payment_failed_preview', False)
+        payment_failed_final_preview = options.get('payment_failed_final_preview', False)
+        cancelled_preview = options.get('cancelled_preview', False)
 
         self.stdout.write("=" * 70)
         self.stdout.write("Email System Test")
@@ -61,6 +82,12 @@ class Command(BaseCommand):
             self._send_verification_preview(recipient_email)
         elif password_reset_preview:
             self._send_password_reset_preview(recipient_email)
+        elif payment_failed_preview:
+            self._send_payment_failed_preview(recipient_email, is_final=False)
+        elif payment_failed_final_preview:
+            self._send_payment_failed_preview(recipient_email, is_final=True)
+        elif cancelled_preview:
+            self._send_cancelled_preview(recipient_email)
         else:
             self._send_simple_test(recipient_email)
 
@@ -242,5 +269,107 @@ class Command(BaseCommand):
         except Exception as e:
             self.stdout.write(
                 self.style.ERROR(f'✗ Failed to send password reset preview: {e}')
+            )
+            raise CommandError(f'Email sending failed: {e}')
+
+    def _send_payment_failed_preview(self, recipient_email, is_final=False):
+        """Send a preview of the payment failed email template."""
+        from users.services.email_preference_service import EmailPreferenceService
+
+        variant = "final warning (urgent)" if is_final else "first warning (friendly)"
+        self.stdout.write(f"\nSending payment failed email preview ({variant})...")
+
+        sample_user_id = 1
+        try:
+            preference_token = EmailPreferenceService.generate_preference_token(sample_user_id)
+            preference_url = f"{settings.SITE_URL}/users/email-preferences/?token={preference_token}"
+        except Exception as e:
+            self.stdout.write(self.style.WARNING(f"Failed to generate preference token: {e}"))
+            preference_url = f"{settings.SITE_URL}/users/email-preferences/"
+
+        context = {
+            'username': 'TestUser',
+            'is_final_warning': is_final,
+            'portal_url': f'{settings.SITE_URL}/users/subscription-management/',
+            'tier_name': 'Premium Monthly',
+            'site_url': settings.SITE_URL,
+            'preference_url': preference_url,
+        }
+
+        subject = (
+            "[PREVIEW] Action Required: Your PlatPursuit subscription is at risk"
+            if is_final
+            else "[PREVIEW] Heads up: We couldn't process your payment"
+        )
+
+        try:
+            sent_count = EmailService.send_html_email(
+                subject=subject,
+                to_emails=[recipient_email],
+                template_name='emails/payment_failed.html',
+                context=context,
+                fail_silently=False,
+            )
+
+            if sent_count > 0:
+                self.stdout.write(
+                    self.style.SUCCESS(f'✓ Payment failed preview ({variant}) sent successfully!')
+                )
+                self.stdout.write('\nCheck your inbox to see how the payment failed email looks.')
+            else:
+                self.stdout.write(
+                    self.style.ERROR('✗ Email was not sent (no errors but send count is 0)')
+                )
+
+        except Exception as e:
+            self.stdout.write(
+                self.style.ERROR(f'✗ Failed to send payment failed preview: {e}')
+            )
+            raise CommandError(f'Email sending failed: {e}')
+
+    def _send_cancelled_preview(self, recipient_email):
+        """Send a preview of the subscription cancelled farewell email."""
+        from users.services.email_preference_service import EmailPreferenceService
+
+        self.stdout.write("\nSending subscription cancelled email preview...")
+
+        sample_user_id = 1
+        try:
+            preference_token = EmailPreferenceService.generate_preference_token(sample_user_id)
+            preference_url = f"{settings.SITE_URL}/users/email-preferences/?token={preference_token}"
+        except Exception as e:
+            self.stdout.write(self.style.WARNING(f"Failed to generate preference token: {e}"))
+            preference_url = f"{settings.SITE_URL}/users/email-preferences/"
+
+        context = {
+            'username': 'TestUser',
+            'tier_name': 'Premium Monthly',
+            'subscribe_url': f'{settings.SITE_URL}/users/subscribe/',
+            'site_url': settings.SITE_URL,
+            'preference_url': preference_url,
+        }
+
+        try:
+            sent_count = EmailService.send_html_email(
+                subject="[PREVIEW] We're sorry to see you go",
+                to_emails=[recipient_email],
+                template_name='emails/subscription_cancelled.html',
+                context=context,
+                fail_silently=False,
+            )
+
+            if sent_count > 0:
+                self.stdout.write(
+                    self.style.SUCCESS('✓ Subscription cancelled preview sent successfully!')
+                )
+                self.stdout.write('\nCheck your inbox to see how the cancellation farewell email looks.')
+            else:
+                self.stdout.write(
+                    self.style.ERROR('✗ Email was not sent (no errors but send count is 0)')
+                )
+
+        except Exception as e:
+            self.stdout.write(
+                self.style.ERROR(f'✗ Failed to send cancelled preview: {e}')
             )
             raise CommandError(f'Email sending failed: {e}')

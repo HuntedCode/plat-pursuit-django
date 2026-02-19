@@ -5,6 +5,7 @@ from datetime import datetime
 from allauth.account.views import ConfirmEmailView
 from core.services.tracking import track_page_view
 from django.conf import settings
+from django.core import signing
 from django.utils import timezone
 from django.contrib import messages
 from django.contrib.auth import update_session_auth_hash
@@ -22,14 +23,15 @@ from djstripe.models import Price, Customer, Subscription
 from djstripe.models import Event as DJStripeEvent
 import stripe
 import logging
-from users.forms import UserSettingsForm, CustomPasswordChangeForm
+from users.forms import UserSettingsForm, CustomPasswordChangeForm, EmailPreferencesForm
+from users.services.email_preference_service import EmailPreferenceService
 from users.services.subscription_service import SubscriptionService
 from users.models import CustomUser
 from trophies.forms import PremiumSettingsForm, ProfileSettingsForm
 from trophies.models import Concept, ProfileGame
 from trophies.utils import update_profile_trophy_counts
 
-logger = logging.getLogger('psn_api')
+logger = logging.getLogger('users.views')
 
 class CustomConfirmEmailView(ConfirmEmailView):
     def get(self, *args, **kwargs):
@@ -364,6 +366,16 @@ class SubscriptionManagementView(LoginRequiredMixin, TemplateView):
             sub = Subscription.objects.filter(
                 customer__id=user.stripe_customer_id, stripe_data__status='active'
             ).first()
+
+            # Fallback: check for past_due subscription so users can still
+            # access billing portal to fix their payment method
+            if not sub:
+                sub = Subscription.objects.filter(
+                    customer__id=user.stripe_customer_id, stripe_data__status='past_due'
+                ).first()
+                if sub:
+                    context['payment_past_due'] = True
+
             if sub:
                 stripe_data = sub.stripe_data or {}
                 context['tier'] = user.get_premium_tier()
@@ -446,8 +458,6 @@ class EmailPreferencesView(View):
 
         Validates token from URL parameter and pre-fills form with user's current preferences.
         """
-        from django.core import signing
-        from users.services.email_preference_service import EmailPreferenceService
 
         token = request.GET.get('token')
         context = {
@@ -479,7 +489,6 @@ class EmailPreferencesView(View):
         preferences = EmailPreferenceService.get_user_preferences(user)
 
         # Pre-fill form with current preferences
-        from users.forms import EmailPreferencesForm
         form = EmailPreferencesForm(initial=preferences)
 
         context['form'] = form
@@ -493,9 +502,6 @@ class EmailPreferencesView(View):
 
         Validates token, processes form data, and updates user preferences.
         """
-        from django.core import signing
-        from users.services.email_preference_service import EmailPreferenceService
-        from users.forms import EmailPreferencesForm
 
         token = request.GET.get('token')
         context = {
@@ -531,6 +537,7 @@ class EmailPreferencesView(View):
                 'monthly_recap': form.cleaned_data.get('monthly_recap', False),
                 'badge_notifications': form.cleaned_data.get('badge_notifications', False),
                 'milestone_notifications': form.cleaned_data.get('milestone_notifications', False),
+                'subscription_notifications': form.cleaned_data.get('subscription_notifications', False),
                 'admin_announcements': form.cleaned_data.get('admin_announcements', False),
                 'global_unsubscribe': form.cleaned_data.get('global_unsubscribe', False),
             }

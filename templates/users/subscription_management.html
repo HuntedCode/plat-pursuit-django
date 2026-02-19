@@ -32,6 +32,23 @@
     </div>
 
     {% if subscription_provider %}
+
+    {% if payment_past_due %}
+    <!-- ===== PAYMENT PAST DUE WARNING ===== -->
+    <div class="flex justify-center">
+        <div class="alert alert-warning max-w-lg shadow-lg">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="shrink-0" aria-hidden="true"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            <div>
+                <h3 class="font-bold">Payment Issue</h3>
+                <p class="text-sm">Your most recent payment didn't go through. We're still retrying, but please update your payment method to avoid losing premium access.</p>
+            </div>
+            {% if portal_url %}
+            <a href="{{ portal_url }}" class="btn btn-sm btn-warning">Update Payment</a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+
     <!-- ===== SECTION 2: Subscription Status (Active Subscriber) ===== -->
     <div class="flex justify-center">
         <div class="card bg-base-200/60 w-full max-w-lg {% if premium_tier_slug == 'supporter' %}shimmer{% else %}card-interactive{% endif %}">

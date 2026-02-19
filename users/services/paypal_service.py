@@ -11,7 +11,7 @@ This service manages:
 import json
 import logging
 import requests
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional
 from django.conf import settings
 from django.core.cache import cache
@@ -256,15 +256,29 @@ class PayPalService:
                 except (ValueError, AttributeError):
                     logger.warning(f"Failed to parse next_billing_time '{next_billing}' for user {user.email}")
             else:
-                # No expiry date: user retains premium until EXPIRED webhook arrives.
-                # If that webhook is never received, is_premium() has no local expiry guard.
-                logger.warning(f"PayPal CANCELLED event for user {user.email} has no next_billing_time")
+                # No expiry date from PayPal: use a 30-day safety fallback so the user
+                # doesn't stay premium forever if the EXPIRED webhook is never received.
+                from django.utils import timezone
+                cancel_at = timezone.now() + timedelta(days=30)
+                logger.warning(
+                    f"PayPal CANCELLED event for user {user.email} has no next_billing_time, "
+                    f"using 30-day fallback expiry: {cancel_at}"
+                )
             SubscriptionService.mark_subscription_cancelling(user, cancel_at)
             logger.info(f"PayPal subscription cancelling for user {user.email}, expires at {cancel_at}")
 
-        elif event_type in ('BILLING.SUBSCRIPTION.SUSPENDED', 'BILLING.SUBSCRIPTION.EXPIRED'):
+        elif event_type == 'BILLING.SUBSCRIPTION.SUSPENDED':
+            # Payment failed: send notification before deactivating (no retry cycle for PayPal).
+            # Always uses is_final_warning=True so the email shows the urgent/final tone,
+            # not the first-warning copy that mentions Stripe-specific retry behavior.
+            SubscriptionService._send_payment_failed_email(user, is_final_warning=True)
+            SubscriptionService._send_payment_failed_notification(user, attempt_count=1, is_final=True)
             SubscriptionService.deactivate_subscription(user, 'paypal', event_type)
-            logger.info(f"PayPal subscription deactivated for user {user.email} ({event_type})")
+            logger.info(f"PayPal subscription suspended (payment failed) for user {user.email}")
+
+        elif event_type == 'BILLING.SUBSCRIPTION.EXPIRED':
+            SubscriptionService.deactivate_subscription(user, 'paypal', event_type)
+            logger.info(f"PayPal subscription expired for user {user.email}")
 
         elif event_type == 'PAYMENT.SALE.COMPLETED':
             logger.info(f"PayPal renewal payment for user {user.email}")

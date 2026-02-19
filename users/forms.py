@@ -1,5 +1,5 @@
 from django import forms
-from django.contrib.auth.forms import UserChangeForm, PasswordChangeForm
+from django.contrib.auth.forms import PasswordChangeForm
 from allauth.account.forms import SignupForm
 from .models import CustomUser
 import pytz
@@ -16,7 +16,7 @@ class CustomUserCreationForm(SignupForm):
             raise forms.ValidationError("This email is already in use.")
         return email
 
-class UserSettingsForm(UserChangeForm):
+class UserSettingsForm(forms.ModelForm):
     class Meta:
         model = CustomUser
         fields = ['user_timezone', 'default_region', 'use_24hr_clock']
@@ -70,6 +70,13 @@ class EmailPreferencesForm(forms.Form):
         widget=forms.CheckboxInput(attrs={'class': 'checkbox'})
     )
 
+    subscription_notifications = forms.BooleanField(
+        required=False,
+        label='Subscription & Billing Emails',
+        help_text='Payment failure warnings and subscription status updates (recommended)',
+        widget=forms.CheckboxInput(attrs={'class': 'checkbox'})
+    )
+
     admin_announcements = forms.BooleanField(
         required=False,
         label='Site Announcements',
@@ -97,6 +104,7 @@ class EmailPreferencesForm(forms.Form):
             cleaned_data['monthly_recap'] = False
             cleaned_data['badge_notifications'] = False
             cleaned_data['milestone_notifications'] = False
+            cleaned_data['subscription_notifications'] = False
             cleaned_data['admin_announcements'] = False
 
         return cleaned_data

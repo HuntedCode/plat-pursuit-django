@@ -42,7 +42,7 @@ def check_profile_badges(profile, profilegame_ids, skip_notis: bool = False):
 
     pg_qs: QuerySet[ProfileGame] = ProfileGame.objects.filter(
         id__in=profilegame_ids, profile=profile
-    ).select_related('game__concept').prefetch_related('game__concept__badges')
+    )
 
     if not pg_qs.exists():
         logger.info(f"No ProfileGames found for profile {profile.psn_username}")
@@ -66,9 +66,9 @@ def check_profile_badges(profile, profilegame_ids, skip_notis: bool = False):
             try:
                 handle_badge(profile, badge, add_role_only=skip_notis)
                 checked_count += 1
-            except Exception as e:
-                logger.error(
-                    f"Error checking badge {badge.id} for profile {profile.psn_username}: {e}"
+            except Exception:
+                logger.exception(
+                    f"Error checking badge {badge.id} for profile {profile.psn_username}"
                 )
 
     duration = time.time() - start_time
@@ -370,10 +370,46 @@ def notify_bot_role_earned(profile, role_id):
         logger.info(
             f"Bot notified: Assigned role {role_id} to {profile.discord_id}."
         )
-    except requests.RequestException as e:
-        logger.error(
+    except requests.RequestException:
+        logger.exception(
             f"Bot notification failed for role {role_id} "
-            f"(user {profile.psn_username}): {e}"
+            f"(user {profile.psn_username})"
+        )
+
+
+def notify_bot_role_removed(profile, role_id):
+    """
+    Notify Discord bot to remove a role from a user.
+
+    This function calls the Discord bot API to remove a role when a user
+    loses a badge, milestone, or subscription with an associated Discord role.
+
+    Args:
+        profile: Profile instance with discord_id set
+        role_id: Discord role ID to remove
+    """
+    if settings.DEBUG:
+        return
+
+    try:
+        url = settings.BOT_API_URL + "/remove-role"
+        headers = {
+            'Authorization': f"Bearer {settings.BOT_API_KEY}",
+            'Content-Type': 'application/json'
+        }
+        data = {
+            'user_id': profile.discord_id,
+            'role_id': role_id,
+        }
+        response = requests.post(url, json=data, headers=headers)
+        response.raise_for_status()
+        logger.info(
+            f"Bot notified: Removed role {role_id} from {profile.discord_id}."
+        )
+    except requests.RequestException:
+        logger.exception(
+            f"Bot role removal failed for role {role_id} "
+            f"(user {profile.psn_username})"
         )
 
 
@@ -403,7 +439,7 @@ def initial_badge_check(profile, discord_notify: bool = True):
 
     pg_qs: QuerySet[ProfileGame] = ProfileGame.objects.filter(
         profile=profile
-    ).select_related('game__concept').prefetch_related('game__concept__badges')
+    )
 
     if not pg_qs.exists():
         logger.info(f"No ProfileGames found for profile {profile.psn_username}")
@@ -426,9 +462,9 @@ def initial_badge_check(profile, discord_notify: bool = True):
             checked_count += 1
             if created and badge.discord_role_id:
                 role_granting_badges.append(badge)
-        except Exception as e:
-            logger.error(
-                f"Error checking badge {badge.id} for profile {profile.psn_username}: {e}"
+        except Exception:
+            logger.exception(
+                f"Error checking badge {badge.id} for profile {profile.psn_username}"
             )
 
     logger.info(f"Found {len(role_granting_badges)} qualifying role-granting badges")

@@ -11,7 +11,6 @@ import logging
 from typing import Dict, Optional
 from django.conf import settings
 from django.core import signing
-from django.core.exceptions import ValidationError
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +19,7 @@ DEFAULT_EMAIL_PREFERENCES = {
     "monthly_recap": True,
     "badge_notifications": True,
     "milestone_notifications": True,
+    "subscription_notifications": True,
     "admin_announcements": True,
     "global_unsubscribe": False,
 }

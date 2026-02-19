@@ -21,6 +21,7 @@ class NotificationTemplate(models.Model):
         ('challenge_completed', 'Challenge Completed'),
         ('admin_announcement', 'Admin Announcement'),
         ('system_alert', 'System Alert'),
+        ('payment_failed', 'Payment Failed'),
     ]
 
     PRIORITY_CHOICES = [
