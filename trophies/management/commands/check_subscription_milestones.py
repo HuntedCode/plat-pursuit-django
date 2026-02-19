@@ -7,7 +7,6 @@ Intended to run daily via cron. Only checks users who have an open SubscriptionP
 Usage:
     python manage.py check_subscription_milestones
     python manage.py check_subscription_milestones --silent
-    python manage.py check_subscription_milestones --no-discord
     python manage.py check_subscription_milestones --dry-run
 """
 from django.core.management.base import BaseCommand
@@ -23,12 +22,7 @@ class Command(BaseCommand):
         parser.add_argument(
             '--silent',
             action='store_true',
-            help='Suppress ALL notifications (in-app + Discord).',
-        )
-        parser.add_argument(
-            '--no-discord',
-            action='store_true',
-            help='Suppress Discord notifications only (in-app still sent).',
+            help='Suppress in-app notifications.',
         )
         parser.add_argument(
             '--dry-run',
@@ -38,18 +32,14 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         silent = options['silent']
-        no_discord = options['no_discord']
         dry_run = options['dry_run']
 
         notify_webapp = not silent
-        notify_discord = not silent and not no_discord
 
         if dry_run:
             self.stdout.write(self.style.WARNING('DRY RUN MODE: No milestone checks will be performed.\n'))
         elif silent:
-            self.stdout.write(self.style.WARNING('Silent mode: all notifications suppressed.'))
-        elif no_discord:
-            self.stdout.write(self.style.WARNING('No-discord mode: in-app only, Discord suppressed.'))
+            self.stdout.write(self.style.WARNING('Silent mode: notifications suppressed.'))
 
         # Find users with an open subscription period
         active_user_ids = SubscriptionPeriod.objects.filter(
@@ -73,7 +63,6 @@ class Command(BaseCommand):
                 profile=profile,
                 criteria_type='subscription_months',
                 notify_webapp=notify_webapp,
-                notify_discord=notify_discord,
             )
             count = len(awarded) if awarded else 0
             total_awarded += count

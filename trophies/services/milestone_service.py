@@ -59,7 +59,7 @@ def notify_bot_role_earned(profile, role_id):
 
 
 @transaction.atomic
-def check_and_award_milestone(profile, milestone, notify=True, _cache=None):
+def check_and_award_milestone(profile, milestone, _cache=None):
     """
     Check if a milestone is achieved for a profile and award if earned.
 
@@ -69,7 +69,6 @@ def check_and_award_milestone(profile, milestone, notify=True, _cache=None):
     Args:
         profile: Profile instance to check
         milestone: Milestone instance to evaluate
-        notify: If True, send Discord notification for new awards (default: True)
         _cache: Optional dict for handler-level caching across tiers of the
                 same criteria_type. Prevents redundant DB queries when checking
                 multiple tiers in a single batch.
@@ -81,7 +80,6 @@ def check_and_award_milestone(profile, milestone, notify=True, _cache=None):
     """
     from trophies.models import UserMilestoneProgress, UserMilestone
     from trophies.milestone_handlers import MILESTONE_HANDLERS
-    from trophies.discord_utils.discord_notifications import notify_new_milestone
 
     # Skip premium-only milestones for non-premium users
     if milestone.premium_only and not profile.user_is_premium:
@@ -134,20 +132,13 @@ def check_and_award_milestone(profile, milestone, notify=True, _cache=None):
                 lambda p=profile, r=milestone.discord_role_id: notify_bot_role_earned(p, r)
             )
 
-        # Send Discord webhook notification for newly awarded milestones
-        if created and notify and profile.is_discord_verified and profile.discord_id:
-            transaction.on_commit(
-                lambda p=profile, m=milestone: notify_new_milestone(p, m)
-            )
-
         return {'awarded': True, 'created': created, 'user_milestone': user_milestone}
 
     return {'awarded': False, 'created': False, 'user_milestone': None}
 
 
 def check_all_milestones_for_user(profile, criteria_type=None, criteria_types=None,
-                                  exclude_types=None,
-                                  notify_webapp=True, notify_discord=True):
+                                  exclude_types=None, notify_webapp=True):
     """
     Batch check all relevant milestones for a profile.
 
@@ -170,13 +161,11 @@ def check_all_milestones_for_user(profile, criteria_type=None, criteria_types=No
         exclude_types: Optional set of criteria_types to skip (e.g., calendar
                        types when they're checked separately)
         notify_webapp: If True, send in-app notification for highest tier earned.
-        notify_discord: If True, send Discord webhook for highest tier earned.
 
     Returns:
         list: List of newly awarded Milestone instances
     """
     from trophies.models import Milestone
-    from trophies.discord_utils.discord_notifications import notify_new_milestone
     from notifications.signals import create_milestone_notification
 
     if criteria_type and criteria_types:
@@ -207,7 +196,7 @@ def check_all_milestones_for_user(profile, criteria_type=None, criteria_types=No
             # One-off: notify individually (no spam risk, at most 1 tier)
             for milestone in milestones:
                 status = check_and_award_milestone(
-                    profile, milestone, notify=notify_discord, _cache=_cache
+                    profile, milestone, _cache=_cache
                 )
                 if status['created']:
                     all_awarded.append(milestone)
@@ -219,7 +208,7 @@ def check_all_milestones_for_user(profile, criteria_type=None, criteria_types=No
             new_award_statuses = {}
             for milestone in milestones:
                 status = check_and_award_milestone(
-                    profile, milestone, notify=False, _cache=_cache
+                    profile, milestone, _cache=_cache
                 )
                 if status['created']:
                     new_awards.append(milestone)
@@ -230,8 +219,6 @@ def check_all_milestones_for_user(profile, criteria_type=None, criteria_types=No
                     um = new_award_statuses[highest.id].get('user_milestone')
                     if um:
                         create_milestone_notification(um)
-                if notify_discord and profile.is_discord_verified and profile.discord_id:
-                    notify_new_milestone(profile, highest)
                 all_awarded.extend(new_awards)
 
     return all_awarded

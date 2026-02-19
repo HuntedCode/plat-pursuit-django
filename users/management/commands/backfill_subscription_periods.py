@@ -10,6 +10,7 @@ Usage:
 """
 from datetime import datetime
 from django.core.management.base import BaseCommand
+from django.db.models import Exists, OuterRef
 from django.utils import timezone
 from users.models import CustomUser, SubscriptionPeriod
 
@@ -53,11 +54,17 @@ class Command(BaseCommand):
         if dry_run:
             self.stdout.write(self.style.WARNING('DRY RUN MODE: No changes will be made.\n'))
 
-        # Find premium users with no open (active) SubscriptionPeriod
+        # Find premium users with no open (active) SubscriptionPeriod.
+        # Uses Exists() instead of .exclude(subscription_periods__ended_at__isnull=True)
+        # because the latter fails on empty tables: LEFT JOIN produces NULL for ended_at
+        # when no related rows exist, which __isnull=True matches, excluding everyone.
         premium_users = CustomUser.objects.filter(
             premium_tier__isnull=False,
+            subscription_provider__isnull=False,  # Skip admin-assigned users
         ).exclude(
-            subscription_periods__ended_at__isnull=True,
+            Exists(SubscriptionPeriod.objects.filter(
+                user=OuterRef('pk'), ended_at__isnull=True,
+            ))
         ).select_related('profile')
 
         created_count = 0
