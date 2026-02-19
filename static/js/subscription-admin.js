@@ -29,7 +29,7 @@
     async function _extractError(error, fallback) {
         try {
             const d = await error.response?.json();
-            return d?.error || fallback;
+            return d?.error || d?.detail || fallback;
         } catch {
             return fallback;
         }
@@ -45,7 +45,7 @@
     }
 
     function _escapeHtml(str) {
-        return PlatPursuit.HTMLUtils.escapeHtml(str || '');
+        return PlatPursuit.HTMLUtils.escape(str || '');
     }
 
     /**
@@ -62,6 +62,9 @@
             btn.disabled = false;
         }
     }
+
+    // Currently viewed user in the detail modal
+    let _modalUserId = null;
 
     // ── API Actions ──────────────────────────────────────────────────
 
@@ -103,6 +106,7 @@
     }
 
     async function showUserDetail(userId) {
+        _modalUserId = userId;
         const modal = document.getElementById('user-detail-modal');
         const loading = document.getElementById('detail-modal-loading');
         const content = document.getElementById('detail-modal-content');
@@ -183,6 +187,46 @@
         }
     }
 
+    async function sendWelcomeEmail(event) {
+        if (!_modalUserId) return;
+        await _withButtonLock(event, async () => {
+            try {
+                const data = await API.post('/api/v1/admin/subscriptions/action/', {
+                    action: 'send_welcome_email',
+                    user_id: _modalUserId,
+                });
+                if (data.success) {
+                    Toast.show(data.message || 'Welcome email sent', 'success');
+                } else {
+                    Toast.show(data.message || 'Failed to send welcome email', 'warning');
+                }
+            } catch (error) {
+                const msg = await _extractError(error, 'Failed to send welcome email');
+                Toast.show(msg, 'error');
+            }
+        });
+    }
+
+    async function sendPaymentSucceededEmail(event) {
+        if (!_modalUserId) return;
+        await _withButtonLock(event, async () => {
+            try {
+                const data = await API.post('/api/v1/admin/subscriptions/action/', {
+                    action: 'send_payment_succeeded_email',
+                    user_id: _modalUserId,
+                });
+                if (data.success) {
+                    Toast.show(data.message || 'Payment succeeded email sent', 'success');
+                } else {
+                    Toast.show(data.message || 'Failed to send payment succeeded email', 'warning');
+                }
+            } catch (error) {
+                const msg = await _extractError(error, 'Failed to send payment succeeded email');
+                Toast.show(msg, 'error');
+            }
+        });
+    }
+
     function confirmDeactivate(userId, username) {
         document.getElementById('deactivate-user-id').value = userId;
         document.getElementById('deactivate-username').textContent = username;
@@ -228,6 +272,8 @@
         resendEmail,
         resendNotification,
         showUserDetail,
+        sendWelcomeEmail,
+        sendPaymentSucceededEmail,
         confirmDeactivate,
         executeDeactivate,
     };

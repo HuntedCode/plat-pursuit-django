@@ -170,6 +170,7 @@ class AdminSendNotificationView(APIView):
     """
     permission_classes = [IsAuthenticated, IsAdminUser]
     authentication_classes = [SessionAuthentication, TokenAuthentication]
+    throttle_classes = []
 
     @method_decorator(ratelimit(key='user', rate='10/m', method='POST'))
     def post(self, request):
@@ -1084,6 +1085,7 @@ class AdminNotificationPreviewView(APIView):
     """
     permission_classes = [IsAuthenticated, IsAdminUser]
     authentication_classes = [SessionAuthentication]
+    throttle_classes = []
 
     def post(self, request):
         from django.utils import timezone
@@ -1120,6 +1122,7 @@ class AdminTargetCountView(APIView):
     """
     permission_classes = [IsAuthenticated, IsAdminUser]
     authentication_classes = [SessionAuthentication]
+    throttle_classes = []
 
     def post(self, request):
         target_type = request.data.get('target_type', 'all')
@@ -1145,6 +1148,7 @@ class AdminUserSearchView(APIView):
     """
     permission_classes = [IsAuthenticated, IsAdminUser]
     authentication_classes = [SessionAuthentication]
+    throttle_classes = []
 
     def get(self, request):
         from django.db.models import Q

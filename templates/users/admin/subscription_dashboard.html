@@ -289,6 +289,20 @@
                     <tbody id="detail-periods"></tbody>
                 </table>
             </div>
+
+            <!-- Admin Actions -->
+            <div class="divider"></div>
+            <h4 class="font-semibold mb-2">Send Email</h4>
+            <div class="flex flex-wrap gap-2">
+                <button class="btn btn-primary btn-sm"
+                        onclick="PlatPursuit.SubAdmin.sendWelcomeEmail(event)">
+                    Send Welcome Email
+                </button>
+                <button class="btn btn-secondary btn-sm"
+                        onclick="PlatPursuit.SubAdmin.sendPaymentSucceededEmail(event)">
+                    Send Payment Succeeded Email
+                </button>
+            </div>
         </div>
     </div>
     <form method="dialog" class="modal-backdrop">

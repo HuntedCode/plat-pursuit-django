@@ -3,7 +3,7 @@
 
     const API = window.PlatPursuit?.API;
     const Toast = window.PlatPursuit?.ToastManager;
-    const escapeHtml = window.PlatPursuit?.HTMLUtils?.escapeHtml || (s => s);
+    const escapeHtml = window.PlatPursuit?.HTMLUtils?.escape || (s => s);
 
     const BASE_URL = '/api/v1/game-families';
 
@@ -528,7 +528,7 @@
     async function _extractError(error, fallback) {
         try {
             const errData = await error.response?.json();
-            return errData?.error || fallback;
+            return errData?.error || errData?.detail || fallback;
         } catch {
             return fallback;
         }

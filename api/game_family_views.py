@@ -103,6 +103,7 @@ class ProposalApproveView(APIView):
     """Approve a pending proposal, creating a GameFamily."""
     authentication_classes = [SessionAuthentication, TokenAuthentication]
     permission_classes = [IsAuthenticated, IsAdminUser]
+    throttle_classes = []
 
     def post(self, request, proposal_id):
         try:
@@ -151,6 +152,7 @@ class ProposalRejectView(APIView):
     """Reject a pending proposal."""
     authentication_classes = [SessionAuthentication, TokenAuthentication]
     permission_classes = [IsAuthenticated, IsAdminUser]
+    throttle_classes = []
 
     def post(self, request, proposal_id):
         try:
@@ -171,6 +173,7 @@ class GameFamilyCreateView(APIView):
     """Manually create a GameFamily with selected concepts."""
     authentication_classes = [SessionAuthentication, TokenAuthentication]
     permission_classes = [IsAuthenticated, IsAdminUser]
+    throttle_classes = []
 
     def post(self, request):
         canonical_name = request.data.get('canonical_name', '').strip()
@@ -216,6 +219,7 @@ class GameFamilyUpdateView(APIView):
     """Update a GameFamily's canonical_name or admin_notes."""
     authentication_classes = [SessionAuthentication, TokenAuthentication]
     permission_classes = [IsAuthenticated, IsAdminUser]
+    throttle_classes = []
 
     def patch(self, request, family_id):
         try:
@@ -247,6 +251,7 @@ class GameFamilyDeleteView(APIView):
     """Delete a GameFamily (unlinks concepts, does not delete them)."""
     authentication_classes = [SessionAuthentication, TokenAuthentication]
     permission_classes = [IsAuthenticated, IsAdminUser]
+    throttle_classes = []
 
     def delete(self, request, family_id):
         try:
@@ -265,6 +270,7 @@ class GameFamilyAddConceptView(APIView):
     """Add a concept to an existing GameFamily."""
     authentication_classes = [SessionAuthentication, TokenAuthentication]
     permission_classes = [IsAuthenticated, IsAdminUser]
+    throttle_classes = []
 
     def post(self, request, family_id):
         try:
@@ -297,6 +303,7 @@ class GameFamilyRemoveConceptView(APIView):
     """Remove a concept from a GameFamily."""
     authentication_classes = [SessionAuthentication, TokenAuthentication]
     permission_classes = [IsAuthenticated, IsAdminUser]
+    throttle_classes = []
 
     def post(self, request, family_id):
         try:
@@ -330,6 +337,7 @@ class ConceptSearchView(APIView):
     """Search concepts by name for manual family linking."""
     authentication_classes = [SessionAuthentication, TokenAuthentication]
     permission_classes = [IsAuthenticated, IsAdminUser]
+    throttle_classes = []
 
     def get(self, request):
         query = request.GET.get('q', '').strip()

@@ -25,6 +25,7 @@ class SubscriptionAdminActionView(APIView):
     """Staff-only actions: resend emails, resend notifications, force deactivate."""
     authentication_classes = [SessionAuthentication, TokenAuthentication]
     permission_classes = [IsAuthenticated, IsAdminUser]
+    throttle_classes = []
 
     def post(self, request):
         action = request.data.get('action')
@@ -94,6 +95,22 @@ class SubscriptionAdminActionView(APIView):
                 )
                 return Response({'success': True, 'message': f'Deactivated {user.email}'})
 
+            elif action == 'send_welcome_email':
+                tier_name = SubscriptionService.get_tier_display_name(user.premium_tier) if user.premium_tier else 'Premium'
+                sent = SubscriptionService._send_subscription_welcome_email(
+                    user, tier_name, triggered_by='admin_manual',
+                )
+                msg = 'Welcome email sent' if sent else 'Email was suppressed (user preference) or failed'
+                return Response({'success': bool(sent), 'message': msg})
+
+            elif action == 'send_payment_succeeded_email':
+                tier_name = SubscriptionService.get_tier_display_name(user.premium_tier) if user.premium_tier else 'Premium'
+                sent = SubscriptionService._send_payment_succeeded_email(
+                    user, tier_name, triggered_by='admin_manual',
+                )
+                msg = 'Payment succeeded email sent' if sent else 'Email was suppressed (user preference) or failed'
+                return Response({'success': bool(sent), 'message': msg})
+
             return Response({'error': f'Unknown action: {action}'}, status=status.HTTP_400_BAD_REQUEST)
 
         except Exception as e:
@@ -105,6 +122,7 @@ class SubscriptionAdminUserDetailView(APIView):
     """Staff-only: fetch a user's notification + email history for the detail modal."""
     authentication_classes = [SessionAuthentication, TokenAuthentication]
     permission_classes = [IsAuthenticated, IsAdminUser]
+    throttle_classes = []
 
     def get(self, request, user_id):
         try:
