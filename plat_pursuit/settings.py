@@ -199,6 +199,7 @@ TEMPLATES = [
                 "plat_pursuit.context_processors.ads",
                 "plat_pursuit.context_processors.moderation",
                 "plat_pursuit.context_processors.premium_theme_background",
+                "plat_pursuit.context_processors.high_sync_volume",
             ],
         },
     },

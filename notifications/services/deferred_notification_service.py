@@ -113,7 +113,7 @@ class DeferredNotificationService:
             existing = Notification.objects.filter(
                 recipient=profile.user,
                 notification_type='platinum_earned',
-                context__game_id=game.id,
+                metadata__game_id=game.id,
             ).exists()
             if existing:
                 logger.info(f"Platinum notification already exists for {profile.psn_username} - {game.title_name}, skipping")

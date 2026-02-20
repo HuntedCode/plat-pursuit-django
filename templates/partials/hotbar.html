@@ -28,6 +28,7 @@
                         <div id="sync-progress-div" class="flex items-center gap-1 {% if not hotbar.sync_status == 'syncing' %}hidden{% endif %}">
                             <progress id="sync-progress-bar" class="progress progress-primary w-16 xl:w-24 h-2" value="{{ hotbar.progress_percentage|floatformat:0|default:0 }}" max="100"></progress>
                             <span id="sync-progress-percent" class="text-xs text-base-content/70">{{ hotbar.progress_percentage|floatformat:0|default:0 }}%</span>
+                            <span id="sync-queue-position" class="text-xs text-base-content/50 {% if not hotbar.queue_position or hotbar.queue_position == 0 %}hidden{% endif %}">~{{ hotbar.queue_position|default:0 }} ahead</span>
                             <span class="loading loading-spinner loading-sm"></span>
                         </div>
                         <button id="sync-now-btn"

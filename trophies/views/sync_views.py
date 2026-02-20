@@ -7,17 +7,64 @@ from django.views.generic import View
 from django_ratelimit.decorators import ratelimit
 
 from trophies.psn_manager import PSNManager
+from trophies.util_modules.cache import redis_client
 from ..models import Profile
 
 logger = logging.getLogger("psn_api")
+
+
+def _get_queue_position(profile_id):
+    """
+    Calculate approximate queue position for a syncing profile.
+
+    Counts how many other profiles started syncing before this one and are
+    still active. Uses a Redis pipeline to batch lookups into a single
+    round-trip. Returns None if position cannot be determined.
+    """
+    try:
+        my_start = redis_client.get(f"sync_started_at:{profile_id}")
+        if not my_start:
+            return None
+
+        my_start_time = float(my_start.decode() if isinstance(my_start, bytes) else my_start)
+        active_ids = redis_client.smembers('active_profiles')
+
+        other_pids = []
+        for pid_bytes in active_ids:
+            pid = pid_bytes.decode() if isinstance(pid_bytes, bytes) else str(pid_bytes)
+            if str(pid) != str(profile_id):
+                other_pids.append(pid)
+
+        if not other_pids:
+            return 0
+
+        pipe = redis_client.pipeline(transaction=False)
+        for pid in other_pids:
+            pipe.get(f"sync_started_at:{pid}")
+        results = pipe.execute()
+
+        ahead = 0
+        for val in results:
+            if not val:
+                continue
+            try:
+                other_time = float(val.decode() if isinstance(val, bytes) else val)
+                if other_time < my_start_time:
+                    ahead += 1
+            except (ValueError, TypeError):
+                continue
+
+        return ahead
+    except Exception:
+        return None
 
 
 class ProfileSyncStatusView(LoginRequiredMixin, View):
     """
     AJAX endpoint for polling profile sync status in navigation hotbar.
 
-    Returns current sync status, progress percentage, and cooldown time.
-    Used by frontend to display sync progress bar and enable/disable sync button.
+    Returns current sync status, progress percentage, cooldown time,
+    and queue position when syncing.
 
     Rate limited to 60 requests per minute per user.
     """
@@ -33,6 +80,10 @@ class ProfileSyncStatusView(LoginRequiredMixin, View):
             'sync_percentage': profile.sync_percentage,
             'seconds_to_next_sync': seconds_to_next_sync,
         }
+
+        if profile.sync_status == 'syncing':
+            data['queue_position'] = _get_queue_position(profile.id)
+
         return JsonResponse(data)
 
 class TriggerSyncView(LoginRequiredMixin, View):

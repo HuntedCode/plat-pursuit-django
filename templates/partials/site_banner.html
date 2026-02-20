@@ -1,0 +1,50 @@
+{% if high_sync_volume %}
+<div id="site-banner"
+     class="bg-warning/15 border-b-2 border-warning text-warning-content"
+     role="alert"
+     aria-live="polite"
+     data-activated-at="{{ high_sync_volume_activated_at }}">
+    <div class="mx-auto px-4 py-2 flex items-center justify-between gap-3">
+        <div class="flex items-center gap-2 min-w-0">
+            <svg class="w-5 h-5 shrink-0 text-warning animate-spin" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+            </svg>
+            <p class="text-xs lg:text-sm font-medium">
+                <span class="font-bold">High sync traffic detected.</span>
+                {{ high_sync_volume_count }} profiles are currently running large syncs.
+                Your sync may take longer than usual. Hang tight, hunter!
+            </p>
+        </div>
+        <button id="site-banner-dismiss"
+                class="btn btn-ghost btn-xs shrink-0"
+                aria-label="Dismiss banner">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+        </button>
+    </div>
+</div>
+<script>
+(function() {
+    var banner = document.getElementById('site-banner');
+    var dismissBtn = document.getElementById('site-banner-dismiss');
+    if (!banner || !dismissBtn) return;
+
+    var STORAGE_KEY = 'pp_banner_dismissed_at';
+    var activatedAt = parseFloat(banner.dataset.activatedAt) || 0;
+
+    // Check if user already dismissed THIS specific banner event
+    var dismissedAt = parseFloat(localStorage.getItem(STORAGE_KEY)) || 0;
+    if (dismissedAt >= activatedAt) {
+        banner.style.display = 'none';
+        return;
+    }
+
+    dismissBtn.addEventListener('click', function() {
+        localStorage.setItem(STORAGE_KEY, String(activatedAt));
+        banner.style.display = 'none';
+    });
+})();
+</script>
+{% endif %}

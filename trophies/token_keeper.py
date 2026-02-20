@@ -318,6 +318,7 @@ class TokenKeeper:
             self._check_stuck_instances()
             # Check for stuck syncing profiles on every health loop iteration
             self._check_stuck_syncing_profiles()
+            self._check_high_sync_volume()
             for group_id, group in self.group_instances.items():
                 for instance_id, inst in group['instances'].items():
                     self._check_and_refresh(inst)
@@ -588,6 +589,65 @@ class TokenKeeper:
                 logger.info(f"Stuck syncing check complete. Triggered sync_complete for {stuck_count} profiles.")
         except Exception as e:
             logger.error(f"Error checking stuck syncing profiles: {e}")
+
+    def _check_high_sync_volume(self):
+        """
+        Detect high sync volume and set/clear a Redis flag for site-wide banner.
+
+        Uses hysteresis to prevent rapid toggling:
+        - Activates when >= ACTIVATE_THRESHOLD profiles have >= JOB_THRESHOLD pending jobs
+        - Deactivates only when count drops below DEACTIVATE_THRESHOLD
+        """
+        ACTIVATE_THRESHOLD = 10
+        DEACTIVATE_THRESHOLD = 5
+        JOB_THRESHOLD = 200
+        REDIS_KEY = 'site:high_sync_volume'
+        TTL = 300  # 5-minute safety TTL; refreshed each health loop if still active
+
+        try:
+            active_ids = redis_client.smembers('active_profiles')
+            pids = [p.decode() if isinstance(p, bytes) else str(p) for p in active_ids]
+
+            heavy_count = 0
+            if pids:
+                pipe = redis_client.pipeline(transaction=False)
+                for pid in pids:
+                    pipe.get(f"profile_jobs:{pid}:low_priority")
+                    pipe.get(f"profile_jobs:{pid}:medium_priority")
+                results = pipe.execute()
+
+                for i in range(0, len(results), 2):
+                    total = int(results[i] or 0) + int(results[i + 1] or 0)
+                    if total >= JOB_THRESHOLD:
+                        heavy_count += 1
+
+            existing = redis_client.get(REDIS_KEY)
+            is_currently_active = existing is not None
+
+            if not is_currently_active and heavy_count >= ACTIVATE_THRESHOLD:
+                data = json.dumps({
+                    'activated_at': time.time(),
+                    'heavy_count': heavy_count
+                })
+                redis_client.set(REDIS_KEY, data, ex=TTL)
+                logger.info(f"High sync volume detected: {heavy_count} profiles with {JOB_THRESHOLD}+ jobs. Banner activated.")
+
+            elif is_currently_active and heavy_count >= DEACTIVATE_THRESHOLD:
+                # Still above deactivation threshold: refresh TTL, update count
+                try:
+                    existing_str = existing.decode() if isinstance(existing, bytes) else existing
+                    data = json.loads(existing_str)
+                    data['heavy_count'] = heavy_count
+                    redis_client.set(REDIS_KEY, json.dumps(data), ex=TTL)
+                except (json.JSONDecodeError, ValueError):
+                    redis_client.set(REDIS_KEY, existing, ex=TTL)
+
+            elif is_currently_active and heavy_count < DEACTIVATE_THRESHOLD:
+                redis_client.delete(REDIS_KEY)
+                logger.info(f"High sync volume cleared: {heavy_count} heavy profiles (below deactivation threshold).")
+
+        except Exception as e:
+            logger.error(f"Error checking high sync volume: {e}")
 
     def _get_instance_for_job(self, job_type: str) -> TokenInstance:
         """Selects best instance for job with atomic acquisition using Redis locks."""

@@ -1,4 +1,9 @@
+import json
+import logging
+
 from django.conf import settings
+
+logger = logging.getLogger(__name__)
 
 def ads(request):
     enabled = settings.ADSENSE_ENABLED
@@ -58,3 +63,27 @@ def premium_theme_background(request):
         return {'user_theme_style': get_theme_style(profile.selected_theme)}
 
     return {}
+
+
+def high_sync_volume(request):
+    """
+    Check Redis for high sync volume flag and inject banner data into all templates.
+    Single Redis GET per request (sub-millisecond).
+    """
+    try:
+        from trophies.util_modules.cache import redis_client
+
+        raw = redis_client.get('site:high_sync_volume')
+        if not raw:
+            return {}
+
+        raw_str = raw.decode() if isinstance(raw, bytes) else raw
+        parsed = json.loads(raw_str)
+        return {
+            'high_sync_volume': True,
+            'high_sync_volume_count': parsed.get('heavy_count', 0),
+            'high_sync_volume_activated_at': parsed.get('activated_at', 0),
+        }
+    except Exception:
+        logger.debug("Failed to read high sync volume flag from Redis", exc_info=True)
+        return {}

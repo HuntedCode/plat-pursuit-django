@@ -134,19 +134,19 @@ class Command(BaseCommand):
             # Clear job queues
             queues = ['high_priority_jobs', 'medium_priority_jobs', 'low_priority_jobs']
             for queue in queues:
-                redis_client.delete(queue)
-                deleted_count += 1
-            
+                deleted_count += redis_client.delete(queue)
+
             # Clear profile_jobs:* (all queues)
             for pattern in ['profile_jobs:*', 'deferred_jobs:*', 'pending_sync_complete:*', 'sync_started_at:*']:
                 matching_keys = redis_client.keys(pattern)
                 if matching_keys:
-                    redis_client.delete(*matching_keys)
-                    deleted_count += len(matching_keys)
-            
+                    deleted_count += redis_client.delete(*matching_keys)
+
             # Clear active_profiles set
-            redis_client.delete('active_profiles')
-            deleted_count += 1
+            deleted_count += redis_client.delete('active_profiles')
+
+            # Clear high sync volume banner flag
+            deleted_count += redis_client.delete('site:high_sync_volume')
 
             logger.info(f"Flushed {deleted_count} TokenKeeper-related keys/queues.")
             self.stdout.write(self.style.SUCCESS(f"Flushed {deleted_count} TokenKeeper queues and profiles."))

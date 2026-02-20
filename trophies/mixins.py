@@ -54,6 +54,11 @@ class ProfileHotbarMixin(View):
                 'progress_percentage': profile.sync_percentage,
                 'seconds_to_next_sync': seconds_to_next_sync,
             }
+
+            if profile.sync_status == 'syncing':
+                from trophies.views.sync_views import _get_queue_position
+                hotbar_data['queue_position'] = _get_queue_position(profile.id)
+
             context['hotbar'] = hotbar_data
         return context
 

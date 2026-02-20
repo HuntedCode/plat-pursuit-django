@@ -21,6 +21,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const syncProgress = document.getElementById('sync-progress-bar');
     const syncPercent = document.getElementById('sync-progress-percent');
     const syncAnnouncement = document.getElementById('sync-status-announcement');
+    const syncQueuePosition = document.getElementById('sync-queue-position');
 
     // DOM elements - Add sync
     const addSyncBtn = document.getElementById('add-sync-btn');
@@ -66,6 +67,7 @@ document.addEventListener('DOMContentLoaded', () => {
             syncBadge?.classList.add('badge-success');
             if (syncBadge) syncBadge.textContent = 'Synced!';
             hide(syncDiv);
+            hide(syncQueuePosition);
 
             if (syncAnnouncement) {
                 syncAnnouncement.textContent = 'Profile sync completed successfully';
@@ -89,6 +91,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 syncPercent.textContent = `${parseInt(data.sync_percentage)}%`;
             }
 
+            // Queue position indicator
+            if (syncQueuePosition) {
+                if (data.queue_position != null && data.queue_position > 0) {
+                    syncQueuePosition.textContent = `~${data.queue_position} ahead`;
+                    show(syncQueuePosition);
+                } else {
+                    hide(syncQueuePosition);
+                }
+            }
+
             if (syncAnnouncement) {
                 syncAnnouncement.textContent = `Syncing in progress: ${parseInt(data.sync_percentage)}% complete`;
             }
@@ -98,6 +110,7 @@ document.addEventListener('DOMContentLoaded', () => {
             syncBadge?.classList.add('badge-error');
             if (syncBadge) syncBadge.textContent = 'Error';
             hide(syncDiv);
+            hide(syncQueuePosition);
 
             if (syncAnnouncement) {
                 syncAnnouncement.textContent = 'Profile sync encountered an error';
