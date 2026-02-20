@@ -7,27 +7,65 @@
 
 {% block content %}
 {% with target_profile as profile %}
-    <section class="shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 w-full p-0 lg:p-4">
+    <!-- Header -->
+    <section class="shadow-lg shadow-neutral bg-base-200/95 rounded-box border-2 border-base-300 w-full p-3 lg:p-4">
         {% include 'partials/breadcrumb.html' with items=breadcrumb view_count=view_count %}
         {% include 'trophies/partials/badge_detail/badge_detail_header.html' %}
-        <div class="w-full flex flex-col justify-center items-center mt-6">
-            <a href="{% url 'badge_leaderboards' badge.series_slug %}" class="btn btn-success w-7/8">View Badge Leaderboards</a>
+
+        <!-- Tier Selector -->
+        <div class="mt-4">
+            {% include 'trophies/partials/badge_detail/badge_tier_selector.html' %}
         </div>
+
+        <!-- Stats -->
+        {% include 'trophies/partials/badge_detail/badge_series_stats.html' %}
     </section>
 
+    <!-- Leaderboards Banner -->
+    <a href="{% url 'badge_leaderboards' badge.series_slug %}" class="bg-base-200/95 bg-gradient-to-r from-success/20 to-transparent border-2 border-success/50 rounded-box p-4 lg:p-5 flex items-center gap-4 shadow-md shadow-success/20 mt-4 transition-all duration-300 hover:from-success/30 group">
+        <div class="bg-success/20 rounded-full p-3 flex-shrink-0">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 text-success" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"></path><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"></path><path d="M4 22h16"></path><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"></path><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"></path><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"></path>
+            </svg>
+        </div>
+        <div class="flex-1">
+            <h3 class="font-bold text-base lg:text-lg text-success">Badge Leaderboards</h3>
+            <p class="text-sm text-base-content/60 italic">See how you stack up against the competition</p>
+        </div>
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-success transition-transform group-hover:translate-x-1 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <polyline points="9 18 15 12 9 6"></polyline>
+        </svg>
+    </a>
+
+    <!-- Stage Sections -->
     {% for data in stage_data %}
         {% with data.stage as stage %}
-            <section id="stage-{{ stage.stage_number }}" class="shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 w-full p-0 lg:p-2 mt-8 scroll-mt-4">
-                <div class="flex flex-row gap-2">
-                    <div class="hidden lg:block card sticky top-2 w-1/10 bg-base-100 border-4 border-base-300 shadow-md shadow-neutral h-full hover:border-secondary hover:shadow-secondary">
-                        <div class="card-body p-2 m-0">
-                            <span class="text-xl text-center">STAGE</span>
-                            <span class="text-7xl text-center">{{ stage.stage_number }}</span>
+            <section id="stage-{{ stage.stage_number }}" class="mt-4 scroll-mt-4">
+                <div class="flex flex-row gap-3">
+                    <!-- Sticky Stage Sidebar (desktop only) -->
+                    {% if stage.stage_number != 0 %}
+                        <div class="hidden lg:block sticky top-2 self-start w-20 shrink-0">
+                            <div class="card bg-base-100 border-4 border-base-300 shadow-md shadow-neutral items-center justify-center aspect-square">
+                                <span class="text-2xs text-base-content/50 font-bold italic uppercase tracking-wider">Stage</span>
+                                <span class="text-2xl font-black italic text-accent leading-none">{{ stage.stage_number }}</span>
+                                {% if target_profile and data.stage_completion_state %}
+                                    {% if data.stage_completion_state == 'complete' %}
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-success mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-label="Complete"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                                    {% elif data.stage_completion_state == 'partial' %}
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-warning mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-label="Partial"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                                    {% else %}
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-error mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-label="Incomplete"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                                    {% endif %}
+                                {% endif %}
+                            </div>
                         </div>
-                    </div>
-                    <div class="w-full">
+                    {% endif %}
+
+                    <!-- Stage Content -->
+                    <div class="flex-1 min-w-0 shadow-lg shadow-neutral bg-base-200/95 rounded-box border-2 border-base-300 p-2 lg:p-3">
                         {% include 'trophies/partials/badge_detail/badge_detail_stages.html' %}
-                        <div class="flex flex-col gap-4">
+                        {% include 'trophies/partials/badge_detail/badge_stage_stats.html' %}
+                        <div class="flex flex-col gap-1.5">
                             {% for games in data.games %}
                             {% with games.game as game %}
                             {% with games.profile_game as pgame %}
@@ -40,102 +78,29 @@
                         </div>
                     </div>
                 </div>
-            </section> 
+            </section>
         {% endwith %}
     {% endfor %}
 {% endwith %}
-
-{% for i in '1234' %}
-    <input type="checkbox" id="{{ i }}-modal" class="modal-toggle" aria-hidden="true" />
-    <div class="modal backdrop-blur-lg" role="dialog" aria-modal="true" aria-labelledby="{{ i }}-modal-title">
-        <div class="modal-box border-4 border-base-300 shadow-lg shadow-{{ i|badge_color }} w-11/12 max-w-5xl h-fit">
-            <div class="flex flex-row gap-2 justify-center items-center mb-2">
-                <figure class="w-15 h-15 hover:scale-105">
-                    <img src="{% static 'images/badges/backdrops/'|add:i|add:'_backdrop.png' %}" alt="{{ i|badge_tier }} Badge Backdrop" class="w-full object-cover" loading="lazy" decoding="async" />
-                </figure>
-                <h3 id="{{ i }}-modal-title" class="text-xl text-base-content font-bold italic">{{ i|badge_tier }} Requirements:</h3>
-            </div>
-            <div class="flex flex-row gap-4">
-                {% if badge.badge_type == 'megamix' %}
-                    <div class="w-1/7 h-65 max-h-65 flex flex-col gap-4 bg-base-100 border-4 border-base-300 shadow-md shadow-neutral rounded-box items-center justify-center p-4" role="region" aria-label="Earn Platinum Trophy requirement">
-                        <p class="text-sm lg:text-3xl text-base-content font-bold">EARN</p>
-                        <div class="flex flex-row gap-1">
-                            <figure class="w-10 lg:w-13">
-                                <img src="{% static 'images/plat.png' %}" alt="Platinum Trophy" class="w-full" loading="lazy" decoding="async" />
-                            </figure>
-                            {% with i|add:"0" as i %}
-                                <h3 class="text-4xl lg:text-5xl font-bold text-{{ i|badge_color }}">{{ badge_requirements|dict_get:i }}</h3>
-                            {% endwith %}
-                        </div>
-                        <p class="text-sm lg:text-3xl text-base-content font-bold">IN</p>
-                    </div>
-                {% else %}
-                    {% if i in '13' %}
-                        <div class="w-1/7 h-65 max-h-65 flex flex-col gap-4 bg-base-100 border-4 border-base-300 shadow-md shadow-neutral rounded-box items-center justify-center p-4" role="region" aria-label="Earn Platinum Trophy requirement">
-                            <p class="text-sm lg:text-3xl text-base-content font-bold">EARN</p>
-                            <figure class="w-14 lg:w-30">
-                                <img src="{% static 'images/plat.png' %}" alt="Platinum Trophy" class="w-full" loading="lazy" decoding="async" />
-                            </figure>
-                            <p class="text-sm lg:text-3xl text-base-content font-bold">IN</p>
-                        </div>
-                    {% else %}
-                        <div class="w-1/7 h-65 max-h-65 flex flex-col gap-4 bg-base-100 border-4 border-base-300 shadow-md shadow-neutral rounded-box items-center justify-center p-4" role="region" aria-label="Earn 100% completion requirement">
-                            <p class="text-sm lg:text-3xl text-base-content font-bold">EARN</p>
-                            <p class="text-base lg:text-4xl text-warning font-bold italic">100%</p>
-                            <p class="text-sm lg:text-3xl text-base-content font-bold">IN</p>
-                        </div>
-                    {% endif %}
-                {% endif %}
-                <div class="flex flex-col gap-2 border-4 border-base-300 shadow-lg shadow-neutral rounded-box max-h-65 h-65 w-full overflow-y-scroll overflow-x-visible p-2" role="list" aria-label="Badge stage requirements">
-                    {% for data in stage_data %}
-                        {% with data.stage as stage %}
-                        {% if not stage.stage_number == 0%}
-                            {% if not stage.required_tiers or i|add:"0" in stage.required_tiers %}
-                                <div class="flex flex-row gap-1 lg:gap-4" role="listitem">
-                                    {% with i|add:"0" as i %}
-                                        {% with completion|dict_get:i as comp %}
-                                        {% with stage.stage_number as num %}
-                                            {% with comp|dict_get:num as earned %}
-                                            <div class="flex justify-center items-center bg-base-100 border-4 {% if earned %}border-success{% else %}border-error{% endif %} shadow-md shadow-neutral rounded-box p-2" role="status" aria-label="{% if earned %}Stage completed{% else %}Stage not completed{% endif %}">
-                                                {% if earned %}
-                                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 lg:w-12 lg:h-12" viewBox="0 0 24 24" fill="none" stroke="var(--color-success)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" role="img" aria-labelledby="check-icon-{{ i }}-{{ num }}">
-                                                        <title id="check-icon-{{ i }}-{{ num }}">Completed</title>
-                                                        <polyline points="20 6 9 17 4 12"></polyline>
-                                                    </svg>
-                                                {% else %}
-                                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 lg:w-12 lg:h-12" viewBox="0 0 24 24" fill="none" stroke="var(--color-error)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" role="img" aria-labelledby="x-icon-{{ i }}-{{ num }}">
-                                                        <title id="x-icon-{{ i }}-{{ num }}">Not completed</title>
-                                                        <line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line>
-                                                    </svg>
-                                                {% endif %}
-                                            </div>
-                                            {% endwith %}
-                                        {% endwith %}
-                                        {% endwith %}
-                                    {% endwith %}
-                                    <div class="flex flex-row gap-4 items-center bg-base-100 border-4 border-base-300 shadow-md shadow-neutral rounded-box p-2 w-7/8 hover:border-primary hover:shadow-primary">
-                                        <figure class="hidden lg:block w-12 h-12 rounded-box hover:scale-105">
-                                            <img src="{{ stage.stage_icon }}" alt="{{ stage.title }} icon" class="w-full object-cover" loading="lazy" decoding="async" />
-                                        </figure>
-                                        <p class="text-xs lg:text-xl text-base-content text-start line-clamp-2"><span class="text-accent font-bold">Stage {{ stage.stage_number }}</span>: {{ stage.title }}</p>
-                                    </div>
-                                </div>
-                            {% endif %}
-                        {% endif %}
-                        {% endwith %}
-                    {% endfor %}
-                </div>
-            </div>
-            <div class="modal-action">
-                <label for="{{ i }}-modal" class="btn" aria-label="Close {{ i|badge_tier }} requirements modal">Close</label>
-            </div>
-        </div>
-        <label class="modal-backdrop" for="{{ i }}-modal" aria-label="Close modal">Close</label>
-    </div>
-{% endfor %}
-
 {% endblock %}
 
 {% block js_scripts %}
-<script>PlatPursuit.ZoomScaler.init();</script>
+<script>
+PlatPursuit.ZoomScaler.init();
+
+// Scroll preservation for tier tab switching
+document.addEventListener('DOMContentLoaded', function() {
+    const scrollKey = 'badgeDetailScrollPos';
+    const saved = sessionStorage.getItem(scrollKey);
+    if (saved !== null) {
+        sessionStorage.removeItem(scrollKey);
+        window.scrollTo(0, parseInt(saved, 10));
+    }
+    document.querySelectorAll('[data-tier-tab]').forEach(function(tab) {
+        tab.addEventListener('click', function() {
+            sessionStorage.setItem(scrollKey, window.scrollY);
+        });
+    });
+});
+</script>
 {% endblock %}

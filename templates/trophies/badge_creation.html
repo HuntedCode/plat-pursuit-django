@@ -26,7 +26,7 @@
                     {{ form.series_slug }}
                 </div>
                 <div class="form-control">
-                    <label class="label" for="{{ form.badge_type.id_for_label }}">Series Slug</label>
+                    <label class="label" for="{{ form.badge_type.id_for_label }}">Badge Type</label>
                     {{ form.badge_type }}
                 </div>
                 <button class="btn btn-primary" type="submit">Create Badges</button>
@@ -37,42 +37,25 @@
 
 <script>
     document.addEventListener('DOMContentLoaded', function() {
-        const searchInput = document.getElementById('concepts-search');
-        const optionsContainer = document.getElementById('concepts-list');
-        const checkboxes = optionsContainer.querySelectorAll('input[type="checkbox"]');
-
-        if (!searchInput || !optionsContainer) return;
-
-        searchInput.addEventListener('input', function() {
-            const filter = searchInput.value.toLowerCase();
-            checkboxes.forEach(checkbox => {
-                const label = checkbox.closest('label') || checkbox.parentElement;  // Assumes label after input (Django default)
-                const labelText = label ? label.textContent.toLowerCase() : '';
-                if (labelText.includes(filter)) {
-                    label.style.display = '';
-                } else {
-                    label.style.display = 'none';
-                }
-            });
-        });
-
         function slugify(text) {
             return text
                 .toString()
-                .normalize('NFD') // Split an accented letter into the base letter and the accent
-                .replace(/[\u0300-\u036f]/g, '') // Remove all previously split accents
+                .normalize('NFD')
+                .replace(/[\u0300-\u036f]/g, '')
                 .toLowerCase()
                 .trim()
-                .replace(/\s+/g, '-') // Replace spaces with -
-                .replace(/[^a-z0-9 -]/g, '') // Remove all chars not letters, numbers, and spaces
-                .replace(/-+/g, '-'); // Replace multiple dashes with a single dash
+                .replace(/\s+/g, '-')
+                .replace(/[^a-z0-9 -]/g, '')
+                .replace(/-+/g, '-');
         }
 
         const nameInput = document.getElementById('id_name');
         const seriesSlugInput = document.getElementById('id_series_slug');
-        nameInput.addEventListener('input', function() {
-            seriesSlugInput.value = slugify(nameInput.value);
-        });
+        if (nameInput && seriesSlugInput) {
+            nameInput.addEventListener('input', function() {
+                seriesSlugInput.value = slugify(nameInput.value);
+            });
+        }
     });
 </script>
 {% endblock %}

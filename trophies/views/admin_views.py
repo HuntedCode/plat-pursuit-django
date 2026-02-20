@@ -47,7 +47,7 @@ class TokenMonitoringView(TemplateView):
             context['queue_stats'] = self.get_queue_stats()
             context['profile_queue_stats'] = self.get_profile_queue_stats()
         except Exception as e:
-            logger.error(f"Error fetching aggregated stats for monitoring: {e}")
+            logger.exception("Error fetching aggregated stats for monitoring")
             context['machines'] = {}
             context['queue_stats'] = {}
             context['profile_queue_stats'] = {}
@@ -116,7 +116,7 @@ class BadgeCreationView(FormView):
     """
     template_name = 'trophies/badge_creation.html'
     form_class = BadgeCreationForm
-    success_url = '/staff/badge-create/'
+    success_url = reverse_lazy('badge_creation')
 
     def form_valid(self, form):
         try:
@@ -124,8 +124,9 @@ class BadgeCreationView(FormView):
             PsnApiService.create_badge_group_from_form(badge_data)
             messages.success(self.request, 'Badge group created successfully!')
         except Exception as e:
-            logger.error(f"Error creating badge: {e}")
+            logger.exception("Error creating badge")
             messages.error(self.request, 'Error creating badge. Check logs.')
+            return self.form_invalid(form)
         return super().form_valid(form)
 
 
@@ -178,11 +179,15 @@ class CommentModerationView(ListView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
 
-        # Count by status for tabs
-        context['pending_count'] = CommentReport.objects.filter(status='pending').count()
-        context['reviewed_count'] = CommentReport.objects.filter(status='reviewed').count()
-        context['dismissed_count'] = CommentReport.objects.filter(status='dismissed').count()
-        context['action_taken_count'] = CommentReport.objects.filter(status='action_taken').count()
+        # Count by status for tabs (single aggregation query)
+        status_counts = {
+            row['status']: row['count']
+            for row in CommentReport.objects.values('status').annotate(count=Count('id'))
+        }
+        context['pending_count'] = status_counts.get('pending', 0)
+        context['reviewed_count'] = status_counts.get('reviewed', 0)
+        context['dismissed_count'] = status_counts.get('dismissed', 0)
+        context['action_taken_count'] = status_counts.get('action_taken', 0)
 
         # Current filters
         context['current_status'] = self.request.GET.get('status', 'pending')
@@ -287,6 +292,9 @@ class ModerationActionView(View):
 
         else:
             messages.error(request, f"Unknown action: {action}")
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                return JsonResponse({'success': False, 'error': f'Unknown action: {action}'})
+            return redirect('comment_moderation')
 
         # Return JSON for AJAX or redirect for non-AJAX
         if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
@@ -358,14 +366,14 @@ class ModerationLogView(ListView):
         context['date_from'] = self.request.GET.get('date_from', '')
         context['date_to'] = self.request.GET.get('date_to', '')
 
-        # Stats
-        context['total_actions'] = ModerationLog.objects.count()
-        context['actions_today'] = ModerationLog.objects.filter(
-            timestamp__gte=timezone.now().date()
-        ).count()
-        context['actions_this_week'] = ModerationLog.objects.filter(
-            timestamp__gte=timezone.now() - timedelta(days=7)
-        ).count()
+        # Stats (single query with conditional aggregation)
+        now = timezone.now()
+        stats = ModerationLog.objects.aggregate(
+            total_actions=Count('id'),
+            actions_today=Count('id', filter=Q(timestamp__gte=now.date())),
+            actions_this_week=Count('id', filter=Q(timestamp__gte=now - timedelta(days=7))),
+        )
+        context.update(stats)
 
         return context
 

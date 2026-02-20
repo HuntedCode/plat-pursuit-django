@@ -880,6 +880,33 @@ const ZoomScaler = {
     }
 };
 
+/**
+ * Leaderboard Utilities
+ * Shared helpers for leaderboard page interactions
+ */
+const LeaderboardUtils = {
+    /**
+     * Navigate to a specific leaderboard page via form submission
+     * @param {HTMLFormElement} form - The page jump form
+     * @param {string} paramName - The query parameter name for the page number
+     */
+    updatePage(form, paramName) {
+        const input = form.querySelector('input[type="number"]');
+        if (!input) return;
+        const page = parseInt(input.value, 10);
+        const maxPage = parseInt(input.max, 10);
+        if (isNaN(page) || page < 1 || (!isNaN(maxPage) && maxPage > 0 && page > maxPage)) {
+            const maxLabel = !isNaN(maxPage) && maxPage > 0 ? ` between 1 and ${maxPage}` : '';
+            ToastManager.warning(`Please enter a valid page number${maxLabel}.`);
+            return;
+        }
+
+        const url = new URL(window.location);
+        url.searchParams.set(paramName, page);
+        window.location.href = url.toString();
+    }
+};
+
 // Export for use in other modules
 window.PlatPursuit = window.PlatPursuit || {};
 window.PlatPursuit.ToastManager = ToastManager;
@@ -892,3 +919,4 @@ window.PlatPursuit.debounce = debounce;
 window.PlatPursuit.InfiniteScroller = InfiniteScroller;
 window.PlatPursuit.DragReorderManager = DragReorderManager;
 window.PlatPursuit.ZoomScaler = ZoomScaler;
+window.PlatPursuit.LeaderboardUtils = LeaderboardUtils;

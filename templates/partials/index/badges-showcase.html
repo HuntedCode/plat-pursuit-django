@@ -10,18 +10,10 @@
             <a href="{% url 'badge_detail' badge.series_slug %}"
                class="card bg-base-100 border-2 border-base-300 shadow-md shadow-neutral transition-all duration-300 hover:scale-105 hover:border-{{ badge.tier|badge_color }} hover:shadow-{{ badge.tier|badge_color }} cursor-pointer group">
                 <div class="card-body p-3 gap-1 items-center text-center">
-                    <div class="relative w-28 h-28 mx-auto">
-                        <img src="{% static badge.layers.backdrop %}" alt="" class="absolute inset-0 w-full h-full object-cover rounded-box" loading="lazy" />
-                        {% if badge.has_custom_image %}
-                            <img src="{{ badge.layers.main }}" alt="{{ badge.name }}" class="absolute inset-0 w-full h-full object-cover rounded-box" loading="lazy" />
-                        {% else %}
-                            <img src="{% static badge.layers.main %}" alt="{{ badge.name }}" class="absolute inset-0 w-full h-full object-cover rounded-box" loading="lazy" />
-                        {% endif %}
-                        {% if badge.layers.foreground %}
-                            <img src="{% static badge.layers.foreground %}" alt="" class="absolute inset-0 w-full h-full object-cover rounded-box" loading="lazy" />
-                        {% endif %}
+                    <div class="w-28 h-28 mx-auto">
+                        {% include 'partials/badge.html' with layers=badge.layers %}
                     </div>
-                    <h3 class="text-sm font-bold line-clamp-1 italic">{{ badge.name }}</h3>
+                    <h3 class="text-sm font-bold line-clamp-1 italic pr-1">{{ badge.name }}</h3>
                     <p class="text-xs text-base-content/70 line-clamp-1">{{ badge.series }}</p>
                     <span class="badge badge-sm badge-ghost">{{ badge.earned_count|intcomma }} earned</span>
                 </div>

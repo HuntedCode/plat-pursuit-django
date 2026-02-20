@@ -1,122 +1,122 @@
-{% load custom_filters %}
+{% load custom_filters static %}
 
-    <a href="{% if profile %}{% url 'game_detail_with_profile' game.np_communication_id profile.psn_username %}{% else %}{% url 'game_detail' game.np_communication_id %}{% endif %}" class="card bg-base-100 border-4 border-base-300 shadow-md shadow-neutral cursor-pointer transition-all duration-300 hover:border-{{ game|platform_color }} hover:shadow-{{ game|platform_color }} group">
-        <div class="{% if pgame.progress == 100 %}bg-success/15{% elif pgame.earned_trophies.platinum == 1 %}bg-warning/20{% else %}bg-base-100{% endif %}">
-            <div class="card-body m-0 px-3 py-3 {% if pgame.progress == 100 %}border-4 border-success{% elif pgame.earned_trophies.platinum == 1 %}border-4 border-warning{% endif %}">
-                <div class="flex flex-row justify-between items-center gap-2 lg:gap-4 w-full">
-                    <div class="flex flex-row items-center justify-start gap-2 lg:gap-4 min-w-0 flex-1">
-                        <figure class="border-2 lg:border-4 border-base-300 rounded-box transition-all duration-300 w-18 lg:w-28 shrink-0 group-hover:border-{{ game|platform_color }} hover:scale-105">
-                            {% if game.title_image and not game.force_title_icon %}
-                                <img src="{{ game.title_image }}" alt="{{ game.title_name }} cover" class="w-full object-cover shrink-0" loading="lazy" decoding="async" />
-                            {% else %}
-                                <img src="{{ game.title_icon_url }}" alt="{{ game.title_name }} icon" class="w-full object-cover shrink-0" loading="lazy" decoding="async" />
-                            {% endif %}
-                        </figure>
-                        <div class="flex flex-col gap-1 w-full">
-                            <div class="flex flex-row gap-0 items-center justify-start">
-                                {% if not game.is_obtainable %}
-                                    <div class="tooltip w-fit" data-tip="Unobtainable" aria-label="Unobtainable trophies">
-                                        <svg xmlns="http://www.w3.org/2000/svg" class="w-7 h-7 hover:scale-105" viewBox="0 0 24 24" fill="none" stroke="var(--color-error)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" role="img" aria-labelledby="unobtainable-icon-{{ game.np_communication_id }}">
-                                            <title id="unobtainable-icon-{{ game.np_communication_id }}">Unobtainable</title>
-                                            <polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2"></polygon><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line>
-                                        </svg>
-                                    </div>
-                                    <div class="divider divider-horizontal m-0 p-0" aria-hidden="true"></div>
-                                {% endif %}
-                                {% if game.has_online_trophies %}
-                                    <div class="tooltip w-fit" data-tip="Online Trophies Required" aria-label="Online trophies required">
-                                        <svg xmlns="http://www.w3.org/2000/svg" class="w-7 h-7 hover:scale-105" viewBox="0 0 24 24" fill="none" stroke="var(--color-warning)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" role="img" aria-labelledby="online-icon-{{ game.np_communication_id }}">
-                                            <title id="online-icon-{{ game.np_communication_id }}">Online trophies</title>
-                                            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line>
-                                        </svg>
-                                    </div>
-                                    <div class="divider divider-horizontal m-0 p-0" aria-hidden="true"></div>
-                                {% endif %}
-                                {% if ratings %}
-                                    <span class="flex flex-row gap-1 items-center tooltip font-bold {% if ratings.avg_difficulty < 4 %}text-success{% elif ratings.avg_difficulty < 8 %}text-warning{% else %}text-error{% endif %} w-fit" data-tip="Avg. Difficulty" aria-label="Average difficulty: {{ ratings.avg_difficulty|floatformat:1 }}">
-                                        <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 hover:scale-105 pr-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" role="img" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M16.2 7.8l-2 6.3-6.4 2.1 2-6.3z"/></svg>
-                                        {{ ratings.avg_difficulty|floatformat:1 }}
-                                    </span>
+<a href="{% if profile %}{% url 'game_detail_with_profile' game.np_communication_id profile.psn_username %}{% else %}{% url 'game_detail' game.np_communication_id %}{% endif %}" class="card bg-base-100 border-2 border-base-300 shadow-sm shadow-neutral cursor-pointer transition-all duration-300 hover:border-{{ game|platform_color }} hover:shadow-{{ game|platform_color }} group">
+    <div class="{% if pgame.progress == 100 %}bg-success/20{% elif pgame.earned_trophies.platinum == 1 %}bg-warning/20{% else %}bg-base-100{% endif %}">
+        <div class="card-body m-0 px-2 py-1.5 lg:px-3 lg:py-2 {% if pgame.progress == 100 %}border-2 border-success{% elif pgame.earned_trophies.platinum == 1 %}border-2 border-warning{% endif %}">
+            <div class="flex flex-row items-center gap-2 lg:gap-3 w-full">
+                <!-- Game Icon -->
+                <figure class="border-2 border-base-300 rounded-box w-14 lg:w-20 shrink-0 transition-all duration-300 group-hover:border-{{ game|platform_color }} hover:scale-105">
+                    {% if game.title_image and not game.force_title_icon %}
+                        <img src="{{ game.title_image }}" alt="{{ game.title_name }}" class="w-full object-cover" loading="lazy" decoding="async" />
+                    {% else %}
+                        <img src="{{ game.title_icon_url }}" alt="{{ game.title_name }}" class="w-full object-cover" loading="lazy" decoding="async" />
+                    {% endif %}
+                </figure>
 
-                                    <div class="divider divider-horizontal m-0 p-0" aria-hidden="true"></div>
-
-                                    <span class="flex flex-row gap-1 items-center tooltip font-bold {% if ratings.avg_grindiness < 4 %}text-success{% elif ratings.avg_grindiness < 8 %}text-warning{% else %}text-error{% endif %} w-fit" data-tip="Avg. Grindiness" aria-label="Average grindiness: {{ ratings.avg_grindiness|floatformat:1 }}">
-                                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 hover:scale-105 pr-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" role="img" aria-hidden="true"> <path d="M2.5 2v6h6M21.5 22v-6h-6"/><path d="M22 11.5A10 10 0 0 0 3.2 7.2M2 12.5a10 10 0 0 0 18.8 4.2"/></svg>
-                                        {{ ratings.avg_grindiness|floatformat:1 }}
-                                    </span>
-
-                                    <div class="divider divider-horizontal m-0 p-0" aria-hidden="true"></div>
-
-                                    <span class="flex flex-row gap-1 items-center tooltip font-bold {% if ratings.avg_hours < 25 %}text-success{% elif ratings.avg_hours < 75 %}text-warning{% elif ratings.avg_hours < 100 %}text-accent{% else %}text-error{% endif %} w-fit" data-tip="Avg. Hours To Plat" aria-label="Average hours to platinum: {{ ratings.avg_hours|floatformat:1 }}">
-                                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 hover:scale-105 pr-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" role="img" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
-                                        {{ ratings.avg_hours|floatformat:1 }}
-                                    </span>
-
-                                    <div class="divider divider-horizontal m-0 p-0" aria-hidden="true"></div>
-
-                                    <span class="flex flex-row gap-1 items-center tooltip font-bold w-fit" data-tip="Total Ratings" aria-label="Total ratings: {{ ratings.count }}">
-                                        <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 hover:scale-105 pr-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" role="img" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
-                                        {{ ratings.count }}
-                                    </span>
-                                {% else %}
-                                    <p class="text-base-content/70 text-sm pr-1 italic">No ratings yet. Be the first!</p>
-                                {% endif %}
+                <!-- Game Info -->
+                <div class="flex flex-col gap-0.5 flex-1 min-w-0">
+                    <!-- Indicators Row -->
+                    <div class="flex flex-row gap-0 items-center">
+                        {% if not game.is_obtainable %}
+                            <div class="tooltip" data-tip="Unobtainable">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 lg:w-5 lg:h-5" viewBox="0 0 24 24" fill="none" stroke="var(--color-error)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2"></polygon><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
                             </div>
-                            <p class="text-sm lg:text-lg 2xl:text-2xl text-base-content italic pr-1 line-clamp-1 font-semibold">{{ game.title_name }}</p>
-                            <div class="flex flex-row items-center gap-2">
-                                {% for platform in game.title_platform reversed %}
-                                    <div class="badge badge-xs lg:badge-sm badge-ghost font-bold text-xs md:text-sm lg:text-base border-2 border-{{ platform|platform_color_str }} rounded-box hover:scale-105">{{ platform }}</div>
-                                {% endfor %}
-                                {% if game.is_regional %}
-                                    <div class="flex flex-row gap-2">
-                                        {% for region in game.region %}
-                                            {% if region == "NA" %}
-                                                <div class="badge badge-xs lg:badge-sm badge-primary font-bold italic hover:scale-105">NA</div>
-                                            {% elif region == "EU" %}
-                                                <div class="badge badge-xs lg:badge-sm badge-secondary font-bold italic hover:scale-105">EU</div>
-                                            {% elif region == "JP" %}
-                                                <div class="badge badge-xs lg:badge-sm badge-accent font-bold italic hover:scale-105">JP</div>
-                                            {% else %}
-                                                <div class="badge badge-xs lg:badge-sm badge-warning font-bold italic hover:scale-105">AS</div>
-                                            {% endif %}
-                                        {% endfor %}
-                                    </div>
-                                {% else %}
-                                    <div class="badge badge-sm badge-ghost font-bold italic hover:scale-105">
-                                        <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15"  viewBox="0 0 512 512" stroke="var(--color-success)" fill="var(--color-success)"><path d="M351.9 280l-190.9 0c2.9 64.5 17.2 123.9 37.5 167.4 11.4 24.5 23.7 41.8 35.1 52.4 11.2 10.5 18.9 12.2 22.9 12.2s11.7-1.7 22.9-12.2c11.4-10.6 23.7-28 35.1-52.4 20.3-43.5 34.6-102.9 37.5-167.4zM160.9 232l190.9 0C349 167.5 334.7 108.1 314.4 64.6 303 40.2 290.7 22.8 279.3 12.2 268.1 1.7 260.4 0 256.4 0s-11.7 1.7-22.9 12.2c-11.4 10.6-23.7 28-35.1 52.4-20.3 43.5-34.6 102.9-37.5 167.4zm-48 0C116.4 146.4 138.5 66.9 170.8 14.7 78.7 47.3 10.9 131.2 1.5 232l111.4 0zM1.5 280c9.4 100.8 77.2 184.7 169.3 217.3-32.3-52.2-54.4-131.7-57.9-217.3L1.5 280zm398.4 0c-3.5 85.6-25.6 165.1-57.9 217.3 92.1-32.7 159.9-116.5 169.3-217.3l-111.4 0zm111.4-48C501.9 131.2 434.1 47.3 342 14.7 374.3 66.9 396.4 146.4 399.9 232l111.4 0z"/></svg>
-                                    </div>
-                                {% endif %}
+                            <div class="divider divider-horizontal m-0 p-0" aria-hidden="true"></div>
+                        {% endif %}
+                        {% if game.has_online_trophies %}
+                            <div class="tooltip" data-tip="Online Required">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 lg:w-5 lg:h-5" viewBox="0 0 24 24" fill="none" stroke="var(--color-warning)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
                             </div>
+                            <div class="divider divider-horizontal m-0 p-0" aria-hidden="true"></div>
+                        {% endif %}
+                        {% if games.has_guide %}
+                            <div class="tooltip" data-tip="PPTV Guide">
+                                <img src="{% static 'images/logo.png' %}" alt="Guide" class="w-4 h-4 lg:w-5 lg:h-5 hover:scale-110" loading="lazy" decoding="async" />
+                            </div>
+                            <div class="divider divider-horizontal m-0 p-0" aria-hidden="true"></div>
+                        {% endif %}
+                        {% if ratings %}
+                            <span class="flex items-center gap-0.5 tooltip text-xs font-bold {% if ratings.avg_difficulty < 4 %}text-success{% elif ratings.avg_difficulty < 8 %}text-warning{% else %}text-error{% endif %}" data-tip="Difficulty">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M16.2 7.8l-2 6.3-6.4 2.1 2-6.3z"/></svg>
+                                {{ ratings.avg_difficulty|floatformat:1 }}
+                            </span>
+                            <div class="divider divider-horizontal m-0 p-0" aria-hidden="true"></div>
+                            <span class="flex items-center gap-0.5 tooltip text-xs font-bold {% if ratings.avg_hours < 25 %}text-success{% elif ratings.avg_hours < 75 %}text-warning{% elif ratings.avg_hours < 100 %}text-accent{% else %}text-error{% endif %}" data-tip="Hours">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                                {{ ratings.avg_hours|floatformat:1 }}
+                            </span>
+                        {% else %}
+                            <span class="text-xs text-base-content/50 italic">No ratings</span>
+                        {% endif %}
+                    </div>
+
+                    <!-- Game Title -->
+                    <p class="text-xs lg:text-base font-semibold italic pr-1 line-clamp-1">{{ game.title_name }}</p>
+
+                    <!-- Platform + Region Badges -->
+                    <div class="flex flex-row items-center gap-1">
+                        {% for platform in game.title_platform reversed %}
+                            <div class="badge badge-xs badge-ghost font-bold text-xs border border-{{ platform|platform_color_str }} rounded-box">{{ platform }}</div>
+                        {% endfor %}
+                        {% if game.is_regional %}
+                            {% for region in game.region %}
+                                {% if region == "NA" %}
+                                    <div class="badge badge-xs badge-primary font-bold italic">NA</div>
+                                {% elif region == "EU" %}
+                                    <div class="badge badge-xs badge-secondary font-bold italic">EU</div>
+                                {% elif region == "JP" %}
+                                    <div class="badge badge-xs badge-accent font-bold italic">JP</div>
+                                {% else %}
+                                    <div class="badge badge-xs badge-warning font-bold italic">AS</div>
+                                {% endif %}
+                            {% endfor %}
+                        {% else %}
+                            <div class="badge badge-xs badge-ghost font-bold italic">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 512 512" stroke="var(--color-success)" fill="var(--color-success)"><path d="M351.9 280l-190.9 0c2.9 64.5 17.2 123.9 37.5 167.4 11.4 24.5 23.7 41.8 35.1 52.4 11.2 10.5 18.9 12.2 22.9 12.2s11.7-1.7 22.9-12.2c11.4-10.6 23.7-28 35.1-52.4 20.3-43.5 34.6-102.9 37.5-167.4zM160.9 232l190.9 0C349 167.5 334.7 108.1 314.4 64.6 303 40.2 290.7 22.8 279.3 12.2 268.1 1.7 260.4 0 256.4 0s-11.7 1.7-22.9 12.2c-11.4 10.6-23.7 28-35.1 52.4-20.3 43.5-34.6 102.9-37.5 167.4zm-48 0C116.4 146.4 138.5 66.9 170.8 14.7 78.7 47.3 10.9 131.2 1.5 232l111.4 0zM1.5 280c9.4 100.8 77.2 184.7 169.3 217.3-32.3-52.2-54.4-131.7-57.9-217.3L1.5 280zm398.4 0c-3.5 85.6-25.6 165.1-57.9 217.3 92.1-32.7 159.9-116.5 169.3-217.3l-111.4 0zm111.4-48C501.9 131.2 434.1 47.3 342 14.7 374.3 66.9 396.4 146.4 399.9 232l111.4 0z"/></svg>
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <!-- Trophy Counts + Progress -->
+                <div class="flex flex-col items-end gap-1 shrink-0">
+                    <!-- Trophy Counts (earned/total) -->
+                    <div class="flex flex-row items-center gap-1.5">
+                        <div class="flex items-center gap-0.5">
+                            {% include 'partials/icons/trophy_cup.html' with color='var(--color-trophy-bronze)' size='w-3 h-3' %}
+                            <span class="text-xs font-bold">{{ pgame.earned_trophies.bronze|default:0 }}/{{ game.defined_trophies.bronze|default:0 }}</span>
+                        </div>
+                        <div class="flex items-center gap-0.5">
+                            {% include 'partials/icons/trophy_cup.html' with color='var(--color-trophy-silver)' size='w-3 h-3' %}
+                            <span class="text-xs font-bold">{{ pgame.earned_trophies.silver|default:0 }}/{{ game.defined_trophies.silver|default:0 }}</span>
+                        </div>
+                        <div class="flex items-center gap-0.5">
+                            {% include 'partials/icons/trophy_cup.html' with color='var(--color-trophy-gold)' size='w-3 h-3' %}
+                            <span class="text-xs font-bold">{{ pgame.earned_trophies.gold|default:0 }}/{{ game.defined_trophies.gold|default:0 }}</span>
+                        </div>
+                        <div class="flex items-center gap-0.5">
+                            {% include 'partials/icons/trophy_cup.html' with color='var(--color-trophy-platinum)' size='w-3 h-3' %}
+                            <span class="text-xs font-bold">{{ pgame.earned_trophies.platinum|default:0 }}/{{ game.defined_trophies.platinum|default:0 }}</span>
                         </div>
                     </div>
-                    
-                    <div class="flex flex-col w-auto shrink-0 min-w-[200px] lg:min-w-110 2xl:min-w-140">
-                        <div class="flex flex-row items-center justify-around w-full mb-4">
-                            <div class="flex flex-row items-center justify-around w-full gap-4">
-                                <div class="flex flex-row items-end">
-                                    {% include 'partials/icons/trophy_cup.html' with color='var(--color-trophy-bronze)' size='w-5 lg:w-7 2xl:w-10 h-5 lg:h-7 2xl:h-10 mr-1 lg:mr-4' extra_class='hover:scale-105' %}
-                                    <p class="text-xs lg:text-sm 2xl:text-base font-bold" aria-label="Bronze trophies: {{ pgame.earned_trophies.bronze|default:0 }} of {{ game.defined_trophies.bronze }}"><span class="text-base lg:text-2xl 2xl:text-3xl text-primary">{{ pgame.earned_trophies.bronze|default:0 }}</span> / {{ game.defined_trophies.bronze }}</p>
-                                </div>
-                                <div class="flex flex-row items-end">
-                                    {% include 'partials/icons/trophy_cup.html' with color='var(--color-trophy-silver)' size='w-5 lg:w-7 2xl:w-10 h-5 lg:h-7 2xl:h-10 mr-1 lg:mr-4' extra_class='hover:scale-105' %}
-                                    <p class="text-xs lg:text-sm 2xl:text-base font-bold" aria-label="Silver trophies: {{ pgame.earned_trophies.silver|default:0 }} of {{ game.defined_trophies.silver }}"><span class="text-base lg:text-2xl 2xl:text-3xl text-primary">{{ pgame.earned_trophies.silver|default:0 }}</span> / {{ game.defined_trophies.silver }}</p>
-                                </div>
-                            </div>
-                            <div class="flex flex-row items-center justify-around w-full gap-4">
-                                <div class="flex flex-row items-end">
-                                    {% include 'partials/icons/trophy_cup.html' with color='var(--color-trophy-gold)' size='w-5 lg:w-7 2xl:w-10 h-5 lg:h-7 2xl:h-10 mr-1 lg:mr-4' extra_class='hover:scale-105' %}
-                                    <p class="text-xs lg:text-sm 2xl:text-base font-bold" aria-label="Gold trophies: {{ pgame.earned_trophies.gold|default:0 }} of {{ game.defined_trophies.gold }}"><span class="text-base lg:text-2xl 2xl:text-3xl text-primary">{{ pgame.earned_trophies.gold|default:0 }}</span> / {{ game.defined_trophies.gold }}</p>
-                                </div>
-                                <div class="flex flex-row items-end">
-                                    {% include 'partials/icons/trophy_cup.html' with color='var(--color-trophy-platinum)' size='w-5 lg:w-7 2xl:w-10 h-5 lg:h-7 2xl:h-10 mr-1 lg:mr-4' extra_class='hover:scale-105' %}
-                                    <p class="text-xs lg:text-sm 2xl:text-base font-bold" aria-label="Platinum trophies: {{ pgame.earned_trophies.platinum|default:0 }} of {{ game.defined_trophies.platinum }}"><span class="text-base lg:text-2xl 2xl:text-3xl text-primary">{{ pgame.earned_trophies.platinum|default:0 }}</span> / {{ game.defined_trophies.platinum }}</p>
-                                </div>
-                            </div>
+
+                    <!-- Progress Bar -->
+                    {% if pgame %}
+                        <div class="w-full">
+                            <progress class="progress h-1.5 {% if pgame.progress < 33 %}progress-error{% elif pgame.progress < 66 %}progress-warning{% elif pgame.progress < 100 %}progress-success{% else %}progress-primary{% endif %} w-full" value="{{ pgame.progress|default:0 }}" max="100"></progress>
+                            <p class="text-xs text-base-content/70 text-center font-bold italic">{{ pgame.progress|default:0 }}%</p>
                         </div>
-                        <progress class="progress {% if pgame.progress < 33 %}progress-error{% elif pgame.progress < 66 %}progress-warning{% elif pgame.progress < 100 %}progress-success{% else %}progress-primary{% endif %} w-7/8 mx-auto mb-1" value="{{ pgame.progress }}" max="100" aria-label="Game completion progress: {{ pgame.progress|default:0 }}%"></progress>
-                        <p class="text-xs lg:text-base 2xl:text-lg text-base-content/70 text-center font-bold pr-1 italic">Total Completion: {{ pgame.progress|default:0 }}%</p>
-                    </div>
+                    {% endif %}
+
+                    <!-- Playtime -->
+                    {% if pgame.play_duration %}
+                        <span class="text-xs text-base-content/50 italic flex items-center gap-0.5">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-2.5 h-2.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                            {{ pgame.play_duration|timedelta_hours }}
+                        </span>
+                    {% endif %}
                 </div>
             </div>
         </div>
-    </a>
+    </div>
+</a>

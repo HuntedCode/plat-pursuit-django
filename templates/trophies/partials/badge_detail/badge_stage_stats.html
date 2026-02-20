@@ -1,0 +1,24 @@
+{% load custom_filters %}
+{% if target_profile and data.user_stage_stats and data.user_stage_stats.games_played > 0 %}
+    <div class="flex flex-row flex-wrap gap-2 items-center px-2 mb-1">
+        <span class="text-xs text-base-content/50 italic font-bold">Your Stage Stats:</span>
+        {% if data.user_stage_stats.total_playtime %}
+            <span class="badge badge-ghost badge-sm font-bold italic gap-1 text-info">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline>
+                </svg>
+                {{ data.user_stage_stats.total_playtime|timedelta_hours }}
+            </span>
+        {% endif %}
+        <span class="badge badge-ghost badge-sm font-bold italic gap-1">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M11.5 6.027a.5.5 0 1 1-1 0 .5.5 0 0 1 1 0m-1.5 1.5a.5.5 0 1 0 0-1 .5.5 0 0 0 0 1m2.5-.5a.5.5 0 1 1-1 0 .5.5 0 0 1 1 0m-1.5 1.5a.5.5 0 1 0 0-1 .5.5 0 0 0 0 1m-6.5-3h1v1h1v1h-1v1h-1v-1h-1v-1h1z"/><path d="M3.051 3.26a.5.5 0 0 1 .354-.613l1.932-.518a.5.5 0 0 1 .62.39c.655-.079 1.35-.117 2.043-.117.72 0 1.443.041 2.12.126a.5.5 0 0 1 .622-.399l1.932.518a.5.5 0 0 1 .306.729q.211.136.373.297c.408.408.78 1.05 1.095 1.772.32.733.599 1.591.805 2.466s.34 1.78.364 2.606c.024.816-.059 1.602-.328 2.21a1.42 1.42 0 0 1-1.445.83c-.636-.067-1.115-.394-1.513-.773a11.3 11.3 0 0 1-.739-.809c-.126-.147-.25-.291-.368-.422-.728-.804-1.597-1.527-3.224-1.527s-2.496.723-3.224 1.527c-.119.131-.242.275-.368.422-.243.283-.494.576-.739.81-.398.378-.877.705-1.513.772a1.42 1.42 0 0 1-1.445-.83c-.27-.608-.352-1.395-.329-2.21.024-.826.16-1.73.365-2.606.206-.875.484-1.733.805-2.466.315-.722.687-1.364 1.094-1.772a2.3 2.3 0 0 1 .433-.335.5.5 0 0 1-.048-.745z"/></svg>
+            {{ data.user_stage_stats.games_played }}/{{ data.user_stage_stats.total_games }} game{{ data.user_stage_stats.total_games|pluralize }}
+        </span>
+        {% if data.user_stage_stats.platinums > 0 %}
+            <span class="badge badge-ghost badge-sm font-bold italic gap-1 text-warning">
+                {% include 'partials/icons/trophy_cup.html' with color='var(--color-trophy-platinum)' size='w-3 h-3' %}
+                {{ data.user_stage_stats.platinums }} plat{{ data.user_stage_stats.platinums|pluralize }}
+            </span>
+        {% endif %}
+    </div>
+{% endif %}

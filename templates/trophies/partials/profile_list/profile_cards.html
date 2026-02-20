@@ -43,7 +43,7 @@
                         <span class="text-xs text-error italic">Profile data is private</span>
                     </div>
                 {% elif profile.sync_status == 'syncing' %}
-                    {# Syncing state — single loading indicator #}
+                    {# Syncing state: single loading indicator #}
                     <div class="divider divider-vertical my-0"></div>
                     <div class="flex flex-col items-center gap-1 py-3">
                         <span class="loading loading-infinity loading-lg"></span>
@@ -99,11 +99,11 @@
                         <div class="divider divider-vertical my-0"></div>
                         <div class="flex flex-row self-start items-center w-full gap-2">
                             <figure class="border-2 border-{{ recent|trophy_color }} rounded-box shrink-0 transition-colors duration-300 hover:scale-105">
-                                <img src="{{ recent.trophy_icon_url }}" alt="{{ recent.trophy_name }}" class="h-8 w-8 object-fill shrink-0" loading="lazy" />
+                                <img src="{{ recent.trophy_icon_url }}" alt="{{ recent.trophy_name }}" class="h-8 w-8 object-cover shrink-0" loading="lazy" />
                             </figure>
                             <div class="flex flex-col gap-0 min-w-0">
                                 <span class="text-xs text-base-content text-start line-clamp-1">{{ recent.trophy_name }}</span>
-                                <span class="text-xs text-accent text-start italic line-clamp-1">{{ recent.game.title_name }}</span>
+                                <span class="text-xs text-accent text-start italic pr-1 line-clamp-1">{{ recent.game.title_name }}</span>
                             </div>
                         </div>
                     {% endif %}

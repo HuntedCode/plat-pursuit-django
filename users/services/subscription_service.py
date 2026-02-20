@@ -158,17 +158,25 @@ class SubscriptionService:
                             provider=provider,
                         )
 
-        # Discord notifications for new subscriptions (side effects after commit)
+        # Discord notification embed for new subscriptions only (side effects after commit)
         activation_events = [
             'customer.subscription.created',       # Stripe
             'BILLING.SUBSCRIPTION.ACTIVATED',       # PayPal
         ]
         if hasattr(user, 'profile') and event_type in activation_events and is_premium:
             send_subscription_notification(user)
-            if user.premium_tier in PREMIUM_DISCORD_ROLE_TIERS:
-                notify_bot_role_earned(user.profile, settings.DISCORD_PREMIUM_ROLE)
-            elif user.premium_tier in SUPPORTER_DISCORD_ROLE_TIERS:
-                notify_bot_role_earned(user.profile, settings.DISCORD_PREMIUM_PLUS_ROLE)
+
+        # Idempotent role assignment: re-apply on every activation (including renewals)
+        # so roles self-heal if the user rejoined the server or the bot had an outage.
+        # Deferred via on_commit to avoid blocking the webhook response with HTTP calls.
+        if hasattr(user, 'profile') and is_premium and user.profile.is_discord_verified and user.profile.discord_id:
+            profile = user.profile
+            if user.premium_tier in PREMIUM_DISCORD_ROLE_TIERS and settings.DISCORD_PREMIUM_ROLE:
+                role_id = settings.DISCORD_PREMIUM_ROLE
+                transaction.on_commit(lambda p=profile, r=role_id: notify_bot_role_earned(p, r))
+            elif user.premium_tier in SUPPORTER_DISCORD_ROLE_TIERS and settings.DISCORD_PREMIUM_PLUS_ROLE:
+                role_id = settings.DISCORD_PREMIUM_PLUS_ROLE
+                transaction.on_commit(lambda p=profile, r=role_id: notify_bot_role_earned(p, r))
 
         # Welcome email for new subscriptions (not upgrades/recoveries)
         if hasattr(user, 'profile') and event_type in activation_events and is_premium:

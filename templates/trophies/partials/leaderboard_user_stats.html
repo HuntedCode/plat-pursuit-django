@@ -1,0 +1,191 @@
+{% load static humanize custom_filters %}
+{% if user.is_authenticated and user.profile %}
+    {% if leaderboard_type == 'series' %}
+        {# Per-series leaderboard stats: Your Tier, Series XP, Earner Rank, Progress Rank #}
+        <!-- Desktop: Single row -->
+        <section class="stats stats-horizontal shadow-lg shadow-neutral w-full bg-base-200 border-2 border-base-300 overflow-x-auto transition duration-300 hover:shadow-accent hover:border-accent hidden lg:flex mb-4">
+            <div class="stat place-items-center">
+                <div class="stat-figure">
+                    {% if user_highest_tier > 0 %}
+                        {% with user_highest_tier|stringformat:'s' as tier_str %}
+                            <figure class="w-10 h-10">
+                                <img src="{% static 'images/badges/backdrops/'|add:tier_str|add:'_backdrop.png' %}" alt="{{ user_highest_tier|badge_tier }}" class="w-full object-contain" loading="lazy" decoding="async" />
+                            </figure>
+                        {% endwith %}
+                    {% else %}
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-10 h-10" viewBox="0 0 24 24" fill="none" stroke="var(--color-base-content)" opacity="0.5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+                        </svg>
+                    {% endif %}
+                </div>
+                <div class="stat-title text-{{ user_highest_tier|badge_color|default:'base-content' }} italic font-bold">Your Tier</div>
+                <div class="stat-value text-base-content text-2xl">{{ user_highest_tier|badge_tier|default:'None' }}</div>
+            </div>
+            <div class="stat place-items-center">
+                <div class="stat-figure">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-10 h-10" viewBox="0 0 24 24" fill="none" stroke="var(--color-secondary)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+                    </svg>
+                </div>
+                <div class="stat-title text-secondary italic font-bold">Series XP</div>
+                <div class="stat-value text-base-content text-2xl">{{ user_series_xp|intcomma }}</div>
+            </div>
+            <div class="stat place-items-center">
+                <div class="stat-figure">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-10 h-10" viewBox="0 0 24 24" fill="none" stroke="var(--color-success)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <line x1="12" y1="20" x2="12" y2="10"></line><line x1="18" y1="20" x2="18" y2="4"></line><line x1="6" y1="20" x2="6" y2="16"></line>
+                    </svg>
+                </div>
+                <div class="stat-title text-success italic font-bold">Earner Rank</div>
+                <div class="stat-value text-base-content text-2xl">{% if lb_earners_user_rank %}#{{ lb_earners_user_rank }}{% else %}Unranked{% endif %}</div>
+            </div>
+            <div class="stat place-items-center">
+                <div class="stat-figure">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-10 h-10" viewBox="0 0 24 24" fill="none" stroke="var(--color-accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <line x1="12" y1="20" x2="12" y2="10"></line><line x1="18" y1="20" x2="18" y2="4"></line><line x1="6" y1="20" x2="6" y2="16"></line>
+                    </svg>
+                </div>
+                <div class="stat-title text-accent italic font-bold">Progress Rank</div>
+                <div class="stat-value text-base-content text-2xl">{% if lb_progress_user_rank %}#{{ lb_progress_user_rank }}{% else %}Unranked{% endif %}</div>
+            </div>
+        </section>
+
+        <!-- Tablet: Split into rows -->
+        <div class="lg:hidden flex flex-col gap-2 mb-4">
+            <section class="stats stats-horizontal shadow-lg shadow-neutral w-full bg-base-200 border-2 border-base-300 overflow-x-auto">
+                <div class="stat place-items-center">
+                    <div class="stat-figure block">
+                        {% if user_highest_tier > 0 %}
+                            {% with user_highest_tier|stringformat:'s' as tier_str %}
+                                <figure class="w-10 h-10">
+                                    <img src="{% static 'images/badges/backdrops/'|add:tier_str|add:'_backdrop.png' %}" alt="{{ user_highest_tier|badge_tier }}" class="w-full object-contain" loading="lazy" decoding="async" />
+                                </figure>
+                            {% endwith %}
+                        {% else %}
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-10 h-10" viewBox="0 0 24 24" fill="none" stroke="var(--color-base-content)" opacity="0.5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+                            </svg>
+                        {% endif %}
+                    </div>
+                    <div class="stat-title text-{{ user_highest_tier|badge_color|default:'base-content' }} italic font-bold">Your Tier</div>
+                    <div class="stat-value text-base-content text-2xl">{{ user_highest_tier|badge_tier|default:'None' }}</div>
+                </div>
+                <div class="stat place-items-center">
+                    <div class="stat-figure block">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-10 h-10" viewBox="0 0 24 24" fill="none" stroke="var(--color-secondary)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+                        </svg>
+                    </div>
+                    <div class="stat-title text-secondary italic font-bold">Series XP</div>
+                    <div class="stat-value text-base-content text-2xl">{{ user_series_xp|intcomma }}</div>
+                </div>
+            </section>
+            <section class="stats stats-horizontal shadow-lg shadow-neutral w-full bg-base-200 border-2 border-base-300 overflow-x-auto">
+                <div class="stat place-items-center">
+                    <div class="stat-figure block">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-10 h-10" viewBox="0 0 24 24" fill="none" stroke="var(--color-success)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <line x1="12" y1="20" x2="12" y2="10"></line><line x1="18" y1="20" x2="18" y2="4"></line><line x1="6" y1="20" x2="6" y2="16"></line>
+                        </svg>
+                    </div>
+                    <div class="stat-title text-success italic font-bold">Earner Rank</div>
+                    <div class="stat-value text-base-content text-2xl">{% if lb_earners_user_rank %}#{{ lb_earners_user_rank }}{% else %}Unranked{% endif %}</div>
+                </div>
+                <div class="stat place-items-center">
+                    <div class="stat-figure block">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-10 h-10" viewBox="0 0 24 24" fill="none" stroke="var(--color-accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <line x1="12" y1="20" x2="12" y2="10"></line><line x1="18" y1="20" x2="18" y2="4"></line><line x1="6" y1="20" x2="6" y2="16"></line>
+                        </svg>
+                    </div>
+                    <div class="stat-title text-accent italic font-bold">Progress Rank</div>
+                    <div class="stat-value text-base-content text-2xl">{% if lb_progress_user_rank %}#{{ lb_progress_user_rank }}{% else %}Unranked{% endif %}</div>
+                </div>
+            </section>
+        </div>
+
+    {% elif leaderboard_type == 'overall' %}
+        {# Overall leaderboard stats: Total XP, Badges Earned, XP Rank, Trophy Rank #}
+        <!-- Desktop: Single row -->
+        <section class="stats stats-horizontal shadow-lg shadow-neutral w-full bg-base-200 border-2 border-base-300 overflow-x-auto transition duration-300 hover:shadow-accent hover:border-accent hidden lg:flex mb-4">
+            <div class="stat place-items-center">
+                <div class="stat-figure">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-10 h-10" viewBox="0 0 24 24" fill="none" stroke="var(--color-secondary)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+                    </svg>
+                </div>
+                <div class="stat-title text-secondary italic font-bold">Your Total XP</div>
+                <div class="stat-value text-base-content text-2xl">{{ user_total_xp|intcomma }}</div>
+            </div>
+            <div class="stat place-items-center">
+                <div class="stat-figure">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-10 h-10" viewBox="0 0 24 24" fill="none" stroke="var(--color-success)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline>
+                    </svg>
+                </div>
+                <div class="stat-title text-success italic font-bold">Badges Earned</div>
+                <div class="stat-value text-base-content text-2xl">{{ user_total_badges|intcomma }}</div>
+            </div>
+            <div class="stat place-items-center">
+                <div class="stat-figure">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-10 h-10" viewBox="0 0 24 24" fill="none" stroke="var(--color-primary)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <line x1="12" y1="20" x2="12" y2="10"></line><line x1="18" y1="20" x2="18" y2="4"></line><line x1="6" y1="20" x2="6" y2="16"></line>
+                    </svg>
+                </div>
+                <div class="stat-title text-primary italic font-bold">XP Rank</div>
+                <div class="stat-value text-base-content text-2xl">{% if lb_total_xp_user_rank %}#{{ lb_total_xp_user_rank }}{% else %}Unranked{% endif %}</div>
+            </div>
+            <div class="stat place-items-center">
+                <div class="stat-figure">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-10 h-10" viewBox="0 0 24 24" fill="none" stroke="var(--color-accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <line x1="12" y1="20" x2="12" y2="10"></line><line x1="18" y1="20" x2="18" y2="4"></line><line x1="6" y1="20" x2="6" y2="16"></line>
+                    </svg>
+                </div>
+                <div class="stat-title text-accent italic font-bold">Trophy Rank</div>
+                <div class="stat-value text-base-content text-2xl">{% if lb_total_progress_user_rank %}#{{ lb_total_progress_user_rank }}{% else %}Unranked{% endif %}</div>
+            </div>
+        </section>
+
+        <!-- Tablet: Split into rows -->
+        <div class="lg:hidden flex flex-col gap-2 mb-4">
+            <section class="stats stats-horizontal shadow-lg shadow-neutral w-full bg-base-200 border-2 border-base-300 overflow-x-auto">
+                <div class="stat place-items-center">
+                    <div class="stat-figure block">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-10 h-10" viewBox="0 0 24 24" fill="none" stroke="var(--color-secondary)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+                        </svg>
+                    </div>
+                    <div class="stat-title text-secondary italic font-bold">Your Total XP</div>
+                    <div class="stat-value text-base-content text-2xl">{{ user_total_xp|intcomma }}</div>
+                </div>
+                <div class="stat place-items-center">
+                    <div class="stat-figure block">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-10 h-10" viewBox="0 0 24 24" fill="none" stroke="var(--color-success)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline>
+                        </svg>
+                    </div>
+                    <div class="stat-title text-success italic font-bold">Badges Earned</div>
+                    <div class="stat-value text-base-content text-2xl">{{ user_total_badges|intcomma }}</div>
+                </div>
+            </section>
+            <section class="stats stats-horizontal shadow-lg shadow-neutral w-full bg-base-200 border-2 border-base-300 overflow-x-auto">
+                <div class="stat place-items-center">
+                    <div class="stat-figure block">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-10 h-10" viewBox="0 0 24 24" fill="none" stroke="var(--color-primary)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <line x1="12" y1="20" x2="12" y2="10"></line><line x1="18" y1="20" x2="18" y2="4"></line><line x1="6" y1="20" x2="6" y2="16"></line>
+                        </svg>
+                    </div>
+                    <div class="stat-title text-primary italic font-bold">XP Rank</div>
+                    <div class="stat-value text-base-content text-2xl">{% if lb_total_xp_user_rank %}#{{ lb_total_xp_user_rank }}{% else %}Unranked{% endif %}</div>
+                </div>
+                <div class="stat place-items-center">
+                    <div class="stat-figure block">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-10 h-10" viewBox="0 0 24 24" fill="none" stroke="var(--color-accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <line x1="12" y1="20" x2="12" y2="10"></line><line x1="18" y1="20" x2="18" y2="4"></line><line x1="6" y1="20" x2="6" y2="16"></line>
+                        </svg>
+                    </div>
+                    <div class="stat-title text-accent italic font-bold">Trophy Rank</div>
+                    <div class="stat-value text-base-content text-2xl">{% if lb_total_progress_user_rank %}#{{ lb_total_progress_user_rank }}{% else %}Unranked{% endif %}</div>
+                </div>
+            </section>
+        </div>
+    {% endif %}
+{% endif %}

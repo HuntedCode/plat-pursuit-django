@@ -11,51 +11,12 @@ import logging
 from collections import defaultdict
 from django.db import transaction
 from django.db.models import F
-from django.conf import settings
-import requests
 
 from trophies.models import UserTitle
 from trophies.milestone_constants import ONE_OFF_TYPES
+from trophies.services.badge_service import notify_bot_role_earned
 
 logger = logging.getLogger("psn_api")
-
-
-def notify_bot_role_earned(profile, role_id):
-    """
-    Notify Discord bot to assign a role to a user.
-
-    This function calls the Discord bot API to assign a role when a user
-    earns a milestone with an associated Discord role. Called on every check
-    (not just first award) so roles are re-assigned if a user leaves and
-    rejoins the Discord server.
-
-    Args:
-        profile: Profile instance with discord_id set
-        role_id: Discord role ID to assign
-    """
-    if settings.DEBUG:
-        return
-
-    try:
-        url = settings.BOT_API_URL + "/assign-role"
-        headers = {
-            'Authorization': f"Bearer {settings.BOT_API_KEY}",
-            'Content-Type': 'application/json'
-        }
-        data = {
-            'user_id': profile.discord_id,
-            'role_id': role_id,
-        }
-        response = requests.post(url, json=data, headers=headers)
-        response.raise_for_status()
-        logger.info(
-            f"Bot notified: Assigned role {role_id} to {profile.discord_id}."
-        )
-    except requests.RequestException as e:
-        logger.exception(
-            f"Bot notification failed for role {role_id} "
-            f"(user {profile.psn_username}): {e}"
-        )
 
 
 @transaction.atomic
@@ -83,19 +44,19 @@ def check_and_award_milestone(profile, milestone, _cache=None):
 
     # Skip premium-only milestones for non-premium users
     if milestone.premium_only and not profile.user_is_premium:
-        return {'awarded': False, 'created': False}
+        return {'awarded': False, 'created': False, 'user_milestone': None}
 
     # Get the appropriate handler for this milestone type
     handler = MILESTONE_HANDLERS.get(milestone.criteria_type)
     if not handler:
         logger.warning(f"No handler for criteria_type: {milestone.criteria_type}")
-        return {'awarded': False, 'created': False}
+        return {'awarded': False, 'created': False, 'user_milestone': None}
 
     # Execute handler to get current progress
     result = handler(profile, milestone, _cache=_cache)
 
     # Update progress tracking (only write when value actually changed)
-    progress, created = UserMilestoneProgress.objects.get_or_create(
+    progress, _ = UserMilestoneProgress.objects.get_or_create(
         profile=profile,
         milestone=milestone,
         defaults={'progress_value': result['progress']}

@@ -23,6 +23,32 @@ PLAT_STAGE_XP = 75
 BADGE_TIER_XP = 3000
 
 
+def compute_community_series_xp(series_slug: str) -> int:
+    """
+    Sum all users' XP for a specific badge series from ProfileGamification.
+
+    Reads the series_badge_xp JSONField and extracts the value for the given
+    series_slug across all users. Used by the update_leaderboards command to
+    cache community-wide XP totals per series.
+
+    Args:
+        series_slug: The badge series identifier (e.g., 'god-of-war')
+
+    Returns:
+        int: Total XP earned by all users for this series
+    """
+    from trophies.models import ProfileGamification
+    from django.db.models import Sum
+    from django.db.models.expressions import RawSQL
+
+    result = ProfileGamification.objects.annotate(
+        series_xp=RawSQL(
+            "COALESCE((series_badge_xp->>%s)::int, 0)", [series_slug]
+        )
+    ).aggregate(total=Sum('series_xp'))
+    return result['total'] or 0
+
+
 def compute_earners_leaderboard(series_slug: str) -> list[dict]:
     """
     Compute earners leaderboard for a badge series.

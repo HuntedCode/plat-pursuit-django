@@ -1,4 +1,4 @@
-{% load custom_filters %}
+{% load custom_filters humanize %}
 {% for item in display_data %}
 {% with item.badge as badge %}
     <a href="{% url 'badge_detail' badge.series_slug %}" class="card bg-base-100 border-4 border-base-300 shadow-lg shadow-neutral cursor-pointer transition-all duration-300 hover:scale-105 {% if item.is_earned %}hover:border-{{ badge.tier|badge_color }} hover:shadow-{{ badge.tier|badge_color }}{% endif %} hover:z-10 group">
@@ -10,12 +10,12 @@
                             {% include 'partials/badge.html' with layers=badge.get_badge_layers %}
                         </div>
                         {% if badge.most_recent_concept %}
-                            <figure class="border-4 border-base-300 shadow-md shadow-neutral w-16 h-16 lg:w-24 lg:h-24 hover:border-{{ badge.tier|badge_color }} hover:shadow-{{ badge.tier|badge_color }}">
-                                <img src="{{ badge.most_recent_concept.concept_icon_url }}" class="w-full object-cover hover:scale-105" />
+                            <figure class="border-4 border-base-300 shadow-md shadow-neutral w-16 h-16 lg:w-24 lg:h-24 aspect-square hover:border-{{ badge.tier|badge_color }} hover:shadow-{{ badge.tier|badge_color }}">
+                                <img src="{{ badge.most_recent_concept.concept_icon_url }}" class="w-full aspect-square object-cover hover:scale-105" alt="{{ badge.most_recent_concept.unified_title }}" loading="lazy" decoding="async" />
                             </figure>
-                        {% elif badge.base_badge.most_recent_concept %}
-                            <figure class="border-4 border-base-300 shadow-md shadow-neutral w-16 h-16 lg:w-24 lg:h-24 hover:border-{{ badge.tier|badge_color }} hover:shadow-{{ badge.tier|badge_color }}">
-                                <img src="{{ badge.base_badge.most_recent_concept.concept_icon_url }}" class="w-full object-cover hover:scale-105" />
+                        {% elif badge.base_badge and badge.base_badge.most_recent_concept %}
+                            <figure class="border-4 border-base-300 shadow-md shadow-neutral w-16 h-16 lg:w-24 lg:h-24 aspect-square hover:border-{{ badge.tier|badge_color }} hover:shadow-{{ badge.tier|badge_color }}">
+                                <img src="{{ badge.base_badge.most_recent_concept.concept_icon_url }}" class="w-full aspect-square object-cover hover:scale-105" alt="{{ badge.base_badge.most_recent_concept.unified_title }}" loading="lazy" decoding="async" />
                             </figure>
                         {% endif %}
                     </div>
@@ -23,7 +23,27 @@
                         <h3 class="text-sm lg:text-lg font-bold line-clamp-1 italic pr-1">{{ badge.effective_display_title }} - {% if item.is_earned %}<span class="text-{{ badge.tier|badge_color }}">{{ badge.tier|badge_tier }}</span>{% else %}Unearned{% endif %}</h3>
                         <h2 class="text-base legendary-title text-start italic">{{ badge.badge_type|capfirst }}</h2>
                         <h6 class="text-xs text-base-content/70 text-start italic line-clamp-1 pr-1">{{ badge.effective_description }}</h6>
-                        <h5 class="text-xs text-base-content/70 font-semibold italic pr-1">Total games: {{ item.total_games }} | Total Earned: {{ item.tier1_earned_count }}</h5>                  
+                        <div class="flex flex-row flex-wrap items-center gap-2 text-xs text-base-content/70 font-semibold italic pr-1">
+                            <span class="flex flex-row items-center gap-1">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M11.5 6.027a.5.5 0 1 1-1 0 .5.5 0 0 1 1 0m-1.5 1.5a.5.5 0 1 0 0-1 .5.5 0 0 0 0 1m2.5-.5a.5.5 0 1 1-1 0 .5.5 0 0 1 1 0m-1.5 1.5a.5.5 0 1 0 0-1 .5.5 0 0 0 0 1m-6.5-3h1v1h1v1h-1v1h-1v-1h-1v-1h1z"/><path d="M3.051 3.26a.5.5 0 0 1 .354-.613l1.932-.518a.5.5 0 0 1 .62.39c.655-.079 1.35-.117 2.043-.117.72 0 1.443.041 2.12.126a.5.5 0 0 1 .622-.399l1.932.518a.5.5 0 0 1 .306.729q.211.136.373.297c.408.408.78 1.05 1.095 1.772.32.733.599 1.591.805 2.466s.34 1.78.364 2.606c.024.816-.059 1.602-.328 2.21a1.42 1.42 0 0 1-1.445.83c-.636-.067-1.115-.394-1.513-.773a11.3 11.3 0 0 1-.739-.809c-.126-.147-.25-.291-.368-.422-.728-.804-1.597-1.527-3.224-1.527s-2.496.723-3.224 1.527c-.119.131-.242.275-.368.422-.243.283-.494.576-.739.81-.398.378-.877.705-1.513.772a1.42 1.42 0 0 1-1.445-.83c-.27-.608-.352-1.395-.329-2.21.024-.826.16-1.73.365-2.606.206-.875.484-1.733.805-2.466.315-.722.687-1.364 1.094-1.772a2.3 2.3 0 0 1 .433-.335.5.5 0 0 1-.048-.745z"/></svg>
+                                {{ item.total_games }} game{{ item.total_games|pluralize }}
+                            </span>
+                            <span>|</span>
+                            <span class="flex flex-row items-center gap-1">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle></svg>
+                                {{ item.tier1_earned_count|intcomma }} earned
+                            </span>
+                            {% if user.is_authenticated and series_badge_xp %}
+                                {% with badge.series_slug as slug %}
+                                    {% if series_badge_xp|dict_get:slug %}
+                                        <span class="badge badge-xs badge-secondary font-bold gap-0.5">
+                                            <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+                                            {{ series_badge_xp|dict_get:slug|intcomma }} XP
+                                        </span>
+                                    {% endif %}
+                                {% endwith %}
+                            {% endif %}
+                        </div>
                     </div>
                 </div>
 
@@ -57,7 +77,7 @@
 
                     <div class="flex flex-col justify-center gap-0 w-full">
                         {% if user.is_authenticated and user.profile %}
-                            <h4 class="text-xs lg:text-sm font-semibold text-center mb-1">Your Progress</h4>
+                            <h4 class="text-xs lg:text-sm font-semibold text-center mb-1 italic">Your Progress</h4>
                             {% with item.progress_percentage as percent %}
                                 <div class="flex flex-col gap-0 items-center self-center w-full">
                                     <progress class="progress {% if percent < 33.0 %}progress-error{% elif percent < 66.0 %}progress-warning{% elif percent < 100.0 %}progress-success{% else %}progress-primary{% endif %} w-full" value="{{ percent }}" max="100"></progress>
@@ -72,5 +92,5 @@
     </a>
 {% endwith %}
 {% empty %}
-    <p>No badges found. Try expanding your search!</p>
+    <p class="text-base-content/70 text-center italic">No badges found. Try expanding your search!</p>
 {% endfor %}

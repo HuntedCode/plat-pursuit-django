@@ -6,50 +6,35 @@
     <section class="shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 w-full p-0 lg:p-4">
         {% include 'partials/breadcrumb.html' with items=breadcrumb %}
 
-        <h1 class="text3xl text-accent text-center font-bold italic mb-4">NOTE: Only PSN accounts LINKED to a PlatPursuit user account are considered.</h1>
+        {% include 'trophies/partials/leaderboard_user_stats.html' with leaderboard_type='overall' %}
 
-        <div class="grid grid-cols-1 xl:grid-cols-2 gap-4">
+        <div class="alert alert-info mb-4">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+            <span class="text-base italic">Only PSN accounts linked to a PlatPursuit user account are considered.</span>
+        </div>
+
+        <div class="grid grid-cols-2 gap-4">
 
             <div class="flex flex-col justify-start gap-2">
                 <h2 class="text-lg italic font-bold">Total Badge XP Leaders</h2>
                 <p class="text-sm text-base-content/70 text-center pr-1 italic">Leaderboard Updated: {{ lb_total_xp_refresh_time|iso_datetime }}</p>
                 <p class="text-sm text-base-content/70 text-center pr-1 italic">Refreshed every 6 hours.</p>
-                <div class="flex flex-row justify-between items-center gap-4 mt-4 w-7/8 mx-auto">
-                    <div class="btn-group">
-                        {% if lb_total_xp_page_obj.has_previous %}
-                        <a href="?{% query_transform lb_total_xp_page=1 %}" class="btn btn-xs">First</a>
-                        <a href="?{% query_transform lb_total_xp_page=lb_total_xp_page_obj.previous_page_number %}" class="btn btn-xs">Prev</a>
-                        {% endif %}
-                        <span class="btn btn-xs btn-secondary btn-active">Page {{ lb_total_xp_page_obj.number }} of {{ lb_total_xp_paginator.num_pages }}</span>
-                        {% if lb_total_xp_page_obj.has_next %}
-                        <a href="?{% query_transform lb_total_xp_page=lb_total_xp_page_obj.next_page_number %}" class="btn btn-xs">Next</a>
-                        <a href="?{% query_transform lb_total_xp_page=lb_total_xp_paginator.num_pages %}" class="btn btn-xs">Last</a>
-                        {% endif %}
-                    </div>
-                    <div class="flex flex-row justify-between gap-8">
-                        {% if lb_total_xp_user_page %}
-                            <a href="?{% query_transform lb_total_xp_page=lb_total_xp_user_page %}#1-rank-{{ lb_total_xp_user_rank }}" class="btn btn-xs btn-accent tooltip" data-tip="Jump to your rank">My Rank</a>
-                        {% endif %}
-                        <form class="input-group" onsubmit="updatePage(this, 'lb_total_xp_page'); return false;">
-                            <input type="number" class="input input-bordered input-xs w-16" min="1" max="{{ lb_total_xp_paginator.num_pages }}" placeholder="Page" />
-                            <button type="submit" class="btn btn-xs btn-primary">Go</button>
-                        </form>
-                    </div>
-                </div>
+
+                {% include 'partials/leaderboard_pagination.html' with page_obj=lb_total_xp_page_obj paginator=lb_total_xp_paginator page_param='lb_total_xp_page' user_page=lb_total_xp_user_page user_rank=lb_total_xp_user_rank rank_prefix='1' %}
 
                 <div class="w-full overflow-x-scroll">
                     <table class="table table-zebra bg-base-100/80 border-4 border-base-300 shadow-lg shadow-neutral rounded-box w-full">
                         <thead>
                             <tr>
-                                <th></th>
-                                <th class="text-sm">User</th>
-                                <th class="text-sm">Total XP</th>
-                                <th class="text-sm">Total Badges</th>
+                                <th class="text-sm italic font-bold"></th>
+                                <th class="text-sm italic font-bold">User</th>
+                                <th class="text-sm italic font-bold">Total XP</th>
+                                <th class="text-sm italic font-bold">Total Badges</th>
                             </tr>
                         </thead>
                         <tbody>
                             {% for entry in lb_total_xp_page_obj %}
-                                <tr id="1-rank-{{ entry.rank }}" class="{% if request.user.is_authenticated and request.user.profile.display_psn_username == entry.psn_username %}bg-success/15{% endif %} h-15">
+                                <tr id="1-rank-{{ entry.rank }}" class="{% if request.user.is_authenticated and request.user.profile.display_psn_username == entry.psn_username %}bg-success/15{% endif %} h-15 hover:bg-base-200/50">
                                     <td>{{ entry.rank }}</td>
                                     <td class="text-sm lg:text-base">
                                         <a href="{% url 'profile_detail' entry.psn_username %}">
@@ -69,75 +54,29 @@
                     </table>
                 </div>
 
-                <div class="flex flex-row justify-between items-center gap-4 mt-4 w-7/8 mx-auto">
-
-                    <div class="btn-group">
-                        {% if lb_total_xp_page_obj.has_previous %}
-                        <a href="?{% query_transform lb_total_xp_page=1 %}" class="btn btn-xs">First</a>
-                        <a href="?{% query_transform lb_total_xp_page=lb_total_xp_page_obj.previous_page_number %}" class="btn btn-xs">Prev</a>
-                        {% endif %}
-                        <span class="btn btn-xs btn-secondary btn-active">Page {{ lb_total_xp_page_obj.number }} of {{ lb_total_xp_paginator.num_pages }}</span>
-                        {% if lb_total_xp_page_obj.has_next %}
-                        <a href="?{% query_transform lb_total_xp_page=lb_total_xp_page_obj.next_page_number %}" class="btn btn-xs">Next</a>
-                        <a href="?{% query_transform lb_total_xp_page=lb_total_xp_paginator.num_pages %}" class="btn btn-xs">Last</a>
-                        {% endif %}
-                    </div>
-
-                    <div class="flex flex-row justify-between gap-8">
-                        {% if lb_total_xp_user_page %}
-                            <a href="?{% query_transform lb_total_xp_page=lb_total_xp_user_page %}#1-rank-{{ lb_total_xp_user_rank }}" class="btn btn-xs btn-accent tooltip" data-tip="Jump to your rank">My Rank</a>
-                        {% endif %}
-
-                        <form class="input-group" onsubmit="updatePage(this, 'lb_total_xp_page'); return false;">
-                            <input type="number" class="input input-bordered input-xs w-16" min="1" max="{{ lb_total_xp_paginator.num_pages }}" placeholder="Page" />
-                            <button type="submit" class="btn btn-xs btn-primary">Go</button>
-                        </form>
-                    </div>
-                </div>
+                {% include 'partials/leaderboard_pagination.html' with page_obj=lb_total_xp_page_obj paginator=lb_total_xp_paginator page_param='lb_total_xp_page' user_page=lb_total_xp_user_page user_rank=lb_total_xp_user_rank rank_prefix='1' %}
             </div>
 
-            <div class="flex flex-col justify-start-start gap-2">
-                <h2 class="text-xl italic font-bold">Total Badge Trophy Leaders</h2>
+            <div class="flex flex-col justify-start gap-2">
+                <h2 class="text-lg italic font-bold">Total Badge Trophy Leaders</h2>
                 <p class="text-sm text-base-content/70 text-center pr-1 italic">Leaderboard Updated: {{ lb_total_progress_refresh_time|iso_datetime }}</p>
                 <p class="text-sm text-base-content/70 text-center pr-1 italic">Refreshed every 6 hours.</p>
-                <div class="flex flex-row justify-between items-center gap-4 mt-4 w-7/8 mx-auto">
-                    <div class="btn-group">
-                        {% if lb_total_progress_page_obj.has_previous %}
-                        <a href="?{% query_transform lb_total_progress_page=1 %}" class="btn btn-xs">First</a>
-                        <a href="?{% query_transform lb_total_progress_page=lb_total_progress_page_obj.previous_page_number %}" class="btn btn-xs">Prev</a>
-                        {% endif %}
-                        <span class="btn btn-xs btn-secondary btn-active">Page {{ lb_total_progress_page_obj.number }} of {{ lb_total_progress_paginator.num_pages }}</span>
-                        {% if lb_total_progress_page_obj.has_next %}
-                        <a href="?{% query_transform lb_total_progress_page=lb_total_progress_page_obj.next_page_number %}" class="btn btn-xs">Next</a>
-                        <a href="?{% query_transform lb_total_progress_page=lb_total_progress_paginator.num_pages %}" class="btn btn-xs">Last</a>
-                        {% endif %}
-                    </div>
-                    
-                    <div class="flex flex-row justify-between gap-8">
-                        {% if lb_total_progress_user_page %}
-                            <a href="?{% query_transform lb_total_progress_page=lb_total_progress_user_page %}#2-rank-{{ lb_total_progress_user_rank }}" class="btn btn-xs btn-accent tooltip" data-tip="Jump to your rank">My Rank</a>
-                        {% endif %}
 
-                        <form class="input-group" onsubmit="updatePage(this, 'lb_total_progress_page'); return false;">
-                            <input type="number" class="input input-bordered input-xs w-16" min="1" max="{{ lb_total_progress_paginator.num_pages }}" placeholder="Page" />
-                            <button type="submit" class="btn btn-xs btn-primary">Go</button>
-                        </form>
-                    </div>
-                </div>
+                {% include 'partials/leaderboard_pagination.html' with page_obj=lb_total_progress_page_obj paginator=lb_total_progress_paginator page_param='lb_total_progress_page' user_page=lb_total_progress_user_page user_rank=lb_total_progress_user_rank rank_prefix='2' %}
 
                 <div class="w-full overflow-x-scroll">
                     <table class="table table-zebra bg-base-100/80 border-4 border-base-300 shadow-lg shadow-neutral rounded-box w-full">
                     <thead>
                         <tr>
-                            <th></th>
-                            <th>User</th>
-                            <th>Badge Trophies</th>
-                            <th>Last Earned</th>
+                            <th class="text-sm italic font-bold"></th>
+                            <th class="text-sm italic font-bold">User</th>
+                            <th class="text-sm italic font-bold">Badge Trophies</th>
+                            <th class="text-sm italic font-bold">Last Earned</th>
                         </tr>
                     </thead>
                     <tbody>
                         {% for entry in lb_total_progress_page_obj %}
-                            <tr id="2-rank-{{ entry.rank }}" class="{% if request.user.is_authenticated and request.user.profile.display_psn_username == entry.psn_username %}bg-success/15{% endif %} h-15">
+                            <tr id="2-rank-{{ entry.rank }}" class="{% if request.user.is_authenticated and request.user.profile.display_psn_username == entry.psn_username %}bg-success/15{% endif %} h-15 hover:bg-base-200/50">
                                 <td>{{ entry.rank }}</td>
                                 <td>
                                     <a href="{% url 'profile_detail' entry.psn_username %}">
@@ -180,46 +119,11 @@
                     </table>
                 </div>
 
-                <div class="flex flex-row justify-between items-center gap-4 mt-4 w-7/8 mx-auto">
-                    <div class="btn-group">
-                        {% if lb_total_progress_page_obj.has_previous %}
-                        <a href="?{% query_transform lb_total_progress_page=1 %}" class="btn btn-xs">First</a>
-                        <a href="?{% query_transform lb_total_progress_page=lb_total_progress_page_obj.previous_page_number %}" class="btn btn-xs">Prev</a>
-                        {% endif %}
-                        <span class="btn btn-xs btn-secondary btn-active">Page {{ lb_total_progress_page_obj.number }} of {{ lb_total_progress_paginator.num_pages }}</span>
-                        {% if lb_total_progress_page_obj.has_next %}
-                        <a href="?{% query_transform lb_total_progress_page=lb_total_progress_page_obj.next_page_number %}" class="btn btn-xs">Next</a>
-                        <a href="?{% query_transform lb_total_progress_page=lb_total_progress_paginator.num_pages %}" class="btn btn-xs">Last</a>
-                        {% endif %}
-                    </div>
-
-                    <div class="flex flex-row justify-between gap-8">
-                        {% if lb_total_progress_user_page %}
-                            <a href="?{% query_transform lb_total_progress_page=lb_total_progress_user_page %}#2-rank-{{ lb_total_progress_user_rank }}" class="btn btn-xs btn-accent tooltip" data-tip="Jump to your rank">My Rank</a>
-                        {% endif %}
-
-                        <form class="input-group" onsubmit="updatePage(this, 'lb_total_progress_page'); return false;">
-                            <input type="number" class="input input-bordered input-xs w-16" min="1" max="{{ lb_total_progress_paginator.num_pages }}" placeholder="Page" />
-                            <button type="submit" class="btn btn-xs btn-primary">Go</button>
-                        </form>
-                    </div>
-                </div>
+                {% include 'partials/leaderboard_pagination.html' with page_obj=lb_total_progress_page_obj paginator=lb_total_progress_paginator page_param='lb_total_progress_page' user_page=lb_total_progress_user_page user_rank=lb_total_progress_user_rank rank_prefix='2' %}
             </div>
         </div>
     </section>
 {% endblock %}
 {% block js_scripts %}
-<script>
-    function updatePage(form, paramName) {
-        const input = form.querySelector('input[type="number"]');
-        const page = input.value;
-
-        if (page < 1 || page > input.max) return;
-
-        const url = new URL(window.location);
-        url.searchParams.set(paramName, page);
-        window.location.href = url.toString();
-    }
-</script>
 <script>PlatPursuit.ZoomScaler.init();</script>
 {% endblock %}

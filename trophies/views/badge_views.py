@@ -1,9 +1,12 @@
-import json
 import logging
 from collections import defaultdict
 
 from core.services.tracking import track_page_view
-from datetime import date
+from datetime import date, timedelta
+from trophies.util_modules.constants import (
+    BADGE_TIER_XP, BRONZE_STAGE_XP, SILVER_STAGE_XP,
+    GOLD_STAGE_XP, PLAT_STAGE_XP,
+)
 
 from django.core.cache import cache
 from django.core.paginator import Paginator
@@ -19,7 +22,7 @@ from trophies.mixins import ProfileHotbarMixin
 from ..models import (
     Game, Profile, ProfileGame, Badge, UserBadge, UserBadgeProgress,
     Concept, Stage, Milestone, UserMilestone, UserMilestoneProgress,
-    UserTitle,
+    UserTitle, ProfileGamification,
 )
 from ..forms import BadgeSearchForm
 from trophies.milestone_constants import (
@@ -43,7 +46,10 @@ class BadgeListView(ProfileHotbarMixin, ListView):
     paginate_by = None
 
     def get_queryset(self):
-        qs = super().get_queryset()
+        qs = super().get_queryset().select_related(
+            'base_badge', 'most_recent_concept', 'title',
+            'base_badge__most_recent_concept', 'base_badge__title',
+        )
         form = BadgeSearchForm(self.request.GET)
 
         if form.is_valid():
@@ -52,25 +58,46 @@ class BadgeListView(ProfileHotbarMixin, ListView):
                 qs = qs.filter(series_slug__icontains=series_slug)
         return qs
 
-    def _calculate_series_stats(self, series_slug):
+    def _calculate_all_series_stats(self, series_slugs):
         """
-        Calculate total games and trophy counts for a badge series.
+        Calculate total games and trophy counts for multiple badge series in bulk.
+
+        Single query fetches all games across all requested series, then groups
+        in memory. Eliminates N*2 queries (count + iteration per series).
 
         Args:
-            series_slug: Badge series slug
+            series_slugs: Iterable of series slug strings
 
         Returns:
-            tuple: (total_games, trophy_types_dict)
+            dict: {series_slug: (total_games, trophy_types_dict)}
         """
-        all_games = Game.objects.filter(concept__stages__series_slug=series_slug).distinct()
-        total_games = all_games.count()
-        trophy_types = {
-            'bronze': sum(game.defined_trophies['bronze'] for game in all_games),
-            'silver': sum(game.defined_trophies['silver'] for game in all_games),
-            'gold': sum(game.defined_trophies['gold'] for game in all_games),
-            'platinum': sum(game.defined_trophies['platinum'] for game in all_games),
-        }
-        return total_games, trophy_types
+        games_with_series = Game.objects.filter(
+            concept__stages__series_slug__in=series_slugs
+        ).values_list(
+            'id', 'concept__stages__series_slug',
+            'defined_trophies',
+        ).distinct()
+
+        # Group games by series slug
+        series_games = defaultdict(dict)
+        for game_id, slug, trophies in games_with_series:
+            if game_id not in series_games[slug]:
+                series_games[slug][game_id] = trophies
+
+        result = {}
+        for slug in series_slugs:
+            games_map = series_games.get(slug, {})
+            total_games = len(games_map)
+            trophy_types = {'bronze': 0, 'silver': 0, 'gold': 0, 'platinum': 0}
+            for trophies in games_map.values():
+                if trophies:
+                    trophy_types['bronze'] += trophies.get('bronze', 0)
+                    trophy_types['silver'] += trophies.get('silver', 0)
+                    trophy_types['gold'] += trophies.get('gold', 0)
+                    trophy_types['platinum'] += trophies.get('platinum', 0)
+            result[slug] = (total_games, trophy_types)
+
+        return result
 
     def _build_badge_display_data(self, grouped_badges, profile=None):
         """
@@ -95,8 +122,13 @@ class BadgeListView(ProfileHotbarMixin, ListView):
             earned_dict = {e['badge__series_slug']: e['max_tier'] for e in user_earned}
 
             all_badges_ids = [b.id for group in grouped_badges.values() for b in group]
-            progress_qs = UserBadgeProgress.objects.filter(profile=profile, badge__id__in=all_badges_ids)
-            progress_dict = {p.badge.id: p for p in progress_qs}
+            progress_qs = UserBadgeProgress.objects.filter(
+                profile=profile, badge__id__in=all_badges_ids
+            ).select_related('badge')
+            progress_dict = {p.badge_id: p for p in progress_qs}
+
+        # Bulk-fetch series stats for all series at once (1 query instead of N*2)
+        all_series_stats = self._calculate_all_series_stats(grouped_badges.keys())
 
         # Build display data for each series
         for slug, group in grouped_badges.items():
@@ -108,8 +140,8 @@ class BadgeListView(ProfileHotbarMixin, ListView):
             if not tier1_badge:
                 continue
 
-            # Calculate series stats
-            total_games, trophy_types = self._calculate_series_stats(tier1_badge.series_slug)
+            # Look up pre-computed series stats
+            total_games, trophy_types = all_series_stats.get(slug, (0, {'bronze': 0, 'silver': 0, 'gold': 0, 'platinum': 0}))
             tier1_earned_count = tier1_badge.earned_count
 
             # Determine display badge and progress
@@ -166,7 +198,8 @@ class BadgeListView(ProfileHotbarMixin, ListView):
         context = super().get_context_data(**kwargs)
         badges = context['object_list']
 
-        # Group badges by series
+        # Group badges by series. Badges without an effective_user_title are
+        # treated as unpublished/WIP and hidden from the public listing.
         grouped_badges = defaultdict(list)
         for badge in badges:
             if badge.effective_user_title:
@@ -202,6 +235,52 @@ class BadgeListView(ProfileHotbarMixin, ListView):
         context['page_obj'] = page_obj
         context['paginator'] = paginator
         context['is_paginated'] = page_obj.has_other_pages()
+
+        # User badge stats for authenticated users
+        if profile:
+            try:
+                gamification = profile.gamification
+                series_completed = UserBadge.objects.filter(
+                    profile=profile
+                ).values('badge__series_slug').distinct().count()
+                total_series = Badge.objects.filter(tier=1).exclude(
+                    series_slug__isnull=True
+                ).exclude(series_slug='').count()
+
+                # Global stage completion stats (all badge series)
+                total_stages = Stage.objects.filter(stage_number__gt=0).count()
+                plat_eligible_stages = Stage.objects.filter(
+                    stage_number__gt=0,
+                    concepts__games__defined_trophies__platinum__gt=0,
+                ).distinct().count()
+                user_stages_platted = Stage.objects.filter(
+                    stage_number__gt=0,
+                    concepts__games__played_by__profile=profile,
+                    concepts__games__played_by__has_plat=True,
+                ).distinct().count()
+                user_stages_completed = Stage.objects.filter(
+                    stage_number__gt=0,
+                    concepts__games__played_by__profile=profile,
+                    concepts__games__played_by__progress=100,
+                ).distinct().count()
+
+                context['user_badge_stats'] = {
+                    'total_xp': gamification.total_badge_xp,
+                    'total_badges_earned': gamification.total_badges_earned,
+                    'stages_platted': user_stages_platted,
+                    'plat_eligible_stages': plat_eligible_stages,
+                    'stages_completed': user_stages_completed,
+                    'total_stages': total_stages,
+                    'series_completed': series_completed,
+                    'total_series': total_series,
+                    'completion_pct': round(
+                        (series_completed / total_series * 100), 1
+                    ) if total_series > 0 else 0,
+                }
+                context['series_badge_xp'] = gamification.series_badge_xp or {}
+            except ProfileGamification.DoesNotExist:
+                context['user_badge_stats'] = None
+                context['series_badge_xp'] = {}
 
         # Breadcrumbs and form
         context['breadcrumb'] = [
@@ -252,9 +331,21 @@ class BadgeDetailView(ProfileHotbarMixin, DetailView):
 
         badge = None
         is_earned = True
+        highest_tier_earned = 0
+        max_tier = series_badges.aggregate(max_tier=Max('tier'))['max_tier'] or 0
+
+        # Bulk-fetch progress for all badges in this series (single query, reused below)
+        badge_progress_dict = {}
+        if target_profile:
+            badge_progress_dict = {
+                p.badge_id: p for p in
+                UserBadgeProgress.objects.filter(
+                    profile=target_profile, badge__series_slug=self.kwargs['series_slug']
+                )
+            }
+
         if target_profile:
             highest_tier_earned = UserBadge.objects.filter(profile=target_profile, badge__series_slug=self.kwargs['series_slug']).aggregate(max_tier=Max('badge__tier'))['max_tier'] or 0
-            max_tier = series_badges.aggregate(max_tier=Max('tier'))['max_tier'] or 0
             badge = series_badges.filter(tier=highest_tier_earned).first()
             if not badge:
                 badge = series_badges.order_by('tier').first()
@@ -263,56 +354,330 @@ class BadgeDetailView(ProfileHotbarMixin, DetailView):
 
             context['badge'] = badge
 
-            progress = UserBadgeProgress.objects.filter(profile=target_profile, badge=badge).first()
+            progress = badge_progress_dict.get(badge.id)
             context['progress'] = progress
             context['progress_percent'] = progress.completed_concepts / badge.required_stages * 100 if progress and badge.required_stages > 0 else 0
         else:
             badge = series_badges.filter(tier=1).first()
             context['badge'] = badge
 
-        stages = Stage.objects.filter(series_slug=badge.series_slug).order_by('stage_number').prefetch_related(
-            Prefetch('concepts__games', queryset=Game.objects.all().order_by(Lower('title_name')))
-        )
-        context['stage_count'] = stages.count()
+        # Tier selector: determine which tier tab to show
+        tier_param = self.request.GET.get('tier')
+        try:
+            selected_tier = int(tier_param)
+            if selected_tier < 1 or selected_tier > max_tier:
+                selected_tier = None
+        except (TypeError, ValueError):
+            selected_tier = None
+
+        if selected_tier is None:
+            if target_profile and highest_tier_earned > 0:
+                selected_tier = min(highest_tier_earned + 1, max_tier)
+            else:
+                selected_tier = 1
+        context['selected_tier'] = selected_tier
+        context['max_tier'] = max_tier
+        # Whether selected tier requires platinum (tiers 1/3) or 100% (tiers 2/4)
+        context['selected_tier_is_plat'] = selected_tier in [1, 3]
+
+        stages = list(Stage.objects.filter(series_slug=badge.series_slug).order_by('stage_number').prefetch_related(
+            Prefetch('concepts__games', queryset=Game.objects.select_related('concept').order_by(Lower('title_name')))
+        ))
+        context['stage_count'] = len(stages)
+
+        # Collect all games across all stages first (uses prefetched data)
+        stage_games_map = {}
+        all_games_set = set()
+        for stage in stages:
+            games = set()
+            for concept in stage.concepts.all():
+                games.update(concept.games.all())
+            stage_games_map[stage.id] = sorted(games, key=lambda g: g.title_name)
+            all_games_set.update(games)
+
+        # Single bulk ProfileGame query instead of one per stage
+        profile_games = {}
+        if target_profile and all_games_set:
+            profile_games_qs = ProfileGame.objects.filter(
+                profile=target_profile, game__in=all_games_set
+            ).select_related('game')
+            profile_games = {pg.game_id: pg for pg in profile_games_qs}
 
         today = date.today().isoformat()
         stats_timeout = 3600
         structured_data = []
         for stage in stages:
-            games = set()
-            for concept in stage.concepts.all():
-                games.update(concept.games.all())
-            games = sorted(games, key=lambda g: g.title_name)
-
-            profile_games = {}
-            if target_profile:
-                profile_games_qs = ProfileGame.objects.filter(profile=target_profile, game__in=games).select_related('game')
-                profile_games = {pg.game: pg for pg in profile_games_qs}
+            games = stage_games_map[stage.id]
 
             community_ratings = {}
             for game in games:
                 averages_cache_key = f"concept:averages:{game.concept.concept_id}:{today}"
-                cached_averages = cache.get(averages_cache_key)
-                if cached_averages:
-                    averages = json.loads(cached_averages)
-                else:
+                averages = cache.get(averages_cache_key)
+                if not averages:
                     averages = game.concept.get_community_averages()
                     if averages:
-                        cache.set(averages_cache_key, json.dumps(averages), timeout=stats_timeout)
+                        cache.set(averages_cache_key, averages, timeout=stats_timeout)
                 community_ratings[game] = averages
 
             structured_data.append({
                 'stage': stage,
-                'games': [{'game': game, 'profile_game': profile_games.get(game, None), 'community_ratings': community_ratings.get(game, None)} for game in games]
+                'games': [{
+                    'game': game,
+                    'profile_game': profile_games.get(game.id),
+                    'community_ratings': community_ratings.get(game),
+                    'has_guide': bool(game.concept.guide_slug),
+                } for game in games],
             })
 
         all_badges = Badge.objects.by_series(badge.series_slug)
-        badge_completion = {b.tier: b.get_stage_completion(target_profile, b.badge_type) for b in all_badges}
+        all_badges_list = list(all_badges)
+        badge_completion = {b.tier: b.get_stage_completion(target_profile, b.badge_type) for b in all_badges_list}
+
 
         # Add required_stages for each tier (useful for megamix badges)
-        badge_requirements = {b.tier: b.required_stages for b in all_badges}
+        badge_requirements = {b.tier: b.required_stages for b in all_badges_list}
 
-        logger.debug(f"Badge detail loaded {len(structured_data)} stage data entries for {badge.series_slug}")
+        # Tier selector context
+        context['all_tier_badges'] = sorted(all_badges_list, key=lambda b: b.tier)
+        selected_tier_badge = next((b for b in all_badges_list if b.tier == selected_tier), None)
+        context['selected_tier_badge'] = selected_tier_badge
+        context['selected_tier_completion'] = badge_completion.get(selected_tier, {})
+        context['selected_tier_requirements'] = badge_requirements.get(selected_tier, 0)
+
+        # Badge series stats (computed from existing data, no new DB queries)
+        tier_earner_counts = {b.tier: b.earned_count for b in all_badges_list}
+
+        total_games = sum(len(data['games']) for data in structured_data)
+
+        user_series_xp = 0
+        user_lb_rank = None
+        user_total_playtime = None
+        user_games_played = 0
+        user_platinums = 0
+        series_slug = self.kwargs['series_slug']
+        if target_profile:
+            try:
+                xp_data = target_profile.gamification.series_badge_xp
+                user_series_xp = (xp_data or {}).get(series_slug, 0)
+            except Exception:
+                pass
+            lb_earners = cache.get(f"lb_earners_{series_slug}", [])
+            user_psn = target_profile.display_psn_username
+            for idx, entry in enumerate(lb_earners):
+                if entry['psn_username'] == user_psn:
+                    user_lb_rank = idx + 1
+                    break
+
+            # User playtime stats from already-fetched profile_games
+            total_duration = timedelta()
+            for pg in profile_games.values():
+                user_games_played += 1
+                if pg.play_duration:
+                    total_duration += pg.play_duration
+                if pg.has_plat:
+                    user_platinums += 1
+            user_total_playtime = total_duration if total_duration.total_seconds() > 0 else None
+
+            # Per-stage user stats and progress
+            # For stage progress: tiers 1/3 and megamix check has_plat, tiers 2/4 check 100%
+            is_plat_tier = selected_tier in [1, 3] or badge.badge_type == 'megamix'
+            for data in structured_data:
+                stage_game_ids = {g['game'].id for g in data['games']}
+                stage_duration = timedelta()
+                stage_played = 0
+                stage_plats = 0
+                stage_completed = 0
+                for game_id in stage_game_ids:
+                    pg = profile_games.get(game_id)
+                    if pg:
+                        stage_played += 1
+                        if pg.play_duration:
+                            stage_duration += pg.play_duration
+                        if pg.has_plat:
+                            stage_plats += 1
+                        if (is_plat_tier and pg.has_plat) or (not is_plat_tier and pg.progress == 100):
+                            stage_completed += 1
+                total_stage_games = len(stage_game_ids)
+                data['user_stage_stats'] = {
+                    'total_playtime': stage_duration if stage_duration.total_seconds() > 0 else None,
+                    'games_played': stage_played,
+                    'total_games': total_stage_games,
+                    'platinums': stage_plats,
+                }
+                data['stage_progress'] = {
+                    'completed': stage_completed,
+                    'total': total_stage_games,
+                    'percentage': round(stage_completed / total_stage_games * 100, 1) if total_stage_games else 0,
+                }
+                # 3-state completion indicator
+                has_any_100 = any(
+                    profile_games.get(gid) and profile_games[gid].progress == 100
+                    for gid in stage_game_ids
+                )
+                has_any_plat = stage_plats > 0
+                if has_any_100:
+                    data['stage_completion_state'] = 'complete'
+                elif has_any_plat:
+                    data['stage_completion_state'] = 'partial'
+                else:
+                    data['stage_completion_state'] = 'incomplete'
+
+        # Aggregated stats from already-fetched profile_games (no new queries)
+        avg_progress = 0
+        total_trophies_earned = 0
+        user_trophy_breakdown = {'bronze': 0, 'silver': 0, 'gold': 0, 'platinum': 0}
+        first_played = None
+        most_recent_trophy = None
+        if target_profile and profile_games:
+            total_progress = sum(pg.progress for pg in profile_games.values())
+            avg_progress = round(total_progress / len(profile_games), 1)
+            total_trophies_earned = sum(pg.earned_trophies_count for pg in profile_games.values())
+            for pg in profile_games.values():
+                et = pg.earned_trophies or {}
+                user_trophy_breakdown['bronze'] += et.get('bronze', 0)
+                user_trophy_breakdown['silver'] += et.get('silver', 0)
+                user_trophy_breakdown['gold'] += et.get('gold', 0)
+                user_trophy_breakdown['platinum'] += et.get('platinum', 0)
+                if pg.first_played_date_time:
+                    if first_played is None or pg.first_played_date_time < first_played:
+                        first_played = pg.first_played_date_time
+                if pg.most_recent_trophy_date:
+                    if most_recent_trophy is None or pg.most_recent_trophy_date > most_recent_trophy:
+                        most_recent_trophy = pg.most_recent_trophy_date
+
+        # Avg community difficulty / hours across all series games
+        total_difficulty = 0
+        total_hours = 0
+        rated_games_count = 0
+        for data in structured_data:
+            for game_entry in data['games']:
+                ratings = game_entry.get('community_ratings')
+                if ratings:
+                    total_difficulty += ratings.get('avg_difficulty', 0)
+                    total_hours += ratings.get('avg_hours', 0)
+                    rated_games_count += 1
+        series_avg_difficulty = round(total_difficulty / rated_games_count, 1) if rated_games_count else None
+        series_avg_hours = round(total_hours / rated_games_count, 1) if rated_games_count else None
+
+        # Max Tier Distribution: exclusive % showing each earner's highest tier
+        t1 = tier_earner_counts.get(1, 0)
+        t2 = tier_earner_counts.get(2, 0)
+        t3 = tier_earner_counts.get(3, 0)
+        t4 = tier_earner_counts.get(4, 0)
+        max_tier_counts = {1: max(0, t1 - t2), 2: max(0, t2 - t3), 3: max(0, t3 - t4), 4: t4}
+        max_tier_pcts = {
+            tier: round(count / t1 * 100, 1) if t1 else 0
+            for tier, count in max_tier_counts.items()
+        }
+
+        # Community total XP for this series (cached by update_leaderboards cron)
+        community_total_xp = cache.get(f"lb_community_xp_{series_slug}", 0)
+
+        # Total series XP available (sum across all tiers, no new queries)
+        # Uses actual stage counts from structured_data instead of badge.required_stages,
+        # which stores min_required for megamix badges (not the real stage count)
+        tier_xp_map = {1: BRONZE_STAGE_XP, 2: SILVER_STAGE_XP, 3: GOLD_STAGE_XP, 4: PLAT_STAGE_XP}
+        total_series_xp_available = 0
+        for b in all_badges_list:
+            per_stage_xp = tier_xp_map.get(b.tier, 0)
+            tier_stage_count = sum(
+                1 for data in structured_data
+                if data['stage'].stage_number != 0 and data['stage'].applies_to_tier(b.tier)
+            )
+            total_series_xp_available += BADGE_TIER_XP + (tier_stage_count * per_stage_xp)
+
+        # Selected tier total XP (for tier selector display)
+        selected_tier_stage_xp = tier_xp_map.get(selected_tier, 0)
+        selected_tier_stage_count = sum(
+            1 for data in structured_data
+            if data['stage'].stage_number != 0 and data['stage'].applies_to_tier(selected_tier)
+        )
+        selected_tier_total_xp = BADGE_TIER_XP + (selected_tier_stage_count * selected_tier_stage_xp)
+        context['selected_tier_total_xp'] = selected_tier_total_xp
+        context['badge_tier_xp_bonus'] = BADGE_TIER_XP
+
+        # User's earned XP for the selected tier
+        selected_tier_user_xp = 0
+        if target_profile and selected_tier_badge:
+            sel_progress = badge_progress_dict.get(selected_tier_badge.id)
+            sel_completed = sel_progress.completed_concepts if sel_progress else 0
+            selected_tier_user_xp = sel_completed * tier_xp_map.get(selected_tier, 0)
+            if highest_tier_earned >= selected_tier:
+                selected_tier_user_xp += BADGE_TIER_XP
+        context['selected_tier_user_xp'] = selected_tier_user_xp
+
+        # Series completion for radial progress
+        series_stages_completed = 0
+        series_stages_total = 0
+        if target_profile and selected_tier in badge_completion:
+            tier_comp = badge_completion[selected_tier]
+            for stage_num, is_complete in tier_comp.items():
+                if stage_num != 0:  # Skip optional stages
+                    series_stages_total += 1
+                    if is_complete:
+                        series_stages_completed += 1
+
+        # Stage-level user stats (excluding stage 0)
+        user_stages_played = 0
+        user_stages_platinumed = 0
+        total_required_stages = 0
+        if target_profile:
+            for data in structured_data:
+                if data['stage'].stage_number == 0:
+                    continue
+                total_required_stages += 1
+                stage_stats = data.get('user_stage_stats')
+                if stage_stats:
+                    if stage_stats['games_played'] > 0:
+                        user_stages_played += 1
+                    if stage_stats['platinums'] > 0:
+                        user_stages_platinumed += 1
+        else:
+            total_required_stages = sum(1 for d in structured_data if d['stage'].stage_number != 0)
+
+        context['badge_series_stats'] = {
+            'tier_earner_counts': tier_earner_counts,
+            'total_games': total_games,
+            'user_series_xp': user_series_xp,
+            'user_lb_rank': user_lb_rank,
+            'user_total_playtime': user_total_playtime,
+            'user_stages_played': user_stages_played,
+            'user_stages_platinumed': user_stages_platinumed,
+            'total_required_stages': total_required_stages,
+            'avg_progress': avg_progress,
+            'total_trophies_earned': total_trophies_earned,
+            'series_stages_completed': series_stages_completed,
+            'series_stages_total': series_stages_total,
+            'series_completion_pct': round(series_stages_completed / series_stages_total * 100) if series_stages_total else 0,
+            'series_avg_difficulty': series_avg_difficulty,
+            'series_avg_hours': series_avg_hours,
+            'rated_games_count': rated_games_count,
+            'user_trophy_breakdown': user_trophy_breakdown,
+            'max_tier_pcts': max_tier_pcts,
+            'total_unique_earners': t1,
+            'first_played': first_played,
+            'most_recent_trophy': most_recent_trophy,
+            'total_series_xp_available': total_series_xp_available,
+            'community_total_xp': community_total_xp,
+        }
+
+        # Build tier requirements stage list (for the tier selector panel)
+        # Uses structured_data to avoid re-querying stages
+        tier_req_stages = []
+        tier_comp = badge_completion.get(selected_tier, {})
+        for data in structured_data:
+            stage = data['stage']
+            if stage.stage_number == 0:
+                continue
+            if not stage.applies_to_tier(selected_tier):
+                continue
+            tier_req_stages.append({
+                'stage': stage,
+                'is_complete': tier_comp.get(stage.stage_number, False),
+            })
+        context['tier_req_stages'] = tier_req_stages
+
+        logger.debug(f"Badge detail loaded {len(structured_data)} stage data entries for {series_slug}")
         context['stage_data'] = structured_data
         context['completion'] = badge_completion
         context['badge_requirements'] = badge_requirements
@@ -331,7 +696,6 @@ class BadgeDetailView(ProfileHotbarMixin, DetailView):
             {'text': context['badge'].effective_display_series},
         ]
 
-        series_slug = self.kwargs['series_slug']
         track_page_view('badge', series_slug, self.request)
         tier1_badge = series_badges.filter(tier=1).first()
         context['view_count'] = tier1_badge.view_count if tier1_badge else 0
@@ -357,7 +721,7 @@ class BadgeLeaderboardsView(ProfileHotbarMixin, DetailView):
 
     def get_object(self, queryset=None):
         series_slug = self.kwargs[self.slug_url_kwarg]
-        return Badge.objects.get(series_slug=series_slug, tier=1)
+        return get_object_or_404(Badge, series_slug=series_slug, tier=1)
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -388,6 +752,18 @@ class BadgeLeaderboardsView(ProfileHotbarMixin, DetailView):
                 if entry['psn_username'] == user_psn:
                     context['lb_progress_user_page'] = (idx // lb_progress_paginate_by) + 1
                     context['lb_progress_user_rank'] = idx + 1
+
+            # User stats for this series
+            highest_user_badge = UserBadge.objects.filter(
+                profile=user.profile, badge__series_slug=series_slug
+            ).select_related('badge').order_by('-badge__tier').first()
+            context['user_highest_tier'] = highest_user_badge.badge.tier if highest_user_badge else 0
+
+            try:
+                gamification = ProfileGamification.objects.get(profile=user.profile)
+                context['user_series_xp'] = gamification.series_badge_xp.get(series_slug, 0)
+            except ProfileGamification.DoesNotExist:
+                context['user_series_xp'] = 0
 
         lb_earners_paginator = Paginator(lb_earners, lb_earners_paginate_by)
         lb_earners_page = self.request.GET.get('lb_earners_page', 1)
@@ -431,8 +807,8 @@ class OverallBadgeLeaderboardsView(ProfileHotbarMixin, TemplateView):
         context = super().get_context_data(**kwargs)
         user = self.request.user
 
-        xp_key = f"lb_total_xp"
-        progress_key = f"lb_total_progress"
+        xp_key = "lb_total_xp"
+        progress_key = "lb_total_progress"
 
         lb_total_xp = cache.get(xp_key, [])
         lb_total_xp_paginate_by = 50
@@ -454,6 +830,15 @@ class OverallBadgeLeaderboardsView(ProfileHotbarMixin, TemplateView):
                 if entry['psn_username'] == user_psn:
                     context['lb_total_progress_user_page'] = (idx // lb_total_progress_paginate_by) + 1
                     context['lb_total_progress_user_rank'] = idx + 1
+
+            # User stats for overall leaderboards
+            try:
+                gamification = ProfileGamification.objects.get(profile=user.profile)
+                context['user_total_xp'] = gamification.total_badge_xp
+                context['user_total_badges'] = gamification.total_badges_earned
+            except ProfileGamification.DoesNotExist:
+                context['user_total_xp'] = 0
+                context['user_total_badges'] = 0
 
         lb_total_xp_paginator = Paginator(lb_total_xp, lb_total_xp_paginate_by)
         lb_total_xp_page = self.request.GET.get('lb_total_xp_page', 1)

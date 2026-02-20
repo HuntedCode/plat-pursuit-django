@@ -15,7 +15,7 @@ from django.views.decorators.cache import never_cache
 from django_ratelimit.decorators import ratelimit
 from datetime import timedelta
 from trophies.psn_manager import PSNManager
-from trophies.services.badge_service import initial_badge_check
+from trophies.services.badge_service import initial_badge_check, sync_discord_roles
 from trophies.services.milestone_service import check_all_milestones_for_user
 from trophies.milestone_constants import ALL_CALENDAR_TYPES
 import time
@@ -90,6 +90,7 @@ class VerifyView(APIView):
                     profile.link_discord(discord_id)
                     initial_badge_check(profile)
                     check_all_milestones_for_user(profile, exclude_types=ALL_CALENDAR_TYPES)
+                    sync_discord_roles(profile)
                     return Response({'success': True, 'message': 'Verified and linked successfully!'})
                 else:
                     return Response({'success': False, 'message': 'Verification failed. Check code and try again.'})
@@ -132,6 +133,42 @@ class UnlinkView(APIView):
         except Exception as e:
             logger.exception(f"Unlink error: {e}")
             return Response({'error': 'Internal error.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+class SyncRolesView(APIView):
+    """
+    Sync all earned Discord roles for a verified user.
+
+    Called by the bot on first verification and via the /sync-roles slash command.
+    Assigns badge roles, milestone roles, and premium roles. The bot's /assign-role
+    endpoint is idempotent, so re-assigning existing roles is harmless.
+    """
+    permission_classes = [IsAuthenticated, IsDiscordBot]
+
+    @method_decorator(ratelimit(key='user', rate='5/m', method='POST', block=True))
+    def post(self, request):
+        discord_id = request.data.get('discord_id')
+        if not discord_id:
+            return Response({'error': 'discord_id required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            profile = Profile.objects.select_related('user').get(discord_id=discord_id)
+        except Profile.DoesNotExist:
+            return Response({'error': 'No linked profile found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        if not profile.is_discord_verified:
+            return Response({'error': 'Profile is not Discord verified.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        from trophies.services.badge_service import sync_discord_roles
+        role_counts = sync_discord_roles(profile)
+
+        total = sum(role_counts.values())
+        return Response({
+            'success': True,
+            'roles_synced': total,
+            'breakdown': role_counts,
+            'psn_username': profile.display_psn_username,
+        })
+
 
 class RefreshView(APIView):
     permission_classes = [IsAuthenticated, IsDiscordBot]

@@ -20,6 +20,29 @@ from trophies.models import UserTitle
 logger = logging.getLogger("psn_api")
 
 
+def _build_badge_context(profile, badges):
+    """
+    Pre-fetch data needed by handle_badge to avoid N+1 queries per badge.
+
+    Returns a dict with:
+        - earned_badge_ids: set of Badge IDs the profile has earned
+        - badges_by_key: dict of (series_slug, tier) -> Badge for prerequisite lookups
+    """
+    from trophies.models import UserBadge
+
+    earned_badge_ids = set(
+        UserBadge.objects.filter(
+            profile=profile, badge__in=badges
+        ).values_list('badge_id', flat=True)
+    )
+    badges_by_key = {(b.series_slug, b.tier): b for b in badges}
+
+    return {
+        'earned_badge_ids': earned_badge_ids,
+        'badges_by_key': badges_by_key,
+    }
+
+
 def check_profile_badges(profile, profilegame_ids, skip_notis: bool = False):
     """
     Check and award badges for a profile based on recently updated games.
@@ -54,7 +77,10 @@ def check_profile_badges(profile, profilegame_ids, skip_notis: bool = False):
 
     stages = Stage.objects.filter(concepts__id__in=concept_ids).distinct()
     series_slugs = stages.values_list('series_slug', flat=True).distinct()
-    badges = Badge.objects.filter(series_slug__in=series_slugs).distinct().order_by('tier')
+    badges = list(Badge.objects.filter(series_slug__in=series_slugs).distinct().order_by('tier'))
+
+    # Pre-fetch context to avoid N+1 queries per badge
+    badge_ctx = _build_badge_context(profile, badges)
 
     # Use bulk context manager to defer gamification updates until all badges are processed
     # This prevents N separate ProfileGamification recalculations during sync
@@ -64,7 +90,7 @@ def check_profile_badges(profile, profilegame_ids, skip_notis: bool = False):
     with bulk_gamification_update():
         for badge in badges:
             try:
-                handle_badge(profile, badge, add_role_only=skip_notis)
+                handle_badge(profile, badge, add_role_only=skip_notis, _context=badge_ctx)
                 checked_count += 1
             except Exception:
                 logger.exception(
@@ -79,13 +105,14 @@ def check_profile_badges(profile, profilegame_ids, skip_notis: bool = False):
     return checked_count
 
 
-def _check_prerequisite_tier(profile, badge):
+def _check_prerequisite_tier(profile, badge, _context=None):
     """
     Check if previous tier badge has been earned (prerequisite check).
 
     Args:
         profile: Profile instance
         badge: Badge instance to check prerequisites for
+        _context: Optional pre-fetched context from _build_badge_context
 
     Returns:
         bool: True if prerequisite is met or no prerequisite exists, False otherwise
@@ -96,6 +123,15 @@ def _check_prerequisite_tier(profile, badge):
         return True
 
     prev_tier = badge.tier - 1
+
+    # Use pre-fetched context to avoid per-badge queries
+    if _context:
+        prev_badge = _context['badges_by_key'].get((badge.series_slug, prev_tier))
+        if prev_badge:
+            return prev_badge.id in _context['earned_badge_ids']
+        # prev tier not in current batch; fall through to DB query
+
+    # Fallback for standalone calls or when prev tier not in batch
     prev_badge = Badge.objects.filter(
         series_slug=badge.series_slug, tier=prev_tier
     ).first()
@@ -132,27 +168,33 @@ def _update_badge_progress(profile, badge, completed_count):
     return progress
 
 
-def _award_badge(profile, badge):
+def _award_badge(profile, badge, _already_checked_exists=None):
     """
     Award a badge to a profile and create associated title if applicable.
 
     Args:
         profile: Profile instance
         badge: Badge instance to award
+        _already_checked_exists: If provided (True/False), skip the .exists() check
 
     Returns:
         bool: True if badge was newly created, False if already exists
     """
     from trophies.models import UserBadge
 
-    user_badge_exists = UserBadge.objects.filter(
-        profile=profile, badge=badge
-    ).exists()
+    if _already_checked_exists is None:
+        user_badge_exists = UserBadge.objects.filter(
+            profile=profile, badge=badge
+        ).exists()
+    else:
+        user_badge_exists = _already_checked_exists
 
     if user_badge_exists:
         return False
 
-    UserBadge.objects.create(profile=profile, badge=badge)
+    _, created = UserBadge.objects.get_or_create(profile=profile, badge=badge)
+    if not created:
+        return False
     logger.info(
         f"Awarded badge {badge.effective_display_title} (tier: {badge.tier}) "
         f"to {profile.display_psn_username}"
@@ -198,7 +240,7 @@ def _revoke_badge(profile, badge):
         ).delete()
 
 
-def _process_badge_award_revoke(profile, badge, badge_earned, prev_badge_earned):
+def _process_badge_award_revoke(profile, badge, badge_earned, prev_badge_earned, _context=None):
     """
     Process badge awarding or revoking based on completion status.
 
@@ -207,21 +249,36 @@ def _process_badge_award_revoke(profile, badge, badge_earned, prev_badge_earned)
         badge: Badge instance
         badge_earned: Whether the badge requirements are met
         prev_badge_earned: Whether prerequisite tier is met
+        _context: Optional pre-fetched context to update after award/revoke
 
     Returns:
         bool: True if badge was newly created, False otherwise
     """
     from trophies.models import UserBadge
 
-    user_badge_exists = UserBadge.objects.filter(
-        profile=profile, badge=badge
-    ).exists()
+    # Use context to check existence if available, otherwise query
+    if _context:
+        user_badge_exists = badge.id in _context['earned_badge_ids']
+    else:
+        user_badge_exists = UserBadge.objects.filter(
+            profile=profile, badge=badge
+        ).exists()
     badge_created = False
 
     if prev_badge_earned and badge_earned and not user_badge_exists:
-        badge_created = _award_badge(profile, badge)
+        badge_created = _award_badge(profile, badge, _already_checked_exists=False)
+        # Update context so subsequent tier checks see this badge as earned
+        if badge_created and _context:
+            _context['earned_badge_ids'].add(badge.id)
     elif (not badge_earned or not prev_badge_earned) and user_badge_exists:
         _revoke_badge(profile, badge)
+        # Remove Discord role after transaction commits (avoid holding DB txn open during HTTP)
+        if badge.discord_role_id and profile.is_discord_verified and profile.discord_id:
+            role_id = badge.discord_role_id
+            transaction.on_commit(lambda rid=role_id: notify_bot_role_removed(profile, rid))
+        # Update context so subsequent tier checks see this badge as revoked
+        if _context:
+            _context['earned_badge_ids'].discard(badge.id)
 
     return badge_created
 
@@ -238,22 +295,23 @@ def _handle_discord_notifications(profile, badge, badge_created, add_role_only):
     """
     from trophies.discord_utils.discord_notifications import notify_new_badge
 
-    if not badge.discord_role_id:
+    if not badge_created or not badge.discord_role_id:
         return
 
     if not profile.is_discord_verified or not profile.discord_id:
         return
 
-    # Assign Discord role
-    notify_bot_role_earned(profile, badge.discord_role_id)
+    # Assign Discord role after transaction commits (avoid holding DB txn open during HTTP)
+    role_id = badge.discord_role_id
+    transaction.on_commit(lambda rid=role_id: notify_bot_role_earned(profile, rid))
 
     # Send Discord notification for newly earned badge
-    if not add_role_only and badge_created:
-        notify_new_badge(profile, badge)
+    if not add_role_only:
+        transaction.on_commit(lambda b=badge: notify_new_badge(profile, b))
 
 
 @transaction.atomic
-def handle_badge(profile, badge, add_role_only=False):
+def handle_badge(profile, badge, add_role_only=False, _context=None):
     """
     Handle badge logic for a single badge and profile.
 
@@ -270,6 +328,8 @@ def handle_badge(profile, badge, add_role_only=False):
         badge: Badge instance to evaluate
         add_role_only: If True, only assign Discord roles without sending
                        notification messages (used for initial/bulk checks)
+        _context: Optional pre-fetched context from _build_badge_context
+                  to avoid N+1 queries during batch processing
 
     Returns:
         bool: True if badge was newly created, False otherwise
@@ -278,7 +338,7 @@ def handle_badge(profile, badge, add_role_only=False):
         return False
 
     # Check prerequisite: Previous tier must be earned first
-    prev_badge_earned = _check_prerequisite_tier(profile, badge)
+    prev_badge_earned = _check_prerequisite_tier(profile, badge, _context=_context)
 
     # Handle series and collection badges (concept-based)
     if badge.badge_type in ['series', 'collection']:
@@ -298,7 +358,7 @@ def handle_badge(profile, badge, add_role_only=False):
         _update_badge_progress(profile, badge, completed_count)
 
         # Award or revoke badge based on completion
-        badge_created = _process_badge_award_revoke(profile, badge, badge_earned, prev_badge_earned)
+        badge_created = _process_badge_award_revoke(profile, badge, badge_earned, prev_badge_earned, _context=_context)
 
         # Handle Discord notifications
         if prev_badge_earned and badge_earned:
@@ -330,7 +390,7 @@ def handle_badge(profile, badge, add_role_only=False):
         _update_badge_progress(profile, badge, completed_count)
 
         # Award or revoke badge based on completion
-        badge_created = _process_badge_award_revoke(profile, badge, badge_earned, prev_badge_earned)
+        badge_created = _process_badge_award_revoke(profile, badge, badge_earned, prev_badge_earned, _context=_context)
 
         # Handle Discord notifications
         if prev_badge_earned and badge_earned:
@@ -338,6 +398,7 @@ def handle_badge(profile, badge, add_role_only=False):
 
         return badge_created
 
+    # 'misc' badges are admin-awarded only and not evaluated automatically.
     return False
 
 
@@ -365,7 +426,7 @@ def notify_bot_role_earned(profile, role_id):
             'user_id': profile.discord_id,
             'role_id': role_id,
         }
-        response = requests.post(url, json=data, headers=headers)
+        response = requests.post(url, json=data, headers=headers, timeout=10)
         response.raise_for_status()
         logger.info(
             f"Bot notified: Assigned role {role_id} to {profile.discord_id}."
@@ -401,7 +462,7 @@ def notify_bot_role_removed(profile, role_id):
             'user_id': profile.discord_id,
             'role_id': role_id,
         }
-        response = requests.post(url, json=data, headers=headers)
+        response = requests.post(url, json=data, headers=headers, timeout=10)
         response.raise_for_status()
         logger.info(
             f"Bot notified: Removed role {role_id} from {profile.discord_id}."
@@ -411,6 +472,76 @@ def notify_bot_role_removed(profile, role_id):
             f"Bot role removal failed for role {role_id} "
             f"(user {profile.psn_username})"
         )
+
+
+def sync_discord_roles(profile):
+    """
+    Sync ALL Discord roles for a verified profile.
+
+    Collects every role the user has earned (badges, milestones, premium) and
+    calls notify_bot_role_earned for each. The bot's /assign-role endpoint is
+    idempotent, so re-assigning an existing role is harmless.
+
+    Intended to be called:
+    - By the bot when a user first verifies (POST /api/v1/sync-roles/)
+    - By a /sync-roles slash command the user can trigger manually
+
+    Args:
+        profile: Profile instance (must have discord_id and is_discord_verified)
+
+    Returns:
+        dict with counts of roles synced by source
+    """
+    from trophies.models import UserBadge, UserMilestone
+
+    if not profile.is_discord_verified or not profile.discord_id:
+        return {'badge_roles': 0, 'milestone_roles': 0, 'premium_roles': 0}
+
+    role_counts = {'badge_roles': 0, 'milestone_roles': 0, 'premium_roles': 0}
+
+    # Badge roles
+    badge_role_ids = list(
+        UserBadge.objects.filter(
+            profile=profile,
+            badge__discord_role_id__isnull=False,
+        ).exclude(
+            badge__discord_role_id=0
+        ).values_list('badge__discord_role_id', flat=True)
+    )
+    for role_id in badge_role_ids:
+        notify_bot_role_earned(profile, role_id)
+    role_counts['badge_roles'] = len(badge_role_ids)
+
+    # Milestone roles
+    milestone_role_ids = list(
+        UserMilestone.objects.filter(
+            profile=profile,
+            milestone__discord_role_id__isnull=False,
+        ).exclude(
+            milestone__discord_role_id=0
+        ).values_list('milestone__discord_role_id', flat=True)
+    )
+    for role_id in milestone_role_ids:
+        notify_bot_role_earned(profile, role_id)
+    role_counts['milestone_roles'] = len(milestone_role_ids)
+
+    # Premium roles
+    if profile.user_is_premium and profile.user:
+        from users.constants import PREMIUM_DISCORD_ROLE_TIERS, SUPPORTER_DISCORD_ROLE_TIERS
+        tier = profile.user.premium_tier
+        if tier in PREMIUM_DISCORD_ROLE_TIERS and settings.DISCORD_PREMIUM_ROLE:
+            notify_bot_role_earned(profile, settings.DISCORD_PREMIUM_ROLE)
+            role_counts['premium_roles'] += 1
+        elif tier in SUPPORTER_DISCORD_ROLE_TIERS and settings.DISCORD_PREMIUM_PLUS_ROLE:
+            notify_bot_role_earned(profile, settings.DISCORD_PREMIUM_PLUS_ROLE)
+            role_counts['premium_roles'] += 1
+
+    total = sum(role_counts.values())
+    logger.info(
+        f"Synced {total} Discord role(s) for {profile.psn_username}: {role_counts}"
+    )
+
+    return role_counts
 
 
 @transaction.atomic
@@ -451,14 +582,17 @@ def initial_badge_check(profile, discord_notify: bool = True):
 
     stages = Stage.objects.filter(concepts__id__in=concept_ids).distinct()
     series_slugs = stages.values_list('series_slug', flat=True).distinct()
-    badges = Badge.objects.filter(series_slug__in=series_slugs).distinct().order_by('tier')
+    badges = list(Badge.objects.filter(series_slug__in=series_slugs).distinct().order_by('tier'))
+
+    # Pre-fetch context to avoid N+1 queries per badge
+    badge_ctx = _build_badge_context(profile, badges)
 
     role_granting_badges = []
     checked_count = 0
 
     for badge in badges:
         try:
-            created = handle_badge(profile, badge, add_role_only=True)
+            created = handle_badge(profile, badge, add_role_only=True, _context=badge_ctx)
             checked_count += 1
             if created and badge.discord_role_id:
                 role_granting_badges.append(badge)

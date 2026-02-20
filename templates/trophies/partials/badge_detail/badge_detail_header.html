@@ -1,116 +1,85 @@
 {% load custom_filters humanize static %}
 {% with target_profile as profile %}
-<div class="flex flex-col xl:flex-row justify-center gap-4">
-    {% if profile %}
-        <a href="{% url 'profile_detail' profile.psn_username %}" class="card shadow-lg shadow-neutral bg-base-100 border-4 border-base-300 w-full xl:w-9/30 transition-all duration-300 cursor-pointer hover:border-accent hover:shadow-accent">                    
-            <div class="relative card-body flex flex-col gap-1 items-center justify-between">
-                <div class="avatar hover:scale-105 transition-all duration-300">
-                    <div class="w-35 md:w-40 lg:w-45 rounded-full ring-4 ring-primary">
-                        <img class="bg-secondary/50" src="{{ profile.avatar_url }}" alt="{{ profile.display_psn_username }} avatar" loading="lazy" decoding="async" />
-                    </div>
-                </div>
-                <div class="flex flex-col items-center">
-                    <div class="flex flex-row items-end gap-2">
-                        <p class="text-2xl text-base-content font-bold mt-4 line-clamp-2">{{ profile.display_psn_username }}</p>
-                        {% if profile.is_plus %}
-                            <img src="{% static 'images/plus.png' %}" alt="PlayStation Plus member" class="w-7 h-7 mb-2" loading="lazy" decoding="async" />
-                        {% endif %}
-                    </div>
-                    <p class="text-base text-base-content/70 italic pr-1 line-clamp-2">{{ profile.about_me }}</p>
-                </div>
-                <div class="absolute top-2 right-4 text-xl md:text-2xl lg:text-3xl text-base-content font-bold text-center" aria-label="Country: {{ profile.country_code }}">{{ profile.country_code }}</div>
-            </div>
-        </a>
-    {% endif %}
-    <div class="card bg-base-100 border-4 border-base-300 shadow-lg shadow-neutral w-full xl:w-12/30 transition-all duration-300 hover:border-{{ badge.tier|badge_color }} hover:shadow-{{ badge.tier|badge_color }}">
-        <div class="card-body flex flex-col items-center justify-between gap-0">
-            <figure class="w-37 md:w-42 lg:w-48 h-37 md:h-42 lg:h-48 mx-auto overflow-visible {% if not is_earned %}grayscale hover:grayscale-0{% endif %}">
+<div class="card bg-base-100 border-4 border-base-300 shadow-lg shadow-neutral transition-all duration-300 hover:border-{{ badge.tier|badge_color }} hover:shadow-{{ badge.tier|badge_color }}">
+    <div class="card-body p-3 lg:p-5">
+        <div class="flex flex-col lg:flex-row items-center gap-3 lg:gap-5">
+            <!-- Badge Image -->
+            <figure class="w-16 lg:w-20 h-16 lg:h-20 shrink-0 {% if not is_earned %}grayscale hover:grayscale-0{% endif %}">
                 {% include 'partials/badge.html' with layers=badge.get_badge_layers %}
             </figure>
-            <div class="flex flex-col items-center">
-                <h3 class="text-2xl font-bold line-clamp-1 italic pr-1">{{ badge.effective_display_title }} - {% if is_earned %}<span class="text-{{ badge.tier|badge_color }}">{{ badge.tier|badge_tier }}</span>{% else %}Unearned{% endif %}</h3>
-                <h2 class="text-lg text-base-content/70 text-center italic line-clamp-1 pr-1">{{ badge.effective_display_series }}</h2>
+
+            <!-- Series Info -->
+            <div class="flex flex-col items-center lg:items-start gap-1 flex-1 min-w-0">
+                <div class="flex flex-row items-center gap-2 flex-wrap justify-center lg:justify-start">
+                    <h1 class="text-xl lg:text-2xl font-bold italic pr-1 line-clamp-1">{{ badge.effective_display_series }}</h1>
+                    {% if is_earned %}
+                        <span class="badge badge-sm badge-{{ badge.tier|badge_color }} font-bold italic">{{ badge.tier|badge_tier }}</span>
+                    {% else %}
+                        <span class="badge badge-sm badge-ghost font-bold italic">Unearned</span>
+                    {% endif %}
+                </div>
+                <p class="text-sm text-base-content/70 italic pr-1 line-clamp-1">{{ badge.effective_display_title }}</p>
+                {% if badge.most_recent_concept %}
+                    <p class="text-xs text-base-content/50 italic">Latest addition: {{ badge.most_recent_concept.unified_title }}</p>
+                {% endif %}
             </div>
+
+            <!-- User Context + Radial Progress -->
+            {% if profile %}
+                <div class="flex flex-row items-center gap-3 shrink-0">
+                    <!-- Radial Progress -->
+                    {% if badge_series_stats.series_stages_total %}
+                        <div class="flex flex-col items-center gap-0.5">
+                            <div class="radial-progress text-{{ selected_tier|badge_color }}" style="--value:{{ badge_series_stats.series_completion_pct }}; --size:3.5rem; --thickness:4px;" role="progressbar" aria-valuenow="{{ badge_series_stats.series_completion_pct }}" aria-valuemin="0" aria-valuemax="100">
+                                <span class="text-xs font-bold">{{ badge_series_stats.series_stages_completed }}/{{ badge_series_stats.series_stages_total }}</span>
+                            </div>
+                            <span class="text-xs text-base-content/50 italic font-bold">Stages</span>
+                        </div>
+                    {% endif %}
+
+                    <!-- User Pill -->
+                    <a href="{% url 'profile_detail' profile.psn_username %}" class="flex flex-row items-center gap-2 bg-base-200 rounded-box px-3 py-2 border-2 border-base-300 hover:border-accent hover:shadow-accent transition-all duration-300">
+                        <div class="avatar">
+                            <div class="w-8 h-8 rounded-full ring-2 ring-primary">
+                                <img src="{{ profile.avatar_url }}" alt="{{ profile.display_psn_username }}" loading="lazy" decoding="async" />
+                            </div>
+                        </div>
+                        <div class="flex flex-col">
+                            <span class="text-sm font-bold line-clamp-1">{{ profile.display_psn_username }}</span>
+                            {% if badge_series_stats.user_lb_rank %}
+                                <span class="text-xs text-warning font-bold italic">#{{ badge_series_stats.user_lb_rank }}</span>
+                            {% endif %}
+                        </div>
+                    </a>
+                </div>
+            {% endif %}
         </div>
     </div>
-    {% if badge.most_recent_concept %}
-        <div class="card shadow-lg shadow-neutral bg-base-100 border-4 border-base-300 w-full xl:w-9/30 transition-all duration-300 hover:border-success hover:shadow-success">
-            <div class="card-body flex flex-col items-center justify-between gap-0">
-                <div class="hover-3d mb-3 group">
-                    <figure class="border-4 border-base-300 rounded-box w-37 md:w-42 lg:w-48 transition-all duration-300 group-hover:border-success group-hover:scale-105">
-                        <img src="{{ badge.most_recent_concept.concept_icon_url }}" alt="{{ badge.most_recent_concept.unified_title }} cover" class="w-full object-cover" loading="lazy" decoding="async" />
-                    </figure>
-                    <div aria-hidden="true"></div>
-                    <div aria-hidden="true"></div>
-                    <div aria-hidden="true"></div>
-                    <div aria-hidden="true"></div>
-                    <div aria-hidden="true"></div>
-                    <div aria-hidden="true"></div>
-                    <div aria-hidden="true"></div>
-                    <div aria-hidden="true"></div>
-                </div>
-                <div class="flex flex-col items-center">
-                    <p class="text-2xl font-bold line-clamp-1 italic pr-1 mb-0.5">Most Recent Game</p>
-                    <p class="text-base text-base-content/70 text-center italic line-clamp-1 pr-1">{{ badge.most_recent_concept.unified_title }}</p>
-                </div>
-            </div>
-        </div>
-    {% endif %}
 </div>
 {% endwith %}
 
 {% if badge.badge_type == 'megamix' %}
-    <div class="card border-4 border-base-300 bg-base-100 shadow-lg shadow-neutral transition-all duration-300 hover:border-primary hover:shadow-primary mb-6 mt-6">
-        <div class="card-body px-4">
-            <h3 class="text-center text-3xl font-semibold legendary-title pr-1 italic mb-4">Megamix Requirements:</h3>
-            <div class="grid grid-cols-2 xl:grid-cols-4 xl:divide-x-4 xl:divide-base-300/70">
-                <div class="flex flex-col">
-                    <figure class="w-16 lg:w-25 h-16 lg:h-25 self-center hover:scale-105 mb-2">
-                        <img src="{% static 'images/badges/backdrops/1_backdrop.png' %}" />
-                    </figure>
-                    <h3 class="text-center text-sm lg:text-xl font-semibold pr-1 italic mb-2 lg:mb-4">Bronze Requirements:</h3>
-                    <div class="flex flex-row items-center justify-center h-16 lg:h-25 mb-2 lg:mb-4">
-                        <img src="{% static 'images/plat.png' %}" class="w-10 lg:w-15 h-10 lg:h-15 hover:scale-105" />
-                        <span class="text-3xl lg:text-6xl text-base-content font-bold ml-2 lg:ml-4"><span class="text-warning">{{ badge_requirements|dict_get:1 }}</span><span class="text-xl lg:text-3xl">/{{ stage_count }}</span></span>
+    <div class="collapse collapse-arrow border-4 border-base-300 bg-base-100 shadow-lg shadow-neutral transition-all duration-300 hover:border-primary hover:shadow-primary mt-4">
+        <input type="checkbox" />
+        <div class="collapse-title py-2">
+            <h3 class="text-center text-lg lg:text-xl font-semibold legendary-title pr-1 italic">Megamix Requirements</h3>
+        </div>
+        <div class="collapse-content px-3">
+            <div class="grid grid-cols-2 xl:grid-cols-4 gap-3 xl:gap-0 xl:divide-x-4 xl:divide-base-300/70">
+                {% for i in '1234' %}
+                    <div class="flex flex-col items-center gap-1 py-2">
+                        <figure class="w-12 lg:w-16 h-12 lg:h-16 hover:scale-105">
+                            <img src="{% static 'images/badges/backdrops/'|add:i|add:'_backdrop.png' %}" alt="{{ i|badge_tier }}" loading="lazy" decoding="async" />
+                        </figure>
+                        <h4 class="text-xs lg:text-sm font-semibold italic text-{{ i|badge_color }}">{{ i|badge_tier }}</h4>
+                        <div class="flex flex-row items-center justify-center gap-1">
+                            <img src="{% static 'images/plat.png' %}" class="w-6 lg:w-8 h-6 lg:h-8 hover:scale-105" alt="Platinum" loading="lazy" decoding="async" />
+                            <span class="text-xl lg:text-3xl font-bold text-{{ i|badge_color }}">{{ badge_requirements|dict_get:i }}</span>
+                            <span class="text-sm lg:text-lg text-base-content/70">/{{ stage_count }}</span>
+                        </div>
+                        <p class="text-xs text-base-content/50 italic">+3,000 XP</p>
                     </div>
-                    <h3 class="text-center text-sm lg:text-xl text-base-content/70 pr-1 italic">+3,000 Badge XP</h3>
-                </div>
-
-                <div class="flex flex-col">
-                    <figure class="w-16 lg:w-25 h-16 lg:h-25  self-center hover:scale-105 mb-2">
-                        <img src="{% static 'images/badges/backdrops/2_backdrop.png' %}" />
-                    </figure>
-                    <h3 class="text-center text-sm lg:text-xl font-semibold pr-1 italic mb-2 lg:mb-4">Silver Requirements:</h3>
-                    <div class="flex flex-row items-center justify-center h-16 lg:h-25 mb-2 lg:mb-4">
-                        <img src="{% static 'images/plat.png' %}" class="w-10 lg:w-15 h-10 lg:h-15 hover:scale-105" />
-                        <span class="text-3xl lg:text-6xl text-base-content font-bold ml-2 lg:ml-4"><span class="text-secondary">{{ badge_requirements|dict_get:2 }}</span><span class="text-xl lg:text-3xl">/{{ stage_count }}</span></span>
-                    </div>
-                    <h3 class="text-center text-sm lg:text-xl text-base-content/70 pr-1 italic">+3,000 Badge XP</h3>
-                </div>
-
-                <div class="flex flex-col">
-                    <figure class="w-16 lg:w-25 h-16 lg:h-25  self-center hover:scale-105 mb-2">
-                        <img src="{% static 'images/badges/backdrops/3_backdrop.png' %}" />
-                    </figure>
-                    <h3 class="text-center text-sm lg:text-xl font-semibold pr-1 italic mb-2 lg:mb-4">Gold Requirements:</h3>
-                    <div class="flex flex-row items-center justify-center h-16 lg:h-25 mb-2 lg:mb-4">
-                        <img src="{% static 'images/plat.png' %}" class="w-10 lg:w-15 h-10 lg:h-15 hover:scale-105" />
-                        <span class="text-3xl lg:text-6xl text-base-content font-bold ml-2 lg:ml-4"><span class="text-error">{{ badge_requirements|dict_get:3 }}</span><span class="text-xl lg:text-3xl">/{{ stage_count }}</span></span>
-                    </div>
-                    <h3 class="text-center text-sm lg:text-xl text-base-content/70 pr-1 italic">+3,000 Badge XP</h3>
-                </div>
-
-                <div class="flex flex-col">
-                    <figure class="w-16 lg:w-25 h-16 lg:h-25  self-center hover:scale-105 mb-2">
-                        <img src="{% static 'images/badges/backdrops/4_backdrop.png' %}" />
-                    </figure>
-                    <h3 class="text-center text-sm lg:text-xl font-semibold pr-1 italic mb-2 lg:mb-4">Platinum Requirements:</h3>
-                    <div class="flex flex-row items-center justify-center h-16 lg:h-25 mb-2 lg:mb-4">
-                        <img src="{% static 'images/plat.png' %}" class="w-10 lg:w-15 h-10 lg:h-15 hover:scale-105" />
-                        <span class="text-3xl lg:text-6xl text-base-content font-bold ml-2 lg:ml-4"><span class="text-primary">{{ badge_requirements|dict_get:4 }}</span><span class="text-xl lg:text-3xl">/{{ stage_count }}</span></span>
-                    </div>
-                    <h3 class="text-center text-sm lg:text-xl text-base-content/70 pr-1 italic">+3,000 Badge XP</h3>
-                </div>
+                {% endfor %}
             </div>
         </div>
     </div>

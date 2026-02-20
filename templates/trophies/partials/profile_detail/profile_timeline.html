@@ -9,7 +9,7 @@
                 {% if not forloop.first %}<hr style="background-color: var(--color-{{ event.color }});"/>{% endif %}
                 <div class="timeline-start text-center px-2 max-w-36">
                     <span class="text-sm font-semibold line-clamp-1" style="color: var(--color-{{ event.color }});">{{ event.title }}</span>
-                    <p class="text-xs text-base-content/70 italic line-clamp-1">{{ event.subtitle }}</p>
+                    <p class="text-xs text-base-content/70 italic pr-1 line-clamp-1">{{ event.subtitle }}</p>
                 </div>
                 <div class="timeline-middle">
                     <div class="w-3.5 h-3.5 rounded-full" style="background-color: var(--color-{{ event.color }});"></div>

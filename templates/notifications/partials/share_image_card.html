@@ -41,7 +41,7 @@ Color reference (converted from oklch):
 
 {% if format == 'landscape' %}
 {# Landscape Card: 1200x630 #}
-<div class="share-image-content" style="width: 1200px; height: 630px; background: linear-gradient(to bottom right, #2a2e34, #32363d, #2a2e34); padding: 20px; font-family: system-ui, -apple-system, sans-serif; box-sizing: border-box;">
+<div class="share-image-content" style="width: 1200px; height: 630px; background: linear-gradient(to bottom right, #2a2e34, #32363d, #2a2e34); padding: 20px; font-family: 'Inter', 'Poppins', system-ui, -apple-system, sans-serif; box-sizing: border-box;">
     <div style="width: 1160px; height: 590px; border: 3px solid #67d1f8; border-radius: 8px; box-shadow: 0 10px 15px -3px rgba(103, 209, 248, 0.2); overflow: hidden; display: flex; flex-direction: column; box-sizing: border-box;">
         {# Main Content Area #}
         <div style="flex: 1; display: flex; padding: 24px; gap: 24px; box-sizing: border-box;">
@@ -163,7 +163,7 @@ Color reference (converted from oklch):
                     <div style="display: inline-block; vertical-align: middle; background: rgba(42, 46, 52, 0.8); border: 4px solid #1a1b1f; border-radius: 8px; padding: 12px 16px; margin-right: 12px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.6);">
                         <div style="display: inline-block; width: 36px; height: 36px; border-radius: 4px; overflow: hidden; background: #2a2e34; vertical-align: middle; text-align: center; line-height: 36px;">
                             {% if badge.badge_image_url %}
-                            <img src="{{ badge.badge_image_url }}" style="width: 100%; height: 100%; object-fit: cover;" />
+                            <img src="{{ badge.badge_image_url }}" style="width: 100%; height: 100%; object-fit: contain;" />
                             {% else %}
                             <svg style="width: 24px; height: 24px; vertical-align: middle; margin-top: 6px;" viewBox="0 0 24 24" fill="none" stroke="#cd7f32" stroke-width="2">
                                 <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
@@ -183,7 +183,7 @@ Color reference (converted from oklch):
                 {% endif %}
 
                 {# Bottom: Rarity, Playtime & User Rating #}
-                <div style="margin-top: auto;">
+                <div style="margin-top: auto; display: flex; flex-wrap: wrap; align-items: center;">
                     {% if rarity_label %}
                     {% with rarity_colors=earn_rate|rarity_color_hex %}
                     <span style="display: inline-block; background: {{ rarity_colors.bg }}; border: 2px solid {{ rarity_colors.color }}; color: {{ rarity_colors.color }}; padding: 10px 20px; border-radius: 9999px; font-size: 16px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.05em; margin-right: 16px;">
@@ -200,26 +200,26 @@ Color reference (converted from oklch):
 
                     {# User Rating Pills - inline with other bottom items #}
                     {% if user_rating %}
-                    <span style="display: inline-flex; align-items: center; background: rgba(42, 46, 52, 0.8); border: 2px solid #fbbf24; color: #fbbf24; padding: 8px 16px; border-radius: 9999px; font-size: 14px; font-weight: bold; margin-right: 8px;">
+                    <span style="display: inline-flex; align-items: center; background: rgba(42, 46, 52, 0.8); border: 2px solid #fbbf24; color: #fbbf24; padding: 8px 12px; border-radius: 9999px; font-size: 13px; font-weight: bold; margin-right: 6px;">
                         <svg style="width: 12px; height: 12px; margin-right: 5px; flex-shrink: 0;" viewBox="0 0 24 24" fill="#fbbf24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg><span>{{ user_rating.overall_rating }}</span>
                     </span>
-                    <span style="display: inline-flex; align-items: center; background: rgba(42, 46, 52, 0.8); border: 2px solid #f472b6; color: #f472b6; padding: 8px 16px; border-radius: 9999px; font-size: 14px; font-weight: bold; margin-right: 8px;">
+                    <span style="display: inline-flex; align-items: center; background: rgba(42, 46, 52, 0.8); border: 2px solid #f472b6; color: #f472b6; padding: 8px 12px; border-radius: 9999px; font-size: 13px; font-weight: bold; margin-right: 6px;">
                         <svg style="width: 12px; height: 12px; margin-right: 5px; flex-shrink: 0;" viewBox="0 0 24 24" fill="none" stroke="#f472b6" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg><span>Diff {{ user_rating.difficulty }}/10</span>
                     </span>
-                    <span style="display: inline-flex; align-items: center; background: rgba(42, 46, 52, 0.8); border: 2px solid #67f8c8; color: #67f8c8; padding: 8px 16px; border-radius: 9999px; font-size: 14px; font-weight: bold; margin-right: 8px;">
+                    <span style="display: inline-flex; align-items: center; background: rgba(42, 46, 52, 0.8); border: 2px solid #67f8c8; color: #67f8c8; padding: 8px 12px; border-radius: 9999px; font-size: 13px; font-weight: bold; margin-right: 6px;">
                         <svg style="width: 12px; height: 12px; margin-right: 5px; flex-shrink: 0;" viewBox="0 0 24 24" fill="none" stroke="#67f8c8" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg><span>Grind {{ user_rating.grindiness }}/10</span>
                     </span>
-                    <span style="display: inline-flex; align-items: center; background: rgba(42, 46, 52, 0.8); border: 2px solid #9580ff; color: #9580ff; padding: 8px 16px; border-radius: 9999px; font-size: 14px; font-weight: bold; margin-right: 8px;">
+                    <span style="display: inline-flex; align-items: center; background: rgba(42, 46, 52, 0.8); border: 2px solid #9580ff; color: #9580ff; padding: 8px 12px; border-radius: 9999px; font-size: 13px; font-weight: bold; margin-right: 6px;">
                         <svg style="width: 12px; height: 12px; margin-right: 5px; flex-shrink: 0;" viewBox="0 0 24 24" fill="none" stroke="#9580ff" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg><span>Fun {{ user_rating.fun_ranking }}/10</span>
                     </span>
                     {% if not playtime %}
-                    <span style="display: inline-flex; align-items: center; background: rgba(42, 46, 52, 0.8); border: 2px solid #67d1f8; color: #67d1f8; padding: 8px 16px; border-radius: 9999px; font-size: 14px; font-weight: bold; margin-right: 8px;">
+                    <span style="display: inline-flex; align-items: center; background: rgba(42, 46, 52, 0.8); border: 2px solid #67d1f8; color: #67d1f8; padding: 8px 12px; border-radius: 9999px; font-size: 13px; font-weight: bold; margin-right: 6px;">
                         <svg style="width: 12px; height: 12px; margin-right: 5px; flex-shrink: 0;" viewBox="0 0 24 24" fill="none" stroke="#67d1f8" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg><span>{{ user_rating.hours_to_platinum }}h</span>
                     </span>
                     {% endif %}
                     {% else %}
                     {# No Rating Yet badge #}
-                    <span style="display: inline-flex; align-items: center; background: rgba(42, 46, 52, 0.8); border: 2px solid rgba(245, 247, 252, 0.3); color: rgba(245, 247, 252, 0.5); padding: 8px 16px; border-radius: 9999px; font-size: 14px; font-weight: bold; font-style: italic;">
+                    <span style="display: inline-flex; align-items: center; background: rgba(42, 46, 52, 0.8); border: 2px solid rgba(245, 247, 252, 0.3); color: rgba(245, 247, 252, 0.5); padding: 8px 12px; border-radius: 9999px; font-size: 13px; font-weight: bold; font-style: italic;">
                         <svg style="width: 12px; height: 12px; margin-right: 5px; flex-shrink: 0;" viewBox="0 0 24 24" fill="none" stroke="rgba(245, 247, 252, 0.5)" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg><span>No Rating Yet!</span>
                     </span>
                     {% endif %}
@@ -237,7 +237,7 @@ Color reference (converted from oklch):
 
 {% else %}
 {# Portrait Card: 1080x1350 #}
-<div class="share-image-content" style="width: 1080px; height: 1350px; background: linear-gradient(to bottom right, #2a2e34, #32363d, #2a2e34); padding: 20px; font-family: system-ui, -apple-system, sans-serif; box-sizing: border-box;">
+<div class="share-image-content" style="width: 1080px; height: 1350px; background: linear-gradient(to bottom right, #2a2e34, #32363d, #2a2e34); padding: 20px; font-family: 'Inter', 'Poppins', system-ui, -apple-system, sans-serif; box-sizing: border-box;">
     <div style="width: 1040px; height: 1310px; border: 3px solid #67d1f8; border-radius: 8px; box-shadow: 0 10px 15px -3px rgba(103, 209, 248, 0.2); overflow: hidden; display: flex; flex-direction: column; box-sizing: border-box;">
         {# Main Content Area #}
         <div style="flex: 1; display: flex; flex-direction: column; padding: 20px; gap: 14px; box-sizing: border-box;">
@@ -334,7 +334,7 @@ Color reference (converted from oklch):
                     <div style="display: inline-block; {% if badge_xp > 0 %}width: 31%;{% else %}width: 47%;{% endif %} background: rgba(42, 46, 52, 0.8); border: 4px solid #1a1b1f; border-radius: 8px; padding: 12px 14px; vertical-align: top; margin: 0 1%; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.6);">
                         <div style="display: inline-block; width: 38px; height: 38px; border-radius: 4px; overflow: hidden; background: #2a2e34; vertical-align: middle; text-align: center; line-height: 38px;">
                             {% if badge.badge_image_url %}
-                            <img src="{{ badge.badge_image_url }}" style="width: 100%; height: 100%; object-fit: cover;" />
+                            <img src="{{ badge.badge_image_url }}" style="width: 100%; height: 100%; object-fit: contain;" />
                             {% else %}
                             <svg style="width: 24px; height: 24px; vertical-align: middle; margin-top: 7px;" viewBox="0 0 24 24" fill="none" stroke="#cd7f32" stroke-width="2">
                                 <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>

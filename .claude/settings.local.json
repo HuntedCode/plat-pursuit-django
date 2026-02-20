@@ -16,7 +16,11 @@
       "WebFetch(domain:github.com)",
       "WebFetch(domain:docs.phaser.io)",
       "Bash(node --check:*)",
-      "Bash(set DJANGO_SETTINGS_MODULE=plat_pursuit.settings)"
+      "Bash(set DJANGO_SETTINGS_MODULE=plat_pursuit.settings)",
+      "Bash(git -C \"c:\\\\Users\\\\Jlowe\\\\Desktop\\\\PlatPursuit\" diff static/js/utils.js)",
+      "Bash(git -C \"c:\\\\Users\\\\Jlowe\\\\Desktop\\\\PlatPursuit\" diff templates/trophies/trophy_case.html)",
+      "Bash(git -C \"c:\\\\Users\\\\Jlowe\\\\Desktop\\\\PlatPursuit\" diff --stat static/css/output.css)",
+      "Bash(git -C \"c:\\\\Users\\\\Jlowe\\\\Desktop\\\\PlatPursuit\" diff static/css/output.css)"
     ]
   }
 }

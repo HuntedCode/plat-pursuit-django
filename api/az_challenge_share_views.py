@@ -7,7 +7,6 @@ from rest_framework.response import Response
 from rest_framework import status as http_status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.authentication import SessionAuthentication, TokenAuthentication
-from django.core.cache import cache
 from django.template.loader import render_to_string
 from django.http import HttpResponse
 from django.utils.decorators import method_decorator
@@ -16,7 +15,6 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from core.services.share_image_cache import ShareImageCache
 from core.services.tracking import track_site_event
 from trophies.models import Challenge, ProfileGame
-import base64
 import logging
 
 logger = logging.getLogger(__name__)
@@ -40,7 +38,8 @@ def _get_challenge_or_error(request, challenge_id):
             status=http_status.HTTP_404_NOT_FOUND,
         )
 
-    if challenge.profile_id != request.user.profile.id:
+    profile = getattr(request.user, 'profile', None)
+    if not profile or challenge.profile_id != profile.id:
         return None, Response(
             {'error': 'You can only generate share cards for your own challenges'},
             status=http_status.HTTP_403_FORBIDDEN,
@@ -83,7 +82,7 @@ def _build_template_context(challenge, format_type, featured_letter=None):
     # Fetch all images in parallel
     cached_results = {}
     if urls_to_cache:
-        with ThreadPoolExecutor(max_workers=10) as executor:
+        with ThreadPoolExecutor(max_workers=min(len(urls_to_cache), 5)) as executor:
             future_to_key = {
                 executor.submit(ShareImageCache.fetch_and_cache, url): key
                 for key, url in urls_to_cache.items()
@@ -93,6 +92,7 @@ def _build_template_context(challenge, format_type, featured_letter=None):
                 try:
                     cached_results[key] = future.result()
                 except Exception:
+                    logger.warning(f"Failed to cache image for {key}", exc_info=True)
                     cached_results[key] = ''
 
     # Build slot data using pre-fetched cached icons
@@ -238,44 +238,34 @@ class AZChallengeSharePNGView(APIView):
         theme_key = request.query_params.get('theme', 'default')
         featured_letter = request.query_params.get('featured_letter', '')
 
-        # Check Redis cache for a previously rendered PNG
-        # PNG bytes are base64-encoded for JSON serializer compatibility
-        cache_key = f"az_share_png:{challenge_id}:{format_type}:{theme_key}:{featured_letter}"
-        cached = cache.get(cache_key)
-        png_bytes = base64.b64decode(cached) if cached else None
+        context, _ = _build_template_context(
+            challenge, format_type, featured_letter,
+        )
 
-        if not png_bytes:
-            context, _ = _build_template_context(
-                challenge, format_type, featured_letter,
+        html = render_to_string(TEMPLATE, context)
+
+        try:
+            from core.services.playwright_renderer import render_png
+            png_bytes = render_png(
+                html,
+                format_type=format_type,
+                theme_key=theme_key,
             )
-
-            html = render_to_string(TEMPLATE, context)
-
-            try:
-                from core.services.playwright_renderer import render_png
-                png_bytes = render_png(
-                    html,
-                    format_type=format_type,
-                    theme_key=theme_key,
-                )
-            except Exception as e:
-                logger.exception(
-                    f"[AZ-SHARE-PNG] Playwright render failed for challenge {challenge_id}: {e}"
-                )
-                return Response(
-                    {'error': 'Failed to render share image'},
-                    status=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
-                )
-
-            # Cache the rendered PNG for 10 minutes (base64-encoded for JSON serializer)
-            cache.set(cache_key, base64.b64encode(png_bytes).decode('ascii'), timeout=600)
+        except Exception as e:
+            logger.exception(
+                f"[AZ-SHARE-PNG] Playwright render failed for challenge {challenge_id}: {e}"
+            )
+            return Response(
+                {'error': 'Failed to render share image'},
+                status=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
 
         # Track the download
         track_site_event('az_challenge_share_download', str(challenge_id), request)
 
         safe_name = "".join(
             c for c in challenge.name if c.isalnum() or c in (' ', '-', '_')
-        ).strip()
+        ).strip() or 'challenge'
         filename = f"az-challenge-{safe_name}-{format_type}.png"
 
         response = HttpResponse(png_bytes, content_type='image/png')

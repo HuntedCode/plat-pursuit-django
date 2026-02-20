@@ -2,13 +2,11 @@
 REST API views for Platinum Calendar Challenge share card images.
 Provides HTML preview, PNG download, and game background search endpoints.
 """
-import base64
 import logging
 import os
 import tempfile
 
 import requests as http_requests
-from django.core.cache import cache
 from django.db.models import Q
 from django.db.models.functions import Lower
 from django.http import HttpResponse
@@ -170,7 +168,6 @@ class CalendarChallengeSharePNGView(APIView):
 
         theme_key = request.query_params.get('theme', 'default')
         show_us_holidays = request.query_params.get('show_us_holidays') == 'true'
-        holidays_flag = '1' if show_us_holidays else '0'
 
         # Game background support
         game_bg_concept_id = request.query_params.get('game_bg_concept_id', '')
@@ -180,7 +177,7 @@ class CalendarChallengeSharePNGView(APIView):
         if game_bg_concept_id:
             try:
                 concept_id = int(game_bg_concept_id)
-                concept = Concept.objects.get(id=concept_id, bg_url__isnull=False)
+                concept = Concept.objects.get(id=concept_id, bg_url__isnull=False, bg_url__gt='')
 
                 # Validate user has platted or 100% a game with this concept
                 has_access = ProfileGame.objects.filter(
@@ -203,58 +200,48 @@ class CalendarChallengeSharePNGView(APIView):
                     status=http_status.HTTP_400_BAD_REQUEST,
                 )
 
-        # Check Redis cache for a previously rendered PNG
-        bg_flag = game_bg_concept_id or '0'
-        cache_key = f"calendar_share_png:{challenge_id}:{format_type}:{theme_key}:{holidays_flag}:{bg_flag}"
-        cached = cache.get(cache_key)
-        png_bytes = base64.b64decode(cached) if cached else None
+        context = _build_calendar_template_context(challenge, format_type, show_us_holidays=show_us_holidays)
+        html = render_to_string(TEMPLATE, context)
 
-        if not png_bytes:
-            context = _build_calendar_template_context(challenge, format_type, show_us_holidays=show_us_holidays)
-            html = render_to_string(TEMPLATE, context)
-
-            # Download game background image to temp file if needed
-            if game_bg_concept_id and concept:
-                try:
-                    concept_bg_path = _fetch_bg_to_tempfile(concept.bg_url)
-                except Exception:
-                    logger.exception(
-                        f"[CALENDAR-SHARE-PNG] Failed to download game bg for concept {concept.id}"
-                    )
-
+        # Download game background image to temp file if needed
+        if game_bg_concept_id and concept:
             try:
-                from core.services.playwright_renderer import render_png
-                png_bytes = render_png(
-                    html,
-                    format_type=format_type,
-                    theme_key=theme_key,
-                    concept_bg_path=concept_bg_path,
-                )
-            except Exception as e:
+                concept_bg_path = _fetch_bg_to_tempfile(concept.bg_url)
+            except Exception:
                 logger.exception(
-                    f"[CALENDAR-SHARE-PNG] Playwright render failed for challenge {challenge_id}: {e}"
+                    f"[CALENDAR-SHARE-PNG] Failed to download game bg for concept {concept.id}"
                 )
-                return Response(
-                    {'error': 'Failed to render share image'},
-                    status=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
-                )
-            finally:
-                # Clean up temp file
-                if concept_bg_path:
-                    try:
-                        os.unlink(concept_bg_path)
-                    except OSError:
-                        pass
 
-            # Cache the rendered PNG for 10 minutes (base64-encoded for JSON serializer)
-            cache.set(cache_key, base64.b64encode(png_bytes).decode('ascii'), timeout=600)
+        try:
+            from core.services.playwright_renderer import render_png
+            png_bytes = render_png(
+                html,
+                format_type=format_type,
+                theme_key=theme_key,
+                concept_bg_path=concept_bg_path,
+            )
+        except Exception as e:
+            logger.exception(
+                f"[CALENDAR-SHARE-PNG] Playwright render failed for challenge {challenge_id}: {e}"
+            )
+            return Response(
+                {'error': 'Failed to render share image'},
+                status=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+        finally:
+            # Clean up temp file
+            if concept_bg_path:
+                try:
+                    os.unlink(concept_bg_path)
+                except OSError:
+                    pass
 
         # Track the download
         track_site_event('calendar_challenge_share_download', str(challenge_id), request)
 
         safe_name = "".join(
             c for c in challenge.name if c.isalnum() or c in (' ', '-', '_')
-        ).strip()
+        ).strip() or 'challenge'
         filename = f"calendar-challenge-{safe_name}-{format_type}.png"
 
         response = HttpResponse(png_bytes, content_type='image/png')
@@ -302,22 +289,19 @@ class GameBackgroundSearchView(APIView):
         if query:
             qs = qs.filter(game__concept__unified_title__icontains=query)
 
-        qs = qs[:50]
+        # Deduplicate by concept at the DB level, then limit to 20
+        concept_ids = list(
+            qs.values_list('game__concept_id', flat=True)
+            .distinct()[:20]
+        )
 
-        results = []
-        seen_concepts = set()
-        for pg in qs:
-            concept = pg.game.concept
-            if concept.id in seen_concepts:
-                continue
-            seen_concepts.add(concept.id)
-            results.append({
-                'concept_id': concept.id,
-                'title_name': concept.unified_title,
-                'bg_url': concept.bg_url,
-                'icon_url': concept.concept_icon_url or '',
-            })
-            if len(results) >= 20:
-                break
+        concepts = Concept.objects.filter(id__in=concept_ids).order_by(Lower('unified_title'))
+
+        results = [{
+            'concept_id': c.id,
+            'title_name': c.unified_title,
+            'bg_url': c.bg_url,
+            'icon_url': c.concept_icon_url or '',
+        } for c in concepts]
 
         return Response({'results': results})

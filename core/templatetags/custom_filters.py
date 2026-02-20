@@ -151,7 +151,7 @@ def badge_tier_xp(tier):
 def multiply(value, arg):
     try:
         return float(value) * float(arg)
-    except:
+    except (TypeError, ValueError):
         return ''
 
 @register.filter
@@ -201,7 +201,13 @@ def rarity_color_hex(earn_rate):
 
 @register.filter
 def dict_get(dict_obj, key):
-    return dict_obj.get(key)
+    result = dict_obj.get(key)
+    if result is None and isinstance(key, str):
+        try:
+            result = dict_obj.get(int(key))
+        except (ValueError, TypeError):
+            pass
+    return result
 
 @register.filter
 def format_date(value, arg=None):
@@ -232,7 +238,7 @@ def format_date(value, arg=None):
                 except ValueError:
                     return value
 
-    if not isinstance(value, (datetime, timezone.datetime)):
+    if not isinstance(value, datetime):
         return value
 
     current_tz = timezone.get_current_timezone()

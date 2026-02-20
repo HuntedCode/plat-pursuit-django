@@ -7,7 +7,6 @@ from rest_framework.response import Response
 from rest_framework import status as http_status
 from rest_framework.permissions import IsAuthenticated, IsAdminUser
 from rest_framework.authentication import SessionAuthentication, TokenAuthentication
-from django.core.cache import cache
 from django.utils.decorators import method_decorator
 from django.template.loader import render_to_string
 from django_ratelimit.decorators import ratelimit
@@ -16,10 +15,10 @@ from notifications.services.scheduled_notification_service import ScheduledNotif
 from notifications.services.shareable_data_service import ShareableDataService
 from notifications.models import Notification
 from django.contrib.auth import get_user_model
-import base64
 import logging
 from django.http import HttpResponse
 from core.services.share_image_cache import ShareImageCache
+from core.services.share_card_utils import to_int, format_share_date, process_badge_images, resolve_temp_path
 
 logger = logging.getLogger(__name__)
 CustomUser = get_user_model()
@@ -416,7 +415,7 @@ class NotificationShareImageGenerateView(APIView):
                 logger.info(f"Generated {fmt} share image for notification {pk}")
             except Exception as e:
                 logger.exception(f"Failed to generate {fmt} image for notification {pk}: {e}")
-                results[fmt] = {'error': str(e)}
+                results[fmt] = {'error': 'Failed to generate image'}
 
         return Response({
             'success': True,
@@ -629,21 +628,21 @@ class NotificationShareImageHTMLView(APIView):
 
         # Fetch LIVE badge data from database (metadata may be stale)
         badge_xp, tier1_badges = self._get_live_badge_data(request.user.profile, metadata)
-        badge_xp = self._to_int(badge_xp)
-        processed_badges = self._process_badge_images(tier1_badges)
+        badge_xp = to_int(badge_xp)
+        processed_badges = process_badge_images(tier1_badges)
 
         # Format date strings for display
-        first_played_date_time = self._format_date(metadata.get('first_played_date_time'))
-        earned_date_time = self._format_date(metadata.get('earned_date_time'))
+        first_played_date_time = format_share_date(metadata.get('first_played_date_time'))
+        earned_date_time = format_share_date(metadata.get('earned_date_time'))
 
         return {
             'format': format_type,
             'game_name': metadata.get('game_name', 'Unknown Game'),
             'username': metadata.get('username', 'Player'),
-            'total_plats': self._to_int(metadata.get('user_total_platinums', 0)),
-            'progress': self._to_int(metadata.get('progress_percentage', 0)),
-            'earned_trophies': self._to_int(metadata.get('earned_trophies_count', 0)),
-            'total_trophies': self._to_int(metadata.get('total_trophies_count', 0)),
+            'total_plats': to_int(metadata.get('user_total_platinums', 0)),
+            'progress': to_int(metadata.get('progress_percentage', 0)),
+            'earned_trophies': to_int(metadata.get('earned_trophies_count', 0)),
+            'total_trophies': to_int(metadata.get('total_trophies_count', 0)),
             'game_image': game_image_data,
             'trophy_icon': trophy_icon_data,
             'rarity_label': metadata.get('rarity_label', ''),
@@ -654,42 +653,12 @@ class NotificationShareImageHTMLView(APIView):
             'is_regional': metadata.get('is_regional', False),
             'first_played_date_time': first_played_date_time,
             'earned_date_time': earned_date_time,
-            'yearly_plats': self._to_int(metadata.get('yearly_plats', 0)),
-            'earned_year': self._to_int(metadata.get('earned_year', 0)),
+            'yearly_plats': to_int(metadata.get('yearly_plats', 0)),
+            'earned_year': to_int(metadata.get('earned_year', 0)),
             'badge_xp': badge_xp,
             'tier1_badges': processed_badges,
             'user_rating': self._get_live_user_rating(request.user.profile, metadata),
         }
-
-    @staticmethod
-    def _to_int(value, default=0):
-        """Safely convert value to int."""
-        if value is None:
-            return default
-        try:
-            return int(value)
-        except (ValueError, TypeError):
-            return default
-
-    @staticmethod
-    def _format_date(iso_string):
-        """
-        Format an ISO date string to a readable format.
-        Example: "2024-01-15T14:30:00" -> "Jan 15, 2024"
-        """
-        if not iso_string:
-            return ''
-        try:
-            from datetime import datetime
-            # Parse ISO format (handles both with and without timezone)
-            if 'T' in iso_string:
-                dt = datetime.fromisoformat(iso_string.replace('Z', '+00:00'))
-            else:
-                dt = datetime.fromisoformat(iso_string)
-            # Format as "Jan 15, 2024"
-            return dt.strftime('%b %d, %Y')
-        except (ValueError, TypeError):
-            return ''
 
     @staticmethod
     def _get_live_user_rating(profile, metadata):
@@ -702,13 +671,8 @@ class NotificationShareImageHTMLView(APIView):
             return None
 
         try:
-            from trophies.models import Concept
-            concept = Concept.objects.filter(id=concept_id).first()
-            if not concept:
-                return None
-
             from trophies.models import Game
-            game = Game.objects.filter(concept=concept).first()
+            game = Game.objects.filter(concept_id=concept_id).first()
             if not game:
                 return None
 
@@ -744,67 +708,6 @@ class NotificationShareImageHTMLView(APIView):
             logger.warning(f"[SHARE-HTML] Failed to fetch live badge data: {e}")
             return metadata.get('badge_xp', 0), metadata.get('tier1_badges', [])
 
-    def _process_badge_images(self, badges):
-        """
-        Process badge images for share image rendering.
-        Converts badge image URLs to same-origin temp files or base64 data URLs.
-
-        Handles three types of paths:
-        1. Full URLs (http/https) - cached as same-origin temp files
-        2. Media paths (/media/...) - converted to base64 (small local files)
-        3. Static paths (images/...) - converted to base64 (small local files)
-        """
-        if not badges:
-            return []
-
-        processed = []
-        default_badge_image = None
-
-        for badge in badges:
-            badge_copy = dict(badge)
-            badge_image_url = badge_copy.get('badge_image_url', '')
-
-            if badge_image_url:
-                # Case 1: Full URL - cache as same-origin temp file
-                if badge_image_url.startswith(('http://', 'https://')):
-                    cached_url = ShareImageCache.fetch_and_cache(badge_image_url)
-                    if cached_url:
-                        badge_copy['badge_image_url'] = cached_url
-
-                # Case 2: Media file path (/media/...) - convert to base64 (small local files)
-                elif badge_image_url.startswith('/media/'):
-                    from django.conf import settings
-                    relative_path = badge_image_url[len('/media/'):]
-                    file_path = settings.MEDIA_ROOT / relative_path
-                    data_uri = ShareImageCache.local_file_to_base64(str(file_path))
-                    if data_uri:
-                        badge_copy['badge_image_url'] = data_uri
-
-                # Case 3: Static file path - convert to base64 (small local files)
-                else:
-                    if default_badge_image is None:
-                        from django.contrib.staticfiles import finders
-                        default_path = finders.find(badge_image_url)
-                        if default_path:
-                            default_badge_image = ShareImageCache.local_file_to_base64(default_path)
-                        else:
-                            default_badge_image = ''
-                    badge_copy['badge_image_url'] = default_badge_image
-            else:
-                # No image URL provided - use default badge image
-                if default_badge_image is None:
-                    from django.contrib.staticfiles import finders
-                    default_path = finders.find('images/badges/default.png')
-                    if default_path:
-                        default_badge_image = ShareImageCache.local_file_to_base64(default_path)
-                    else:
-                        default_badge_image = ''
-                badge_copy['badge_image_url'] = default_badge_image
-
-            processed.append(badge_copy)
-
-        return processed
-
 
 
 class NotificationShareImagePNGView(APIView):
@@ -839,61 +742,42 @@ class NotificationShareImagePNGView(APIView):
 
         theme_key = request.query_params.get('theme', 'default')
 
-        # Check Redis cache for a previously rendered PNG
-        # PNG bytes are base64-encoded for JSON serializer compatibility
-        cache_key = f"notification_share_png:{pk}:{format_type}:{theme_key}"
-        cached = cache.get(cache_key)
-        png_bytes = base64.b64decode(cached) if cached else None
+        html_view = NotificationShareImageHTMLView()
+        context = html_view._build_share_context(request, notification, format_type)
 
-        if not png_bytes:
-            html_view = NotificationShareImageHTMLView()
-            context = html_view._build_share_context(request, notification, format_type)
+        html = render_to_string('notifications/partials/share_image_card.html', context)
 
-            html = render_to_string('notifications/partials/share_image_card.html', context)
+        # Resolve game image paths for game art themes
+        game_image_path = resolve_temp_path(context.get('game_image'))
+        metadata = notification.metadata or {}
+        concept_bg_url = metadata.get('concept_bg_url', '')
+        concept_bg_data = ShareImageCache.fetch_and_cache(concept_bg_url) if concept_bg_url else ''
+        concept_bg_path = resolve_temp_path(concept_bg_data)
 
-            # Resolve game image paths for game art themes
-            game_image_path = self._resolve_temp_path(context.get('game_image'))
-            metadata = notification.metadata or {}
-            concept_bg_url = metadata.get('concept_bg_url', '')
-            concept_bg_data = ShareImageCache.fetch_and_cache(concept_bg_url) if concept_bg_url else ''
-            concept_bg_path = self._resolve_temp_path(concept_bg_data)
-
-            try:
-                from core.services.playwright_renderer import render_png
-                png_bytes = render_png(
-                    html,
-                    format_type=format_type,
-                    theme_key=theme_key,
-                    game_image_path=game_image_path,
-                    concept_bg_path=concept_bg_path,
-                )
-            except Exception as e:
-                logger.exception(f"[SHARE-PNG] Playwright render failed for notification {pk}: {e}")
-                return Response(
-                    {'error': 'Failed to render share image'},
-                    status=http_status.HTTP_500_INTERNAL_SERVER_ERROR
-                )
-
-            # Cache the rendered PNG for 30 minutes (base64-encoded for JSON serializer)
-            cache.set(cache_key, base64.b64encode(png_bytes).decode('ascii'), timeout=1800)
+        try:
+            from core.services.playwright_renderer import render_png
+            png_bytes = render_png(
+                html,
+                format_type=format_type,
+                theme_key=theme_key,
+                game_image_path=game_image_path,
+                concept_bg_path=concept_bg_path,
+            )
+        except Exception as e:
+            logger.exception(f"[SHARE-PNG] Playwright render failed for notification {pk}: {e}")
+            return Response(
+                {'error': 'Failed to render share image'},
+                status=http_status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
         game_name = (notification.metadata or {}).get('game_name', 'share-card')
-        safe_name = "".join(c for c in game_name if c.isalnum() or c in (' ', '-', '_')).strip()
+        safe_name = "".join(c for c in game_name if c.isalnum() or c in (' ', '-', '_')).strip() or 'share-card'
         filename = f"{safe_name}-{format_type}.png"
 
         response = HttpResponse(png_bytes, content_type='image/png')
         response['Content-Disposition'] = f'attachment; filename="{filename}"'
         return response
 
-    @staticmethod
-    def _resolve_temp_path(serve_path):
-        """Convert a /api/v1/share-temp/<file> path to an absolute filesystem path."""
-        if not serve_path or not serve_path.startswith('/api/v1/share-temp/'):
-            return None
-        filename = serve_path.split('/')[-1]
-        from core.services.share_image_cache import SHARE_TEMP_DIR
-        full_path = SHARE_TEMP_DIR / filename
-        return str(full_path) if full_path.exists() else None
 
 
 class NotificationRatingView(APIView):
@@ -1165,12 +1049,11 @@ class AdminUserSearchView(APIView):
 
         users = []
         for profile in profiles:
-            if profile.user:
-                users.append({
-                    'id': profile.user.id,
-                    'psn_username': profile.psn_username,
-                    'email': profile.user.email,
-                    'avatar_url': profile.avatar_url if hasattr(profile, 'avatar_url') else '',
-                })
+            users.append({
+                'id': profile.user.id,
+                'psn_username': profile.psn_username,
+                'email': profile.user.email,
+                'avatar_url': profile.avatar_url or '',
+            })
 
         return Response({'users': users})

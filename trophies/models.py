@@ -274,10 +274,56 @@ class Profile(models.Model):
         check_all_milestones_for_user(self, criteria_type='discord_linked')
     
     def unlink_discord(self):
+        # Collect all Discord roles to remove while discord_id is still set
+        all_role_ids = set()
+        should_remove_roles = self.discord_id and self.is_discord_verified
+
+        if should_remove_roles:
+            from trophies.services.badge_service import notify_bot_role_removed
+
+            # Collect badge roles
+            all_role_ids.update(
+                UserBadge.objects.filter(profile=self, badge__discord_role_id__isnull=False)
+                .exclude(badge__discord_role_id='')
+                .values_list('badge__discord_role_id', flat=True)
+            )
+
+            # Collect milestone roles
+            all_role_ids.update(
+                UserMilestone.objects.filter(profile=self, milestone__discord_role_id__isnull=False)
+                .exclude(milestone__discord_role_id='')
+                .values_list('milestone__discord_role_id', flat=True)
+            )
+
+            # Collect premium roles if applicable
+            from django.conf import settings
+            if self.user_is_premium:
+                for role_setting in ('DISCORD_PREMIUM_ROLE', 'DISCORD_PREMIUM_PLUS_ROLE'):
+                    role_id = getattr(settings, role_setting, 0)
+                    if role_id:
+                        all_role_ids.add(role_id)
+
+        # Clear Discord fields immediately, defer role removal HTTP calls
+        discord_id_snapshot = self.discord_id
         self.discord_id = None
         self.discord_linked_at = None
         self.is_discord_verified = False
         self.save(update_fields=['discord_id', 'discord_linked_at', 'is_discord_verified'])
+
+        # Schedule role removal after transaction commits (avoid blocking HTTP calls)
+        if should_remove_roles and all_role_ids and discord_id_snapshot:
+            from django.db import transaction
+
+            class _ProfileSnapshot:
+                """Lightweight snapshot to pass discord_id to notify_bot_role_removed."""
+                def __init__(self, discord_id, psn_username):
+                    self.discord_id = discord_id
+                    self.psn_username = psn_username
+
+            snapshot = _ProfileSnapshot(discord_id_snapshot, self.psn_username)
+            for role_id in all_role_ids:
+                rid = role_id
+                transaction.on_commit(lambda rid=rid: notify_bot_role_removed(snapshot, rid))
     
     def set_history_public_flag(self, value: bool):
         self.psn_history_public = value
@@ -346,7 +392,7 @@ class Profile(models.Model):
             self.recent_plat = platinums.filter(earned_date_time=recent_date).first() if recent_date else None
 
             min_rate = platinums.aggregate(Min('trophy__trophy_earn_rate'))['trophy__trophy_earn_rate__min']
-            self.rarest_plat = platinums.filter(trophy__trophy_earn_rate=min_rate).order_by('trophy__earn_rate').first() if min_rate is not None else None
+            self.rarest_plat = platinums.filter(trophy__trophy_earn_rate=min_rate).order_by('trophy__trophy_earn_rate').first() if min_rate is not None else None
 
         self.save(update_fields=['recent_plat', 'rarest_plat'])
 
@@ -1077,12 +1123,12 @@ class Badge(models.Model):
 
     def update_most_recent_concept(self):
         concepts = Concept.objects.filter(stages__series_slug=self.series_slug).distinct()
-        if not concepts:
+        if not concepts.exists():
             self.most_recent_concept = None
         else:
             max_date = concepts.aggregate(Max('release_date'))['release_date__max']
             self.most_recent_concept = concepts.filter(release_date=max_date).first() if max_date else None
-            self.save(update_fields=['most_recent_concept'])
+        self.save(update_fields=['most_recent_concept'])
 
     def update_required(self):
         from trophies.models import Stage
@@ -1105,43 +1151,62 @@ class Badge(models.Model):
             self.save(update_fields=['required_stages'])
 
 
-    def get_stage_completion(self, profile: Profile, type: str) -> dict[int, bool]:
+    def get_stage_completion(self, profile: Profile, badge_type: str) -> dict[int, bool]:
         if not profile:
             return {}
 
         from django.db.models import Q
 
-        stages = Stage.objects.filter(Q(series_slug=self.series_slug) & (Q(required_tiers__len=0) | Q(required_tiers__contains=[self.tier]))).prefetch_related('concepts__games')
+        stages = Stage.objects.filter(
+            Q(series_slug=self.series_slug)
+            & (Q(required_tiers__len=0) | Q(required_tiers__contains=[self.tier]))
+        ).prefetch_related('concepts__games')
 
         is_plat_check = False
         is_progress_check = False
 
-        if type in ['series', 'collection']:
+        if badge_type in ['series', 'collection']:
             is_plat_check = self.tier in [1, 3]
             is_progress_check = self.tier in [2, 4]
-        elif type == 'megamix':
+        elif badge_type == 'megamix':
             is_plat_check = True
         else:
             return {}
 
-        completion = {}
+        if is_plat_check:
+            condition = Q(has_plat=True)
+        elif is_progress_check:
+            condition = Q(progress=100)
+        else:
+            return {}
+
+        # Build a mapping of stage_number -> set of game_ids for that stage
+        stage_games = {}  # {stage_number: set of game_ids}
+        all_game_ids = set()
         for stage in stages:
-            concepts = stage.concepts.all()
+            game_ids = set()
+            for concept in stage.concepts.all():
+                for game in concept.games.all():
+                    game_ids.add(game.id)
+            stage_games[stage.stage_number] = game_ids
+            all_game_ids.update(game_ids)
 
-            if not concepts:
+        if not all_game_ids:
+            return {sn: False for sn in stage_games}
+
+        # Single query: fetch all completed game IDs for this profile
+        completed_game_ids = set(
+            ProfileGame.objects.filter(
+                profile=profile, game_id__in=all_game_ids
+            ).filter(condition).values_list('game_id', flat=True)
+        )
+
+        # Check per-stage completion in memory
+        completion = {}
+        for stage_number, game_ids in stage_games.items():
+            if not game_ids:
                 continue
-
-            games_qs = Game.objects.filter(concept__in=concepts)
-
-            if is_plat_check:
-                condition = Q(has_plat=True)
-            elif is_progress_check:
-                condition = Q(progress=100)
-            else:
-                continue
-
-            has_completion = ProfileGame.objects.filter(profile=profile, game__in=games_qs).filter(condition).exists()
-            completion[stage.stage_number] = has_completion
+            completion[stage_number] = bool(completed_game_ids & game_ids)
         return completion
 
     def __str__(self):

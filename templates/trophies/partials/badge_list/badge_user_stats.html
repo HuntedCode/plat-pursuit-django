@@ -1,0 +1,118 @@
+{% load static humanize custom_filters %}
+{% if user.is_authenticated and user_badge_stats %}
+    <!-- Desktop: Single row -->
+    <section class="stats stats-horizontal shadow-lg shadow-neutral w-full bg-base-200 border-2 border-base-300 overflow-x-auto transition duration-300 hover:shadow-accent hover:border-accent hidden lg:flex mb-6">
+        <div class="stat place-items-center">
+            <div class="stat-figure">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-10 h-10" viewBox="0 0 24 24" fill="none" stroke="var(--color-secondary)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+                </svg>
+            </div>
+            <div class="stat-title text-secondary italic font-bold">Total XP</div>
+            <div class="stat-value text-base-content text-2xl">{{ user_badge_stats.total_xp|intcomma }}</div>
+        </div>
+        <div class="stat place-items-center">
+            <div class="stat-figure">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-10 h-10" viewBox="0 0 24 24" fill="none" stroke="var(--color-success)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline>
+                </svg>
+            </div>
+            <div class="stat-title text-success italic font-bold">Badges Earned</div>
+            <div class="stat-value text-base-content text-2xl">{{ user_badge_stats.total_badges_earned }}</div>
+        </div>
+        <div class="stat place-items-center">
+            <div class="stat-figure">
+                {% include 'partials/icons/trophy_cup.html' with color='var(--color-trophy-platinum)' size='w-10 h-10' %}
+            </div>
+            <div class="stat-title text-warning italic font-bold">Stages Platinumed</div>
+            <div class="stat-value text-base-content text-2xl">{{ user_badge_stats.stages_platted }}/{{ user_badge_stats.plat_eligible_stages }}</div>
+        </div>
+        <div class="stat place-items-center">
+            <div class="stat-figure">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-10 h-10" viewBox="0 0 24 24" fill="none" stroke="var(--color-info)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline>
+                </svg>
+            </div>
+            <div class="stat-title text-info italic font-bold">Stages 100%'d</div>
+            <div class="stat-value text-base-content text-2xl">{{ user_badge_stats.stages_completed }}/{{ user_badge_stats.total_stages }}</div>
+        </div>
+        <div class="stat place-items-center">
+            <div class="stat-figure">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-10 h-10" viewBox="0 0 24 24" fill="none" stroke="var(--color-accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+                </svg>
+            </div>
+            <div class="stat-title text-accent italic font-bold">Series Progress</div>
+            <div class="stat-value text-base-content text-2xl">{{ user_badge_stats.series_completed }}/{{ user_badge_stats.total_series }}</div>
+        </div>
+        <div class="stat place-items-center">
+            <div class="stat-figure">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-10 h-10" viewBox="0 0 24 24" fill="none" stroke="var(--color-primary)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <circle cx="12" cy="12" r="10"></circle><path d="M12 6v6l4 2"></path>
+                </svg>
+            </div>
+            <div class="stat-title text-primary italic font-bold">Completion</div>
+            <div class="stat-value text-base-content text-2xl">{{ user_badge_stats.completion_pct }}%</div>
+        </div>
+    </section>
+
+    <!-- Tablet: Split into rows (3+3) -->
+    <div class="lg:hidden flex flex-col gap-2 mb-6">
+        <section class="stats stats-horizontal shadow-lg shadow-neutral w-full bg-base-200 border-2 border-base-300 overflow-x-auto">
+            <div class="stat place-items-center">
+                <div class="stat-figure block">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-10 h-10" viewBox="0 0 24 24" fill="none" stroke="var(--color-secondary)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+                    </svg>
+                </div>
+                <div class="stat-title text-secondary italic font-bold">Total XP</div>
+                <div class="stat-value text-base-content text-2xl">{{ user_badge_stats.total_xp|intcomma }}</div>
+            </div>
+            <div class="stat place-items-center">
+                <div class="stat-figure block">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-10 h-10" viewBox="0 0 24 24" fill="none" stroke="var(--color-success)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline>
+                    </svg>
+                </div>
+                <div class="stat-title text-success italic font-bold">Badges Earned</div>
+                <div class="stat-value text-base-content text-2xl">{{ user_badge_stats.total_badges_earned }}</div>
+            </div>
+            <div class="stat place-items-center">
+                <div class="stat-figure block">
+                    {% include 'partials/icons/trophy_cup.html' with color='var(--color-trophy-platinum)' size='w-10 h-10' %}
+                </div>
+                <div class="stat-title text-warning italic font-bold">Stages Platinumed</div>
+                <div class="stat-value text-base-content text-2xl">{{ user_badge_stats.stages_platted }}/{{ user_badge_stats.plat_eligible_stages }}</div>
+            </div>
+        </section>
+        <section class="stats stats-horizontal shadow-lg shadow-neutral w-full bg-base-200 border-2 border-base-300 overflow-x-auto">
+            <div class="stat place-items-center">
+                <div class="stat-figure block">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-10 h-10" viewBox="0 0 24 24" fill="none" stroke="var(--color-info)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline>
+                    </svg>
+                </div>
+                <div class="stat-title text-info italic font-bold">Stages 100%'d</div>
+                <div class="stat-value text-base-content text-2xl">{{ user_badge_stats.stages_completed }}/{{ user_badge_stats.total_stages }}</div>
+            </div>
+            <div class="stat place-items-center">
+                <div class="stat-figure block">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-10 h-10" viewBox="0 0 24 24" fill="none" stroke="var(--color-accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+                    </svg>
+                </div>
+                <div class="stat-title text-accent italic font-bold">Series Progress</div>
+                <div class="stat-value text-base-content text-2xl">{{ user_badge_stats.series_completed }}/{{ user_badge_stats.total_series }}</div>
+            </div>
+            <div class="stat place-items-center">
+                <div class="stat-figure block">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-10 h-10" viewBox="0 0 24 24" fill="none" stroke="var(--color-primary)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <circle cx="12" cy="12" r="10"></circle><path d="M12 6v6l4 2"></path>
+                    </svg>
+                </div>
+                <div class="stat-title text-primary italic font-bold">Completion</div>
+                <div class="stat-value text-base-content text-2xl">{{ user_badge_stats.completion_pct }}%</div>
+            </div>
+        </section>
+    </div>
+{% endif %}

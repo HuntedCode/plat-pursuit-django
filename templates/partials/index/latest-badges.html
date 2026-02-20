@@ -11,20 +11,12 @@
 
                         <div class="flex flex-row items-center">
                             <figure class="flex shrink-0 rounded-lg mr-4 border-2 border-base-300 transition duration-300 hover:scale-105 group-hover:border-accent group-focus-within:border-accent">
-                                <div class="relative w-12 h-12 xl:w-20 xl:h-20">
-                                    <img src="{% static item.layers.backdrop %}" alt="" class="absolute inset-0 w-full h-full object-cover rounded-lg" loading="lazy" />
-                                    {% if item.has_custom_image %}
-                                        <img src="{{ item.layers.main }}" alt="{{ item.name }}" class="absolute inset-0 w-full h-full object-cover rounded-lg" loading="lazy" />
-                                    {% else %}
-                                        <img src="{% static item.layers.main %}" alt="{{ item.name }}" class="absolute inset-0 w-full h-full object-cover rounded-lg" loading="lazy" />
-                                    {% endif %}
-                                    {% if item.layers.foreground %}
-                                        <img src="{% static item.layers.foreground %}" alt="" class="absolute inset-0 w-full h-full object-cover rounded-lg" loading="lazy" />
-                                    {% endif %}
+                                <div class="w-12 h-12 xl:w-20 xl:h-20">
+                                    {% include 'partials/badge.html' with layers=item.layers %}
                                 </div>
                             </figure>
                             <div class="flex-grow space-y-1">
-                                <h3 class="card-title text-sm md:text-base xl:text-lg line-clamp-1 italic">{{ item.name }}</h3>
+                                <h3 class="card-title text-sm md:text-base xl:text-lg line-clamp-1 italic pr-1">{{ item.name }}</h3>
                                 <p class="text-xs xl:text-sm text-base-content/70 mb-2 line-clamp-1">{{ item.series }}</p>
                                 <div>
                                     <span class="badge badge-outline badge-xs xl:badge-sm">{{ item.created_at|iso_naturaltime|default:"Just now" }}</span>

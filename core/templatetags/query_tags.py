@@ -15,6 +15,17 @@ def query_transform(context, **kwargs):
     return query.urlencode()
 
 @register.simple_tag(takes_context=True)
+def query_transform_key(context, key, value):
+    """Transform a single query param by dynamic key name while preserving others."""
+    request = context['request']
+    query = request.GET.copy()
+    if value is None:
+        query.pop(key, None)
+    else:
+        query[key] = str(value)
+    return query.urlencode()
+
+@register.simple_tag(takes_context=True)
 def querystring(context, exclude=None):
     request = context['request']
     params = request.GET.copy()

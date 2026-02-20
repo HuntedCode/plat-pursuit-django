@@ -150,7 +150,7 @@
                                     <img src="{% static 'images/plus.png' %}" class="w-5 h-5" alt="Plus member" />
                                 {% endif %}
                             </div>
-                            <span class="text-xs text-base-content/70 italic line-clamp-1">{{ profile.about_me }}</span>
+                            <span class="text-xs text-base-content/70 italic pr-1 line-clamp-1">{{ profile.about_me }}</span>
                         </div>
                     </a>
                     {% if game.concept and image_urls.screenshot_urls %}
@@ -451,7 +451,7 @@
                     </ul>
                 </div>
 
-                {# Shared popover for timeline trophy hover — lives outside overflow container #}
+                {# Shared popover for timeline trophy hover: lives outside overflow container #}
                 <div id="timeline-popover" class="fixed w-64 bg-base-200 border border-base-300 rounded-lg shadow-xl p-3 z-50 pointer-events-none opacity-0 invisible transition-all duration-200">
                     <div class="flex gap-3 items-start">
                         <img id="timeline-popover-img" src="" alt="" class="w-16 h-16 rounded-lg object-cover flex-shrink-0" />
@@ -571,13 +571,15 @@
         const carousel = document.getElementById('screenshot-carousel');
         const modalImage = document.getElementById('modal-image');
 
-        carousel.addEventListener('click', function(e) {
-            const item = e.target.closest('.carousel-item');
-            if (item) {
-                const src = item.dataset.src;
-                modalImage.src = src;
-            }
-        })
+        if (carousel && modalImage) {
+            carousel.addEventListener('click', function(e) {
+                const item = e.target.closest('.carousel-item');
+                if (item) {
+                    const src = item.dataset.src;
+                    modalImage.src = src;
+                }
+            });
+        }
 
         // Timeline trophy hover popover
         const popover = document.getElementById('timeline-popover');

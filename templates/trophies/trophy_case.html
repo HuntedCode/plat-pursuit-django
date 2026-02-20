@@ -5,7 +5,7 @@
 
 {% block content %}
     {% include 'partials/breadcrumb.html' with items=breadcrumb %}
-    <h1 class="text-xl lg:text-2xl xl:text-3xl text-base-content text-center line-clamp-1"><span class="font-bold italic">{{ profile.display_psn_username }}'s</span> <span class="text-trophy-platinum font-bold">Platinum</span> Trophy Case!</h1>
+    <h1 class="text-xl lg:text-2xl xl:text-3xl text-base-content text-center line-clamp-1 pr-1"><span class="font-bold italic">{{ profile.display_psn_username }}'s</span> <span class="text-trophy-platinum font-bold">Platinum</span> Trophy Case!</h1>
     <div class="divider divider-vertical"></div>
 
     <form id="filter-form" method="get" class="mb-4">
@@ -42,7 +42,7 @@
     <script src="{% static 'js/submit_shimmer.js' %}"></script>
     <script src="{% static 'js/list_page_filters.js' %}"></script>
     <script>
-        const toggleSelectionUrl = "{{ toggle_selection_url }}";
+        const toggleSelectionUrl = "{{ toggle_selection_url|escapejs }}";
         let selectedCount = {{ selected_count }};
         const maxSelections = {{ max_selections }};
         document.addEventListener('DOMContentLoaded', function() {
@@ -56,20 +56,13 @@
                 const earned_trophy_id = card.dataset.id;
                 if (!earned_trophy_id) return;
 
-                const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
                 const counter = document.getElementById('selected-counter');
                 if (selectedCount < maxSelections || card.classList.contains('selected')) {
-                    fetch(toggleSelectionUrl, {
+                    PlatPursuit.API.request(toggleSelectionUrl, {
                         method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/x-www-form-urlencoded',
-                            'X-CSRFToken': csrfToken
-                        },
-                        body: new URLSearchParams({
-                            'earned_trophy_id': earned_trophy_id
-                        })
+                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                        body: new URLSearchParams({ 'earned_trophy_id': earned_trophy_id })
                     })
-                    .then(response => response.json())
                     .then(data => {
                         if (data.success) {
                             if (data.action === 'added') {
@@ -81,13 +74,15 @@
                             }
                             counter.textContent = `Selected: ${selectedCount}/${maxSelections}`;
                         } else {
-                            console.error('Toggle failed');
-
                             card.classList.add('border-error', 'shake');
                             setTimeout(() => card.classList.remove('border-error', 'shake'), 750);
                         }
                     })
-                    .catch(error => console.error('Error:', error))
+                    .catch(error => {
+                        console.error('Toggle error:', error);
+                        card.classList.add('border-error', 'shake');
+                        setTimeout(() => card.classList.remove('border-error', 'shake'), 750);
+                    })
                 } else {
                     card.classList.add('border-error', 'shake');
                     setTimeout(() => card.classList.remove('border-error', 'shake'), 750);
