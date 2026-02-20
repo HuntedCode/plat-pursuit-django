@@ -581,13 +581,11 @@ class GameDetailView(ProfileHotbarMixin, DetailView):
 
         # Community averages
         averages_cache_key = f"concept:averages:{game.concept.concept_id}:{today}"
-        cached_averages = cache.get(averages_cache_key)
-        if cached_averages:
-            averages = json.loads(cached_averages)
-        else:
+        averages = cache.get(averages_cache_key)
+        if not averages:
             averages = game.concept.get_community_averages()
             if averages:
-                cache.set(averages_cache_key, json.dumps(averages), timeout=stats_timeout)
+                cache.set(averages_cache_key, averages, timeout=stats_timeout)
         context['community_averages'] = averages
 
         # Related badges
