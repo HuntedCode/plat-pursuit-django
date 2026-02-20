@@ -3,145 +3,50 @@
 
 {% block title %}{{ badge.effective_display_series }} - Leaderboards{% endblock %}
 {% block content %}
-    <section class="shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 w-full p-0 lg:p-4">
+    <section class="shadow-lg shadow-neutral bg-base-200/95 rounded-box border-2 border-base-300 w-full p-0 lg:p-4">
         {% include 'partials/breadcrumb.html' with items=breadcrumb %}
 
-        <div class="flex flex-row bg-base-100 border-4 border-base-300 shadow-md shadow-neutral rounded-box items-center justify-center gap-4 p-4 w-fit mx-auto">
-            <figure class="w-42 lg:w-48 h-42 lg:h-48 overflow-visible">
-                {% include 'partials/badge.html' with layers=badge.get_badge_layers %}
-            </figure>
-            <div class="flex flex-col gap-0">
-                <h1 class="text-xl lg:text-2xl text-base-content text-start pr-1 italic">{{ badge.effective_display_series }}</h1>
-                <h1 class="text-xl lg:text-2xl legendary-title text-start pr-1 italic">{{ badge.effective_user_title }}</h1>
-                <h1 class="text-xl lg:text-2xl text-base-content text-start">Leaderboards</h1>
+        {# ─── Hero Section ─────────────────────────────────────────────── #}
+        <div class="card bg-base-100 border-4 border-base-300 shadow-lg shadow-neutral mb-4">
+            <div class="card-body p-3 lg:p-5">
+                <div class="flex flex-col lg:flex-row items-center gap-3 lg:gap-5">
+                    <figure class="w-16 lg:w-20 h-16 lg:h-20 shrink-0 overflow-visible">
+                        {% include 'partials/badge.html' with layers=badge.get_badge_layers %}
+                    </figure>
+                    <div class="flex flex-col items-center lg:items-start gap-1 flex-1 min-w-0">
+                        <h1 class="text-xl lg:text-2xl font-bold italic pr-1 line-clamp-1">{{ badge.effective_display_series }}</h1>
+                        <p class="text-sm legendary-title italic pr-1">{{ badge.effective_user_title }}</p>
+                        <p class="text-sm text-base-content/60 italic pr-1">Who reigns supreme?</p>
+                    </div>
+                    <a href="{% url 'badge_detail' badge.series_slug %}" class="btn btn-ghost btn-sm gap-1 shrink-0">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <polyline points="15 18 9 12 15 6"></polyline>
+                        </svg>
+                        Badge Detail
+                    </a>
+                </div>
             </div>
         </div>
-        <div class="divider divider-vertical"></div>
 
+        {# ─── User Stats ──────────────────────────────────────────────── #}
         {% include 'trophies/partials/leaderboard_user_stats.html' with leaderboard_type='series' %}
 
+        {# ─── Info Alert ──────────────────────────────────────────────── #}
         <div class="alert alert-info mb-4">
             <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
-            <span class="text-base italic">Only PSN accounts linked to a PlatPursuit user account are considered.</span>
+            <span class="text-base italic pr-1">Only PSN accounts linked to a PlatPursuit profile are ranked. Link yours to join the competition.</span>
         </div>
 
-        <div class="grid grid-cols-2 gap-4">
-
-            <div class="flex flex-col justify-start gap-2">
-                <h2 class="text-lg italic font-bold">Badge Earns By Date</h2>
-                <p class="text-sm text-base-content/70 text-center pr-1 italic">Leaderboard Updated: {{ lb_earners_refresh_time|iso_datetime }}</p>
-                <p class="text-sm text-base-content/70 text-center pr-1 italic">Refreshed every 6 hours.</p>
-
-                {% include 'partials/leaderboard_pagination.html' with page_obj=lb_earners_page_obj paginator=lb_earners_paginator page_param='lb_earners_page' user_page=lb_earners_user_page user_rank=lb_earners_user_rank rank_prefix='1' %}
-
-                <div class="w-full overflow-x-scroll">
-                    <table class="table table-zebra bg-base-100/80 border-4 border-base-300 shadow-lg shadow-neutral rounded-box w-full">
-                        <thead>
-                            <tr>
-                                <th class="text-sm italic font-bold"></th>
-                                <th class="text-sm italic font-bold">User</th>
-                                <th class="text-sm italic font-bold">Tier</th>
-                                <th class="text-sm italic font-bold">Earned Date</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for entry in lb_earners_page_obj %}
-                                <tr id="1-rank-{{ entry.rank }}" class="{% if request.user.is_authenticated and request.user.profile.display_psn_username == entry.psn_username %}bg-success/15{% endif %} h-15 hover:bg-base-200/50">
-                                    <td>{{ entry.rank }}</td>
-                                    <td class="text-sm lg:text-base">
-                                        <a href="{% url 'profile_detail' entry.psn_username %}">
-                                            <div class="avatar mr-2 inline-flex">
-                                                <div class="w-4 lg:w-6 rounded-full ring-2 ring-primary cursor-pointer hover:scale-105">
-                                                    <img src="{{ entry.avatar_url|default:'/static/default-avatar.png' }}" alt="Profile Avatar" />
-                                                </div>
-                                            </div>
-                                            <span class="{% if entry.is_premium %}legendary-title{% endif %}">{{ entry.psn_username }}</span> • {{ entry.flag }}
-                                        </a>
-                                    </td>
-                                    <td>
-                                        {% with entry.highest_tier|stringformat:'s' as tier %}
-                                            <div class="tooltip" data-tip="{{ tier|badge_tier }}">
-                                                <figure class="w-6 hover:scale-105">
-                                                    <img src="{% static 'images/badges/backdrops/'|add:tier|add:'_backdrop.png' %}" class="w-full" alt="{{ tier|badge_tier }}" />
-                                                </figure>
-                                            </div>
-                                        {% endwith %}
-                                    </td>
-                                    <td class="text-sm lg:text-base italic">{{ entry.earn_date|iso_datetime }}</td>
-                                </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-
-                {% include 'partials/leaderboard_pagination.html' with page_obj=lb_earners_page_obj paginator=lb_earners_paginator page_param='lb_earners_page' user_page=lb_earners_user_page user_rank=lb_earners_user_rank rank_prefix='1' %}
-            </div>
-
-            <div class="flex flex-col justify-start gap-2">
-                <h2 class="text-lg italic font-bold">Badge Trophy Leaders</h2>
-                <p class="text-sm text-base-content/70 text-center pr-1 italic">Leaderboard Updated: {{ lb_progress_refresh_time|iso_datetime }}</p>
-                <p class="text-sm text-base-content/70 text-center pr-1 italic">Refreshed every 6 hours.</p>
-
-                {% include 'partials/leaderboard_pagination.html' with page_obj=lb_progress_page_obj paginator=lb_progress_paginator page_param='lb_progress_page' user_page=lb_progress_user_page user_rank=lb_progress_user_rank rank_prefix='2' %}
-
-                <div class="w-full overflow-x-scroll">
-                    <table class="table table-zebra bg-base-100/80 border-4 border-base-300 shadow-lg shadow-neutral rounded-box w-full">
-                    <thead>
-                        <tr>
-                            <th class="text-sm italic font-bold"></th>
-                            <th class="text-sm italic font-bold">User</th>
-                            <th class="text-sm italic font-bold">Badge Trophies</th>
-                            <th class="text-sm italic font-bold">Last Earned</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for entry in lb_progress_page_obj %}
-                            <tr id="2-rank-{{ entry.rank }}" class="{% if request.user.is_authenticated and request.user.profile.display_psn_username == entry.psn_username %}bg-success/15{% endif %} h-15 hover:bg-base-200/50">
-                                <td>{{ entry.rank }}</td>
-                                <td>
-                                    <a href="{% url 'profile_detail' entry.psn_username %}">
-                                        <div class="avatar mr-2 inline-flex">
-                                            <div class="w-4 lg:w-6 rounded-full ring-2 ring-primary cursor-pointer hover:scale-105">
-                                                <img src="{{ entry.avatar_url|default:'/static/default-avatar.png' }}" alt="Profile Avatar" />
-                                            </div>
-                                        </div>
-                                        <span class="{% if entry.is_premium %}legendary-title{% endif %}">{{ entry.psn_username }}</span> • {{ entry.flag }}
-                                    </a>
-                                </td>
-                                <td>
-                                    <div class="flex flex-col lg:flex-row justify-center items-center gap-3">
-                                        <div class="flex flex-row gap-3">
-                                            <div class="flex flex-row items-center gap-0">
-                                                {% include 'partials/icons/trophy_cup.html' with color='var(--color-trophy-platinum)' size='w-4' extra_class='mr-1 hover:scale-105' %}
-                                                <p class="text-base-content text-xs font-bold">{{ entry.trophy_totals.plats }}</p>
-                                            </div>
-                                            <div class="flex flex-row items-center gap-0">
-                                                {% include 'partials/icons/trophy_cup.html' with color='var(--color-trophy-gold)' size='w-4' extra_class='mr-1 hover:scale-105' %}
-                                                <p class="text-base-content text-xs font-bold">{{ entry.trophy_totals.golds }}</p>
-                                            </div>
-                                        </div>
-                                        <div class="flex flex-row gap-3 mb-2 lg:mb-0">
-                                            <div class="flex flex-row items-center gap-0">
-                                                {% include 'partials/icons/trophy_cup.html' with color='var(--color-trophy-silver)' size='w-4' extra_class='mr-1 hover:scale-105' %}
-                                                <p class="text-base-content text-xs font-bold">{{ entry.trophy_totals.silvers }}</p>
-                                            </div>
-                                            <div class="flex flex-row items-center gap-0">
-                                                {% include 'partials/icons/trophy_cup.html' with color='var(--color-trophy-bronze)' size='w-4' extra_class='mr-1 hover:scale-105' %}
-                                                <p class="text-base-content text-xs font-bold">{{ entry.trophy_totals.bronzes }}</p>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </td>
-                                <td class="text-xs italic">{{ entry.last_earned_date|iso_datetime }}</td>
-                            </tr>
-                        {% endfor %}
-                    </tbody>
-                    </table>
-                </div>
-
-                {% include 'partials/leaderboard_pagination.html' with page_obj=lb_progress_page_obj paginator=lb_progress_paginator page_param='lb_progress_page' user_page=lb_progress_user_page user_rank=lb_progress_user_rank rank_prefix='2' %}
-            </div>
+        {# ─── Tabbed Layout ────────────────────────────────────────────── #}
+        <div class="tabs tabs-box bg-base-300/80 mb-3" role="tablist" aria-label="Leaderboard type">
+            <a href="?tab=earners" class="tab {% if active_tab == 'earners' %}tab-active{% endif %}">Earners</a>
+            <a href="?tab=progress" class="tab {% if active_tab == 'progress' %}tab-active{% endif %}">Badge Progress</a>
         </div>
+        {% if active_tab == 'earners' %}
+            {% include 'trophies/partials/leaderboard_earners_table.html' %}
+        {% else %}
+            {% include 'trophies/partials/leaderboard_progress_table.html' with progress_heading='Series Badge Progress' progress_page_obj=lb_progress_page_obj progress_paginator=lb_progress_paginator progress_page_param='lb_progress_page' progress_user_page=lb_progress_user_page progress_user_rank=lb_progress_user_rank progress_rank_prefix='2' progress_refresh_time=lb_progress_refresh_time %}
+        {% endif %}
     </section>
 {% endblock %}
 {% block js_scripts %}

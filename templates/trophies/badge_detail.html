@@ -30,23 +30,29 @@
             <section id="stage-{{ stage.stage_number }}" class="mt-4 scroll-mt-4">
                 <div class="flex flex-row gap-3">
                     <!-- Sticky Stage Sidebar (desktop only) -->
-                    {% if stage.stage_number != 0 %}
-                        <div class="hidden lg:block sticky top-2 self-start w-20 shrink-0">
+                    <div class="hidden lg:flex flex-col items-center relative w-20 shrink-0">
+                        <div class="absolute inset-0 bg-base-200/95 border-2 border-base-300 rounded-xl" aria-hidden="true"></div>
+                        <div class="sticky top-2 z-10 w-20">
                             <div class="card bg-base-100 border-4 border-base-300 shadow-md shadow-neutral items-center justify-center aspect-square">
-                                <span class="text-2xs text-base-content/50 font-bold italic uppercase tracking-wider">Stage</span>
-                                <span class="text-2xl font-black italic text-accent leading-none">{{ stage.stage_number }}</span>
-                                {% if target_profile and data.stage_completion_state %}
-                                    {% if data.stage_completion_state == 'complete' %}
-                                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-success mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-label="Complete"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                                    {% elif data.stage_completion_state == 'partial' %}
-                                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-warning mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-label="Partial"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                                    {% else %}
-                                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-error mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-label="Incomplete"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                                {% if stage.stage_number == 0 %}
+                                    <span class="text-2xs text-base-content/50 font-bold italic uppercase tracking-wider">Bonus</span>
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+                                {% else %}
+                                    <span class="text-2xs text-base-content/50 font-bold italic uppercase tracking-wider">Stage</span>
+                                    <span class="text-2xl font-black italic text-accent leading-none">{{ stage.stage_number }}</span>
+                                    {% if target_profile and data.stage_completion_state %}
+                                        {% if data.stage_completion_state == 'complete' %}
+                                            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-success mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-label="Complete"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                                        {% elif data.stage_completion_state == 'partial' %}
+                                            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-warning mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-label="Partial"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                                        {% else %}
+                                            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-error mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-label="Incomplete"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                                        {% endif %}
                                     {% endif %}
                                 {% endif %}
                             </div>
                         </div>
-                    {% endif %}
+                    </div>
 
                     <!-- Stage Content -->
                     <div class="flex-1 min-w-0 shadow-lg shadow-neutral bg-base-200/95 rounded-box border-2 border-base-300 p-2 lg:p-3">

@@ -1,23 +1,24 @@
-{% load query_tags %}
+{% load query_tags humanize %}
 <div class="flex flex-row justify-between items-center gap-4 mt-4 w-7/8 mx-auto">
     <div class="join">
         {% if page_obj.has_previous %}
-        <a href="?{% query_transform_key page_param 1 %}" class="btn btn-xs join-item">First</a>
-        <a href="?{% query_transform_key page_param page_obj.previous_page_number %}" class="btn btn-xs join-item">Prev</a>
+        <a href="?{% query_transform_key page_param 1 %}" class="btn btn-xs join-item transition-colors duration-200">First</a>
+        <a href="?{% query_transform_key page_param page_obj.previous_page_number %}" class="btn btn-xs join-item transition-colors duration-200">Prev</a>
         {% endif %}
         <span class="btn btn-xs btn-secondary btn-active join-item">Page {{ page_obj.number }} of {{ paginator.num_pages }}</span>
         {% if page_obj.has_next %}
-        <a href="?{% query_transform_key page_param page_obj.next_page_number %}" class="btn btn-xs join-item">Next</a>
-        <a href="?{% query_transform_key page_param paginator.num_pages %}" class="btn btn-xs join-item">Last</a>
+        <a href="?{% query_transform_key page_param page_obj.next_page_number %}" class="btn btn-xs join-item transition-colors duration-200">Next</a>
+        <a href="?{% query_transform_key page_param paginator.num_pages %}" class="btn btn-xs join-item transition-colors duration-200">Last</a>
         {% endif %}
     </div>
-    <div class="flex flex-row justify-between gap-8">
+    <div class="flex flex-row items-center gap-4">
+        <span class="text-xs text-base-content/50 italic">{{ paginator.count|intcomma }} total</span>
         {% if user_page %}
-            <a href="?{% query_transform_key page_param user_page %}#{{ rank_prefix }}-rank-{{ user_rank }}" class="btn btn-xs btn-accent tooltip" data-tip="Jump to your rank">My Rank</a>
+            <a href="?{% query_transform_key page_param user_page %}#{{ rank_prefix }}-rank-{{ user_rank }}" class="btn btn-xs btn-accent tooltip transition-colors duration-200" data-tip="Jump to your rank">My Rank</a>
         {% endif %}
         <form class="input-group" onsubmit="PlatPursuit.LeaderboardUtils.updatePage(this, '{{ page_param }}'); return false;">
             <input type="number" class="input input-bordered input-xs w-16" min="1" max="{{ paginator.num_pages }}" placeholder="Page" />
-            <button type="submit" class="btn btn-xs btn-primary">Go</button>
+            <button type="submit" class="btn btn-xs btn-primary transition-colors duration-200">Go</button>
         </form>
     </div>
 </div>

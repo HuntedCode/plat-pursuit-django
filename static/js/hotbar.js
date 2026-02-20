@@ -331,6 +331,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // Pull toggle flush against navbar (negate main's py-2 padding)
         wrapper.style.top = '0px';
         wrapper.style.marginTop = '-8px';
+        wrapper.style.marginBottom = '0.5rem';
         toggleIcon?.classList.remove('rotate-180');
         toggleBtn?.classList.add('hotbar-toggle-pulse');
         toggleBtn?.setAttribute('aria-label', 'Show hotbar');
@@ -340,6 +341,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // Restore sticky gap from viewport top
         wrapper.style.top = '';
         wrapper.style.marginTop = '';
+        wrapper.style.marginBottom = '0.5rem';
         container.style.borderWidth = '';
         container.style.maxHeight = container.scrollHeight + 'px';
         toggleIcon?.classList.add('rotate-180');
@@ -370,11 +372,13 @@ document.addEventListener('DOMContentLoaded', () => {
         container.style.borderWidth = '0';
         wrapper.style.top = '0px';
         wrapper.style.marginTop = '-8px';
+        wrapper.style.marginBottom = '0.5rem';
         toggleIcon?.classList.remove('rotate-180');
         toggleBtn?.classList.add('hotbar-toggle-pulse');
         toggleBtn?.setAttribute('aria-label', 'Show hotbar');
     } else {
         container.style.maxHeight = 'none';
+        wrapper.style.marginBottom = '0.5rem';
         toggleIcon?.classList.add('rotate-180');
         toggleBtn?.setAttribute('aria-label', 'Hide hotbar');
     }

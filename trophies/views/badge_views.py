@@ -330,7 +330,7 @@ class BadgeDetailView(ProfileHotbarMixin, DetailView):
         context['target_profile'] = target_profile
 
         badge = None
-        is_earned = True
+        is_earned = False
         highest_tier_earned = 0
         max_tier = series_badges.aggregate(max_tier=Max('tier'))['max_tier'] or 0
 
@@ -347,9 +347,10 @@ class BadgeDetailView(ProfileHotbarMixin, DetailView):
         if target_profile:
             highest_tier_earned = UserBadge.objects.filter(profile=target_profile, badge__series_slug=self.kwargs['series_slug']).aggregate(max_tier=Max('badge__tier'))['max_tier'] or 0
             badge = series_badges.filter(tier=highest_tier_earned).first()
-            if not badge:
+            if badge and highest_tier_earned > 0:
+                is_earned = True
+            else:
                 badge = series_badges.order_by('tier').first()
-                is_earned = False
             context['is_maxed'] = highest_tier_earned > 0 and highest_tier_earned == max_tier
 
             context['badge'] = badge
@@ -720,7 +721,7 @@ class BadgeLeaderboardsView(ProfileHotbarMixin, DetailView):
     template_name = 'trophies/badge_leaderboards.html'
     slug_field = 'series_slug'
     slug_url_kwarg = 'series_slug'
-    context_object_name = 'series_badges'
+    context_object_name = 'badge'
 
     def get_object(self, queryset=None):
         series_slug = self.kwargs[self.slug_url_kwarg]
@@ -755,6 +756,7 @@ class BadgeLeaderboardsView(ProfileHotbarMixin, DetailView):
                 if entry['psn_username'] == user_psn:
                     context['lb_progress_user_page'] = (idx // lb_progress_paginate_by) + 1
                     context['lb_progress_user_rank'] = idx + 1
+                    break
 
             # User stats for this series
             highest_user_badge = UserBadge.objects.filter(
@@ -763,7 +765,7 @@ class BadgeLeaderboardsView(ProfileHotbarMixin, DetailView):
             context['user_highest_tier'] = highest_user_badge.badge.tier if highest_user_badge else 0
 
             try:
-                gamification = ProfileGamification.objects.get(profile=user.profile)
+                gamification = user.profile.gamification
                 context['user_series_xp'] = gamification.series_badge_xp.get(series_slug, 0)
             except ProfileGamification.DoesNotExist:
                 context['user_series_xp'] = 0
@@ -789,6 +791,11 @@ class BadgeLeaderboardsView(ProfileHotbarMixin, DetailView):
             {'text': context['badge'].effective_display_series, 'url': reverse_lazy('badge_detail', kwargs={'series_slug': badge.series_slug})},
             {'text': 'Leaderboards'},
         ]
+
+        active_tab = self.request.GET.get('tab', 'earners')
+        if active_tab not in ('earners', 'progress'):
+            active_tab = 'earners'
+        context['active_tab'] = active_tab
 
         track_page_view('badge_leaderboard', badge.series_slug, self.request)
         return context
@@ -833,10 +840,11 @@ class OverallBadgeLeaderboardsView(ProfileHotbarMixin, TemplateView):
                 if entry['psn_username'] == user_psn:
                     context['lb_total_progress_user_page'] = (idx // lb_total_progress_paginate_by) + 1
                     context['lb_total_progress_user_rank'] = idx + 1
+                    break
 
             # User stats for overall leaderboards
             try:
-                gamification = ProfileGamification.objects.get(profile=user.profile)
+                gamification = user.profile.gamification
                 context['user_total_xp'] = gamification.total_badge_xp
                 context['user_total_badges'] = gamification.total_badges_earned
             except ProfileGamification.DoesNotExist:
@@ -858,6 +866,31 @@ class OverallBadgeLeaderboardsView(ProfileHotbarMixin, TemplateView):
             {'text': 'Badges', 'url': reverse_lazy('badges_list')},
             {'text': 'Leaderboards'},
         ]
+
+        active_tab = self.request.GET.get('tab', 'xp')
+        if active_tab not in ('xp', 'progress', 'series'):
+            active_tab = 'xp'
+        context['active_tab'] = active_tab
+
+        if active_tab == 'series':
+            series_badges = Badge.objects.filter(
+                tier=1
+            ).select_related(
+                'base_badge', 'most_recent_concept',
+                'base_badge__most_recent_concept',
+                'base_badge__title', 'title',
+            ).exclude(
+                series_slug__isnull=True
+            ).exclude(series_slug='').order_by(Lower('display_series'))
+
+            titled_badges = [b for b in series_badges if b.effective_user_title]
+            progress_keys = [f"lb_progress_{b.series_slug}" for b in titled_badges]
+            progress_data = cache.get_many(progress_keys) if progress_keys else {}
+            directory = []
+            for badge in titled_badges:
+                badge.progress_count = len(progress_data.get(f"lb_progress_{badge.series_slug}", []))
+                directory.append(badge)
+            context['series_directory'] = directory
 
         track_page_view('overall_leaderboard', 'global', self.request)
         return context

@@ -1,0 +1,17 @@
+{# Rank cell with medal treatment for top-3 positions #}
+{# Usage: {% include 'trophies/partials/leaderboard_rank_cell.html' with rank=entry.rank %} #}
+{% if rank == 1 %}
+    <div class="flex items-center justify-center shimmer rounded-full p-0.5" title="#1">
+        <span class="text-lg lg:text-xl" aria-label="1st Place">🥇</span>
+    </div>
+{% elif rank == 2 %}
+    <div class="flex items-center justify-center" title="#2">
+        <span class="text-lg lg:text-xl" aria-label="2nd Place">🥈</span>
+    </div>
+{% elif rank == 3 %}
+    <div class="flex items-center justify-center" title="#3">
+        <span class="text-lg lg:text-xl" aria-label="3rd Place">🥉</span>
+    </div>
+{% else %}
+    <span class="badge badge-ghost badge-sm font-bold font-mono text-base-content/70">{{ rank }}</span>
+{% endif %}

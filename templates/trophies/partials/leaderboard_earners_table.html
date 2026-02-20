@@ -1,0 +1,60 @@
+{% load static custom_filters query_tags humanize %}
+<div class="flex flex-col justify-start gap-2">
+    <div class="flex items-center gap-2">
+        <h2 class="text-lg italic font-bold">Earners Leaderboard</h2>
+        <div class="tooltip tooltip-right" data-tip="Updated: {{ lb_earners_refresh_time|iso_datetime }} · Refreshes every 6h">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-base-content/50 cursor-help" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>
+            </svg>
+        </div>
+    </div>
+
+    {% if lb_earners_page_obj.object_list %}
+        {% include 'partials/leaderboard_pagination.html' with page_obj=lb_earners_page_obj paginator=lb_earners_paginator page_param='lb_earners_page' user_page=lb_earners_user_page user_rank=lb_earners_user_rank rank_prefix='1' %}
+
+        <div class="w-full overflow-x-auto">
+            <table class="table table-zebra bg-base-100/80 border-4 border-base-300 shadow-lg shadow-neutral rounded-box w-full">
+                <thead>
+                    <tr class="bg-base-200/50 border-b-2 border-base-300">
+                        <th class="text-xs text-base-content/50 italic font-bold uppercase tracking-wide w-12"></th>
+                        <th class="text-xs text-base-content/50 italic font-bold uppercase tracking-wide">User</th>
+                        <th class="text-xs text-base-content/50 italic font-bold uppercase tracking-wide">Tier</th>
+                        <th class="text-xs text-base-content/50 italic font-bold uppercase tracking-wide">Earned Date</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for entry in lb_earners_page_obj %}
+                        <tr id="1-rank-{{ entry.rank }}" class="{% if request.user.is_authenticated and request.user.profile.display_psn_username == entry.psn_username %}bg-success/15{% endif %}{% if entry.rank == 1 %} border-l-6 border-warning bg-warning/5 shadow-sm shadow-warning/20{% elif entry.rank == 2 %} border-l-4 border-base-content/30 bg-base-content/5{% elif entry.rank == 3 %} border-l-4 border-accent bg-accent/5{% endif %} h-15 hover:bg-base-200/50 transition-colors duration-200">
+                            <td class="text-center">
+                                {% include 'trophies/partials/leaderboard_rank_cell.html' with rank=entry.rank %}
+                            </td>
+                            <td class="text-sm lg:text-base">
+                                {% include 'trophies/partials/leaderboard_user_cell.html' with entry=entry %}
+                            </td>
+                            <td>
+                                {% with entry.highest_tier|stringformat:'s' as tier %}
+                                    <div class="tooltip" data-tip="{{ tier|badge_tier }}">
+                                        <figure class="w-6 hover:scale-105">
+                                            <img src="{% static 'images/badges/backdrops/'|add:tier|add:'_backdrop.png' %}" class="w-full" alt="{{ tier|badge_tier }}" />
+                                        </figure>
+                                    </div>
+                                {% endwith %}
+                            </td>
+                            <td class="text-sm lg:text-base italic">{{ entry.earn_date|iso_datetime }}</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        {% include 'partials/leaderboard_pagination.html' with page_obj=lb_earners_page_obj paginator=lb_earners_paginator page_param='lb_earners_page' user_page=lb_earners_user_page user_rank=lb_earners_user_rank rank_prefix='1' %}
+    {% else %}
+        <div class="bg-base-100/50 rounded-box border-2 border-base-300 border-dashed text-center py-8 px-6">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-12 h-12 mx-auto text-base-content/30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"></path><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"></path><path d="M4 22h16"></path><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"></path><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"></path><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"></path>
+            </svg>
+            <p class="text-base-content/50 font-bold mt-3 italic pr-1">No earners yet.</p>
+            <p class="text-base-content/50 text-sm italic pr-1">Be the first to claim this badge and top the board.</p>
+        </div>
+    {% endif %}
+</div>

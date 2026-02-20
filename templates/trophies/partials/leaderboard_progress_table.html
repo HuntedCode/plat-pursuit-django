@@ -1,0 +1,71 @@
+{% load static custom_filters query_tags humanize %}
+<div class="flex flex-col justify-start gap-2">
+    <div class="flex items-center gap-2">
+        <h2 class="text-lg italic font-bold">{{ progress_heading }}</h2>
+        <div class="tooltip tooltip-right" data-tip="Updated: {{ progress_refresh_time|iso_datetime }} · Refreshes every 6h">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-base-content/50 cursor-help" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>
+            </svg>
+        </div>
+    </div>
+
+    {% if progress_page_obj.object_list %}
+        {% include 'partials/leaderboard_pagination.html' with page_obj=progress_page_obj paginator=progress_paginator page_param=progress_page_param user_page=progress_user_page user_rank=progress_user_rank rank_prefix=progress_rank_prefix %}
+
+        <div class="w-full overflow-x-auto">
+            <table class="table table-zebra bg-base-100/80 border-4 border-base-300 shadow-lg shadow-neutral rounded-box w-full">
+                <thead>
+                    <tr class="bg-base-200/50 border-b-2 border-base-300">
+                        <th class="text-xs text-base-content/50 italic font-bold uppercase tracking-wide w-12"></th>
+                        <th class="text-xs text-base-content/50 italic font-bold uppercase tracking-wide">User</th>
+                        <th class="text-xs text-base-content/50 italic font-bold uppercase tracking-wide">Trophies</th>
+                        <th class="text-xs text-base-content/50 italic font-bold uppercase tracking-wide">Last Trophy</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for entry in progress_page_obj %}
+                        <tr id="{{ progress_rank_prefix }}-rank-{{ entry.rank }}" class="{% if request.user.is_authenticated and request.user.profile.display_psn_username == entry.psn_username %}bg-success/15{% endif %}{% if entry.rank == 1 %} border-l-6 border-warning bg-warning/5 shadow-sm shadow-warning/20{% elif entry.rank == 2 %} border-l-4 border-base-content/30 bg-base-content/5{% elif entry.rank == 3 %} border-l-4 border-accent bg-accent/5{% endif %} h-15 hover:bg-base-200/50 transition-colors duration-200">
+                            <td class="text-center">
+                                {% include 'trophies/partials/leaderboard_rank_cell.html' with rank=entry.rank %}
+                            </td>
+                            <td class="text-sm lg:text-base">
+                                {% include 'trophies/partials/leaderboard_user_cell.html' with entry=entry %}
+                            </td>
+                            <td>
+                                <div class="flex flex-row items-center gap-2">
+                                    <div class="flex items-center gap-0.5">
+                                        {% include 'partials/icons/trophy_cup.html' with color='var(--color-trophy-platinum)' size='w-4 h-4' %}
+                                        <span class="text-xs font-bold">{{ entry.trophy_totals.plats }}</span>
+                                    </div>
+                                    <div class="flex items-center gap-0.5">
+                                        {% include 'partials/icons/trophy_cup.html' with color='var(--color-trophy-gold)' size='w-4 h-4' %}
+                                        <span class="text-xs font-bold">{{ entry.trophy_totals.golds }}</span>
+                                    </div>
+                                    <div class="flex items-center gap-0.5">
+                                        {% include 'partials/icons/trophy_cup.html' with color='var(--color-trophy-silver)' size='w-4 h-4' %}
+                                        <span class="text-xs font-bold">{{ entry.trophy_totals.silvers }}</span>
+                                    </div>
+                                    <div class="flex items-center gap-0.5">
+                                        {% include 'partials/icons/trophy_cup.html' with color='var(--color-trophy-bronze)' size='w-4 h-4' %}
+                                        <span class="text-xs font-bold">{{ entry.trophy_totals.bronzes }}</span>
+                                    </div>
+                                </div>
+                            </td>
+                            <td class="text-xs italic">{{ entry.last_earned_date|iso_datetime }}</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        {% include 'partials/leaderboard_pagination.html' with page_obj=progress_page_obj paginator=progress_paginator page_param=progress_page_param user_page=progress_user_page user_rank=progress_user_rank rank_prefix=progress_rank_prefix %}
+    {% else %}
+        <div class="bg-base-100/50 rounded-box border-2 border-base-300 border-dashed text-center py-8 px-6">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-12 h-12 mx-auto text-base-content/30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <line x1="12" y1="20" x2="12" y2="10"></line><line x1="18" y1="20" x2="18" y2="4"></line><line x1="6" y1="20" x2="6" y2="16"></line>
+            </svg>
+            <p class="text-base-content/50 font-bold mt-3 italic pr-1">{{ progress_empty_text|default:"No trophy progress recorded yet." }}</p>
+            <p class="text-base-content/50 text-sm italic pr-1">{{ progress_empty_subtext|default:"Start hunting to make your mark." }}</p>
+        </div>
+    {% endif %}
+</div>

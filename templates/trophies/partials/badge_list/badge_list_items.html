@@ -10,11 +10,11 @@
                             {% include 'partials/badge.html' with layers=badge.get_badge_layers %}
                         </div>
                         {% if badge.most_recent_concept %}
-                            <figure class="border-4 border-base-300 shadow-md shadow-neutral w-16 h-16 lg:w-24 lg:h-24 aspect-square hover:border-{{ badge.tier|badge_color }} hover:shadow-{{ badge.tier|badge_color }}">
+                            <figure class="hidden lg:block border-4 border-base-300 shadow-md shadow-neutral w-16 h-16 lg:w-24 lg:h-24 aspect-square hover:border-{{ badge.tier|badge_color }} hover:shadow-{{ badge.tier|badge_color }}">
                                 <img src="{{ badge.most_recent_concept.concept_icon_url }}" class="w-full aspect-square object-cover hover:scale-105" alt="{{ badge.most_recent_concept.unified_title }}" loading="lazy" decoding="async" />
                             </figure>
                         {% elif badge.base_badge and badge.base_badge.most_recent_concept %}
-                            <figure class="border-4 border-base-300 shadow-md shadow-neutral w-16 h-16 lg:w-24 lg:h-24 aspect-square hover:border-{{ badge.tier|badge_color }} hover:shadow-{{ badge.tier|badge_color }}">
+                            <figure class="hidden lg:block border-4 border-base-300 shadow-md shadow-neutral w-16 h-16 lg:w-24 lg:h-24 aspect-square hover:border-{{ badge.tier|badge_color }} hover:shadow-{{ badge.tier|badge_color }}">
                                 <img src="{{ badge.base_badge.most_recent_concept.concept_icon_url }}" class="w-full aspect-square object-cover hover:scale-105" alt="{{ badge.base_badge.most_recent_concept.unified_title }}" loading="lazy" decoding="async" />
                             </figure>
                         {% endif %}
@@ -51,26 +51,26 @@
                     <h3 class="text-sm lg:text-lg xl:text-xl legendary-title italic pr-1 {% if not item.is_earned %}grayscale{% endif %} shrink-0">{{ badge.effective_user_title }}</h3>
                 {% endif %}
 
-                <div class="flex flex-col w-auto shrink-0 gap-1 lg:gap-2">
+                <div class="flex flex-col w-48 lg:w-72 shrink-0 gap-1 lg:gap-2">
                     <div class="flex flex-row justify-center items-center gap-1 lg:gap-2">
                         <div class="flex flex-row gap-1 lg:gap-2">
                             <div class="flex flex-row items-center gap-0">
                                 {% include 'partials/icons/trophy_cup.html' with color='var(--color-trophy-bronze)' size='w-5 h-5 lg:w-7 lg:h-7 mr-1' extra_class='hover:scale-105' %}
-                                <p class="text-base-content font-bold">{{ item.trophy_types.bronze }}</p>
+                                <p class="text-xs lg:text-base text-base-content font-bold">{{ item.trophy_types.bronze }}</p>
                             </div>
                             <div class="flex flex-row items-center gap-0">
                                 {% include 'partials/icons/trophy_cup.html' with color='var(--color-trophy-silver)' size='w-5 h-5 lg:w-7 lg:h-7 mr-1' extra_class='hover:scale-105' %}
-                                <p class="text-base-content font-bold">{{ item.trophy_types.silver }}</p>
+                                <p class="text-xs lg:text-base text-base-content font-bold">{{ item.trophy_types.silver }}</p>
                             </div>
                         </div>
                         <div class="flex flex-row gap-1 lg:gap-2">
                             <div class="flex flex-row items-center gap-0">
                                 {% include 'partials/icons/trophy_cup.html' with color='var(--color-trophy-gold)' size='w-5 h-5 lg:w-7 lg:h-7 mr-1' extra_class='hover:scale-105' %}
-                                <p class="text-base-content font-bold">{{ item.trophy_types.gold }}</p>
+                                <p class="text-xs lg:text-base text-base-content font-bold">{{ item.trophy_types.gold }}</p>
                             </div>
                             <div class="flex flex-row items-center gap-0">
                                 {% include 'partials/icons/trophy_cup.html' with color='var(--color-trophy-platinum)' size='w-5 h-5 lg:w-7 lg:h-7 mr-1' extra_class='hover:scale-105' %}
-                                <p class="text-base-content font-bold">{{ item.trophy_types.platinum }}</p>
+                                <p class="text-xs lg:text-base text-base-content font-bold">{{ item.trophy_types.platinum }}</p>
                             </div>
                         </div>
                     </div>
