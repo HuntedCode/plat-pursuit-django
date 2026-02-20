@@ -445,21 +445,27 @@ class BadgeDetailView(ProfileHotbarMixin, DetailView):
 
         user_series_xp = 0
         user_lb_rank = None
+        user_lb_progress_rank = None
         user_total_playtime = None
         user_games_played = 0
         user_platinums = 0
         series_slug = self.kwargs['series_slug']
+        lb_earners = cache.get(f"lb_earners_{series_slug}", [])
+        lb_progress = cache.get(f"lb_progress_{series_slug}", [])
         if target_profile:
             try:
                 xp_data = target_profile.gamification.series_badge_xp
                 user_series_xp = (xp_data or {}).get(series_slug, 0)
             except Exception:
                 pass
-            lb_earners = cache.get(f"lb_earners_{series_slug}", [])
             user_psn = target_profile.display_psn_username
             for idx, entry in enumerate(lb_earners):
                 if entry['psn_username'] == user_psn:
                     user_lb_rank = idx + 1
+                    break
+            for idx, entry in enumerate(lb_progress):
+                if entry['psn_username'] == user_psn:
+                    user_lb_progress_rank = idx + 1
                     break
 
             # User playtime stats from already-fetched profile_games
@@ -634,6 +640,9 @@ class BadgeDetailView(ProfileHotbarMixin, DetailView):
             'total_games': total_games,
             'user_series_xp': user_series_xp,
             'user_lb_rank': user_lb_rank,
+            'user_lb_progress_rank': user_lb_progress_rank,
+            'total_earners_count': len(lb_earners),
+            'total_progressers_count': len(lb_progress),
             'user_total_playtime': user_total_playtime,
             'user_stages_played': user_stages_played,
             'user_stages_platinumed': user_stages_platinumed,

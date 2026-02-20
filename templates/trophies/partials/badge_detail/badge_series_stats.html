@@ -188,17 +188,6 @@
                         </div>
                     </div>
 
-                    {% if stats.user_lb_rank %}
-                        <!-- Rank -->
-                        <div class="flex flex-row items-center gap-2 bg-base-100 rounded-box border-2 border-base-300 px-3 py-2">
-                            {% include 'partials/icons/trophy_cup.html' with color='var(--color-warning)' size='w-6 h-6 shrink-0' %}
-                            <div class="flex flex-col">
-                                <span class="text-xs text-warning italic font-bold">Rank</span>
-                                <span class="text-lg font-bold">#{{ stats.user_lb_rank }}</span>
-                            </div>
-                        </div>
-                    {% endif %}
-
                     <!-- Trophies Earned -->
                     <div class="flex flex-row items-center gap-2 bg-base-100 rounded-box border-2 border-base-300 px-3 py-2">
                         <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 shrink-0" viewBox="0 0 24 24" fill="none" stroke="var(--color-info)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">

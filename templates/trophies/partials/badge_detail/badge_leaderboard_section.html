@@ -1,0 +1,107 @@
+{% load static custom_filters humanize %}
+{% with badge_series_stats as stats %}
+{% if stats %}
+<section class="shadow-lg shadow-neutral bg-base-200/95 rounded-box border-2 border-base-300 w-full p-3 lg:p-4 mt-4">
+    <div class="flex flex-col gap-3">
+        <!-- Section Label -->
+        <span class="text-xs text-base-content/50 font-bold italic uppercase tracking-wide">Leaderboard</span>
+
+        <!-- Stat Cards -->
+        {% if target_profile %}
+            <div class="grid grid-cols-2 lg:grid-cols-4 gap-2 lg:gap-3">
+                <!-- Earners Rank -->
+                <div class="flex flex-row items-center gap-2 bg-base-100 rounded-box border-2 border-base-300 px-3 py-2">
+                    {% include 'partials/icons/trophy_cup.html' with color='var(--color-warning)' size='w-6 h-6 shrink-0' %}
+                    <div class="flex flex-col">
+                        <span class="text-xs text-warning italic font-bold">Earners Rank</span>
+                        {% if stats.user_lb_rank %}
+                            <span class="text-lg font-bold">#{{ stats.user_lb_rank }}</span>
+                        {% else %}
+                            <span class="text-lg font-bold text-base-content/30">Unranked</span>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <!-- Total Earners -->
+                <div class="flex flex-row items-center gap-2 bg-base-100 rounded-box border-2 border-base-300 px-3 py-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 shrink-0" viewBox="0 0 24 24" fill="none" stroke="var(--color-primary)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                    </svg>
+                    <div class="flex flex-col">
+                        <span class="text-xs text-primary italic font-bold">Total Earners</span>
+                        <span class="text-lg font-bold">{{ stats.total_earners_count|intcomma }}</span>
+                    </div>
+                </div>
+
+                <!-- Progress Rank -->
+                <div class="flex flex-row items-center gap-2 bg-base-100 rounded-box border-2 border-base-300 px-3 py-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 shrink-0" viewBox="0 0 24 24" fill="none" stroke="var(--color-accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <line x1="12" y1="20" x2="12" y2="10"></line><line x1="18" y1="20" x2="18" y2="4"></line><line x1="6" y1="20" x2="6" y2="16"></line>
+                    </svg>
+                    <div class="flex flex-col">
+                        <span class="text-xs text-accent italic font-bold">Progress Rank</span>
+                        {% if stats.user_lb_progress_rank %}
+                            <span class="text-lg font-bold">#{{ stats.user_lb_progress_rank }}</span>
+                        {% else %}
+                            <span class="text-lg font-bold text-base-content/30">Unranked</span>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <!-- Total Progressers -->
+                <div class="flex flex-row items-center gap-2 bg-base-100 rounded-box border-2 border-base-300 px-3 py-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 shrink-0" viewBox="0 0 24 24" fill="none" stroke="var(--color-info)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                    </svg>
+                    <div class="flex flex-col">
+                        <span class="text-xs text-info italic font-bold">Users With Progress</span>
+                        <span class="text-lg font-bold">{{ stats.total_progressers_count|intcomma }}</span>
+                    </div>
+                </div>
+            </div>
+        {% else %}
+            <!-- Unauthenticated: community counts only -->
+            <div class="grid grid-cols-2 gap-2 lg:gap-3">
+                <!-- Total Earners -->
+                <div class="flex flex-row items-center gap-2 bg-base-100 rounded-box border-2 border-base-300 px-3 py-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 shrink-0" viewBox="0 0 24 24" fill="none" stroke="var(--color-primary)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                    </svg>
+                    <div class="flex flex-col">
+                        <span class="text-xs text-primary italic font-bold">Total Earners</span>
+                        <span class="text-lg font-bold">{{ stats.total_earners_count|intcomma }}</span>
+                    </div>
+                </div>
+
+                <!-- Total Progressers -->
+                <div class="flex flex-row items-center gap-2 bg-base-100 rounded-box border-2 border-base-300 px-3 py-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 shrink-0" viewBox="0 0 24 24" fill="none" stroke="var(--color-info)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                    </svg>
+                    <div class="flex flex-col">
+                        <span class="text-xs text-info italic font-bold">Users With Progress</span>
+                        <span class="text-lg font-bold">{{ stats.total_progressers_count|intcomma }}</span>
+                    </div>
+                </div>
+            </div>
+        {% endif %}
+
+        <!-- CTA Link -->
+        <a href="{% url 'badge_leaderboards' badge.series_slug %}" class="bg-success/10 border border-success/30 rounded-box p-3 lg:p-4 flex items-center gap-3 transition-all duration-300 hover:bg-success/20 hover:border-success/50 group">
+            <div class="bg-success/20 rounded-full p-2.5 flex-shrink-0">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-success" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"></path><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"></path><path d="M4 22h16"></path><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"></path><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"></path><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"></path>
+                </svg>
+            </div>
+            <div class="flex-1">
+                <h3 class="font-bold text-sm lg:text-base text-success">View Full Leaderboards</h3>
+                <p class="text-xs text-base-content/60 italic pr-1">See how you stack up against the competition</p>
+            </div>
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-success transition-transform group-hover:translate-x-1 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <polyline points="9 18 15 12 9 6"></polyline>
+            </svg>
+        </a>
+    </div>
+</section>
+{% endif %}
+{% endwith %}

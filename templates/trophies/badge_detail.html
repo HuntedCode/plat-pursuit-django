@@ -21,21 +21,8 @@
         {% include 'trophies/partials/badge_detail/badge_series_stats.html' %}
     </section>
 
-    <!-- Leaderboards Banner -->
-    <a href="{% url 'badge_leaderboards' badge.series_slug %}" class="bg-base-200/95 bg-gradient-to-r from-success/20 to-transparent border-2 border-success/50 rounded-box p-4 lg:p-5 flex items-center gap-4 shadow-md shadow-success/20 mt-4 transition-all duration-300 hover:from-success/30 group">
-        <div class="bg-success/20 rounded-full p-3 flex-shrink-0">
-            <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 text-success" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"></path><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"></path><path d="M4 22h16"></path><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"></path><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"></path><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"></path>
-            </svg>
-        </div>
-        <div class="flex-1">
-            <h3 class="font-bold text-base lg:text-lg text-success">Badge Leaderboards</h3>
-            <p class="text-sm text-base-content/60 italic">See how you stack up against the competition</p>
-        </div>
-        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-success transition-transform group-hover:translate-x-1 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <polyline points="9 18 15 12 9 6"></polyline>
-        </svg>
-    </a>
+    <!-- Leaderboard Section -->
+    {% include 'trophies/partials/badge_detail/badge_leaderboard_section.html' %}
 
     <!-- Stage Sections -->
     {% for data in stage_data %}
