@@ -2,7 +2,7 @@ import logging
 from collections import defaultdict
 
 from core.services.tracking import track_page_view
-from datetime import date, timedelta
+from datetime import timedelta
 from trophies.util_modules.constants import (
     BADGE_TIER_XP, BRONZE_STAGE_XP, SILVER_STAGE_XP,
     GOLD_STAGE_XP, PLAT_STAGE_XP,
@@ -403,21 +403,15 @@ class BadgeDetailView(ProfileHotbarMixin, DetailView):
             ).select_related('game')
             profile_games = {pg.game_id: pg for pg in profile_games_qs}
 
-        today = date.today().isoformat()
-        stats_timeout = 3600
+        from trophies.services.rating_service import RatingService
+
         structured_data = []
         for stage in stages:
             games = stage_games_map[stage.id]
 
             community_ratings = {}
             for game in games:
-                averages_cache_key = f"concept:averages:{game.concept.concept_id}:{today}"
-                averages = cache.get(averages_cache_key)
-                if not averages:
-                    averages = game.concept.get_community_averages()
-                    if averages:
-                        cache.set(averages_cache_key, averages, timeout=stats_timeout)
-                community_ratings[game] = averages
+                community_ratings[game] = RatingService.get_cached_community_averages(game.concept)
 
             structured_data.append({
                 'stage': stage,

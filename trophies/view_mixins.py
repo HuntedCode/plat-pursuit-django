@@ -120,19 +120,6 @@ class CacheKeyMixin:
         return f"game:stats:{np_comm_id}:{date_str}:{hour:02d}"
 
     @staticmethod
-    def concept_averages_key(concept_id):
-        """
-        Generate cache key for concept community rating averages.
-
-        Args:
-            concept_id: ID of the Concept
-
-        Returns:
-            str: Cache key for concept rating averages
-        """
-        return f"concept:averages:{concept_id}"
-
-    @staticmethod
     def leaderboard_key(leaderboard_type, date_str=None):
         """
         Generate cache key for leaderboard data.

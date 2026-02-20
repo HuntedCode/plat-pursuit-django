@@ -575,18 +575,12 @@ class GameDetailView(ProfileHotbarMixin, DetailView):
         if not game.concept:
             return {}
 
+        from trophies.services.rating_service import RatingService
+
         context = {}
-        today = date.today().isoformat()
-        stats_timeout = 3600
 
         # Community averages
-        averages_cache_key = f"concept:averages:{game.concept.concept_id}:{today}"
-        averages = cache.get(averages_cache_key)
-        if not averages:
-            averages = game.concept.get_community_averages()
-            if averages:
-                cache.set(averages_cache_key, averages, timeout=stats_timeout)
-        context['community_averages'] = averages
+        context['community_averages'] = RatingService.get_cached_community_averages(game.concept)
 
         # Related badges
         series_slugs = Stage.objects.filter(concepts__games=game).values_list('series_slug', flat=True).distinct()
@@ -775,9 +769,8 @@ class GameDetailView(ProfileHotbarMixin, DetailView):
                 rating.profile = profile
                 rating.concept = concept
                 rating.save()
-                today = date.today().isoformat()
-                averages_cache_key = f"concept:averages:{concept.concept_id}:{today}"
-                cache.delete(averages_cache_key)
+                from trophies.services.rating_service import RatingService
+                RatingService.invalidate_cache(concept)
 
                 # Check for rating milestones
                 from trophies.services.milestone_service import check_all_milestones_for_user
