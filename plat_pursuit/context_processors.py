@@ -25,18 +25,29 @@ def moderation(request):
     proposals count for superusers.
 
     Only queries the database if the user is authenticated staff to avoid
-    unnecessary overhead for regular users.
+    unnecessary overhead for regular users. Results are cached for 60 seconds
+    to prevent per-request DB queries on every page load.
     """
     pending_reports_count = 0
     pending_proposals_count = 0
 
     if request.user.is_authenticated and request.user.is_staff:
+        from django.core.cache import cache
         from trophies.models import CommentReport
-        pending_reports_count = CommentReport.objects.filter(status='pending').count()
+
+        pending_reports_count = cache.get_or_set(
+            'mod:pending_reports_count',
+            lambda: CommentReport.objects.filter(status='pending').count(),
+            60,
+        )
 
         if request.user.is_superuser:
             from trophies.models import GameFamilyProposal
-            pending_proposals_count = GameFamilyProposal.objects.filter(status='pending').count()
+            pending_proposals_count = cache.get_or_set(
+                'mod:pending_proposals_count',
+                lambda: GameFamilyProposal.objects.filter(status='pending').count(),
+                60,
+            )
 
     return {
         'pending_reports_count': pending_reports_count,

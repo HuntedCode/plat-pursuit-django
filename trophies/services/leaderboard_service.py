@@ -13,16 +13,6 @@ from django.db.models import (
 from django.db.models.functions import RowNumber
 
 
-# XP Constants for badge progression
-# Note: Canonical source is trophies/util_modules/constants.py
-# These are kept here for backward compatibility with progress leaderboards
-BRONZE_STAGE_XP = 250
-SILVER_STAGE_XP = 75
-GOLD_STAGE_XP = 250
-PLAT_STAGE_XP = 75
-BADGE_TIER_XP = 3000
-
-
 def compute_community_series_xp(series_slug: str) -> int:
     """
     Sum all users' XP for a specific badge series from ProfileGamification.

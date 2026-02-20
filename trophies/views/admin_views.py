@@ -56,7 +56,7 @@ class TokenMonitoringView(TemplateView):
 
     def get_aggregated_stats(self):
         aggregated = {}
-        keys = redis_client.keys("token_keeper_latest_stats:*")
+        keys = list(redis_client.scan_iter(match="token_keeper_latest_stats:*"))
         for key in keys:
             stats_json = redis_client.get(key)
             if stats_json:

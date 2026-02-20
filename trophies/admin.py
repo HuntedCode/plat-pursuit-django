@@ -1371,6 +1371,9 @@ class MonthlyRecapAdmin(admin.ModelAdmin):
                     template_name='emails/monthly_recap.html',
                     context=context,
                     fail_silently=False,
+                    log_email_type='monthly_recap',
+                    log_user=user,
+                    log_triggered_by='admin_manual',
                 )
 
                 if sent_count > 0:

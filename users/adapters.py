@@ -41,6 +41,11 @@ class CustomAccountAdapter(DefaultAccountAdapter):
             'expiration_days': settings.ACCOUNT_EMAIL_CONFIRMATION_EXPIRE_DAYS,
         }
 
+        # Detect if this is an admin-triggered resend
+        triggered_by = 'system'
+        if request and hasattr(request, 'user') and request.user.is_staff:
+            triggered_by = 'admin'
+
         # Send using EmailService (same as monthly recap emails)
         try:
             EmailService.send_html_email(
@@ -49,8 +54,11 @@ class CustomAccountAdapter(DefaultAccountAdapter):
                 template_name='emails/email_verification.html',
                 context=context,
                 fail_silently=False,
+                log_email_type='email_verification',
+                log_user=user,
+                log_triggered_by=triggered_by,
             )
-            logger.info(f"Email verification sent to {email} for user {user.id}")
+            logger.info(f"Email verification sent to {email} for user {user.id} (triggered_by={triggered_by})")
         except Exception as e:
             logger.exception(f"Failed to send verification email to {email}: {e}")
             raise  # Re-raise so allauth knows sending failed
@@ -89,6 +97,9 @@ class CustomAccountAdapter(DefaultAccountAdapter):
                 template_name='emails/password_reset.html',
                 context=context,
                 fail_silently=False,
+                log_email_type='password_reset',
+                log_user=user,
+                log_triggered_by='system',
             )
             logger.info(f"Password reset email sent to {email} for user {user.id}")
         except Exception as e:

@@ -70,6 +70,9 @@ class ProfileSyncStatusView(LoginRequiredMixin, View):
     """
     @method_decorator(ratelimit(key='user', rate='60/m', method='GET'))
     def get(self, request):
+        if not hasattr(request.user, 'profile'):
+            return JsonResponse({'error': 'No linked profile'}, status=400)
+
         profile = request.user.profile
         seconds_to_next_sync = profile.get_seconds_to_next_sync()
         logger.debug(f"Sync status check for {profile.psn_username}: {seconds_to_next_sync}s until next sync")
@@ -94,17 +97,17 @@ class TriggerSyncView(LoginRequiredMixin, View):
     Returns error if sync is already in progress or cooldown is active.
     """
     def post(self, request):
-        profile = request.user.profile
-        if not profile:
+        if not hasattr(request.user, 'profile'):
             return JsonResponse({'error': 'No linked profile'}, status=400)
 
+        profile = request.user.profile
         is_syncing = profile.attempt_sync()
         if not is_syncing:
             seconds_left = profile.get_seconds_to_next_sync()
             return JsonResponse({'error': f'Cooldown active: {seconds_left} seconds left'}, status=429)
         return JsonResponse({'success': True, 'message': 'Sync started'})
 
-class SearchSyncProfileView(View):
+class SearchSyncProfileView(LoginRequiredMixin, View):
     """
     AJAX endpoint to search for and add PSN profiles to the database.
 
@@ -137,7 +140,7 @@ class SearchSyncProfileView(View):
             'psn_username': profile.psn_username,
         })
 
-class AddSyncStatusView(View):
+class AddSyncStatusView(LoginRequiredMixin, View):
     """
     AJAX endpoint to poll sync status after adding a new profile.
 

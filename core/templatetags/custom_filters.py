@@ -12,6 +12,8 @@ from trophies.util_modules.constants import BRONZE_STAGE_XP, SILVER_STAGE_XP, GO
 
 register = template.Library()
 
+SPOILER_PATTERN = re.compile(r'\|\|(.+?)\|\|')
+
 @register.filter
 def iso_naturaltime(value):
     """Parse ISO string to datetime and apply naturaltime."""
@@ -302,10 +304,6 @@ def parse_spoilers(text):
     # mark_safe() is valid here because ALL user content was escaped before processing.
     escaped_text = escape(text)
 
-    # Then replace ||spoiler|| tags with HTML
-    # Pattern matches ||anything|| but uses non-greedy matching
-    pattern = r'\|\|(.+?)\|\|'
-
     def replace_spoiler(match):
         spoiler_content = match.group(1)
         # Create a clickable spoiler element with DaisyUI styling
@@ -317,7 +315,7 @@ def parse_spoilers(text):
             f'title="Click to reveal/hide spoiler">{spoiler_content}</span>'
         )
 
-    result = re.sub(pattern, replace_spoiler, escaped_text)
+    result = SPOILER_PATTERN.sub(replace_spoiler, escaped_text)
     return mark_safe(result)
 
 @register.filter

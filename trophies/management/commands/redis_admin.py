@@ -107,15 +107,17 @@ class Command(BaseCommand):
         cache_config = settings.CACHES['default']
         prefix = f"{cache_config['KEY_PREFIX']}:1:"
 
-        index_keys = [
+        exact_keys = [
             f"{prefix}game:imageurls:{np_communication_id}",
-            f"{prefix}game:stats:{np_communication_id}",
             f"{prefix}game:trophygroups:{np_communication_id}",
         ]
-        
+        stats_pattern = f"{prefix}game:stats:{np_communication_id}:*"
+
         try:
             deleted_count = 0
-            for key in index_keys:
+            for key in exact_keys:
+                deleted_count += redis_client.delete(key)
+            for key in redis_client.scan_iter(match=stats_pattern):
                 deleted_count += redis_client.delete(key)
             logger.info(f"Flushed {deleted_count} index-related keys.")
             self.stdout.write(self.style.SUCCESS(f"Flushed {deleted_count} keys for game {np_communication_id} page."))

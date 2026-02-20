@@ -261,17 +261,16 @@ class Command(BaseCommand):
 
         user = recap.profile.user
         profile = recap.profile
+        subject = f"Your {recap.month_name} Monthly Rewind is Ready! 🏆"
 
         # Check email preferences - skip if user opted out
         if not EmailPreferenceService.should_send_email(user, 'monthly_recap'):
             logger.info(f"Skipping recap email for {user.email} - opted out of monthly recaps")
+            EmailService.log_suppressed('monthly_recap', user, subject, 'management_command')
             return False
 
         # Build email context using shared service
         context = MonthlyRecapMessageService.build_email_context(recap)
-
-        # Build subject
-        subject = f"Your {recap.month_name} Monthly Rewind is Ready! 🏆"
 
         try:
             # Send email using EmailService
@@ -281,6 +280,9 @@ class Command(BaseCommand):
                 template_name='emails/monthly_recap.html',
                 context=context,
                 fail_silently=False,
+                log_email_type='monthly_recap',
+                log_user=user,
+                log_triggered_by='management_command',
             )
 
             if sent_count > 0:

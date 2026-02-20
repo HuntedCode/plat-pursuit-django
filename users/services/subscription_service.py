@@ -232,12 +232,16 @@ class SubscriptionService:
         logger.info(f"Deactivated {provider} subscription for user {user.email} ({event_type})")
 
         # Side effects after commit: Discord role removal (only the role matching the user's tier)
+        # Deferred via on_commit to avoid blocking the webhook response with HTTP calls.
         if hasattr(user, 'profile') and user.profile.is_discord_verified and user.profile.discord_id:
             from trophies.services.badge_service import notify_bot_role_removed
+            profile = user.profile
             if original_tier in PREMIUM_DISCORD_ROLE_TIERS and settings.DISCORD_PREMIUM_ROLE:
-                notify_bot_role_removed(user.profile, settings.DISCORD_PREMIUM_ROLE)
+                role_id = settings.DISCORD_PREMIUM_ROLE
+                transaction.on_commit(lambda p=profile, r=role_id: notify_bot_role_removed(p, r))
             elif original_tier in SUPPORTER_DISCORD_ROLE_TIERS and settings.DISCORD_PREMIUM_PLUS_ROLE:
-                notify_bot_role_removed(user.profile, settings.DISCORD_PREMIUM_PLUS_ROLE)
+                role_id = settings.DISCORD_PREMIUM_PLUS_ROLE
+                transaction.on_commit(lambda p=profile, r=role_id: notify_bot_role_removed(p, r))
 
         # Send cancellation email and notification for voluntary cancellations.
         # Payment failures (SUSPENDED) are handled separately by handle_payment_failed

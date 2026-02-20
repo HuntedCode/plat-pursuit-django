@@ -115,8 +115,8 @@ class ProposalApproveView(APIView):
         canonical_name = request.data.get('canonical_name', proposal.proposed_name)
 
         with transaction.atomic():
-            # Check if any concept has since joined a family
-            concepts = list(proposal.concepts.all())
+            # Lock concepts to prevent concurrent approvals from assigning to different families
+            concepts = list(proposal.concepts.select_for_update().all())
             already_in_family = [c for c in concepts if c.family_id is not None]
 
             if already_in_family:
@@ -321,11 +321,11 @@ class GameFamilyRemoveConceptView(APIView):
         concept.family = None
         concept.save(update_fields=['family'])
 
-        # Clean up empty families
+        # Clean up families that are empty or have only 1 member (not a valid family)
         remaining = family.concepts.count()
-        if remaining == 0:
+        if remaining < 2:
             family.delete()
-            return Response({'message': 'Concept removed. Family deleted (was empty).'})
+            return Response({'message': 'Concept removed. Family deleted (insufficient members).'})
 
         return Response({
             'message': f'Removed "{concept.unified_title}" from family.',

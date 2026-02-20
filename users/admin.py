@@ -1,5 +1,7 @@
-from django.contrib import admin
+from django.contrib import admin, messages
 from django.contrib.auth.admin import UserAdmin
+from allauth.account.models import EmailAddress
+from allauth.account.admin import EmailAddressAdmin as BaseEmailAddressAdmin
 from .models import CustomUser, SubscriptionPeriod
 from .forms import CustomUserCreationForm
 
@@ -78,3 +80,37 @@ class SubscriptionPeriodAdmin(admin.ModelAdmin):
     def duration_days_display(self, obj):
         return f"{obj.duration_days} days"
     duration_days_display.short_description = "Duration"
+
+
+# Override allauth's default EmailAddress admin to add resend action
+admin.site.unregister(EmailAddress)
+
+@admin.register(EmailAddress)
+class CustomEmailAddressAdmin(BaseEmailAddressAdmin):
+    actions = ['make_verified', 'resend_confirmation_email']
+
+    @admin.action(description="Resend confirmation email to selected addresses")
+    def resend_confirmation_email(self, request, queryset):
+        unverified = queryset.filter(verified=False)
+        skipped = queryset.filter(verified=True).count()
+
+        sent = 0
+        failed = 0
+        for email_address in unverified:
+            try:
+                email_address.send_confirmation(request=request, signup=False)
+                sent += 1
+            except Exception as e:
+                failed += 1
+                self.message_user(
+                    request,
+                    f"Failed to send to {email_address.email}: {e}",
+                    level=messages.ERROR,
+                )
+
+        if sent:
+            self.message_user(request, f"Sent {sent} confirmation email(s).", level=messages.SUCCESS)
+        if skipped:
+            self.message_user(request, f"Skipped {skipped} already verified email(s).", level=messages.WARNING)
+        if not sent and not skipped and not failed:
+            self.message_user(request, "No email addresses selected.", level=messages.WARNING)

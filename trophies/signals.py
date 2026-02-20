@@ -63,10 +63,7 @@ def update_gamification_on_progress(sender, instance, created, **kwargs):
             f"after progress update on {instance.badge.name}"
         )
     except Exception as e:
-        logger.error(
-            f"Failed to update gamification after progress change: {e}",
-            exc_info=True
-        )
+        logger.exception(f"Failed to update gamification after progress change: {e}")
 
 
 @receiver(post_save, sender=UserBadge, dispatch_uid="update_gamification_on_badge_earned")
@@ -98,10 +95,7 @@ def update_gamification_on_badge_earned(sender, instance, created, **kwargs):
             f"after earning {instance.badge.name}"
         )
     except Exception as e:
-        logger.error(
-            f"Failed to update gamification after badge earned: {e}",
-            exc_info=True
-        )
+        logger.exception(f"Failed to update gamification after badge earned: {e}")
 
 
 @receiver(post_delete, sender=UserBadge, dispatch_uid="update_gamification_on_badge_revoked")

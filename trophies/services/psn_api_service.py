@@ -241,11 +241,11 @@ class PsnApiService:
     def create_concept_from_details(cls, details):
         try:
             descriptions_short = next((d['desc'] for d in details['descriptions'] if d['type'] == 'SHORT'), '')
-        except:
+        except Exception:
             descriptions_short = ''
         try:
             descriptions_long = next((d['desc'] for d in details['descriptions'] if d['type'] == 'LONG'), '')
-        except:
+        except Exception:
             descriptions_long = ''
 
         return Concept.objects.get_or_create(
@@ -264,8 +264,9 @@ class PsnApiService:
     
     @classmethod
     def update_profile_game_with_title_stats(cls, profile: Profile, title_stats: TitleStats):
-        games = Game.objects.filter(title_ids__contains=title_stats.title_id)        
+        games = Game.objects.filter(title_ids__contains=title_stats.title_id)
         if games:
+            needs_refresh = False
             for game in games:
                 try:
                     profile_game = ProfileGame.objects.get(profile=profile, game=game)
@@ -279,21 +280,22 @@ class PsnApiService:
                 profile_game.last_played_date_time = title_stats.last_played_date_time
                 profile_game.play_duration = title_stats.play_duration
                 profile_game.save(update_fields=['play_count', 'first_played_date_time', 'last_played_date_time', 'play_duration'])
-            if game.concept_lock:
-                return True
-            if game.concept and not game.concept.concept_id.startswith('PP_'):
-                if game.concept_stale:
-                    logger.info(f"Game {game} marked as concept_stale. Queuing for concept refresh.")
-                    return False
-                if title_stats.title_id in game.concept.title_ids:
-                    return True
+
+                if game.concept_lock:
+                    continue
+                if game.concept and not game.concept.concept_id.startswith('PP_'):
+                    if game.concept_stale:
+                        logger.info(f"Game {game} marked as concept_stale. Queuing for concept refresh.")
+                        needs_refresh = True
+                    elif title_stats.title_id not in game.concept.title_ids:
+                        logger.info(f"Game {game} has concept {game.concept.concept_id} but title_id "
+                                    f"{title_stats.title_id} not in concept's title_ids. Queuing for concept refresh.")
+                        needs_refresh = True
                 else:
-                    logger.info(f"Game {game} has concept {game.concept.concept_id} but title_id "
-                                f"{title_stats.title_id} not in concept's title_ids. Queuing for concept refresh.")
-                    return False
-            else:
-                logger.warning(f"Game {title_stats.title_id} does not have an expected concept.")
-                return False
+                    logger.warning(f"Game {title_stats.title_id} does not have an expected concept.")
+                    needs_refresh = True
+
+            return not needs_refresh
         logger.warning(f"No games found for {title_stats.title_id}")
         return False
 
@@ -369,7 +371,7 @@ class PsnApiService:
             trophy.progress_target_value = trophy_data.trophy_progress_target_value
             trophy.reward_name = trophy_data.trophy_reward_name
             trophy.reward_img_url = trophy_data.trophy_reward_img_url
-            trophy.trophy_rarity = trophy_data.trophy_rarity.value if trophy_data.trophy_rarity else ''
+            trophy.trophy_rarity = trophy_data.trophy_rarity.value if trophy_data.trophy_rarity else None
             trophy.trophy_earn_rate = trophy_data.trophy_earn_rate if trophy_data.trophy_earn_rate else 0.0
             trophy.save()
         
@@ -454,7 +456,7 @@ class PsnApiService:
                 platinum=Count('id', filter=Q(trophy__trophy_type='platinum')),
             )
             return result
-        except:
+        except Exception:
             return {
                 'total': 0,
                 'bronze': 0,
@@ -561,7 +563,7 @@ class PsnApiService:
 
             earned_counts_dict = {item['trophy__id']: item['new_earned_count'] for item in earned_counts_qs}
 
-            trophies_qs = Trophy.objects.filter(game__id__in=game_batch_ids)
+            trophies_qs = Trophy.objects.filter(game__id__in=game_batch_ids).select_related('game')
             for trophy in trophies_qs:
                 new_earned_count = earned_counts_dict.get(trophy.id, 0)
                 new_earn_rate = new_earned_count / played_counts_dict.get(trophy.game.id, 1) if played_counts_dict.get(trophy.game.id, 0) > 0 else 0.0
@@ -592,19 +594,19 @@ class PsnApiService:
     @classmethod
     def create_badge_group_from_form(cls, form_data: dict):
         name = form_data['name']
-        type = form_data['badge_type'].capitalize()
-        if type == 'Collection':
+        badge_type_name = form_data['badge_type'].capitalize()
+        if badge_type_name == 'Collection':
             title = 'Collector'
-        elif type == 'Megamix':
+        elif badge_type_name == 'Megamix':
             title = 'Mega Master'
         else:
             title = 'Series Master'
         base_badge = Badge.objects.create(
             name=name + ' Bronze',
             series_slug=form_data['series_slug'] or '',
-            description=f"Earn plats in the {name} {type}!",
+            description=f"Earn plats in the {name} {badge_type_name}!",
             display_title=f"{name} {title}",
-            display_series=f"{name} {type}",
+            display_series=f"{name} {badge_type_name}",
             tier=1,
             badge_type = form_data['badge_type'],
             view_count=0,

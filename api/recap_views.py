@@ -202,7 +202,12 @@ class RecapDetailView(APIView):
                 status=http_status.HTTP_403_FORBIDDEN
             )
 
-        # Don't allow future months
+        # Validate year range
+        if year < 2023:
+            return Response(
+                {'error': 'Invalid year.'},
+                status=http_status.HTTP_400_BAD_REQUEST
+            )
         if (year > now_local.year) or (year == now_local.year and month > now_local.month):
             return Response(
                 {'error': 'Cannot view recap for future months.'},
@@ -487,9 +492,8 @@ class RecapShareImagePNGView(APIView):
                 status=http_status.HTTP_404_NOT_FOUND
             )
 
-        track_site_event('recap_share_generate', f"{year}-{month:02d}", request)
-
         # Reuse the HTML view's context builder
+        # Note: tracking is handled by the HTML view endpoint, not here (avoids double-counting)
         html_view = RecapShareImageHTMLView()
         context = html_view._build_template_context(recap, profile, format_type)
 

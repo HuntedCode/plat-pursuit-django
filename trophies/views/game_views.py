@@ -15,7 +15,6 @@ from django.utils import timezone
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.generic import ListView, DetailView
-from random import choice
 from urllib.parse import urlencode
 from trophies.mixins import ProfileHotbarMixin
 from ..models import Game, Trophy, Profile, EarnedTrophy, ProfileGame, TrophyGroup, Badge, Concept, FeaturedGuide, Stage, Checklist
@@ -219,12 +218,12 @@ class GameDetailView(ProfileHotbarMixin, DetailView):
 
                 # Calculate trophy type totals
                 ordered_earned_qs = earned_qs.filter(earned=True).order_by(F('earned_date_time').asc(nulls_last=True))
-                context['profile_trophy_totals'] = {
-                    'bronze': ordered_earned_qs.filter(trophy__trophy_type='bronze').count() or 0,
-                    'silver': ordered_earned_qs.filter(trophy__trophy_type='silver').count() or 0,
-                    'gold': ordered_earned_qs.filter(trophy__trophy_type='gold').count() or 0,
-                    'platinum': ordered_earned_qs.filter(trophy__trophy_type='platinum').count() or 0,
-                }
+                context['profile_trophy_totals'] = ordered_earned_qs.aggregate(
+                    bronze=Count('id', filter=Q(trophy__trophy_type='bronze')),
+                    silver=Count('id', filter=Q(trophy__trophy_type='silver')),
+                    gold=Count('id', filter=Q(trophy__trophy_type='gold')),
+                    platinum=Count('id', filter=Q(trophy__trophy_type='platinum')),
+                )
 
                 # Calculate group totals
                 profile_group_totals = {}
@@ -343,7 +342,7 @@ class GameDetailView(ProfileHotbarMixin, DetailView):
             events.append(self._make_timeline_event('Platinum Trophy', 'trophy', False))
 
         # 100% trophy
-        if profile_progress and profile_progress['progress'] == 100:
+        if profile_progress and profile_progress['progress'] == 100 and earned_list:
             complete = earned_list[-1]
             events.append(self._make_timeline_event(
                 '100% Trophy', 'trophy', True, date=complete.earned_date_time, trophy=complete.trophy
@@ -833,7 +832,7 @@ class GuideListView(ProfileHotbarMixin, ListView):
             else:
                 guides = Concept.objects.exclude(Q(guide_slug__isnull=True) | Q(guide_slug=''))
                 if guides.exists():
-                    featured_concept = choice(guides)
+                    featured_concept = guides.order_by('?').first()
                 else:
                     featured_concept = None
 

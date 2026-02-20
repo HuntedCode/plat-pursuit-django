@@ -417,8 +417,9 @@ class NotificationShareImageGenerateView(APIView):
                 logger.exception(f"Failed to generate {fmt} image for notification {pk}: {e}")
                 results[fmt] = {'error': 'Failed to generate image'}
 
+        any_success = any('url' in v for v in results.values())
         return Response({
-            'success': True,
+            'success': any_success,
             'images': results
         })
 

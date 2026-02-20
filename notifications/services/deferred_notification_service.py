@@ -12,6 +12,7 @@ Uses Redis to queue notifications during sync and creates them at appropriate co
 import json
 import logging
 from collections import defaultdict
+from datetime import datetime
 from django.utils import timezone
 from notifications.services.notification_service import NotificationService
 from notifications.services.shareable_data_service import ShareableDataService
@@ -141,7 +142,7 @@ class DeferredNotificationService:
             ).count()
 
             # Get earned date and calculate yearly plats
-            earned_date = timezone.datetime.fromisoformat(data["earned_date_time"]) if data["earned_date_time"] else None
+            earned_date = datetime.fromisoformat(data["earned_date_time"]) if data["earned_date_time"] else None
             yearly_plats = 0
             earned_year = None
 
