@@ -9,16 +9,15 @@ logger = logging.getLogger(__name__)
 @receiver(post_save, sender=UserBadge, dispatch_uid="update_badge_earned_count")
 def update_badge_earned_count_on_save(sender, instance, created, **kwargs):
     if created:
-        badge = instance.badge
-        badge.earned_count += 1
-        badge.save(update_fields=['earned_count'])
+        from trophies.models import Badge
+        Badge.objects.filter(pk=instance.badge_id).update(earned_count=F('earned_count') + 1)
 
 @receiver(post_delete, sender=UserBadge, dispatch_uid='decrement_badge_earned_count')
 def decrement_badge_earned_count_on_delete(sender, instance, **kwargs):
-    badge = instance.badge
-    if badge.earned_count > 0:
-        badge.earned_count -= 1
-        badge.save(update_fields=['earned_count'])
+    from trophies.models import Badge
+    Badge.objects.filter(pk=instance.badge_id, earned_count__gt=0).update(
+        earned_count=F('earned_count') - 1
+    )
 
 
 @receiver(post_save, sender=Comment, dispatch_uid="update_comment_count_on_save")

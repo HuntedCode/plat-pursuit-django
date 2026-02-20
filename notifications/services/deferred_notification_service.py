@@ -224,7 +224,7 @@ class DeferredNotificationService:
             logger.exception(f"Failed to queue badge notification: {e}")
 
     @staticmethod
-    def create_badge_notifications(profile_id):
+    def create_badge_notifications(profile_id, profile=None):
         """
         Create badge notifications for a profile after sync completes.
 
@@ -232,6 +232,7 @@ class DeferredNotificationService:
 
         Args:
             profile_id: Profile ID
+            profile: Optional Profile instance (avoids redundant DB fetch if caller has it)
         """
         key = f"pending_badges:{profile_id}"
 
@@ -249,14 +250,15 @@ class DeferredNotificationService:
 
             badge_list = [json.loads(item) for item in raw_items]
 
-            # Get profile and user
-            try:
-                profile = Profile.objects.get(id=profile_id)
-                if not profile.user:
-                    logger.debug(f"No user linked to profile {profile_id}")
+            # Get profile and user (skip fetch if caller provided instance)
+            if profile is None:
+                try:
+                    profile = Profile.objects.get(id=profile_id)
+                except Profile.DoesNotExist:
+                    logger.error(f"Profile {profile_id} not found")
                     return
-            except Profile.DoesNotExist:
-                logger.error(f"Profile {profile_id} not found")
+            if not profile.user:
+                logger.debug(f"No user linked to profile {profile_id}")
                 return
 
             # Get notification template

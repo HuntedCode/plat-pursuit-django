@@ -906,7 +906,7 @@ class TokenKeeper:
             # Create consolidated badge notifications
             try:
                 from notifications.services.deferred_notification_service import DeferredNotificationService
-                DeferredNotificationService.create_badge_notifications(profile_id)
+                DeferredNotificationService.create_badge_notifications(profile_id, profile=profile)
             except Exception as e:
                 logger.error(f"Failed to create badge notifications for profile {profile_id}: {e}", exc_info=True)
 
@@ -1169,14 +1169,19 @@ class TokenKeeper:
 
         logger.info(f"Fetching trophies for profile {profile_id}, game {np_communication_id} on platform {platform}")
         trophies = self._execute_api_call(self._get_instance_for_job(job_type), profile, 'trophies', np_communication_id=np_communication_id, platform=PlatformType(platform), include_progress=True, trophy_group_id='all', page_size=500)
-        # Process in batches to avoid long-running transactions that block other DB operations
+        # Process in batches to avoid long-running transactions that block other DB operations.
+        # Suppress the EarnedTrophy pre_save signal during sync: the signal fires a SELECT per
+        # save to track earned state, but during sync notifications are handled by
+        # DeferredNotificationService and earned-flip detection is in create_or_update_earned_trophy_from_trophy_data.
+        from trophies.sync_utils import sync_signal_suppressor
         batch_size = 50
-        for i in range(0, len(trophies), batch_size):
-            batch = trophies[i:i + batch_size]
-            with transaction.atomic():
-                for trophy_data in batch:
-                    trophy, _ = PsnApiService.create_or_update_trophy_from_trophy_data(game, trophy_data)
-                    PsnApiService.create_or_update_earned_trophy_from_trophy_data(profile, trophy, trophy_data)
+        with sync_signal_suppressor():
+            for i in range(0, len(trophies), batch_size):
+                batch = trophies[i:i + batch_size]
+                with transaction.atomic():
+                    for trophy_data in batch:
+                        trophy, _ = PsnApiService.create_or_update_trophy_from_trophy_data(game, trophy_data)
+                        PsnApiService.create_or_update_earned_trophy_from_trophy_data(profile, trophy, trophy_data)
         profile.increment_sync_progress(value=2)
 
         # Create any pending platinum notifications for this game

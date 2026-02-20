@@ -27,8 +27,11 @@ def _build_badge_context(profile, badges):
     Returns a dict with:
         - earned_badge_ids: set of Badge IDs the profile has earned
         - badges_by_key: dict of (series_slug, tier) -> Badge for prerequisite lookups
+        - stage_data: series_slug -> [(stage_number, required_tiers, game_ids)]
+        - plat_game_ids: set of game IDs where profile has platinum
+        - complete_game_ids: set of game IDs where profile has 100% progress
     """
-    from trophies.models import UserBadge
+    from trophies.models import UserBadge, Stage, ProfileGame
 
     earned_badge_ids = set(
         UserBadge.objects.filter(
@@ -37,10 +40,89 @@ def _build_badge_context(profile, badges):
     )
     badges_by_key = {(b.series_slug, b.tier): b for b in badges}
 
+    # Pre-fetch ALL stage completion data for all relevant series in one pass
+    series_slugs = {b.series_slug for b in badges if b.series_slug}
+
+    all_stages = (
+        Stage.objects
+        .filter(series_slug__in=series_slugs)
+        .prefetch_related('concepts__games')
+    )
+
+    # Build mapping: series_slug -> [(stage_number, required_tiers, game_ids)]
+    stage_data = {}
+    all_game_ids = set()
+
+    for stage in all_stages:
+        slug = stage.series_slug
+        if slug not in stage_data:
+            stage_data[slug] = []
+        game_ids = set()
+        for concept in stage.concepts.all():
+            for game in concept.games.all():
+                game_ids.add(game.id)
+        stage_data[slug].append((stage.stage_number, stage.required_tiers, game_ids))
+        all_game_ids.update(game_ids)
+
+    # Two queries: fetch all plat'd and 100%'d game IDs for this profile
+    plat_game_ids = set(
+        ProfileGame.objects.filter(
+            profile=profile, game_id__in=all_game_ids, has_plat=True
+        ).values_list('game_id', flat=True)
+    ) if all_game_ids else set()
+
+    complete_game_ids = set(
+        ProfileGame.objects.filter(
+            profile=profile, game_id__in=all_game_ids, progress=100
+        ).values_list('game_id', flat=True)
+    ) if all_game_ids else set()
+
     return {
         'earned_badge_ids': earned_badge_ids,
         'badges_by_key': badges_by_key,
+        'stage_data': stage_data,
+        'plat_game_ids': plat_game_ids,
+        'complete_game_ids': complete_game_ids,
     }
+
+
+def _get_stage_completion_from_cache(badge, _context):
+    """
+    Compute stage completion from pre-fetched cache instead of per-badge DB queries.
+    Mirrors the logic in Badge.get_stage_completion() but uses cached data from
+    _build_badge_context(), reducing O(2B) queries to O(0) for badge evaluation.
+    """
+    stage_entries = _context.get('stage_data', {}).get(badge.series_slug, [])
+
+    is_plat_check = False
+    is_progress_check = False
+
+    if badge.badge_type in ['series', 'collection']:
+        is_plat_check = badge.tier in [1, 3]
+        is_progress_check = badge.tier in [2, 4]
+    elif badge.badge_type == 'megamix':
+        is_plat_check = True
+    else:
+        return {}
+
+    if is_plat_check:
+        completed_ids = _context['plat_game_ids']
+    elif is_progress_check:
+        completed_ids = _context['complete_game_ids']
+    else:
+        return {}
+
+    completion = {}
+    for stage_number, required_tiers, game_ids in stage_entries:
+        # Same logic as Stage.applies_to_tier: empty required_tiers means all tiers
+        if required_tiers and badge.tier not in required_tiers:
+            continue
+        if not game_ids:
+            completion[stage_number] = False
+            continue
+        completion[stage_number] = bool(completed_ids & game_ids)
+
+    return completion
 
 
 def check_profile_badges(profile, profilegame_ids, skip_notis: bool = False):
@@ -342,7 +424,11 @@ def handle_badge(profile, badge, add_role_only=False, _context=None):
 
     # Handle series and collection badges (concept-based)
     if badge.badge_type in ['series', 'collection']:
-        stage_completion_dict = badge.get_stage_completion(profile, badge.badge_type)
+        # Use pre-fetched cache when available (batch path), fall back to per-badge query (standalone)
+        if _context and 'stage_data' in _context:
+            stage_completion_dict = _get_stage_completion_from_cache(badge, _context)
+        else:
+            stage_completion_dict = badge.get_stage_completion(profile, badge.badge_type)
         badge_earned = True
         completed_count = 0
 
@@ -368,7 +454,10 @@ def handle_badge(profile, badge, add_role_only=False, _context=None):
 
     # Handle megamix badges (flexible completion requirements)
     elif badge.badge_type == 'megamix':
-        stage_completion_dict = badge.get_stage_completion(profile, badge.badge_type)
+        if _context and 'stage_data' in _context:
+            stage_completion_dict = _get_stage_completion_from_cache(badge, _context)
+        else:
+            stage_completion_dict = badge.get_stage_completion(profile, badge.badge_type)
         completed_count = 0
 
         for stage, is_complete in stage_completion_dict.items():

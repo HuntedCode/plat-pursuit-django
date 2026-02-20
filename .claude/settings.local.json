@@ -21,7 +21,8 @@
       "Bash(git -C \"c:\\\\Users\\\\Jlowe\\\\Desktop\\\\PlatPursuit\" diff templates/trophies/trophy_case.html)",
       "Bash(git -C \"c:\\\\Users\\\\Jlowe\\\\Desktop\\\\PlatPursuit\" diff --stat static/css/output.css)",
       "Bash(git -C \"c:\\\\Users\\\\Jlowe\\\\Desktop\\\\PlatPursuit\" diff static/css/output.css)",
-      "Bash(git -C \"c:\\\\Users\\\\Jlowe\\\\Desktop\\\\PlatPursuit\" diff templates/trophies/badge_leaderboards.html templates/trophies/overall_badge_leaderboards.html templates/trophies/partials/badge_detail/badge_leaderboard_section.html templates/trophies/partials/badge_list/badge_list_items.html templates/trophies/partials/leaderboard_user_stats.html)"
+      "Bash(git -C \"c:\\\\Users\\\\Jlowe\\\\Desktop\\\\PlatPursuit\" diff templates/trophies/badge_leaderboards.html templates/trophies/overall_badge_leaderboards.html templates/trophies/partials/badge_detail/badge_leaderboard_section.html templates/trophies/partials/badge_list/badge_list_items.html templates/trophies/partials/leaderboard_user_stats.html)",
+      "Bash(xxd:*)"
     ]
   }
 }

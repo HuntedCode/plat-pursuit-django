@@ -77,15 +77,22 @@ def check_az_challenge_progress(profile):
             ).values_list('game_id', flat=True)
         )
 
-        newly_completed = 0
+        now = timezone.now()
+        slots_to_update = []
         for slot in pending_slots:
             if slot.game_id in platted_game_ids:
                 slot.is_completed = True
-                slot.completed_at = timezone.now()
-                slot.save(update_fields=['is_completed', 'completed_at'])
-                newly_completed += 1
+                slot.completed_at = now
+                slots_to_update.append(slot)
+
+        if slots_to_update:
+            AZChallengeSlot.objects.bulk_update(
+                slots_to_update, ['is_completed', 'completed_at']
+            )
+        newly_completed = len(slots_to_update)
 
         if newly_completed > 0:
+            # Compute counts from DB (prefetch cache may be stale after bulk_update)
             recalculate_challenge_counts(challenge)
             if challenge.completed_count == 26:
                 challenge.is_complete = True
@@ -376,6 +383,20 @@ def check_calendar_challenge_progress(profile):
         user_tz = _get_user_tz(profile)
         now = timezone.now()
 
+        # Early-exit: skip expensive full platinum scan if no new platinums since last check
+        has_new_plats = EarnedTrophy.objects.filter(
+            profile=profile,
+            trophy__trophy_type='platinum',
+            earned=True,
+            earned_date_time__isnull=False,
+            earned_date_time__gt=challenge.updated_at,
+            trophy__game__is_shovelware=False,
+            user_hidden=False,
+        ).exists()
+
+        if not has_new_plats:
+            continue
+
         # Fetch all platinum earned dates for this user (no shovelware, not hidden)
         platinums = EarnedTrophy.objects.filter(
             profile=profile,
@@ -436,7 +457,10 @@ def check_calendar_challenge_progress(profile):
             )
 
         if newly_filled:
-            recalculate_challenge_counts(challenge)
+            # Compute counts in-memory from all_days dict (avoids 2 COUNT queries)
+            filled = sum(1 for d in all_days.values() if d.is_filled)
+            challenge.filled_count = filled
+            challenge.completed_count = filled
 
             if challenge.completed_count >= challenge.total_items:
                 challenge.is_complete = True
@@ -453,6 +477,10 @@ def check_calendar_challenge_progress(profile):
 
             # Check calendar milestone progress (sync path)
             _check_calendar_milestones(profile)
+        elif to_update:
+            # plat_counts changed but no new days filled; advance the watermark
+            # so the early-exit check doesn't re-scan the same platinums next sync
+            challenge.save(update_fields=['updated_at'])
 
 
 def _check_calendar_milestones(profile):

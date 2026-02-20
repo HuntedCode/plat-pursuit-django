@@ -396,11 +396,19 @@ class PsnApiService:
             },
         )
 
-        notify = False
-        if (created and trophy_data.earned == True) or ((not created) and earned_trophy.earned == False and trophy_data.earned == True):
-            threshold = timezone.now() - timedelta(days=2)
-            notify = profile.discord_id and earned_trophy.trophy.trophy_type == 'platinum' and trophy_data.earned_date_time >= threshold
+        # Detect earned flip (unearned -> earned) for notification purposes
+        is_earned_flip = (not created) and earned_trophy.earned == False and trophy_data.earned == True
+        is_new_earn = (created and trophy_data.earned == True) or is_earned_flip
 
+        notify = False
+        if is_new_earn:
+            threshold = timezone.now() - timedelta(days=2)
+            notify = (
+                profile.discord_id
+                and earned_trophy.trophy.trophy_type == 'platinum'
+                and trophy_data.earned_date_time is not None
+                and trophy_data.earned_date_time >= threshold
+            )
 
         if not created:
             earned_trophy.earned = trophy_data.earned
@@ -415,6 +423,22 @@ class PsnApiService:
             earned_trophy.refresh_from_db()
             if not earned_trophy.trophy.game.is_shovelware:
                 notify_new_platinum(profile, earned_trophy)
+
+        # During sync with pre_save suppressed, the post_save signal won't detect earned
+        # flips (it relies on _previous_earned from pre_save). Queue the deferred platinum
+        # notification directly for the flip case so in-app notifications are still created.
+        if is_earned_flip and trophy.trophy_type == 'platinum' and profile.sync_status == 'syncing':
+            if trophy_data.earned_date_time and not trophy.game.is_shovelware and profile.user:
+                threshold = timezone.now() - timedelta(days=2)
+                if trophy_data.earned_date_time >= threshold:
+                    try:
+                        from notifications.services.deferred_notification_service import DeferredNotificationService
+                        DeferredNotificationService.queue_platinum_notification(
+                            profile=profile, game=trophy.game,
+                            trophy=trophy, earned_date=trophy_data.earned_date_time,
+                        )
+                    except Exception:
+                        logger.exception(f"Failed to queue deferred platinum notification for earned flip")
 
         return earned_trophy, created
 
@@ -474,25 +498,45 @@ class PsnApiService:
             logger.info("No ProfileGames to update.")
             return
 
+        # Collect profile_id/game_id pairs for the batch annotated query
+        pg_list = list(pg_qs)
+        profile_ids = {pg.profile_id for pg in pg_list}
+        game_ids_set = {pg.game_id for pg in pg_list}
+
+        # Single annotated query: compute all 4 stats grouped by (profile_id, game_id)
+        stats_qs = (
+            EarnedTrophy.objects
+            .filter(profile_id__in=profile_ids, trophy__game_id__in=game_ids_set)
+            .values('profile_id', 'trophy__game_id')
+            .annotate(
+                earned_count=Count('id', filter=Q(earned=True)),
+                unearned_count=Count('id', filter=Q(earned=False)),
+                plat_earned=Count('id', filter=Q(earned=True, trophy__trophy_type='platinum')),
+                max_earned_date=Max('earned_date_time', filter=Q(earned=True)),
+            )
+        )
+        stats_dict = {
+            (row['profile_id'], row['trophy__game_id']): row
+            for row in stats_qs
+        }
+
         pg_to_update = []
         unique_game_ids = set()
-        
-        for i in range(0, total_pgs, batch_size):
-            batch_qs = pg_qs[i:i + batch_size].iterator()
-            for pg in batch_qs:
-                earned_qs = EarnedTrophy.objects.filter(profile=pg.profile, trophy__game=pg.game)
-                pg.earned_trophies_count = earned_qs.filter(earned=True).count()
-                pg.unearned_trophies_count = earned_qs.filter(earned=False).count()
-                pg.has_plat = earned_qs.filter(trophy__trophy_type='platinum', earned=True).exists()
-                recent_date = earned_qs.filter(earned=True).aggregate(max_date=Max('earned_date_time'))['max_date']
-                pg.most_recent_trophy_date = recent_date if recent_date else None
-                pg_to_update.append(pg)
-                unique_game_ids.add(pg.game.id)
 
-            if pg_to_update:
-                ProfileGame.objects.bulk_update(pg_to_update, ['earned_trophies_count', 'unearned_trophies_count', 'has_plat', 'most_recent_trophy_date'])
-                logger.info(f"Updated batch of {len(pg_to_update)} ProfileGames.")
-                pg_to_update = []
+        for pg in pg_list:
+            row = stats_dict.get((pg.profile_id, pg.game_id), {})
+            pg.earned_trophies_count = row.get('earned_count', 0)
+            pg.unearned_trophies_count = row.get('unearned_count', 0)
+            pg.has_plat = row.get('plat_earned', 0) > 0
+            pg.most_recent_trophy_date = row.get('max_earned_date')
+            pg_to_update.append(pg)
+            unique_game_ids.add(pg.game_id)
+
+        # Bulk update in batches
+        for i in range(0, len(pg_to_update), batch_size):
+            batch = pg_to_update[i:i + batch_size]
+            ProfileGame.objects.bulk_update(batch, ['earned_trophies_count', 'unearned_trophies_count', 'has_plat', 'most_recent_trophy_date'])
+            logger.info(f"Updated batch of {len(batch)} ProfileGames.")
         logger.info(f"Updated {total_pgs} ProfileGames.")
 
         unique_game_ids = list(unique_game_ids)
@@ -522,7 +566,7 @@ class PsnApiService:
                 new_earned_count = earned_counts_dict.get(trophy.id, 0)
                 new_earn_rate = new_earned_count / played_counts_dict.get(trophy.game.id, 1) if played_counts_dict.get(trophy.game.id, 0) > 0 else 0.0
                 updated = False
-                if new_played_count != trophy.earned_count:
+                if new_earned_count != trophy.earned_count:
                     trophy.earned_count = new_earned_count
                     updated = True
                 if new_earn_rate != trophy.earn_rate:

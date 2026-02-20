@@ -384,15 +384,25 @@ class Profile(models.Model):
         """Recalculate and update recent and rarest platinums."""
         platinums = self.earned_trophy_entries.filter(earned=True, trophy__trophy_type='platinum')
 
-        if not platinums.exists():
+        # Single aggregate for both max date and min earn rate (saves 2 queries)
+        agg = platinums.aggregate(
+            max_date=Max('earned_date_time'),
+            min_rate=Min('trophy__trophy_earn_rate'),
+        )
+
+        max_date = agg['max_date']
+        min_rate = agg['min_rate']
+
+        if max_date is None:
             self.recent_plat = None
             self.rarest_plat = None
         else:
-            recent_date = platinums.aggregate(Max('earned_date_time'))['earned_date_time__max']
-            self.recent_plat = platinums.filter(earned_date_time=recent_date).first() if recent_date else None
-
-            min_rate = platinums.aggregate(Min('trophy__trophy_earn_rate'))['trophy__trophy_earn_rate__min']
-            self.rarest_plat = platinums.filter(trophy__trophy_earn_rate=min_rate).order_by('trophy__trophy_earn_rate').first() if min_rate is not None else None
+            self.recent_plat = platinums.filter(earned_date_time=max_date).first()
+            self.rarest_plat = (
+                platinums.filter(trophy__trophy_earn_rate=min_rate)
+                .order_by('trophy__trophy_earn_rate').first()
+                if min_rate is not None else None
+            )
 
         self.save(update_fields=['recent_plat', 'rarest_plat'])
 

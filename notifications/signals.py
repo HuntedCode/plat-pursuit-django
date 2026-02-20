@@ -25,7 +25,16 @@ def capture_earned_trophy_previous_state(sender, instance, **kwargs):
     Capture the previous 'earned' value before saving.
     This allows post_save to detect when earned flips from False to True.
     Uses .only('earned') to minimize query overhead during bulk sync operations.
+
+    Suppressed during sync via sync_signal_suppressor() context manager:
+    during sync, platinum notifications are handled by DeferredNotificationService
+    and earned-flip detection is done directly in create_or_update_earned_trophy_from_trophy_data().
     """
+    from trophies.sync_utils import is_sync_signal_suppressed
+    if is_sync_signal_suppressed():
+        instance._previous_earned = None
+        return
+
     if instance.pk and not instance._state.adding:
         try:
             instance._previous_earned = (
