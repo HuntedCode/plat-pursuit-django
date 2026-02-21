@@ -11,9 +11,9 @@
             <div class="grid grid-cols-2 lg:grid-cols-4 gap-2 lg:gap-3">
                 <!-- Earners Rank -->
                 <div class="flex flex-row items-center gap-2 bg-base-100 rounded-box border-2 border-base-300 px-3 py-2">
-                    {% include 'partials/icons/trophy_cup.html' with color='var(--color-warning)' size='w-6 h-6 shrink-0' %}
+                    {% include 'partials/icons/trophy_cup.html' with color='var(--color-info)' size='w-6 h-6 shrink-0' %}
                     <div class="flex flex-col">
-                        <span class="text-xs text-warning italic font-bold">Earners Rank</span>
+                        <span class="text-xs text-info italic font-bold">Earners Rank</span>
                         {% if stats.user_lb_rank %}
                             <span class="text-lg font-bold">#{{ stats.user_lb_rank }}</span>
                         {% else %}
@@ -24,22 +24,22 @@
 
                 <!-- Total Earners -->
                 <div class="flex flex-row items-center gap-2 bg-base-100 rounded-box border-2 border-base-300 px-3 py-2">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 shrink-0" viewBox="0 0 24 24" fill="none" stroke="var(--color-primary)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 shrink-0 stroke-accent" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                         <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
                     </svg>
                     <div class="flex flex-col">
-                        <span class="text-xs text-primary italic font-bold">Total Earners</span>
+                        <span class="text-xs text-accent italic font-bold">Total Earners</span>
                         <span class="text-lg font-bold">{{ stats.total_earners_count|intcomma }}</span>
                     </div>
                 </div>
 
                 <!-- Progress Rank -->
                 <div class="flex flex-row items-center gap-2 bg-base-100 rounded-box border-2 border-base-300 px-3 py-2">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 shrink-0" viewBox="0 0 24 24" fill="none" stroke="var(--color-accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 shrink-0 stroke-info lg:stroke-secondary" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                         <line x1="12" y1="20" x2="12" y2="10"></line><line x1="18" y1="20" x2="18" y2="4"></line><line x1="6" y1="20" x2="6" y2="16"></line>
                     </svg>
                     <div class="flex flex-col">
-                        <span class="text-xs text-accent italic font-bold">Progress Rank</span>
+                        <span class="text-xs text-info lg:text-secondary italic font-bold">Progress Rank</span>
                         {% if stats.user_lb_progress_rank %}
                             <span class="text-lg font-bold">#{{ stats.user_lb_progress_rank }}</span>
                         {% else %}
@@ -50,11 +50,11 @@
 
                 <!-- Total Progressers -->
                 <div class="flex flex-row items-center gap-2 bg-base-100 rounded-box border-2 border-base-300 px-3 py-2">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 shrink-0" viewBox="0 0 24 24" fill="none" stroke="var(--color-info)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 shrink-0 stroke-accent lg:stroke-primary" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                         <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
                     </svg>
                     <div class="flex flex-col">
-                        <span class="text-xs text-info italic font-bold">Users With Progress</span>
+                        <span class="text-xs text-accent lg:text-primary italic font-bold">Users With Progress</span>
                         <span class="text-lg font-bold">{{ stats.total_progressers_count|intcomma }}</span>
                     </div>
                 </div>
@@ -64,22 +64,22 @@
             <div class="grid grid-cols-2 gap-2 lg:gap-3">
                 <!-- Total Earners -->
                 <div class="flex flex-row items-center gap-2 bg-base-100 rounded-box border-2 border-base-300 px-3 py-2">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 shrink-0" viewBox="0 0 24 24" fill="none" stroke="var(--color-primary)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 shrink-0 stroke-info" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                         <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
                     </svg>
                     <div class="flex flex-col">
-                        <span class="text-xs text-primary italic font-bold">Total Earners</span>
+                        <span class="text-xs text-info italic font-bold">Total Earners</span>
                         <span class="text-lg font-bold">{{ stats.total_earners_count|intcomma }}</span>
                     </div>
                 </div>
 
                 <!-- Total Progressers -->
                 <div class="flex flex-row items-center gap-2 bg-base-100 rounded-box border-2 border-base-300 px-3 py-2">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 shrink-0" viewBox="0 0 24 24" fill="none" stroke="var(--color-info)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 shrink-0 stroke-accent" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                         <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
                     </svg>
                     <div class="flex flex-col">
-                        <span class="text-xs text-info italic font-bold">Users With Progress</span>
+                        <span class="text-xs text-accent italic font-bold">Users With Progress</span>
                         <span class="text-lg font-bold">{{ stats.total_progressers_count|intcomma }}</span>
                     </div>
                 </div>
