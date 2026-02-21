@@ -593,8 +593,6 @@ def sync_discord_roles(profile):
         UserBadge.objects.filter(
             profile=profile,
             badge__discord_role_id__isnull=False,
-        ).exclude(
-            badge__discord_role_id=0
         ).values_list('badge__discord_role_id', flat=True)
     )
     for role_id in badge_role_ids:
@@ -606,8 +604,6 @@ def sync_discord_roles(profile):
         UserMilestone.objects.filter(
             profile=profile,
             milestone__discord_role_id__isnull=False,
-        ).exclude(
-            milestone__discord_role_id=0
         ).values_list('milestone__discord_role_id', flat=True)
     )
     for role_id in milestone_role_ids:

@@ -283,14 +283,12 @@ class Profile(models.Model):
             # Collect badge roles
             all_role_ids.update(
                 UserBadge.objects.filter(profile=self, badge__discord_role_id__isnull=False)
-                .exclude(badge__discord_role_id='')
                 .values_list('badge__discord_role_id', flat=True)
             )
 
             # Collect milestone roles
             all_role_ids.update(
                 UserMilestone.objects.filter(profile=self, milestone__discord_role_id__isnull=False)
-                .exclude(milestone__discord_role_id='')
                 .values_list('milestone__discord_role_id', flat=True)
             )
 
