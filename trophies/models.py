@@ -703,6 +703,7 @@ class Concept(models.Model):
                 return cls.objects.create(
                     concept_id=f"PP_{next_id}",
                     unified_title=f"{game.title_name} ({platforms})",
+                    concept_icon_url=game.title_icon_url or None,
                 )
             except IntegrityError:
                 if attempt == 4:
