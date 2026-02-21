@@ -393,6 +393,13 @@
     }
   }
 }
+
+/* ===== Modal Backdrop Blur ===== */
+.modal[open] {
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
+}
+
 .legendary-title {
   font-family: 'Montserrat', sans-serif; /* e.g., Montserrat for epic feel */
   font-weight: 700;
@@ -624,4 +631,42 @@ html {
 .logo-spin-active {
   animation: logo-spin 2s cubic-bezier(0.25, 0.46, 0.45, 0.94) !important;
   cursor: pointer;
+}
+
+/* ─── Pick My Next Game Spinner ──────────────────────────────────────────── */
+
+@keyframes spinner-fade-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-spinner-fade-in {
+  animation: spinner-fade-in 0.4s ease-out forwards;
+}
+
+@keyframes spinner-winner-pulse {
+  0%, 100% { box-shadow: 0 0 12px color-mix(in oklch, var(--color-primary) 30%, transparent); }
+  50% { box-shadow: 0 0 24px color-mix(in oklch, var(--color-primary) 60%, transparent); }
+}
+
+.spinner-winner-glow {
+  animation: spinner-winner-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes spinner-grid-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 transparent; }
+  50% { box-shadow: 0 0 16px 4px color-mix(in oklch, var(--color-secondary) 50%, transparent); }
+}
+
+.spinner-grid-highlight {
+  animation: spinner-grid-pulse 0.8s ease-in-out 3;
+}
+
+@keyframes spinner-fade-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+.animate-spinner-fade-out {
+  animation: spinner-fade-out 0.4s ease-in forwards;
 }

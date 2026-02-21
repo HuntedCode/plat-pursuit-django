@@ -26,7 +26,9 @@
       "Bash(views)",
       "Bash(models)",
       "Bash(services \")",
-      "Bash(node -c:*)"
+      "Bash(node -c:*)",
+      "Bash(python3:*)",
+      "Bash(node:*)"
     ]
   }
 }

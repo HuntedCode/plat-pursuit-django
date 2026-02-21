@@ -1272,6 +1272,7 @@ const AZChallengeDetail = {
         this.challengeId = challengeId;
         this._bindShareButton();
         this._bindShareImageButton();
+        this._bindPickNextGame();
         _bindInlineRename(this.challengeId, (newName) => {
             const shareBtn = document.getElementById('share-image-btn');
             const bannerBtn = document.getElementById('banner-share-image-btn');
@@ -1339,6 +1340,698 @@ const AZChallengeDetail = {
             bannerBtn.addEventListener('click', () => openShareModal(bannerBtn.dataset.challengeName || ''));
         }
     },
+
+    // ─── Pick My Next Game Spinner ──────────────────────────────────────────
+
+    _TILE_WIDTH: 104, // 96px tile (w-24) + 8px gap (gap-2)
+
+    _spinnerSlots: [],
+    _reelItems: [],
+    _winner: null,
+    _winnerTileIndex: -1,
+    _finalTranslateX: 0,
+    _isSpinning: false,
+    _animFrameId: null,
+    _lastWinnerLetter: null,
+    _resultTimeoutId: null,
+    _resultInnerTimeoutId: null,
+
+    // Audio
+    _audioCtx: null,
+    _audioGain: null,
+    _audioMuted: false,
+    _noiseBuffer: null,
+    _lastTickTime: 0,
+    _lastTickTileIdx: -1,
+
+    _DICE_SVG: `<svg xmlns="http://www.w3.org/2000/svg" class="w-full h-full" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="2"/><circle cx="8" cy="8" r="1.5" fill="currentColor"/><circle cx="16" cy="8" r="1.5" fill="currentColor"/><circle cx="8" cy="16" r="1.5" fill="currentColor"/><circle cx="16" cy="16" r="1.5" fill="currentColor"/><circle cx="12" cy="12" r="1.5" fill="currentColor"/></svg>`,
+
+    _CAMERA_SVG: `<svg xmlns="http://www.w3.org/2000/svg" class="w-full h-full" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>`,
+
+    _FLAVOR_TEXTS: [
+        'Your next platinum awaits!',
+        'The hunt begins here.',
+        'Destiny has spoken. Time to earn that plat.',
+        'The trophies are calling. Will you answer?',
+        'This one has your name on it.',
+        'No trophy can hide from you.',
+        'Lock in. This plat is yours.',
+        'The pursuit continues.',
+    ],
+
+    _bindPickNextGame() {
+        const btn = document.getElementById('pick-next-game-btn');
+        if (!btn) return;
+
+        this._spinnerSlots = window._SPINNER_SLOTS || [];
+
+        if (this._spinnerSlots.length < 2) {
+            btn.disabled = true;
+            btn.classList.add('btn-disabled');
+            btn.title = this._spinnerSlots.length === 0
+                ? 'No assigned games to pick from'
+                : 'Need at least 2 assigned games to spin';
+            return;
+        }
+
+        btn.addEventListener('click', () => this._openSpinnerModal());
+    },
+
+    _openSpinnerModal() {
+        if (!document.getElementById('pick-next-game-modal')) {
+            document.body.insertAdjacentHTML('beforeend', this._buildSpinnerModalHTML());
+            this._bindSpinnerEvents();
+
+            // Set initial mute icon from localStorage
+            this._audioMuted = localStorage.getItem('pp_spinner_muted') === '1';
+            this._updateMuteIcon();
+        }
+
+        this._resetSpinner();
+        document.getElementById('pick-next-game-modal').showModal();
+    },
+
+    _buildSpinnerModalHTML() {
+        return `
+            <dialog id="pick-next-game-modal" class="modal">
+                <div class="modal-box max-w-2xl bg-base-200 p-0 overflow-hidden relative">
+                    <canvas id="spinner-confetti-canvas" class="absolute inset-0 w-full h-full pointer-events-none z-50"></canvas>
+                    <div class="bg-base-300/50 px-6 py-4 flex items-center justify-between">
+                        <h3 class="font-bold text-lg flex items-center gap-2">
+                            <span class="inline-flex w-5 h-5 text-secondary">${this._DICE_SVG}</span>
+                            Pick My Next Game!
+                        </h3>
+                        <div class="flex items-center gap-1">
+                            <button class="btn btn-sm btn-circle btn-ghost" id="spinner-mute-btn" title="Toggle sound">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" id="spinner-mute-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+                                    <path d="M19.07 4.93a10 10 0 0 1 0 14.14"/>
+                                    <path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>
+                                </svg>
+                            </button>
+                            <button class="btn btn-sm btn-circle btn-ghost" id="spinner-close-btn">&#x2715;</button>
+                        </div>
+                    </div>
+
+                    <div class="relative px-6 py-8" id="spinner-area">
+                        <div class="absolute top-0 bottom-0 left-1/2 -translate-x-1/2 z-20 flex flex-col items-center pointer-events-none">
+                            <div class="w-0 h-0 border-l-[10px] border-r-[10px] border-t-[14px]
+                                        border-l-transparent border-r-transparent border-t-secondary
+                                        drop-shadow-lg"></div>
+                            <div class="w-0.5 flex-1 bg-secondary/30"></div>
+                            <div class="w-0 h-0 border-l-[10px] border-r-[10px] border-b-[14px]
+                                        border-l-transparent border-r-transparent border-b-secondary
+                                        drop-shadow-lg"></div>
+                        </div>
+
+                        <div class="overflow-x-hidden overflow-y-visible rounded-lg py-2" id="spinner-viewport">
+                            <div class="flex gap-2" id="spinner-strip" style="will-change: transform;"></div>
+                        </div>
+
+                        <div class="absolute left-6 top-8 bottom-8 w-16 bg-gradient-to-r from-base-200 to-transparent z-10 pointer-events-none rounded-l-lg"></div>
+                        <div class="absolute right-6 top-8 bottom-8 w-16 bg-gradient-to-l from-base-200 to-transparent z-10 pointer-events-none rounded-r-lg"></div>
+                    </div>
+
+                    <div id="spinner-result" class="hidden px-6 py-6">
+                        <div class="flex flex-col items-center gap-3">
+                            <div class="w-24 h-24 rounded-xl overflow-hidden border-2 border-secondary shadow-lg shadow-secondary/30"
+                                 id="spinner-result-icon"></div>
+                            <div class="text-center">
+                                <span class="badge badge-secondary badge-lg font-bold mb-1"
+                                      id="spinner-result-letter"></span>
+                                <h4 class="text-xl font-bold" id="spinner-result-name"></h4>
+                                <p class="text-sm text-base-content/60 mt-1"
+                                   id="spinner-result-progress"></p>
+                                <p class="text-secondary font-medium mt-2 italic pr-1"
+                                   id="spinner-result-flavor"></p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="px-6 pb-6 flex flex-col items-center gap-3">
+                        <div class="flex gap-3">
+                            <button class="btn btn-secondary btn-sm" id="spinner-spin-btn">
+                                Spin!
+                            </button>
+                            <button class="btn btn-ghost btn-sm hidden" id="spinner-again-btn">
+                                Spin Again
+                            </button>
+                        </div>
+                        <button class="btn btn-ghost btn-xs hidden gap-1 text-base-content/50" id="spinner-set-cover-btn">
+                            <span class="inline-flex w-3.5 h-3.5">${this._CAMERA_SVG}</span>
+                            Set as Display Cover
+                        </button>
+                    </div>
+                </div>
+                <form method="dialog" class="modal-backdrop"><button>close</button></form>
+            </dialog>
+        `;
+    },
+
+    _bindSpinnerEvents() {
+        document.getElementById('spinner-spin-btn').addEventListener('click', () => {
+            this._startSpin();
+        });
+
+        document.getElementById('spinner-again-btn').addEventListener('click', () => {
+            this._resetSpinner();
+            this._startSpin();
+        });
+
+        document.getElementById('spinner-close-btn').addEventListener('click', () => {
+            document.getElementById('pick-next-game-modal').close();
+        });
+
+        document.getElementById('spinner-set-cover-btn').addEventListener('click', () => {
+            this._setWinnerAsCover();
+        });
+
+        document.getElementById('spinner-mute-btn').addEventListener('click', () => {
+            this._toggleMute();
+        });
+
+        document.getElementById('pick-next-game-modal').addEventListener('close', () => {
+            if (this._isSpinning) {
+                this._isSpinning = false;
+                if (this._animFrameId) {
+                    cancelAnimationFrame(this._animFrameId);
+                    this._animFrameId = null;
+                }
+            }
+
+            // Cancel any pending result timeouts to prevent stale DOM manipulation
+            if (this._resultTimeoutId) {
+                clearTimeout(this._resultTimeoutId);
+                this._resultTimeoutId = null;
+            }
+            if (this._resultInnerTimeoutId) {
+                clearTimeout(this._resultInnerTimeoutId);
+                this._resultInnerTimeoutId = null;
+            }
+
+            // Highlight winning slot on the grid
+            if (this._lastWinnerLetter) {
+                const gridSlot = document.querySelector(
+                    `[data-letter="${this._lastWinnerLetter}"][data-slot-id]`
+                );
+                if (gridSlot) {
+                    gridSlot.classList.add('spinner-grid-highlight');
+                    setTimeout(() => gridSlot.classList.remove('spinner-grid-highlight'), 2500);
+                }
+            }
+        });
+    },
+
+    _buildReelStrip() {
+        const strip = document.getElementById('spinner-strip');
+        strip.innerHTML = '';
+        strip.style.transform = 'translateX(0)';
+
+        const e = PlatPursuit.HTMLUtils.escape;
+        const slots = this._spinnerSlots;
+
+        const repeatCount = Math.max(Math.ceil(70 / slots.length), 8);
+        this._reelItems = [];
+
+        for (let i = 0; i < repeatCount; i++) {
+            const shuffled = [...slots].sort(() => Math.random() - 0.5);
+            for (const slot of shuffled) {
+                this._reelItems.push(slot);
+                strip.insertAdjacentHTML('beforeend', `
+                    <div class="spinner-tile flex-shrink-0 w-24 h-32 rounded-lg border-2
+                                border-base-300 bg-base-100 flex flex-col items-center
+                                justify-center gap-1 p-1.5 transition-all duration-300">
+                        <span class="text-xs font-black text-secondary">${e(slot.letter)}</span>
+                        <img src="${e(slot.game_icon)}" alt=""
+                             class="w-16 h-16 rounded object-cover" />
+                        <span class="text-[0.6rem] text-base-content/50 leading-tight
+                                     line-clamp-2 text-center w-full">${e(slot.game_name)}</span>
+                    </div>
+                `);
+            }
+        }
+    },
+
+    _pickWinner() {
+        const idx = Math.floor(Math.random() * this._spinnerSlots.length);
+        this._winner = this._spinnerSlots[idx];
+
+        // Collect ALL tile indices matching the winner
+        const candidates = [];
+        for (let i = 0; i < this._reelItems.length; i++) {
+            if (this._reelItems[i].letter === this._winner.letter) {
+                candidates.push(i);
+            }
+        }
+
+        // Filter to tiles past 30% of the reel (ensures decent scroll distance)
+        const minIndex = Math.floor(this._reelItems.length * 0.3);
+        const viable = candidates.filter(i => i >= minIndex);
+
+        // Pick randomly from viable candidates (fallback to all candidates)
+        const pool = viable.length > 0 ? viable : candidates;
+        this._winnerTileIndex = pool[Math.floor(Math.random() * pool.length)];
+    },
+
+    _calculateFinalPosition() {
+        const viewport = document.getElementById('spinner-viewport');
+        const viewportWidth = viewport.offsetWidth;
+        const tw = this._TILE_WIDTH;
+
+        const tileCenter = (this._winnerTileIndex * tw) + (tw / 2);
+        const viewportCenter = viewportWidth / 2;
+
+        // Small random jitter so it doesn't always land dead-center
+        const jitter = (Math.random() - 0.5) * (tw * 0.3);
+
+        this._finalTranslateX = -(tileCenter - viewportCenter + jitter);
+    },
+
+    _startSpin() {
+        const spinBtn = document.getElementById('spinner-spin-btn');
+        const againBtn = document.getElementById('spinner-again-btn');
+        spinBtn.disabled = true;
+        spinBtn.innerHTML = '<span class="loading loading-spinner loading-xs"></span>';
+        againBtn.classList.add('hidden');
+
+        this._isSpinning = true;
+        this._lastWinnerLetter = null;
+
+        // Show spinner area, hide result
+        document.getElementById('spinner-area').classList.remove('hidden');
+        document.getElementById('spinner-result').classList.add('hidden');
+
+        this._buildReelStrip();
+        this._pickWinner();
+        this._calculateFinalPosition();
+
+        const strip = document.getElementById('spinner-strip');
+        const endX = this._finalTranslateX;
+        const totalDistance = Math.abs(endX);
+
+        // Duration scales with distance, clamped between 3-6 seconds
+        const duration = Math.min(Math.max(totalDistance * 1.2, 3000), 6000);
+        const startTime = performance.now();
+
+        this._onSpinStart();
+
+        const animate = (now) => {
+            if (!this._isSpinning) return;
+
+            const elapsed = now - startTime;
+            const progress = Math.min(elapsed / duration, 1);
+
+            // Cubic ease-out: fast start, smooth deceleration
+            const eased = 1 - Math.pow(1 - progress, 3);
+            const currentX = endX * eased;
+            strip.style.transform = `translateX(${currentX}px)`;
+
+            this._onTick(progress);
+
+            if (progress < 1) {
+                this._animFrameId = requestAnimationFrame(animate);
+            } else {
+                this._onLandResult();
+            }
+        };
+
+        this._animFrameId = requestAnimationFrame(animate);
+    },
+
+    _onLandResult() {
+        this._isSpinning = false;
+        this._lastWinnerLetter = this._winner.letter;
+
+        // Play reveal fanfare
+        this._playRevealFanfare();
+
+        // Highlight the winning tile
+        const tiles = document.querySelectorAll('#spinner-strip .spinner-tile');
+        const winningTile = tiles[this._winnerTileIndex];
+        if (winningTile) {
+            winningTile.classList.add(
+                'border-secondary', 'scale-110', 'spinner-winner-glow'
+            );
+        }
+
+        // Brief pause, then show result
+        this._resultTimeoutId = setTimeout(() => {
+            this._resultTimeoutId = null;
+            this._showResult();
+        }, 600);
+    },
+
+    _showResult() {
+        // Guard: skip if modal was closed before this fired
+        const modal = document.getElementById('pick-next-game-modal');
+        if (!modal || !modal.open) return;
+
+        const e = PlatPursuit.HTMLUtils.escape;
+        const w = this._winner;
+        const spinnerArea = document.getElementById('spinner-area');
+
+        // Populate result card while still hidden
+        document.getElementById('spinner-result-icon').innerHTML =
+            `<img src="${e(w.game_icon)}" alt="" class="w-full h-full object-cover" />`;
+        document.getElementById('spinner-result-letter').textContent = w.letter;
+        document.getElementById('spinner-result-name').textContent = w.game_name;
+
+        const progressText = w.progress > 0
+            ? `${w.progress}% complete`
+            : 'Not started yet';
+        document.getElementById('spinner-result-progress').textContent = progressText;
+
+        const flavor = this._FLAVOR_TEXTS[Math.floor(Math.random() * this._FLAVOR_TEXTS.length)];
+        document.getElementById('spinner-result-flavor').textContent = flavor;
+
+        // Phase 1: Fade out the reel (opacity only, no layout shift)
+        spinnerArea.classList.add('animate-spinner-fade-out');
+
+        // Phase 2: Once fade completes, swap to result card
+        this._resultInnerTimeoutId = setTimeout(() => {
+            this._resultInnerTimeoutId = null;
+
+            // Guard: skip if modal was closed during fade
+            const innerModal = document.getElementById('pick-next-game-modal');
+            if (!innerModal || !innerModal.open) return;
+
+            spinnerArea.classList.add('hidden');
+            spinnerArea.classList.remove('animate-spinner-fade-out');
+
+            // Reveal result card
+            const resultEl = document.getElementById('spinner-result');
+            resultEl.classList.remove('hidden');
+            resultEl.classList.add('animate-spinner-fade-in');
+
+            // Update buttons
+            document.getElementById('spinner-spin-btn').classList.add('hidden');
+            document.getElementById('spinner-again-btn').classList.remove('hidden');
+
+            // Show "Set as Display Cover" button
+            const coverBtn = document.getElementById('spinner-set-cover-btn');
+            if (coverBtn) {
+                coverBtn.classList.remove('hidden', 'text-success');
+                coverBtn.classList.add('text-base-content/50');
+                coverBtn.disabled = false;
+                coverBtn.innerHTML = `
+                    <span class="inline-flex w-3.5 h-3.5">${this._CAMERA_SVG}</span>
+                    Set as Display Cover
+                `;
+            }
+
+            // Fire confetti + pop sound
+            this._playConfettiPop();
+            if (PlatPursuit.CelebrationManager) {
+                PlatPursuit.CelebrationManager.loadConfetti().then(() => {
+                    if (typeof confetti !== 'function') return;
+                    const canvas = document.getElementById('spinner-confetti-canvas');
+                    if (!canvas) return;
+                    const myConfetti = confetti.create(canvas, { resize: true });
+                    myConfetti({
+                        particleCount: 80,
+                        spread: 70,
+                        origin: { x: 0.5, y: 0.5 },
+                        colors: ['#67d1f8', '#f472b6', '#a855f7', '#3b82f6', '#22c55e', '#eab308'],
+                        disableForReducedMotion: true,
+                    });
+                }).catch(() => {});
+            }
+        }, 400);
+    },
+
+    async _setWinnerAsCover() {
+        const btn = document.getElementById('spinner-set-cover-btn');
+        if (!btn || !this._winner) return;
+
+        btn.disabled = true;
+        btn.innerHTML = '<span class="loading loading-spinner loading-xs"></span>';
+
+        try {
+            await PlatPursuit.API.patch(
+                `/api/v1/challenges/az/${this.challengeId}/update/`,
+                { cover_letter: this._winner.letter }
+            );
+            btn.innerHTML = `
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>
+                Display Cover Set!
+            `;
+            btn.classList.remove('text-base-content/50');
+            btn.classList.add('text-success');
+            PlatPursuit.ToastManager.success(`Display cover set to ${this._winner.game_name}`);
+        } catch (error) {
+            btn.disabled = false;
+            btn.innerHTML = `
+                <span class="inline-flex w-3.5 h-3.5">${this._CAMERA_SVG}</span>
+                Set as Display Cover
+            `;
+            let msg = 'Failed to set display cover.';
+            try { const errData = await error.response?.json(); msg = errData?.error || msg; } catch {}
+            PlatPursuit.ToastManager.error(msg);
+        }
+    },
+
+    _resetSpinner() {
+        this._isSpinning = false;
+        if (this._animFrameId) {
+            cancelAnimationFrame(this._animFrameId);
+            this._animFrameId = null;
+        }
+        if (this._resultTimeoutId) {
+            clearTimeout(this._resultTimeoutId);
+            this._resultTimeoutId = null;
+        }
+        if (this._resultInnerTimeoutId) {
+            clearTimeout(this._resultInnerTimeoutId);
+            this._resultInnerTimeoutId = null;
+        }
+
+        const result = document.getElementById('spinner-result');
+        if (result) {
+            result.classList.add('hidden');
+            result.classList.remove('animate-spinner-fade-in');
+        }
+
+        // Show spinner area (clear both hidden and any mid-fade state)
+        const spinnerArea = document.getElementById('spinner-area');
+        if (spinnerArea) {
+            spinnerArea.classList.remove('hidden', 'animate-spinner-fade-out');
+        }
+
+        const spinBtn = document.getElementById('spinner-spin-btn');
+        if (spinBtn) {
+            spinBtn.classList.remove('hidden');
+            spinBtn.disabled = false;
+            spinBtn.textContent = 'Spin!';
+        }
+
+        const againBtn = document.getElementById('spinner-again-btn');
+        if (againBtn) againBtn.classList.add('hidden');
+
+        const coverBtn = document.getElementById('spinner-set-cover-btn');
+        if (coverBtn) {
+            coverBtn.classList.add('hidden');
+            coverBtn.classList.remove('text-success');
+            coverBtn.classList.add('text-base-content/50');
+            coverBtn.disabled = false;
+            coverBtn.innerHTML = `
+                <span class="inline-flex w-3.5 h-3.5">${this._CAMERA_SVG}</span>
+                Set as Display Cover
+            `;
+        }
+
+        this._buildReelStrip();
+    },
+
+    // ─── Audio System ─────────────────────────────────────────────────────
+
+    _SPEAKER_ON_SVG: `
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+            <path d="M19.07 4.93a10 10 0 0 1 0 14.14"/>
+            <path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>
+        </svg>
+    `,
+    _SPEAKER_OFF_SVG: `
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+            <line x1="23" y1="9" x2="17" y2="15"/>
+            <line x1="17" y1="9" x2="23" y2="15"/>
+        </svg>
+    `,
+
+    _initAudio() {
+        if (this._audioCtx) return;
+
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        if (!AudioCtx) return;
+
+        this._audioCtx = new AudioCtx();
+        if (this._audioCtx.state === 'suspended') this._audioCtx.resume();
+
+        this._audioGain = this._audioCtx.createGain();
+        this._audioGain.gain.value = 0.5;
+        this._audioGain.connect(this._audioCtx.destination);
+
+        // Read mute preference
+        this._audioMuted = localStorage.getItem('pp_spinner_muted') === '1';
+        this._updateMuteIcon();
+    },
+
+    _toggleMute() {
+        this._audioMuted = !this._audioMuted;
+        localStorage.setItem('pp_spinner_muted', this._audioMuted ? '1' : '0');
+        this._updateMuteIcon();
+    },
+
+    _updateMuteIcon() {
+        const btn = document.getElementById('spinner-mute-btn');
+        if (!btn) return;
+        btn.innerHTML = this._audioMuted ? this._SPEAKER_OFF_SVG : this._SPEAKER_ON_SVG;
+        btn.title = this._audioMuted ? 'Unmute sound' : 'Mute sound';
+    },
+
+    _getNoiseBuffer() {
+        if (this._noiseBuffer) return this._noiseBuffer;
+        const size = Math.floor(this._audioCtx.sampleRate * 0.5);
+        const buffer = this._audioCtx.createBuffer(1, size, this._audioCtx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < size; i++) {
+            data[i] = Math.random() * 2 - 1;
+        }
+        this._noiseBuffer = buffer;
+        return buffer;
+    },
+
+    _playWhoosh() {
+        if (!this._audioCtx || this._audioMuted) return;
+
+        const ctx = this._audioCtx;
+        const now = ctx.currentTime;
+
+        // Filtered white noise with rising cutoff
+        const noise = ctx.createBufferSource();
+        noise.buffer = this._getNoiseBuffer();
+
+        const filter = ctx.createBiquadFilter();
+        filter.type = 'lowpass';
+        filter.frequency.setValueAtTime(200, now);
+        filter.frequency.exponentialRampToValueAtTime(1200, now + 0.3);
+
+        const gain = ctx.createGain();
+        gain.gain.setValueAtTime(0, now);
+        gain.gain.linearRampToValueAtTime(0.15, now + 0.05);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.4);
+
+        noise.connect(filter);
+        filter.connect(gain);
+        gain.connect(this._audioGain);
+        noise.start(now);
+        noise.stop(now + 0.45);
+    },
+
+    _playTick() {
+        if (!this._audioCtx || this._audioMuted) return;
+
+        const ctx = this._audioCtx;
+        const now = ctx.currentTime;
+
+        const osc = ctx.createOscillator();
+        osc.type = 'sine';
+        osc.frequency.value = 800;
+
+        const gain = ctx.createGain();
+        gain.gain.setValueAtTime(0.08, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.02);
+
+        osc.connect(gain);
+        gain.connect(this._audioGain);
+        osc.start(now);
+        osc.stop(now + 0.03);
+    },
+
+    _playRevealFanfare() {
+        if (!this._audioCtx || this._audioMuted) return;
+
+        const ctx = this._audioCtx;
+        const now = ctx.currentTime;
+        const notes = [523.25, 659.25, 783.99, 1046.50]; // C5, E5, G5, C6
+
+        for (let i = 0; i < notes.length; i++) {
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+
+            osc.type = 'sine';
+            osc.frequency.value = notes[i];
+
+            const start = now + i * 0.1;
+            gain.gain.setValueAtTime(0, start);
+            gain.gain.linearRampToValueAtTime(0.25, start + 0.02);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.6);
+
+            osc.connect(gain);
+            gain.connect(this._audioGain);
+            osc.start(start);
+            osc.stop(now + 0.65);
+        }
+    },
+
+    _playConfettiPop() {
+        if (!this._audioCtx || this._audioMuted) return;
+
+        const ctx = this._audioCtx;
+        const now = ctx.currentTime;
+
+        // Confetti cannon: bandpass-filtered noise burst ("pfft!")
+        const noise = ctx.createBufferSource();
+        noise.buffer = this._getNoiseBuffer();
+
+        const bandpass = ctx.createBiquadFilter();
+        bandpass.type = 'bandpass';
+        bandpass.frequency.setValueAtTime(1200, now);
+        bandpass.frequency.exponentialRampToValueAtTime(600, now + 0.1);
+        bandpass.Q.value = 0.8;
+
+        const gain = ctx.createGain();
+        gain.gain.setValueAtTime(0.3, now);
+        gain.gain.linearRampToValueAtTime(0.25, now + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+
+        noise.connect(bandpass);
+        bandpass.connect(gain);
+        gain.connect(this._audioGain);
+        noise.start(now);
+        noise.stop(now + 0.15);
+    },
+
+    _onSpinStart() {
+        this._initAudio();
+        this._lastTickTime = 0;
+        this._lastTickTileIdx = -1;
+        this._playWhoosh();
+    },
+
+    _onTick(progress) {
+        if (!this._audioCtx || this._audioMuted) return;
+
+        // Calculate which tile the center indicator is currently over
+        const viewport = document.getElementById('spinner-viewport');
+        if (!viewport) return;
+        const viewportCenter = viewport.offsetWidth / 2;
+        const currentX = Math.abs(this._finalTranslateX * (1 - Math.pow(1 - progress, 3)));
+        const currentTileIdx = Math.floor((currentX + viewportCenter) / this._TILE_WIDTH);
+
+        // Play tick when we cross a new tile boundary
+        if (currentTileIdx !== this._lastTickTileIdx) {
+            const now = performance.now();
+            // Rate-limit: skip if last tick was <40ms ago (avoid buzzing at high speed)
+            if (now - this._lastTickTime > 40) {
+                this._playTick();
+                this._lastTickTime = now;
+            }
+            this._lastTickTileIdx = currentTileIdx;
+        }
+    },
+
 };
 
 window.AZChallengeDetail = AZChallengeDetail;

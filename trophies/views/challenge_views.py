@@ -11,7 +11,7 @@ import logging
 from core.services.tracking import track_page_view, track_site_event
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.db.models import Q
+from django.db.models import Count, F, Q
 from django.http import Http404
 from django.shortcuts import redirect
 from django.urls import reverse_lazy, reverse
@@ -423,8 +423,20 @@ class AZChallengeDetailView(ProfileHotbarMixin, DetailView):
         if context['is_owner']:
             context['available_themes'] = get_available_themes_for_grid(include_game_art=False)
 
+            # Serialize eligible spinner slots for "Pick My Next Game" picker
+            spinner_data = []
+            for slot in slots:
+                if slot.game and not slot.is_completed:
+                    progress = slot.user_progress or {'percentage': 0}
+                    spinner_data.append({
+                        'letter': slot.letter,
+                        'game_name': slot.game.title_name,
+                        'game_icon': slot.game.title_icon_url or slot.game.title_image or '',
+                        'progress': progress.get('percentage', 0),
+                    })
+            context['spinner_slots_json'] = json.dumps(spinner_data)
+
         # Increment view count atomically
-        from django.db.models import F
         Challenge.objects.filter(pk=challenge.pk).update(view_count=F('view_count') + 1)
 
         track_page_view('az_challenge', str(challenge.id), self.request)
@@ -605,7 +617,6 @@ class CalendarChallengeDetailView(ProfileHotbarMixin, DetailView):
             context['available_themes'] = get_available_themes_for_grid(include_game_art=False)
 
         # Increment view count atomically to avoid race conditions
-        from django.db.models import F
         Challenge.objects.filter(pk=challenge.pk).update(view_count=F('view_count') + 1)
 
         track_page_view('calendar_challenge', str(challenge.id), self.request)
@@ -621,7 +632,6 @@ def _get_mini_calendar_data(challenge):
     Returns a list of 12 dicts: {month_num, filled_count, total_days}.
     Uses a single aggregate query rather than fetching all 365 day objects.
     """
-    from django.db.models import Count
     from trophies.models import CALENDAR_DAYS_PER_MONTH
 
     filled_by_month = dict(
