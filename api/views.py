@@ -96,6 +96,11 @@ class VerifyView(APIView):
                     return Response({'success': False, 'message': 'Verification failed. Check code and try again.'})
             except Profile.DoesNotExist:
                 return Response({'error': 'Profile not found.'}, status=status.HTTP_404_NOT_FOUND)
+            except ValueError as e:
+                return Response({'success': False, 'message': str(e)}, status=status.HTTP_409_CONFLICT)
+            except Exception as e:
+                logger.exception(f"Verify error for {psn_username}: {e}")
+                return Response({'error': 'Internal error.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         else:
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
