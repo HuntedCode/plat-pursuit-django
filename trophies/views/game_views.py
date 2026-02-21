@@ -93,7 +93,7 @@ class GamesListView(ProfileHotbarMixin, ListView):
             if show_only_platinum:
                 qs = qs.filter(trophies__trophy_type='platinum').distinct()
             if filter_shovelware:
-                qs = qs.filter(is_shovelware=False)
+                qs = qs.exclude(shovelware_status__in=['auto_flagged', 'manually_flagged'])
 
             if sort_val == 'played':
                 order = ['-played_count', Lower('title_name')]
@@ -583,7 +583,7 @@ class GameDetailView(ProfileHotbarMixin, DetailView):
 
         # Related badges
         series_slugs = Stage.objects.filter(concepts__games=game).values_list('series_slug', flat=True).distinct()
-        badges = Badge.objects.filter(series_slug__in=Subquery(series_slugs), tier=1).distinct().order_by('tier')
+        badges = Badge.objects.live().filter(series_slug__in=Subquery(series_slugs), tier=1).distinct().order_by('tier')
         context['badges'] = badges
 
         # Other platform versions

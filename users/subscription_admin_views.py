@@ -2,13 +2,13 @@
 Subscription admin dashboard: staff-only view for monitoring subscription health.
 
 Provides:
-- Stats cards (active, past_due, deactivated, suppressed)
-- Attention Needed tab: past-due users with notification/email history
+- Stats cards (active, past_due, action_required, deactivated, suppressed)
+- Attention Needed tab: action-required + past-due users with notification/email history
 - All Subscribers tab: full subscriber list
 - Recent Activity tab: recently ended subscription periods
 """
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone as dt_timezone
 
 from django.contrib.admin.views.decorators import staff_member_required
 from django.db.models import Count, Q
@@ -27,10 +27,8 @@ logger = logging.getLogger('users.admin')
 
 def _get_psn(user):
     """Get PSN username from a user with select_related('profile'), or 'N/A'."""
-    try:
-        return user.profile.psn_username
-    except Exception:
-        return 'N/A'
+    profile = getattr(user, 'profile', None)
+    return profile.psn_username if profile else 'N/A'
 
 
 @method_decorator(staff_member_required, name='dispatch')
@@ -40,19 +38,36 @@ class SubscriptionAdminView(TemplateView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
 
-        # ── Stats cards ──────────────────────────────────────────────
-        all_premium = list(
-            CustomUser.objects.filter(
-                premium_tier__isnull=False,
-            ).select_related('profile').order_by('premium_tier', 'email')
+        # ── Stats cards (aggregated in DB where possible) ─────────────
+        premium_qs = CustomUser.objects.filter(premium_tier__isnull=False)
+        provider_counts = premium_qs.aggregate(
+            stripe=Count('id', filter=Q(subscription_provider='stripe')),
+            paypal=Count('id', filter=Q(subscription_provider='paypal')),
         )
-
-        stripe_count = sum(1 for u in all_premium if u.subscription_provider == 'stripe')
-        paypal_count = sum(1 for u in all_premium if u.subscription_provider == 'paypal')
+        stripe_count = provider_counts['stripe']
+        paypal_count = provider_counts['paypal']
         total_active = stripe_count + paypal_count
+
+        # Tier breakdown (single DB query)
+        tier_rows = (
+            premium_qs.values('premium_tier')
+            .annotate(count=Count('id'))
+            .order_by('premium_tier')
+        )
+        tier_breakdown = [
+            {
+                'tier': row['premium_tier'],
+                'display': SubscriptionService.get_tier_display_name(row['premium_tier']),
+                'count': row['count'],
+            }
+            for row in tier_rows
+        ]
 
         # Past-due users (Stripe only, PayPal suspends immediately)
         past_due_users = self._get_past_due_users()
+
+        # Action-required users (awaiting 3D Secure / SCA verification)
+        action_required_users = self._get_action_required_users()
 
         # Recently deactivated (last 30 days)
         thirty_days_ago = timezone.now() - timedelta(days=30)
@@ -63,24 +78,12 @@ class SubscriptionAdminView(TemplateView):
             ).select_related('user', 'user__profile').order_by('-ended_at')[:30]
         )
 
-        # Email suppression count (users with sub_notifications off who are premium)
+        # Email suppression count (requires service call per user, so fetch premium users)
+        all_premium = list(premium_qs.select_related('profile').order_by('premium_tier', 'email'))
         suppressed_count = sum(
             1 for u in all_premium
             if not EmailPreferenceService.should_send_email(u, 'subscription_notifications')
         )
-
-        # Tier breakdown
-        tier_counts = {}
-        for user in all_premium:
-            tier_counts[user.premium_tier] = tier_counts.get(user.premium_tier, 0) + 1
-        tier_breakdown = [
-            {
-                'tier': tier,
-                'display': SubscriptionService.get_tier_display_name(tier),
-                'count': count,
-            }
-            for tier, count in sorted(tier_counts.items())
-        ]
 
         # ── All subscribers ──────────────────────────────────────────
         all_subscribers = [
@@ -115,12 +118,14 @@ class SubscriptionAdminView(TemplateView):
             'stripe_count': stripe_count,
             'paypal_count': paypal_count,
             'past_due_count': len(past_due_users),
+            'action_required_count': len(action_required_users),
             'deactivated_count': len(recent_deactivated),
             'suppressed_count': suppressed_count,
             # Tier breakdown
             'tier_breakdown': tier_breakdown,
             # Tabs
             'past_due_users': past_due_users,
+            'action_required_users': action_required_users,
             'all_subscribers': all_subscribers,
             'recent_activity': recent_activity,
         })
@@ -194,7 +199,7 @@ class SubscriptionAdminView(TemplateView):
                 next_retry_ts = latest_notification.metadata.get('next_retry_at')
                 if next_retry_ts:
                     try:
-                        next_retry_at = datetime.fromtimestamp(next_retry_ts, tz=timezone.utc)
+                        next_retry_at = datetime.fromtimestamp(next_retry_ts, tz=dt_timezone.utc)
                     except (ValueError, OSError, TypeError):
                         pass
                 attempt_count = latest_notification.metadata.get('attempt_count', 0)
@@ -217,3 +222,48 @@ class SubscriptionAdminView(TemplateView):
             })
 
         return past_due_list
+
+    def _get_action_required_users(self):
+        """
+        Find users with pending payment authentication (3D Secure / SCA).
+
+        Queries for payment_action_required notifications from the last 7 days,
+        deduplicates by user, and returns enriched data for the dashboard.
+        """
+        seven_days_ago = timezone.now() - timedelta(days=7)
+
+        recent_notifications = list(
+            Notification.objects.filter(
+                notification_type='payment_action_required',
+                created_at__gte=seven_days_ago,
+            ).select_related('recipient', 'recipient__profile').order_by('-created_at')
+        )
+        if not recent_notifications:
+            return []
+
+        # Deduplicate by user (keep most recent)
+        seen = set()
+        action_required_list = []
+        for n in recent_notifications:
+            user = n.recipient
+            if user.id in seen:
+                continue
+            seen.add(user.id)
+
+            if not user.premium_tier:
+                continue
+
+            invoice_url = (n.metadata or {}).get('invoice_url', '')
+            action_required_list.append({
+                'id': user.id,
+                'email': user.email,
+                'psn_username': _get_psn(user),
+                'tier': user.premium_tier,
+                'tier_display': SubscriptionService.get_tier_display_name(user.premium_tier),
+                'provider': user.subscription_provider or 'unknown',
+                'invoice_url': invoice_url,
+                'notified_at': n.created_at,
+                'emails_enabled': EmailPreferenceService.should_send_email(user, 'subscription_notifications'),
+            })
+
+        return action_required_list

@@ -76,6 +76,44 @@ def premium_theme_background(request):
     return {}
 
 
+def active_fundraiser(request):
+    """
+    Inject the currently active fundraiser for the site-wide banner.
+
+    Caches the fundraiser's PK for 60 seconds (model instances can't be
+    JSON-serialized by django-redis's JSONSerializer, so we cache the ID
+    and do a cheap PK lookup). A cached value of 0 means "no active
+    fundraiser" to distinguish from a cache miss.
+    """
+    try:
+        from django.core.cache import cache
+        from fundraiser.models import Fundraiser
+        from django.utils import timezone
+
+        def _fetch_id():
+            from django.db.models import Q
+            now = timezone.now()
+            fundraiser = (
+                Fundraiser.objects
+                .filter(banner_active=True, start_date__lte=now)
+                .filter(Q(end_date__isnull=True) | Q(end_date__gte=now))
+                .first()
+            )
+            return fundraiser.pk if fundraiser else 0
+
+        fundraiser_id = cache.get_or_set('fundraiser:active_banner', _fetch_id, 60)
+        if fundraiser_id:
+            fundraiser = Fundraiser.objects.filter(pk=fundraiser_id).first()
+            if fundraiser:
+                return {'active_fundraiser': fundraiser}
+    except ImportError:
+        logger.warning("Fundraiser app not available", exc_info=True)
+    except Exception:
+        logger.warning("Failed to check active fundraiser", exc_info=True)
+
+    return {}
+
+
 def high_sync_volume(request):
     """
     Check Redis for high sync volume flag and inject banner data into all templates.

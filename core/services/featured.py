@@ -20,7 +20,12 @@ def get_featured_games(limit=6):
     # Enrich with stats
     enriched = []
     game_ids = [g.id for g in featured]
-    pg_stats = ProfileGame.objects.filter(game__id__in=game_ids).aggregate(avg_completion=Avg('progress')) or {'avg_completion': 0}
+    pg_stats = (
+        ProfileGame.objects.filter(game__id__in=game_ids)
+        .values('game_id')
+        .annotate(avg_completion=Avg('progress'))
+    )
+    pg_dict = {item['game_id']: item['avg_completion'] or 0 for item in pg_stats}
     et_counts = EarnedTrophy.objects.filter(trophy__game__id__in=game_ids, earned=True).values('trophy__game__id').annotate(total_earned=Count('id'))
     et_dict = {item['trophy__game__id']: item['total_earned'] for item in et_counts}
 
@@ -30,7 +35,7 @@ def get_featured_games(limit=6):
             'trophies': game.defined_trophies,
             'trophiesEarned': et_dict.get(game.id, 0),
             'platform': ', '.join(game.title_platform),
-            'avgCompletion': pg_stats['avg_completion'],
+            'avgCompletion': pg_dict.get(game.id, 0),
             'image': game.get_icon_url(),
             'slug': f"/games/{game.np_communication_id}/",
         })
@@ -42,12 +47,14 @@ def compute_top_games(limit=6):
 
     player_counts = ProfileGame.objects.filter(
         last_updated_datetime__gte=past_date,
-        game__is_shovelware=False,
+    ).exclude(
+        game__shovelware_status__in=['auto_flagged', 'manually_flagged'],
     ).values('game__id').annotate(players=Count('profile', distinct=True)).order_by('-players')
 
     trophy_counts = EarnedTrophy.objects.filter(
         earned_date_time__gte=past_date,
-        trophy__game__is_shovelware=False,
+    ).exclude(
+        trophy__game__shovelware_status__in=['auto_flagged', 'manually_flagged'],
     ).values('trophy__game__id').annotate(trophies=Count('id')).order_by('-trophies')
 
     games = {}

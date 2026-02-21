@@ -140,7 +140,8 @@ def _get_badge_notification_context(user_badge_instance):
         # Find next tier badge in same series
         next_tier_badge = Badge.objects.filter(
             series_slug=badge.series_slug,
-            tier=badge.tier + 1
+            tier=badge.tier + 1,
+            is_live=True,
         ).first()
 
         if next_tier_badge:

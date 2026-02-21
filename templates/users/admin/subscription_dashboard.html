@@ -17,7 +17,7 @@
     </div>
 
     <!-- Stats Cards -->
-    <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <div class="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
         <div class="stat bg-base-100 border-2 border-base-300 rounded-box">
             <div class="stat-title">Active Subscribers</div>
             <div class="stat-value text-success">{{ total_active }}</div>
@@ -29,13 +29,18 @@
             <div class="stat-desc">Payment retries in progress</div>
         </div>
         <div class="stat bg-base-100 border-2 border-base-300 rounded-box">
+            <div class="stat-title">Action Required</div>
+            <div class="stat-value text-info">{{ action_required_count }}</div>
+            <div class="stat-desc">Awaiting 3D Secure</div>
+        </div>
+        <div class="stat bg-base-100 border-2 border-base-300 rounded-box">
             <div class="stat-title">Deactivated (30d)</div>
             <div class="stat-value text-warning">{{ deactivated_count }}</div>
             <div class="stat-desc">Subscriptions ended</div>
         </div>
         <div class="stat bg-base-100 border-2 border-base-300 rounded-box">
             <div class="stat-title">Emails Suppressed</div>
-            <div class="stat-value text-info">{{ suppressed_count }}</div>
+            <div class="stat-value text-neutral">{{ suppressed_count }}</div>
             <div class="stat-desc">Opted out of sub emails</div>
         </div>
     </div>
@@ -54,14 +59,57 @@
 
     <!-- Tabs -->
     <div id="sub-tabs" class="tabs tabs-boxed mb-6">
-        <button class="tab tab-active" data-tab="attention">Attention Needed ({{ past_due_count }})</button>
+        <button class="tab tab-active" data-tab="attention">Attention Needed ({{ past_due_count|add:action_required_count }})</button>
         <button class="tab" data-tab="all">All Subscribers ({{ total_active }})</button>
         <button class="tab" data-tab="activity">Recent Activity ({{ deactivated_count }})</button>
     </div>
 
     <!-- Tab: Attention Needed -->
     <div id="tab-attention" class="sub-tab-panel">
+        {% if action_required_users %}
+        <h3 class="text-lg font-semibold mb-2">Awaiting Payment Verification</h3>
+        <p class="text-sm opacity-70 mb-4">
+            These users need to complete 3D Secure authentication. Their premium access is still active.
+        </p>
+        <div class="space-y-4 mb-8">
+            {% for user in action_required_users %}
+            <div class="bg-base-100 border-2 border-info/30 rounded-box p-4">
+                <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
+                    <div class="flex-1">
+                        <div class="flex items-center gap-2 mb-1">
+                            <span class="font-bold text-lg">{{ user.psn_username }}</span>
+                            <span class="badge badge-info badge-sm">action_required</span>
+                            <span class="badge badge-outline badge-sm">{{ user.tier_display }}</span>
+                            <span class="badge badge-ghost badge-sm">{{ user.provider }}</span>
+                        </div>
+                        <div class="text-sm opacity-70">
+                            {{ user.email }}
+                            {% if not user.emails_enabled %}
+                                <span class="badge badge-warning badge-xs ml-1">emails disabled</span>
+                            {% endif %}
+                        </div>
+                        <div class="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-sm">
+                            <span>Notified: <strong>{{ user.notified_at|timesince }} ago</strong></span>
+                        </div>
+                    </div>
+                    <div class="flex flex-wrap gap-2">
+                        <button class="btn btn-info btn-sm"
+                                onclick="PlatPursuit.SubAdmin.resendActionRequiredEmail({{ user.id }}, event)">
+                            Resend Email
+                        </button>
+                        <button class="btn btn-ghost btn-sm"
+                                onclick="PlatPursuit.SubAdmin.showUserDetail({{ user.id }})">
+                            View History
+                        </button>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+
         {% if past_due_users %}
+        <h3 class="text-lg font-semibold mb-2">Past Due Payments</h3>
         <p class="text-sm opacity-70 mb-4">
             Stripe users with past-due payments. PayPal payment failures deactivate immediately and appear in Recent Activity.
         </p>
@@ -130,7 +178,9 @@
             </div>
             {% endfor %}
         </div>
-        {% else %}
+        {% endif %}
+
+        {% if not past_due_users and not action_required_users %}
         <div class="text-center py-12 opacity-60">
             <p class="text-2xl mb-2">All clear!</p>
             <p>No users need attention. All subscription payments are current.</p>

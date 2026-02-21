@@ -96,13 +96,14 @@ class GameQuerySet(models.QuerySet):
         """
         Exclude shovelware games.
 
-        Shovelware is identified by low-quality indicators like
-        extremely high platinum rates or very short completion times.
+        Shovelware is identified via rule-based detection:
+        games with >= 90% platinum earn rate, their concept siblings,
+        and all games from fully blacklisted publishers (5+ flagged concepts).
 
         Returns:
             QuerySet: Non-shovelware games
         """
-        return self.filter(is_shovelware=False)
+        return self.exclude(shovelware_status__in=['auto_flagged', 'manually_flagged'])
 
     def for_platform(self, platforms):
         """
@@ -300,6 +301,10 @@ class ProfileGameManager(models.Manager):
 class BadgeQuerySet(models.QuerySet):
     """Custom queryset for Badge model."""
 
+    def live(self):
+        """Filter to only badges visible to regular users."""
+        return self.filter(is_live=True)
+
     def by_series(self, series_slug):
         """
         Filter badges by series, ordered by tier.
@@ -343,6 +348,10 @@ class BadgeManager(models.Manager):
     def get_queryset(self):
         """Return custom queryset."""
         return BadgeQuerySet(self.model, using=self._db)
+
+    def live(self):
+        """Proxy to queryset method."""
+        return self.get_queryset().live()
 
     def by_series(self, series_slug):
         """Proxy to queryset method."""

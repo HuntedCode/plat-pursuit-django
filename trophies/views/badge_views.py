@@ -46,7 +46,7 @@ class BadgeListView(ProfileHotbarMixin, ListView):
     paginate_by = None
 
     def get_queryset(self):
-        qs = super().get_queryset().select_related(
+        qs = super().get_queryset().live().select_related(
             'base_badge', 'most_recent_concept', 'title',
             'base_badge__most_recent_concept', 'base_badge__title',
         )
@@ -243,7 +243,7 @@ class BadgeListView(ProfileHotbarMixin, ListView):
                 series_completed = UserBadge.objects.filter(
                     profile=profile
                 ).values('badge__series_slug').distinct().count()
-                total_series = Badge.objects.filter(tier=1).exclude(
+                total_series = Badge.objects.live().filter(tier=1).exclude(
                     series_slug__isnull=True
                 ).exclude(series_slug='').count()
 
@@ -310,7 +310,7 @@ class BadgeDetailView(ProfileHotbarMixin, DetailView):
 
     def get_object(self, queryset=None):
         series_slug = self.kwargs[self.slug_url_kwarg]
-        return Badge.objects.by_series(series_slug)
+        return Badge.objects.by_series(series_slug).select_related('funded_by')
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -318,6 +318,13 @@ class BadgeDetailView(ProfileHotbarMixin, DetailView):
 
         if not series_badges.exists():
             raise Http404("Series not found")
+
+        # Staff preview gate: non-live badges are staff-only
+        first_badge = series_badges.first()
+        if first_badge and not first_badge.is_live:
+            if not self.request.user.is_staff:
+                raise Http404("Series not found")
+            context['is_staff_preview'] = True
 
         psn_username = self.kwargs.get('psn_username')
         if psn_username:
@@ -725,7 +732,10 @@ class BadgeLeaderboardsView(ProfileHotbarMixin, DetailView):
 
     def get_object(self, queryset=None):
         series_slug = self.kwargs[self.slug_url_kwarg]
-        return get_object_or_404(Badge, series_slug=series_slug, tier=1)
+        badge = get_object_or_404(Badge, series_slug=series_slug, tier=1)
+        if not badge.is_live and not self.request.user.is_staff:
+            raise Http404("Series not found")
+        return badge
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -873,7 +883,7 @@ class OverallBadgeLeaderboardsView(ProfileHotbarMixin, TemplateView):
         context['active_tab'] = active_tab
 
         if active_tab == 'series':
-            series_badges = Badge.objects.filter(
+            series_badges = Badge.objects.live().filter(
                 tier=1
             ).select_related(
                 'base_badge', 'most_recent_concept',

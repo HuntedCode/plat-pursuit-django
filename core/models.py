@@ -217,6 +217,7 @@ class EmailLog(models.Model):
         ('subscription_cancelled', 'Subscription Cancelled'),
         ('subscription_welcome', 'Subscription Welcome'),
         ('payment_succeeded', 'Payment Succeeded'),
+        ('payment_action_required', 'Payment Action Required'),
         # Account
         ('email_verification', 'Email Verification'),
         ('password_reset', 'Password Reset'),
@@ -224,6 +225,10 @@ class EmailLog(models.Model):
         ('monthly_recap', 'Monthly Recap'),
         # Admin
         ('admin_announcement', 'Admin Announcement'),
+        # Fundraiser
+        ('donation_receipt', 'Donation Receipt'),
+        ('badge_claim_confirmation', 'Badge Claim Confirmation'),
+        ('artwork_complete', 'Badge Artwork Complete'),
     ]
     STATUS_CHOICES = [
         ('sent', 'Sent'),

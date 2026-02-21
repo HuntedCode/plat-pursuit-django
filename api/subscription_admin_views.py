@@ -111,6 +111,21 @@ class SubscriptionAdminActionView(APIView):
                 msg = 'Payment succeeded email sent' if sent else 'Email was suppressed (user preference) or failed'
                 return Response({'success': bool(sent), 'message': msg})
 
+            elif action == 'resend_action_required_email':
+                from django.conf import settings
+                latest = Notification.objects.filter(
+                    recipient=user,
+                    notification_type='payment_action_required',
+                ).order_by('-created_at').first()
+                invoice_url = (latest.metadata or {}).get('invoice_url', '') if latest else ''
+                if not invoice_url:
+                    invoice_url = f"{settings.SITE_URL}/users/subscription-management/"
+                sent = SubscriptionService._send_payment_action_required_email(
+                    user, invoice_url, triggered_by='admin_manual',
+                )
+                msg = 'Action required email sent' if sent else 'Email was suppressed (user preference) or failed'
+                return Response({'success': bool(sent), 'message': msg})
+
             return Response({'error': f'Unknown action: {action}'}, status=status.HTTP_400_BAD_REQUEST)
 
         except Exception as e:
@@ -139,7 +154,7 @@ class SubscriptionAdminUserDetailView(APIView):
             # In-app notifications (payment_failed + subscription_updated)
             notifications = Notification.objects.filter(
                 recipient=user,
-                notification_type__in=['payment_failed', 'subscription_updated'],
+                notification_type__in=['payment_failed', 'payment_action_required', 'subscription_updated'],
             ).order_by('-created_at')[:20]
 
             # Email logs

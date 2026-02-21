@@ -22,6 +22,7 @@ class NotificationTemplate(models.Model):
         ('admin_announcement', 'Admin Announcement'),
         ('system_alert', 'System Alert'),
         ('payment_failed', 'Payment Failed'),
+        ('payment_action_required', 'Payment Action Required'),
     ]
 
     PRIORITY_CHOICES = [

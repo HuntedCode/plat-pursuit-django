@@ -1,0 +1,100 @@
+{% extends "emails/base_email.html" %}
+
+{% block extra_styles %}
+    <style>
+        .complete-box {
+            background-color: #667eea;
+            background: linear-gradient(135deg, #2ECC71 0%, #1abc9c 50%, #667eea 100%);
+            border-radius: 12px;
+            padding: 30px;
+            margin: 25px 0;
+            color: #ffffff;
+            text-align: center;
+        }
+
+        .complete-box .complete-icon {
+            font-size: 42px;
+            margin-bottom: 10px;
+            display: block;
+        }
+
+        .complete-box h2 {
+            margin: 0 0 10px 0;
+            font-size: 22px;
+            font-weight: 700;
+        }
+
+        .complete-box p {
+            margin: 0;
+            font-size: 15px;
+            opacity: 0.95;
+            line-height: 1.6;
+        }
+
+        .complete-box .badge-name {
+            font-size: 24px;
+            font-weight: 700;
+            margin: 15px 0;
+            display: block;
+        }
+
+        .flavor-text {
+            text-align: center;
+            font-style: italic;
+            color: #777777;
+            font-size: 15px;
+            margin: 30px 0 10px 0;
+            line-height: 1.6;
+        }
+
+        @media only screen and (max-width: 600px) {
+            .complete-box {
+                padding: 20px 15px;
+            }
+            .complete-box .badge-name {
+                font-size: 20px;
+            }
+        }
+    </style>
+{% endblock %}
+
+{% block title %}New Artwork: {{ claim.series_name }}{% endblock %}
+
+{% block header_content %}
+    <h1>Artwork Complete!</h1>
+    <p>Your claimed badge has a new look</p>
+{% endblock %}
+
+{% block content %}
+    <p class="greeting">Hey {{ user.first_name|default:user.email }},</p>
+
+    <div class="complete-box">
+        <span class="complete-icon">&#127912;</span>
+        <h2>Fresh artwork is live!</h2>
+        <span class="badge-name">{{ claim.series_name }}</span>
+        <p>
+            The badge series you helped commission now has professional artwork.
+            All tiers of this badge have been updated with the new design.
+            Go check it out!
+        </p>
+    </div>
+
+    <p class="intro">
+        Thanks to your generous donation, this badge series now has custom artwork
+        that the entire PlatPursuit community can enjoy. Your contribution made
+        this possible!
+    </p>
+
+    <div class="cta-container">
+        <a href="{{ badge_url }}" class="cta-button">See the New Artwork</a>
+    </div>
+
+    <p class="flavor-text">
+        Another badge brought to life. The pursuit continues!
+    </p>
+{% endblock %}
+
+{% block footer_note %}
+    You're receiving this because you claimed this badge series on PlatPursuit.<br>
+    <a href="{{ preference_url }}" style="color: #999999; text-decoration: underline;">Manage your email preferences</a>.
+{% endblock %}

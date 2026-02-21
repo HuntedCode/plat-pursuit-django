@@ -10,7 +10,7 @@ def get_featured_badges(limit=6):
     All filtered to tier=1 (Bronze entry point).
     """
     base_qs = (
-        Badge.objects.filter(tier=1)
+        Badge.objects.live().filter(tier=1)
         .filter(
             Q(badge_image__isnull=False, badge_image__gt='')
             | Q(base_badge__badge_image__isnull=False, base_badge__badge_image__gt='')

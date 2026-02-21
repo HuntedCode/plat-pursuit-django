@@ -179,7 +179,6 @@ class PsnApiService:
                 "played_count": 0,
                 "view_count": 0,
                 "is_regional": False,
-                "is_shovelware": False,
                 "is_obtainable": True,
                 "is_delisted": False,
                 "has_online_trophies": False,
@@ -375,8 +374,9 @@ class PsnApiService:
             trophy.trophy_earn_rate = trophy_data.trophy_earn_rate if trophy_data.trophy_earn_rate else 0.0
             trophy.save()
         
-        if trophy.trophy_type == 'platinum' and not trophy.game.is_shovelware:
-            game.update_is_shovelware(trophy.trophy_earn_rate)
+        if trophy.trophy_type == 'platinum':
+            from trophies.services.shovelware_detection_service import ShovelwareDetectionService
+            ShovelwareDetectionService.evaluate_game(game)
         return trophy, created
 
     @classmethod

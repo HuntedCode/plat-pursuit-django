@@ -16,6 +16,10 @@ Usage:
     python manage.py test_email_system your.email@example.com --cancelled-preview
     python manage.py test_email_system your.email@example.com --welcome-preview
     python manage.py test_email_system your.email@example.com --payment-succeeded-preview
+    python manage.py test_email_system your.email@example.com --payment-action-required-preview
+    python manage.py test_email_system your.email@example.com --donation-receipt-preview
+    python manage.py test_email_system your.email@example.com --badge-claim-preview
+    python manage.py test_email_system your.email@example.com --artwork-complete-preview
 """
 from django.core.management.base import BaseCommand, CommandError
 from django.conf import settings
@@ -71,6 +75,26 @@ class Command(BaseCommand):
             action='store_true',
             help='Send a preview of the payment succeeded / renewal confirmation email'
         )
+        parser.add_argument(
+            '--payment-action-required-preview',
+            action='store_true',
+            help='Send a preview of the payment action required (3D Secure) email'
+        )
+        parser.add_argument(
+            '--donation-receipt-preview',
+            action='store_true',
+            help='Send a preview of the fundraiser donation receipt email'
+        )
+        parser.add_argument(
+            '--badge-claim-preview',
+            action='store_true',
+            help='Send a preview of the badge claim confirmation email'
+        )
+        parser.add_argument(
+            '--artwork-complete-preview',
+            action='store_true',
+            help='Send a preview of the badge artwork complete notification email'
+        )
 
     def handle(self, *args, **options):
         recipient_email = options['recipient_email']
@@ -82,6 +106,10 @@ class Command(BaseCommand):
         cancelled_preview = options.get('cancelled_preview', False)
         welcome_preview = options.get('welcome_preview', False)
         payment_succeeded_preview = options.get('payment_succeeded_preview', False)
+        payment_action_required_preview = options.get('payment_action_required_preview', False)
+        donation_receipt_preview = options.get('donation_receipt_preview', False)
+        badge_claim_preview = options.get('badge_claim_preview', False)
+        artwork_complete_preview = options.get('artwork_complete_preview', False)
 
         self.stdout.write("=" * 70)
         self.stdout.write("Email System Test")
@@ -106,6 +134,14 @@ class Command(BaseCommand):
             self._send_welcome_preview(recipient_email)
         elif payment_succeeded_preview:
             self._send_payment_succeeded_preview(recipient_email)
+        elif payment_action_required_preview:
+            self._send_payment_action_required_preview(recipient_email)
+        elif donation_receipt_preview:
+            self._send_donation_receipt_preview(recipient_email)
+        elif badge_claim_preview:
+            self._send_badge_claim_preview(recipient_email)
+        elif artwork_complete_preview:
+            self._send_artwork_complete_preview(recipient_email)
         else:
             self._send_simple_test(recipient_email)
 
@@ -484,5 +520,212 @@ class Command(BaseCommand):
         except Exception as e:
             self.stdout.write(
                 self.style.ERROR(f'✗ Failed to send payment succeeded preview: {e}')
+            )
+            raise CommandError(f'Email sending failed: {e}')
+
+    def _send_payment_action_required_preview(self, recipient_email):
+        """Send a preview of the payment action required (3D Secure) email."""
+        from users.services.email_preference_service import EmailPreferenceService
+
+        self.stdout.write("\nSending payment action required email preview...")
+
+        sample_user_id = 1
+        try:
+            preference_token = EmailPreferenceService.generate_preference_token(sample_user_id)
+            preference_url = f"{settings.SITE_URL}/users/email-preferences/?token={preference_token}"
+        except Exception as e:
+            self.stdout.write(self.style.WARNING(f"Failed to generate preference token: {e}"))
+            preference_url = f"{settings.SITE_URL}/users/email-preferences/"
+
+        context = {
+            'username': 'TestUser',
+            'tier_name': 'Premium Monthly',
+            'invoice_url': f'{settings.SITE_URL}/users/subscription-management/',
+            'site_url': settings.SITE_URL,
+            'preference_url': preference_url,
+        }
+
+        try:
+            sent_count = EmailService.send_html_email(
+                subject='[PREVIEW] Complete your payment verification',
+                to_emails=[recipient_email],
+                template_name='emails/payment_action_required.html',
+                context=context,
+                fail_silently=False,
+            )
+
+            if sent_count > 0:
+                self.stdout.write(
+                    self.style.SUCCESS('✓ Payment action required preview sent successfully!')
+                )
+                self.stdout.write('\nCheck your inbox to see how the 3D Secure email looks.')
+            else:
+                self.stdout.write(
+                    self.style.ERROR('✗ Email was not sent (no errors but send count is 0)')
+                )
+
+        except Exception as e:
+            self.stdout.write(
+                self.style.ERROR(f'✗ Failed to send payment action required preview: {e}')
+            )
+            raise CommandError(f'Email sending failed: {e}')
+
+    def _send_donation_receipt_preview(self, recipient_email):
+        """Send a preview of the fundraiser donation receipt email."""
+        from users.services.email_preference_service import EmailPreferenceService
+
+        self.stdout.write("\nSending donation receipt email preview...")
+
+        sample_user_id = 1
+        try:
+            preference_token = EmailPreferenceService.generate_preference_token(sample_user_id)
+            preference_url = f"{settings.SITE_URL}/users/email-preferences/?token={preference_token}"
+        except Exception as e:
+            self.stdout.write(self.style.WARNING(f"Failed to generate preference token: {e}"))
+            preference_url = f"{settings.SITE_URL}/users/email-preferences/"
+
+        # Build a mock donation-like object for template rendering
+        class MockDonation:
+            amount = '25.00'
+            provider = 'stripe'
+
+        class MockFundraiser:
+            name = 'Badge Artwork Fund'
+            slug = 'badge-artwork-fund'
+
+        context = {
+            'user': type('User', (), {'first_name': 'TestUser', 'email': recipient_email})(),
+            'donation': MockDonation(),
+            'fundraiser': MockFundraiser(),
+            'badge_picks_earned': 2,
+            'claim_url': f'{settings.SITE_URL}/fundraiser/badge-artwork-fund/',
+            'site_url': settings.SITE_URL,
+            'preference_url': preference_url,
+        }
+
+        try:
+            sent_count = EmailService.send_html_email(
+                subject='[PREVIEW] Thank you for your donation!',
+                to_emails=[recipient_email],
+                template_name='emails/donation_receipt.html',
+                context=context,
+                fail_silently=False,
+            )
+
+            if sent_count > 0:
+                self.stdout.write(
+                    self.style.SUCCESS('✓ Donation receipt preview sent successfully!')
+                )
+                self.stdout.write('\nCheck your inbox to see how the donation receipt email looks.')
+            else:
+                self.stdout.write(
+                    self.style.ERROR('✗ Email was not sent (no errors but send count is 0)')
+                )
+
+        except Exception as e:
+            self.stdout.write(
+                self.style.ERROR(f'✗ Failed to send donation receipt preview: {e}')
+            )
+            raise CommandError(f'Email sending failed: {e}')
+
+    def _send_badge_claim_preview(self, recipient_email):
+        """Send a preview of the badge claim confirmation email."""
+        from users.services.email_preference_service import EmailPreferenceService
+
+        self.stdout.write("\nSending badge claim confirmation email preview...")
+
+        sample_user_id = 1
+        try:
+            preference_token = EmailPreferenceService.generate_preference_token(sample_user_id)
+            preference_url = f"{settings.SITE_URL}/users/email-preferences/?token={preference_token}"
+        except Exception as e:
+            self.stdout.write(self.style.WARNING(f"Failed to generate preference token: {e}"))
+            preference_url = f"{settings.SITE_URL}/users/email-preferences/"
+
+        class MockClaim:
+            series_name = 'Trophy Hunter'
+            series_slug = 'trophy-hunter'
+
+        context = {
+            'user': type('User', (), {'first_name': 'TestUser', 'email': recipient_email})(),
+            'claim': MockClaim(),
+            'badge_url': f'{settings.SITE_URL}/badges/trophy-hunter/',
+            'site_url': settings.SITE_URL,
+            'preference_url': preference_url,
+        }
+
+        try:
+            sent_count = EmailService.send_html_email(
+                subject='[PREVIEW] Badge claimed: Trophy Hunter',
+                to_emails=[recipient_email],
+                template_name='emails/badge_claim_confirmation.html',
+                context=context,
+                fail_silently=False,
+            )
+
+            if sent_count > 0:
+                self.stdout.write(
+                    self.style.SUCCESS('✓ Badge claim preview sent successfully!')
+                )
+                self.stdout.write('\nCheck your inbox to see how the badge claim email looks.')
+            else:
+                self.stdout.write(
+                    self.style.ERROR('✗ Email was not sent (no errors but send count is 0)')
+                )
+
+        except Exception as e:
+            self.stdout.write(
+                self.style.ERROR(f'✗ Failed to send badge claim preview: {e}')
+            )
+            raise CommandError(f'Email sending failed: {e}')
+
+    def _send_artwork_complete_preview(self, recipient_email):
+        """Send a preview of the badge artwork complete notification email."""
+        from users.services.email_preference_service import EmailPreferenceService
+
+        self.stdout.write("\nSending artwork complete email preview...")
+
+        sample_user_id = 1
+        try:
+            preference_token = EmailPreferenceService.generate_preference_token(sample_user_id)
+            preference_url = f"{settings.SITE_URL}/users/email-preferences/?token={preference_token}"
+        except Exception as e:
+            self.stdout.write(self.style.WARNING(f"Failed to generate preference token: {e}"))
+            preference_url = f"{settings.SITE_URL}/users/email-preferences/"
+
+        class MockClaim:
+            series_name = 'Trophy Hunter'
+            series_slug = 'trophy-hunter'
+
+        context = {
+            'user': type('User', (), {'first_name': 'TestUser', 'email': recipient_email})(),
+            'claim': MockClaim(),
+            'badge_url': f'{settings.SITE_URL}/badges/trophy-hunter/',
+            'site_url': settings.SITE_URL,
+            'preference_url': preference_url,
+        }
+
+        try:
+            sent_count = EmailService.send_html_email(
+                subject='[PREVIEW] New artwork is live: Trophy Hunter!',
+                to_emails=[recipient_email],
+                template_name='emails/artwork_complete.html',
+                context=context,
+                fail_silently=False,
+            )
+
+            if sent_count > 0:
+                self.stdout.write(
+                    self.style.SUCCESS('✓ Artwork complete preview sent successfully!')
+                )
+                self.stdout.write('\nCheck your inbox to see how the artwork notification email looks.')
+            else:
+                self.stdout.write(
+                    self.style.ERROR('✗ Email was not sent (no errors but send count is 0)')
+                )
+
+        except Exception as e:
+            self.stdout.write(
+                self.style.ERROR(f'✗ Failed to send artwork complete preview: {e}')
             )
             raise CommandError(f'Email sending failed: {e}')

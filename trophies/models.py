@@ -16,7 +16,6 @@ from trophies.util_modules.language import count_unique_game_groups, calculate_t
 from trophies.util_modules.constants import (
     TITLE_STATS_SUPPORTED_PLATFORMS, NA_REGION_CODES, EU_REGION_CODES,
     JP_REGION_CODES, AS_REGION_CODES, KR_REGION_CODES, CN_REGION_CODES,
-    SHOVELWARE_THRESHOLD
 )
 from trophies.managers import (
     ProfileManager, GameManager, ProfileGameManager,
@@ -443,7 +442,22 @@ class Game(models.Model):
     region_lock = models.BooleanField(default=False, help_text="Admin region override lock - won't be automatically updated.")
     concept_lock = models.BooleanField(default=False, help_text="Admin concept override lock - won't be automatically updated.")
     concept_stale = models.BooleanField(default=False, help_text="Flag for concept re-lookup on next sync.")
-    is_shovelware = models.BooleanField(default=False)
+    shovelware_status = models.CharField(
+        max_length=20,
+        choices=[
+            ('clean', 'Clean'),
+            ('auto_flagged', 'Auto-Flagged'),
+            ('manually_flagged', 'Manually Flagged'),
+            ('manually_cleared', 'Manually Cleared'),
+        ],
+        default='clean',
+        help_text="Shovelware detection status. Manual statuses are never overwritten by auto-detection."
+    )
+    shovelware_lock = models.BooleanField(
+        default=False,
+        help_text="Admin lock: prevents auto-detection from changing this game's shovelware status."
+    )
+    shovelware_updated_at = models.DateTimeField(null=True, blank=True)
     is_obtainable= models.BooleanField(default=True)
     is_delisted = models.BooleanField(default=False)
     has_online_trophies = models.BooleanField(default=False)
@@ -458,7 +472,7 @@ class Game(models.Model):
             GinIndex(fields=['title_platform'], name='game_platform_gin_idx'),
             models.Index(fields=['created_at'], name='game_created_idx'),
             models.Index(fields=['is_obtainable', 'title_platform'], name='game_obtainable_platform_idx'),
-            models.Index(fields=['is_shovelware'], name='game_shovelware_idx'),
+            models.Index(fields=['shovelware_status'], name='game_sw_status_idx'),
             models.Index(fields=['is_delisted'], name='game_delisted_idx'),
             models.Index(fields=['is_regional'], name='game_regional_idx'),
             models.Index(fields=['has_online_trophies'], name='game_online_trophies_idx'),
@@ -523,9 +537,10 @@ class Game(models.Model):
             self.title_ids.append(title_id)
             self.save(update_fields=['title_ids'])
     
-    def update_is_shovelware(self, platinum_earn_rate: str):
-        self.is_shovelware = float(platinum_earn_rate) >= SHOVELWARE_THRESHOLD
-        self.save(update_fields=['is_shovelware'])
+    @property
+    def is_shovelware(self):
+        """Whether this game is flagged as shovelware (auto or manual)."""
+        return self.shovelware_status in ('auto_flagged', 'manually_flagged')
 
     def get_total_defined_trophies(self):
         return self.defined_trophies['bronze'] + self.defined_trophies['silver'] + self.defined_trophies['gold'] + self.defined_trophies['platinum']
@@ -725,6 +740,11 @@ class Concept(models.Model):
         for stage in other.stages.all():
             stage.concepts.add(self)
             stage.concepts.remove(other)
+
+        # GameFamilyProposal M2M
+        for proposal in other.family_proposals.all():
+            proposal.concepts.add(self)
+            proposal.concepts.remove(other)
 
         # GameFamily — inherit if this concept doesn't have one
         if other.family and not self.family:
@@ -1061,11 +1081,13 @@ class Badge(models.Model):
     min_required = models.PositiveIntegerField(default=0, help_text="For large series (e.g. 10 out of 30)")
     requirements = models.JSONField(default=dict, blank=True, help_text="For misc badges")
     most_recent_concept = models.ForeignKey(Concept, on_delete=models.SET_NULL, null=True, blank=True, related_name='most_recent_for_badges', help_text='Concept with the latest release_date')
+    funded_by = models.ForeignKey('Profile', on_delete=models.SET_NULL, null=True, blank=True, related_name='funded_badges', help_text='Profile of the donor who funded this badge artwork.')
     created_at = models.DateTimeField(auto_now_add=True)
     earned_count = models.PositiveIntegerField(default=0, help_text="Count of users who have earned this badge tier")
     view_count = models.PositiveIntegerField(default=0, help_text="Denormalized total page view count (only tracked on tier=1 badge rows).")
     required_stages = models.PositiveIntegerField(default=0, help_text="Denormalized count of required stages for series badges")
     required_value = models.PositiveIntegerField(default=0, help_text="Denormalized required value for misc badges")
+    is_live = models.BooleanField(default=False, help_text="Whether this badge is visible to regular users. New badges start hidden until explicitly released.")
 
     objects = BadgeManager()
 
@@ -1077,6 +1099,7 @@ class Badge(models.Model):
             models.Index(fields=['earned_count'], name='badge_earned_count_idx'),
             models.Index(fields=['most_recent_concept'], name='badge_recent_concept_idx'),
             models.Index(fields=['tier'], name='badge_tier_idx'),
+            models.Index(fields=['is_live'], name='badge_is_live_idx'),
         ]
 
     @property
@@ -1529,13 +1552,56 @@ class UserMilestoneProgress(models.Model):
         return f"{self.profile.psn_username} - {self.milestone.name} Progress"
 
 class PublisherBlacklist(models.Model):
+    BLACKLIST_THRESHOLD = 5
+
     name = models.CharField(max_length=255, unique=True)
     date_added = models.DateTimeField(auto_now_add=True)
+    flagged_concepts = models.JSONField(
+        default=list, blank=True,
+        help_text="List of concept IDs whose games triggered this entry."
+    )
+    is_blacklisted = models.BooleanField(
+        default=False,
+        help_text="True when flagged_concepts reaches 5+. All publisher games get flagged."
+    )
+    notes = models.TextField(blank=True)
 
     class Meta:
         indexes = [
             models.Index(fields=['name'], name='blacklist_name_idx'),
         ]
+
+    @property
+    def flagged_concept_count(self):
+        return len(self.flagged_concepts)
+
+    @property
+    def is_near_threshold(self):
+        return 3 <= self.flagged_concept_count < self.BLACKLIST_THRESHOLD
+
+    def add_concept(self, concept_id):
+        """Add a concept ID and check if publisher should be fully blacklisted."""
+        if concept_id not in self.flagged_concepts:
+            self.flagged_concepts.append(concept_id)
+            if self.flagged_concept_count >= self.BLACKLIST_THRESHOLD:
+                self.is_blacklisted = True
+            self.save(update_fields=['flagged_concepts', 'is_blacklisted'])
+            return True
+        return False
+
+    def remove_concept(self, concept_id):
+        """Remove a concept ID and check if publisher should be un-blacklisted."""
+        if concept_id in self.flagged_concepts:
+            self.flagged_concepts.remove(concept_id)
+            if self.flagged_concept_count < self.BLACKLIST_THRESHOLD:
+                self.is_blacklisted = False
+            self.save(update_fields=['flagged_concepts', 'is_blacklisted'])
+            return True
+        return False
+
+    def __str__(self):
+        status = "BLACKLISTED" if self.is_blacklisted else f"{self.flagged_concept_count} concepts"
+        return f"{self.name} ({status})"
 
 
 class Comment(models.Model):

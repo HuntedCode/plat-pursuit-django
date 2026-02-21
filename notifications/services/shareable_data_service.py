@@ -101,7 +101,7 @@ class ShareableDataService:
             seen_series.add(stage.series_slug)
 
             # Find tier 1 badge for this series
-            tier1_badge = Badge.objects.filter(series_slug=stage.series_slug, tier=1).first()
+            tier1_badge = Badge.objects.filter(series_slug=stage.series_slug, tier=1, is_live=True).first()
             if not tier1_badge:
                 continue
 

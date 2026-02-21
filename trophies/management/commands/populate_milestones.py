@@ -66,11 +66,11 @@ MILESTONE_DEFINITIONS = [
     {'name': 'Regular',               'criteria_type': 'playtime_hours', 'criteria_details': {'target': 200},   'description': 'Two hundred hours. Gaming is your thing.'},
     {'name': 'Committed',             'criteria_type': 'playtime_hours', 'criteria_details': {'target': 350},   'description': 'Three hundred and fifty hours. You show up consistently.',            'title_name': 'Dedicated'},
     {'name': 'Enthusiast',            'criteria_type': 'playtime_hours', 'criteria_details': {'target': 500},   'description': 'Five hundred hours. More than a casual hobby.'},
-    {'name': 'Half a Grand',          'criteria_type': 'playtime_hours', 'criteria_details': {'target': 750},   'description': 'Seven hundred and fifty hours. Gaming is more than a hobby now.'},
+    {'name': 'Seven Five Oh',          'criteria_type': 'playtime_hours', 'criteria_details': {'target': 750},   'description': 'Seven hundred and fifty hours. Gaming is more than a hobby now.'},
     {'name': 'Absorbed',              'criteria_type': 'playtime_hours', 'criteria_details': {'target': 1000},  'description': 'One thousand hours. Fully immersed.'},
     {'name': 'Time Well Spent',       'criteria_type': 'playtime_hours', 'criteria_details': {'target': 1500},  'description': 'Fifteen hundred hours. Or so you keep telling yourself.'},
     {'name': 'Deeply Invested',       'criteria_type': 'playtime_hours', 'criteria_details': {'target': 2000},  'description': 'Two thousand hours in the chair.',                                  'title_name': 'Veteran'},
-    {'name': 'Two Thousand Hours',    'criteria_type': 'playtime_hours', 'criteria_details': {'target': 3000},  'description': 'Three thousand hours. That is a lot of controller time.'},
+    {'name': 'Three Thousand Hours',    'criteria_type': 'playtime_hours', 'criteria_details': {'target': 3000},  'description': 'Three thousand hours. That is a lot of controller time.'},
     {'name': 'Seasoned',              'criteria_type': 'playtime_hours', 'criteria_details': {'target': 4000},  'description': 'Four thousand hours in the trenches.'},
     {'name': 'Marathon Gamer',        'criteria_type': 'playtime_hours', 'criteria_details': {'target': 5500},  'description': 'Five thousand five hundred hours. You play the long game.'},
     {'name': 'Iron Endurance',        'criteria_type': 'playtime_hours', 'criteria_details': {'target': 7000},  'description': 'Seven thousand hours. Unstoppable.'},
@@ -78,7 +78,7 @@ MILESTONE_DEFINITIONS = [
     {'name': 'Lifetime Gamer',        'criteria_type': 'playtime_hours', 'criteria_details': {'target': 12000}, 'description': 'Twelve thousand hours. A lifetime of gaming memories.',             'title_name': 'Lifer'},
     {'name': 'Beyond Dedication',     'criteria_type': 'playtime_hours', 'criteria_details': {'target': 15000}, 'description': 'Fifteen thousand hours. This transcends dedication.',              'title_name': 'Beyond Dedicated'},
     {'name': 'All-Timer',             'criteria_type': 'playtime_hours', 'criteria_details': {'target': 20000}, 'description': 'Twenty thousand hours. Time has no meaning.',                     'title_name': 'All-Timer'},
-    {'name': 'Eternal Player',        'criteria_type': 'playtime_hours', 'criteria_details': {'target': 25000}, 'description': 'Twenty-five thousand hours. Gaming is eternal.',                  'title_name': 'Eternal Player'},
+    {'name': 'Eternal Player',        'criteria_type': 'playtime_hours', 'criteria_details': {'target': 25000}, 'description': 'Twenty-five thousand hours. Gaming is eternal.',                  'title_name': 'Touch Grass'},
     {'name': 'No Life (Affectionate)','criteria_type': 'playtime_hours', 'criteria_details': {'target': 30000}, 'description': 'Thirty thousand hours. Touch grass? Never heard of it.',            'title_name': 'The Eternal'},
 
     # ── rating_count (20 tiers, max 500) ────────────────────────────────
@@ -278,6 +278,9 @@ MILESTONE_DEFINITIONS = [
 
     # ── discord_linked (1 tier, one-off) ────────────────────────────────
     {'name': 'Connected',             'criteria_type': 'discord_linked', 'criteria_details': {'target': 1}, 'description': 'Discord linked. You are part of the inner circle now.'},
+
+    # ── manual (special milestones, granted programmatically) ──────────
+    {'name': 'Badge Artwork Patron',  'criteria_type': 'manual', 'criteria_details': {'target': 1}, 'description': 'Donated to the Badge Artwork Fundraiser. Your generosity brings our badges to life.', 'title_name': 'Patron of the Arts'},
 ]
 # fmt: on
 

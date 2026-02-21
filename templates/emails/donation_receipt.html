@@ -1,0 +1,151 @@
+{% extends "emails/base_email.html" %}
+
+{% block extra_styles %}
+    <style>
+        .donation-box {
+            background-color: #667eea;
+            background: linear-gradient(135deg, #2ECC71 0%, #27ae60 50%, #667eea 100%);
+            border-radius: 12px;
+            padding: 30px;
+            margin: 25px 0;
+            color: #ffffff;
+            text-align: center;
+        }
+
+        .donation-box .donation-icon {
+            font-size: 42px;
+            margin-bottom: 10px;
+            display: block;
+        }
+
+        .donation-box h2 {
+            margin: 0 0 10px 0;
+            font-size: 22px;
+            font-weight: 700;
+        }
+
+        .donation-box p {
+            margin: 0;
+            font-size: 15px;
+            opacity: 0.95;
+            line-height: 1.6;
+        }
+
+        .donation-box .amount {
+            font-size: 36px;
+            font-weight: 700;
+            margin: 15px 0;
+            display: block;
+        }
+
+        .details-box {
+            background-color: #f0f4ff;
+            border-radius: 8px;
+            padding: 20px 25px;
+            margin: 25px 0;
+            border-left: 4px solid #2ECC71;
+        }
+
+        .details-box h3 {
+            margin: 0 0 12px 0;
+            font-size: 16px;
+            color: #333333;
+        }
+
+        .details-box ul {
+            margin: 0;
+            padding-left: 20px;
+            color: #555555;
+        }
+
+        .details-box li {
+            margin-bottom: 8px;
+            font-size: 14px;
+        }
+
+        .details-box li strong {
+            color: #333333;
+        }
+
+        .flavor-text {
+            text-align: center;
+            font-style: italic;
+            color: #777777;
+            font-size: 15px;
+            margin: 30px 0 10px 0;
+            line-height: 1.6;
+        }
+
+        @media only screen and (max-width: 600px) {
+            .donation-box {
+                padding: 20px 15px;
+            }
+            .donation-box .amount {
+                font-size: 28px;
+            }
+        }
+    </style>
+{% endblock %}
+
+{% block title %}Thank you for your donation!{% endblock %}
+
+{% block header_content %}
+    <h1>Thank You!</h1>
+    <p>Your donation has been received</p>
+{% endblock %}
+
+{% block content %}
+    <p class="greeting">Hey {{ user.first_name|default:user.email }},</p>
+
+    <div class="donation-box">
+        <span class="donation-icon">&#10084;&#65039;</span>
+        <h2>You are amazing!</h2>
+        <span class="amount">${{ donation.amount|floatformat:2 }}</span>
+        <p>
+            Your generous donation to the <strong>{{ fundraiser.name }}</strong>
+            helps bring our badge artwork to life. Thank you for supporting our community!
+        </p>
+    </div>
+
+    <div class="details-box">
+        <h3>Donation Details:</h3>
+        <ul>
+            <li><strong>Amount:</strong> ${{ donation.amount|floatformat:2 }} USD</li>
+            <li><strong>Campaign:</strong> {{ fundraiser.name }}</li>
+            <li><strong>Payment Method:</strong> {{ donation.provider|title }}</li>
+            {% if badge_picks_earned > 0 %}
+                <li><strong>Badge Artwork Picks Earned:</strong> {{ badge_picks_earned }}</li>
+            {% endif %}
+        </ul>
+    </div>
+
+    {% if badge_picks_earned > 0 %}
+        <p class="intro">
+            You have earned <strong>{{ badge_picks_earned }} badge artwork pick{{ badge_picks_earned|pluralize }}</strong>!
+            Head to the fundraiser page to choose which badge series you would like to see
+            with professional artwork.
+        </p>
+
+        <div class="cta-container">
+            <a href="{{ claim_url }}" class="cta-button">Claim Your Badge Picks</a>
+        </div>
+    {% else %}
+        <p class="intro">
+            Every dollar counts and brings us closer to professional artwork for our badges.
+            Thank you for being part of this journey.
+        </p>
+
+        <div class="cta-container">
+            <a href="{{ claim_url }}" class="cta-button">View the Fundraiser</a>
+        </div>
+    {% endif %}
+
+    <p class="flavor-text">
+        Your support keeps the hunt alive. Thank you, trophy hunter!
+    </p>
+{% endblock %}
+
+{% block footer_note %}
+    You're receiving this because you made a donation on PlatPursuit.<br>
+    <a href="{{ preference_url }}" style="color: #999999; text-decoration: underline;">Manage your email preferences</a>.
+{% endblock %}

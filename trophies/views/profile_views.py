@@ -388,7 +388,7 @@ class ProfileDetailView(ProfileHotbarMixin, DetailView):
             tier_filter = Q()
             for slug, tier in series_tier_pairs:
                 tier_filter |= Q(series_slug=slug, tier=tier)
-            all_badges = Badge.objects.filter(tier_filter).select_related(
+            all_badges = Badge.objects.live().filter(tier_filter).select_related(
                 'base_badge', 'title', 'base_badge__title'
             )
             badge_lookup = {(b.series_slug, b.tier): b for b in all_badges}

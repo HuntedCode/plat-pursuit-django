@@ -1,0 +1,46 @@
+{# Donor Wall: public list of non-anonymous donors with amounts and claimed badges #}
+{% if donors %}
+<section class="space-y-4">
+    <h2 class="text-xl lg:text-2xl font-bold">Donor Wall</h2>
+    <p class="text-base-content/70 text-sm">
+        A huge thank you to everyone who has contributed to this campaign.
+    </p>
+
+    <div class="grid grid-cols-2 lg:grid-cols-3 gap-3">
+        {% for donation in donors %}
+            <div class="card bg-base-200/80 border border-base-300">
+                <div class="card-body p-3 gap-2">
+                    <div class="flex items-center gap-2">
+                        {% if donation.profile %}
+                            <a href="{% url 'profile_detail' donation.profile.psn_username %}"
+                               class="font-semibold text-sm hover:text-primary transition-colors truncate">
+                                {{ donation.profile.display_psn_username }}
+                            </a>
+                        {% else %}
+                            <span class="font-semibold text-sm text-base-content/60 truncate">Unknown Hunter</span>
+                        {% endif %}
+                    </div>
+                    <div class="flex items-center justify-between">
+                        <span class="text-success font-bold text-sm">${{ donation.amount|floatformat:0 }}</span>
+                        <span class="text-base-content/40 text-xs">{{ donation.completed_at|timesince }} ago</span>
+                    </div>
+                    {% if donation.message %}
+                        <p class="text-xs text-base-content/60 italic line-clamp-2 pr-1">"{{ donation.message }}"</p>
+                    {% endif %}
+                    {% if donation.badge_claims.all %}
+                        <div class="flex flex-wrap gap-1 mt-1">
+                            {% for claim in donation.badge_claims.all %}
+                                <a href="{% url 'badge_detail' claim.series_slug %}"
+                                   class="badge badge-xs badge-outline badge-accent truncate max-w-24"
+                                   title="{{ claim.series_name }}">
+                                    {{ claim.series_name }}
+                                </a>
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        {% endfor %}
+    </div>
+</section>
+{% endif %}

@@ -1,0 +1,96 @@
+{% extends "emails/base_email.html" %}
+
+{% block extra_styles %}
+    <style>
+        .info-box {
+            border-radius: 12px;
+            padding: 25px 30px;
+            margin: 25px 0;
+            text-align: center;
+            background-color: #f0f4ff;
+            border: 2px solid #667eea;
+        }
+
+        .info-icon {
+            font-size: 36px;
+            margin-bottom: 10px;
+            display: block;
+        }
+
+        .info-title {
+            font-size: 18px;
+            font-weight: 700;
+            margin: 0 0 8px 0;
+            color: #333333;
+        }
+
+        .info-message {
+            font-size: 15px;
+            color: #555555;
+            margin: 0;
+            line-height: 1.6;
+        }
+
+        .cta-button-info {
+            display: inline-block;
+            background: #667eea;
+            color: #ffffff !important;
+            text-decoration: none;
+            padding: 16px 40px;
+            border-radius: 8px;
+            font-size: 18px;
+            font-weight: 700;
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+            border: none;
+        }
+
+        @media only screen and (max-width: 600px) {
+            .info-box {
+                padding: 20px 15px;
+            }
+
+            .cta-button-info {
+                padding: 14px 30px;
+                font-size: 16px;
+            }
+        }
+    </style>
+{% endblock %}
+
+{% block title %}Complete Your Payment{% endblock %}
+
+{% block header_content %}
+    <h1>Quick Verification Needed</h1>
+    <p>Your bank needs a moment of your time</p>
+{% endblock %}
+
+{% block content %}
+    <p class="greeting">Hey {{ username }},</p>
+
+    <div class="info-box">
+        <span class="info-icon">&#128272;</span>
+        <p class="info-title">Your bank wants to verify this payment</p>
+        <p class="info-message">
+            Your latest {{ tier_name }} subscription payment requires an extra verification step
+            (commonly called 3D Secure). This is a security measure from your bank, not an error.
+        </p>
+    </div>
+
+    <p class="intro">
+        The good news: your premium access is still fully active. You just need to complete a
+        quick authentication step to finalize the payment. It usually takes less than a minute.
+    </p>
+
+    <div class="cta-container">
+        <a href="{{ invoice_url }}" class="cta-button-info">Complete Verification</a>
+    </div>
+
+    <p class="intro" style="margin-top: 25px; text-align: center; font-size: 14px; color: #777777;">
+        Once verified, everything continues as normal. Happy trophy hunting!
+    </p>
+{% endblock %}
+
+{% block footer_note %}
+    You're receiving this because you have an active subscription on PlatPursuit.<br>
+    <a href="{{ preference_url }}" style="color: #999999; text-decoration: underline;">Manage your email preferences</a>.
+{% endblock %}

@@ -30,7 +30,8 @@ class Command(BaseCommand):
         # Find an existing platinum trophy (not earned yet)
         platinum_trophy = Trophy.objects.filter(
             trophy_type='platinum',
-            game__is_shovelware=False
+        ).exclude(
+            game__shovelware_status__in=['auto_flagged', 'manually_flagged'],
         ).exclude(
             earnedtrophy__profile=profile,
             earnedtrophy__earned=True

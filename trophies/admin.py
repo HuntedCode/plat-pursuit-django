@@ -114,12 +114,13 @@ class GameAdmin(admin.ModelAdmin):
         "is_obtainable",
         "total_defined_trophies",
         "played_count",
-        "is_shovelware",
+        "shovelware_status",
+        "shovelware_lock",
         "is_delisted",
         "has_online_trophies",
     )
     list_select_related = ('concept',)
-    list_filter = ("has_trophy_groups", "is_regional", RegionListFilter, 'concept_lock', 'concept_stale', 'is_shovelware', 'is_delisted', 'is_obtainable', "has_online_trophies")
+    list_filter = ("has_trophy_groups", "is_regional", RegionListFilter, 'concept_lock', 'concept_stale', 'shovelware_status', 'shovelware_lock', 'is_delisted', 'is_obtainable', "has_online_trophies")
     search_fields = ("title_name", "np_communication_id")
     ordering = ("title_name",)
     fieldsets = (
@@ -140,7 +141,6 @@ class GameAdmin(admin.ModelAdmin):
                     "title_ids",
                     "title_detail",
                     "title_image",
-                    "is_shovelware",
                     "is_obtainable",
                     "is_delisted",
                     "has_online_trophies",
@@ -155,8 +155,13 @@ class GameAdmin(admin.ModelAdmin):
             "Metadata",
             {"fields": ("title_icon_url", "force_title_icon", "title_platform", "metadata")},
         ),
+        (
+            "Shovelware Detection",
+            {"fields": ("shovelware_status", "shovelware_lock", "shovelware_updated_at")},
+        ),
     )
-    actions = ['toggle_is_regional', 'add_psvr_platform', 'mark_concepts_stale']
+    readonly_fields = ('shovelware_updated_at',)
+    actions = ['toggle_is_regional', 'add_psvr_platform', 'mark_concepts_stale', 'mark_as_shovelware', 'clear_shovelware_flag', 'reset_shovelware_auto']
     autocomplete_fields=['concept']
 
     @admin.action(description="Toggle is_regional for selected games")
@@ -187,6 +192,37 @@ class GameAdmin(admin.ModelAdmin):
     def mark_concepts_stale(self, request, queryset):
         updated = queryset.filter(concept_stale=False).update(concept_stale=True)
         messages.success(request, f"Marked {updated} game(s) as concept_stale. Concepts will be re-looked up on next sync.")
+
+    @admin.action(description="Mark as shovelware (manual override)")
+    def mark_as_shovelware(self, request, queryset):
+        from django.utils import timezone as tz
+        updated = queryset.update(
+            shovelware_status='manually_flagged',
+            shovelware_lock=True,
+            shovelware_updated_at=tz.now(),
+        )
+        messages.success(request, f"Manually flagged {updated} game(s) as shovelware (locked).")
+
+    @admin.action(description="Clear shovelware flag (manual override)")
+    def clear_shovelware_flag(self, request, queryset):
+        from django.utils import timezone as tz
+        updated = queryset.update(
+            shovelware_status='manually_cleared',
+            shovelware_lock=True,
+            shovelware_updated_at=tz.now(),
+        )
+        messages.success(request, f"Manually cleared shovelware flag for {updated} game(s) (locked).")
+
+    @admin.action(description="Reset to auto-detection (unlock)")
+    def reset_shovelware_auto(self, request, queryset):
+        from trophies.services.shovelware_detection_service import ShovelwareDetectionService
+        count = 0
+        for game in queryset.select_related('concept').prefetch_related('trophies'):
+            game.shovelware_lock = False
+            game.save(update_fields=['shovelware_lock'])
+            ShovelwareDetectionService.evaluate_game(game)
+            count += 1
+        messages.success(request, f"Unlocked and re-evaluated {count} game(s) with auto-detection.")
 
     def total_defined_trophies(self, obj):
         return sum(obj.defined_trophies.values()) if obj.defined_trophies else 0
@@ -405,11 +441,33 @@ class StageInline(admin.TabularInline):
 
 @admin.register(Badge)
 class BadgeAdmin(admin.ModelAdmin):
-    list_display = ['name', 'tier', 'badge_type', 'series_slug', 'title', 'display_series', 'required_stages', 'requires_all', 'min_required', 'earned_count', 'most_recent_concept']
-    list_select_related = ('most_recent_concept', 'title')
-    list_filter = ['tier', 'badge_type']
+    list_display = ['name', 'is_live', 'tier', 'badge_type', 'series_slug', 'title', 'display_series', 'required_stages', 'requires_all', 'min_required', 'earned_count', 'most_recent_concept', 'funded_by']
+    list_select_related = ('most_recent_concept', 'title', 'funded_by')
+    list_filter = ['is_live', 'tier', 'badge_type']
+    list_editable = ['is_live']
     search_fields = ['name', 'series_slug']
-    fields = ['name', 'series_slug', 'description', 'badge_image', 'base_badge', 'tier', 'badge_type', 'title', 'display_title', 'display_series', 'discord_role_id', 'requires_all', 'min_required', 'requirements', 'earned_count']
+    readonly_fields = ['created_at', 'earned_count', 'view_count', 'required_stages', 'required_value']
+    fields = [
+        'name', 'is_live', 'series_slug', 'description', 'badge_image', 'base_badge',
+        'tier', 'badge_type', 'title', 'display_title', 'display_series',
+        'discord_role_id', 'requires_all', 'min_required', 'requirements',
+        'most_recent_concept', 'funded_by',
+        'earned_count', 'view_count', 'required_stages', 'required_value',
+        'created_at',
+    ]
+    actions = ['mark_series_live', 'mark_series_not_live']
+
+    def mark_series_live(self, request, queryset):
+        series_slugs = set(queryset.values_list('series_slug', flat=True))
+        updated = Badge.objects.filter(series_slug__in=series_slugs).update(is_live=True)
+        self.message_user(request, f"Marked {updated} badges across {len(series_slugs)} series as live.")
+    mark_series_live.short_description = "Mark series live (all tiers)"
+
+    def mark_series_not_live(self, request, queryset):
+        series_slugs = set(queryset.values_list('series_slug', flat=True))
+        updated = Badge.objects.filter(series_slug__in=series_slugs).update(is_live=False)
+        self.message_user(request, f"Marked {updated} badges across {len(series_slugs)} series as not live.")
+    mark_series_not_live.short_description = "Mark series not live (all tiers)"
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         if db_field.name == 'base_badge':
@@ -453,7 +511,14 @@ class FeaturedGuideAdmin(admin.ModelAdmin):
 
 @admin.register(PublisherBlacklist)
 class PublisherBlacklistAdmin(admin.ModelAdmin):
-    list_display = ['name', 'date_added']
+    list_display = ['name', 'is_blacklisted', 'concept_count', 'date_added']
+    list_filter = ['is_blacklisted']
+    search_fields = ['name']
+    readonly_fields = ('flagged_concepts',)
+
+    def concept_count(self, obj):
+        return obj.flagged_concept_count
+    concept_count.short_description = "Flagged Concepts"
 
 @admin.register(Title)
 class TitleAdmin(admin.ModelAdmin):

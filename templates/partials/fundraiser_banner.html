@@ -1,0 +1,71 @@
+{% if active_fundraiser %}
+<div id="fundraiser-banner"
+     class="bg-gradient-to-r from-accent/20 via-primary/20 to-accent/20 border-b-2 border-accent/40"
+     role="banner"
+     data-slug="{{ active_fundraiser.slug }}"
+     data-reshow-days="{{ active_fundraiser.banner_dismiss_days }}">
+    <div class="mx-auto px-4 py-2 flex items-center justify-between gap-3">
+        <div class="flex items-center gap-2 min-w-0">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 shrink-0 text-accent" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+            </svg>
+            <p class="text-xs lg:text-sm font-medium">
+                <span class="font-bold">{{ active_fundraiser.name }}</span> is live!
+                {{ active_fundraiser.banner_text }}
+                <a href="{% url 'fundraiser' active_fundraiser.slug %}"
+                   class="underline font-semibold hover:text-accent transition-colors ml-1">
+                    Learn more & donate
+                </a>
+            </p>
+        </div>
+        <button id="fundraiser-banner-dismiss"
+                class="btn btn-ghost btn-xs shrink-0"
+                aria-label="Dismiss banner">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+        </button>
+    </div>
+</div>
+<script>
+(function() {
+    var banner = document.getElementById('fundraiser-banner');
+    var dismissBtn = document.getElementById('fundraiser-banner-dismiss');
+    if (!banner || !dismissBtn) return;
+
+    var STORAGE_KEY = 'pp_fundraiser_banner_dismissed_at';
+    var slug = banner.dataset.slug;
+    var reshowDays = parseInt(banner.dataset.reshowDays, 10);
+
+    // 0 days = session-only dismiss (sessionStorage), >0 = persistent dismiss (localStorage)
+    if (reshowDays === 0) {
+        if (sessionStorage.getItem(STORAGE_KEY) === slug) {
+            banner.style.display = 'none';
+            return;
+        }
+        dismissBtn.addEventListener('click', function() {
+            sessionStorage.setItem(STORAGE_KEY, slug);
+            banner.style.display = 'none';
+        });
+    } else {
+        var reshowMs = reshowDays * 24 * 60 * 60 * 1000;
+        var stored = localStorage.getItem(STORAGE_KEY);
+        if (stored) {
+            try {
+                var data = JSON.parse(stored);
+                if (data.slug === slug && (Date.now() - data.ts) < reshowMs) {
+                    banner.style.display = 'none';
+                    return;
+                }
+            } catch(e) {
+                localStorage.removeItem(STORAGE_KEY);
+            }
+        }
+        dismissBtn.addEventListener('click', function() {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify({ slug: slug, ts: Date.now() }));
+            banner.style.display = 'none';
+        });
+    }
+})();
+</script>
+{% endif %}

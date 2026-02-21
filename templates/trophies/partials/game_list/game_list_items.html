@@ -10,7 +10,7 @@
                         {% if game.title_image and not game.force_title_icon %}
                             <img src="{{ game.title_image }}" alt="{{ game.title_name }}" class="h-15 lg:h-18 w-15 lg:w-18 object-cover shrink-0" loading="lazy" />
                         {% else %}
-                            <img src="{{ game.title_icon_url }}" alt="{{ game.title_name }}" class="h-15 lg:h-18 w-15 lg:w-18 object-cover shrink-0" loading="lazy" />
+                            <img src="{{ game.title_icon_url }}" alt="{{ game.title_name }}" class="h-15 lg:h-18 w-15 lg:w-18 object-contain p-3 shrink-0" loading="lazy" />
                         {% endif %}
                         {% if user.is_authenticated and user.profile %}
                         <button class="quick-add-trigger absolute top-0.5 right-0.5 z-20 btn btn-xs btn-circle btn-info opacity-0 group-hover:opacity-100 transition-opacity"
@@ -31,6 +31,11 @@
                                 <div class="badge badge-xs lg:badge-sm badge-ghost font-bold border-2 border-{{ platform|platform_color_str }} rounded-box hover:scale-105">{{ platform }}</div>
                             {% endfor %}
                             {% include 'partials/region_badges.html' with game=game badge_size='badge-xs lg:badge-sm' %}
+                            {% if game.is_shovelware %}
+                                <div class="badge badge-xs lg:badge-sm badge-warning gap-0.5 font-bold">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-2.5 h-2.5 lg:w-3 lg:h-3" viewBox="0 0 24 24" fill="currentColor"><path d="m10.06 15.35 7.03-7.03c.98.42 2.16.23 2.95-.57l1.41-1.41c.29-.29.29-.77 0-1.06l-2.74-2.74a.754.754 0 0 0-1.06 0l-1.41 1.41c-.8.8-.98 1.97-.57 2.95l-7.03 7.03-1.77-1.77-3.54 3.54c-1.37 1.37-1.37 3.58 0 4.95s3.58 1.37 4.95 0l3.54-3.54-1.77-1.77Zm7.25-10.34.88-.88 1.68 1.68-.88.88c-.46.46-1.22.46-1.68 0s-.46-1.22 0-1.68M6.88 19.24c-.58.58-1.54.58-2.12 0s-.58-1.54 0-2.12L6.88 15 9 17.12z"/></svg>
+                                </div>
+                            {% endif %}
                         </div>
                     </div>
                 </div>
@@ -55,7 +60,7 @@
                     </div>
                     {% if game.platinum_trophy %}
                         <figure>
-                            <img src="{{ plat.trophy_icon_url }}" class="w-10 h-10 border-2 border-trophy-platinum rounded-box hover:scale-105 hidden xl:block object-cover" loading="lazy" />
+                            <img src="{{ plat.trophy_icon_url }}" alt="{{ plat.trophy_name|default:'Platinum trophy' }}" class="w-10 h-10 border-2 border-trophy-platinum rounded-box hover:scale-105 hidden xl:block object-cover" loading="lazy" />
                         </figure>
                     {% endif %}
                 </div>

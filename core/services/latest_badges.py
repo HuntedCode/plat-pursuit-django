@@ -5,7 +5,7 @@ def get_latest_badges(limit=10):
     """Return recently created badge series for homepage showcase."""
 
     badges = (
-        Badge.objects.filter(tier=1)
+        Badge.objects.live().filter(tier=1)
         .exclude(series_slug='')
         .exclude(series_slug__isnull=True)
         .select_related('base_badge')

@@ -88,7 +88,7 @@ class TrophiesListView(ProfileHotbarMixin, ListView):
             if show_only_platinum:
                 qs = qs.filter(game__trophies__trophy_type='platinum').distinct()
             if filter_shovelware:
-                qs = qs.filter(game__is_shovelware=False)
+                qs = qs.exclude(game__shovelware_status__in=['auto_flagged', 'manually_flagged'])
 
 
             if sort_val == 'earned':

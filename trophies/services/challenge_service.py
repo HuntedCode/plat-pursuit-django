@@ -297,8 +297,9 @@ def backfill_calendar_from_history(challenge):
         trophy__trophy_type='platinum',
         earned=True,
         earned_date_time__isnull=False,
-        trophy__game__is_shovelware=False,
         user_hidden=False,
+    ).exclude(
+        trophy__game__shovelware_status__in=['auto_flagged', 'manually_flagged'],
     ).select_related('trophy__game').order_by('earned_date_time')
 
     # Group by (month, day) in user's timezone: take the first per day,
@@ -390,8 +391,9 @@ def check_calendar_challenge_progress(profile):
             earned=True,
             earned_date_time__isnull=False,
             earned_date_time__gt=challenge.updated_at,
-            trophy__game__is_shovelware=False,
             user_hidden=False,
+        ).exclude(
+            trophy__game__shovelware_status__in=['auto_flagged', 'manually_flagged'],
         ).exists()
 
         if not has_new_plats:
@@ -403,8 +405,9 @@ def check_calendar_challenge_progress(profile):
             trophy__trophy_type='platinum',
             earned=True,
             earned_date_time__isnull=False,
-            trophy__game__is_shovelware=False,
             user_hidden=False,
+        ).exclude(
+            trophy__game__shovelware_status__in=['auto_flagged', 'manually_flagged'],
         ).select_related('trophy__game').order_by('earned_date_time')
 
         # Build map for unfilled days + count ALL platinums per day for plat_count

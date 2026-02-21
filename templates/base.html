@@ -47,6 +47,10 @@
     </a>
     {% include 'partials/navbar.html' %}
     {% include 'partials/site_banner.html' %}
+    {% include 'partials/fundraiser_banner.html' %}
+    {% if user.is_authenticated and not user.premium_tier %}
+        {% include 'partials/premium_upsell_banner.html' %}
+    {% endif %}
 
     <div class="flex flex-1 flex-col lg:flex-row lg:items-start">
 

@@ -260,8 +260,9 @@ class CalendarDayDetailAPIView(APIView):
                 trophy__trophy_type='platinum',
                 earned=True,
                 earned_date_time__isnull=False,
-                trophy__game__is_shovelware=False,
                 user_hidden=False,
+            ).exclude(
+                trophy__game__shovelware_status__in=['auto_flagged', 'manually_flagged'],
             ).select_related('trophy__game').order_by('earned_date_time')
 
             platinums = []

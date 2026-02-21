@@ -25,7 +25,7 @@ def compute_community_stats():
     )
 
     # Badge series count (Tier 1 badges = unique series)
-    badge_series_counts = Badge.objects.filter(tier=1).aggregate(
+    badge_series_counts = Badge.objects.live().filter(tier=1).aggregate(
         total=Count('id'),
         weekly=Count('id', filter=Q(created_at__gte=week_ago))
     )

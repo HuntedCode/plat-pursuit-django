@@ -247,6 +247,7 @@
                                 {% endif %}
                             </a>
                         </li>
+                        <li><a href="{% url 'fundraiser_admin' %}">Fundraiser</a></li>
                         {% if user.is_superuser %}
                             <li>
                                 <a href="{% url 'game_family_management' %}" class="flex items-center">

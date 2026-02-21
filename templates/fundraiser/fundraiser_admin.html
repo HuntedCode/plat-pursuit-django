@@ -1,0 +1,251 @@
+{% extends 'base.html' %}
+{% load static humanize %}
+
+{% block title %}Fundraiser Admin - PlatPursuit{% endblock %}
+
+{% block content %}
+<div class="container mx-auto p-4">
+
+    {# ─── Header ──────────────────────────────────────────────────────── #}
+    <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-6">
+        <h1 class="text-3xl font-bold mb-4 md:mb-0">Fundraiser Admin</h1>
+        <div class="flex gap-2">
+            <a href="{% url 'subscription_admin' %}" class="btn btn-ghost btn-sm">Subscriptions</a>
+            <a href="{% url 'admin_notification_center' %}" class="btn btn-ghost btn-sm">Notifications</a>
+            <a href="{% url 'comment_moderation' %}" class="btn btn-ghost btn-sm">Moderation</a>
+        </div>
+    </div>
+
+    {# ─── Campaign Selector ──────────────────────────────────────────── #}
+    {% if fundraiser_stats %}
+    <div class="grid grid-cols-2 lg:grid-cols-3 gap-3 mb-6">
+        {% for fs in fundraiser_stats %}
+            <a href="?campaign={{ fs.fundraiser.slug }}"
+               class="card bg-base-100 border-2 transition-colors
+                      {% if selected_fundraiser and fs.fundraiser.slug == selected_fundraiser.slug %}border-primary{% else %}border-base-300 hover:border-primary/50{% endif %}">
+                <div class="card-body p-4 gap-1">
+                    <h3 class="font-bold text-sm truncate">{{ fs.fundraiser.name }}</h3>
+                    <div class="flex items-center gap-2">
+                        <span class="badge badge-sm
+                            {% if fs.is_live %}badge-success
+                            {% elif fs.is_upcoming %}badge-info
+                            {% else %}badge-ghost{% endif %}">
+                            {% if fs.is_live %}Live{% elif fs.is_upcoming %}Upcoming{% else %}Ended{% endif %}
+                        </span>
+                        <span class="text-xs text-base-content/50">{{ fs.donor_count }} donors</span>
+                    </div>
+                    <span class="text-success font-bold">${{ fs.total_raised|floatformat:0 }}</span>
+                </div>
+            </a>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="text-center py-12 text-base-content/50">
+        <p class="text-lg">No fundraisers found.</p>
+        <p class="text-sm">Create a fundraiser via Django Admin to get started.</p>
+    </div>
+    {% endif %}
+
+    {% if selected_fundraiser %}
+    {# ─── Stats Cards ─────────────────────────────────────────────────── #}
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        <div class="stat bg-base-100 border-2 border-base-300 rounded-box">
+            <div class="stat-title">Total Raised</div>
+            <div class="stat-value text-success">${{ total_raised|floatformat:0 }}</div>
+            <div class="stat-desc">From {{ total_donors }} donor{{ total_donors|pluralize }}</div>
+        </div>
+        <div class="stat bg-base-100 border-2 border-base-300 rounded-box">
+            <div class="stat-title">Pending</div>
+            <div class="stat-value text-warning">{{ pending_count }}</div>
+            <div class="stat-desc">Awaiting payment</div>
+        </div>
+        <div class="stat bg-base-100 border-2 border-base-300 rounded-box">
+            <div class="stat-title">Claims</div>
+            <div class="stat-value text-accent">{{ claims_pending|add:claims_in_progress|add:claims_completed }}</div>
+            <div class="stat-desc">{{ claims_completed }} complete, {{ claims_in_progress }} in progress</div>
+        </div>
+        <div class="stat bg-base-100 border-2 border-base-300 rounded-box">
+            <div class="stat-title">Status</div>
+            <div class="stat-value text-sm">
+                {% if selected_fundraiser.is_live %}
+                    <span class="text-success">Live</span>
+                {% elif selected_fundraiser.is_upcoming %}
+                    <span class="text-info">Upcoming</span>
+                {% else %}
+                    <span class="text-base-content/50">Ended</span>
+                {% endif %}
+            </div>
+            <div class="stat-desc">
+                {{ selected_fundraiser.start_date|date:"M j, Y" }}{% if selected_fundraiser.end_date %} - {{ selected_fundraiser.end_date|date:"M j, Y" }}{% else %} (Ongoing){% endif %}
+            </div>
+        </div>
+    </div>
+
+    {# ─── Tabs ────────────────────────────────────────────────────────── #}
+    <div id="fundraiser-admin-tabs" class="tabs tabs-boxed mb-6">
+        <button class="tab tab-active" data-tab="donations">
+            Donations ({{ donations|length }})
+        </button>
+        <button class="tab" data-tab="claims">
+            Badge Claims ({{ claims|length }})
+        </button>
+    </div>
+
+    {# ─── Donations Panel ─────────────────────────────────────────────── #}
+    <div id="panel-donations" class="admin-panel">
+        {% if donations %}
+        <div class="overflow-x-auto">
+            <table class="table table-zebra">
+                <thead>
+                    <tr>
+                        <th>Donor</th>
+                        <th>Amount</th>
+                        <th>Provider</th>
+                        <th>Status</th>
+                        <th>Picks</th>
+                        <th>Date</th>
+                        <th>Message</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for donation in donations %}
+                    <tr>
+                        <td>
+                            {% if donation.profile %}
+                                <a href="{% url 'profile_detail' donation.profile.psn_username %}"
+                                   class="hover:text-primary transition-colors">
+                                    {{ donation.profile.display_psn_username }}
+                                </a>
+                            {% else %}
+                                <span class="text-base-content/50">{{ donation.user.email|default:"Unknown" }}</span>
+                            {% endif %}
+                            {% if donation.is_anonymous %}
+                                <span class="badge badge-xs badge-ghost ml-1">anon</span>
+                            {% endif %}
+                        </td>
+                        <td class="font-bold text-success">${{ donation.amount|floatformat:2 }}</td>
+                        <td>
+                            <span class="badge badge-xs {% if donation.provider == 'stripe' %}badge-primary{% else %}badge-info{% endif %}">
+                                {{ donation.provider|title }}
+                            </span>
+                        </td>
+                        <td>
+                            <span class="badge badge-xs
+                                {% if donation.status == 'completed' %}badge-success
+                                {% elif donation.status == 'pending' %}badge-warning
+                                {% elif donation.status == 'refunded' %}badge-info
+                                {% else %}badge-error{% endif %}">
+                                {{ donation.get_status_display }}
+                            </span>
+                        </td>
+                        <td class="text-center">
+                            {% if donation.badge_picks_earned %}
+                                {{ donation.badge_picks_used }}/{{ donation.badge_picks_earned }}
+                            {% else %}
+                                -
+                            {% endif %}
+                        </td>
+                        <td class="text-xs text-base-content/50">
+                            {{ donation.created_at|date:"M j, g:i A" }}
+                        </td>
+                        <td class="max-w-48 truncate text-xs text-base-content/60">
+                            {{ donation.message|default:"-" }}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="text-center py-8 text-base-content/50">
+            No donations yet for this fundraiser.
+        </div>
+        {% endif %}
+    </div>
+
+    {# ─── Badge Claims Panel ──────────────────────────────────────────── #}
+    <div id="panel-claims" class="admin-panel hidden">
+        {% if claims %}
+        <div class="overflow-x-auto">
+            <table class="table table-zebra">
+                <thead>
+                    <tr>
+                        <th>Badge Series</th>
+                        <th>Claimed By</th>
+                        <th>Donor</th>
+                        <th>Status</th>
+                        <th>Claimed</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for claim in claims %}
+                    <tr data-claim-id="{{ claim.id }}">
+                        <td>
+                            <a href="{% url 'badge_detail' claim.series_slug %}"
+                               class="hover:text-primary transition-colors font-semibold">
+                                {{ claim.series_name }}
+                            </a>
+                        </td>
+                        <td>
+                            {% if claim.profile %}
+                                <a href="{% url 'profile_detail' claim.profile.psn_username %}"
+                                   class="hover:text-primary transition-colors">
+                                    {{ claim.profile.display_psn_username }}
+                                </a>
+                            {% endif %}
+                        </td>
+                        <td class="text-success text-sm">
+                            ${{ claim.donation.amount|floatformat:0 }}
+                        </td>
+                        <td>
+                            <span class="claim-status-badge badge badge-sm
+                                {% if claim.status == 'completed' %}badge-success
+                                {% elif claim.status == 'in_progress' %}badge-warning
+                                {% else %}badge-ghost{% endif %}">
+                                {{ claim.get_status_display }}
+                            </span>
+                        </td>
+                        <td class="text-xs text-base-content/50">
+                            {{ claim.claimed_at|date:"M j, Y" }}
+                        </td>
+                        <td>
+                            {% if claim.status != 'completed' %}
+                                <select class="select select-bordered select-xs claim-status-select"
+                                        data-claim-id="{{ claim.id }}">
+                                    <option value="" disabled selected>Update</option>
+                                    {% if claim.status == 'claimed' %}
+                                        <option value="in_progress">In Progress</option>
+                                    {% endif %}
+                                    <option value="completed">Complete</option>
+                                </select>
+                            {% else %}
+                                <span class="text-xs text-success">Done {{ claim.completed_at|date:"M j" }}</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="text-center py-8 text-base-content/50">
+            No badge claims yet for this fundraiser.
+        </div>
+        {% endif %}
+    </div>
+
+    {% endif %}
+
+</div>
+{% endblock %}
+
+{% block js_scripts %}
+<script src="{% static 'js/fundraiser.js' %}"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        PlatPursuit.FundraiserAdmin.init();
+        PlatPursuit.ZoomScaler.init();
+    });
+</script>
+{% endblock %}

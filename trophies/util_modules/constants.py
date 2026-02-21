@@ -32,10 +32,6 @@ CN_REGION_CODES = ['CN']  # China
 # All recognized regions
 REGIONS = ['NA', 'EU', 'JP', 'AS', 'KR', 'CN']
 
-# Shovelware detection threshold
-# Games with platinum earn rate above this percentage are flagged as shovelware
-SHOVELWARE_THRESHOLD = 90.0
-
 # Badge XP values
 BRONZE_STAGE_XP = 250  # XP per concept completed at Bronze tier
 SILVER_STAGE_XP = 75   # XP per concept completed at Silver tier

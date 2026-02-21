@@ -19,7 +19,7 @@ def get_whats_new(limit=8):
 
     # New badge series (tier=1 only, recent, must have series_slug)
     new_badges = (
-        Badge.objects.filter(tier=1, created_at__gte=two_weeks_ago)
+        Badge.objects.live().filter(tier=1, created_at__gte=two_weeks_ago)
         .exclude(series_slug='')
         .exclude(series_slug__isnull=True)
         .select_related('base_badge')

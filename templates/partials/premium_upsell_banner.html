@@ -1,0 +1,49 @@
+<div id="premium-upsell-banner"
+     class="bg-gradient-to-r from-purple-900/30 via-primary/20 to-purple-900/30 border-b-2 border-purple-500/40"
+     role="banner"
+     data-reshow-days="7">
+    <div class="mx-auto px-4 py-2 flex items-center justify-between gap-3">
+        <div class="flex items-center gap-2 min-w-0">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 shrink-0 text-purple-400" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/>
+            </svg>
+            <p class="text-xs md:text-sm font-medium">
+                <span class="font-bold">Unlock the full Platinum Pursuit experience.</span>
+                Custom themes, ad-free browsing, exclusive badges, and more.
+                <a href="{% url 'subscribe' %}"
+                   class="underline font-semibold hover:text-purple-300 transition-colors ml-1">
+                    Explore PP Premium
+                </a>
+            </p>
+        </div>
+        <button id="premium-upsell-banner-dismiss"
+                class="btn btn-ghost btn-xs shrink-0"
+                aria-label="Dismiss banner">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+        </button>
+    </div>
+</div>
+<script>
+(function() {
+    var banner = document.getElementById('premium-upsell-banner');
+    var dismissBtn = document.getElementById('premium-upsell-banner-dismiss');
+    if (!banner || !dismissBtn) return;
+
+    var STORAGE_KEY = 'pp_premium_upsell_dismissed_at';
+    var reshowDays = parseInt(banner.dataset.reshowDays, 10) || 7;
+    var reshowMs = reshowDays * 24 * 60 * 60 * 1000;
+
+    var dismissedAt = parseInt(localStorage.getItem(STORAGE_KEY), 10) || 0;
+    if (dismissedAt && (Date.now() - dismissedAt) < reshowMs) {
+        banner.style.display = 'none';
+        return;
+    }
+
+    dismissBtn.addEventListener('click', function() {
+        localStorage.setItem(STORAGE_KEY, String(Date.now()));
+        banner.style.display = 'none';
+    });
+})();
+</script>

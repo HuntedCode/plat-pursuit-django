@@ -159,7 +159,7 @@ def check_profile_badges(profile, profilegame_ids, skip_notis: bool = False):
 
     stages = Stage.objects.filter(concepts__id__in=concept_ids).distinct()
     series_slugs = stages.values_list('series_slug', flat=True).distinct()
-    badges = list(Badge.objects.filter(series_slug__in=series_slugs).distinct().order_by('tier'))
+    badges = list(Badge.objects.filter(series_slug__in=series_slugs, is_live=True).distinct().order_by('tier'))
 
     # Pre-fetch context to avoid N+1 queries per badge
     badge_ctx = _build_badge_context(profile, badges)
@@ -215,7 +215,7 @@ def _check_prerequisite_tier(profile, badge, _context=None):
 
     # Fallback for standalone calls or when prev tier not in batch
     prev_badge = Badge.objects.filter(
-        series_slug=badge.series_slug, tier=prev_tier
+        series_slug=badge.series_slug, tier=prev_tier, is_live=True
     ).first()
 
     return prev_badge and UserBadge.objects.filter(
@@ -671,7 +671,7 @@ def initial_badge_check(profile, discord_notify: bool = True):
 
     stages = Stage.objects.filter(concepts__id__in=concept_ids).distinct()
     series_slugs = stages.values_list('series_slug', flat=True).distinct()
-    badges = list(Badge.objects.filter(series_slug__in=series_slugs).distinct().order_by('tier'))
+    badges = list(Badge.objects.filter(series_slug__in=series_slugs, is_live=True).distinct().order_by('tier'))
 
     # Pre-fetch context to avoid N+1 queries per badge
     badge_ctx = _build_badge_context(profile, badges)

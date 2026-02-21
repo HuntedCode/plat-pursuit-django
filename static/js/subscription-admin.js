@@ -38,6 +38,7 @@
     function _formatDate(isoString) {
         if (!isoString) return '-';
         const d = new Date(isoString);
+        if (isNaN(d.getTime())) return '-';
         return d.toLocaleDateString('en-US', {
             month: 'short', day: 'numeric', year: 'numeric',
             hour: 'numeric', minute: '2-digit',
@@ -266,11 +267,31 @@
         });
     }
 
+    async function resendActionRequiredEmail(userId, event) {
+        await _withButtonLock(event, async () => {
+            try {
+                const data = await API.post('/api/v1/admin/subscriptions/action/', {
+                    action: 'resend_action_required_email',
+                    user_id: userId,
+                });
+                if (data.success) {
+                    Toast.show(data.message || 'Action required email sent', 'success');
+                } else {
+                    Toast.show(data.message || 'Failed to send email', 'warning');
+                }
+            } catch (error) {
+                const msg = await _extractError(error, 'Failed to send action required email');
+                Toast.show(msg, 'error');
+            }
+        });
+    }
+
     // ── Expose to global scope ───────────────────────────────────────
 
     window.PlatPursuit.SubAdmin = {
         resendEmail,
         resendNotification,
+        resendActionRequiredEmail,
         showUserDetail,
         sendWelcomeEmail,
         sendPaymentSucceededEmail,

@@ -492,7 +492,8 @@ class AZGameSearchAPIView(APIView):
             games = Game.objects.filter(
                 title_name__istartswith=letter,
                 is_obtainable=True,
-                is_shovelware=False,
+            ).exclude(
+                shovelware_status__in=['auto_flagged', 'manually_flagged'],
             )
 
             # Only games that have a platinum trophy

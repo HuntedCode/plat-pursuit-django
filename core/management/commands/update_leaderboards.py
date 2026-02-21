@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 class Command(BaseCommand):
     def handle(self, *args, **options):
         unique_slugs = list(
-            Badge.objects.values_list('series_slug', flat=True).distinct().order_by('series_slug')
+            Badge.objects.filter(is_live=True).values_list('series_slug', flat=True).distinct().order_by('series_slug')
         )
         if not unique_slugs:
             self.stdout.write(self.style.ERROR("No series found to update leaderboards."))

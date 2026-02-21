@@ -695,6 +695,122 @@ class SubscriptionService:
         if is_first or is_final:
             SubscriptionService._send_payment_failed_email(user, is_final)
 
+    # ── Payment action required (3D Secure / SCA) ───────────────────────
+
+    @staticmethod
+    def handle_payment_action_required(user, invoice_data: dict) -> None:
+        """
+        Handle a Stripe invoice.payment_action_required event.
+
+        Fires when a payment needs customer authentication (3D Secure / SCA).
+        Sends a single notification and email directing the user to complete
+        verification. No subscription status change: premium stays active.
+
+        Args:
+            user: CustomUser instance
+            invoice_data: Stripe Invoice object data
+        """
+        invoice_url = invoice_data.get('hosted_invoice_url', '')
+        if not invoice_url:
+            logger.warning(f"No hosted_invoice_url in payment_action_required event for {user.email}")
+            invoice_url = f"{settings.SITE_URL}/users/subscription-management/"
+
+        logger.info(f"Payment action required for {user.email}: invoice_url={invoice_url}")
+
+        SubscriptionService._send_payment_action_required_notification(user, invoice_url)
+        SubscriptionService._send_payment_action_required_email(user, invoice_url)
+
+    @staticmethod
+    def _send_payment_action_required_notification(
+        user, invoice_url: str, triggered_by: str = 'webhook',
+    ) -> None:
+        """
+        Send in-app notification when a payment requires customer authentication.
+
+        Args:
+            user: CustomUser instance
+            invoice_url: Stripe hosted invoice URL for completing 3D Secure
+            triggered_by: Origin ('webhook', 'admin_manual', etc.)
+        """
+        from notifications.services.notification_service import NotificationService
+
+        try:
+            NotificationService.create_notification(
+                recipient=user,
+                notification_type='payment_action_required',
+                title="Payment verification needed",
+                message=(
+                    "Your bank requires an extra verification step to process "
+                    "your latest subscription payment. This usually takes less "
+                    "than a minute."
+                ),
+                action_url='/users/subscription-management/',
+                action_text='Manage Subscription',
+                icon='\U0001f510',
+                priority='normal',
+                metadata={
+                    'invoice_url': invoice_url,
+                    'triggered_by': triggered_by,
+                },
+            )
+        except Exception:
+            logger.exception(f"Failed to create payment action required notification for {user.email}")
+
+    @staticmethod
+    def _send_payment_action_required_email(
+        user, invoice_url: str, triggered_by: str = 'webhook',
+    ) -> bool:
+        """
+        Send email when a payment requires customer authentication (3D Secure / SCA).
+
+        Args:
+            user: CustomUser instance
+            invoice_url: Stripe hosted invoice URL where the customer completes authentication
+            triggered_by: Origin of the email ('webhook', 'admin_manual', etc.)
+
+        Returns:
+            bool: True if email was sent successfully
+        """
+        from users.services.email_preference_service import EmailPreferenceService
+        from core.services.email_service import EmailService
+
+        subject = "Quick step needed to complete your payment"
+
+        if not EmailPreferenceService.should_send_email(user, 'subscription_notifications'):
+            logger.info(f"Skipping payment action required email for {user.email}: preference disabled")
+            EmailService.log_suppressed('payment_action_required', user, subject, triggered_by)
+            return False
+
+        tier_name = SubscriptionService.get_tier_display_name(user.premium_tier) if user.premium_tier else 'Premium'
+        username = user.profile.psn_username if hasattr(user, 'profile') else user.email.split('@')[0]
+        preference_token = EmailPreferenceService.generate_preference_token(user.id)
+
+        context = {
+            'username': username,
+            'invoice_url': invoice_url,
+            'tier_name': tier_name,
+            'site_url': settings.SITE_URL,
+            'preference_url': f"{settings.SITE_URL}/users/email-preferences/?token={preference_token}",
+        }
+
+        try:
+            sent = EmailService.send_html_email(
+                subject=subject,
+                to_emails=[user.email],
+                template_name='emails/payment_action_required.html',
+                context=context,
+                log_email_type='payment_action_required',
+                log_user=user,
+                log_triggered_by=triggered_by,
+                log_metadata={'invoice_url': invoice_url},
+            )
+            if sent:
+                logger.info(f"Sent payment action required email to {user.email}")
+            return sent > 0
+        except Exception:
+            logger.exception(f"Failed to send payment action required email to {user.email}")
+            return False
+
     # ── Positive lifecycle emails ─────────────────────────────────────────
 
     @staticmethod
@@ -853,6 +969,7 @@ class SubscriptionService:
         - customer.subscription.deleted
         - invoice.paid
         - invoice.payment_failed
+        - invoice.payment_action_required
 
         Args:
             event_type: Stripe event type
@@ -869,6 +986,21 @@ class SubscriptionService:
                 from users.models import CustomUser
                 user = CustomUser.objects.get(stripe_customer_id=customer_id)
                 SubscriptionService.handle_payment_failed(user, event_data)
+            except CustomUser.DoesNotExist:
+                logger.warning(f"No user found with stripe_customer_id {customer_id}")
+            return
+
+        # Payment action required (3D Secure / SCA authentication needed)
+        if event_type == 'invoice.payment_action_required':
+            customer_id = event_data.get('customer')
+            if not customer_id:
+                logger.warning(f"No customer_id in webhook event {event_type}")
+                return
+
+            try:
+                from users.models import CustomUser
+                user = CustomUser.objects.get(stripe_customer_id=customer_id)
+                SubscriptionService.handle_payment_action_required(user, event_data)
             except CustomUser.DoesNotExist:
                 logger.warning(f"No user found with stripe_customer_id {customer_id}")
             return

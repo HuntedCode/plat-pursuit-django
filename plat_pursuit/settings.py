@@ -135,6 +135,7 @@ INSTALLED_APPS = [
     'allauth.account',
     'djstripe',
     'notifications.apps.NotificationsConfig',
+    'fundraiser.apps.FundraiserConfig',
 ]
 
 AUTHENTICATION_BACKENDS = [
@@ -200,6 +201,7 @@ TEMPLATES = [
                 "plat_pursuit.context_processors.moderation",
                 "plat_pursuit.context_processors.premium_theme_background",
                 "plat_pursuit.context_processors.high_sync_volume",
+                "plat_pursuit.context_processors.active_fundraiser",
             ],
         },
     },

@@ -34,7 +34,8 @@ class Command(BaseCommand):
             profile=profile,
             trophy__trophy_type='platinum',
             earned=True,
-            trophy__game__is_shovelware=False
+        ).exclude(
+            trophy__game__shovelware_status__in=['auto_flagged', 'manually_flagged'],
         ).first()
 
         if not earned_plat:

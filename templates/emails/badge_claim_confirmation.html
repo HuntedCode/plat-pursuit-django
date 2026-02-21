@@ -1,0 +1,117 @@
+{% extends "emails/base_email.html" %}
+
+{% block extra_styles %}
+    <style>
+        .claim-box {
+            background-color: #667eea;
+            background: linear-gradient(135deg, #f39c12 0%, #e67e22 50%, #667eea 100%);
+            border-radius: 12px;
+            padding: 30px;
+            margin: 25px 0;
+            color: #ffffff;
+            text-align: center;
+        }
+
+        .claim-box .claim-icon {
+            font-size: 42px;
+            margin-bottom: 10px;
+            display: block;
+        }
+
+        .claim-box h2 {
+            margin: 0 0 10px 0;
+            font-size: 22px;
+            font-weight: 700;
+        }
+
+        .claim-box p {
+            margin: 0;
+            font-size: 15px;
+            opacity: 0.95;
+            line-height: 1.6;
+        }
+
+        .claim-box .badge-name {
+            font-size: 24px;
+            font-weight: 700;
+            margin: 15px 0;
+            display: block;
+        }
+
+        .info-box {
+            background-color: #fff8e1;
+            border-radius: 8px;
+            padding: 20px 25px;
+            margin: 25px 0;
+            border-left: 4px solid #f39c12;
+        }
+
+        .info-box p {
+            margin: 0;
+            font-size: 14px;
+            color: #555555;
+            line-height: 1.6;
+        }
+
+        .flavor-text {
+            text-align: center;
+            font-style: italic;
+            color: #777777;
+            font-size: 15px;
+            margin: 30px 0 10px 0;
+            line-height: 1.6;
+        }
+
+        @media only screen and (max-width: 600px) {
+            .claim-box {
+                padding: 20px 15px;
+            }
+            .claim-box .badge-name {
+                font-size: 20px;
+            }
+        }
+    </style>
+{% endblock %}
+
+{% block title %}Badge Claimed: {{ claim.series_name }}{% endblock %}
+
+{% block header_content %}
+    <h1>Badge Claimed!</h1>
+    <p>Your pick has been recorded</p>
+{% endblock %}
+
+{% block content %}
+    <p class="greeting">Hey {{ user.first_name|default:user.email }},</p>
+
+    <div class="claim-box">
+        <span class="claim-icon">&#127942;</span>
+        <h2>You claimed a badge!</h2>
+        <span class="badge-name">{{ claim.series_name }}</span>
+        <p>
+            This badge series has been added to the artwork queue.
+            Our artist will create professional artwork for this badge
+            and all its tiers.
+        </p>
+    </div>
+
+    <div class="info-box">
+        <p>
+            <strong>What happens next?</strong> Our artist will work on your claimed badge series.
+            You will receive another email when the artwork is completed and live on the site.
+            You can check the status anytime on the fundraiser page.
+        </p>
+    </div>
+
+    <div class="cta-container">
+        <a href="{{ badge_url }}" class="cta-button">View Badge Series</a>
+    </div>
+
+    <p class="flavor-text">
+        You are shaping the future of PlatPursuit, one badge at a time!
+    </p>
+{% endblock %}
+
+{% block footer_note %}
+    You're receiving this because you claimed a badge on PlatPursuit.<br>
+    <a href="{{ preference_url }}" style="color: #999999; text-decoration: underline;">Manage your email preferences</a>.
+{% endblock %}

@@ -1,4 +1,10 @@
 {% load custom_filters humanize static %}
+{% if is_staff_preview %}
+<div class="alert bg-warning/10 border-2 border-warning text-warning mb-4">
+    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" /></svg>
+    <span class="font-semibold italic">Staff Preview: This badge series is not yet live. Regular users cannot see this page.</span>
+</div>
+{% endif %}
 {% with target_profile as profile %}
 <div class="card bg-base-100 border-4 border-base-300 shadow-lg shadow-neutral transition-all duration-300 hover:border-{{ badge.tier|badge_color }} hover:shadow-{{ badge.tier|badge_color }}">
     <div class="card-body p-3 lg:p-5">
@@ -21,6 +27,15 @@
                 <p class="text-sm text-base-content/70 italic pr-1 line-clamp-1">{{ badge.effective_display_title }}</p>
                 {% if badge.most_recent_concept %}
                     <p class="text-xs text-base-content/50 italic">Latest addition: {{ badge.most_recent_concept.unified_title }}</p>
+                {% endif %}
+                {% if badge.funded_by %}
+                    <p class="text-xs text-base-content/50 italic">
+                        Artwork funded by
+                        <a href="{% url 'profile_detail' badge.funded_by.psn_username %}"
+                           class="font-semibold text-accent hover:underline">
+                            {{ badge.funded_by.display_psn_username }}
+                        </a>
+                    </p>
                 {% endif %}
             </div>
 

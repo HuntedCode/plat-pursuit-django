@@ -284,6 +284,20 @@ def stripe_webhook(request):
     
     dj_event = DJStripeEvent.process(event)
 
+    # Route one-time donation payments before subscription handling
+    if event.type == 'checkout.session.completed':
+        session_data = event.data.object
+        metadata = session_data.get('metadata', {}) if isinstance(session_data, dict) else getattr(session_data, 'metadata', {})
+        if metadata.get('type') == 'fundraiser_donation':
+            from fundraiser.services.donation_service import DonationService
+            try:
+                DonationService.handle_stripe_payment_completed(
+                    session_data if isinstance(session_data, dict) else session_data.to_dict()
+                )
+            except Exception:
+                logger.exception("Error processing fundraiser donation webhook")
+            return HttpResponse(status=200)
+
     # Delegate all subscription-related events to SubscriptionService
     SubscriptionService.handle_webhook_event(event.type, event.data.object)
 
@@ -320,6 +334,20 @@ def paypal_webhook(request):
     resource = event_data.get('resource', {})
 
     logger.info(f"PayPal webhook received: {event_type}")
+
+    # Route one-time donation order events before subscription handling
+    if event_type == 'CHECKOUT.ORDER.APPROVED':
+        logger.info(f"PayPal order approved (capture pending): {resource.get('id')}")
+        return HttpResponse(status=200)
+
+    if event_type == 'PAYMENT.CAPTURE.COMPLETED':
+        from fundraiser.services.donation_service import DonationService
+        try:
+            if DonationService.handle_paypal_capture_completed(resource):
+                return HttpResponse(status=200)
+        except Exception:
+            logger.exception("Error processing fundraiser PayPal capture event")
+        # Fall through to subscription handler if not a donation capture
 
     try:
         PayPalService.handle_webhook_event(event_type, resource)
