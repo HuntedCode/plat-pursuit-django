@@ -4,7 +4,7 @@
 {% block title %}{{ fundraiser.name }} - Platinum Pursuit{% endblock %}
 
 {% block content %}
-<div class="max-w-6xl mx-auto px-4 md:px-8 py-6 space-y-8">
+<div class="max-w-6xl mx-auto px-4 md:px-6 lg:px-8 py-6 lg:py-8 space-y-8">
 
     {# ─── Staff Preview Banner ─────────────────────────────────────────── #}
     {% if is_staff_preview %}
@@ -17,55 +17,161 @@
         </div>
     {% endif %}
 
-    {# ─── Ended Banner (for non-staff) ─────────────────────────────────── #}
+    {# ─── Ended Celebration Banner ────────────────────────────────────── #}
     {% if is_ended and not is_staff_preview %}
-        <div class="alert bg-base-300 border-2 border-base-content/20 text-center py-3">
-            <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/></svg>
-            <span>This fundraiser has ended. Thank you to everyone who contributed!</span>
+        <div class="card bg-base-100 border-4 border-success shadow-success/20 shadow-lg">
+            <div class="card-body text-center space-y-2 py-5">
+                <h2 class="text-2xl lg:text-3xl font-bold italic text-success">Mission Accomplished!</h2>
+                <p class="text-base-content/70 italic text-sm lg:text-base max-w-2xl mx-auto">
+                    This fundraiser has wrapped up. Here's what the community achieved together.
+                </p>
+                <div class="flex justify-center gap-6 mt-2">
+                    <div class="text-center">
+                        <div class="text-xl font-bold text-success">${{ total_raised|floatformat:0 }}</div>
+                        <div class="text-xs text-base-content/50">Raised</div>
+                    </div>
+                    <div class="text-center">
+                        <div class="text-xl font-bold text-primary">{{ donor_count }}</div>
+                        <div class="text-xs text-base-content/50">Donors</div>
+                    </div>
+                    {% if badge_tracker %}
+                    <div class="text-center">
+                        <div class="text-xl font-bold text-primary">{{ badge_tracker.completed }}</div>
+                        <div class="text-xs text-base-content/50">Artworks</div>
+                    </div>
+                    {% endif %}
+                </div>
+                <p class="text-xs text-base-content/40 italic mt-1">The hunt never ends, but this chapter is complete. Thank you!</p>
+            </div>
         </div>
     {% endif %}
 
-    {# ─── Hero Section ─────────────────────────────────────────────────── #}
-    <section class="text-center space-y-4">
-        <h1 class="text-3xl md:text-4xl lg:text-5xl font-bold">
-            {{ fundraiser.name }}
-        </h1>
-        <p class="text-base-content/70 text-sm md:text-base lg:text-lg max-w-3xl mx-auto">
-            {{ fundraiser.description }}
-        </p>
+    {# ─── Hero Section ────────────────────────────────────────────────── #}
+    <section class="card bg-base-100 border-4 border-base-300 shadow-lg shadow-neutral transition-all duration-300 hover:border-primary hover:shadow-primary">
+        <div class="card-body text-center py-6 lg:py-8">
+            <div class="max-w-3xl mx-auto space-y-3">
+                <h1 class="text-3xl lg:text-5xl font-bold italic pr-1">
+                    {{ fundraiser.name }}
+                </h1>
+                <p class="text-base-content/60 italic text-sm lg:text-base">
+                    Every badge tells a story. Help us bring them to life.
+                </p>
+                {% if fundraiser.description %}
+                    <p class="text-base-content/70 text-sm lg:text-base max-w-2xl mx-auto">
+                        {{ fundraiser.description }}
+                    </p>
+                {% endif %}
+                {% if is_live and user.is_authenticated %}
+                    <div class="pt-2">
+                        <button type="button" id="hero-donate-cta" class="btn btn-primary btn-lg shadow-primary/30 shadow-md hover:shadow-primary/50 hover:shadow-lg transition-all duration-300">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+                            Support the Cause
+                        </button>
+                    </div>
+                {% elif is_live and not user.is_authenticated %}
+                    <div class="pt-2">
+                        <a href="{% url 'account_signup' %}?next={% url 'fundraiser' fundraiser.slug %}" class="btn btn-primary btn-lg shadow-primary/30 shadow-md hover:shadow-primary/50 hover:shadow-lg transition-all duration-300">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+                            Join the Hunt
+                        </a>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
     </section>
 
-    {# ─── My Contributions (for authenticated users) ────────────────────── #}
+    {# ─── Campaign Stats (social proof) ───────────────────────────────── #}
+    <div class="card bg-base-100 border-4 border-base-300 shadow-md shadow-neutral">
+        <div class="stats stats-horizontal w-full">
+            <div class="stat place-items-center">
+                <div class="stat-figure text-success">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" x2="12" y1="2" y2="22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+                </div>
+                <div class="stat-title text-xs">Total Raised</div>
+                <div class="stat-value text-success text-lg lg:text-3xl">${{ total_raised|floatformat:0 }}</div>
+                <div class="stat-desc italic text-xs">and counting!</div>
+            </div>
+            <div class="stat place-items-center">
+                <div class="stat-figure text-primary">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                </div>
+                <div class="stat-title text-xs">Donors</div>
+                <div class="stat-value text-primary text-lg lg:text-3xl">{{ donor_count }}</div>
+                <div class="stat-desc italic text-xs">trophy hunters strong</div>
+            </div>
+            {% if badge_tracker %}
+            <div class="stat place-items-center">
+                <div class="stat-figure text-secondary">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+                </div>
+                <div class="stat-title text-xs">Badges Claimed</div>
+                <div class="stat-value text-secondary text-lg lg:text-3xl">{{ badge_tracker.claimed }}</div>
+                <div class="stat-desc italic text-xs">series adopted</div>
+            </div>
+            <div class="stat place-items-center">
+                <div class="stat-figure text-warning">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                </div>
+                <div class="stat-title text-xs">Artworks Complete</div>
+                <div class="stat-value text-warning text-lg lg:text-3xl">{{ badge_tracker.completed }}</div>
+                <div class="stat-desc italic text-xs">masterpieces live</div>
+            </div>
+            {% else %}
+            <div class="stat place-items-center">
+                <div class="stat-figure text-error">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" viewBox="0 0 24 24" fill="currentColor"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+                </div>
+                <div class="stat-title text-xs">Thank You!</div>
+                <div class="stat-value text-lg lg:text-3xl">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-8 h-8 text-error" viewBox="0 0 24 24" fill="currentColor"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+                </div>
+                <div class="stat-desc italic text-xs">for your support</div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    {# ─── Badge Completion Tracker ────────────────────────────────────── #}
+    {% if fundraiser.campaign_type == 'badge_artwork' and badge_tracker %}
+        {% include 'fundraiser/partials/badge_tracker.html' %}
+    {% endif %}
+
+    {# ─── My Contributions (for authenticated users) ──────────────────── #}
     {% if has_contributions %}
-        <section class="card bg-base-200/80 border-2 border-accent/30 shadow-md shadow-neutral"
+        <section class="card bg-base-100 border-4 border-primary/30 shadow-lg shadow-neutral"
                  data-donation-ids="{{ donation_ids_with_picks }}">
             <div class="card-body space-y-4">
-                <div class="flex items-center justify-between">
-                    <h2 class="card-title text-xl lg:text-2xl">My Contributions</h2>
-                    <span class="badge badge-accent badge-lg">${{ total_donated|floatformat:0 }} donated</span>
+                <div class="flex items-center justify-between flex-wrap gap-2">
+                    <div>
+                        <h2 class="card-title text-xl lg:text-2xl italic">My Contributions</h2>
+                        <p class="text-base-content/50 italic text-xs">Your trophy hunting generosity at a glance.</p>
+                    </div>
+                    <span class="badge badge-primary badge-lg font-bold">${{ total_donated|floatformat:0 }} donated</span>
                 </div>
 
                 {# ── Donation Summary ────────────────────────────── #}
                 <div class="grid grid-cols-3 gap-3">
-                    <div class="bg-base-300/50 rounded-lg p-3 text-center">
+                    <div class="bg-base-200/80 rounded-lg p-3 text-center space-y-1">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 mx-auto text-success" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" x2="12" y1="2" y2="22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
                         <div class="text-lg font-bold text-success">${{ total_donated|floatformat:0 }}</div>
                         <div class="text-xs text-base-content/50">Total Donated</div>
                     </div>
-                    <div class="bg-base-300/50 rounded-lg p-3 text-center">
+                    <div class="bg-base-200/80 rounded-lg p-3 text-center space-y-1">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 mx-auto text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
                         <div class="text-lg font-bold">{{ user_donations|length }}</div>
                         <div class="text-xs text-base-content/50">Donation{{ user_donations|length|pluralize }}</div>
                     </div>
                     {% if fundraiser.campaign_type == 'badge_artwork' %}
-                    <div class="bg-base-300/50 rounded-lg p-3 text-center">
-                        <div class="text-lg font-bold text-accent">{{ total_picks_remaining }}</div>
+                    <div class="bg-base-200/80 rounded-lg p-3 text-center space-y-1">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 mx-auto text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+                        <div class="text-lg font-bold text-primary">{{ total_picks_remaining }}</div>
                         <div class="text-xs text-base-content/50">Pick{{ total_picks_remaining|pluralize }} Remaining</div>
                     </div>
                     {% else %}
-                    <div class="bg-base-300/50 rounded-lg p-3 text-center">
-                        <div class="text-lg font-bold">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 mx-auto text-error" viewBox="0 0 24 24" fill="currentColor"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
-                        </div>
-                        <div class="text-xs text-base-content/50">Thank You!</div>
+                    <div class="bg-base-200/80 rounded-lg p-3 text-center space-y-1">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 mx-auto text-error" viewBox="0 0 24 24" fill="currentColor"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+                        <div class="text-lg font-bold text-error">Thank You!</div>
+                        <div class="text-xs text-base-content/50">For your support</div>
                     </div>
                     {% endif %}
                 </div>
@@ -73,7 +179,7 @@
                 {# ── Badge Claiming (live only, picks > 0) ────────── #}
                 {% if fundraiser.campaign_type == 'badge_artwork' %}
                     {% if is_live and total_picks_remaining > 0 %}
-                        <div class="bg-base-300/30 rounded-lg p-3">
+                        <div class="bg-base-200/60 rounded-lg p-3">
                             <div class="flex items-center justify-between flex-wrap gap-2">
                                 <p class="text-sm text-base-content/70">
                                     You have <span class="font-bold text-accent">{{ total_picks_remaining }}</span> badge pick{{ total_picks_remaining|pluralize }} to use.
@@ -84,15 +190,15 @@
                                     {% endif %}
                                 </p>
                                 {% if user_profile.is_discord_verified %}
-                                    <button type="button" id="open-badge-picker-btn" class="btn btn-accent btn-sm">
-                                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 mr-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21 8-2 2-1.5-3.7A2 2 0 0 0 15.6 5H8.4a2 2 0 0 0-1.9 1.3L5 10 3 8"/><path d="m7 14 .4-1a1 1 0 0 1 .9-.6h7.4a1 1 0 0 1 .9.6l.4 1"/><path d="M19 17H5a2 2 0 0 0-2 2v0a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v0a2 2 0 0 0-2-2Z"/></svg>
+                                    <button type="button" id="open-badge-picker-btn" class="btn btn-primary btn-sm shadow-primary/30 shadow-md hover:shadow-primary/50 hover:shadow-lg transition-all duration-300">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21 8-2 2-1.5-3.7A2 2 0 0 0 15.6 5H8.4a2 2 0 0 0-1.9 1.3L5 10 3 8"/><path d="m7 14 .4-1a1 1 0 0 1 .9-.6h7.4a1 1 0 0 1 .9.6l.4 1"/><path d="M19 17H5a2 2 0 0 0-2 2v0a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v0a2 2 0 0 0-2-2Z"/></svg>
                                         Browse Available Badges
                                     </button>
                                 {% endif %}
                             </div>
                         </div>
                     {% elif total_picks_remaining > 0 %}
-                        <div class="bg-base-300/30 rounded-lg p-3">
+                        <div class="bg-base-200/60 rounded-lg p-3">
                             <p class="text-sm text-base-content/50">
                                 You have {{ total_picks_remaining }} badge pick{{ total_picks_remaining|pluralize }} remaining.
                                 {% if is_ended %}Badge claiming is no longer available for this fundraiser.{% endif %}
@@ -104,11 +210,12 @@
                 {# ── Claimed Badges ───────────────────────────────── #}
                 {% if user_claims %}
                     <div>
-                        <h3 class="font-semibold text-sm mb-2">Your Claimed Badges</h3>
+                        <h3 class="font-semibold text-sm mb-2 italic">Your Claimed Badges</h3>
                         <div class="flex flex-wrap gap-2">
                             {% for claim in user_claims %}
                                 <a href="{% url 'badge_detail' claim.series_slug %}"
-                                   class="flex items-center gap-2 bg-base-300/50 rounded-lg px-3 py-2 hover:bg-base-300 transition-colors">
+                                   class="flex items-center gap-2 bg-base-200/80 rounded-lg px-3 py-2 hover:bg-base-300 transition-colors
+                                          border-l-4 {% if claim.status == 'completed' %}border-success{% elif claim.status == 'in_progress' %}border-warning{% else %}border-base-content/20{% endif %}">
                                     <span class="font-medium text-sm">{{ claim.series_name }}</span>
                                     <span class="badge badge-xs
                                         {% if claim.status == 'completed' %}badge-success
@@ -123,14 +230,14 @@
                 {% endif %}
 
                 {# ── Donation History (collapsible) ───────────────── #}
-                <details class="collapse collapse-arrow bg-base-300/30 rounded-lg">
-                    <summary class="collapse-title text-sm font-semibold py-2 min-h-0">
+                <details class="collapse collapse-arrow bg-base-200/50 rounded-lg">
+                    <summary class="collapse-title text-sm font-semibold italic py-2 min-h-0">
                         Donation History
                     </summary>
                     <div class="collapse-content">
-                        <div class="space-y-2 pt-1">
+                        <div class="space-y-1 pt-1">
                             {% for donation in user_donations %}
-                                <div class="flex items-center justify-between text-sm">
+                                <div class="flex items-center justify-between text-sm py-1 px-2 rounded hover:bg-base-300/30 transition-colors">
                                     <div class="flex items-center gap-2">
                                         <span class="font-bold text-success">${{ donation.amount|floatformat:0 }}</span>
                                         <span class="badge badge-xs {% if donation.provider == 'stripe' %}badge-primary{% else %}badge-info{% endif %}">
@@ -152,9 +259,9 @@
         </section>
     {% elif is_live and user.is_authenticated and user.profile %}
         {# ── Gentle prompt for users who haven't donated yet ────────── #}
-        <section class="card bg-base-200/60 border border-base-300">
+        <section class="card bg-base-100 border-2 border-base-300">
             <div class="card-body py-4 text-center">
-                <p class="text-sm text-base-content/60">
+                <p class="text-sm text-base-content/60 italic">
                     Your contributions will appear here after your first donation.
                     Every dollar helps bring our badges to life!
                 </p>
@@ -162,80 +269,52 @@
         </section>
     {% endif %}
 
-    {# ─── Badge Completion Tracker ─────────────────────────────────────── #}
-    {% if fundraiser.campaign_type == 'badge_artwork' and badge_tracker %}
-        {% include 'fundraiser/partials/badge_tracker.html' %}
-    {% endif %}
-
-    {# ─── Stats Cards ──────────────────────────────────────────────────── #}
-    <div class="grid grid-cols-3 gap-4">
-        <div class="stat bg-base-200/80 rounded-box border border-base-300 text-center">
-            <div class="stat-title text-xs lg:text-sm">Total Raised</div>
-            <div class="stat-value text-lg lg:text-3xl text-success">${{ total_raised|floatformat:0 }}</div>
-        </div>
-        <div class="stat bg-base-200/80 rounded-box border border-base-300 text-center">
-            <div class="stat-title text-xs lg:text-sm">Donors</div>
-            <div class="stat-value text-lg lg:text-3xl text-primary">{{ donor_count }}</div>
-        </div>
-        {% if fundraiser.campaign_type == 'badge_artwork' and badge_tracker %}
-        <div class="stat bg-base-200/80 rounded-box border border-base-300 text-center">
-            <div class="stat-title text-xs lg:text-sm">Badges Claimed</div>
-            <div class="stat-value text-lg lg:text-3xl text-accent">{{ badge_tracker.claimed }}</div>
-        </div>
-        {% else %}
-        <div class="stat bg-base-200/80 rounded-box border border-base-300 text-center">
-            <div class="stat-title text-xs lg:text-sm">Thank You!</div>
-            <div class="stat-value text-lg lg:text-3xl">
-                <svg xmlns="http://www.w3.org/2000/svg" class="w-8 h-8 mx-auto text-error" viewBox="0 0 24 24" fill="currentColor"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
-            </div>
-        </div>
-        {% endif %}
-    </div>
-
-    {# ─── Donation Form ────────────────────────────────────────────────── #}
+    {# ─── Donation Form ───────────────────────────────────────────────── #}
     {% if is_live and user.is_authenticated %}
-        <section class="card bg-base-200/80 border-2 border-base-300 shadow-md shadow-neutral">
-            <div class="card-body space-y-4">
-                <h2 class="card-title text-xl lg:text-2xl">Make a Donation</h2>
-                <p class="text-base-content/70 text-sm">
-                    Every dollar helps bring our badges to life.
-                    {% if fundraiser.campaign_type == 'badge_artwork' %}
-                        Donate ${{ badge_pick_divisor }} or more to claim a badge series for custom artwork!
-                    {% endif %}
-                </p>
+        <section class="card bg-base-100 border-4 border-base-300 shadow-lg shadow-neutral">
+            <div class="card-body space-y-6">
+                <div>
+                    <h2 class="card-title text-xl lg:text-2xl italic">Make a Donation</h2>
+                    <p class="text-base-content/60 italic text-sm mt-1">
+                        Every dollar brings a badge to life. Pick your amount and let's go!
+                        {% if fundraiser.campaign_type == 'badge_artwork' %}
+                            Donate ${{ badge_pick_divisor }} or more to claim a badge series for custom artwork.
+                        {% endif %}
+                    </p>
+                </div>
 
-                <div id="donation-form" data-slug="{{ fundraiser.slug }}" data-min="{{ fundraiser.minimum_donation }}" data-pick-divisor="{{ badge_pick_divisor }}">
+                <div id="donation-form" class="space-y-5" data-slug="{{ fundraiser.slug }}" data-min="{{ fundraiser.minimum_donation }}" data-pick-divisor="{{ badge_pick_divisor }}">
                     {# Amount Selection #}
-                    <div class="space-y-3">
+                    <div class="bg-base-200/60 rounded-xl p-4 space-y-4">
                         <label class="text-sm font-semibold">Donation Amount (USD)</label>
-                        <div class="grid grid-cols-4 gap-2">
-                            <button type="button" class="btn btn-outline amount-preset" data-amount="5">$5</button>
-                            <button type="button" class="btn btn-outline amount-preset" data-amount="10">$10</button>
-                            <button type="button" class="btn btn-outline amount-preset" data-amount="25">$25</button>
-                            <button type="button" class="btn btn-outline amount-preset" data-amount="50">$50</button>
+                        <div class="grid grid-cols-4 gap-3">
+                            <button type="button" class="btn btn-outline btn-lg amount-preset transition-all duration-200" data-amount="5">$5</button>
+                            <button type="button" class="btn btn-outline btn-lg amount-preset transition-all duration-200" data-amount="10">$10</button>
+                            <button type="button" class="btn btn-outline btn-lg amount-preset transition-all duration-200" data-amount="25">$25</button>
+                            <button type="button" class="btn btn-outline btn-lg amount-preset transition-all duration-200" data-amount="50">$50</button>
                         </div>
                         <div class="flex items-center gap-2">
                             <span class="text-lg font-bold">$</span>
-                            <input type="number" id="donation-amount" class="input input-bordered w-full"
+                            <input type="number" id="donation-amount" class="input input-bordered w-full focus:ring-2 focus:ring-primary"
                                    placeholder="Custom amount" min="{{ fundraiser.minimum_donation }}" step="1">
                         </div>
                         {% if fundraiser.campaign_type == 'badge_artwork' %}
-                            <p class="text-xs text-base-content/50" id="picks-hint"></p>
+                            <div id="picks-hint"></div>
                         {% endif %}
                     </div>
 
                     {# Provider Selection #}
                     {% if paypal_available %}
-                    <div class="space-y-2 mt-4">
+                    <div class="bg-base-200/60 rounded-xl p-4 space-y-3">
                         <label class="text-sm font-semibold">Payment Method</label>
                         <div class="grid grid-cols-2 gap-3">
-                            <label class="provider-option cursor-pointer rounded-lg border-2 border-base-300 p-3 flex items-center justify-center gap-2 transition-all hover:border-primary/50 selected-provider"
+                            <label class="provider-option cursor-pointer rounded-lg border-2 border-primary p-4 flex items-center justify-center gap-2 transition-all duration-200 hover:border-primary/50 selected-provider"
                                    data-provider="stripe">
                                 <input type="radio" name="provider" value="stripe" class="hidden" checked>
                                 <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/></svg>
                                 <span class="font-medium text-sm">Card / Stripe</span>
                             </label>
-                            <label class="provider-option cursor-pointer rounded-lg border-2 border-base-300 p-3 flex items-center justify-center gap-2 transition-all hover:border-primary/50"
+                            <label class="provider-option cursor-pointer rounded-lg border-2 border-base-300 p-4 flex items-center justify-center gap-2 transition-all duration-200 hover:border-info/50"
                                    data-provider="paypal">
                                 <input type="radio" name="provider" value="paypal" class="hidden">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 11l1-9h8c4 0 5 3 4 6s-3 4-6 4h-3l-1 6H7z"/></svg>
@@ -246,7 +325,7 @@
                     {% endif %}
 
                     {# Options #}
-                    <div class="space-y-3 mt-4">
+                    <div class="bg-base-200/60 rounded-xl p-4 space-y-3">
                         <label class="flex items-center gap-3 cursor-pointer">
                             <input type="checkbox" id="donation-anonymous" class="checkbox checkbox-sm">
                             <span class="text-sm">Donate anonymously (hide from donor wall)</span>
@@ -254,23 +333,25 @@
                         <div>
                             <label class="text-sm font-semibold" for="donation-message">Message (optional)</label>
                             <input type="text" id="donation-message" class="input input-bordered w-full mt-1"
-                                   placeholder="Leave a public message..." maxlength="200">
+                                   placeholder="Leave a message for the donor wall..." maxlength="200">
                         </div>
                     </div>
 
                     {# Submit #}
-                    <button type="button" id="donate-btn" class="btn btn-primary btn-block mt-6" disabled>
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 mr-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+                    <button type="button" id="donate-btn" class="btn btn-primary btn-lg btn-block hover:shadow-primary/30 hover:shadow-lg transition-all duration-300" disabled>
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
                         <span id="donate-btn-text">Donate</span>
                     </button>
                 </div>
             </div>
         </section>
     {% elif is_live and not user.is_authenticated %}
-        <section class="card bg-base-200/80 border-2 border-base-300 shadow-md shadow-neutral">
-            <div class="card-body text-center">
-                <h2 class="card-title text-xl justify-center">Want to Donate?</h2>
-                <p class="text-base-content/70">Create a PlatPursuit account to make a donation and claim badge artwork.</p>
+        {# ── Unauthenticated CTA ──────────────────────────────────────── #}
+        <section class="card bg-base-100 border-4 border-base-300 shadow-md shadow-neutral">
+            <div class="card-body text-center space-y-3">
+                <h2 class="card-title text-xl lg:text-2xl justify-center italic">Join the Hunt</h2>
+                <p class="text-base-content/70 text-sm">Create a PlatPursuit account to donate and claim badge artwork.</p>
+                <p class="text-sm italic text-base-content/40">Your support keeps the pursuit alive.</p>
                 <div class="flex gap-3 justify-center mt-2">
                     <a href="{% url 'account_login' %}?next={% url 'fundraiser' fundraiser.slug %}" class="btn btn-primary">Log In</a>
                     <a href="{% url 'account_signup' %}?next={% url 'fundraiser' fundraiser.slug %}" class="btn btn-outline">Sign Up</a>
@@ -279,47 +360,86 @@
         </section>
     {% endif %}
 
-    {# ─── Claimed Badges Gallery ───────────────────────────────────────── #}
-    {% if fundraiser.campaign_type == 'badge_artwork' and claimed_badges %}
-        <section class="space-y-4">
-            <h2 class="text-xl lg:text-2xl font-bold">Claimed Badges</h2>
-            <p class="text-base-content/70 text-sm">
-                These badge series have been claimed by donors and are queued for artwork.
-            </p>
-            <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
-                {% for claim in claimed_badges %}
-                    <a href="{% url 'badge_detail' claim.series_slug %}" class="card bg-base-200/80 border border-base-300 hover:border-primary/50 transition-colors">
-                        <div class="card-body p-3 items-center text-center gap-2">
-                            {# Badge image placeholder #}
-                            <div class="relative w-16 h-16">
-                                <img src="{% static 'images/badges/backdrops/1_backdrop.png' %}"
-                                     alt="" class="w-full h-full absolute top-0 left-0 object-contain" loading="lazy">
-                                <img src="{% static 'images/badges/default.png' %}"
-                                     alt="{{ claim.series_name }}" class="w-full h-full absolute top-0 left-0 object-contain" loading="lazy">
-                            </div>
-                            <span class="font-semibold text-sm line-clamp-2">{{ claim.series_name }}</span>
-                            <span class="text-xs text-base-content/50">
-                                Claimed by {{ claim.profile.display_psn_username }}
-                            </span>
-                            <span class="badge badge-sm
-                                {% if claim.status == 'completed' %}badge-success
-                                {% elif claim.status == 'in_progress' %}badge-warning
-                                {% else %}badge-ghost{% endif %}">
-                                {{ claim.get_status_display }}
-                            </span>
-                        </div>
-                    </a>
-                {% endfor %}
+    {# ─── Claimed Badges Gallery (split: completed vs queued) ─────────── #}
+    {% if fundraiser.campaign_type == 'badge_artwork' %}
+    {% if completed_claims or pending_claims %}
+        <section class="space-y-6">
+            <div>
+                <h2 class="text-xl lg:text-2xl font-bold italic">Claimed Badges</h2>
+                <p class="text-base-content/60 italic text-sm mt-1">Badges adopted by the community for custom artwork.</p>
             </div>
+
+            {# ── Artwork Complete ──────────────────────────────── #}
+            {% if completed_claims %}
+                <div class="space-y-3">
+                    <div class="flex items-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-success" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                        <h3 class="font-bold italic text-success">Artwork Complete</h3>
+                    </div>
+                    <p class="text-base-content/50 italic text-xs">Brought to life by the community.</p>
+                    <div class="grid grid-cols-3 lg:grid-cols-6 gap-3">
+                        {% for claim in completed_claims %}
+                            <a href="{% url 'badge_detail' claim.series_slug %}"
+                               class="card bg-base-100 border-2 border-success/30 hover:border-success hover:shadow-success/20 hover:shadow-md transition-all duration-300">
+                                <div class="card-body p-3 items-center text-center gap-1">
+                                    <figure class="w-16 h-16 shrink-0">
+                                        {% if claim.badge_layers %}
+                                            {% include 'partials/badge.html' with layers=claim.badge_layers %}
+                                        {% endif %}
+                                    </figure>
+                                    <span class="font-semibold text-sm line-clamp-1 pr-1">{{ claim.series_name }}</span>
+                                    {% if claim.profile %}
+                                        <span class="text-xs text-accent italic">Funded by {{ claim.profile.display_psn_username }}</span>
+                                    {% endif %}
+                                </div>
+                            </a>
+                        {% endfor %}
+                    </div>
+                </div>
+            {% endif %}
+
+            {# ── In the Queue ─────────────────────────────────── #}
+            {% if pending_claims %}
+                <div class="space-y-3">
+                    <div class="flex items-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-warning" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                        <h3 class="font-bold italic text-warning">In the Queue</h3>
+                    </div>
+                    <p class="text-base-content/50 italic text-xs">Claimed and waiting for their glow-up.</p>
+                    <div class="grid grid-cols-3 lg:grid-cols-4 gap-3">
+                        {% for claim in pending_claims %}
+                            <a href="{% url 'badge_detail' claim.series_slug %}"
+                               class="card bg-base-100 border-2 border-base-300 hover:border-warning/50 hover:shadow-md transition-all duration-300">
+                                <div class="card-body p-3 items-center text-center gap-1">
+                                    <div class="relative w-14 h-14">
+                                        <img src="{% static 'images/badges/backdrops/1_backdrop.png' %}"
+                                             alt="" class="w-full h-full absolute top-0 left-0 object-contain" loading="lazy">
+                                        <img src="{% static 'images/badges/default.png' %}"
+                                             alt="{{ claim.series_name }}" class="w-full h-full absolute top-0 left-0 object-contain" loading="lazy">
+                                    </div>
+                                    <span class="font-semibold text-sm line-clamp-1 pr-1">{{ claim.series_name }}</span>
+                                    {% if claim.profile %}
+                                        <span class="text-xs text-base-content/50">Claimed by {{ claim.profile.display_psn_username }}</span>
+                                    {% endif %}
+                                    <span class="badge badge-xs
+                                        {% if claim.status == 'in_progress' %}badge-warning
+                                        {% else %}badge-ghost{% endif %}">
+                                        {{ claim.get_status_display }}
+                                    </span>
+                                </div>
+                            </a>
+                        {% endfor %}
+                    </div>
+                </div>
+            {% endif %}
         </section>
     {% endif %}
+    {% endif %}
 
-    {# ─── Donor Wall ───────────────────────────────────────────────────── #}
+    {# ─── Donor Wall ──────────────────────────────────────────────────── #}
     {% include 'fundraiser/partials/donor_wall.html' %}
 
 </div>
-
-{# ─── Badge Picker Modal (outside zoom wrapper) ───────────────────────── #}
 {% endblock %}
 
 {% block fixed_overlays %}

@@ -370,7 +370,7 @@ class DonationService:
             logger.warning("Fundraiser milestone 'Badge Artwork Patron' not found. Run populate_milestones.")
             return
 
-        _, created = UserMilestone.objects.get_or_create(
+        user_milestone, created = UserMilestone.objects.get_or_create(
             profile=profile,
             milestone=milestone,
         )
@@ -399,6 +399,10 @@ class DonationService:
                 )
 
             logger.info(f"Fundraiser milestone granted to {profile.psn_username}")
+
+            # Send milestone notification
+            from notifications.signals import create_milestone_notification
+            create_milestone_notification(user_milestone)
 
     # ──────────────────────────────────────────────
     # Email Notifications

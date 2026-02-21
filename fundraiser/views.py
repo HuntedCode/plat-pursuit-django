@@ -3,6 +3,7 @@ Fundraiser page views: public fundraiser page, donation success, and staff admin
 """
 import json
 import logging
+from collections import defaultdict
 from decimal import Decimal
 
 import stripe
@@ -11,7 +12,7 @@ from django.conf import settings
 from django.contrib import messages
 from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.db.models import Count, Q, Sum
+from django.db.models import Count, Max, Q, Sum
 from django.db.models.functions import Coalesce, Lower
 from django.shortcuts import get_object_or_404, redirect
 from django.utils import timezone
@@ -19,7 +20,7 @@ from django.utils.decorators import method_decorator
 from django.views.generic import TemplateView
 
 from fundraiser.models import Fundraiser, Donation, DonationBadgeClaim
-from trophies.models import Badge
+from trophies.models import Badge, Profile
 
 logger = logging.getLogger(__name__)
 
@@ -76,25 +77,83 @@ class FundraiserView(TemplateView):
             completed_donations.values('user').distinct().count()
         )
 
-        # Donor wall (non-anonymous, completed only)
-        context['donors'] = (
+        # Donor wall (non-anonymous, completed, grouped by user)
+        donor_wall_donations = list(
             completed_donations
-            .filter(is_anonymous=False)
-            .select_related('profile')
-            .prefetch_related('badge_claims')
-            .order_by('-amount', '-completed_at')
+            .filter(is_anonymous=False, profile__isnull=False)
+            .values('profile_id')
+            .annotate(
+                total_amount=Sum('amount'),
+                donation_count=Count('id'),
+                latest_donation=Max('completed_at'),
+            )
+            .order_by('-total_amount', '-latest_donation')
         )
+
+        # Build donor dicts with profile objects, messages, and badge claims
+        profile_ids = [d['profile_id'] for d in donor_wall_donations]
+        profiles_by_id = {
+            p.id: p
+            for p in Profile.objects.filter(id__in=profile_ids)
+        }
+
+        # Collect most recent non-empty message per profile
+        profile_messages = {}
+        for d in (completed_donations
+                  .filter(is_anonymous=False, profile_id__in=profile_ids, message__gt='')
+                  .order_by('-completed_at')
+                  .values('profile_id', 'message')):
+            if d['profile_id'] not in profile_messages:
+                profile_messages[d['profile_id']] = d['message']
+
+        # Collect badge claims per profile
+        profile_claims = defaultdict(list)
+        donation_ids_for_wall = list(
+            completed_donations
+            .filter(is_anonymous=False, profile_id__in=profile_ids)
+            .values_list('id', flat=True)
+        )
+        for claim in (DonationBadgeClaim.objects
+                      .filter(donation_id__in=donation_ids_for_wall)
+                      .select_related('badge')
+                      .order_by('-claimed_at')):
+            profile_claims[claim.profile_id].append(claim)
+
+        context['donors'] = [
+            {
+                'profile': profiles_by_id.get(d['profile_id']),
+                'total_amount': d['total_amount'],
+                'donation_count': d['donation_count'],
+                'latest_donation': d['latest_donation'],
+                'message': profile_messages.get(d['profile_id']),
+                'badge_claims': profile_claims.get(d['profile_id'], []),
+            }
+            for d in donor_wall_donations
+            if d['profile_id'] in profiles_by_id
+        ]
 
         # Badge artwork campaign specifics
         if fundraiser.campaign_type == 'badge_artwork':
-            # All badge claims for this fundraiser
+            # All badge claims for this fundraiser, split into completed/pending
             fundraiser_donation_ids = completed_donations.values_list('id', flat=True)
-            context['claimed_badges'] = (
+            all_claims = list(
                 DonationBadgeClaim.objects
                 .filter(donation_id__in=fundraiser_donation_ids)
-                .select_related('badge', 'profile')
+                .select_related('badge', 'badge__base_badge', 'profile')
                 .order_by('-claimed_at')
             )
+
+            completed_claims = []
+            pending_claims = []
+            for claim in all_claims:
+                claim.badge_layers = claim.badge.get_badge_layers() if claim.badge else None
+                if claim.status == 'completed':
+                    completed_claims.append(claim)
+                else:
+                    pending_claims.append(claim)
+
+            context['completed_claims'] = completed_claims
+            context['pending_claims'] = pending_claims
 
             # Badge tracker stats
             total_needing_art = Badge.objects.live().filter(
@@ -105,9 +164,9 @@ class FundraiserView(TemplateView):
                 series_slug__isnull=True,
             ).exclude(series_slug='').count()
 
-            claimed_count = context['claimed_badges'].count()
-            completed_count = context['claimed_badges'].filter(status='completed').count()
-            pending_count = claimed_count - completed_count
+            claimed_count = len(all_claims)
+            completed_count = len(completed_claims)
+            pending_count = len(pending_claims)
 
             # total_needing_art includes claimed-but-pending badges (still no image).
             # Completed claims have artwork uploaded, so they're no longer in that query.
@@ -117,7 +176,6 @@ class FundraiserView(TemplateView):
                 'claimed': claimed_count,
                 'completed': completed_count,
                 'pending': pending_count,
-                'remaining': total_needing_art,
             }
 
             # Available badges for claiming (logged-in users only)

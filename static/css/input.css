@@ -298,6 +298,14 @@
         border-color: var(--color-primary);
       }
   }
+  .progress-pulse {
+    animation: progress-pulse 2s ease-in-out infinite;
+  }
+  @keyframes progress-pulse {
+    0%, 100% { opacity: 0.6; }
+    50% { opacity: 1; }
+  }
+
   .shake {
     animation: shake 0.5s cubic-bezier(.36,.07,.19,.97) both;
   }

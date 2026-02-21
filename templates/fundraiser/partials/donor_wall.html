@@ -1,35 +1,63 @@
-{# Donor Wall: public list of non-anonymous donors with amounts and claimed badges #}
+{# Donor Wall: public list of non-anonymous donors grouped by user #}
+{% load static %}
 {% if donors %}
 <section class="space-y-4">
-    <h2 class="text-xl lg:text-2xl font-bold">Donor Wall</h2>
-    <p class="text-base-content/70 text-sm">
-        A huge thank you to everyone who has contributed to this campaign.
-    </p>
+    <div>
+        <h2 class="text-xl lg:text-2xl font-bold italic">Donor Wall</h2>
+        <p class="text-base-content/60 italic text-sm mt-1">
+            A huge thank you to everyone keeping the pursuit alive.
+        </p>
+    </div>
 
-    <div class="grid grid-cols-2 lg:grid-cols-3 gap-3">
-        {% for donation in donors %}
-            <div class="card bg-base-200/80 border border-base-300">
+    <div class="grid grid-cols-2 lg:grid-cols-3 gap-4">
+        {% for donor in donors %}
+            <div class="card bg-base-100 transition-all duration-300
+                {% if forloop.first %}border-4 border-warning shadow-warning/20 shadow-lg hover:shadow-warning/40 hover:shadow-xl{% else %}border-2 border-base-300 hover:border-primary/30 hover:shadow-md{% endif %}">
                 <div class="card-body p-3 gap-2">
-                    <div class="flex items-center gap-2">
-                        {% if donation.profile %}
-                            <a href="{% url 'profile_detail' donation.profile.psn_username %}"
-                               class="font-semibold text-sm hover:text-primary transition-colors truncate">
-                                {{ donation.profile.display_psn_username }}
-                            </a>
-                        {% else %}
-                            <span class="font-semibold text-sm text-base-content/60 truncate">Unknown Hunter</span>
-                        {% endif %}
-                    </div>
-                    <div class="flex items-center justify-between">
-                        <span class="text-success font-bold text-sm">${{ donation.amount|floatformat:0 }}</span>
-                        <span class="text-base-content/40 text-xs">{{ donation.completed_at|timesince }} ago</span>
-                    </div>
-                    {% if donation.message %}
-                        <p class="text-xs text-base-content/60 italic line-clamp-2 pr-1">"{{ donation.message }}"</p>
+                    {# Top donor crown #}
+                    {% if forloop.first %}
+                        <div class="flex items-center justify-between">
+                            <span class="badge badge-warning badge-sm font-bold italic">Top Supporter</span>
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-warning" viewBox="0 0 24 24" fill="currentColor"><path d="M5 16L3 5l5.5 5L12 4l3.5 6L21 5l-2 11H5zm14 3c0 .6-.4 1-1 1H6c-.6 0-1-.4-1-1v-1h14v1z"/></svg>
+                        </div>
                     {% endif %}
-                    {% if donation.badge_claims.all %}
+
+                    {# Donor info row: avatar + name + amount #}
+                    <div class="flex items-center gap-2">
+                        {# Avatar #}
+                        <div class="avatar shrink-0">
+                            <div class="{% if forloop.first %}w-12 h-12 ring-2 ring-warning{% else %}w-8 h-8 ring-2 ring-primary{% endif %} rounded-full">
+                                <img src="{{ donor.profile.avatar_url|default:'/static/images/default_avatar.png' }}"
+                                     alt="{{ donor.profile.display_psn_username }}"
+                                     loading="lazy" decoding="async" />
+                            </div>
+                        </div>
+
+                        {# Name + amount #}
+                        <div class="flex-1 min-w-0">
+                            <a href="{% url 'profile_detail' donor.profile.psn_username %}"
+                               class="font-semibold text-sm hover:text-primary transition-colors truncate block">
+                                {{ donor.profile.display_psn_username }}
+                            </a>
+                            <div class="flex items-center gap-2">
+                                <span class="text-success font-bold text-sm">${{ donor.total_amount|floatformat:0 }}</span>
+                                {% if donor.donation_count > 1 %}
+                                    <span class="text-base-content/40 text-xs">({{ donor.donation_count }} donations)</span>
+                                {% endif %}
+                                <span class="text-base-content/40 text-xs">{{ donor.latest_donation|timesince }} ago</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    {# Message #}
+                    {% if donor.message %}
+                        <p class="text-xs text-base-content/60 italic line-clamp-2 pr-1">"{{ donor.message }}"</p>
+                    {% endif %}
+
+                    {# Badge claims #}
+                    {% if donor.badge_claims %}
                         <div class="flex flex-wrap gap-1 mt-1">
-                            {% for claim in donation.badge_claims.all %}
+                            {% for claim in donor.badge_claims %}
                                 <a href="{% url 'badge_detail' claim.series_slug %}"
                                    class="badge badge-xs badge-outline badge-accent truncate max-w-24"
                                    title="{{ claim.series_name }}">

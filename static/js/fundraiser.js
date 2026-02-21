@@ -20,9 +20,22 @@ const FundraiserPage = {
     },
 
     init() {
+        this._initHeroCTA();
         this._initDonationForm();
         this._initProviderToggle();
         this._initBadgePicker();
+    },
+
+    // ── Hero CTA Smooth Scroll ─────────────────────────────────────────
+
+    _initHeroCTA() {
+        const cta = document.getElementById('hero-donate-cta');
+        const target = document.getElementById('donation-form');
+        if (!cta || !target) return;
+
+        cta.addEventListener('click', () => {
+            target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        });
     },
 
     // ── Donation Form ────────────────────────────────────────────────────
@@ -39,8 +52,10 @@ const FundraiserPage = {
         // Preset buttons
         presets.forEach(btn => {
             btn.addEventListener('click', () => {
-                presets.forEach(b => b.classList.remove('btn-primary'));
-                btn.classList.add('btn-primary');
+                presets.forEach(b => {
+                    b.classList.remove('btn-primary', 'scale-105');
+                });
+                btn.classList.add('btn-primary', 'scale-105');
                 amountInput.value = btn.dataset.amount;
                 this._state.selectedAmount = parseFloat(btn.dataset.amount);
                 this._updateDonateButton();
@@ -50,7 +65,9 @@ const FundraiserPage = {
 
         // Custom amount input
         amountInput.addEventListener('input', () => {
-            presets.forEach(b => b.classList.remove('btn-primary'));
+            presets.forEach(b => {
+                b.classList.remove('btn-primary', 'scale-105');
+            });
             const val = parseFloat(amountInput.value);
             this._state.selectedAmount = isNaN(val) ? null : val;
 
@@ -58,7 +75,7 @@ const FundraiserPage = {
             if (this._state.selectedAmount) {
                 presets.forEach(b => {
                     if (parseFloat(b.dataset.amount) === this._state.selectedAmount) {
-                        b.classList.add('btn-primary');
+                        b.classList.add('btn-primary', 'scale-105');
                     }
                 });
             }
@@ -98,14 +115,14 @@ const FundraiserPage = {
         const divisor = parseInt(form?.dataset.pickDivisor, 10) || 10;
         const amount = this._state.selectedAmount;
         if (!amount || amount < divisor) {
-            hint.textContent = amount
-                ? `Donate $${divisor} or more to earn badge artwork picks!`
+            hint.innerHTML = amount
+                ? `<span class="text-xs text-base-content/50">Donate $${divisor} or more to earn badge artwork picks!</span>`
                 : '';
             return;
         }
 
         const picks = Math.floor(amount / divisor);
-        hint.textContent = `This earns ${picks} badge artwork pick${picks !== 1 ? 's' : ''}!`;
+        hint.innerHTML = `<span class="badge badge-primary badge-sm font-semibold">This earns ${picks} badge artwork pick${picks !== 1 ? 's' : ''}!</span>`;
     },
 
     // ── Provider Toggle ──────────────────────────────────────────────────
@@ -114,10 +131,15 @@ const FundraiserPage = {
         const options = document.querySelectorAll('.provider-option');
         if (!options.length) return;
 
+        const borderColors = { stripe: 'border-primary', paypal: 'border-info' };
+
         options.forEach(option => {
             option.addEventListener('click', () => {
-                options.forEach(o => o.classList.remove('selected-provider', 'border-primary'));
-                option.classList.add('selected-provider', 'border-primary');
+                options.forEach(o => {
+                    o.classList.remove('selected-provider', 'border-primary', 'border-info');
+                });
+                const color = borderColors[option.dataset.provider] || 'border-primary';
+                option.classList.add('selected-provider', color);
                 option.querySelector('input[type="radio"]').checked = true;
                 this._state.selectedProvider = option.dataset.provider;
             });
@@ -235,13 +257,13 @@ const FundraiserPage = {
         // Deselect previous
         const grid = document.getElementById('badge-picker-grid');
         grid.querySelectorAll('.badge-pick-option').forEach(o => {
-            o.classList.remove('border-accent', 'border-2');
-            o.classList.add('border-base-300');
+            o.classList.remove('border-primary', 'border-4', 'bg-primary/5');
+            o.classList.add('border-base-300', 'border-2');
         });
 
         // Select new
-        option.classList.remove('border-base-300');
-        option.classList.add('border-accent', 'border-2');
+        option.classList.remove('border-base-300', 'border-2');
+        option.classList.add('border-primary', 'border-4', 'bg-primary/5');
 
         this._state.selectedBadgeId = option.dataset.badgeId;
         this._state.selectedBadgeName = option.dataset.badgeName;
@@ -265,8 +287,8 @@ const FundraiserPage = {
         const grid = document.getElementById('badge-picker-grid');
         if (grid) {
             grid.querySelectorAll('.badge-pick-option').forEach(o => {
-                o.classList.remove('border-accent', 'border-2');
-                o.classList.add('border-base-300');
+                o.classList.remove('border-primary', 'border-4', 'bg-primary/5');
+                o.classList.add('border-base-300', 'border-2');
             });
         }
 
