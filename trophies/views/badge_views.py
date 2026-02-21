@@ -711,6 +711,17 @@ class BadgeDetailView(ProfileHotbarMixin, DetailView):
         tier1_badge = series_badges.filter(tier=1).first()
         context['view_count'] = tier1_badge.view_count if tier1_badge else 0
 
+        # Fundraiser CTA: show when tier1 badge has no custom artwork and no pending claim
+        show_fundraiser_cta = False
+        if tier1_badge:
+            layers = tier1_badge.get_badge_layers()
+            if not layers.get('has_custom_image'):
+                from fundraiser.models import DonationBadgeClaim
+                has_claim = DonationBadgeClaim.objects.filter(badge=tier1_badge).exists()
+                if not has_claim:
+                    show_fundraiser_cta = True
+        context['show_fundraiser_cta'] = show_fundraiser_cta
+
         return context
 
 

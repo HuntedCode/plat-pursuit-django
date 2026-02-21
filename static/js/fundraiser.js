@@ -97,13 +97,16 @@ const FundraiserPage = {
 
         const minAmount = parseFloat(form.dataset.min) || 1;
         const amount = this._state.selectedAmount;
+        const warning = document.getElementById('min-amount-warning');
 
         if (amount && amount >= minAmount) {
             btn.disabled = false;
             btnText.textContent = `Donate $${parseInt(amount, 10)}`;
+            if (warning) warning.classList.add('hidden');
         } else {
             btn.disabled = true;
             btnText.textContent = 'Donate';
+            if (warning) warning.classList.toggle('hidden', !amount || amount <= 0);
         }
     },
 

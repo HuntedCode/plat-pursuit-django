@@ -298,6 +298,9 @@
                             <input type="number" id="donation-amount" class="input input-bordered w-full focus:ring-2 focus:ring-primary"
                                    placeholder="Custom amount" min="{{ fundraiser.minimum_donation }}" step="1">
                         </div>
+                        <div id="min-amount-warning" class="hidden text-xs text-error font-medium">
+                            Minimum donation is ${{ fundraiser.minimum_donation|floatformat:0 }}.
+                        </div>
                         {% if fundraiser.campaign_type == 'badge_artwork' %}
                             <div id="picks-hint"></div>
                         {% endif %}
