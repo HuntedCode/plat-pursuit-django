@@ -302,12 +302,6 @@ class DonationService:
                 if donation.badge_picks_remaining <= 0:
                     raise ValueError("No badge picks remaining for this donation.")
 
-                if not profile.is_discord_verified:
-                    raise ValueError(
-                        "Discord verification is required to claim badges. "
-                        "Link your Discord in our server to claim your picks."
-                    )
-
                 if badge.badge_image:
                     raise ValueError("This badge series already has custom artwork.")
 

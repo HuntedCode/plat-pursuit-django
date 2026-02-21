@@ -183,18 +183,11 @@
                             <div class="flex items-center justify-between flex-wrap gap-2">
                                 <p class="text-sm text-base-content/70">
                                     You have <span class="font-bold text-accent">{{ total_picks_remaining }}</span> badge pick{{ total_picks_remaining|pluralize }} to use.
-                                    {% if not user_profile.is_discord_verified %}
-                                        <span class="text-warning font-semibold">
-                                            Link your Discord account to claim badges.
-                                        </span>
-                                    {% endif %}
                                 </p>
-                                {% if user_profile.is_discord_verified %}
-                                    <button type="button" id="open-badge-picker-btn" class="btn btn-primary btn-sm shadow-primary/30 shadow-md hover:shadow-primary/50 hover:shadow-lg transition-all duration-300">
-                                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21 8-2 2-1.5-3.7A2 2 0 0 0 15.6 5H8.4a2 2 0 0 0-1.9 1.3L5 10 3 8"/><path d="m7 14 .4-1a1 1 0 0 1 .9-.6h7.4a1 1 0 0 1 .9.6l.4 1"/><path d="M19 17H5a2 2 0 0 0-2 2v0a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v0a2 2 0 0 0-2-2Z"/></svg>
-                                        Browse Available Badges
-                                    </button>
-                                {% endif %}
+                                <button type="button" id="open-badge-picker-btn" class="btn btn-primary btn-sm shadow-primary/30 shadow-md hover:shadow-primary/50 hover:shadow-lg transition-all duration-300">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21 8-2 2-1.5-3.7A2 2 0 0 0 15.6 5H8.4a2 2 0 0 0-1.9 1.3L5 10 3 8"/><path d="m7 14 .4-1a1 1 0 0 1 .9-.6h7.4a1 1 0 0 1 .9.6l.4 1"/><path d="M19 17H5a2 2 0 0 0-2 2v0a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v0a2 2 0 0 0-2-2Z"/></svg>
+                                    Browse Available Badges
+                                </button>
                             </div>
                         </div>
                     {% elif total_picks_remaining > 0 %}
