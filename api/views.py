@@ -68,7 +68,7 @@ class VerifyView(APIView):
                 profile = Profile.objects.get(psn_username=psn_username)
 
                 start_time = timezone.now()
-                timeout_seconds = 5
+                timeout_seconds = 15
                 poll_interval_seconds = 1
 
                 is_syncing = profile.attempt_sync()
@@ -194,7 +194,7 @@ class RefreshView(APIView):
                     PSNManager.profile_refresh(profile)
 
                 start_time = timezone.now()
-                timeout_seconds = 5
+                timeout_seconds = 15
                 poll_interval_seconds = 1
 
                 while (timezone.now() - start_time).total_seconds() < timeout_seconds:
