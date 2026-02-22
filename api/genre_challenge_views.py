@@ -7,7 +7,7 @@ and community ratings.
 """
 import logging
 
-from django.db.models import Avg, Count, Q
+from django.db.models import Avg, Count, F, Q
 from django.utils import timezone
 from django.utils.decorators import method_decorator
 from django_ratelimit.decorators import ratelimit
@@ -669,6 +669,19 @@ class GenreConceptSearchAPIView(APIView):
                     games__played_by__profile=profile,
                 ).distinct()
 
+            # Exclude concepts where ALL games are shovelware
+            shovelware_ids = Concept.objects.filter(
+                games__isnull=False,
+            ).annotate(
+                total_games=Count('games'),
+                sw_games=Count('games', filter=Q(
+                    games__shovelware_status__in=['auto_flagged', 'manually_flagged']
+                )),
+            ).filter(
+                total_games=F('sw_games'),
+            ).values_list('id', flat=True)
+            concepts = concepts.exclude(id__in=shovelware_ids)
+
             # Exclude platted / >50% progress concepts
             excluded_ids = get_genre_excluded_concept_ids(profile)
             if excluded_ids:
@@ -700,7 +713,7 @@ class GenreConceptSearchAPIView(APIView):
                     pass
 
             # "New Subgenres Only" filter: exclude games whose subgenres are all already collected
-            if new_subgenres_only and already_collected:
+            if new_subgenres_only:
                 candidates = list(concepts.values_list('id', 'subgenres'))
                 exclude_ids = set()
                 for cid, raw_sgs in candidates:
