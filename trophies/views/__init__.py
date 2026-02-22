@@ -17,6 +17,8 @@ from .challenge_views import (
     ChallengeHubView, MyChallengesView, AZChallengeCreateView,
     AZChallengeSetupView, AZChallengeDetailView, AZChallengeEditView,
     CalendarChallengeCreateView, CalendarChallengeDetailView,
+    GenreChallengeCreateView, GenreChallengeSetupView,
+    GenreChallengeDetailView, GenreChallengeEditView,
 )
 
 __all__ = [
@@ -43,4 +45,6 @@ __all__ = [
     'ChallengeHubView', 'MyChallengesView', 'AZChallengeCreateView',
     'AZChallengeSetupView', 'AZChallengeDetailView', 'AZChallengeEditView',
     'CalendarChallengeCreateView', 'CalendarChallengeDetailView',
+    'GenreChallengeCreateView', 'GenreChallengeSetupView',
+    'GenreChallengeDetailView', 'GenreChallengeEditView',
 ]

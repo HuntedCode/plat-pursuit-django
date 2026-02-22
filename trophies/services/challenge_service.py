@@ -1,9 +1,10 @@
 """
 Challenge Service — Core service for challenge creation, progress checking, and management.
-Handles A-Z Platinum Challenges and Platinum Calendar Challenges.
+Handles A-Z Platinum Challenges, Platinum Calendar Challenges, and Genre Challenges.
 """
 import calendar as cal_module
-from collections import Counter
+from collections import Counter, defaultdict
+from itertools import chain
 import random
 import logging
 
@@ -12,8 +13,12 @@ from django.db.models import Q
 from django.utils import timezone
 
 from trophies.models import (
-    Challenge, AZChallengeSlot, CalendarChallengeDay,
-    CALENDAR_DAYS_PER_MONTH, ProfileGame, Game, EarnedTrophy,
+    Challenge, AZChallengeSlot, CalendarChallengeDay, GenreChallengeSlot,
+    GenreBonusSlot, CALENDAR_DAYS_PER_MONTH, ProfileGame, Game, EarnedTrophy,
+)
+from trophies.util_modules.constants import (
+    GENRE_CHALLENGE_GENRES, GENRE_DISPLAY_NAMES, GENRE_MERGE_MAP,
+    GENRE_CHALLENGE_SUBGENRES, SUBGENRE_MERGE_MAP, _GENRE_CHALLENGE_SUBGENRES_SET,
 )
 
 logger = logging.getLogger("psn_api")
@@ -121,6 +126,11 @@ def recalculate_challenge_counts(challenge):
         filled = challenge.calendar_days.filter(is_filled=True).count()
         challenge.filled_count = filled
         challenge.completed_count = filled
+    elif challenge.challenge_type == 'genre':
+        challenge.filled_count = challenge.genre_slots.filter(concept__isnull=False).count()
+        challenge.completed_count = challenge.genre_slots.filter(is_completed=True).count()
+        challenge.subgenre_count = len(get_collected_subgenres(challenge))
+        challenge.bonus_count = challenge.bonus_slots.filter(concept__isnull=False).count()
 
 
 def auto_set_cover_letter(challenge):
@@ -204,6 +214,14 @@ def _create_completion_notification(challenge):
                 f'welcome to the Hall of Fame!'
             )
             action_url = f'/challenges/calendar/{challenge.id}/'
+        elif challenge.challenge_type == 'genre':
+            title = 'Genre Challenge Complete!'
+            message = (
+                f'You conquered every genre in "{challenge.name}"! '
+                f'{challenge.completed_count}/{challenge.total_items} genres mastered. '
+                f'Welcome to the Hall of Fame!'
+            )
+            action_url = f'/challenges/genre/{challenge.id}/'
         else:
             title = 'A-Z Challenge Complete!'
             message = (
@@ -604,3 +622,285 @@ def get_calendar_stats(challenge, month_data=None):
         'max_plat_day_count': max_plat_count,
         'max_plat_day_label': max_plat_day_label,
     }
+
+
+# ─── Genre Challenge ─────────────────────────────────────────────────────────
+
+
+def create_genre_challenge(profile, name='My Genre Challenge'):
+    """
+    Create a new Genre Challenge with one slot per curated genre.
+
+    Returns:
+        Challenge instance
+
+    Raises:
+        ValueError if user already has an active Genre challenge
+    """
+    if Challenge.objects.filter(
+        profile=profile, challenge_type='genre', is_deleted=False, is_complete=False
+    ).exists():
+        raise ValueError("You already have an active Genre Challenge.")
+
+    challenge = Challenge.objects.create(
+        profile=profile,
+        challenge_type='genre',
+        name=name,
+        total_items=len(GENRE_CHALLENGE_GENRES),
+    )
+    slots = [
+        GenreChallengeSlot(
+            challenge=challenge,
+            genre=genre,
+            genre_display=GENRE_DISPLAY_NAMES.get(genre, genre),
+        )
+        for genre in GENRE_CHALLENGE_GENRES
+    ]
+    GenreChallengeSlot.objects.bulk_create(slots)
+    return challenge
+
+
+def check_genre_challenge_progress(profile):
+    """
+    Check all active Genre challenges for newly completed slots.
+    Called during sync in _job_sync_complete().
+
+    A slot is completed when ANY game under the assigned concept has been platted.
+    """
+    challenges = Challenge.objects.filter(
+        profile=profile, challenge_type='genre',
+        is_deleted=False, is_complete=False,
+    ).prefetch_related('genre_slots__concept', 'bonus_slots__concept')
+
+    for challenge in challenges:
+        any_updated = False
+
+        # --- Check genre slots ---
+        pending_slots = [
+            s for s in challenge.genre_slots.all()
+            if s.concept_id and not s.is_completed
+        ]
+        # --- Check bonus slots ---
+        bonus_pending = [
+            s for s in challenge.bonus_slots.all()
+            if s.concept_id and not s.is_completed
+        ]
+
+        all_pending_concept_ids = (
+            [s.concept_id for s in pending_slots]
+            + [s.concept_id for s in bonus_pending]
+        )
+        if not all_pending_concept_ids:
+            continue
+
+        # Build concept -> game IDs map
+        concept_game_map = defaultdict(set)
+        for game_id, concept_id in Game.objects.filter(
+            concept_id__in=all_pending_concept_ids
+        ).values_list('id', 'concept_id'):
+            concept_game_map[concept_id].add(game_id)
+
+        # Flatten all game IDs and batch-check which are platted
+        all_game_ids = set()
+        for gids in concept_game_map.values():
+            all_game_ids.update(gids)
+
+        if not all_game_ids:
+            continue
+
+        platted_game_ids = set(
+            ProfileGame.objects.filter(
+                profile=profile, game_id__in=all_game_ids, has_plat=True
+            ).values_list('game_id', flat=True)
+        )
+
+        # A concept is platted if any of its games are platted
+        platted_concept_ids = {
+            c_id for c_id, g_ids in concept_game_map.items()
+            if g_ids & platted_game_ids
+        }
+
+        now = timezone.now()
+
+        # Update genre slots
+        genre_to_update = []
+        for slot in pending_slots:
+            if slot.concept_id in platted_concept_ids:
+                slot.is_completed = True
+                slot.completed_at = now
+                genre_to_update.append(slot)
+        if genre_to_update:
+            GenreChallengeSlot.objects.bulk_update(
+                genre_to_update, ['is_completed', 'completed_at']
+            )
+            any_updated = True
+
+        # Update bonus slots
+        bonus_to_update = []
+        for slot in bonus_pending:
+            if slot.concept_id in platted_concept_ids:
+                slot.is_completed = True
+                slot.completed_at = now
+                bonus_to_update.append(slot)
+        if bonus_to_update:
+            GenreBonusSlot.objects.bulk_update(
+                bonus_to_update, ['is_completed', 'completed_at']
+            )
+            any_updated = True
+
+        if any_updated:
+            recalculate_challenge_counts(challenge)
+            total_genres = len(GENRE_CHALLENGE_GENRES)
+            save_fields = [
+                'completed_count', 'filled_count', 'subgenre_count',
+                'bonus_count', 'updated_at',
+            ]
+            if challenge.completed_count == total_genres:
+                challenge.is_complete = True
+                challenge.completed_at = timezone.now()
+                save_fields.extend(['is_complete', 'completed_at'])
+                challenge.save(update_fields=save_fields)
+                _create_completion_notification(challenge)
+            else:
+                challenge.save(update_fields=save_fields)
+
+
+def auto_set_cover_genre(challenge):
+    """
+    Pick a random assigned slot's genre as the cover.
+    Returns the chosen genre key or '' if no concepts are assigned.
+    """
+    assigned_genres = list(
+        challenge.genre_slots.filter(concept__isnull=False)
+        .values_list('genre', flat=True)
+    )
+    if not assigned_genres:
+        challenge.cover_genre = ''
+    else:
+        challenge.cover_genre = random.choice(assigned_genres)
+    challenge.save(update_fields=['cover_genre'])
+    return challenge.cover_genre
+
+
+def get_genre_excluded_concept_ids(profile):
+    """
+    Return set of concept IDs to exclude from Genre challenge search:
+    - Concepts where user has platted any game under the concept
+    - Concepts where user has >50% progress on any game under the concept
+    No family sibling expansion (unlike A-Z).
+    """
+    platted_concept_ids = set(
+        ProfileGame.objects.filter(
+            profile=profile, has_plat=True,
+        ).exclude(
+            game__concept__isnull=True
+        ).values_list('game__concept_id', flat=True)
+    )
+
+    progress_concept_ids = set(
+        ProfileGame.objects.filter(
+            profile=profile, progress__gt=50,
+        ).exclude(
+            game__concept__isnull=True
+        ).values_list('game__concept_id', flat=True)
+    )
+
+    return platted_concept_ids | progress_concept_ids
+
+
+def resolve_subgenres(raw_subgenres):
+    """
+    Map raw PSN subgenre strings to curated subgenre keys.
+    Filters out N/A, MMORPG, and any other uncurated values.
+    Returns a set of curated subgenre keys.
+    """
+    result = set()
+    for sg in raw_subgenres:
+        if not sg:
+            continue
+        # Check merge map first, then direct membership
+        mapped = SUBGENRE_MERGE_MAP.get(sg, sg)
+        if mapped in _GENRE_CHALLENGE_SUBGENRES_SET:
+            result.add(mapped)
+    return result
+
+
+def get_subgenre_status(challenge):
+    """
+    Return dict mapping curated subgenre key -> 'platted' | 'assigned'.
+    A subgenre is 'platted' if ANY slot contributing it has is_completed=True.
+    A subgenre is 'assigned' if contributed by an assigned-but-not-completed slot.
+    Subgenres not in the dict are uncollected.
+    """
+    status = {}
+    for slot in chain(
+        challenge.genre_slots.filter(concept__isnull=False).select_related('concept'),
+        challenge.bonus_slots.filter(concept__isnull=False).select_related('concept'),
+    ):
+        resolved = resolve_subgenres(slot.concept.subgenres or [])
+        slot_status = 'platted' if slot.is_completed else 'assigned'
+        for sg in resolved:
+            if status.get(sg) != 'platted':
+                status[sg] = slot_status
+    return status
+
+
+def get_collected_subgenres(challenge):
+    """
+    Return the set of curated subgenre keys collected from all assigned concepts.
+    Thin wrapper around get_subgenre_status() for backward compatibility.
+    """
+    return set(get_subgenre_status(challenge).keys())
+
+
+def recalculate_subgenre_count(challenge):
+    """Recalculate and save the subgenre_count for a genre challenge."""
+    challenge.subgenre_count = len(get_collected_subgenres(challenge))
+    challenge.save(update_fields=['subgenre_count'])
+
+
+def get_genre_swap_targets(concept, challenge, current_source):
+    """
+    Return list of valid move targets for a concept within a genre challenge.
+
+    Args:
+        concept: The Concept being moved
+        challenge: The Challenge instance
+        current_source: The genre key or 'BONUS' where the concept currently is
+
+    Returns:
+        List of dicts: [{'genre': str, 'genre_display': str, 'has_game': bool}]
+        Always includes 'BONUS' as a target (unless source is already bonus).
+    """
+    _GENRE_SET = set(GENRE_CHALLENGE_GENRES)
+
+    # Map concept genres through GENRE_MERGE_MAP to find qualifying genre keys
+    concept_genres = set(concept.genres or [])
+    mapped_genres = set()
+    for g in concept_genres:
+        mapped = GENRE_MERGE_MAP.get(g, g)
+        if mapped in _GENRE_SET:
+            mapped_genres.add(mapped)
+
+    targets = []
+    for slot in challenge.genre_slots.select_related('concept').all():
+        if slot.genre == current_source:
+            continue
+        if slot.is_completed:
+            continue
+        if slot.genre in mapped_genres and not slot.concept_id:
+            targets.append({
+                'genre': slot.genre,
+                'genre_display': slot.genre_display,
+                'has_game': False,
+            })
+
+    # Add bonus as a target (unless already in bonus)
+    if current_source != 'BONUS':
+        targets.append({
+            'genre': 'BONUS',
+            'genre_display': 'Bonus Slot',
+            'has_game': False,
+        })
+
+    return targets

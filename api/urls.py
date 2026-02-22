@@ -51,6 +51,14 @@ from .calendar_challenge_share_views import (
     CalendarChallengeShareHTMLView, CalendarChallengeSharePNGView,
     GameBackgroundSearchView,
 )
+from .genre_challenge_views import (
+    GenreChallengeCreateAPIView, GenreChallengeDetailAPIView,
+    GenreChallengeUpdateAPIView, GenreChallengeDeleteAPIView,
+    GenreSlotAssignAPIView, GenreSlotClearAPIView,
+    GenreConceptSearchAPIView,
+    GenreBonusAddAPIView, GenreBonusClearAPIView,
+    GenreMoveAPIView, GenreSwapTargetsAPIView,
+)
 from .game_family_views import (
     ProposalApproveView, ProposalRejectView,
     GameFamilyCreateView, GameFamilyUpdateView, GameFamilyDeleteView,
@@ -206,6 +214,19 @@ urlpatterns = [
     path('challenges/calendar/<int:challenge_id>/day/<int:month>/<int:day>/', CalendarDayDetailAPIView.as_view(), name='calendar-day-detail'),
     path('challenges/calendar/<int:challenge_id>/share/html/', CalendarChallengeShareHTMLView.as_view(), name='calendar-challenge-share-html'),
     path('challenges/calendar/<int:challenge_id>/share/png/', CalendarChallengeSharePNGView.as_view(), name='calendar-challenge-share-png'),
+
+    # Genre Challenge endpoints (static paths before <int:> to avoid URL conflicts)
+    path('challenges/genre/', GenreChallengeCreateAPIView.as_view(), name='genre-challenge-create'),
+    path('challenges/genre/concept-search/', GenreConceptSearchAPIView.as_view(), name='genre-concept-search'),
+    path('challenges/genre/<int:challenge_id>/', GenreChallengeDetailAPIView.as_view(), name='genre-challenge-detail'),
+    path('challenges/genre/<int:challenge_id>/update/', GenreChallengeUpdateAPIView.as_view(), name='genre-challenge-update'),
+    path('challenges/genre/<int:challenge_id>/delete/', GenreChallengeDeleteAPIView.as_view(), name='genre-challenge-delete'),
+    path('challenges/genre/<int:challenge_id>/slots/<str:genre>/assign/', GenreSlotAssignAPIView.as_view(), name='genre-slot-assign'),
+    path('challenges/genre/<int:challenge_id>/slots/<str:genre>/clear/', GenreSlotClearAPIView.as_view(), name='genre-slot-clear'),
+    path('challenges/genre/<int:challenge_id>/bonus/add/', GenreBonusAddAPIView.as_view(), name='genre-bonus-add'),
+    path('challenges/genre/<int:challenge_id>/bonus/<int:bonus_slot_id>/clear/', GenreBonusClearAPIView.as_view(), name='genre-bonus-clear'),
+    path('challenges/genre/<int:challenge_id>/move/', GenreMoveAPIView.as_view(), name='genre-move'),
+    path('challenges/genre/<int:challenge_id>/move-targets/', GenreSwapTargetsAPIView.as_view(), name='genre-move-targets'),
 
     # Game Family endpoints (staff-only)
     path('game-families/', GameFamilyCreateView.as_view(), name='game-family-create'),

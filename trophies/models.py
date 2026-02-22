@@ -745,6 +745,12 @@ class Concept(models.Model):
             proposal.concepts.add(self)
             proposal.concepts.remove(other)
 
+        # Genre challenge slots
+        other.genre_challenge_slots.update(concept=self)
+
+        # Genre bonus slots
+        other.genre_bonus_slots.update(concept=self)
+
         # GameFamily — inherit if this concept doesn't have one
         if other.family and not self.family:
             self.family = other.family
@@ -2731,6 +2737,7 @@ class Challenge(models.Model):
     CHALLENGE_TYPES = [
         ('az', 'A-Z Platinum Challenge'),
         ('calendar', 'Platinum Calendar'),
+        ('genre', 'Genre Challenge'),
     ]
 
     profile = models.ForeignKey(Profile, on_delete=models.CASCADE, related_name='challenges')
@@ -2748,6 +2755,11 @@ class Challenge(models.Model):
 
     # Display
     cover_letter = models.CharField(max_length=1, blank=True, default='')
+    cover_genre = models.CharField(max_length=50, blank=True, default='')
+
+    # Genre challenge: unique subgenres collected from assigned concepts
+    subgenre_count = models.PositiveIntegerField(default=0)
+    bonus_count = models.PositiveIntegerField(default=0)
 
     # Status
     is_complete = models.BooleanField(default=False)
@@ -2857,3 +2869,71 @@ class CalendarChallengeDay(models.Model):
         status = 'filled' if self.is_filled else 'empty'
         game_name = self.game.title_name if self.game else 'none'
         return f"{self.month:02d}/{self.day:02d}: {game_name} ({status})"
+
+
+class GenreChallengeSlot(models.Model):
+    """One genre slot in a Genre Challenge. Points to a Concept, not a Game."""
+    challenge = models.ForeignKey(
+        Challenge, on_delete=models.CASCADE, related_name='genre_slots'
+    )
+    genre = models.CharField(max_length=50, db_index=True)
+    genre_display = models.CharField(max_length=100, blank=True, default='')
+    concept = models.ForeignKey(
+        'Concept', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='genre_challenge_slots'
+    )
+
+    # Progress
+    is_completed = models.BooleanField(default=False)
+    completed_at = models.DateTimeField(null=True, blank=True)
+
+    # Timestamps
+    assigned_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        unique_together = ['challenge', 'genre']
+        ordering = ['genre']
+        indexes = [
+            models.Index(
+                fields=['challenge', 'is_completed'],
+                name='genreslot_chal_completed_idx'
+            ),
+        ]
+
+    def __str__(self):
+        concept_name = self.concept.unified_title if self.concept else 'empty'
+        status = 'done' if self.is_completed else 'pending'
+        return f"{self.genre_display}: {concept_name} ({status})"
+
+
+class GenreBonusSlot(models.Model):
+    """Bonus game slot for subgenre hunting in a Genre Challenge (no genre restriction)."""
+    challenge = models.ForeignKey(
+        Challenge, on_delete=models.CASCADE, related_name='bonus_slots'
+    )
+    concept = models.ForeignKey(
+        'Concept', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='genre_bonus_slots'
+    )
+
+    # Progress
+    is_completed = models.BooleanField(default=False)
+    completed_at = models.DateTimeField(null=True, blank=True)
+
+    # Timestamps
+    assigned_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ['challenge', 'concept']
+        ordering = ['assigned_at']
+        indexes = [
+            models.Index(
+                fields=['challenge', 'is_completed'],
+                name='bonusslot_chal_completed_idx'
+            ),
+        ]
+
+    def __str__(self):
+        concept_name = self.concept.unified_title if self.concept else 'empty'
+        status = 'done' if self.is_completed else 'pending'
+        return f"Bonus: {concept_name} ({status})"

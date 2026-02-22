@@ -1,0 +1,455 @@
+{% extends 'base.html' %}
+{% load static custom_filters %}
+
+{% block title %}Edit: {{ challenge.name }} - Platinum Pursuit{% endblock %}
+
+{% block content %}
+<section class="shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 w-full p-0 lg:p-4">
+    {% include 'partials/breadcrumb.html' with items=breadcrumb %}
+
+    <div class="card bg-base-100 border-4 border-base-300 shadow-md shadow-neutral">
+        <div class="card-body">
+            <div class="flex flex-row items-center justify-between gap-4">
+                <div>
+                    <div class="flex items-center gap-2">
+                        <h1 class="text-xl lg:text-2xl font-bold line-clamp-2" id="challenge-name-display">
+                            Edit: <span id="challenge-name-text">{{ challenge.name }}</span>
+                        </h1>
+                        <button type="button" class="btn btn-ghost btn-xs btn-circle opacity-60 hover:opacity-100 transition-opacity"
+                                id="challenge-name-edit-btn" title="Rename challenge">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+                            </svg>
+                        </button>
+                        <div class="hidden items-center gap-2" id="challenge-name-editor">
+                            <span class="text-xl lg:text-2xl font-bold">Edit:</span>
+                            <div class="flex flex-col">
+                                <input type="text" id="challenge-name-input"
+                                       class="input input-bordered input-sm text-lg lg:text-xl font-bold max-w-xs lg:max-w-md"
+                                       maxlength="75" value="{{ challenge.name }}" />
+                                <span class="text-xs text-base-content/50 mt-0.5 ml-1" id="rename-counter">{{ challenge.name|length }}/75</span>
+                            </div>
+                            <button type="button" class="btn btn-ghost btn-xs btn-circle text-success" id="challenge-name-save-btn" title="Save">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>
+                            </button>
+                            <button type="button" class="btn btn-ghost btn-xs btn-circle text-error" id="challenge-name-cancel-btn" title="Cancel">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                            </button>
+                        </div>
+                    </div>
+                    <p class="text-sm text-base-content/70">
+                        Click any empty or incomplete slot to assign or swap a game. Completed slots are locked.
+                    </p>
+                </div>
+                <div class="flex gap-2">
+                    <a href="{% url 'genre_challenge_detail' challenge_id=challenge.id %}" class="btn btn-ghost btn-sm">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 mr-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                        View
+                    </a>
+                    {% if challenge.filled_count < challenge.total_items %}
+                        <a href="{% url 'genre_challenge_setup' challenge_id=challenge.id %}" class="btn btn-primary btn-sm">
+                            Continue Setup
+                        </a>
+                    {% endif %}
+                    <button id="delete-challenge-btn" class="btn btn-ghost btn-sm text-error hover:bg-error/10" data-challenge-id="{{ challenge.id }}">Delete</button>
+                </div>
+            </div>
+
+            {# Progress #}
+            <div class="mt-3">
+                <div class="flex justify-between text-sm mb-1">
+                    <span>{{ challenge.completed_count }}/{{ challenge.total_items }} Platinums</span>
+                    <span class="text-base-content/60">{{ challenge.filled_count }}/{{ challenge.total_items }} filled</span>
+                </div>
+                <progress class="progress progress-primary w-full h-2"
+                          value="{{ challenge.completed_count }}" max="{{ challenge.total_items }}"></progress>
+            </div>
+
+            {# Subgenre count #}
+            <div class="text-xs text-base-content/50 mt-1">
+                <span id="edit-subgenre-count">{{ subgenre_count }}/{{ subgenre_total }} subgenres collected</span>
+            </div>
+        </div>
+    </div>
+</section>
+
+{# Genre Slot Grid (editable) #}
+<section class="shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 w-full p-0 lg:p-4 mt-6">
+    <div class="p-4">
+        <div id="genre-edit-grid" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+            {% for slot in slots %}
+            <div class="relative group" data-genre="{{ slot.genre }}" data-slot-id="{{ slot.id }}">
+                <div class="card bg-base-100 border-2 {% if slot.is_completed %}border-success/50{% elif slot.concept %}border-primary/30{% else %}border-base-300{% endif %} shadow-md h-full">
+                    {# Genre badge header with set-cover button #}
+                    <div class="px-3 pt-3 pb-1">
+                        <div class="flex items-center justify-between">
+                            <span class="badge {% if slot.is_completed %}badge-success{% elif slot.concept %}badge-primary{% else %}badge-ghost{% endif %} badge-sm font-bold">
+                                {{ slot.genre_display }}
+                            </span>
+                            <div class="flex items-center gap-1 header-actions">
+                                {% if slot.is_completed %}
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-success" viewBox="0 0 24 24" fill="currentColor">
+                                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+                                </svg>
+                                {% endif %}
+                                {% if slot.concept and slot.genre != challenge.cover_genre %}
+                                <button class="btn btn-ghost btn-xs p-0 w-5 h-5 min-h-0 opacity-40 hover:opacity-100 transition-opacity"
+                                        data-action="set-cover" data-genre="{{ slot.genre }}" title="Set as cover image">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
+                                        <path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/>
+                                    </svg>
+                                </button>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+
+                    {% if slot.concept %}
+                    <div class="px-3 pb-3">
+                        <div class="flex items-center gap-2 mt-1">
+                            {% if slot.concept.concept_icon_url %}
+                            <img src="{{ slot.concept.concept_icon_url }}" alt="{{ slot.concept.unified_title }}"
+                                 class="w-10 h-10 rounded object-cover flex-shrink-0" loading="lazy" />
+                            {% else %}
+                            <div class="w-10 h-10 rounded bg-base-200 flex items-center justify-center flex-shrink-0">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-base-content/20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/>
+                                </svg>
+                            </div>
+                            {% endif %}
+                            <div class="flex-1 min-w-0">
+                                <p class="text-sm font-semibold line-clamp-2 pr-1">{{ slot.concept.unified_title }}</p>
+                            </div>
+                        </div>
+                        {% if slot.resolved_subgenres %}
+                        <div class="flex flex-wrap gap-0.5 mt-1.5">
+                            {% for sg in slot.resolved_subgenres %}
+                            <span class="badge badge-ghost badge-xs text-[0.55rem]">{{ sg.display }}</span>
+                            {% endfor %}
+                        </div>
+                        {% endif %}
+                    </div>
+                    {% else %}
+                    <div class="px-3 pb-3">
+                        <div class="flex items-center justify-center h-16 text-base-content/20">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-8 h-8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                <path d="M12 5v14M5 12h14"/>
+                            </svg>
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+
+                {# Cover indicator badge (top-right) #}
+                {% if slot.genre == challenge.cover_genre %}
+                <div class="absolute top-1 right-1 z-10 cover-indicator" data-genre="{{ slot.genre }}">
+                    <div class="badge badge-primary badge-sm gap-0.5" title="Cover image">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" viewBox="0 0 24 24" fill="currentColor"><path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/></svg>
+                    </div>
+                </div>
+                {% endif %}
+
+                {# Edit overlay (only for non-completed slots) #}
+                {% if not slot.is_completed %}
+                <div class="absolute inset-0 bg-base-300/80 opacity-0 group-hover:opacity-100 transition-opacity rounded-box flex flex-col items-center justify-center gap-1 cursor-pointer"
+                     data-action="edit" data-genre="{{ slot.genre }}">
+                    {% if slot.concept %}
+                        <div class="flex gap-1">
+                            <button class="btn btn-xs btn-primary" data-action="swap" data-genre="{{ slot.genre }}">Swap</button>
+                            <button class="btn btn-xs btn-ghost" data-action="move" data-genre="{{ slot.genre }}">Move</button>
+                            <button class="btn btn-xs btn-error btn-outline" data-action="clear" data-genre="{{ slot.genre }}">Clear</button>
+                        </div>
+                    {% else %}
+                        <button class="btn btn-xs btn-primary" data-action="assign" data-genre="{{ slot.genre }}">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3 mr-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+                            Assign
+                        </button>
+                    {% endif %}
+                </div>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</section>
+
+{# Bonus Games Section #}
+<section class="shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 w-full p-0 lg:p-4 mt-6">
+    <div class="p-4">
+        <div class="flex items-center justify-between mb-3">
+            <h2 class="text-base font-bold">
+                Bonus Games <span id="bonus-count" class="text-primary text-sm font-normal">({{ bonus_slots|length }})</span>
+            </h2>
+            <button id="add-bonus-btn" class="btn btn-primary btn-sm">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 mr-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+                Add Bonus Game
+            </button>
+        </div>
+        <p class="text-xs text-base-content/50 mb-3">
+            Extra games for subgenre hunting. These don't count toward the 20/20 completion but their subgenres count!
+        </p>
+        <div id="bonus-grid" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+            {% for slot in bonus_slots %}
+            <div class="relative group" data-bonus-id="{{ slot.id }}">
+                <div class="card bg-base-100 border-2 {% if slot.is_completed %}border-success/50{% else %}border-info/30{% endif %} shadow-md h-full">
+                    <div class="px-3 pt-3 pb-1">
+                        <div class="flex items-center justify-between">
+                            <span class="badge {% if slot.is_completed %}badge-success{% else %}badge-info{% endif %} badge-sm font-bold">Bonus</span>
+                            {% if slot.is_completed %}
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-success" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+                            </svg>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% if slot.concept %}
+                    <div class="px-3 pb-3">
+                        <div class="flex items-center gap-2 mt-1">
+                            {% if slot.concept.concept_icon_url %}
+                            <img src="{{ slot.concept.concept_icon_url }}" alt="{{ slot.concept.unified_title }}"
+                                 class="w-10 h-10 rounded object-cover flex-shrink-0" loading="lazy" />
+                            {% else %}
+                            <div class="w-10 h-10 rounded bg-base-200 flex items-center justify-center flex-shrink-0">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-base-content/20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/>
+                                </svg>
+                            </div>
+                            {% endif %}
+                            <div class="flex-1 min-w-0">
+                                <p class="text-sm font-semibold line-clamp-2 pr-1">{{ slot.concept.unified_title }}</p>
+                            </div>
+                        </div>
+                        {% if slot.resolved_subgenres %}
+                        <div class="flex flex-wrap gap-0.5 mt-1.5">
+                            {% for sg in slot.resolved_subgenres %}
+                            <span class="badge badge-ghost badge-xs text-[0.55rem]">{{ sg.display }}</span>
+                            {% endfor %}
+                        </div>
+                        {% endif %}
+                    </div>
+                    {% endif %}
+                </div>
+                {# Overlay for bonus slots #}
+                {% if not slot.is_completed %}
+                <div class="absolute inset-0 bg-base-300/80 opacity-0 group-hover:opacity-100 transition-opacity rounded-box flex flex-col items-center justify-center gap-1 cursor-pointer"
+                     data-action="bonus-edit" data-bonus-id="{{ slot.id }}">
+                    <div class="flex gap-1">
+                        <button class="btn btn-xs btn-primary" data-action="bonus-move" data-bonus-id="{{ slot.id }}">Move to Genre</button>
+                        <button class="btn btn-xs btn-error btn-outline" data-action="bonus-remove" data-bonus-id="{{ slot.id }}">Remove</button>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+        <div id="bonus-empty" class="{% if bonus_slots %}hidden{% endif %} text-center py-6 text-base-content/30">
+            <p>No bonus games yet. Add games to collect more subgenres!</p>
+        </div>
+    </div>
+</section>
+
+{# Subgenre Bonus Tracker #}
+<section class="shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 w-full p-0 lg:p-4 mt-6">
+    <div class="p-4">
+        <div class="collapse collapse-arrow bg-base-100 border-2 border-base-300">
+            <input type="checkbox" />
+            <div class="collapse-title text-base font-bold">
+                Subgenre Bonus Tracker: <span id="edit-subgenre-tracker-count" class="text-primary">{{ subgenre_count }}/{{ subgenre_total }}</span>
+            </div>
+            <div class="collapse-content">
+                <p class="text-xs text-base-content/50 mb-3">Subgenres are collected automatically from your picks.</p>
+                <div id="subgenre-tracker-grid" class="flex flex-wrap gap-2">
+                    {# Populated by JS from subgenres_json #}
+                </div>
+                <div class="flex items-center gap-3 mt-2 text-xs text-base-content/50">
+                    <span class="flex items-center gap-1"><span class="badge badge-warning badge-xs w-2 h-2 p-0"></span> Platted</span>
+                    <span class="flex items-center gap-1"><span class="badge badge-primary badge-xs w-2 h-2 p-0"></span> Assigned</span>
+                    <span class="flex items-center gap-1"><span class="badge badge-ghost badge-xs w-2 h-2 p-0"></span> Uncollected</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+{# Search Modal #}
+<dialog id="genre-search-modal" class="modal">
+    <div class="modal-box max-w-2xl">
+        <form method="dialog">
+            <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2">X</button>
+        </form>
+        <h3 class="text-lg font-bold">
+            <span id="modal-header-genre">Pick a game for <span id="modal-genre" class="text-primary text-2xl font-black">Action</span></span>
+            <span id="modal-header-bonus" class="hidden">Add a <span class="text-info text-2xl font-black">Bonus Game</span></span>
+        </h3>
+        <p id="modal-subtitle-genre" class="text-xs text-base-content/50 mt-1">
+            Choose a game you want to platinum in this genre.
+        </p>
+        <p id="modal-subtitle-bonus" class="hidden text-xs text-base-content/50 mt-1">
+            Pick any game to hunt extra subgenres. No genre restriction!
+        </p>
+        <div class="bg-base-200 rounded-lg p-2.5 text-xs text-base-content/60 space-y-1 mt-2">
+            <p class="font-semibold text-base-content/70">Challenge Rules</p>
+            <ul class="list-disc list-inside space-y-0.5">
+                <li>PS4/PS5 only. PSN data is limited to modern platforms, so each pick needs at least one PS4 or PS5 version</li>
+                <li>No stacking: games you've already platted are excluded</li>
+                <li>No games with over 50% completion. Pick something fresh!</li>
+                <li>Each game can only fill one genre slot</li>
+            </ul>
+        </div>
+
+        {# Chip filters #}
+        <div class="flex flex-wrap items-center gap-2 mt-3 mb-2" id="modal-filter-row">
+            <span class="text-xs text-base-content/50 font-semibold uppercase tracking-wider mr-1">Filters</span>
+            <div class="flex flex-wrap gap-1">
+                <button type="button" class="badge badge-ghost badge-sm font-bold cursor-pointer hover:badge-outline transition-all modal-filter-chip" data-filter="platform" data-value="PS5">PS5</button>
+                <button type="button" class="badge badge-ghost badge-sm font-bold cursor-pointer hover:badge-outline transition-all modal-filter-chip" data-filter="platform" data-value="PS4">PS4</button>
+            </div>
+            <span class="text-base-content/20">|</span>
+            <div class="flex flex-wrap gap-1">
+                <button type="button" class="badge badge-ghost badge-sm font-bold cursor-pointer hover:badge-outline transition-all modal-filter-chip" data-filter="region" data-value="global">Global</button>
+                <button type="button" class="badge badge-ghost badge-sm font-bold cursor-pointer hover:badge-outline transition-all modal-filter-chip" data-filter="region" data-value="NA">NA</button>
+                <button type="button" class="badge badge-ghost badge-sm font-bold cursor-pointer hover:badge-outline transition-all modal-filter-chip" data-filter="region" data-value="EU">EU</button>
+                <button type="button" class="badge badge-ghost badge-sm font-bold cursor-pointer hover:badge-outline transition-all modal-filter-chip" data-filter="region" data-value="JP">JP</button>
+                <button type="button" class="badge badge-ghost badge-sm font-bold cursor-pointer hover:badge-outline transition-all modal-filter-chip" data-filter="region" data-value="AS">AS</button>
+            </div>
+            <span class="text-base-content/20">|</span>
+            <div class="flex flex-wrap gap-1">
+                <button type="button" class="badge badge-ghost badge-sm font-bold cursor-pointer hover:badge-outline transition-all modal-toggle-chip" data-toggle="in_badge" title="Show only games that appear in a live badge">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3 mr-0.5" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/></svg>
+                    In a Badge
+                </button>
+                <button type="button" class="badge badge-ghost badge-sm font-bold cursor-pointer hover:badge-outline transition-all modal-toggle-chip" data-toggle="my_backlog" title="Show only games you've played">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3 mr-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg>
+                    My Backlog
+                </button>
+                <button type="button" class="badge badge-ghost badge-sm font-bold cursor-pointer hover:badge-outline transition-all modal-toggle-chip" data-toggle="new_subgenres" title="Only show games that contribute new subgenres">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3 mr-0.5" viewBox="0 0 24 24" fill="currentColor"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+                    New Subgenres
+                </button>
+            </div>
+            <button type="button" class="btn btn-ghost btn-xs text-error/70 hover:text-error hidden" id="modal-clear-filters">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+                Clear
+            </button>
+        </div>
+
+        {# Subgenre filter chips (populated by JS) #}
+        <div class="flex flex-wrap items-center gap-2 mt-2 mb-2" id="modal-subgenre-filter-row">
+            <span class="text-xs text-base-content/50 font-semibold uppercase tracking-wider">Subgenre</span>
+            <div id="modal-subgenre-chips" class="flex flex-wrap gap-1"></div>
+        </div>
+
+        {# Search input + Sort #}
+        <div class="flex flex-col md:flex-row gap-2 mt-2">
+            <input id="modal-search-input" type="text"
+                   placeholder="Search games..."
+                   class="input input-bordered flex-1 input-sm" />
+            <select id="modal-sort-select" class="select select-bordered w-auto select-sm">
+                <option value="popular">Most Popular</option>
+                <option value="alpha">Alphabetical</option>
+                <option value="plat_earners">Most Plats Earned</option>
+            </select>
+        </div>
+
+        {# Results: single column, scrollable #}
+        <div id="modal-search-results" class="flex flex-col gap-2 mt-4 max-h-96 overflow-y-auto">
+            <div id="modal-scroll-sentinel" class="hidden text-center py-4">
+                <span class="loading loading-spinner loading-md text-primary"></span>
+            </div>
+        </div>
+        <div id="modal-search-loading" class="hidden text-center py-4">
+            <span class="loading loading-spinner loading-md text-primary"></span>
+        </div>
+        <div id="modal-no-results" class="hidden text-center py-4 text-base-content/50">
+            No games found.
+        </div>
+    </div>
+    <form method="dialog" class="modal-backdrop"><button>close</button></form>
+</dialog>
+
+{# Clear/Move Confirmation Modal #}
+<dialog id="genre-clear-modal" class="modal">
+    <div class="modal-box max-w-sm">
+        <h3 class="text-lg font-bold">What would you like to do?</h3>
+        <p class="text-sm text-base-content/70 mt-2">
+            <span id="clear-modal-game-name" class="font-semibold"></span> is currently assigned to <span id="clear-modal-genre" class="font-semibold text-primary"></span>.
+        </p>
+        <div class="flex flex-col gap-2 mt-4">
+            <button id="clear-modal-move-bonus" class="btn btn-primary btn-sm justify-start">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                Move to Bonus
+                <span class="text-xs opacity-70 ml-1">(keeps subgenre progress)</span>
+            </button>
+            <button id="clear-modal-remove" class="btn btn-error btn-outline btn-sm justify-start">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                Remove entirely
+            </button>
+        </div>
+        <div id="clear-modal-progress-warning" class="hidden alert alert-warning text-xs mt-3">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+            <span>This game has over 50% progress. You won't be able to re-add it later.</span>
+        </div>
+        <div class="modal-action">
+            <form method="dialog"><button class="btn btn-ghost btn-sm">Cancel</button></form>
+        </div>
+    </div>
+    <form method="dialog" class="modal-backdrop"><button>close</button></form>
+</dialog>
+
+{# Move To Modal #}
+<dialog id="genre-move-modal" class="modal">
+    <div class="modal-box max-w-sm">
+        <h3 class="text-lg font-bold">Move <span id="move-modal-game-name" class="text-primary"></span></h3>
+        <p class="text-sm text-base-content/70 mt-1">Choose a destination:</p>
+        <div id="move-modal-targets" class="flex flex-col gap-1.5 mt-3 max-h-64 overflow-y-auto">
+            {# Populated by JS with target buttons #}
+        </div>
+        <div id="move-modal-loading" class="hidden text-center py-4">
+            <span class="loading loading-spinner loading-md text-primary"></span>
+        </div>
+        <div id="move-modal-empty" class="hidden text-center py-4 text-base-content/50 text-sm">
+            No valid destinations found.
+        </div>
+        <div class="modal-action">
+            <form method="dialog"><button class="btn btn-ghost btn-sm">Cancel</button></form>
+        </div>
+    </div>
+    <form method="dialog" class="modal-backdrop"><button>close</button></form>
+</dialog>
+
+{# Bonus Removal Confirmation Modal #}
+<dialog id="genre-bonus-remove-modal" class="modal">
+    <div class="modal-box max-w-sm">
+        <h3 class="text-lg font-bold">Remove Bonus Game</h3>
+        <p class="text-sm text-base-content/70 mt-2">
+            Remove <span id="bonus-remove-modal-name" class="font-semibold text-primary"></span> from your bonus games?
+        </p>
+        <div class="modal-action">
+            <form method="dialog"><button class="btn btn-ghost btn-sm">Cancel</button></form>
+            <button id="bonus-remove-modal-confirm" class="btn btn-error btn-sm">Remove</button>
+        </div>
+    </div>
+    <form method="dialog" class="modal-backdrop"><button>close</button></form>
+</dialog>
+{% endblock %}
+
+{% block js_scripts %}
+<script>PlatPursuit.ZoomScaler.init();</script>
+<script src="{% static 'js/genre-challenge.js' %}"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        if (typeof GenreChallengeEdit !== 'undefined') {
+            GenreChallengeEdit.init(
+                {{ challenge.id }},
+                {{ slots_json|safe }},
+                '{{ challenge.cover_genre }}',
+                {{ genre_display_json|safe }},
+                {{ subgenres_json|safe }},
+                {{ bonus_slots_json|safe }}
+            );
+        }
+    });
+</script>
+{% endblock %}

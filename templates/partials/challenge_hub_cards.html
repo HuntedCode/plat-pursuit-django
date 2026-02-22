@@ -4,6 +4,8 @@
 {% for challenge in challenges %}
     {% if current_type == 'calendar' %}
         {% include 'partials/calendar_challenge/challenge_card.html' with challenge=challenge %}
+    {% elif current_type == 'genre' %}
+        {% include 'partials/genre_challenge/challenge_card.html' with challenge=challenge %}
     {% else %}
         {% include 'partials/az_challenge/challenge_card.html' with challenge=challenge %}
     {% endif %}

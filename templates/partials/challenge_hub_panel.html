@@ -50,6 +50,8 @@
         {% for challenge in challenges %}
             {% if current_type == 'calendar' %}
                 {% include 'partials/calendar_challenge/challenge_card.html' with challenge=challenge %}
+            {% elif current_type == 'genre' %}
+                {% include 'partials/genre_challenge/challenge_card.html' with challenge=challenge %}
             {% else %}
                 {% include 'partials/az_challenge/challenge_card.html' with challenge=challenge %}
             {% endif %}
@@ -71,6 +73,9 @@
             {% if current_type == 'calendar' %}
                 <p class="text-base-content/50 font-bold">365 days of platinum. The Hall of Fame awaits its first entry.</p>
                 <p class="text-base-content/40 text-sm">Fill every day of the year to claim your spot.</p>
+            {% elif current_type == 'genre' %}
+                <p class="text-base-content/50 font-bold">Master every genre. The Hall of Fame awaits its first genre champion.</p>
+                <p class="text-base-content/40 text-sm">Complete all genres to earn your place.</p>
             {% else %}
                 <p class="text-base-content/50 font-bold">The Hall of Fame awaits its first legend.</p>
                 <p class="text-base-content/40 text-sm">Complete all 26 platinums to earn your place.</p>
@@ -81,6 +86,11 @@
                 <p class="text-base-content/50 font-bold">No calendars yet. Be the first to fill the year!</p>
                 {% if user.is_authenticated %}
                     <a href="{% url 'calendar_challenge_create' %}" class="btn btn-primary btn-sm mt-3">Start Your Platinum Calendar</a>
+                {% endif %}
+            {% elif current_type == 'genre' %}
+                <p class="text-base-content/50 font-bold">No genre challenges yet. Be the first to conquer every genre!</p>
+                {% if user.is_authenticated %}
+                    <a href="{% url 'genre_challenge_create' %}" class="btn btn-primary btn-sm mt-3">Start Your Genre Challenge</a>
                 {% endif %}
             {% else %}
                 <p class="text-base-content/50 font-bold">No A-Z challenges yet. Be the first to take on the alphabet!</p>

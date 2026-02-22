@@ -157,6 +157,74 @@
     </div>
 </section>
 
+{# ─── Genre Challenge Section ──────────────────────────────────────── #}
+<section class="shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 w-full p-0 lg:p-4 mt-6">
+    <div class="p-4">
+        <h2 class="text-lg font-bold mb-3">
+            <span class="text-primary">Genre Challenge</span>
+        </h2>
+
+        {% if active_genre %}
+            <div class="card bg-base-100 border-2 border-primary/30 shadow-md">
+                <div class="card-body p-4">
+                    <div class="flex flex-row items-center justify-between gap-4">
+                        <div class="flex-1">
+                            <h3 class="text-xl font-bold">{{ active_genre.name }}</h3>
+                            <div class="flex items-center gap-3 mt-1 text-sm text-base-content/60">
+                                <span>{{ active_genre.completed_count }}/{{ active_genre.total_items }} Platinums</span>
+                                <span>{{ active_genre.filled_count }}/{{ active_genre.total_items }} Slots Filled</span>
+                                <span>{{ active_genre.subgenre_count }} subgenres</span>
+                                {% if active_genre.bonus_count %}<span>+{{ active_genre.bonus_count }} bonus</span>{% endif %}
+                            </div>
+                        </div>
+                        <div class="flex gap-2">
+                            {% if active_genre.filled_count < active_genre.total_items %}
+                                <a href="{% url 'genre_challenge_setup' challenge_id=active_genre.id %}" class="btn btn-primary btn-sm">
+                                    Continue Setup
+                                </a>
+                            {% endif %}
+                            <a href="{% url 'genre_challenge_detail' challenge_id=active_genre.id %}" class="btn btn-ghost btn-sm">View</a>
+                            <a href="{% url 'genre_challenge_edit' challenge_id=active_genre.id %}" class="btn btn-ghost btn-sm">Edit</a>
+                            <button id="delete-genre-btn" class="btn btn-ghost btn-sm text-error hover:bg-error/10" data-challenge-id="{{ active_genre.id }}">Delete</button>
+                        </div>
+                    </div>
+
+                    {# Progress bar #}
+                    <div class="mt-3">
+                        <progress class="progress progress-primary w-full h-3"
+                                  value="{{ active_genre.completed_count }}"
+                                  max="{{ active_genre.total_items }}"></progress>
+                    </div>
+
+                    {# Mini genre slot preview #}
+                    <div class="flex flex-wrap gap-1 mt-3">
+                        {% for slot in active_genre.genre_slots.all %}
+                            <div class="px-1.5 h-7 lg:h-8 rounded text-[0.6rem] lg:text-xs font-bold flex items-center justify-center
+                                        {% if slot.is_completed %}bg-success text-success-content
+                                        {% elif slot.concept %}bg-primary/20 text-primary
+                                        {% else %}bg-base-200 text-base-content/30{% endif %}">
+                                {{ slot.genre_display }}
+                            </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        {% elif can_create_genre %}
+            <div class="card bg-base-100 border-2 border-dashed border-base-300">
+                <div class="card-body items-center text-center py-8">
+                    <p class="text-4xl mb-2">&#127918;</p>
+                    <p class="text-lg font-bold text-base-content/70">Every genre, one platinum.</p>
+                    <p class="text-sm text-base-content/50 mb-4">20 genres, 20 platinums. Prove you can conquer any genre.</p>
+                    <a href="{% url 'genre_challenge_create' %}" class="btn btn-primary">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 mr-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+                        Start Genre Challenge
+                    </a>
+                </div>
+            </div>
+        {% endif %}
+    </div>
+</section>
+
 {# ─── History Section ────────────────────────────────────────────────── #}
 {% if history %}
 <section class="shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 w-full p-0 lg:p-4 mt-6">
@@ -164,7 +232,9 @@
         <h2 class="text-lg font-bold mb-3">Challenge History</h2>
         <div class="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {% for challenge in history %}
-                {% if challenge.challenge_type == 'calendar' %}
+                {% if challenge.challenge_type == 'genre' %}
+                    {% include 'partials/genre_challenge/challenge_card.html' with challenge=challenge %}
+                {% elif challenge.challenge_type == 'calendar' %}
                     {% include 'partials/calendar_challenge/challenge_card.html' with challenge=challenge %}
                 {% else %}
                     {% include 'partials/az_challenge/challenge_card.html' with challenge=challenge %}
@@ -173,6 +243,23 @@
         </div>
     </div>
 </section>
+{% endif %}
+
+{# ─── Genre Delete Confirmation Modal ──────────────────────────────── #}
+{% if active_genre %}
+<dialog id="genre-delete-modal" class="modal">
+    <div class="modal-box">
+        <h3 class="font-bold text-lg">Delete Genre Challenge?</h3>
+        <p class="py-4 text-base-content/70">This will permanently delete your Genre Challenge. Your trophy data is not affected.</p>
+        <div class="modal-action">
+            <form method="dialog">
+                <button class="btn btn-ghost">Cancel</button>
+            </form>
+            <button id="genre-delete-confirm" class="btn btn-error">Delete</button>
+        </div>
+    </div>
+    <form method="dialog" class="modal-backdrop"><button>close</button></form>
+</dialog>
 {% endif %}
 
 {# ─── Calendar Delete Confirmation Modal ──────────────────────────────── #}
@@ -210,6 +297,31 @@
                 await PlatPursuit.API.delete(`/api/v1/challenges/calendar/${btn.dataset.challengeId}/delete/`);
                 modal.close();
                 PlatPursuit.ToastManager.success('Calendar challenge deleted.');
+                window.location.reload();
+            } catch (error) {
+                modal.close();
+                let msg = 'Failed to delete challenge.';
+                try { const errData = await error.response?.json(); msg = errData?.error || msg; } catch {}
+                PlatPursuit.ToastManager.error(msg);
+            }
+        });
+    });
+</script>
+{% endif %}
+{% if active_genre %}
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const btn = document.getElementById('delete-genre-btn');
+        const modal = document.getElementById('genre-delete-modal');
+        const confirm = document.getElementById('genre-delete-confirm');
+        if (!btn || !modal || !confirm) return;
+
+        btn.addEventListener('click', () => modal.showModal());
+        confirm.addEventListener('click', async () => {
+            try {
+                await PlatPursuit.API.delete(`/api/v1/challenges/genre/${btn.dataset.challengeId}/delete/`);
+                modal.close();
+                PlatPursuit.ToastManager.success('Genre challenge deleted.');
                 window.location.reload();
             } catch (error) {
                 modal.close();

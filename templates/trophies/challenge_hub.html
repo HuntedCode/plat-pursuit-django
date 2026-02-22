@@ -78,6 +78,28 @@
         {% endif %}
     </div>
 
+    {# ── Genre Challenge Tab ───────────────────────────────────────── #}
+    <a href="?type=genre" id="genre-tab"
+       class="tab {% if current_type == 'genre' %}tab-active{% endif %}"
+       role="tab"
+       aria-selected="{% if current_type == 'genre' %}true{% else %}false{% endif %}"
+       aria-controls="genre-panel">
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 mr-2" viewBox="0 0 24 24" fill="none"
+             stroke="var(--color-secondary)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"></path>
+            <line x1="4" y1="22" x2="4" y2="15"></line>
+        </svg>
+        Genre Challenge
+        {% if genre_total_count %}<span class="badge badge-sm ml-1">{{ genre_total_count }}</span>{% endif %}
+    </a>
+    <div id="genre-panel"
+         class="tab-content bg-base-100/90 border-2 border-base-300 shadow-md shadow-neutral p-0"
+         role="tabpanel" aria-labelledby="genre-tab">
+        {% if current_type == 'genre' %}
+            {% include 'partials/challenge_hub_panel.html' %}
+        {% endif %}
+    </div>
+
 </div>
 {% endblock %}
 

@@ -1,0 +1,182 @@
+{% extends 'base.html' %}
+{% load static custom_filters %}
+
+{% block title %}Setup: {{ challenge.name }} - Platinum Pursuit{% endblock %}
+
+{% block content %}
+<section class="shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 w-full p-0 lg:p-4">
+    {% include 'partials/breadcrumb.html' with items=breadcrumb %}
+
+    <div class="card bg-base-100 border-4 border-base-300 shadow-md shadow-neutral">
+        <div class="card-body">
+            <h1 class="text-xl lg:text-2xl font-bold">{{ challenge.name }}: Setup Wizard</h1>
+            <p class="text-sm text-base-content/70">Pick a game for each genre. Skip any you're unsure about. You can always come back!</p>
+
+            {# Progress bar: genre buttons #}
+            <div id="genre-progress-bar" class="flex flex-wrap gap-1 mt-3">
+                {% for slot in slots %}
+                <button class="genre-slot-btn px-2 h-7 lg:h-8 rounded text-[0.65rem] lg:text-xs font-bold flex items-center justify-center cursor-pointer transition-all border-2
+                               {% if slot.is_completed %}bg-success text-success-content border-success
+                               {% elif slot.concept %}bg-primary/20 text-primary border-primary/40
+                               {% else %}bg-base-200 text-base-content/40 border-base-300 hover:border-primary/40{% endif %}"
+                        data-genre="{{ slot.genre }}">
+                    {{ slot.genre_display }}
+                </button>
+                {% endfor %}
+            </div>
+
+            {# Stats #}
+            <div class="flex items-center gap-4 mt-2 text-xs text-base-content/50">
+                <span id="genre-filled-count">{{ challenge.filled_count }}/{{ challenge.total_items }} filled</span>
+                <span id="genre-completed-count">{{ challenge.completed_count }}/{{ challenge.total_items }} completed</span>
+                <span id="genre-subgenre-count">{{ subgenre_count }}/{{ subgenre_total }} subgenres</span>
+            </div>
+        </div>
+    </div>
+</section>
+
+{# Current Genre + Search #}
+<section class="shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 w-full p-0 lg:p-4 mt-6">
+    <div class="p-4">
+        {# Current genre display #}
+        <div class="text-center mb-4">
+            <div id="current-genre-display" class="text-4xl lg:text-6xl font-black text-primary">Action</div>
+            <p id="current-genre-prompt" class="text-base-content/70 mt-1">Pick a game tagged as <strong id="prompt-genre">Action</strong></p>
+            <p class="text-xs text-base-content/40 mt-1">The more subgenres you collect, the closer to the bonus goal!</p>
+        </div>
+
+        {# Search + Filters + Sort #}
+        <div class="max-w-2xl mx-auto">
+            {# Chip filters #}
+            <div class="flex flex-wrap items-center gap-2 mb-3" id="genre-filter-row">
+                <span class="text-xs text-base-content/50 font-semibold uppercase tracking-wider mr-1">Filters</span>
+                <div class="flex flex-wrap gap-1">
+                    <button type="button" class="badge badge-ghost badge-sm font-bold cursor-pointer hover:badge-outline transition-all genre-filter-chip" data-filter="platform" data-value="PS5">PS5</button>
+                    <button type="button" class="badge badge-ghost badge-sm font-bold cursor-pointer hover:badge-outline transition-all genre-filter-chip" data-filter="platform" data-value="PS4">PS4</button>
+                </div>
+                <span class="text-base-content/20">|</span>
+                <div class="flex flex-wrap gap-1">
+                    <button type="button" class="badge badge-ghost badge-sm font-bold cursor-pointer hover:badge-outline transition-all genre-filter-chip" data-filter="region" data-value="global">Global</button>
+                    <button type="button" class="badge badge-ghost badge-sm font-bold cursor-pointer hover:badge-outline transition-all genre-filter-chip" data-filter="region" data-value="NA">NA</button>
+                    <button type="button" class="badge badge-ghost badge-sm font-bold cursor-pointer hover:badge-outline transition-all genre-filter-chip" data-filter="region" data-value="EU">EU</button>
+                    <button type="button" class="badge badge-ghost badge-sm font-bold cursor-pointer hover:badge-outline transition-all genre-filter-chip" data-filter="region" data-value="JP">JP</button>
+                    <button type="button" class="badge badge-ghost badge-sm font-bold cursor-pointer hover:badge-outline transition-all genre-filter-chip" data-filter="region" data-value="AS">AS</button>
+                </div>
+                <span class="text-base-content/20">|</span>
+                <div class="flex flex-wrap gap-1">
+                    <button type="button" class="badge badge-ghost badge-sm font-bold cursor-pointer hover:badge-outline transition-all genre-toggle-chip" data-toggle="in_badge" title="Show only games that appear in a live badge">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3 mr-0.5" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/></svg>
+                        In a Badge
+                    </button>
+                    <button type="button" class="badge badge-ghost badge-sm font-bold cursor-pointer hover:badge-outline transition-all genre-toggle-chip" data-toggle="my_backlog" title="Show only games you've played">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3 mr-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg>
+                        My Backlog
+                    </button>
+                    <button type="button" class="badge badge-ghost badge-sm font-bold cursor-pointer hover:badge-outline transition-all genre-toggle-chip" data-toggle="new_subgenres" title="Only show games that contribute new subgenres">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3 mr-0.5" viewBox="0 0 24 24" fill="currentColor"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+                        New Subgenres
+                    </button>
+                </div>
+                <button type="button" class="btn btn-ghost btn-xs text-error/70 hover:text-error hidden" id="genre-clear-filters">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                    Clear
+                </button>
+            </div>
+
+            {# Subgenre filter chips (populated by JS) #}
+            <div class="flex flex-wrap items-center gap-2 mb-3" id="genre-subgenre-filter-row">
+                <span class="text-xs text-base-content/50 font-semibold uppercase tracking-wider mr-1">Subgenre</span>
+                <div id="genre-subgenre-chips" class="flex flex-wrap gap-1"></div>
+            </div>
+
+            {# Search input + Sort dropdown #}
+            <div class="flex flex-col md:flex-row gap-2 mb-3">
+                <input id="genre-search-input" type="text"
+                       placeholder="Search within this genre..."
+                       class="input input-bordered flex-1" />
+                <select id="genre-sort-select" class="select select-bordered w-auto">
+                    <option value="popular">Most Popular</option>
+                    <option value="alpha">Alphabetical</option>
+                    <option value="plat_earners">Most Plats Earned</option>
+                </select>
+            </div>
+            <div class="bg-base-200 rounded-lg p-3 text-xs text-base-content/60 space-y-1 mb-2">
+                <p class="font-semibold text-base-content/70">Challenge Rules</p>
+                <ul class="list-disc list-inside space-y-0.5">
+                    <li>PS4/PS5 only. PSN data is limited to modern platforms, so each pick needs at least one PS4 or PS5 version</li>
+                    <li>No stacking: games you've already platted are excluded</li>
+                    <li>No games with over 50% completion. Pick something fresh!</li>
+                    <li>Each game can only fill one genre slot</li>
+                </ul>
+            </div>
+        </div>
+
+        {# Navigation buttons #}
+        <div class="flex justify-center gap-3 mt-4 max-w-2xl mx-auto">
+            <button id="genre-skip-btn" class="btn btn-ghost">
+                Skip for now
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 ml-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+            </button>
+            <button id="genre-finish-btn" class="btn btn-primary hidden">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 mr-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>
+                Finish Setup
+            </button>
+        </div>
+
+        {# Search results: single column #}
+        <div id="genre-search-results" class="max-w-2xl mx-auto flex flex-col gap-2 mt-4"></div>
+
+        {# Infinite scroll sentinel with loading spinner #}
+        <div id="genre-scroll-sentinel" class="hidden text-center py-4 max-w-2xl mx-auto">
+            <span class="loading loading-spinner loading-md text-primary"></span>
+        </div>
+
+        {# Loading indicator (initial search) #}
+        <div id="genre-search-loading" class="hidden text-center py-4">
+            <span class="loading loading-spinner loading-md text-primary"></span>
+        </div>
+
+        {# No results message #}
+        <div id="genre-no-results" class="hidden text-center py-6 text-base-content/50">
+            <p>No games found. Try different filters or a different search term.</p>
+        </div>
+    </div>
+</section>
+
+{# Subgenre Bonus Tracker (collapsible) #}
+<section class="shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 w-full p-0 lg:p-4 mt-6">
+    <div class="p-4">
+        <div class="collapse collapse-arrow bg-base-100 border-2 border-base-300">
+            <input type="checkbox" id="subgenre-tracker-toggle" />
+            <div class="collapse-title text-base font-bold">
+                Subgenre Bonus Tracker: <span id="subgenre-tracker-count" class="text-primary">{{ subgenre_count }}/{{ subgenre_total }}</span>
+            </div>
+            <div class="collapse-content">
+                <p class="text-xs text-base-content/50 mb-3">Subgenres are collected automatically from your picks. Fill as many as you can!</p>
+                <div id="subgenre-tracker-grid" class="flex flex-wrap gap-2">
+                    {# Populated by JS from subgenres_json #}
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}
+
+{% block js_scripts %}
+<script>PlatPursuit.ZoomScaler.init();</script>
+<script src="{% static 'js/genre-challenge.js' %}"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        if (typeof GenreChallengeSetup !== 'undefined') {
+            GenreChallengeSetup.init(
+                {{ challenge.id }},
+                {{ slots_json|safe }},
+                {{ genre_display_json|safe }},
+                {{ subgenres_json|safe }}
+            );
+        }
+    });
+</script>
+{% endblock %}

@@ -86,3 +86,156 @@ BANNED_WORDS = [
     # Add your banned words here - this is just a template
     # Keep this list updated through the Django admin or database
 ]
+
+# ── Genre Challenge Constants ──────────────────────────────────────────────────
+# Keys are exact PSN API genre strings stored in Concept.genres (JSONField list).
+# Dropped: ADULT (inappropriate for community challenge), FITNESS (14 concepts)
+# Merged: SIMULATOR -> SIMULATION via GENRE_MERGE_MAP
+GENRE_CHALLENGE_GENRES = (
+    'ACTION',
+    'ADVENTURE',
+    'ARCADE',
+    'BRAIN_TRAINING',
+    'CASUAL',
+    'EDUCATIONAL',
+    'FAMILY',
+    'FIGHTING',
+    'HORROR',
+    'MUSIC_RHYTHM',
+    'PARTY',
+    'PUZZLE',
+    'QUIZ',
+    'RACING',
+    'ROLE_PLAYING_GAMES',
+    'SHOOTER',
+    'SIMULATION',
+    'SPORTS',
+    'STRATEGY',
+    'UNIQUE',
+)
+
+GENRE_DISPLAY_NAMES = {
+    'ACTION': 'Action',
+    'ADVENTURE': 'Adventure',
+    'ARCADE': 'Arcade',
+    'BRAIN_TRAINING': 'Brain Training',
+    'CASUAL': 'Casual',
+    'EDUCATIONAL': 'Educational',
+    'FAMILY': 'Family',
+    'FIGHTING': 'Fighting',
+    'HORROR': 'Horror',
+    'MUSIC_RHYTHM': 'Music / Rhythm',
+    'PARTY': 'Party',
+    'PUZZLE': 'Puzzle',
+    'QUIZ': 'Quiz',
+    'RACING': 'Racing',
+    'ROLE_PLAYING_GAMES': 'RPG',
+    'SHOOTER': 'Shooter',
+    'SIMULATION': 'Simulation',
+    'SPORTS': 'Sports',
+    'STRATEGY': 'Strategy',
+    'UNIQUE': 'Unique',
+}
+
+# Maps raw PSN genre tags to curated genre keys (e.g. SIMULATOR -> SIMULATION)
+GENRE_MERGE_MAP = {
+    'SIMULATOR': 'SIMULATION',
+    'MUSIC/RHYTHM': 'MUSIC_RHYTHM',
+}
+
+# ── Subgenre Bonus Tracker Constants ───────────────────────────────────────────
+# Curated subgenres collected automatically from assigned concepts.
+# Dropped: N/A (meaningless), MMORPG (26 concepts)
+# Merged: see SUBGENRE_MERGE_MAP below
+GENRE_CHALLENGE_SUBGENRES = (
+    'ART/EXPERIMENTAL',
+    'BEAT_EM_UP',
+    'BOARD_GAME',
+    'CARD_GAME',
+    "CHILDREN'S",
+    'COMBAT',
+    'DEVELOPMENT',
+    'DUNGEON_CRAWLER',
+    'EPIC',
+    'FANTASY',
+    'FIGHTING',
+    'FIRST_PERSON_SHOOTER',
+    'FLIGHT',
+    'GRAPHIC_ADVENTURE',
+    'HACK_AND_SLASH',
+    'MAZE',
+    'MYSTERY',
+    'PHYSICS_GAME',
+    'PINBALL',
+    'PLATFORMER',
+    'REAL_TIME_STRATEGY',
+    'RUN_AND_GUN',
+    'SHOOT_EM_UP',
+    'SHOWTIME',
+    'STEALTH',
+    'STRATEGY_RPG',
+    'TACTICAL',
+    'TEAM_SPORTS',
+    'TEXT_ADVENTURE',
+    'THIRD_PERSON_SHOOTER',
+    'TOWER_DEFENSE',
+    'TURN_BASED_STRATEGY',
+    'VEHICULAR_COMBAT',
+)
+
+SUBGENRE_DISPLAY_NAMES = {
+    'ART/EXPERIMENTAL': 'Art / Experimental',
+    'BEAT_EM_UP': "Beat 'Em Up",
+    'BOARD_GAME': 'Board Game',
+    'CARD_GAME': 'Card Game',
+    "CHILDREN'S": "Children's",
+    'COMBAT': 'Combat',
+    'DEVELOPMENT': 'Development',
+    'DUNGEON_CRAWLER': 'Dungeon Crawler',
+    'EPIC': 'Epic',
+    'FANTASY': 'Fantasy',
+    'FIGHTING': 'Fighting',
+    'FIRST_PERSON_SHOOTER': 'FPS',
+    'FLIGHT': 'Flight',
+    'GRAPHIC_ADVENTURE': 'Graphic Adventure',
+    'HACK_AND_SLASH': 'Hack & Slash',
+    'MAZE': 'Maze',
+    'MYSTERY': 'Mystery',
+    'PHYSICS_GAME': 'Physics',
+    'PINBALL': 'Pinball',
+    'PLATFORMER': 'Platformer',
+    'REAL_TIME_STRATEGY': 'RTS',
+    'RUN_AND_GUN': 'Run & Gun',
+    'SHOOT_EM_UP': "Shoot 'Em Up",
+    'SHOWTIME': 'Showtime',
+    'STEALTH': 'Stealth',
+    'STRATEGY_RPG': 'Strategy RPG',
+    'TACTICAL': 'Tactical',
+    'TEAM_SPORTS': 'Team Sports',
+    'TEXT_ADVENTURE': 'Text Adventure',
+    'THIRD_PERSON_SHOOTER': 'Third Person Shooter',
+    'TOWER_DEFENSE': 'Tower Defense',
+    'TURN_BASED_STRATEGY': 'Turn-Based Strategy',
+    'VEHICULAR_COMBAT': 'Vehicular Combat',
+}
+
+# Maps raw PSN subgenre strings to curated subgenre keys
+SUBGENRE_MERGE_MAP = {
+    '2D_FIGHTING': 'FIGHTING',
+    '3D_FIGHTING': 'FIGHTING',
+    'TEAM_FIGHTING': 'FIGHTING',
+    'FLIGHT_COMBAT': 'FLIGHT',
+    'FLIGHT_SIMULATION': 'FLIGHT',
+    'DANCE': 'SHOWTIME',
+    'GAME_SHOW': 'SHOWTIME',
+    'TRIVIA/QUIZ': 'SHOWTIME',
+    'SOCCER': 'TEAM_SPORTS',
+    'FOOTBALL': 'TEAM_SPORTS',
+    'BASKETBALL': 'TEAM_SPORTS',
+    'BASEBALL': 'TEAM_SPORTS',
+    'HOCKEY': 'TEAM_SPORTS',
+    'STRATEGY_ROLE_PLAYING_GAME': 'STRATEGY_RPG',
+}
+
+# Precomputed set for fast lookup during subgenre resolution
+_GENRE_CHALLENGE_SUBGENRES_SET = frozenset(GENRE_CHALLENGE_SUBGENRES)
