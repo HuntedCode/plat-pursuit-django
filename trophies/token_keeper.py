@@ -57,8 +57,16 @@ class ProxiedRequestBuilder(BaseRequestBuilder):
 
 class ProxiedAuthenticator(BaseAuthenticator):
     def __init__(self, npsso_cookie, common_headers, rate_limit, proxy_url=None):
-        super().__init__(npsso_cookie, common_headers, rate_limit)
+        # DO NOT call super().__init__() - it creates a RequestBuilder with an SQLite
+        # bucket that spawns a Leaker daemon thread. That thread persists even after we
+        # replace request_builder, causing "database is locked" errors.
+        # Instead, replicate the parent's initialization with our proxied builder.
+        import uuid
+        self.npsso_cookie = npsso_cookie
+        self.common_headers = common_headers
         self.request_builder = ProxiedRequestBuilder(common_headers, rate_limit, proxy_url=proxy_url)
+        self.token_response = None
+        self.cid = str(uuid.UUID(int=uuid.getnode()))
 
 class ProxiedPSNAWP(BasePSNAWP):
     def __init__(self, npsso_cookie, headers=None, rate_limit=None, proxy_url=None):
@@ -918,7 +926,7 @@ class TokenKeeper:
             logger.info(f"Milestones checked for {profile_id} successfully!")
 
             # Check A-Z challenge progress
-            from trophies.services.challenge_service import check_az_challenge_progress, check_calendar_challenge_progress
+            from trophies.services.challenge_service import check_az_challenge_progress, check_calendar_challenge_progress, check_genre_challenge_progress
             try:
                 check_az_challenge_progress(profile)
             except Exception:
@@ -929,6 +937,12 @@ class TokenKeeper:
                 check_calendar_challenge_progress(profile)
             except Exception:
                 logger.exception(f"Failed to check calendar challenge progress for profile {profile_id}")
+
+            # Check Genre challenge progress
+            try:
+                check_genre_challenge_progress(profile)
+            except Exception:
+                logger.exception(f"Failed to check genre challenge progress for profile {profile_id}")
 
             update_profile_trophy_counts(profile)
             profile.set_sync_status('synced')
