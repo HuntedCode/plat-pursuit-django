@@ -188,6 +188,8 @@ const _sharedFilterState = {
     platform: new Set(),
     region: new Set(),
     sort: 'popular',
+    inBadge: false,
+    myBacklog: false,
 };
 
 const CHIP_ACTIVE_CLASSES = {
@@ -231,7 +233,8 @@ function _bindChipFilters(chipSelector, clearBtnId, filterState, onChangeCallbac
     };
 
     const updateClearBtn = () => {
-        const total = filterState.platform.size + filterState.region.size;
+        const total = filterState.platform.size + filterState.region.size
+            + (filterState.inBadge ? 1 : 0) + (filterState.myBacklog ? 1 : 0);
         if (clearBtn) clearBtn.classList.toggle('hidden', total === 0);
     };
 
@@ -265,11 +268,67 @@ function _bindChipFilters(chipSelector, clearBtnId, filterState, onChangeCallbac
         clearBtn.addEventListener('click', () => {
             filterState.platform.clear();
             filterState.region.clear();
+            filterState.inBadge = false;
+            filterState.myBacklog = false;
             chips.forEach(chip => updateChipVisual(chip, false));
+            // Reset toggle chip visuals in the same filter row
+            const filterRow = clearBtn.closest('[id$="filter-row"]');
+            if (filterRow) {
+                filterRow.querySelectorAll('[data-toggle]').forEach(tc => {
+                    tc.classList.remove('badge-secondary', 'badge-info');
+                    tc.classList.add('badge-ghost');
+                });
+            }
             updateClearBtn();
             onChangeCallback();
         });
     }
+}
+
+/**
+ * Bind boolean toggle filter chips (on/off, not multi-select).
+ * Uses data-toggle attribute to map to filterState boolean keys.
+ * @param {string} chipSelector - CSS selector for toggle chips
+ * @param {object} filterState - shared state object with boolean keys
+ * @param {function} onChangeCallback - Called after any toggle change
+ */
+function _bindToggleFilters(chipSelector, filterState, onChangeCallback) {
+    const chips = document.querySelectorAll(chipSelector);
+    if (!chips.length) return;
+
+    const TOGGLE_ACTIVE_CLASSES = {
+        in_badge: 'badge-secondary',
+        my_backlog: 'badge-info',
+    };
+
+    const TOGGLE_KEY_MAP = {
+        in_badge: 'inBadge',
+        my_backlog: 'myBacklog',
+    };
+
+    const updateChipVisual = (chip, active) => {
+        const key = chip.dataset.toggle;
+        chip.classList.remove('badge-ghost', 'badge-secondary', 'badge-info');
+        chip.classList.add(active ? (TOGGLE_ACTIVE_CLASSES[key] || 'badge-secondary') : 'badge-ghost');
+    };
+
+    // Restore visual state from existing filterState
+    chips.forEach(chip => {
+        const stateKey = TOGGLE_KEY_MAP[chip.dataset.toggle];
+        if (stateKey && filterState[stateKey]) {
+            updateChipVisual(chip, true);
+        }
+    });
+
+    chips.forEach(chip => {
+        chip.addEventListener('click', () => {
+            const stateKey = TOGGLE_KEY_MAP[chip.dataset.toggle];
+            if (!stateKey) return;
+            filterState[stateKey] = !filterState[stateKey];
+            updateChipVisual(chip, filterState[stateKey]);
+            onChangeCallback();
+        });
+    });
 }
 
 /**
@@ -284,6 +343,8 @@ function _buildFilterParams(filterState) {
         params += `&region=${[...filterState.region].join(',')}`;
     }
     params += `&sort=${filterState.sort}`;
+    if (filterState.inBadge) params += '&in_badge=1';
+    if (filterState.myBacklog) params += '&my_backlog=1';
     return params;
 }
 
@@ -511,6 +572,9 @@ const AZChallengeSetup = {
 
     _bindChipFilters() {
         _bindChipFilters('.az-filter-chip', 'az-clear-filters', _sharedFilterState, () => {
+            this._doSearch(false);
+        });
+        _bindToggleFilters('.az-toggle-chip', _sharedFilterState, () => {
             this._doSearch(false);
         });
     },
@@ -844,6 +908,9 @@ const AZChallengeEdit = {
         // Bind chip filters once (they persist across modal opens)
         if (!this._modalChipsBound) {
             _bindChipFilters('.modal-filter-chip', 'modal-clear-filters', _sharedFilterState, () => {
+                this._doModalSearch(false);
+            });
+            _bindToggleFilters('.modal-toggle-chip', _sharedFilterState, () => {
                 this._doModalSearch(false);
             });
             this._modalChipsBound = true;

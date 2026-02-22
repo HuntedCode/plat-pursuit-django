@@ -19,7 +19,7 @@ from django.db.models import Avg, Count, F, IntegerField, OuterRef, Subquery
 from django.db.models.functions import Lower
 
 from trophies.models import (
-    Challenge, AZChallengeSlot, Game, Trophy, UserConceptRating,
+    Challenge, AZChallengeSlot, Game, Trophy, UserConceptRating, Badge,
 )
 from trophies.services.challenge_service import (
     create_az_challenge, recalculate_challenge_counts, get_excluded_game_ids,
@@ -488,6 +488,10 @@ class AZGameSearchAPIView(APIView):
                 r for r in regions_raw.split(',') if r in valid_regions
             ] if regions_raw else []
 
+            # Boolean toggle filters
+            in_badge = request.query_params.get('in_badge', '') == '1'
+            my_backlog = request.query_params.get('my_backlog', '') == '1'
+
             # Base query: games starting with this letter, quality-filtered
             games = Game.objects.filter(
                 title_name__istartswith=letter,
@@ -510,6 +514,19 @@ class AZGameSearchAPIView(APIView):
             # Region filter
             if regions:
                 games = games.for_region(regions)
+
+            # "In a Badge" filter: games in non-optional stages of live badges
+            if in_badge:
+                games = games.filter(
+                    concept__stages__stage_number__gt=0,
+                    concept__stages__series_slug__in=Badge.objects.filter(
+                        is_live=True, series_slug__isnull=False,
+                    ).values_list('series_slug', flat=True),
+                )
+
+            # "My Backlog" filter: games user has played
+            if my_backlog:
+                games = games.filter(played_by__profile=profile)
 
             # Exclude platted + >50% progress games
             excluded_ids = get_excluded_game_ids(profile)
