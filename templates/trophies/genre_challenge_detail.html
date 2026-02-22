@@ -171,6 +171,7 @@
 {# Genre Slot Grid #}
 <section class="shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 w-full p-0 lg:p-4 mt-6">
     <div class="p-4">
+        {% include 'partials/genre_challenge/psn_attribution.html' %}
         <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
             {% for slot in slots %}
             <div class="relative" data-genre="{{ slot.genre }}" data-slot-id="{{ slot.id }}">

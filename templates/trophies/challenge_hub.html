@@ -96,6 +96,9 @@
          class="tab-content bg-base-100/90 border-2 border-base-300 shadow-md shadow-neutral p-0"
          role="tabpanel" aria-labelledby="genre-tab">
         {% if current_type == 'genre' %}
+            <div class="px-4 pt-4">
+                {% include 'partials/genre_challenge/psn_attribution.html' %}
+            </div>
             {% include 'partials/challenge_hub_panel.html' %}
         {% endif %}
     </div>
