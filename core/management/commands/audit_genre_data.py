@@ -61,8 +61,8 @@ class Command(BaseCommand):
         empty_subgenres = 0
 
         for concept in concepts.iterator(chunk_size=500):
-            genres = concept.genres or []
-            subgenres = concept.subgenres or []
+            genres = [g for g in (concept.genres or []) if g]
+            subgenres = [sg for sg in (concept.subgenres or []) if sg]
 
             if genres:
                 has_genres += 1
