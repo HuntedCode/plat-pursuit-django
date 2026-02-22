@@ -4,6 +4,7 @@ Management command to audit genre and subgenre data across Concepts.
 By default, filters to challenge-eligible concepts only:
   - Excludes PP_ stub concepts (no genre data)
   - PS4/PS5 games only (modern consoles)
+  - Excludes shovelware-flagged games
 
 Reports coverage stats, unique genres/subgenres with counts, and
 genre-to-subgenre relationships.
@@ -40,6 +41,11 @@ class Command(BaseCommand):
             concepts = (
                 Concept.objects
                 .exclude(concept_id__startswith='PP_')
+                .exclude(
+                    games__shovelware_status__in=[
+                        'auto_flagged', 'manually_flagged',
+                    ]
+                )
                 .filter(
                     Q(games__title_platform__contains='PS4')
                     | Q(games__title_platform__contains='PS5')
@@ -47,7 +53,7 @@ class Command(BaseCommand):
                 .distinct()
                 .only('genres', 'subgenres')
             )
-            filter_label = 'Eligible concepts (non-stub, PS4/PS5 only)'
+            filter_label = 'Eligible concepts (non-stub, PS4/PS5, non-shovelware)'
 
         total = concepts.count()
 
