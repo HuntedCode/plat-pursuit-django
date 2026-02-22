@@ -1706,34 +1706,6 @@ const GenreChallengeEdit = {
                 </div>`);
         }
 
-        // Update header set-cover button visibility
-        this._updateHeaderActions(genre);
-    },
-
-    _updateHeaderActions(genre) {
-        const container = document.querySelector(`[data-genre="${genre}"][data-slot-id]`);
-        if (!container) return;
-
-        const headerActions = container.querySelector('.header-actions');
-        if (!headerActions) return;
-
-        const slot = this.slots[genre];
-        const e = PlatPursuit.HTMLUtils.escape;
-
-        let html = '';
-        if (slot?.is_completed) {
-            html += `<svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-success" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>`;
-        }
-        if (slot?.concept && genre !== this.coverGenre) {
-            html += `
-                <button class="btn btn-ghost btn-xs p-0 w-5 h-5 min-h-0 opacity-40 hover:opacity-100 transition-opacity"
-                        data-action="set-cover" data-genre="${e(genre)}" title="Set as cover image">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/>
-                    </svg>
-                </button>`;
-        }
-        headerActions.innerHTML = html;
     },
 
     _updateSlotOverlay(genre) {
@@ -1746,15 +1718,20 @@ const GenreChallengeEdit = {
         const existing = container.querySelector('[data-action="edit"]');
         if (!existing) return;
 
-        // Rebuild the overlay buttons (set-cover now lives in the card header, not here)
         const e = PlatPursuit.HTMLUtils.escape;
         if (slot?.concept) {
+            const coverBtn = genre !== this.coverGenre
+                ? `<button class="btn btn-xs btn-ghost text-base-content/70" data-action="set-cover" data-genre="${e(genre)}">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" viewBox="0 0 24 24" fill="currentColor"><path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/></svg>
+                    Set as Cover
+                </button>`
+                : '';
             existing.innerHTML = `
                 <div class="flex gap-1">
                     <button class="btn btn-xs btn-primary" data-action="swap" data-genre="${e(genre)}">Swap</button>
                     <button class="btn btn-xs btn-ghost" data-action="move" data-genre="${e(genre)}">Move</button>
                     <button class="btn btn-xs btn-error btn-outline" data-action="clear" data-genre="${e(genre)}">Clear</button>
-                </div>`;
+                </div>${coverBtn}`;
         } else {
             existing.innerHTML = `
                 <button class="btn btn-xs btn-primary" data-action="assign" data-genre="${e(genre)}">
@@ -1859,9 +1836,36 @@ const GenreChallengeDetail = {
     init(challengeId) {
         this.challengeId = challengeId;
 
-        _bindInlineRename(this.challengeId);
+        _bindInlineRename(this.challengeId, (newName) => {
+            const shareBtn = document.getElementById('share-image-btn');
+            const bannerBtn = document.getElementById('banner-share-image-btn');
+            const modalTitle = document.getElementById('genre-share-modal-title');
+            if (shareBtn) shareBtn.dataset.challengeName = newName;
+            if (bannerBtn) bannerBtn.dataset.challengeName = newName;
+            if (modalTitle) modalTitle.textContent = `Share: ${newName}`;
+        });
         _bindDeleteButton(this.challengeId);
         this._bindShareButton();
+        this._bindShareImageButton();
+        this._bindPickNextGame();
+    },
+
+    _bindPickNextGame() {
+        if (!document.getElementById('pick-next-game-btn')) return;
+        const spinner = new PlatPursuit.ReelSpinner({
+            slots: window._SPINNER_SLOTS || [],
+            challengeId: this.challengeId,
+            tileLabel:      (s) => s.genre_display,
+            tileLabelClass: 'text-[0.6rem] font-bold leading-tight truncate max-w-[5.5rem]',
+            tileIcon:       (s) => s.game_icon,
+            tileName:       (s) => s.game_name,
+            resultBadge:    (s) => s.genre_display,
+            coverApiUrl:    (id) => `/api/v1/challenges/genre/${id}/update/`,
+            coverPayload:   (s) => ({ cover_genre: s.genre }),
+            gridSelector:   (s) => `[data-genre="${s.genre}"][data-slot-id]`,
+            winnerKey:      (s) => s.genre,
+        });
+        spinner.bind('pick-next-game-btn');
     },
 
     _bindShareButton() {
@@ -1884,6 +1888,34 @@ const GenreChallengeDetail = {
                 PlatPursuit.ToastManager.success('Challenge URL copied to clipboard!');
             }
         });
+    },
+
+    _bindShareImageButton() {
+        if (typeof GenreChallengeShareManager === 'undefined') return;
+
+        const openShareModal = (challengeName) => {
+            const modal = document.getElementById('genre-share-modal');
+            const content = document.getElementById('genre-share-modal-content');
+            if (!modal || !content) return;
+
+            const manager = new GenreChallengeShareManager(this.challengeId, challengeName);
+            content.innerHTML = manager.renderShareSection();
+            manager.init();
+
+            modal.showModal();
+        };
+
+        // Header "Share Image" button
+        const btn = document.getElementById('share-image-btn');
+        if (btn) {
+            btn.addEventListener('click', () => openShareModal(btn.dataset.challengeName || ''));
+        }
+
+        // CTA banner "Create Share Card" button
+        const bannerBtn = document.getElementById('banner-share-image-btn');
+        if (bannerBtn) {
+            bannerBtn.addEventListener('click', () => openShareModal(bannerBtn.dataset.challengeName || ''));
+        }
     },
 };
 

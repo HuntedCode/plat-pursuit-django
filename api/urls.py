@@ -59,6 +59,7 @@ from .genre_challenge_views import (
     GenreBonusAddAPIView, GenreBonusClearAPIView,
     GenreMoveAPIView, GenreSwapTargetsAPIView,
 )
+from .genre_challenge_share_views import GenreChallengeShareHTMLView, GenreChallengeSharePNGView
 from .game_family_views import (
     ProposalApproveView, ProposalRejectView,
     GameFamilyCreateView, GameFamilyUpdateView, GameFamilyDeleteView,
@@ -227,6 +228,8 @@ urlpatterns = [
     path('challenges/genre/<int:challenge_id>/bonus/<int:bonus_slot_id>/clear/', GenreBonusClearAPIView.as_view(), name='genre-bonus-clear'),
     path('challenges/genre/<int:challenge_id>/move/', GenreMoveAPIView.as_view(), name='genre-move'),
     path('challenges/genre/<int:challenge_id>/move-targets/', GenreSwapTargetsAPIView.as_view(), name='genre-move-targets'),
+    path('challenges/genre/<int:challenge_id>/share/html/', GenreChallengeShareHTMLView.as_view(), name='genre-challenge-share-html'),
+    path('challenges/genre/<int:challenge_id>/share/png/', GenreChallengeSharePNGView.as_view(), name='genre-challenge-share-png'),
 
     # Game Family endpoints (staff-only)
     path('game-families/', GameFamilyCreateView.as_view(), name='game-family-create'),

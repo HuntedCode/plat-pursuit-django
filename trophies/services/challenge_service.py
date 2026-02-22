@@ -15,6 +15,7 @@ from django.utils import timezone
 from trophies.models import (
     Challenge, AZChallengeSlot, CalendarChallengeDay, GenreChallengeSlot,
     GenreBonusSlot, CALENDAR_DAYS_PER_MONTH, ProfileGame, Game, EarnedTrophy,
+    Concept,
 )
 from trophies.util_modules.constants import (
     GENRE_CHALLENGE_GENRES, GENRE_DISPLAY_NAMES, GENRE_MERGE_MAP,
@@ -787,7 +788,7 @@ def get_genre_excluded_concept_ids(profile):
     Return set of concept IDs to exclude from Genre challenge search:
     - Concepts where user has platted any game under the concept
     - Concepts where user has >50% progress on any game under the concept
-    No family sibling expansion (unlike A-Z).
+    - GameFamily siblings of platted concepts (prevents cross-gen duplicates)
     """
     platted_concept_ids = set(
         ProfileGame.objects.filter(
@@ -805,7 +806,23 @@ def get_genre_excluded_concept_ids(profile):
         ).values_list('game__concept_id', flat=True)
     )
 
-    return platted_concept_ids | progress_concept_ids
+    # GameFamily sibling expansion for platted concepts
+    family_sibling_concept_ids = set()
+    if platted_concept_ids:
+        family_ids = set(
+            Concept.objects.filter(
+                id__in=platted_concept_ids,
+                family__isnull=False,
+            ).values_list('family_id', flat=True)
+        )
+        if family_ids:
+            family_sibling_concept_ids = set(
+                Concept.objects.filter(
+                    family_id__in=family_ids,
+                ).values_list('id', flat=True)
+            )
+
+    return platted_concept_ids | progress_concept_ids | family_sibling_concept_ids
 
 
 def resolve_subgenres(raw_subgenres):

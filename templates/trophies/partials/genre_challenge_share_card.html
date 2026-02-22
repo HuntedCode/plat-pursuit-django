@@ -1,0 +1,464 @@
+{% load static custom_filters %}
+{% comment %}
+Genre Challenge Share Image Card Template
+Used for both preview and final image generation via Playwright (server-side).
+Uses inline styles with hex colors for maximum rendering compatibility.
+
+Variables available:
+- format: 'landscape' or 'portrait'
+- challenge_name: Name of the challenge
+- username: Player's PSN username
+- avatar_url: Cached avatar image URL
+- completed_count: Number of completed genre slots
+- total_items: Total genre slots (20)
+- progress_percentage: Overall challenge completion percentage
+- is_complete: Boolean, whether all 20 are done
+- completed_at: Formatted completion date string or ''
+- subgenre_count: Number of collected subgenres
+- subgenre_total: Total subgenres (33)
+- slots: List of 20 dicts with:
+  - genre, genre_label, state ('completed'|'assigned'|'empty'), game_icon (cached URL or ''), progress (0-100)
+- subgenres: List of 33 dicts with:
+  - display (display name), status ('platted'|'assigned'|'uncollected')
+
+Color reference (converted from oklch):
+- base-100: #3d4047
+- base-200: #32363d
+- base-300: #2a2e34
+- base-content: #f5f7fc
+- primary: #67d1f8
+- secondary: #9580ff
+- accent: #ffaa5c
+- success: #67f8c8
+- neutral: #1a1b1f
+- warning/gold: #fbbf24
+
+Grid layout: Landscape 5x4 | Portrait 4x5
+{% endcomment %}
+
+{% if format == 'landscape' %}
+{# ═══════════════════════════════════════════════════════ #}
+{# Landscape Card: 1200x630                               #}
+{# Layout: Header → Name+Stats → 5x4 Grid → Subgenres → Progress → Footer #}
+{# ═══════════════════════════════════════════════════════ #}
+<div class="share-image-content" style="width: 1200px; height: 630px; background: linear-gradient(to bottom right, #2a2e34, #32363d, #2a2e34); padding: 20px; font-family: system-ui, -apple-system, sans-serif; box-sizing: border-box;">
+    <div style="width: 1160px; height: 590px; border: 3px solid #67d1f8; border-radius: 8px; box-shadow: 0 10px 15px -3px rgba(103, 209, 248, 0.2); overflow: hidden; display: flex; flex-direction: column; box-sizing: border-box;">
+
+        {# Header Banner #}
+        <div data-element="challenge-banner" style="padding: 10px 24px; background: linear-gradient(to right, rgba(103, 209, 248, 0.15), rgba(103, 209, 248, 0.05)); border-bottom: 2px solid #1a1b1f; border-left: 4px solid #67d1f8; display: flex; align-items: center; justify-content: space-between; flex-shrink: 0;">
+            <div style="display: flex; align-items: center; gap: 12px;">
+                <svg style="height: 28px; width: 28px; flex-shrink: 0;" version="1.1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="#67d1f8"><path d="M102.49,0c0,27.414,0,104.166,0,137.062c0,112.391,99.33,156.25,153.51,156.25 c54.18,0,153.51-43.859,153.51-156.25c0-32.896,0-109.648,0-137.062H102.49z M256.289,50.551l-68.164,29.768v98.474l-0.049,19.53 c-0.526-0.112-47.274-10.112-47.274-78.391c0-28.17,0-69.6,0-69.6h60.385L256.289,50.551z"></path><polygon points="315.473,400.717 291.681,367.482 279.791,318.506 256,322.004 232.209,318.506 220.314,367.482 205.347,388.394 196.527,400.476 196.699,400.476 196.527,400.717"></polygon><polygon points="366.93,432.24 366.93,432 145.07,432 145.07,511.598 145.07,511.76 145.07,511.76 145.07,512 366.93,512 366.93,432.402 366.93,432.24"></polygon><path d="M511.638,96.668c-0.033-1.268-0.068-2.336-0.068-3.174V45.1h-73.889v38.736h35.152v9.658 c0,1.127,0.037,2.557,0.086,4.258c0.389,13.976,1.303,46.707-21.545,70.203c-5.121,5.266-11.221,9.787-18.219,13.613 c-3.883,17.635-10.109,33.564-18.104,47.814c26.561-6.406,48.026-17.898,64.096-34.422 C513.402,159.734,512.121,113.918,511.638,96.668z"></path><path d="M60.625,167.955c-22.848-23.496-21.934-56.227-21.541-70.203c0.047-1.701,0.082-3.131,0.082-4.258v-9.658 h34.842h0.07l0,0h0.24V45.1H0.43v48.394c0,0.838-0.032,1.906-0.068,3.174c-0.482,17.25-1.76,63.066,32.494,98.293 c16.068,16.524,37.531,28.014,64.092,34.422c-7.996-14.25-14.22-30.182-18.103-47.816C71.846,177.74,65.746,173.221,60.625,167.955 z"></path></svg>
+                <span style="font-size: 24px; font-weight: bold; color: #67d1f8; text-transform: uppercase; letter-spacing: 0.1em; font-style: italic;">Genre Platinum Challenge</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 10px;">
+                {% if avatar_url %}
+                <img src="{{ avatar_url }}" style="width: 32px; height: 32px; border-radius: 50%; border: 2px solid #1a1b1f;" />
+                {% endif %}
+                <span style="font-size: 18px; color: #67d1f8; font-weight: 600;">{{ username }}</span>
+            </div>
+        </div>
+
+        {# Main Content Area #}
+        <div style="flex: 1; padding: 10px 24px 8px; display: flex; flex-direction: column; box-sizing: border-box;">
+
+            {# Challenge Name + Stats Row #}
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+                <h1 style="font-size: 22px; font-weight: bold; color: #f5f7fc; line-height: 1.2; margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; margin-right: 16px;">{{ challenge_name }}</h1>
+                <div style="display: flex; gap: 8px; flex-shrink: 0;">
+                    <span style="display: inline-flex; align-items: center; gap: 5px; background: rgba(42, 46, 52, 0.8); border: 2px solid #67d1f8; color: #67d1f8; padding: 4px 12px; border-radius: 9999px; font-size: 13px; font-weight: bold;">
+                        <svg style="width: 13px; height: 13px; flex-shrink: 0;" version="1.1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="#67d1f8"><path d="M102.49,0c0,27.414,0,104.166,0,137.062c0,112.391,99.33,156.25,153.51,156.25 c54.18,0,153.51-43.859,153.51-156.25c0-32.896,0-109.648,0-137.062H102.49z M256.289,50.551l-68.164,29.768v98.474l-0.049,19.53 c-0.526-0.112-47.274-10.112-47.274-78.391c0-28.17,0-69.6,0-69.6h60.385L256.289,50.551z"></path><polygon points="315.473,400.717 291.681,367.482 279.791,318.506 256,322.004 232.209,318.506 220.314,367.482 205.347,388.394 196.527,400.476 196.699,400.476 196.527,400.717"></polygon><polygon points="366.93,432.24 366.93,432 145.07,432 145.07,511.598 145.07,511.76 145.07,511.76 145.07,512 366.93,512 366.93,432.402 366.93,432.24"></polygon></svg>
+                        {{ completed_count }}/{{ total_items }} Genres
+                    </span>
+                    <span style="display: inline-flex; align-items: center; background: rgba(42, 46, 52, 0.8); border: 2px solid #67f8c8; color: #67f8c8; padding: 4px 12px; border-radius: 9999px; font-size: 13px; font-weight: bold;">
+                        {{ progress_percentage }}% Complete
+                    </span>
+                </div>
+            </div>
+
+            {# 5x4 Genre Grid #}
+            <div style="display: flex; flex-direction: column; gap: 5px; align-items: center; flex: 1;">
+                {# Row 1: slots 1-5 #}
+                <div style="display: flex; gap: 5px;">
+                    {% for slot in slots %}{% if forloop.counter <= 5 %}
+                    <div style="width: 217px; height: 80px; border-radius: 6px; position: relative; overflow: hidden; box-sizing: border-box; flex-shrink: 0;
+                        {% if slot.state == 'completed' %}background: #2a2e34; border: 3px solid #fbbf24; box-shadow: 0 0 10px rgba(251, 191, 36, 0.3), inset 0 0 6px rgba(251, 191, 36, 0.1);
+                        {% elif slot.state == 'assigned' %}background: #2a2e34; border: 2px solid rgba(103, 209, 248, 0.4);
+                        {% else %}background: rgba(42, 46, 52, 0.6); border: 2px solid #1a1b1f;{% endif %}">
+                        {% if slot.game_icon %}
+                        <img src="{{ slot.game_icon }}" style="width: 100%; height: 100%; object-fit: cover; position: absolute; top: 0; left: 0;" />
+                        <div style="position: absolute; bottom: 0; left: 0; width: 100%; height: 70%; background: linear-gradient(to top, {% if slot.state == 'completed' %}rgba(120, 80, 0, 0.7){% else %}rgba(0,0,0,0.75){% endif %}, rgba(0,0,0,0));"></div>
+                        {% endif %}
+                        <div style="position: absolute; bottom: 5px; left: 7px; font-size: 14px; font-weight: bold; z-index: 1; text-shadow: 0 1px 3px rgba(0,0,0,0.9);
+                            {% if slot.state == 'completed' %}color: #fbbf24;
+                            {% elif slot.state == 'assigned' %}color: #f5f7fc;
+                            {% else %}color: rgba(245, 247, 252, 0.25);{% endif %}">{{ slot.genre_label }}</div>
+                        {% if slot.state == 'completed' %}
+                        <div style="position: absolute; top: 3px; right: 3px; z-index: 2; width: 22px; height: 22px; background: #fbbf24; border-radius: 50%; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 4px rgba(0,0,0,0.4);">
+                            <svg style="width: 13px; height: 13px;" viewBox="0 0 24 24" fill="none" stroke="#1a1b1f" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>
+                        </div>
+                        {% elif slot.state == 'assigned' and slot.progress > 0 %}
+                        <div style="position: absolute; bottom: 0; left: 0; width: 100%; height: 4px; background: rgba(0,0,0,0.5); z-index: 2;">
+                            <div style="height: 100%; width: {{ slot.progress }}%; background: #67d1f8;"></div>
+                        </div>
+                        {% endif %}
+                    </div>
+                    {% endif %}{% endfor %}
+                </div>
+                {# Row 2: slots 6-10 #}
+                <div style="display: flex; gap: 5px;">
+                    {% for slot in slots %}{% if forloop.counter > 5 and forloop.counter <= 10 %}
+                    <div style="width: 217px; height: 80px; border-radius: 6px; position: relative; overflow: hidden; box-sizing: border-box; flex-shrink: 0;
+                        {% if slot.state == 'completed' %}background: #2a2e34; border: 3px solid #fbbf24; box-shadow: 0 0 10px rgba(251, 191, 36, 0.3), inset 0 0 6px rgba(251, 191, 36, 0.1);
+                        {% elif slot.state == 'assigned' %}background: #2a2e34; border: 2px solid rgba(103, 209, 248, 0.4);
+                        {% else %}background: rgba(42, 46, 52, 0.6); border: 2px solid #1a1b1f;{% endif %}">
+                        {% if slot.game_icon %}
+                        <img src="{{ slot.game_icon }}" style="width: 100%; height: 100%; object-fit: cover; position: absolute; top: 0; left: 0;" />
+                        <div style="position: absolute; bottom: 0; left: 0; width: 100%; height: 70%; background: linear-gradient(to top, {% if slot.state == 'completed' %}rgba(120, 80, 0, 0.7){% else %}rgba(0,0,0,0.75){% endif %}, rgba(0,0,0,0));"></div>
+                        {% endif %}
+                        <div style="position: absolute; bottom: 5px; left: 7px; font-size: 14px; font-weight: bold; z-index: 1; text-shadow: 0 1px 3px rgba(0,0,0,0.9);
+                            {% if slot.state == 'completed' %}color: #fbbf24;
+                            {% elif slot.state == 'assigned' %}color: #f5f7fc;
+                            {% else %}color: rgba(245, 247, 252, 0.25);{% endif %}">{{ slot.genre_label }}</div>
+                        {% if slot.state == 'completed' %}
+                        <div style="position: absolute; top: 3px; right: 3px; z-index: 2; width: 22px; height: 22px; background: #fbbf24; border-radius: 50%; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 4px rgba(0,0,0,0.4);">
+                            <svg style="width: 13px; height: 13px;" viewBox="0 0 24 24" fill="none" stroke="#1a1b1f" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>
+                        </div>
+                        {% elif slot.state == 'assigned' and slot.progress > 0 %}
+                        <div style="position: absolute; bottom: 0; left: 0; width: 100%; height: 4px; background: rgba(0,0,0,0.5); z-index: 2;">
+                            <div style="height: 100%; width: {{ slot.progress }}%; background: #67d1f8;"></div>
+                        </div>
+                        {% endif %}
+                    </div>
+                    {% endif %}{% endfor %}
+                </div>
+                {# Row 3: slots 11-15 #}
+                <div style="display: flex; gap: 5px;">
+                    {% for slot in slots %}{% if forloop.counter > 10 and forloop.counter <= 15 %}
+                    <div style="width: 217px; height: 80px; border-radius: 6px; position: relative; overflow: hidden; box-sizing: border-box; flex-shrink: 0;
+                        {% if slot.state == 'completed' %}background: #2a2e34; border: 3px solid #fbbf24; box-shadow: 0 0 10px rgba(251, 191, 36, 0.3), inset 0 0 6px rgba(251, 191, 36, 0.1);
+                        {% elif slot.state == 'assigned' %}background: #2a2e34; border: 2px solid rgba(103, 209, 248, 0.4);
+                        {% else %}background: rgba(42, 46, 52, 0.6); border: 2px solid #1a1b1f;{% endif %}">
+                        {% if slot.game_icon %}
+                        <img src="{{ slot.game_icon }}" style="width: 100%; height: 100%; object-fit: cover; position: absolute; top: 0; left: 0;" />
+                        <div style="position: absolute; bottom: 0; left: 0; width: 100%; height: 70%; background: linear-gradient(to top, {% if slot.state == 'completed' %}rgba(120, 80, 0, 0.7){% else %}rgba(0,0,0,0.75){% endif %}, rgba(0,0,0,0));"></div>
+                        {% endif %}
+                        <div style="position: absolute; bottom: 5px; left: 7px; font-size: 14px; font-weight: bold; z-index: 1; text-shadow: 0 1px 3px rgba(0,0,0,0.9);
+                            {% if slot.state == 'completed' %}color: #fbbf24;
+                            {% elif slot.state == 'assigned' %}color: #f5f7fc;
+                            {% else %}color: rgba(245, 247, 252, 0.25);{% endif %}">{{ slot.genre_label }}</div>
+                        {% if slot.state == 'completed' %}
+                        <div style="position: absolute; top: 3px; right: 3px; z-index: 2; width: 22px; height: 22px; background: #fbbf24; border-radius: 50%; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 4px rgba(0,0,0,0.4);">
+                            <svg style="width: 13px; height: 13px;" viewBox="0 0 24 24" fill="none" stroke="#1a1b1f" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>
+                        </div>
+                        {% elif slot.state == 'assigned' and slot.progress > 0 %}
+                        <div style="position: absolute; bottom: 0; left: 0; width: 100%; height: 4px; background: rgba(0,0,0,0.5); z-index: 2;">
+                            <div style="height: 100%; width: {{ slot.progress }}%; background: #67d1f8;"></div>
+                        </div>
+                        {% endif %}
+                    </div>
+                    {% endif %}{% endfor %}
+                </div>
+                {# Row 4: slots 16-20 #}
+                <div style="display: flex; gap: 5px;">
+                    {% for slot in slots %}{% if forloop.counter > 15 %}
+                    <div style="width: 217px; height: 80px; border-radius: 6px; position: relative; overflow: hidden; box-sizing: border-box; flex-shrink: 0;
+                        {% if slot.state == 'completed' %}background: #2a2e34; border: 3px solid #fbbf24; box-shadow: 0 0 10px rgba(251, 191, 36, 0.3), inset 0 0 6px rgba(251, 191, 36, 0.1);
+                        {% elif slot.state == 'assigned' %}background: #2a2e34; border: 2px solid rgba(103, 209, 248, 0.4);
+                        {% else %}background: rgba(42, 46, 52, 0.6); border: 2px solid #1a1b1f;{% endif %}">
+                        {% if slot.game_icon %}
+                        <img src="{{ slot.game_icon }}" style="width: 100%; height: 100%; object-fit: cover; position: absolute; top: 0; left: 0;" />
+                        <div style="position: absolute; bottom: 0; left: 0; width: 100%; height: 70%; background: linear-gradient(to top, {% if slot.state == 'completed' %}rgba(120, 80, 0, 0.7){% else %}rgba(0,0,0,0.75){% endif %}, rgba(0,0,0,0));"></div>
+                        {% endif %}
+                        <div style="position: absolute; bottom: 5px; left: 7px; font-size: 14px; font-weight: bold; z-index: 1; text-shadow: 0 1px 3px rgba(0,0,0,0.9);
+                            {% if slot.state == 'completed' %}color: #fbbf24;
+                            {% elif slot.state == 'assigned' %}color: #f5f7fc;
+                            {% else %}color: rgba(245, 247, 252, 0.25);{% endif %}">{{ slot.genre_label }}</div>
+                        {% if slot.state == 'completed' %}
+                        <div style="position: absolute; top: 3px; right: 3px; z-index: 2; width: 22px; height: 22px; background: #fbbf24; border-radius: 50%; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 4px rgba(0,0,0,0.4);">
+                            <svg style="width: 13px; height: 13px;" viewBox="0 0 24 24" fill="none" stroke="#1a1b1f" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>
+                        </div>
+                        {% elif slot.state == 'assigned' and slot.progress > 0 %}
+                        <div style="position: absolute; bottom: 0; left: 0; width: 100%; height: 4px; background: rgba(0,0,0,0.5); z-index: 2;">
+                            <div style="height: 100%; width: {{ slot.progress }}%; background: #67d1f8;"></div>
+                        </div>
+                        {% endif %}
+                    </div>
+                    {% endif %}{% endfor %}
+                </div>
+            </div>
+
+            {# Subgenre Tracker #}
+            <div style="margin-top: 6px; display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap;">
+                <span style="font-size: 11px; font-weight: bold; color: #9580ff; text-transform: uppercase; letter-spacing: 0.05em; flex-shrink: 0;">Subgenres {{ subgenre_count }}/{{ subgenre_total }}:</span>
+                {% for sg in subgenres %}
+                <span style="display: inline-block; font-size: 8px; font-weight: 600; padding: 2px 5px; border-radius: 3px; white-space: nowrap;
+                    {% if sg.status == 'platted' %}background: rgba(251, 191, 36, 0.15); color: #fbbf24; border: 1px solid rgba(251, 191, 36, 0.3);
+                    {% elif sg.status == 'assigned' %}background: rgba(103, 209, 248, 0.1); color: #67d1f8; border: 1px solid rgba(103, 209, 248, 0.25);
+                    {% else %}background: rgba(42, 46, 52, 0.5); color: rgba(245, 247, 252, 0.2); border: 1px solid rgba(245, 247, 252, 0.08);{% endif %}">{{ sg.display }}</span>
+                {% endfor %}
+            </div>
+
+            {# Progress Bar #}
+            <div style="margin-top: 6px; display: flex; align-items: center; gap: 12px;">
+                <div style="flex: 1; height: 7px; background: #1a1b1f; border-radius: 4px; overflow: hidden;">
+                    <div style="height: 100%; width: {{ progress_percentage }}%; background: linear-gradient(to right, {% if is_complete %}#fbbf24, #f59e0b{% else %}#67d1f8, #9580ff{% endif %}); border-radius: 4px;"></div>
+                </div>
+                {% if is_complete %}
+                <div style="display: flex; align-items: center; gap: 5px; background: rgba(251, 191, 36, 0.1); border: 2px solid #fbbf24; border-radius: 9999px; padding: 3px 12px; flex-shrink: 0;">
+                    <svg style="width: 12px; height: 12px;" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#fbbf24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+                    <span style="font-size: 12px; font-weight: bold; color: #fbbf24;">Hall of Fame</span>
+                    {% if completed_at %}
+                    <span style="font-size: 11px; color: rgba(245, 247, 252, 0.5);">{{ completed_at }}</span>
+                    {% endif %}
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        {# Footer #}
+        <div style="border-top: 2px solid #1a1b1f; background: rgba(42, 46, 52, 0.5); height: 46px; box-sizing: border-box; line-height: 46px; padding: 0 24px; flex-shrink: 0;">
+            <img src="{% static 'images/logo.png' %}" style="display: inline-block; width: 28px; height: 28px; vertical-align: middle; margin-right: 8px;" /><span style="font-size: 17px; color: #67d1f8; font-weight: bold; font-style: italic; vertical-align: middle;">platpursuit.com</span>
+            <span style="float: right; font-size: 12px; color: rgba(245, 247, 252, 0.5); font-style: italic;">Every genre, one platinum each</span>
+        </div>
+    </div>
+</div>
+
+{% else %}
+{# ═══════════════════════════════════════════════════════ #}
+{# Portrait Card: 1080x1350                               #}
+{# Layout: Header → Name → Stats → 4x5 Grid → Progress → HoF → Subgenres → Footer #}
+{# ═══════════════════════════════════════════════════════ #}
+<div class="share-image-content" style="width: 1080px; height: 1350px; background: linear-gradient(to bottom right, #2a2e34, #32363d, #2a2e34); padding: 20px; font-family: system-ui, -apple-system, sans-serif; box-sizing: border-box;">
+    <div style="width: 1040px; height: 1310px; border: 3px solid #67d1f8; border-radius: 8px; box-shadow: 0 10px 15px -3px rgba(103, 209, 248, 0.2); overflow: hidden; display: flex; flex-direction: column; box-sizing: border-box;">
+
+        {# Header Banner #}
+        <div data-element="challenge-banner" style="padding: 14px 28px; background: linear-gradient(to right, rgba(103, 209, 248, 0.15), rgba(103, 209, 248, 0.05)); border-bottom: 2px solid #1a1b1f; border-left: 4px solid #67d1f8; display: flex; align-items: center; justify-content: space-between; flex-shrink: 0;">
+            <div style="display: flex; align-items: center; gap: 12px;">
+                <svg style="height: 34px; width: 34px; flex-shrink: 0;" version="1.1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="#67d1f8"><path d="M102.49,0c0,27.414,0,104.166,0,137.062c0,112.391,99.33,156.25,153.51,156.25 c54.18,0,153.51-43.859,153.51-156.25c0-32.896,0-109.648,0-137.062H102.49z M256.289,50.551l-68.164,29.768v98.474l-0.049,19.53 c-0.526-0.112-47.274-10.112-47.274-78.391c0-28.17,0-69.6,0-69.6h60.385L256.289,50.551z"></path><polygon points="315.473,400.717 291.681,367.482 279.791,318.506 256,322.004 232.209,318.506 220.314,367.482 205.347,388.394 196.527,400.476 196.699,400.476 196.527,400.717"></polygon><polygon points="366.93,432.24 366.93,432 145.07,432 145.07,511.598 145.07,511.76 145.07,511.76 145.07,512 366.93,512 366.93,432.402 366.93,432.24"></polygon><path d="M511.638,96.668c-0.033-1.268-0.068-2.336-0.068-3.174V45.1h-73.889v38.736h35.152v9.658 c0,1.127,0.037,2.557,0.086,4.258c0.389,13.976,1.303,46.707-21.545,70.203c-5.121,5.266-11.221,9.787-18.219,13.613 c-3.883,17.635-10.109,33.564-18.104,47.814c26.561-6.406,48.026-17.898,64.096-34.422 C513.402,159.734,512.121,113.918,511.638,96.668z"></path><path d="M60.625,167.955c-22.848-23.496-21.934-56.227-21.541-70.203c0.047-1.701,0.082-3.131,0.082-4.258v-9.658 h34.842h0.07l0,0h0.24V45.1H0.43v48.394c0,0.838-0.032,1.906-0.068,3.174c-0.482,17.25-1.76,63.066,32.494,98.293 c16.068,16.524,37.531,28.014,64.092,34.422c-7.996-14.25-14.22-30.182-18.103-47.816C71.846,177.74,65.746,173.221,60.625,167.955 z"></path></svg>
+                <span style="font-size: 26px; font-weight: bold; color: #67d1f8; text-transform: uppercase; letter-spacing: 0.1em; font-style: italic;">Genre Platinum Challenge</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 10px;">
+                {% if avatar_url %}
+                <img src="{{ avatar_url }}" style="width: 34px; height: 34px; border-radius: 50%; border: 2px solid #1a1b1f;" />
+                {% endif %}
+                <span style="font-size: 18px; color: #67d1f8; font-weight: 600;">{{ username }}</span>
+            </div>
+        </div>
+
+        {# Main Content Area #}
+        <div style="flex: 1; padding: 20px 28px 16px; display: flex; flex-direction: column; box-sizing: border-box;">
+
+            {# Challenge Name #}
+            <h1 style="font-size: 34px; font-weight: bold; color: #f5f7fc; line-height: 1.2; margin: 0 0 16px 0; text-align: center;">{{ challenge_name }}</h1>
+
+            {# Stats Row #}
+            <div style="display: flex; gap: 16px; justify-content: center; margin-bottom: 16px;">
+                <div style="background: rgba(42, 46, 52, 0.8); border: 4px solid #1a1b1f; border-radius: 8px; padding: 14px 28px; text-align: center; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.6); box-sizing: border-box; min-width: 180px;">
+                    <div style="font-size: 13px; color: #67d1f8; text-transform: uppercase; letter-spacing: 0.05em; font-weight: bold; font-style: italic; margin-bottom: 4px;">Genres</div>
+                    <div style="font-size: 36px; font-weight: bold; color: #f5f7fc;">{{ completed_count }}<span style="font-size: 18px; color: rgba(245, 247, 252, 0.4);">/{{ total_items }}</span></div>
+                </div>
+                <div style="background: rgba(42, 46, 52, 0.8); border: 4px solid #1a1b1f; border-radius: 8px; padding: 14px 28px; text-align: center; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.6); box-sizing: border-box; min-width: 180px;">
+                    <div style="font-size: 13px; color: #67f8c8; text-transform: uppercase; letter-spacing: 0.05em; font-weight: bold; font-style: italic; margin-bottom: 4px;">Complete</div>
+                    <div style="font-size: 36px; font-weight: bold; color: #f5f7fc;">{{ progress_percentage }}%</div>
+                </div>
+                <div style="background: rgba(42, 46, 52, 0.8); border: 4px solid #1a1b1f; border-radius: 8px; padding: 14px 28px; text-align: center; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.6); box-sizing: border-box; min-width: 180px;">
+                    <div style="font-size: 13px; color: #9580ff; text-transform: uppercase; letter-spacing: 0.05em; font-weight: bold; font-style: italic; margin-bottom: 4px;">Subgenres</div>
+                    <div style="font-size: 36px; font-weight: bold; color: #f5f7fc;">{{ subgenre_count }}<span style="font-size: 18px; color: rgba(245, 247, 252, 0.4);">/{{ subgenre_total }}</span></div>
+                </div>
+            </div>
+
+            {# 4x5 Genre Grid #}
+            <div style="display: flex; flex-direction: column; gap: 7px; align-items: center; flex: 1;">
+                {# Row 1: slots 1-4 #}
+                <div style="display: flex; gap: 7px;">
+                    {% for slot in slots %}{% if forloop.counter <= 4 %}
+                    <div style="width: 235px; height: 120px; border-radius: 8px; position: relative; overflow: hidden; box-sizing: border-box; flex-shrink: 0;
+                        {% if slot.state == 'completed' %}background: #2a2e34; border: 4px solid #fbbf24; box-shadow: 0 0 12px rgba(251, 191, 36, 0.35), inset 0 0 8px rgba(251, 191, 36, 0.1);
+                        {% elif slot.state == 'assigned' %}background: #2a2e34; border: 3px solid rgba(103, 209, 248, 0.4);
+                        {% else %}background: rgba(42, 46, 52, 0.6); border: 3px solid #1a1b1f;{% endif %}">
+                        {% if slot.game_icon %}
+                        <img src="{{ slot.game_icon }}" style="width: 100%; height: 100%; object-fit: cover; position: absolute; top: 0; left: 0;" />
+                        <div style="position: absolute; bottom: 0; left: 0; width: 100%; height: 65%; background: linear-gradient(to top, {% if slot.state == 'completed' %}rgba(120, 80, 0, 0.7){% else %}rgba(0,0,0,0.75){% endif %}, rgba(0,0,0,0));"></div>
+                        {% endif %}
+                        <div style="position: absolute; bottom: 7px; left: 9px; font-size: 16px; font-weight: bold; z-index: 1; text-shadow: 0 1px 3px rgba(0,0,0,0.9);
+                            {% if slot.state == 'completed' %}color: #fbbf24;
+                            {% elif slot.state == 'assigned' %}color: #f5f7fc;
+                            {% else %}color: rgba(245, 247, 252, 0.25);{% endif %}">{{ slot.genre_label }}</div>
+                        {% if slot.state == 'completed' %}
+                        <div style="position: absolute; top: 5px; right: 5px; z-index: 2; width: 28px; height: 28px; background: #fbbf24; border-radius: 50%; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 4px rgba(0,0,0,0.4);">
+                            <svg style="width: 16px; height: 16px;" viewBox="0 0 24 24" fill="none" stroke="#1a1b1f" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>
+                        </div>
+                        {% elif slot.state == 'assigned' and slot.progress > 0 %}
+                        <div style="position: absolute; bottom: 0; left: 0; width: 100%; height: 5px; background: rgba(0,0,0,0.5); z-index: 2;">
+                            <div style="height: 100%; width: {{ slot.progress }}%; background: #67d1f8;"></div>
+                        </div>
+                        {% endif %}
+                    </div>
+                    {% endif %}{% endfor %}
+                </div>
+                {# Row 2: slots 5-8 #}
+                <div style="display: flex; gap: 7px;">
+                    {% for slot in slots %}{% if forloop.counter > 4 and forloop.counter <= 8 %}
+                    <div style="width: 235px; height: 120px; border-radius: 8px; position: relative; overflow: hidden; box-sizing: border-box; flex-shrink: 0;
+                        {% if slot.state == 'completed' %}background: #2a2e34; border: 4px solid #fbbf24; box-shadow: 0 0 12px rgba(251, 191, 36, 0.35), inset 0 0 8px rgba(251, 191, 36, 0.1);
+                        {% elif slot.state == 'assigned' %}background: #2a2e34; border: 3px solid rgba(103, 209, 248, 0.4);
+                        {% else %}background: rgba(42, 46, 52, 0.6); border: 3px solid #1a1b1f;{% endif %}">
+                        {% if slot.game_icon %}
+                        <img src="{{ slot.game_icon }}" style="width: 100%; height: 100%; object-fit: cover; position: absolute; top: 0; left: 0;" />
+                        <div style="position: absolute; bottom: 0; left: 0; width: 100%; height: 65%; background: linear-gradient(to top, {% if slot.state == 'completed' %}rgba(120, 80, 0, 0.7){% else %}rgba(0,0,0,0.75){% endif %}, rgba(0,0,0,0));"></div>
+                        {% endif %}
+                        <div style="position: absolute; bottom: 7px; left: 9px; font-size: 16px; font-weight: bold; z-index: 1; text-shadow: 0 1px 3px rgba(0,0,0,0.9);
+                            {% if slot.state == 'completed' %}color: #fbbf24;
+                            {% elif slot.state == 'assigned' %}color: #f5f7fc;
+                            {% else %}color: rgba(245, 247, 252, 0.25);{% endif %}">{{ slot.genre_label }}</div>
+                        {% if slot.state == 'completed' %}
+                        <div style="position: absolute; top: 5px; right: 5px; z-index: 2; width: 28px; height: 28px; background: #fbbf24; border-radius: 50%; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 4px rgba(0,0,0,0.4);">
+                            <svg style="width: 16px; height: 16px;" viewBox="0 0 24 24" fill="none" stroke="#1a1b1f" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>
+                        </div>
+                        {% elif slot.state == 'assigned' and slot.progress > 0 %}
+                        <div style="position: absolute; bottom: 0; left: 0; width: 100%; height: 5px; background: rgba(0,0,0,0.5); z-index: 2;">
+                            <div style="height: 100%; width: {{ slot.progress }}%; background: #67d1f8;"></div>
+                        </div>
+                        {% endif %}
+                    </div>
+                    {% endif %}{% endfor %}
+                </div>
+                {# Row 3: slots 9-12 #}
+                <div style="display: flex; gap: 7px;">
+                    {% for slot in slots %}{% if forloop.counter > 8 and forloop.counter <= 12 %}
+                    <div style="width: 235px; height: 120px; border-radius: 8px; position: relative; overflow: hidden; box-sizing: border-box; flex-shrink: 0;
+                        {% if slot.state == 'completed' %}background: #2a2e34; border: 4px solid #fbbf24; box-shadow: 0 0 12px rgba(251, 191, 36, 0.35), inset 0 0 8px rgba(251, 191, 36, 0.1);
+                        {% elif slot.state == 'assigned' %}background: #2a2e34; border: 3px solid rgba(103, 209, 248, 0.4);
+                        {% else %}background: rgba(42, 46, 52, 0.6); border: 3px solid #1a1b1f;{% endif %}">
+                        {% if slot.game_icon %}
+                        <img src="{{ slot.game_icon }}" style="width: 100%; height: 100%; object-fit: cover; position: absolute; top: 0; left: 0;" />
+                        <div style="position: absolute; bottom: 0; left: 0; width: 100%; height: 65%; background: linear-gradient(to top, {% if slot.state == 'completed' %}rgba(120, 80, 0, 0.7){% else %}rgba(0,0,0,0.75){% endif %}, rgba(0,0,0,0));"></div>
+                        {% endif %}
+                        <div style="position: absolute; bottom: 7px; left: 9px; font-size: 16px; font-weight: bold; z-index: 1; text-shadow: 0 1px 3px rgba(0,0,0,0.9);
+                            {% if slot.state == 'completed' %}color: #fbbf24;
+                            {% elif slot.state == 'assigned' %}color: #f5f7fc;
+                            {% else %}color: rgba(245, 247, 252, 0.25);{% endif %}">{{ slot.genre_label }}</div>
+                        {% if slot.state == 'completed' %}
+                        <div style="position: absolute; top: 5px; right: 5px; z-index: 2; width: 28px; height: 28px; background: #fbbf24; border-radius: 50%; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 4px rgba(0,0,0,0.4);">
+                            <svg style="width: 16px; height: 16px;" viewBox="0 0 24 24" fill="none" stroke="#1a1b1f" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>
+                        </div>
+                        {% elif slot.state == 'assigned' and slot.progress > 0 %}
+                        <div style="position: absolute; bottom: 0; left: 0; width: 100%; height: 5px; background: rgba(0,0,0,0.5); z-index: 2;">
+                            <div style="height: 100%; width: {{ slot.progress }}%; background: #67d1f8;"></div>
+                        </div>
+                        {% endif %}
+                    </div>
+                    {% endif %}{% endfor %}
+                </div>
+                {# Row 4: slots 13-16 #}
+                <div style="display: flex; gap: 7px;">
+                    {% for slot in slots %}{% if forloop.counter > 12 and forloop.counter <= 16 %}
+                    <div style="width: 235px; height: 120px; border-radius: 8px; position: relative; overflow: hidden; box-sizing: border-box; flex-shrink: 0;
+                        {% if slot.state == 'completed' %}background: #2a2e34; border: 4px solid #fbbf24; box-shadow: 0 0 12px rgba(251, 191, 36, 0.35), inset 0 0 8px rgba(251, 191, 36, 0.1);
+                        {% elif slot.state == 'assigned' %}background: #2a2e34; border: 3px solid rgba(103, 209, 248, 0.4);
+                        {% else %}background: rgba(42, 46, 52, 0.6); border: 3px solid #1a1b1f;{% endif %}">
+                        {% if slot.game_icon %}
+                        <img src="{{ slot.game_icon }}" style="width: 100%; height: 100%; object-fit: cover; position: absolute; top: 0; left: 0;" />
+                        <div style="position: absolute; bottom: 0; left: 0; width: 100%; height: 65%; background: linear-gradient(to top, {% if slot.state == 'completed' %}rgba(120, 80, 0, 0.7){% else %}rgba(0,0,0,0.75){% endif %}, rgba(0,0,0,0));"></div>
+                        {% endif %}
+                        <div style="position: absolute; bottom: 7px; left: 9px; font-size: 16px; font-weight: bold; z-index: 1; text-shadow: 0 1px 3px rgba(0,0,0,0.9);
+                            {% if slot.state == 'completed' %}color: #fbbf24;
+                            {% elif slot.state == 'assigned' %}color: #f5f7fc;
+                            {% else %}color: rgba(245, 247, 252, 0.25);{% endif %}">{{ slot.genre_label }}</div>
+                        {% if slot.state == 'completed' %}
+                        <div style="position: absolute; top: 5px; right: 5px; z-index: 2; width: 28px; height: 28px; background: #fbbf24; border-radius: 50%; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 4px rgba(0,0,0,0.4);">
+                            <svg style="width: 16px; height: 16px;" viewBox="0 0 24 24" fill="none" stroke="#1a1b1f" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>
+                        </div>
+                        {% elif slot.state == 'assigned' and slot.progress > 0 %}
+                        <div style="position: absolute; bottom: 0; left: 0; width: 100%; height: 5px; background: rgba(0,0,0,0.5); z-index: 2;">
+                            <div style="height: 100%; width: {{ slot.progress }}%; background: #67d1f8;"></div>
+                        </div>
+                        {% endif %}
+                    </div>
+                    {% endif %}{% endfor %}
+                </div>
+                {# Row 5: slots 17-20 #}
+                <div style="display: flex; gap: 7px;">
+                    {% for slot in slots %}{% if forloop.counter > 16 %}
+                    <div style="width: 235px; height: 120px; border-radius: 8px; position: relative; overflow: hidden; box-sizing: border-box; flex-shrink: 0;
+                        {% if slot.state == 'completed' %}background: #2a2e34; border: 4px solid #fbbf24; box-shadow: 0 0 12px rgba(251, 191, 36, 0.35), inset 0 0 8px rgba(251, 191, 36, 0.1);
+                        {% elif slot.state == 'assigned' %}background: #2a2e34; border: 3px solid rgba(103, 209, 248, 0.4);
+                        {% else %}background: rgba(42, 46, 52, 0.6); border: 3px solid #1a1b1f;{% endif %}">
+                        {% if slot.game_icon %}
+                        <img src="{{ slot.game_icon }}" style="width: 100%; height: 100%; object-fit: cover; position: absolute; top: 0; left: 0;" />
+                        <div style="position: absolute; bottom: 0; left: 0; width: 100%; height: 65%; background: linear-gradient(to top, {% if slot.state == 'completed' %}rgba(120, 80, 0, 0.7){% else %}rgba(0,0,0,0.75){% endif %}, rgba(0,0,0,0));"></div>
+                        {% endif %}
+                        <div style="position: absolute; bottom: 7px; left: 9px; font-size: 16px; font-weight: bold; z-index: 1; text-shadow: 0 1px 3px rgba(0,0,0,0.9);
+                            {% if slot.state == 'completed' %}color: #fbbf24;
+                            {% elif slot.state == 'assigned' %}color: #f5f7fc;
+                            {% else %}color: rgba(245, 247, 252, 0.25);{% endif %}">{{ slot.genre_label }}</div>
+                        {% if slot.state == 'completed' %}
+                        <div style="position: absolute; top: 5px; right: 5px; z-index: 2; width: 28px; height: 28px; background: #fbbf24; border-radius: 50%; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 4px rgba(0,0,0,0.4);">
+                            <svg style="width: 16px; height: 16px;" viewBox="0 0 24 24" fill="none" stroke="#1a1b1f" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>
+                        </div>
+                        {% elif slot.state == 'assigned' and slot.progress > 0 %}
+                        <div style="position: absolute; bottom: 0; left: 0; width: 100%; height: 5px; background: rgba(0,0,0,0.5); z-index: 2;">
+                            <div style="height: 100%; width: {{ slot.progress }}%; background: #67d1f8;"></div>
+                        </div>
+                        {% endif %}
+                    </div>
+                    {% endif %}{% endfor %}
+                </div>
+            </div>
+
+            {# Progress Bar #}
+            <div style="margin-top: 14px; display: flex; align-items: center; gap: 12px;">
+                <div style="flex: 1; height: 10px; background: #1a1b1f; border-radius: 5px; overflow: hidden;">
+                    <div style="height: 100%; width: {{ progress_percentage }}%; background: linear-gradient(to right, {% if is_complete %}#fbbf24, #f59e0b{% else %}#67d1f8, #9580ff{% endif %}); border-radius: 5px;"></div>
+                </div>
+                <span style="font-size: 15px; font-weight: bold; color: {% if is_complete %}#fbbf24{% else %}rgba(245, 247, 252, 0.7){% endif %};">{{ progress_percentage }}%</span>
+            </div>
+
+            {% if is_complete %}
+            {# Hall of Fame #}
+            <div style="margin-top: 12px; text-align: center;">
+                <div style="display: inline-flex; align-items: center; gap: 8px; background: rgba(251, 191, 36, 0.1); border: 2px solid #fbbf24; border-radius: 9999px; padding: 8px 20px;">
+                    <svg style="width: 18px; height: 18px;" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#fbbf24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+                    <span style="font-size: 16px; font-weight: bold; color: #fbbf24;">Hall of Fame</span>
+                    {% if completed_at %}
+                    <span style="font-size: 14px; color: rgba(245, 247, 252, 0.5);">{{ completed_at }}</span>
+                    {% endif %}
+                </div>
+            </div>
+            {% endif %}
+
+            {# Subgenre Tracker #}
+            <div style="margin-top: 16px; background: rgba(42, 46, 52, 0.6); border: 2px solid #1a1b1f; border-radius: 8px; padding: 14px 16px; box-sizing: border-box;">
+                <div style="font-size: 13px; font-weight: bold; color: #9580ff; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 10px;">
+                    Subgenre Tracker: {{ subgenre_count }}/{{ subgenre_total }}
+                </div>
+                <div style="display: flex; flex-wrap: wrap; gap: 4px;">
+                    {% for sg in subgenres %}
+                    <span style="display: inline-block; font-size: 10px; font-weight: 600; padding: 3px 7px; border-radius: 4px; white-space: nowrap;
+                        {% if sg.status == 'platted' %}background: rgba(251, 191, 36, 0.15); color: #fbbf24; border: 1px solid rgba(251, 191, 36, 0.3);
+                        {% elif sg.status == 'assigned' %}background: rgba(103, 209, 248, 0.1); color: #67d1f8; border: 1px solid rgba(103, 209, 248, 0.25);
+                        {% else %}background: rgba(42, 46, 52, 0.5); color: rgba(245, 247, 252, 0.25); border: 1px solid rgba(245, 247, 252, 0.08);{% endif %}">{{ sg.display }}</span>
+                    {% endfor %}
+                </div>
+                <div style="display: flex; gap: 12px; margin-top: 8px;">
+                    <span style="display: flex; align-items: center; gap: 4px; font-size: 9px; color: rgba(245, 247, 252, 0.5);">
+                        <span style="display: inline-block; width: 8px; height: 8px; border-radius: 2px; background: rgba(251, 191, 36, 0.3); border: 1px solid #fbbf24;"></span> Platted
+                    </span>
+                    <span style="display: flex; align-items: center; gap: 4px; font-size: 9px; color: rgba(245, 247, 252, 0.5);">
+                        <span style="display: inline-block; width: 8px; height: 8px; border-radius: 2px; background: rgba(103, 209, 248, 0.2); border: 1px solid #67d1f8;"></span> Assigned
+                    </span>
+                    <span style="display: flex; align-items: center; gap: 4px; font-size: 9px; color: rgba(245, 247, 252, 0.5);">
+                        <span style="display: inline-block; width: 8px; height: 8px; border-radius: 2px; background: rgba(42, 46, 52, 0.5); border: 1px solid rgba(245, 247, 252, 0.1);"></span> Uncollected
+                    </span>
+                </div>
+            </div>
+        </div>
+
+        {# Footer #}
+        <div style="border-top: 2px solid #1a1b1f; background: rgba(42, 46, 52, 0.5); height: 56px; box-sizing: border-box; line-height: 56px; padding: 0 28px; flex-shrink: 0;">
+            <img src="{% static 'images/logo.png' %}" style="display: inline-block; width: 34px; height: 34px; vertical-align: middle; margin-right: 10px;" /><span style="font-size: 20px; color: #67d1f8; font-weight: bold; font-style: italic; vertical-align: middle;">platpursuit.com</span>
+            <span style="float: right; font-size: 13px; color: rgba(245, 247, 252, 0.5); font-style: italic;">Every genre, one platinum each</span>
+        </div>
+    </div>
+</div>
+{% endif %}

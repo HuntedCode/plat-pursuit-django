@@ -13,7 +13,7 @@
     <div class="card bg-base-100 border-4 border-base-300 shadow-md shadow-neutral">
         <div class="card-body">
             <div class="flex flex-row items-start justify-between gap-4">
-                <div class="flex-1">
+                <div class="flex-1 max-w-[50%]">
                     <div class="flex items-center gap-2 mb-1">
                         <a href="{% url 'profile_detail' challenge.profile.psn_username %}" class="flex items-center gap-2 hover:text-primary transition-colors">
                             {% if challenge.profile.avatar_url %}
@@ -30,7 +30,7 @@
                     </div>
                     {% if is_owner %}
                     <div class="flex items-center gap-2">
-                        <h1 class="text-2xl lg:text-3xl font-bold line-clamp-2" id="challenge-name-display">
+                        <h1 class="text-2xl lg:text-3xl font-bold line-clamp-2 break-words" id="challenge-name-display">
                             <span id="challenge-name-text">{{ challenge.name }}</span>
                         </h1>
                         <button type="button" class="btn btn-ghost btn-xs btn-circle opacity-60 hover:opacity-100 transition-opacity"
@@ -55,7 +55,7 @@
                         </div>
                     </div>
                     {% else %}
-                    <h1 class="text-2xl lg:text-3xl font-bold line-clamp-2">{{ challenge.name }}</h1>
+                    <h1 class="text-2xl lg:text-3xl font-bold line-clamp-2 break-words">{{ challenge.name }}</h1>
                     {% endif %}
                     {% if challenge.description %}
                         <p class="text-base-content/70 mt-1">{{ challenge.description }}</p>
@@ -80,7 +80,7 @@
                 </div>
 
                 {# Actions #}
-                <div class="flex gap-2">
+                <div class="flex flex-col gap-1">
                     {% if is_owner %}
                         {% if challenge.filled_count < challenge.total_items and not challenge.is_deleted %}
                             <a href="{% url 'genre_challenge_setup' challenge_id=challenge.id %}" class="btn btn-primary btn-sm">
@@ -98,18 +98,90 @@
                         </svg>
                         Share
                     </button>
+                    {% if is_owner %}
+                    <button id="share-image-btn" class="btn btn-ghost btn-sm" data-challenge-name="{{ challenge.name }}">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/>
+                        </svg>
+                        Share Image
+                    </button>
+                    {% endif %}
                 </div>
             </div>
         </div>
     </div>
 </section>
 
+{% if is_owner and not challenge.is_deleted and not challenge.is_complete %}
+{# Pick My Next Game CTA Banner #}
+<section class="mt-6">
+    <div class="bg-gradient-to-r from-secondary/10 to-transparent border-2 border-secondary/30 rounded-box p-4 lg:p-5 flex items-center gap-4 shadow-md shadow-secondary/10">
+        <div class="bg-secondary/20 rounded-full p-3 flex-shrink-0">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 text-secondary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="2" y="2" width="20" height="20" rx="2"/>
+                <circle cx="8" cy="8" r="1.5" fill="currentColor"/>
+                <circle cx="16" cy="8" r="1.5" fill="currentColor"/>
+                <circle cx="8" cy="16" r="1.5" fill="currentColor"/>
+                <circle cx="16" cy="16" r="1.5" fill="currentColor"/>
+                <circle cx="12" cy="12" r="1.5" fill="currentColor"/>
+            </svg>
+        </div>
+        <div class="flex-1">
+            <h3 class="font-bold text-base lg:text-lg text-secondary">Can't Decide What to Play Next?</h3>
+            <p class="text-sm text-base-content/60">Let fate decide. Spin the wheel and discover your next platinum!</p>
+        </div>
+        <button id="pick-next-game-btn" class="btn btn-secondary btn-sm lg:btn-md gap-2 flex-shrink-0">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="2" y="2" width="20" height="20" rx="2"/>
+                <circle cx="8" cy="8" r="1.5" fill="currentColor"/>
+                <circle cx="16" cy="8" r="1.5" fill="currentColor"/>
+                <circle cx="8" cy="16" r="1.5" fill="currentColor"/>
+                <circle cx="16" cy="16" r="1.5" fill="currentColor"/>
+                <circle cx="12" cy="12" r="1.5" fill="currentColor"/>
+            </svg>
+            Pick My Next Game!
+        </button>
+    </div>
+</section>
+{% endif %}
+
+{% if is_owner and not challenge.is_deleted %}
+{# Share Card CTA Banner #}
+<section class="mt-6">
+    <div class="bg-gradient-to-r from-primary/10 to-transparent border-2 border-primary/30 rounded-box p-4 lg:p-5 flex items-center gap-4 shadow-md shadow-primary/10">
+        <div class="bg-primary/20 rounded-full p-3 flex-shrink-0">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+            </svg>
+        </div>
+        <div class="flex-1">
+            <h3 class="font-bold text-base lg:text-lg text-primary">Share Your Challenge</h3>
+            <p class="text-sm text-base-content/60">Generate a beautiful share card to show off your genre progress</p>
+        </div>
+        <button id="banner-share-image-btn" class="btn btn-primary btn-sm lg:btn-md gap-2" data-challenge-name="{{ challenge.name }}">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/>
+            </svg>
+            Create Share Card
+        </button>
+    </div>
+</section>
+{% endif %}
+
 {# Genre Slot Grid #}
 <section class="shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 w-full p-0 lg:p-4 mt-6">
     <div class="p-4">
         <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
             {% for slot in slots %}
-            <div class="card bg-base-100 border-2 {% if slot.is_completed %}border-success/50{% elif slot.concept %}border-primary/30{% else %}border-base-300{% endif %} shadow-md">
+            <div class="relative" data-genre="{{ slot.genre }}" data-slot-id="{{ slot.id }}">
+            {% if slot.genre == challenge.cover_genre %}
+            <div class="absolute top-1 right-1 z-10">
+                <div class="badge badge-primary badge-sm gap-0.5" title="Cover image">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" viewBox="0 0 24 24" fill="currentColor"><path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/></svg>
+                </div>
+            </div>
+            {% endif %}
+            <div class="card bg-base-100 border-2 {% if slot.is_completed %}border-success/50{% elif slot.concept %}border-primary/30{% else %}border-base-300{% endif %} shadow-md h-full">
                 {# Genre badge header #}
                 <div class="px-3 pt-3 pb-1">
                     <div class="flex items-center justify-between">
@@ -173,6 +245,7 @@
                     </div>
                 </div>
                 {% endif %}
+            </div>
             </div>
             {% endfor %}
         </div>
@@ -286,10 +359,34 @@
         </div>
     </div>
 </section>
+{% if is_owner %}
+{# Share Image Modal #}
+<dialog id="genre-share-modal" class="modal">
+    <div class="modal-box max-w-4xl bg-base-200">
+        <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2" onclick="this.closest('dialog').close()">&#x2715;</button>
+        <h3 class="font-bold text-lg mb-2" id="genre-share-modal-title">Share: {{ challenge.name }}</h3>
+        <div id="genre-share-modal-content">
+            <div class="flex justify-center items-center py-12">
+                <span class="loading loading-spinner loading-lg"></span>
+            </div>
+        </div>
+    </div>
+    <form method="dialog" class="modal-backdrop"><button>close</button></form>
+</dialog>
+{% include 'partials/color_grid_modal.html' with available_themes=available_themes %}
+{% endif %}
 {% endblock %}
 
 {% block js_scripts %}
 <script>PlatPursuit.ZoomScaler.init();</script>
+{% if is_owner %}
+<script>window.GRADIENT_THEMES = {% gradient_themes_json %};</script>
+<script src="{% static 'js/share-image.js' %}"></script>
+<script src="{% static 'js/color-grid-modal.js' %}"></script>
+<script src="{% static 'js/genre-challenge-share.js' %}"></script>
+<script>window._SPINNER_SLOTS = {{ spinner_slots_json|safe }};</script>
+{% endif %}
+<script src="{% static 'js/reel-spinner.js' %}"></script>
 <script src="{% static 'js/genre-challenge.js' %}"></script>
 <script>
     document.addEventListener('DOMContentLoaded', () => {

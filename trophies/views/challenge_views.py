@@ -947,6 +947,24 @@ class GenreChallengeDetailView(ProfileHotbarMixin, DetailView):
             {'text': challenge.name},
         ]
 
+        # Provide theme grid data and spinner slots (owner only)
+        if context['is_owner']:
+            context['available_themes'] = get_available_themes_for_grid(include_game_art=False)
+
+            # Serialize eligible spinner slots for "Pick My Next Game" picker
+            spinner_data = []
+            for slot in slots:
+                if slot.concept and not slot.is_completed:
+                    progress = slot.user_progress or {'percentage': 0}
+                    spinner_data.append({
+                        'genre': slot.genre,
+                        'genre_display': slot.genre_display,
+                        'game_name': slot.concept.unified_title,
+                        'game_icon': slot.concept.concept_icon_url or '',
+                        'progress': progress.get('percentage', 0),
+                    })
+            context['spinner_slots_json'] = json.dumps(spinner_data)
+
         # Increment view count atomically
         Challenge.objects.filter(pk=challenge.pk).update(view_count=F('view_count') + 1)
 

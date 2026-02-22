@@ -13,7 +13,7 @@
     <div class="card bg-base-100 border-4 border-base-300 shadow-md shadow-neutral">
         <div class="card-body">
             <div class="flex flex-row items-start justify-between gap-4">
-                <div class="flex-1">
+                <div class="flex-1 max-w-[50%]">
                     {# Author + Hall of Fame badge #}
                     <div class="flex items-center gap-2 mb-1">
                         <a href="{% url 'profile_detail' challenge.profile.psn_username %}" class="flex items-center gap-2 hover:text-primary transition-colors">
@@ -33,7 +33,7 @@
                     {# Challenge name (inline-editable for owner) #}
                     {% if is_owner %}
                     <div class="flex items-center gap-2">
-                        <h1 class="text-2xl lg:text-3xl font-bold line-clamp-2" id="challenge-name-display">
+                        <h1 class="text-2xl lg:text-3xl font-bold line-clamp-2 break-words" id="challenge-name-display">
                             <span id="challenge-name-text">{{ challenge.name }}</span>
                         </h1>
                         <button type="button" class="btn btn-ghost btn-xs btn-circle opacity-60 hover:opacity-100 transition-opacity"
@@ -58,7 +58,7 @@
                         </div>
                     </div>
                     {% else %}
-                    <h1 class="text-2xl lg:text-3xl font-bold line-clamp-2">{{ challenge.name }}</h1>
+                    <h1 class="text-2xl lg:text-3xl font-bold line-clamp-2 break-words">{{ challenge.name }}</h1>
                     {% endif %}
 
                     {# Progress bar #}
@@ -83,7 +83,7 @@
                 {# Owner action buttons #}
                 {% if is_owner %}
                 <div class="flex flex-col gap-2 items-end">
-                    <div class="flex gap-2">
+                    <div class="flex flex-col gap-1">
                         <button id="share-url-btn" class="btn btn-ghost btn-sm" title="Copy link">
                             <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg>
                             Share Link
