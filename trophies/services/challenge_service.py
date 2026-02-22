@@ -765,6 +765,10 @@ def check_genre_challenge_progress(profile):
             else:
                 challenge.save(update_fields=save_fields)
 
+    # Check genre milestone progress after processing all challenges
+    from trophies.services.milestone_service import check_all_milestones_for_user
+    check_all_milestones_for_user(profile, criteria_types=['genre_progress', 'subgenre_progress'])
+
 
 def auto_set_cover_genre(challenge):
     """

@@ -395,6 +395,15 @@ class GenreSlotAssignAPIView(APIView):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
+            # Reject concepts with any shovelware-flagged games
+            if concept.games.filter(
+                shovelware_status__in=['auto_flagged', 'manually_flagged']
+            ).exists():
+                return Response(
+                    {'error': 'This game is flagged as shovelware and cannot be used.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
             # Validate concept isn't excluded (platted or >50% progress)
             excluded_ids = get_genre_excluded_concept_ids(profile)
             if concept.id in excluded_ids:
@@ -669,18 +678,10 @@ class GenreConceptSearchAPIView(APIView):
                     games__played_by__profile=profile,
                 ).distinct()
 
-            # Exclude concepts where ALL games are shovelware
-            shovelware_ids = Concept.objects.filter(
-                games__isnull=False,
-            ).annotate(
-                total_games=Count('games'),
-                sw_games=Count('games', filter=Q(
-                    games__shovelware_status__in=['auto_flagged', 'manually_flagged']
-                )),
-            ).filter(
-                total_games=F('sw_games'),
-            ).values_list('id', flat=True)
-            concepts = concepts.exclude(id__in=shovelware_ids)
+            # Exclude concepts with any shovelware-flagged games
+            concepts = concepts.exclude(
+                games__shovelware_status__in=['auto_flagged', 'manually_flagged']
+            )
 
             # Exclude platted / >50% progress concepts
             excluded_ids = get_genre_excluded_concept_ids(profile)
@@ -926,6 +927,15 @@ class GenreBonusAddAPIView(APIView):
             if not has_modern:
                 return Response(
                     {'error': 'This game needs at least one PS4 or PS5 version.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            # Reject concepts with any shovelware-flagged games
+            if concept.games.filter(
+                shovelware_status__in=['auto_flagged', 'manually_flagged']
+            ).exists():
+                return Response(
+                    {'error': 'This game is flagged as shovelware and cannot be used.'},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 

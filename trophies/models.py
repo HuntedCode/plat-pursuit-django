@@ -1472,6 +1472,8 @@ class Milestone(models.Model):
         ('completion_count', 'Games 100% Completed'),
         ('stage_count', 'Badge Stages Completed'),
         ('az_progress', 'A-Z Challenge Letters'),
+        ('genre_progress', 'Genre Challenge Genres'),
+        ('subgenre_progress', 'Subgenre Collection'),
         ('calendar_month_jan', 'Calendar: January Complete'),
         ('calendar_month_feb', 'Calendar: February Complete'),
         ('calendar_month_mar', 'Calendar: March Complete'),

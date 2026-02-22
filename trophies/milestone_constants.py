@@ -19,6 +19,9 @@ CALENDAR_MONTH_TYPES = list(MONTH_MAP.keys())
 # All calendar-related criteria types (months + aggregate types)
 ALL_CALENDAR_TYPES = set(CALENDAR_MONTH_TYPES) | {'calendar_months_total', 'calendar_complete'}
 
+# All genre-challenge-related criteria types
+ALL_GENRE_TYPES = {'genre_progress', 'subgenre_progress'}
+
 # One-off criteria types: binary earned/not, no tier ladder
 ONE_OFF_TYPES = {
     'psn_linked', 'discord_linked', 'manual', 'is_premium', 'calendar_complete',
@@ -49,7 +52,7 @@ MILESTONE_CATEGORIES = OrderedDict([
     ('challenges', {
         'name': 'Challenges',
         'icon': 'challenges',
-        'criteria_types': ['az_progress', 'calendar_months_total', 'calendar_complete'] + CALENDAR_MONTH_TYPES,
+        'criteria_types': ['az_progress', 'genre_progress', 'subgenre_progress', 'calendar_months_total', 'calendar_complete'] + CALENDAR_MONTH_TYPES,
     }),
     ('getting_started', {
         'name': 'Getting Started',
@@ -80,6 +83,8 @@ CRITERIA_TYPE_DISPLAY_NAMES = {
     'badge_count': 'Badges Earned',
     'stage_count': 'Badge Stages Completed',
     'az_progress': 'A-Z Challenge Progress',
+    'genre_progress': 'Genre Challenge Progress',
+    'subgenre_progress': 'Subgenre Collection',
     'calendar_months_total': 'Calendar Months Completed',
     'calendar_complete': 'Full Calendar',
     'is_premium': 'Premium Membership',

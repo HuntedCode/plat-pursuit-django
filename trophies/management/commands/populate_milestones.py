@@ -225,6 +225,26 @@ MILESTONE_DEFINITIONS = [
     {'name': 'Second Run: Twenty-One','criteria_type': 'az_progress', 'criteria_details': {'target': 47}, 'description': 'Twenty-one letters on the second run. The home stretch again.',       'title_name': 'Alphabet Ace'},
     {'name': 'Double A-Z',            'criteria_type': 'az_progress', 'criteria_details': {'target': 52}, 'description': 'Two complete A-Z challenges. Double alphabet, double legend.',        'title_name': 'A-Z Legend'},
 
+    # ── genre_progress (8 tiers, max 16) ───────────────────────────────
+    {'name': 'Genre Dabbler',         'criteria_type': 'genre_progress', 'criteria_details': {'target': 3},  'description': 'Three genres conquered. The collection is taking shape.'},
+    {'name': 'Branching Out',         'criteria_type': 'genre_progress', 'criteria_details': {'target': 5},  'description': 'Five genres down. Your tastes are expanding.'},
+    {'name': 'Halfway Diverse',       'criteria_type': 'genre_progress', 'criteria_details': {'target': 8},  'description': 'Eight genres completed. Halfway through the spectrum.',                   'title_name': 'Diversified'},
+    {'name': 'Broad Horizons',        'criteria_type': 'genre_progress', 'criteria_details': {'target': 10}, 'description': 'Ten genres done. Your horizons are impressively broad.'},
+    {'name': 'Well Rounded',          'criteria_type': 'genre_progress', 'criteria_details': {'target': 12}, 'description': 'Twelve genres conquered. Three-quarters of the spectrum.',               'title_name': 'Well Rounded'},
+    {'name': 'Final Push',            'criteria_type': 'genre_progress', 'criteria_details': {'target': 14}, 'description': 'Fourteen genres down. The finish line is within reach.'},
+    {'name': 'Genre Sweep',           'criteria_type': 'genre_progress', 'criteria_details': {'target': 15}, 'description': 'Fifteen genres done. Just one more corner of gaming to explore.',        'title_name': 'Genre Master'},
+    {'name': 'Total Diversity',       'criteria_type': 'genre_progress', 'criteria_details': {'target': 16}, 'description': 'Every genre conquered. A platinum in every corner of gaming.',           'title_name': 'Renaissance Gamer'},
+
+    # ── subgenre_progress (8 tiers, max 33) ────────────────────────────
+    {'name': 'Subgenre Scout',        'criteria_type': 'subgenre_progress', 'criteria_details': {'target': 5},  'description': 'Five subgenres discovered. Scratching the surface.'},
+    {'name': 'Subgenre Explorer',     'criteria_type': 'subgenre_progress', 'criteria_details': {'target': 10}, 'description': 'Ten unique subgenres collected. The rabbit holes go deep.'},
+    {'name': 'Niche Hunter',          'criteria_type': 'subgenre_progress', 'criteria_details': {'target': 15}, 'description': 'Fifteen subgenres found. You seek out the niches.',                    'title_name': 'Niche Hunter'},
+    {'name': 'Diverse Portfolio',     'criteria_type': 'subgenre_progress', 'criteria_details': {'target': 20}, 'description': 'Twenty subgenres collected. An incredibly diverse portfolio.'},
+    {'name': 'Deep Diver',            'criteria_type': 'subgenre_progress', 'criteria_details': {'target': 25}, 'description': 'Twenty-five unique subgenres. You leave no stone unturned.',           'title_name': 'Deep Diver'},
+    {'name': 'Subgenre Veteran',      'criteria_type': 'subgenre_progress', 'criteria_details': {'target': 28}, 'description': 'Twenty-eight subgenres. The rarest categories are within reach.',      'title_name': 'Subgenre Veteran'},
+    {'name': 'Near Completionist',    'criteria_type': 'subgenre_progress', 'criteria_details': {'target': 31}, 'description': 'Thirty-one subgenres. Just a handful remain uncollected.'},
+    {'name': 'Subgenre Completionist','criteria_type': 'subgenre_progress', 'criteria_details': {'target': 33}, 'description': 'Every single subgenre collected. The ultimate display of gaming diversity.', 'title_name': 'The Taxonomist'},
+
     # ── calendar_month_* (12 one-off milestones) ────────────────────────
     {'name': 'January Hunter',   'criteria_type': 'calendar_month_jan', 'criteria_details': {'target': 1}, 'description': 'Every day in January covered with a platinum.',   'title_name': 'Frostbite'},
     {'name': 'February Hunter',  'criteria_type': 'calendar_month_feb', 'criteria_details': {'target': 1}, 'description': 'Every day in February covered with a platinum.',  'title_name': 'Heartbreaker'},

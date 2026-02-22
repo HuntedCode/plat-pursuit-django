@@ -924,10 +924,10 @@ class TokenKeeper:
                 logger.error(f"Failed to create badge notifications for profile {profile_id}: {e}", exc_info=True)
 
             logger.info(f"ProfileGame Stats updated for {profile_id} successfully! | {len(touched_profilegame_ids)} profilegames updated")
-            from trophies.milestone_constants import ALL_CALENDAR_TYPES
-            # az_progress is excluded here because it's checked separately
-            # by check_az_challenge_progress() below
-            check_all_milestones_for_user(profile, exclude_types=ALL_CALENDAR_TYPES | {'az_progress'})
+            from trophies.milestone_constants import ALL_CALENDAR_TYPES, ALL_GENRE_TYPES
+            # Challenge-specific types are excluded here because they're checked
+            # separately by their respective check_*_challenge_progress() functions below
+            check_all_milestones_for_user(profile, exclude_types=ALL_CALENDAR_TYPES | {'az_progress'} | ALL_GENRE_TYPES)
             logger.info(f"Milestones checked for {profile_id} successfully!")
 
             # Check A-Z challenge progress

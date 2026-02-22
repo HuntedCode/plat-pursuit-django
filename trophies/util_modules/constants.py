@@ -89,22 +89,18 @@ BANNED_WORDS = [
 
 # ── Genre Challenge Constants ──────────────────────────────────────────────────
 # Keys are exact PSN API genre strings stored in Concept.genres (JSONField list).
-# Dropped: ADULT (inappropriate for community challenge), FITNESS (14 concepts)
-# Merged: SIMULATOR -> SIMULATION via GENRE_MERGE_MAP
+# Dropped: ADULT (inappropriate), FITNESS (14 concepts), QUIZ (22), EDUCATIONAL (55), BRAIN_TRAINING (81)
+# Merged: SIMULATOR -> SIMULATION, MUSIC/RHYTHM -> MUSIC_RHYTHM, PARTY -> FAMILY via GENRE_MERGE_MAP
 GENRE_CHALLENGE_GENRES = (
     'ACTION',
     'ADVENTURE',
     'ARCADE',
-    'BRAIN_TRAINING',
     'CASUAL',
-    'EDUCATIONAL',
     'FAMILY',
     'FIGHTING',
     'HORROR',
     'MUSIC_RHYTHM',
-    'PARTY',
     'PUZZLE',
-    'QUIZ',
     'RACING',
     'ROLE_PLAYING_GAMES',
     'SHOOTER',
@@ -118,16 +114,12 @@ GENRE_DISPLAY_NAMES = {
     'ACTION': 'Action',
     'ADVENTURE': 'Adventure',
     'ARCADE': 'Arcade',
-    'BRAIN_TRAINING': 'Brain Training',
     'CASUAL': 'Casual',
-    'EDUCATIONAL': 'Educational',
     'FAMILY': 'Family',
     'FIGHTING': 'Fighting',
     'HORROR': 'Horror',
     'MUSIC_RHYTHM': 'Music / Rhythm',
-    'PARTY': 'Party',
     'PUZZLE': 'Puzzle',
-    'QUIZ': 'Quiz',
     'RACING': 'Racing',
     'ROLE_PLAYING_GAMES': 'RPG',
     'SHOOTER': 'Shooter',
@@ -141,6 +133,7 @@ GENRE_DISPLAY_NAMES = {
 GENRE_MERGE_MAP = {
     'SIMULATOR': 'SIMULATION',
     'MUSIC/RHYTHM': 'MUSIC_RHYTHM',
+    'PARTY': 'FAMILY',
 }
 
 # ── Subgenre Bonus Tracker Constants ───────────────────────────────────────────
