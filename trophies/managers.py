@@ -98,7 +98,7 @@ class GameQuerySet(models.QuerySet):
 
         Shovelware is identified via rule-based detection:
         games with >= 90% platinum earn rate, their concept siblings,
-        and all games from fully blacklisted publishers (5+ flagged concepts).
+        and all games from blacklisted publishers (any flagged concept).
 
         Returns:
             QuerySet: Non-shovelware games

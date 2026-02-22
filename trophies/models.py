@@ -1559,8 +1559,6 @@ class UserMilestoneProgress(models.Model):
         return f"{self.profile.psn_username} - {self.milestone.name} Progress"
 
 class PublisherBlacklist(models.Model):
-    BLACKLIST_THRESHOLD = 5
-
     name = models.CharField(max_length=255, unique=True)
     date_added = models.DateTimeField(auto_now_add=True)
     flagged_concepts = models.JSONField(
@@ -1569,7 +1567,7 @@ class PublisherBlacklist(models.Model):
     )
     is_blacklisted = models.BooleanField(
         default=False,
-        help_text="True when flagged_concepts reaches 5+. All publisher games get flagged."
+        help_text="True when any concept is flagged. All publisher games get flagged."
     )
     notes = models.TextField(blank=True)
 
@@ -1582,26 +1580,20 @@ class PublisherBlacklist(models.Model):
     def flagged_concept_count(self):
         return len(self.flagged_concepts)
 
-    @property
-    def is_near_threshold(self):
-        return 3 <= self.flagged_concept_count < self.BLACKLIST_THRESHOLD
-
     def add_concept(self, concept_id):
-        """Add a concept ID and check if publisher should be fully blacklisted."""
+        """Add a concept ID and immediately blacklist the publisher."""
         if concept_id not in self.flagged_concepts:
             self.flagged_concepts.append(concept_id)
-            if self.flagged_concept_count >= self.BLACKLIST_THRESHOLD:
-                self.is_blacklisted = True
+            self.is_blacklisted = True
             self.save(update_fields=['flagged_concepts', 'is_blacklisted'])
             return True
         return False
 
     def remove_concept(self, concept_id):
-        """Remove a concept ID and check if publisher should be un-blacklisted."""
+        """Remove a concept ID. Un-blacklist only when no concepts remain."""
         if concept_id in self.flagged_concepts:
             self.flagged_concepts.remove(concept_id)
-            if self.flagged_concept_count < self.BLACKLIST_THRESHOLD:
-                self.is_blacklisted = False
+            self.is_blacklisted = bool(self.flagged_concepts)
             self.save(update_fields=['flagged_concepts', 'is_blacklisted'])
             return True
         return False

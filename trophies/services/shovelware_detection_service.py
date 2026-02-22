@@ -11,7 +11,7 @@ class ShovelwareDetectionService:
     Flagging (at sync time, when platinum trophy data arrives):
       1. Game's plat earn rate >= 90% -> flag game + all concept siblings
       2. Track concept on PublisherBlacklist
-      3. If publisher hits 5+ concepts -> fully blacklisted -> flag publisher games
+      3. Publisher is immediately blacklisted -> flag all publisher games
 
     Concept Shield (universal, applies to ALL flagging scenarios):
       A concept is only flagged if at least one game in it has 80%+ plat rate.

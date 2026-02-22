@@ -128,7 +128,7 @@ class Command(BaseCommand):
         blacklisted_publishers = []
 
         for pub_name, concept_ids in publisher_concepts.items():
-            is_bl = len(concept_ids) >= PublisherBlacklist.BLACKLIST_THRESHOLD
+            is_bl = bool(concept_ids)
 
             if not dry_run:
                 entry, _ = PublisherBlacklist.objects.get_or_create(name=pub_name)
