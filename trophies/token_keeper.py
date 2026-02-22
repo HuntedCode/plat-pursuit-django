@@ -126,7 +126,12 @@ class TokenInstance:
         if self.client:
             auth = self.client.authenticator
             self.access_expiry = datetime.fromtimestamp(auth.access_token_expiration_time)
-            self.refresh_expiry = datetime.fromtimestamp(auth.refresh_token_expiration_time)
+            # Only set refresh_expiry on first initialization. Proactive access token
+            # refreshes create a new client (full re-auth), which recomputes
+            # refresh_token_expires_at from time.time() -- overwriting the original
+            # expiry and making all instances show identical values on the dashboard.
+            if self.refresh_expiry is None:
+                self.refresh_expiry = datetime.fromtimestamp(auth.refresh_token_expiration_time)
 
     def get_access_expiry_in_seconds(self):
         if self.access_expiry:
