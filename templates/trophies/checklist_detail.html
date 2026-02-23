@@ -8,8 +8,7 @@
 {% block content %}
 <div id="checklist-detail-container"
      data-checklist-id="{{ checklist.id }}"
-     data-can-save-progress="{{ can_save_progress|yesno:'true,false' }}"
-     data-is-premium="{% if request.user.is_authenticated and request.user.profile %}{{ request.user.profile.user_is_premium|yesno:'true,false' }}{% else %}false{% endif %}">
+     data-can-save-progress="{{ can_save_progress|yesno:'true,false' }}">
 
     <section class="section-container w-full">
         {% include 'partials/breadcrumb.html' with items=breadcrumb view_count=view_count %}
@@ -166,14 +165,6 @@
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
                         </svg>
                         <span><a href="{% url 'account_login' %}" class="link link-primary font-semibold">Sign in</a> and link your PSN account to track your progress on this guide!</span>
-                    </div>
-                {# Premium Upsell Banner (for non-premium, non-authors) #}
-                {% elif not can_save_progress and not is_author %}
-                    <div class="alert alert-info mt-4">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                        </svg>
-                        <span>You can check items in this session, but progress won't be saved. <a href="{% url 'subscribe' %}" class="link link-success font-semibold">Upgrade to Premium</a> to save your progress on any guide!</span>
                     </div>
                 {% endif %}
             </div>

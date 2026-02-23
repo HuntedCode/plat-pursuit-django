@@ -307,18 +307,14 @@ class ChecklistSerializer(serializers.ModelSerializer):
         return profile and obj.profile == profile and not obj.is_deleted
 
     def get_can_save_progress(self, obj):
-        """Check if user can save progress (premium or author)."""
+        """Check if user can save progress (any authenticated user with a linked profile)."""
         request = self.context.get('request')
         if not request or not request.user.is_authenticated:
             return False
         profile = getattr(request.user, 'profile', None)
         if not profile:
             return False
-        # Author can always save
-        if obj.profile == profile:
-            return True
-        # Premium users can save on any checklist
-        return profile.user_is_premium
+        return profile.is_linked
 
     def get_thumbnail_url(self, obj):
         """Return absolute URL for thumbnail."""

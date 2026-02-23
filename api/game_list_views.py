@@ -96,7 +96,7 @@ def _serialize_game_list(game_list, profile=None):
         'first_game_image': game_list.first_game_image or '',
         'selected_theme': game_list.selected_theme or '',
         # Effective state reflects whether premium features are currently active
-        'effective_is_public': game_list.is_public and game_list.profile.user_is_premium,
+        'effective_is_public': game_list.is_public,
         'effective_theme': game_list.selected_theme if game_list.profile.user_is_premium else '',
     }
     if profile:
@@ -245,11 +245,6 @@ class GameListUpdateView(APIView):
                 update_fields.append('description')
 
             if 'is_public' in request.data:
-                if not _is_premium(request.user):
-                    return Response({
-                        'error': 'Public lists are a Premium feature. Upgrade to make your lists public!',
-                        'premium_required': True,
-                    }, status=status.HTTP_403_FORBIDDEN)
                 game_list.is_public = bool(request.data['is_public'])
                 update_fields.append('is_public')
 
@@ -424,12 +419,6 @@ class GameListUpdateItemView(APIView):
             profile, err = _get_profile_or_error(request)
             if err:
                 return err
-
-            if not _is_premium(request.user):
-                return Response({
-                    'error': 'Notes are a Premium feature. Upgrade to add personal notes!',
-                    'premium_required': True,
-                }, status=status.HTTP_403_FORBIDDEN)
 
             game_list, err = _get_owned_list(list_id, profile)
             if err:

@@ -787,13 +787,11 @@
 
         const checklistId = container.dataset.checklistId;
         const canSaveProgress = container.dataset.canSaveProgress === 'true';
-        const isPremium = container.dataset.isPremium === 'true';
-
         // Vote button handlers
         initVoteButtons(checklistId);
 
         // Progress tracking checkboxes
-        initProgressCheckboxes(checklistId, canSaveProgress, isPremium);
+        initProgressCheckboxes(checklistId, canSaveProgress);
 
         // Report button handler
         initReportButton(checklistId);
@@ -830,7 +828,7 @@
         });
     }
 
-    function initProgressCheckboxes(checklistId, canSaveProgress, isPremium) {
+    function initProgressCheckboxes(checklistId, canSaveProgress) {
         // Attach to regular items and trophy items, not sub-headers
         document.querySelectorAll('.checklist-item[data-item-type="item"] .checklist-item-checkbox, .checklist-trophy-item[data-item-type="trophy"] .checklist-item-checkbox').forEach(checkbox => {
             checkbox.addEventListener('change', async function() {
@@ -854,9 +852,8 @@
                     }
                 }
 
-                // If user can't save progress, show premium upsell
+                // If user can't save progress (not logged in / no linked PSN), track locally only
                 if (!canSaveProgress) {
-                    // Still allow checking in session, just don't save
                     updateLocalProgress();
                     return;
                 }
@@ -934,7 +931,7 @@
     }
 
     function updateLocalProgress() {
-        // Update progress display based on checked checkboxes (for non-premium users)
+        // Update progress display based on checked checkboxes (for users who can't save to API)
         // Count regular items and trophy items, not sub-headers
         const checkboxes = document.querySelectorAll('.checklist-item[data-item-type="item"] .checklist-item-checkbox, .checklist-trophy-item[data-item-type="trophy"] .checklist-item-checkbox');
         const checked = document.querySelectorAll('.checklist-item[data-item-type="item"] .checklist-item-checkbox:checked, .checklist-trophy-item[data-item-type="trophy"] .checklist-item-checkbox:checked');
@@ -4830,20 +4827,16 @@
                 const checklistId = checklistContainer.dataset.checklistId;
                 const canSaveProgress = checklistContainer.dataset.canSaveProgress === 'true';
 
-                // If user can't save progress, just update locally
+                // If user can't save (not logged in / no linked PSN), update locally only
                 if (!canSaveProgress) {
                     const checkboxes = section.querySelectorAll('.checklist-item[data-item-type="item"] .checklist-item-checkbox, .checklist-trophy-item[data-item-type="trophy"] .checklist-item-checkbox');
-                    let checkedCount = 0;
                     checkboxes.forEach(checkbox => {
-                        // Skip earned trophies - they're already checked
                         const itemContainer = checkbox.closest('.checklist-item, .checklist-trophy-item');
                         if (itemContainer && itemContainer.dataset.earned === 'true') {
                             return;
                         }
                         if (!checkbox.checked) {
                             checkbox.checked = true;
-                            checkedCount++;
-                            // Update text styling
                             const itemText = checkbox.closest('label')?.querySelector('.checklist-item-text');
                             if (itemText) {
                                 itemText.classList.add('line-through', 'text-base-content/50');
@@ -4919,20 +4912,16 @@
                 const checklistId = checklistContainer.dataset.checklistId;
                 const canSaveProgress = checklistContainer.dataset.canSaveProgress === 'true';
 
-                // If user can't save progress, just update locally
+                // If user can't save (not logged in / no linked PSN), update locally only
                 if (!canSaveProgress) {
                     const checkboxes = section.querySelectorAll('.checklist-item[data-item-type="item"] .checklist-item-checkbox, .checklist-trophy-item[data-item-type="trophy"] .checklist-item-checkbox');
-                    let uncheckedCount = 0;
                     checkboxes.forEach(checkbox => {
-                        // Don't uncheck earned trophies - they should stay checked
                         const itemContainer = checkbox.closest('.checklist-item, .checklist-trophy-item');
                         if (itemContainer && itemContainer.dataset.earned === 'true') {
                             return;
                         }
                         if (checkbox.checked) {
                             checkbox.checked = false;
-                            uncheckedCount++;
-                            // Update text styling
                             const itemText = checkbox.closest('label')?.querySelector('.checklist-item-text');
                             if (itemText) {
                                 itemText.classList.remove('line-through', 'text-base-content/50');

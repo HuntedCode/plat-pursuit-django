@@ -31,8 +31,8 @@
                 {# About me #}
                 <p class="text-xs text-base-content/70 text-center line-clamp-2 min-h-[2rem]">{{ profile.about_me }}</p>
 
-                {# Premium title (always rendered for consistent card height) #}
-                <span class="text-lg line-clamp-1 pr-1 italic {% if profile.user_is_premium %}legendary-title{% else %}invisible{% endif %}">{% if profile.user_is_premium %}{{ profile.displayed_title }}{% else %}&nbsp;{% endif %}</span>
+                {# Title (always rendered for consistent card height) #}
+                <span class="text-lg line-clamp-1 pr-1 italic {% if profile.displayed_title %}{% if profile.user_is_premium %}legendary-title{% else %}text-base-content/70{% endif %}{% else %}invisible{% endif %}">{% if profile.displayed_title %}{{ profile.displayed_title }}{% else %}&nbsp;{% endif %}</span>
 
                 {# --- Stats Section --- #}
                 {% if not profile.psn_history_public %}

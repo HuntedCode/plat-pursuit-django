@@ -75,7 +75,31 @@
                 </div>
             </div>
 
-            <!-- Profile Settings Section (Conditional) -->
+            <!-- Title Settings (available to all users) -->
+            {% if profile and title_form %}
+                <div class="divider divider-vertical m-0 mt-2 p-0"></div>
+                <h3 class="text-2xl text-base-content font-semibold italic mb-2">Title</h3>
+                <div class="flex flex-col border-4 border-base-300 shadow-lg shadow-neutral rounded-box p-4 w-7/8 mx-auto">
+                    <form method="post" class="w-7/8 mx-auto" id="title-settings-form">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="update_title">
+                        <div class="form-control mb-2">
+                            <label class="label" for="{{ title_form.title.id_for_label }}">Selected Title</label>
+                            {{ title_form.title }}
+                            {% if title_form.title.errors %}
+                                <div class="alert alert-error mt-1">{{ title_form.title.errors }}</div>
+                            {% endif %}
+                        </div>
+                        <p class="text-center text-accent font-bold pr-1 italic mb-4">Earn Badges to unlock more titles!</p>
+                        {% if profile.user_is_premium %}
+                            <p class="text-center text-xs text-base-content/50 mb-4">As a Premium subscriber, your title is displayed with legendary styling.</p>
+                        {% endif %}
+                        <button type="submit" class="btn btn-secondary w-full" id="title-settings-save-btn">Save Title</button>
+                    </form>
+                </div>
+            {% endif %}
+
+            <!-- Premium Settings (background & theme) -->
             {% if profile %}
                 <div class="divider divider-vertical m-0 mt-2 p-0"></div>
                 <h3 class="text-2xl text-base-content font-semibold italic mb-2">Premium Settings</h3>
@@ -87,7 +111,6 @@
                         </div>
                     {% endif %}
 
-                    <!-- Premium Settings -->
                     {% if premium_form %}
                         <h3 class="text-xl font-semibold mb-2 italic">Profile Customization</h3>
                         <form method="post" class="w-7/8 mx-auto" id="premium-settings-form">
@@ -144,17 +167,6 @@
                                     <span class="text-white font-bold text-lg drop-shadow-lg">{{ profile.display_psn_username }}</span>
                                 </div>
                             </div>
-
-                            <div class="divider"></div>
-
-                            <div class="form-control mb-2">
-                                <label class="label" for="{{ premium_form.title.id_for_label }}">Selected Title</label>
-                                {{ premium_form.title }}
-                                {% if premium_form.title.errors %}
-                                    <div class="alert alert-error mt-1">{{ premium_form.title.errors }}</div>
-                                {% endif %}
-                            </div>
-                            <p class="text-center text-accent font-bold pr-1 italic mb-4">Earn Badges to unlock more titles!</p>
 
                             <button type="submit" class="btn btn-secondary w-full" id="premium-settings-save-btn" {% if not profile.user_is_premium %}disabled{% endif %}>Save Premium Settings</button>
                         </form>
@@ -321,6 +333,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const isPremiumUser = {% if profile and profile.user_is_premium %}true{% else %}false{% endif %};
     const trackedForms = [
         { formId: 'user-settings-form', saveBtn: 'user-settings-save-btn', canSave: true },
+        { formId: 'title-settings-form', saveBtn: 'title-settings-save-btn', canSave: true },
         { formId: 'premium-settings-form', saveBtn: 'premium-settings-save-btn', canSave: isPremiumUser },
         { formId: 'profile-settings-form', saveBtn: 'profile-settings-save-btn', canSave: true }
     ];

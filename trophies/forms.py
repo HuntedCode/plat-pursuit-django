@@ -205,8 +205,8 @@ class GameDetailForm(forms.Form):
 class TrophyCaseForm(forms.Form):
     query = forms.CharField(required=False, label='Search by game name')
 
-class PremiumSettingsForm(forms.ModelForm):
-    # selected_background is handled by GameBackgroundPicker JS widget + hidden input
+class TitleSettingsForm(forms.Form):
+    """Title selection form, available to all users with earned titles."""
     title = forms.ModelChoiceField(
         queryset=Title.objects.none(),
         label='User Title',
@@ -214,6 +214,31 @@ class PremiumSettingsForm(forms.ModelForm):
         required=False,
         widget=forms.Select(attrs={'class': 'select w-full'}),
     )
+
+    def __init__(self, *args, profile=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        if profile:
+            self.profile = profile
+            self.fields['title'].queryset = profile.get_earned_titles()
+            current_title = Title.objects.filter(
+                user_titles__profile=profile, user_titles__is_displayed=True
+            ).first()
+            self.initial['title'] = current_title
+
+    def save(self):
+        selected_title = self.cleaned_data.get('title')
+        if selected_title:
+            self.profile.user_titles.update(is_displayed=False)
+            user_title = UserTitle.objects.get(profile=self.profile, title=selected_title)
+            user_title.is_displayed = True
+            user_title.save(update_fields=['is_displayed'])
+        else:
+            self.profile.user_titles.update(is_displayed=False)
+
+
+class PremiumSettingsForm(forms.ModelForm):
+    """Premium-only settings: background and site theme."""
+    # selected_background is handled by GameBackgroundPicker JS widget + hidden input
     selected_theme = forms.ChoiceField(
         choices=[],  # Populated in __init__
         label='Site Theme',
@@ -228,42 +253,20 @@ class PremiumSettingsForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        # Import theme choices
         from trophies.themes import THEME_CHOICES
         self.fields['selected_theme'].choices = THEME_CHOICES
 
-        if self.instance:
-            if self.instance.user_is_premium:
-                self.fields['title'].queryset = self.instance.get_earned_titles()
+        if self.instance and not self.instance.user_is_premium:
+            for field in self.fields:
+                self.fields[field].widget.attrs['disabled'] = 'disabled'
+                self.fields[field].help_text = 'Premium feature.'
 
-                current_title = Title.objects.filter(user_titles__profile=self.instance, user_titles__is_displayed=True).first()
-                self.initial['title'] = current_title
-            else:
-                for field in self.fields:
-                    self.fields[field].widget.attrs['disabled'] = 'disabled'
-                    self.fields[field].help_text = 'Premium feature.'
-    
     def clean(self):
-        cleaned_date = super().clean()
+        cleaned_data = super().clean()
         if not self.instance.user_is_premium:
             for field in self.fields:
-                cleaned_date[field] = self.initial.get(field)
-        return cleaned_date
-    
-    def save(self, commit=True):
-        instance = super().save(commit=commit)
-
-        if self.instance.user_is_premium:
-            selected_title = self.cleaned_data.get('title')
-            if selected_title:
-                instance.user_titles.update(is_displayed=False)
-                user_title = UserTitle.objects.get(profile=instance, title=selected_title)
-                user_title.is_displayed = True
-                user_title.save(update_fields=['is_displayed'])
-            else:
-                instance.user_titles.update(is_displayed=False)
-        
-        return instance
+                cleaned_data[field] = self.initial.get(field)
+        return cleaned_data
 
 class ProfileSettingsForm(forms.ModelForm):
     hide_hiddens = forms.BooleanField(

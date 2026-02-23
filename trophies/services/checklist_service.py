@@ -128,8 +128,8 @@ class ChecklistService:
         """
         Check if profile can save progress on a checklist.
 
-        Premium users: Can save progress on ANY checklist
-        Non-premium users: Can only save progress on their OWN checklists
+        All authenticated users with a linked PSN profile can save progress
+        on any checklist.
 
         Args:
             checklist: Checklist instance
@@ -143,15 +143,7 @@ class ChecklistService:
         if not profile.is_linked:
             return False, "You must link a PSN profile."
 
-        # Authors can always save progress on their own checklists
-        if checklist.profile == profile:
-            return True, None
-
-        # Premium users can save progress on any checklist
-        if profile.user_is_premium:
-            return True, None
-
-        return False, "Premium subscription required to track progress on other users' checklists."
+        return True, None
 
     @staticmethod
     def can_edit_checklist_images(checklist, profile):

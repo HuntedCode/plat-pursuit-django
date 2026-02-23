@@ -471,9 +471,7 @@ const GameListEditor = {
             </span>`;
         }
 
-        let noteSection;
-        if (this.isPremium) {
-            noteSection = `
+        const noteSection = `
                 <div class="note-display-container" data-item-id="${item.id}">
                     <button class="btn btn-ghost btn-xs text-base-content/40 note-add-btn gap-1" data-item-id="${item.id}">
                         <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -495,15 +493,6 @@ const GameListEditor = {
                         </div>
                     </div>
                 </div>`;
-        } else {
-            noteSection = `
-                <span class="text-xs text-base-content/30 italic flex items-center gap-1">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
-                    </svg>
-                    <a href="/beta-access/" class="link link-primary text-xs">Premium</a>: Add personal notes
-                </span>`;
-        }
 
         return `
         <div class="card bg-base-100 border-2 border-base-300 shadow-md transition-all duration-200 hover:shadow-lg group game-list-item-card"
@@ -848,7 +837,6 @@ const GameListEditor = {
 
     // --- Note Editing ---
     _bindNoteEditing() {
-        if (!this.isPremium) return;
 
         // Open note editor on click
         document.addEventListener('click', (e) => {

@@ -27,7 +27,7 @@ from users.forms import UserSettingsForm, CustomPasswordChangeForm, EmailPrefere
 from users.services.email_preference_service import EmailPreferenceService
 from users.services.subscription_service import SubscriptionService
 from users.models import CustomUser
-from trophies.forms import PremiumSettingsForm, ProfileSettingsForm
+from trophies.forms import TitleSettingsForm, PremiumSettingsForm, ProfileSettingsForm
 from trophies.models import Concept, ProfileGame
 from trophies.utils import update_profile_trophy_counts
 
@@ -54,6 +54,7 @@ class SettingsView(LoginRequiredMixin, View):
         user_form = UserSettingsForm(instance=request.user)
         password_form = CustomPasswordChangeForm(user=request.user)
         profile = request.user.profile if hasattr(request.user, 'profile') else None
+        title_form = TitleSettingsForm(profile=profile) if profile else None
         premium_form = PremiumSettingsForm(instance=profile) if profile else None
         profile_form = ProfileSettingsForm(instance=profile) if profile else None
 
@@ -75,6 +76,7 @@ class SettingsView(LoginRequiredMixin, View):
         context = {
             'user_form': user_form,
             'password_form': password_form,
+            'title_form': title_form,
             'premium_form': premium_form,
             'profile_form': profile_form,
             'profile': profile,
@@ -115,6 +117,19 @@ class SettingsView(LoginRequiredMixin, View):
                 messages.error(request, 'No profile to unlink.')
             return redirect('settings')
         
+        elif action == 'update_title':
+            if not hasattr(request.user, 'profile'):
+                messages.error(request, 'Link a PSN account first!')
+                return redirect('settings')
+            profile = request.user.profile
+            title_form = TitleSettingsForm(request.POST, profile=profile)
+            if title_form.is_valid():
+                title_form.save()
+                messages.success(request, 'Title updated!')
+            else:
+                messages.error(request, 'Error updating title.')
+            return redirect('settings')
+
         elif action == 'update_premium':
             if not hasattr(request.user, 'profile') or not request.user.profile.user_is_premium:
                 messages.error(request, 'This feature is for premium users only!')

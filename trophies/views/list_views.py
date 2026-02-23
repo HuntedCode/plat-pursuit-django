@@ -114,8 +114,8 @@ class GameListDetailView(ProfileHotbarMixin, DetailView):
         user = self.request.user
         profile = user.profile if user.is_authenticated and hasattr(user, 'profile') else None
 
-        # Private lists (or public lists whose owner lost premium) are only viewable by their owner
-        is_effectively_public = game_list.is_public and game_list.profile.user_is_premium
+        # Private lists are only viewable by their owner
+        is_effectively_public = game_list.is_public
         if not is_effectively_public:
             if not profile or game_list.profile_id != profile.id:
                 raise Http404("List not found")
