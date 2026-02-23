@@ -28,12 +28,12 @@
                 {% if badge.most_recent_concept %}
                     <p class="text-xs text-base-content/50 italic">Latest addition: {{ badge.most_recent_concept.unified_title }}</p>
                 {% endif %}
-                {% if badge.funded_by %}
+                {% if badge.effective_funded_by %}
                     <p class="text-xs text-base-content/50 italic">
                         Artwork funded by
-                        <a href="{% url 'profile_detail' badge.funded_by.psn_username %}"
+                        <a href="{% url 'profile_detail' badge.effective_funded_by.psn_username %}"
                            class="font-semibold text-accent hover:underline">
-                            {{ badge.funded_by.display_psn_username }}
+                            {{ badge.effective_funded_by.display_psn_username }}
                         </a>
                     </p>
                 {% endif %}

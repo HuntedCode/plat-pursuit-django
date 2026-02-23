@@ -310,7 +310,7 @@ class BadgeDetailView(ProfileHotbarMixin, DetailView):
 
     def get_object(self, queryset=None):
         series_slug = self.kwargs[self.slug_url_kwarg]
-        return Badge.objects.by_series(series_slug).select_related('funded_by')
+        return Badge.objects.by_series(series_slug).select_related('funded_by', 'base_badge__funded_by')
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)

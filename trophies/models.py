@@ -1138,7 +1138,15 @@ class Badge(models.Model):
         elif self.base_badge and self.base_badge.description:
             return self.base_badge.description
         return None
-    
+
+    @property
+    def effective_funded_by(self):
+        if self.funded_by:
+            return self.funded_by
+        elif self.base_badge and self.base_badge.funded_by:
+            return self.base_badge.funded_by
+        return None
+
     def get_badge_layers(self):
         """Return dict of layer URLs for backdrop, main and foreground."""
 
