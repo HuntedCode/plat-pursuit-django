@@ -10,6 +10,8 @@
 
     {% include 'trophies/partials/profile_detail/profile_detail_header.html' %}
 
+    {% include 'partials/ad_unit.html' with ad_slot="1939843878" %}
+
     {% if profile.psn_history_public %}
         <div class="tabs tabs-box mt-8 bg-base-300/80" role="tablist" aria-label="Profile sections">
             <a href="?tab=games" id="games-tab" class="tab {% if current_tab == 'games' %}tab-active{% endif %}" role="tab" aria-selected="{% if current_tab == 'games' %}true{% else %}false{% endif %}" aria-controls="games-panel">

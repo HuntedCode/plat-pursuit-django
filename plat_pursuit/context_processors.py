@@ -8,7 +8,8 @@ logger = logging.getLogger(__name__)
 def ads(request):
     enabled = settings.ADSENSE_ENABLED
 
-    if request.path.startswith('/accounts/'):
+    no_ad_prefixes = ['/accounts/', '/staff/', '/api/', '/admin/']
+    if any(request.path.startswith(p) for p in no_ad_prefixes):
         enabled = False
 
     if request.user.is_authenticated and request.user.premium_tier:
@@ -16,7 +17,8 @@ def ads(request):
 
     return {
         'ADSENSE_PUB_ID': settings.ADSENSE_PUB_ID,
-        'ADSENSE_ENABLED': enabled
+        'ADSENSE_ENABLED': enabled,
+        'ADSENSE_TEST_MODE': settings.ADSENSE_TEST_MODE,
     }
 
 def moderation(request):

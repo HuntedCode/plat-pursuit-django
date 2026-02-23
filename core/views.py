@@ -135,8 +135,8 @@ class AdsTxtView(View):
                 with open(file_path, 'r') as f:
                     content = f.read()
                 return HttpResponse(content, content_type='text/plain')
-            except Exception as e:
-                logger.error(f"Error serving ads.txt: {e}")
+            except Exception:
+                logger.exception("Error serving ads.txt")
                 return HttpResponse("ads.txt not found", status=404)
         else:
             logger.warning("ads.txt not found in static files")

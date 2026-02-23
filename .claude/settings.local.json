@@ -28,7 +28,8 @@
       "Bash(services \")",
       "Bash(node -c:*)",
       "Bash(python3:*)",
-      "Bash(node:*)"
+      "Bash(node:*)",
+      "Bash(npx @tailwindcss/cli:*)"
     ]
   }
 }

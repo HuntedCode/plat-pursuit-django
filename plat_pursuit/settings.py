@@ -22,7 +22,8 @@ AUTH_USER_MODEL = "users.CustomUser"
 SITE_URL = 'https://platpursuit.com'
 
 ADSENSE_PUB_ID = os.getenv('ADSENSE_PUB_ID')
-ADSENSE_ENABLED = os.getenv('ADSENSE_ENABLED', 'True') == 'True'
+ADSENSE_ENABLED = os.getenv('ADSENSE_ENABLED', 'False') == 'True'
+ADSENSE_TEST_MODE = os.getenv('ADSENSE_TEST_MODE', 'False') == 'True'
 
 STRIPE_MODE = os.getenv('STRIPE_MODE', 'test')
 
