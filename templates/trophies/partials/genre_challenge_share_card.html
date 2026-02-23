@@ -16,8 +16,8 @@ Variables available:
 - completed_at: Formatted completion date string or ''
 - subgenre_count: Number of collected subgenres
 - subgenre_total: Total subgenres (33)
-- slots: List of 16 dicts with:
-  - genre, genre_label, state ('completed'|'assigned'|'empty'), game_icon (cached URL or ''), progress (0-100)
+- slot_rows: List of 4 rows, each a list of 4 slot dicts with:
+  - genre, genre_label, state ('completed'|'assigned'|'empty'), game_icon (cached URL or ''), progress (0-100), game_name (unified_title or '')
 - subgenres: List of 33 dicts with:
   - display (display name), status ('platted'|'assigned'|'uncollected')
 
@@ -77,9 +77,9 @@ Grid layout: 4x4 for both landscape and portrait
 
             {# 4x4 Genre Grid #}
             <div style="display: flex; flex-direction: column; gap: 5px; align-items: center; flex: 1;">
-                {# Row 1: slots 1-4 #}
+                {% for row in slot_rows %}
                 <div style="display: flex; gap: 5px;">
-                    {% for slot in slots %}{% if forloop.counter <= 4 %}
+                    {% for slot in row %}
                     <div style="width: 270px; height: 80px; border-radius: 6px; position: relative; overflow: hidden; box-sizing: border-box; flex-shrink: 0;
                         {% if slot.state == 'completed' %}background: #2a2e34; border: 3px solid #fbbf24; box-shadow: 0 0 10px rgba(251, 191, 36, 0.3), inset 0 0 6px rgba(251, 191, 36, 0.1);
                         {% elif slot.state == 'assigned' %}background: #2a2e34; border: 2px solid rgba(103, 209, 248, 0.4);
@@ -87,6 +87,9 @@ Grid layout: 4x4 for both landscape and portrait
                         {% if slot.game_icon %}
                         <img src="{{ slot.game_icon }}" style="width: 100%; height: 100%; object-fit: cover; position: absolute; top: 0; left: 0;" />
                         <div style="position: absolute; bottom: 0; left: 0; width: 100%; height: 70%; background: linear-gradient(to top, {% if slot.state == 'completed' %}rgba(120, 80, 0, 0.7){% else %}rgba(0,0,0,0.75){% endif %}, rgba(0,0,0,0));"></div>
+                        {% endif %}
+                        {% if slot.game_name %}
+                        <div style="position: absolute; bottom: 21px; left: 7px; right: 28px; font-size: 10px; font-weight: 600; z-index: 1; color: rgba(245, 247, 252, 0.85); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-shadow: 0 1px 3px rgba(0,0,0,0.9); line-height: 1.2;">{{ slot.game_name }}</div>
                         {% endif %}
                         <div style="position: absolute; bottom: 5px; left: 7px; font-size: 14px; font-weight: bold; z-index: 1; text-shadow: 0 1px 3px rgba(0,0,0,0.9);
                             {% if slot.state == 'completed' %}color: #fbbf24;
@@ -102,89 +105,9 @@ Grid layout: 4x4 for both landscape and portrait
                         </div>
                         {% endif %}
                     </div>
-                    {% endif %}{% endfor %}
+                    {% endfor %}
                 </div>
-                {# Row 2: slots 5-8 #}
-                <div style="display: flex; gap: 5px;">
-                    {% for slot in slots %}{% if forloop.counter > 4 and forloop.counter <= 8 %}
-                    <div style="width: 270px; height: 80px; border-radius: 6px; position: relative; overflow: hidden; box-sizing: border-box; flex-shrink: 0;
-                        {% if slot.state == 'completed' %}background: #2a2e34; border: 3px solid #fbbf24; box-shadow: 0 0 10px rgba(251, 191, 36, 0.3), inset 0 0 6px rgba(251, 191, 36, 0.1);
-                        {% elif slot.state == 'assigned' %}background: #2a2e34; border: 2px solid rgba(103, 209, 248, 0.4);
-                        {% else %}background: rgba(42, 46, 52, 0.6); border: 2px solid #1a1b1f;{% endif %}">
-                        {% if slot.game_icon %}
-                        <img src="{{ slot.game_icon }}" style="width: 100%; height: 100%; object-fit: cover; position: absolute; top: 0; left: 0;" />
-                        <div style="position: absolute; bottom: 0; left: 0; width: 100%; height: 70%; background: linear-gradient(to top, {% if slot.state == 'completed' %}rgba(120, 80, 0, 0.7){% else %}rgba(0,0,0,0.75){% endif %}, rgba(0,0,0,0));"></div>
-                        {% endif %}
-                        <div style="position: absolute; bottom: 5px; left: 7px; font-size: 14px; font-weight: bold; z-index: 1; text-shadow: 0 1px 3px rgba(0,0,0,0.9);
-                            {% if slot.state == 'completed' %}color: #fbbf24;
-                            {% elif slot.state == 'assigned' %}color: #f5f7fc;
-                            {% else %}color: rgba(245, 247, 252, 0.25);{% endif %}">{{ slot.genre_label }}</div>
-                        {% if slot.state == 'completed' %}
-                        <div style="position: absolute; top: 3px; right: 3px; z-index: 2; width: 22px; height: 22px; background: #fbbf24; border-radius: 50%; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 4px rgba(0,0,0,0.4);">
-                            <svg style="width: 13px; height: 13px;" viewBox="0 0 24 24" fill="none" stroke="#1a1b1f" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>
-                        </div>
-                        {% elif slot.state == 'assigned' and slot.progress > 0 %}
-                        <div style="position: absolute; bottom: 0; left: 0; width: 100%; height: 4px; background: rgba(0,0,0,0.5); z-index: 2;">
-                            <div style="height: 100%; width: {{ slot.progress }}%; background: #67d1f8;"></div>
-                        </div>
-                        {% endif %}
-                    </div>
-                    {% endif %}{% endfor %}
-                </div>
-                {# Row 3: slots 9-12 #}
-                <div style="display: flex; gap: 5px;">
-                    {% for slot in slots %}{% if forloop.counter > 8 and forloop.counter <= 12 %}
-                    <div style="width: 270px; height: 80px; border-radius: 6px; position: relative; overflow: hidden; box-sizing: border-box; flex-shrink: 0;
-                        {% if slot.state == 'completed' %}background: #2a2e34; border: 3px solid #fbbf24; box-shadow: 0 0 10px rgba(251, 191, 36, 0.3), inset 0 0 6px rgba(251, 191, 36, 0.1);
-                        {% elif slot.state == 'assigned' %}background: #2a2e34; border: 2px solid rgba(103, 209, 248, 0.4);
-                        {% else %}background: rgba(42, 46, 52, 0.6); border: 2px solid #1a1b1f;{% endif %}">
-                        {% if slot.game_icon %}
-                        <img src="{{ slot.game_icon }}" style="width: 100%; height: 100%; object-fit: cover; position: absolute; top: 0; left: 0;" />
-                        <div style="position: absolute; bottom: 0; left: 0; width: 100%; height: 70%; background: linear-gradient(to top, {% if slot.state == 'completed' %}rgba(120, 80, 0, 0.7){% else %}rgba(0,0,0,0.75){% endif %}, rgba(0,0,0,0));"></div>
-                        {% endif %}
-                        <div style="position: absolute; bottom: 5px; left: 7px; font-size: 14px; font-weight: bold; z-index: 1; text-shadow: 0 1px 3px rgba(0,0,0,0.9);
-                            {% if slot.state == 'completed' %}color: #fbbf24;
-                            {% elif slot.state == 'assigned' %}color: #f5f7fc;
-                            {% else %}color: rgba(245, 247, 252, 0.25);{% endif %}">{{ slot.genre_label }}</div>
-                        {% if slot.state == 'completed' %}
-                        <div style="position: absolute; top: 3px; right: 3px; z-index: 2; width: 22px; height: 22px; background: #fbbf24; border-radius: 50%; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 4px rgba(0,0,0,0.4);">
-                            <svg style="width: 13px; height: 13px;" viewBox="0 0 24 24" fill="none" stroke="#1a1b1f" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>
-                        </div>
-                        {% elif slot.state == 'assigned' and slot.progress > 0 %}
-                        <div style="position: absolute; bottom: 0; left: 0; width: 100%; height: 4px; background: rgba(0,0,0,0.5); z-index: 2;">
-                            <div style="height: 100%; width: {{ slot.progress }}%; background: #67d1f8;"></div>
-                        </div>
-                        {% endif %}
-                    </div>
-                    {% endif %}{% endfor %}
-                </div>
-                {# Row 4: slots 13-16 #}
-                <div style="display: flex; gap: 5px;">
-                    {% for slot in slots %}{% if forloop.counter > 12 %}
-                    <div style="width: 270px; height: 80px; border-radius: 6px; position: relative; overflow: hidden; box-sizing: border-box; flex-shrink: 0;
-                        {% if slot.state == 'completed' %}background: #2a2e34; border: 3px solid #fbbf24; box-shadow: 0 0 10px rgba(251, 191, 36, 0.3), inset 0 0 6px rgba(251, 191, 36, 0.1);
-                        {% elif slot.state == 'assigned' %}background: #2a2e34; border: 2px solid rgba(103, 209, 248, 0.4);
-                        {% else %}background: rgba(42, 46, 52, 0.6); border: 2px solid #1a1b1f;{% endif %}">
-                        {% if slot.game_icon %}
-                        <img src="{{ slot.game_icon }}" style="width: 100%; height: 100%; object-fit: cover; position: absolute; top: 0; left: 0;" />
-                        <div style="position: absolute; bottom: 0; left: 0; width: 100%; height: 70%; background: linear-gradient(to top, {% if slot.state == 'completed' %}rgba(120, 80, 0, 0.7){% else %}rgba(0,0,0,0.75){% endif %}, rgba(0,0,0,0));"></div>
-                        {% endif %}
-                        <div style="position: absolute; bottom: 5px; left: 7px; font-size: 14px; font-weight: bold; z-index: 1; text-shadow: 0 1px 3px rgba(0,0,0,0.9);
-                            {% if slot.state == 'completed' %}color: #fbbf24;
-                            {% elif slot.state == 'assigned' %}color: #f5f7fc;
-                            {% else %}color: rgba(245, 247, 252, 0.25);{% endif %}">{{ slot.genre_label }}</div>
-                        {% if slot.state == 'completed' %}
-                        <div style="position: absolute; top: 3px; right: 3px; z-index: 2; width: 22px; height: 22px; background: #fbbf24; border-radius: 50%; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 4px rgba(0,0,0,0.4);">
-                            <svg style="width: 13px; height: 13px;" viewBox="0 0 24 24" fill="none" stroke="#1a1b1f" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>
-                        </div>
-                        {% elif slot.state == 'assigned' and slot.progress > 0 %}
-                        <div style="position: absolute; bottom: 0; left: 0; width: 100%; height: 4px; background: rgba(0,0,0,0.5); z-index: 2;">
-                            <div style="height: 100%; width: {{ slot.progress }}%; background: #67d1f8;"></div>
-                        </div>
-                        {% endif %}
-                    </div>
-                    {% endif %}{% endfor %}
-                </div>
+                {% endfor %}
             </div>
 
             {# Subgenre Tracker #}
@@ -269,9 +192,9 @@ Grid layout: 4x4 for both landscape and portrait
 
             {# 4x4 Genre Grid #}
             <div style="display: flex; flex-direction: column; gap: 7px; align-items: center; flex: 1;">
-                {# Row 1: slots 1-4 #}
+                {% for row in slot_rows %}
                 <div style="display: flex; gap: 7px;">
-                    {% for slot in slots %}{% if forloop.counter <= 4 %}
+                    {% for slot in row %}
                     <div style="width: 235px; height: 140px; border-radius: 8px; position: relative; overflow: hidden; box-sizing: border-box; flex-shrink: 0;
                         {% if slot.state == 'completed' %}background: #2a2e34; border: 4px solid #fbbf24; box-shadow: 0 0 12px rgba(251, 191, 36, 0.35), inset 0 0 8px rgba(251, 191, 36, 0.1);
                         {% elif slot.state == 'assigned' %}background: #2a2e34; border: 3px solid rgba(103, 209, 248, 0.4);
@@ -279,6 +202,9 @@ Grid layout: 4x4 for both landscape and portrait
                         {% if slot.game_icon %}
                         <img src="{{ slot.game_icon }}" style="width: 100%; height: 100%; object-fit: cover; position: absolute; top: 0; left: 0;" />
                         <div style="position: absolute; bottom: 0; left: 0; width: 100%; height: 65%; background: linear-gradient(to top, {% if slot.state == 'completed' %}rgba(120, 80, 0, 0.7){% else %}rgba(0,0,0,0.75){% endif %}, rgba(0,0,0,0));"></div>
+                        {% endif %}
+                        {% if slot.game_name %}
+                        <div style="position: absolute; bottom: 26px; left: 9px; right: 36px; font-size: 12px; font-weight: 600; z-index: 1; color: rgba(245, 247, 252, 0.85); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-shadow: 0 1px 3px rgba(0,0,0,0.9); line-height: 1.2;">{{ slot.game_name }}</div>
                         {% endif %}
                         <div style="position: absolute; bottom: 7px; left: 9px; font-size: 16px; font-weight: bold; z-index: 1; text-shadow: 0 1px 3px rgba(0,0,0,0.9);
                             {% if slot.state == 'completed' %}color: #fbbf24;
@@ -294,89 +220,9 @@ Grid layout: 4x4 for both landscape and portrait
                         </div>
                         {% endif %}
                     </div>
-                    {% endif %}{% endfor %}
+                    {% endfor %}
                 </div>
-                {# Row 2: slots 5-8 #}
-                <div style="display: flex; gap: 7px;">
-                    {% for slot in slots %}{% if forloop.counter > 4 and forloop.counter <= 8 %}
-                    <div style="width: 235px; height: 140px; border-radius: 8px; position: relative; overflow: hidden; box-sizing: border-box; flex-shrink: 0;
-                        {% if slot.state == 'completed' %}background: #2a2e34; border: 4px solid #fbbf24; box-shadow: 0 0 12px rgba(251, 191, 36, 0.35), inset 0 0 8px rgba(251, 191, 36, 0.1);
-                        {% elif slot.state == 'assigned' %}background: #2a2e34; border: 3px solid rgba(103, 209, 248, 0.4);
-                        {% else %}background: rgba(42, 46, 52, 0.6); border: 3px solid #1a1b1f;{% endif %}">
-                        {% if slot.game_icon %}
-                        <img src="{{ slot.game_icon }}" style="width: 100%; height: 100%; object-fit: cover; position: absolute; top: 0; left: 0;" />
-                        <div style="position: absolute; bottom: 0; left: 0; width: 100%; height: 65%; background: linear-gradient(to top, {% if slot.state == 'completed' %}rgba(120, 80, 0, 0.7){% else %}rgba(0,0,0,0.75){% endif %}, rgba(0,0,0,0));"></div>
-                        {% endif %}
-                        <div style="position: absolute; bottom: 7px; left: 9px; font-size: 16px; font-weight: bold; z-index: 1; text-shadow: 0 1px 3px rgba(0,0,0,0.9);
-                            {% if slot.state == 'completed' %}color: #fbbf24;
-                            {% elif slot.state == 'assigned' %}color: #f5f7fc;
-                            {% else %}color: rgba(245, 247, 252, 0.25);{% endif %}">{{ slot.genre_label }}</div>
-                        {% if slot.state == 'completed' %}
-                        <div style="position: absolute; top: 5px; right: 5px; z-index: 2; width: 28px; height: 28px; background: #fbbf24; border-radius: 50%; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 4px rgba(0,0,0,0.4);">
-                            <svg style="width: 16px; height: 16px;" viewBox="0 0 24 24" fill="none" stroke="#1a1b1f" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>
-                        </div>
-                        {% elif slot.state == 'assigned' and slot.progress > 0 %}
-                        <div style="position: absolute; bottom: 0; left: 0; width: 100%; height: 5px; background: rgba(0,0,0,0.5); z-index: 2;">
-                            <div style="height: 100%; width: {{ slot.progress }}%; background: #67d1f8;"></div>
-                        </div>
-                        {% endif %}
-                    </div>
-                    {% endif %}{% endfor %}
-                </div>
-                {# Row 3: slots 9-12 #}
-                <div style="display: flex; gap: 7px;">
-                    {% for slot in slots %}{% if forloop.counter > 8 and forloop.counter <= 12 %}
-                    <div style="width: 235px; height: 140px; border-radius: 8px; position: relative; overflow: hidden; box-sizing: border-box; flex-shrink: 0;
-                        {% if slot.state == 'completed' %}background: #2a2e34; border: 4px solid #fbbf24; box-shadow: 0 0 12px rgba(251, 191, 36, 0.35), inset 0 0 8px rgba(251, 191, 36, 0.1);
-                        {% elif slot.state == 'assigned' %}background: #2a2e34; border: 3px solid rgba(103, 209, 248, 0.4);
-                        {% else %}background: rgba(42, 46, 52, 0.6); border: 3px solid #1a1b1f;{% endif %}">
-                        {% if slot.game_icon %}
-                        <img src="{{ slot.game_icon }}" style="width: 100%; height: 100%; object-fit: cover; position: absolute; top: 0; left: 0;" />
-                        <div style="position: absolute; bottom: 0; left: 0; width: 100%; height: 65%; background: linear-gradient(to top, {% if slot.state == 'completed' %}rgba(120, 80, 0, 0.7){% else %}rgba(0,0,0,0.75){% endif %}, rgba(0,0,0,0));"></div>
-                        {% endif %}
-                        <div style="position: absolute; bottom: 7px; left: 9px; font-size: 16px; font-weight: bold; z-index: 1; text-shadow: 0 1px 3px rgba(0,0,0,0.9);
-                            {% if slot.state == 'completed' %}color: #fbbf24;
-                            {% elif slot.state == 'assigned' %}color: #f5f7fc;
-                            {% else %}color: rgba(245, 247, 252, 0.25);{% endif %}">{{ slot.genre_label }}</div>
-                        {% if slot.state == 'completed' %}
-                        <div style="position: absolute; top: 5px; right: 5px; z-index: 2; width: 28px; height: 28px; background: #fbbf24; border-radius: 50%; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 4px rgba(0,0,0,0.4);">
-                            <svg style="width: 16px; height: 16px;" viewBox="0 0 24 24" fill="none" stroke="#1a1b1f" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>
-                        </div>
-                        {% elif slot.state == 'assigned' and slot.progress > 0 %}
-                        <div style="position: absolute; bottom: 0; left: 0; width: 100%; height: 5px; background: rgba(0,0,0,0.5); z-index: 2;">
-                            <div style="height: 100%; width: {{ slot.progress }}%; background: #67d1f8;"></div>
-                        </div>
-                        {% endif %}
-                    </div>
-                    {% endif %}{% endfor %}
-                </div>
-                {# Row 4: slots 13-16 #}
-                <div style="display: flex; gap: 7px;">
-                    {% for slot in slots %}{% if forloop.counter > 12 %}
-                    <div style="width: 235px; height: 140px; border-radius: 8px; position: relative; overflow: hidden; box-sizing: border-box; flex-shrink: 0;
-                        {% if slot.state == 'completed' %}background: #2a2e34; border: 4px solid #fbbf24; box-shadow: 0 0 12px rgba(251, 191, 36, 0.35), inset 0 0 8px rgba(251, 191, 36, 0.1);
-                        {% elif slot.state == 'assigned' %}background: #2a2e34; border: 3px solid rgba(103, 209, 248, 0.4);
-                        {% else %}background: rgba(42, 46, 52, 0.6); border: 3px solid #1a1b1f;{% endif %}">
-                        {% if slot.game_icon %}
-                        <img src="{{ slot.game_icon }}" style="width: 100%; height: 100%; object-fit: cover; position: absolute; top: 0; left: 0;" />
-                        <div style="position: absolute; bottom: 0; left: 0; width: 100%; height: 65%; background: linear-gradient(to top, {% if slot.state == 'completed' %}rgba(120, 80, 0, 0.7){% else %}rgba(0,0,0,0.75){% endif %}, rgba(0,0,0,0));"></div>
-                        {% endif %}
-                        <div style="position: absolute; bottom: 7px; left: 9px; font-size: 16px; font-weight: bold; z-index: 1; text-shadow: 0 1px 3px rgba(0,0,0,0.9);
-                            {% if slot.state == 'completed' %}color: #fbbf24;
-                            {% elif slot.state == 'assigned' %}color: #f5f7fc;
-                            {% else %}color: rgba(245, 247, 252, 0.25);{% endif %}">{{ slot.genre_label }}</div>
-                        {% if slot.state == 'completed' %}
-                        <div style="position: absolute; top: 5px; right: 5px; z-index: 2; width: 28px; height: 28px; background: #fbbf24; border-radius: 50%; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 4px rgba(0,0,0,0.4);">
-                            <svg style="width: 16px; height: 16px;" viewBox="0 0 24 24" fill="none" stroke="#1a1b1f" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>
-                        </div>
-                        {% elif slot.state == 'assigned' and slot.progress > 0 %}
-                        <div style="position: absolute; bottom: 0; left: 0; width: 100%; height: 5px; background: rgba(0,0,0,0.5); z-index: 2;">
-                            <div style="height: 100%; width: {{ slot.progress }}%; background: #67d1f8;"></div>
-                        </div>
-                        {% endif %}
-                    </div>
-                    {% endif %}{% endfor %}
-                </div>
+                {% endfor %}
             </div>
 
             {# Progress Bar #}

@@ -153,6 +153,7 @@ def _build_template_context(challenge, format_type):
             'state': state,
             'game_icon': cached_results.get(f'slot_{slot.genre}', ''),
             'progress': progress_map.get(slot.concept_id, 0) if slot.concept_id else 0,
+            'game_name': slot.concept.unified_title if slot.concept else '',
         })
 
     # Build subgenre status
@@ -166,6 +167,9 @@ def _build_template_context(challenge, format_type):
     ]
 
     avatar_url = cached_results.get('avatar', '')
+
+    # Group slots into rows of 4 for the 4x4 grid template
+    slot_rows = [slot_data[i:i + 4] for i in range(0, len(slot_data), 4)]
 
     context = {
         'format': format_type,
@@ -182,7 +186,7 @@ def _build_template_context(challenge, format_type):
         ),
         'subgenre_count': challenge.subgenre_count,
         'subgenre_total': len(GENRE_CHALLENGE_SUBGENRES),
-        'slots': slot_data,
+        'slot_rows': slot_rows,
         'subgenres': subgenre_data,
     }
 
