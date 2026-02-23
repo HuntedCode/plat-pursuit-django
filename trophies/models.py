@@ -2753,6 +2753,7 @@ class Challenge(models.Model):
 
     # Genre challenge: unique subgenres collected from assigned concepts
     subgenre_count = models.PositiveIntegerField(default=0)
+    platted_subgenre_count = models.PositiveIntegerField(default=0)
     bonus_count = models.PositiveIntegerField(default=0)
 
     # Status
@@ -2931,3 +2932,35 @@ class GenreBonusSlot(models.Model):
         concept_name = self.concept.unified_title if self.concept else 'empty'
         status = 'done' if self.is_completed else 'pending'
         return f"Bonus: {concept_name} ({status})"
+
+
+class DashboardConfig(models.Model):
+    """
+    Per-user dashboard preferences: visible modules, ordering, and per-module settings.
+
+    module_order: ordered list of module slugs (premium-only to customize).
+        ["trophy_summary", "active_challenges", "recent_platinums", ...]
+
+    hidden_modules: slugs the user has toggled off (free users: max 3).
+        ["community_engagement", "quick_links"]
+
+    module_settings: per-module config overrides (premium-only).
+        {"games_in_progress": {"limit": 10}, "recent_platinums": {"limit": 5}}
+    """
+    profile = models.OneToOneField(
+        Profile,
+        on_delete=models.CASCADE,
+        related_name='dashboard_config',
+        primary_key=True,
+    )
+    module_order = models.JSONField(default=list, blank=True)
+    hidden_modules = models.JSONField(default=list, blank=True)
+    module_settings = models.JSONField(default=dict, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Dashboard Config'
+        verbose_name_plural = 'Dashboard Configs'
+
+    def __str__(self):
+        return f"DashboardConfig for {self.profile.psn_username}"

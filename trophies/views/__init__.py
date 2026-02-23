@@ -20,6 +20,7 @@ from .challenge_views import (
     GenreChallengeCreateView, GenreChallengeSetupView,
     GenreChallengeDetailView, GenreChallengeEditView,
 )
+from .dashboard_views import DashboardView
 
 __all__ = [
     # Game views
@@ -47,4 +48,6 @@ __all__ = [
     'CalendarChallengeCreateView', 'CalendarChallengeDetailView',
     'GenreChallengeCreateView', 'GenreChallengeSetupView',
     'GenreChallengeDetailView', 'GenreChallengeEditView',
+    # Dashboard views
+    'DashboardView',
 ]

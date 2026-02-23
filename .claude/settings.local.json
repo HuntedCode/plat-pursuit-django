@@ -29,7 +29,9 @@
       "Bash(node -c:*)",
       "Bash(python3:*)",
       "Bash(node:*)",
-      "Bash(npx @tailwindcss/cli:*)"
+      "Bash(npx @tailwindcss/cli:*)",
+      "WebFetch(domain:docs.stripe.com)",
+      "WebFetch(domain:benfoster.io)"
     ]
   }
 }

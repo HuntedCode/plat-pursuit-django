@@ -572,6 +572,7 @@ class DragReorderManager {
      * @param {Function} config.onReorder - Callback when drop completes: (itemId, newPosition, allItemIds)
      * @param {string} [config.handleSelector] - Optional selector for drag handle (defaults to item itself)
      * @param {string} [config.placeholderClass] - Custom placeholder CSS class
+     * @param {boolean} [config.useXY] - Enable 2D positioning for multi-column grids (default: false, Y-only)
      */
     constructor(config) {
         this.container = config.container;
@@ -579,11 +580,14 @@ class DragReorderManager {
         this.onReorder = config.onReorder;
         this.handleSelector = config.handleSelector || null;
         this.placeholderClass = config.placeholderClass || 'border-2 border-dashed border-primary rounded-box h-16 bg-primary/5';
+        this.onPlaceholderCreate = config.onPlaceholderCreate || null;
+        this.useXY = config.useXY || false;
 
         this.draggedEl = null;
         this.placeholder = null;
         this.rafScheduled = false;
         this.lastClientY = 0;
+        this.lastClientX = 0;
         this._cachedPositions = [];
         this._mouseDownTarget = null; // Track where mousedown occurred
 
@@ -623,6 +627,9 @@ class DragReorderManager {
         // Create placeholder
         this.placeholder = document.createElement('div');
         this.placeholder.className = this.placeholderClass;
+        if (this.onPlaceholderCreate) {
+            this.onPlaceholderCreate(this.placeholder, item);
+        }
 
         // Cache positions at drag start
         this._cacheItemPositions();
@@ -634,6 +641,7 @@ class DragReorderManager {
         e.dataTransfer.dropEffect = 'move';
 
         this.lastClientY = e.clientY;
+        this.lastClientX = e.clientX;
 
         // Throttle to one update per animation frame
         if (this.rafScheduled) return;
@@ -643,7 +651,9 @@ class DragReorderManager {
             this.rafScheduled = false;
             if (!this.draggedEl || !this.placeholder) return;
 
-            const afterEl = this._getDragAfterElement(this.lastClientY);
+            const afterEl = this.useXY
+                ? this._getDragAfterElement2D(this.lastClientY, this.lastClientX)
+                : this._getDragAfterElement(this.lastClientY);
 
             // Short-circuit: skip if placeholder is already in the right spot
             if (afterEl) {
@@ -700,7 +710,12 @@ class DragReorderManager {
         const items = [...this.container.querySelectorAll(`${this.itemSelector}:not(.opacity-50)`)];
         this._cachedPositions = items.map(item => {
             const box = item.getBoundingClientRect();
-            return { element: item, top: box.top, height: box.height };
+            const pos = { element: item, top: box.top, height: box.height };
+            if (this.useXY) {
+                pos.left = box.left;
+                pos.width = box.width;
+            }
+            return pos;
         });
     }
 
@@ -713,6 +728,45 @@ class DragReorderManager {
             return closest;
         }, { offset: Number.NEGATIVE_INFINITY });
         return result.element || null;
+    }
+
+    /**
+     * 2D-aware positioning for multi-column grids.
+     * Items in the same row are disambiguated by X; different rows by Y.
+     */
+    _getDragAfterElement2D(y, x) {
+        let bestElement = null;
+        let bestDistance = Infinity;
+
+        for (const item of this._cachedPositions) {
+            const centerY = item.top + item.height / 2;
+            const centerX = item.left + item.width / 2;
+
+            // Skip items the cursor is past (below and to the right of)
+            // An item is "after" the cursor if: it's in a later row,
+            // or in the same row but to the right
+            const sameRow = Math.abs(y - centerY) < item.height / 2;
+
+            if (sameRow) {
+                // Same row: only consider items to the right of cursor
+                if (x < centerX) {
+                    const dist = centerX - x;
+                    if (dist < bestDistance) {
+                        bestDistance = dist;
+                        bestElement = item.element;
+                    }
+                }
+            } else if (y < centerY) {
+                // Cursor is above this item's row: this item is a candidate
+                const dist = centerY - y;
+                if (dist < bestDistance) {
+                    bestDistance = dist;
+                    bestElement = item.element;
+                }
+            }
+        }
+
+        return bestElement;
     }
 
     /**

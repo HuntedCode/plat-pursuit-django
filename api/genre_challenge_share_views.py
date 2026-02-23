@@ -185,6 +185,7 @@ def _build_template_context(challenge, format_type):
             if challenge.completed_at else ''
         ),
         'subgenre_count': challenge.subgenre_count,
+        'platted_subgenre_count': challenge.platted_subgenre_count,
         'subgenre_total': len(GENRE_CHALLENGE_SUBGENRES),
         'slot_rows': slot_rows,
         'subgenres': subgenre_data,

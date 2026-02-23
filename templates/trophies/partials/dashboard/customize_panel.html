@@ -1,0 +1,107 @@
+{# Customize panel: modal content for toggling/reordering dashboard modules. #}
+<div class="modal-box max-w-2xl bg-base-100 border-4 border-base-300">
+    {# Close button #}
+    <form method="dialog">
+        <button class="btn btn-sm btn-circle btn-ghost absolute right-3 top-3">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+        </button>
+    </form>
+
+    {# Header #}
+    <h3 class="font-bold text-xl mb-1">Customize Dashboard</h3>
+    <p class="text-base-content/60 text-sm mb-4">
+        Toggle modules on or off to build your perfect dashboard.
+        {% if not is_premium %}
+            <span class="text-warning">({{ hidden_count }}/{{ max_free_hidden }} hidden. Upgrade for unlimited.)</span>
+        {% endif %}
+    </p>
+
+    {# Module list by category (flat: h4 + rows are all direct children for DragReorderManager) #}
+    <div id="customize-module-list" class="space-y-2">
+        {% for cat_key, cat_data in module_categories.items %}
+            <h4 class="text-sm font-semibold text-base-content/50 uppercase tracking-wider{% if not forloop.first %} mt-3{% endif %}">
+                {{ cat_data.name }}
+            </h4>
+            {% for mod in cat_data.modules %}
+                <div class="customize-module-row flex items-center justify-between gap-3 p-3 rounded-lg bg-base-200 border border-base-300
+                            {% if mod.is_locked %}opacity-50{% endif %}"
+                     data-customize-slug="{{ mod.slug }}"
+                     data-item-id="{{ mod.slug }}"
+                     {% if is_premium %}draggable="true"{% endif %}>
+                    <div class="flex items-center gap-3 flex-1 min-w-0">
+                        {% if is_premium %}
+                            {# Drag handle for premium reorder in customize panel #}
+                            <div class="customize-drag-handle cursor-grab opacity-40 hover:opacity-100 transition-opacity">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <line x1="8" y1="6" x2="21" y2="6"></line>
+                                    <line x1="8" y1="12" x2="21" y2="12"></line>
+                                    <line x1="8" y1="18" x2="21" y2="18"></line>
+                                    <line x1="3" y1="6" x2="3.01" y2="6"></line>
+                                    <line x1="3" y1="12" x2="3.01" y2="12"></line>
+                                    <line x1="3" y1="18" x2="3.01" y2="18"></line>
+                                </svg>
+                            </div>
+                        {% endif %}
+                        <div class="min-w-0 flex-1">
+                            <div class="font-semibold text-sm flex items-center gap-2">
+                                {{ mod.name }}
+                                {% if mod.requires_premium %}
+                                    <span class="badge badge-warning badge-xs">Premium</span>
+                                {% endif %}
+                            </div>
+                            <p class="text-xs text-base-content/50 truncate">{{ mod.description }}</p>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        {# Size selector (premium only, non-locked, desktop only) #}
+                        {% if is_premium and not mod.is_locked %}
+                            <div class="join hidden lg:inline-flex">
+                                {% for size_option in mod.allowed_sizes %}
+                                    <button type="button"
+                                            class="join-item btn btn-xs module-size-btn
+                                                   {% if size_option == mod.effective_size %}btn-primary{% else %}btn-ghost border-base-300{% endif %}"
+                                            data-slug="{{ mod.slug }}"
+                                            data-size="{{ size_option }}"
+                                            title="{{ size_option|title }}">
+                                        {% if size_option == 'small' %}S{% elif size_option == 'medium' %}M{% else %}L{% endif %}
+                                    </button>
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+
+                        {% if mod.is_locked %}
+                            {# Locked: premium module for free user #}
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-base-content/30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                                <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                            </svg>
+                        {% else %}
+                            <input type="checkbox"
+                                   class="toggle toggle-primary toggle-sm module-toggle"
+                                   data-slug="{{ mod.slug }}"
+                                   {% if not mod.is_hidden %}checked{% endif %}
+                                   aria-label="Toggle {{ mod.name }}" />
+                        {% endif %}
+                    </div>
+                </div>
+            {% endfor %}
+        {% endfor %}
+    </div>
+
+    {# Footer actions #}
+    <div class="modal-action flex flex-row gap-2 mt-6">
+        <button type="button" id="customize-reset-btn" class="btn btn-ghost btn-sm">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 mr-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="1 4 1 10 7 10"></polyline>
+                <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path>
+            </svg>
+            Reset to Default
+        </button>
+        <form method="dialog" class="flex-1 flex justify-end">
+            <button class="btn btn-primary btn-sm">Done</button>
+        </form>
+    </div>
+</div>

@@ -131,6 +131,7 @@ def recalculate_challenge_counts(challenge):
         challenge.filled_count = challenge.genre_slots.filter(concept__isnull=False).count()
         challenge.completed_count = challenge.genre_slots.filter(is_completed=True).count()
         challenge.subgenre_count = len(get_collected_subgenres(challenge))
+        challenge.platted_subgenre_count = len(get_platted_subgenres(challenge))
         challenge.bonus_count = challenge.bonus_slots.filter(concept__isnull=False).count()
 
 
@@ -754,7 +755,7 @@ def check_genre_challenge_progress(profile):
             total_genres = len(GENRE_CHALLENGE_GENRES)
             save_fields = [
                 'completed_count', 'filled_count', 'subgenre_count',
-                'bonus_count', 'updated_at',
+                'platted_subgenre_count', 'bonus_count', 'updated_at',
             ]
             if challenge.completed_count == total_genres:
                 challenge.is_complete = True
@@ -874,10 +875,16 @@ def get_collected_subgenres(challenge):
     return set(get_subgenre_status(challenge).keys())
 
 
+def get_platted_subgenres(challenge):
+    """Return the set of curated subgenre keys that are platted (not just assigned)."""
+    return {k for k, v in get_subgenre_status(challenge).items() if v == 'platted'}
+
+
 def recalculate_subgenre_count(challenge):
-    """Recalculate and save the subgenre_count for a genre challenge."""
+    """Recalculate and save both subgenre counts for a genre challenge."""
     challenge.subgenre_count = len(get_collected_subgenres(challenge))
-    challenge.save(update_fields=['subgenre_count'])
+    challenge.platted_subgenre_count = len(get_platted_subgenres(challenge))
+    challenge.save(update_fields=['subgenre_count', 'platted_subgenre_count'])
 
 
 def get_genre_swap_targets(concept, challenge, current_source):

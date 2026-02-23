@@ -816,14 +816,16 @@ const GenreChallengeSetup = {
         const subgenreEl = document.getElementById('genre-subgenre-count');
         if (filledEl) filledEl.textContent = `${filled}/${this.genres.length} filled`;
         if (completedEl) completedEl.textContent = `${completed}/${this.genres.length} completed`;
-        if (subgenreEl) subgenreEl.textContent = `${this.collectedSubgenres.length}/${this.allSubgenres.length} subgenres`;
+        const plattedCount = this.collectedSubgenres.filter(sg => sg.status === 'platted').length;
+        if (subgenreEl) subgenreEl.textContent = `${plattedCount}/${this.allSubgenres.length} subgenres`;
     },
 
     _renderSubgenreTracker() {
         _renderSubgenreTracker('subgenre-tracker-grid', this.allSubgenres, this.collectedSubgenres);
-        // Update count label
+        // Update count label (only platted subgenres count toward the total)
+        const plattedCount = this.collectedSubgenres.filter(sg => sg.status === 'platted').length;
         const countEl = document.getElementById('subgenre-tracker-count');
-        if (countEl) countEl.textContent = `${this.collectedSubgenres.length}/${this.allSubgenres.length}`;
+        if (countEl) countEl.textContent = `${plattedCount}/${this.allSubgenres.length}`;
     },
 
     // ── Skip & Finish ───────────────────────────────────────
@@ -939,10 +941,11 @@ const GenreChallengeEdit = {
 
     _renderSubgenreTracker() {
         _renderSubgenreTracker('subgenre-tracker-grid', this.allSubgenres, this.collectedSubgenres);
+        const plattedCount = this.collectedSubgenres.filter(sg => sg.status === 'platted').length;
         const countEl = document.getElementById('edit-subgenre-tracker-count');
-        if (countEl) countEl.textContent = `${this.collectedSubgenres.length}/${this.allSubgenres.length}`;
+        if (countEl) countEl.textContent = `${plattedCount}/${this.allSubgenres.length}`;
         const headerEl = document.getElementById('edit-subgenre-count');
-        if (headerEl) headerEl.textContent = `${this.collectedSubgenres.length}/${this.allSubgenres.length} subgenres collected`;
+        if (headerEl) headerEl.textContent = `${plattedCount}/${this.allSubgenres.length} subgenres collected`;
     },
 
     // ── Slot Actions ────────────────────────────────────────

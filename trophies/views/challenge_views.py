@@ -778,6 +778,7 @@ class GenreChallengeSetupView(LoginRequiredMixin, ProfileHotbarMixin, DetailView
         ]
         context['subgenres_json'] = json.dumps(all_subgenres)
         context['subgenre_count'] = challenge.subgenre_count
+        context['platted_subgenre_count'] = challenge.platted_subgenre_count
         context['subgenre_total'] = len(GENRE_CHALLENGE_SUBGENRES)
 
         context['breadcrumb'] = [
@@ -939,6 +940,7 @@ class GenreChallengeDetailView(ProfileHotbarMixin, DetailView):
         ]
         context['all_subgenres'] = all_subgenres
         context['subgenre_count'] = challenge.subgenre_count
+        context['platted_subgenre_count'] = challenge.platted_subgenre_count
         context['subgenre_total'] = len(GENRE_CHALLENGE_SUBGENRES)
 
         context['breadcrumb'] = [
@@ -1087,6 +1089,7 @@ class GenreChallengeEditView(LoginRequiredMixin, ProfileHotbarMixin, DetailView)
         ]
         context['subgenres_json'] = json.dumps(all_subgenres)
         context['subgenre_count'] = challenge.subgenre_count
+        context['platted_subgenre_count'] = challenge.platted_subgenre_count
         context['subgenre_total'] = len(GENRE_CHALLENGE_SUBGENRES)
 
         context['breadcrumb'] = [

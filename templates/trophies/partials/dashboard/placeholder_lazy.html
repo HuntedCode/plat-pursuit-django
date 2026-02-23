@@ -1,0 +1,23 @@
+{# Placeholder module: validates AJAX lazy-loading pipeline. #}
+<div class="card bg-base-200/80 border-2 border-base-300 shadow-lg shadow-neutral">
+    <div class="card-body p-4 lg:p-6">
+        <div class="flex items-center justify-between mb-2">
+            <h2 class="card-title text-lg lg:text-xl font-bold flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-info" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="23 4 23 10 17 10"></polyline>
+                    <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
+                </svg>
+                Lazy Module
+            </h2>
+            <span class="badge badge-info badge-sm">Lazy-loaded</span>
+        </div>
+        <p class="text-base-content/70 text-sm">
+            {{ data.message }}
+        </p>
+        <div class="flex flex-wrap gap-4 mt-3 text-xs text-base-content/50">
+            <span>Profile: {{ data.profile_name }}</span>
+            <span>Fetched: {{ data.timestamp }}</span>
+            <span>Size: {{ effective_size }}</span>
+        </div>
+    </div>
+</div>

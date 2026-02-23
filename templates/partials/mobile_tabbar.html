@@ -86,6 +86,7 @@
     {% if user.is_authenticated and user.profile %}
     <div class="more-drawer-section-title">My Pursuit</div>
     <ul class="menu menu-sm px-2">
+        <li><a href="{% url 'dashboard' %}">My Dashboard</a></li>
         <li><a href="{% url 'settings' %}">Customization</a></li>
         <li><a href="{% url 'recap_index' %}">Monthly Recap</a></li>
         <li><a href="{% url 'my_guides' %}">My Guides</a></li>

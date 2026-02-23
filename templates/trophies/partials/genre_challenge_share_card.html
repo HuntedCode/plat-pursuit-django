@@ -112,7 +112,7 @@ Grid layout: 4x4 for both landscape and portrait
 
             {# Subgenre Tracker #}
             <div style="margin-top: 6px; display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap;">
-                <span style="font-size: 11px; font-weight: bold; color: #9580ff; text-transform: uppercase; letter-spacing: 0.05em; flex-shrink: 0;">Subgenres {{ subgenre_count }}/{{ subgenre_total }}:</span>
+                <span style="font-size: 11px; font-weight: bold; color: #9580ff; text-transform: uppercase; letter-spacing: 0.05em; flex-shrink: 0;">Subgenres {{ platted_subgenre_count }}/{{ subgenre_total }}:</span>
                 {% for sg in subgenres %}
                 <span style="display: inline-block; font-size: 8px; font-weight: 600; padding: 2px 5px; border-radius: 3px; white-space: nowrap;
                     {% if sg.status == 'platted' %}background: rgba(251, 191, 36, 0.15); color: #fbbf24; border: 1px solid rgba(251, 191, 36, 0.3);
@@ -186,7 +186,7 @@ Grid layout: 4x4 for both landscape and portrait
                 </div>
                 <div style="background: rgba(42, 46, 52, 0.8); border: 4px solid #1a1b1f; border-radius: 8px; padding: 14px 28px; text-align: center; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.6); box-sizing: border-box; min-width: 180px;">
                     <div style="font-size: 13px; color: #9580ff; text-transform: uppercase; letter-spacing: 0.05em; font-weight: bold; font-style: italic; margin-bottom: 4px;">Subgenres</div>
-                    <div style="font-size: 36px; font-weight: bold; color: #f5f7fc;">{{ subgenre_count }}<span style="font-size: 18px; color: rgba(245, 247, 252, 0.4);">/{{ subgenre_total }}</span></div>
+                    <div style="font-size: 36px; font-weight: bold; color: #f5f7fc;">{{ platted_subgenre_count }}<span style="font-size: 18px; color: rgba(245, 247, 252, 0.4);">/{{ subgenre_total }}</span></div>
                 </div>
             </div>
 
@@ -249,7 +249,7 @@ Grid layout: 4x4 for both landscape and portrait
             {# Subgenre Tracker #}
             <div style="margin-top: 16px; background: rgba(42, 46, 52, 0.6); border: 2px solid #1a1b1f; border-radius: 8px; padding: 14px 16px; box-sizing: border-box;">
                 <div style="font-size: 13px; font-weight: bold; color: #9580ff; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 10px;">
-                    Subgenre Tracker: {{ subgenre_count }}/{{ subgenre_total }}
+                    Subgenre Tracker: {{ platted_subgenre_count }}/{{ subgenre_total }}
                 </div>
                 <div style="display: flex; flex-wrap: wrap; gap: 4px;">
                     {% for sg in subgenres %}

@@ -133,6 +133,7 @@ def _serialize_challenge(challenge, include_slots=False):
         'cover_genre': challenge.cover_genre,
         'cover_image_url': _resolve_cover_image(challenge),
         'subgenre_count': challenge.subgenre_count,
+        'platted_subgenre_count': challenge.platted_subgenre_count,
         'subgenre_total': len(GENRE_CHALLENGE_SUBGENRES),
         'author': {
             'psn_username': challenge.profile.psn_username,
@@ -435,7 +436,7 @@ class GenreSlotAssignAPIView(APIView):
             recalculate_challenge_counts(challenge)
             challenge.save(update_fields=[
                 'filled_count', 'completed_count', 'subgenre_count',
-                'bonus_count', 'updated_at',
+                'platted_subgenre_count', 'bonus_count', 'updated_at',
             ])
 
             # Auto-set cover genre on first assignment
@@ -445,6 +446,7 @@ class GenreSlotAssignAPIView(APIView):
             response_data = _serialize_slot(slot)
             response_data['cover_genre'] = challenge.cover_genre
             response_data['subgenre_count'] = challenge.subgenre_count
+            response_data['platted_subgenre_count'] = challenge.platted_subgenre_count
             response_data['subgenre_total'] = len(GENRE_CHALLENGE_SUBGENRES)
             response_data['bonus_count'] = challenge.bonus_count
             # Return updated collected subgenres with status for live tracker update
@@ -519,7 +521,7 @@ class GenreSlotClearAPIView(APIView):
             recalculate_challenge_counts(challenge)
             challenge.save(update_fields=[
                 'filled_count', 'completed_count', 'subgenre_count',
-                'bonus_count', 'updated_at',
+                'platted_subgenre_count', 'bonus_count', 'updated_at',
             ])
 
             # Re-pick cover if the cleared slot was the cover
@@ -529,6 +531,7 @@ class GenreSlotClearAPIView(APIView):
             response_data = _serialize_slot(slot)
             response_data['cover_genre'] = challenge.cover_genre
             response_data['subgenre_count'] = challenge.subgenre_count
+            response_data['platted_subgenre_count'] = challenge.platted_subgenre_count
             response_data['subgenre_total'] = len(GENRE_CHALLENGE_SUBGENRES)
             response_data['bonus_count'] = challenge.bonus_count
             sg_status = get_subgenre_status(challenge)
@@ -867,6 +870,7 @@ def _build_genre_response_extras(challenge):
     return {
         'cover_genre': challenge.cover_genre,
         'subgenre_count': challenge.subgenre_count,
+        'platted_subgenre_count': challenge.platted_subgenre_count,
         'subgenre_total': len(GENRE_CHALLENGE_SUBGENRES),
         'bonus_count': challenge.bonus_count,
         'collected_subgenres': [
@@ -970,7 +974,7 @@ class GenreBonusAddAPIView(APIView):
             recalculate_challenge_counts(challenge)
             challenge.save(update_fields=[
                 'filled_count', 'completed_count', 'subgenre_count',
-                'bonus_count', 'updated_at',
+                'platted_subgenre_count', 'bonus_count', 'updated_at',
             ])
 
             response_data = _serialize_bonus_slot(bonus_slot)
@@ -1014,7 +1018,7 @@ class GenreBonusClearAPIView(APIView):
             recalculate_challenge_counts(challenge)
             challenge.save(update_fields=[
                 'filled_count', 'completed_count', 'subgenre_count',
-                'bonus_count', 'updated_at',
+                'platted_subgenre_count', 'bonus_count', 'updated_at',
             ])
 
             response_data = _build_genre_response_extras(challenge)
@@ -1161,7 +1165,7 @@ class GenreMoveAPIView(APIView):
             recalculate_challenge_counts(challenge)
             challenge.save(update_fields=[
                 'filled_count', 'completed_count', 'subgenre_count',
-                'bonus_count', 'updated_at',
+                'platted_subgenre_count', 'bonus_count', 'updated_at',
             ])
 
             response_data = _build_genre_response_extras(challenge)

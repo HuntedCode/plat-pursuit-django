@@ -99,7 +99,7 @@
                     <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
                     {{ challenge.view_count }}
                 </span>
-                <span>{{ challenge.subgenre_count }} subgenres</span>
+                <span>{{ challenge.platted_subgenre_count }} subgenres</span>
                 {% if challenge.bonus_count %}<span>+{{ challenge.bonus_count }} bonus</span>{% endif %}
             </div>
             <span>{{ challenge.created_at|timesince }} ago</span>

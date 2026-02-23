@@ -224,7 +224,7 @@ def handle_genre_progress(profile, milestone, _cache=None):
 
 @register_handler('subgenre_progress')
 def handle_subgenre_progress(profile, milestone, _cache=None):
-    """Check progress for unique subgenres collected (best single challenge)."""
+    """Check progress for unique subgenres platted (best single challenge)."""
     from trophies.models import Challenge
 
     target = milestone.criteria_details.get('target', 0)
@@ -233,8 +233,8 @@ def handle_subgenre_progress(profile, milestone, _cache=None):
     else:
         best_challenge = Challenge.objects.filter(
             profile=profile, challenge_type='genre', is_deleted=False
-        ).order_by('-subgenre_count').first()
-        best = best_challenge.subgenre_count if best_challenge else 0
+        ).order_by('-platted_subgenre_count').first()
+        best = best_challenge.platted_subgenre_count if best_challenge else 0
         if _cache is not None:
             _cache['subgenre_progress'] = best
     achieved = best >= target

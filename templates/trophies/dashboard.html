@@ -1,0 +1,151 @@
+{% extends 'base.html' %}
+{% load static custom_filters %}
+
+{% block title %}My Dashboard - Platinum Pursuit{% endblock %}
+{% block meta_description %}Your personal trophy hunting command center. Track trophies, badges, challenges, and more at a glance.{% endblock %}
+
+{% block content %}
+{# ─── Dashboard Header ────────────────────────────────────────────────── #}
+<section class="shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 w-full p-0 lg:p-4">
+    {% include 'partials/breadcrumb.html' with items=breadcrumb %}
+
+    <div class="card bg-base-100 border-4 border-base-300 shadow-md shadow-neutral">
+        <div class="card-body p-4 lg:p-6">
+            <div class="flex flex-row items-center justify-between gap-4">
+                <div class="flex items-center gap-3">
+                    <div class="avatar">
+                        <div class="w-12 h-12 lg:w-16 lg:h-16 rounded-full ring-2 ring-primary">
+                            <img src="{{ profile.avatar_url }}"
+                                 alt="{{ profile.display_psn_username|default:profile.psn_username }}"
+                                 class="object-cover" loading="eager" />
+                        </div>
+                    </div>
+                    <div>
+                        <h1 class="text-2xl lg:text-3xl font-bold">My Dashboard</h1>
+                        <p class="text-base-content/60 text-sm italic pr-1">Your trophy hunting command center.</p>
+                    </div>
+                </div>
+                <button id="customize-btn" class="btn btn-ghost btn-sm border border-base-300 gap-1">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="3"></circle>
+                        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                    </svg>
+                    <span class="hidden lg:inline">Customize</span>
+                </button>
+            </div>
+        </div>
+    </div>
+</section>
+
+{# ─── Module Container ─────────────────────────────────────────────────── #}
+<div id="dashboard-modules" class="grid grid-cols-2 lg:grid-cols-4 2xl:grid-cols-6 grid-flow-dense gap-4 lg:gap-6 mt-6">
+    {% for module in modules %}
+        <div data-module-slug="{{ module.slug }}"
+             data-module-size="{{ module.effective_size }}"
+             data-item-id="{{ module.slug }}"
+             id="module-{{ module.slug }}"
+             class="dashboard-module {{ module.grid_class }} relative"
+             {% if is_premium %}draggable="true"{% endif %}>
+            {% if is_premium %}
+                {# Drag handle for premium reordering: floats over module content #}
+                <div class="module-drag-handle hidden absolute top-2 left-2 z-10 cursor-grab opacity-40 hover:opacity-100 transition-opacity bg-base-100/80 rounded p-1" aria-label="Drag to reorder">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="8" y1="6" x2="21" y2="6"></line>
+                        <line x1="8" y1="12" x2="21" y2="12"></line>
+                        <line x1="8" y1="18" x2="21" y2="18"></line>
+                        <line x1="3" y1="6" x2="3.01" y2="6"></line>
+                        <line x1="3" y1="12" x2="3.01" y2="12"></line>
+                        <line x1="3" y1="18" x2="3.01" y2="18"></line>
+                    </svg>
+                </div>
+            {% endif %}
+
+            {% if module.load_strategy == 'server' %}
+                {% with mod_data=server_module_data|get_item:module.slug %}
+                    {% include module.template with data=mod_data effective_size=module.effective_size %}
+                {% endwith %}
+            {% else %}
+                {# Skeleton placeholder for lazy-loaded modules #}
+                <div class="dashboard-module-skeleton">
+                    <div class="card bg-base-200/80 border-2 border-base-300 shadow-lg shadow-neutral">
+                        <div class="card-body p-4 lg:p-6">
+                            <div class="animate-pulse">
+                                <div class="h-5 bg-base-300 rounded w-1/3 mb-4"></div>
+                                <div class="space-y-3">
+                                    <div class="h-4 bg-base-300 rounded w-full"></div>
+                                    <div class="h-4 bg-base-300 rounded w-2/3"></div>
+                                    {% if module.effective_size == 'large' %}
+                                        <div class="h-32 bg-base-300 rounded w-full"></div>
+                                    {% elif module.effective_size == 'medium' %}
+                                        <div class="h-20 bg-base-300 rounded w-full"></div>
+                                    {% else %}
+                                        <div class="h-12 bg-base-300 rounded w-full"></div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            {% endif %}
+        </div>
+    {% endfor %}
+</div>
+
+{# ─── Empty State (shown when all modules hidden) ──────────────────────── #}
+<div id="dashboard-empty" class="{% if modules %}hidden{% endif %} text-center py-16 mt-6">
+    <div class="card bg-base-200/80 border-2 border-base-300 shadow-lg shadow-neutral max-w-lg mx-auto">
+        <div class="card-body items-center text-center p-8">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-16 h-16 text-base-content/30 mb-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3" y="3" width="7" height="7"></rect>
+                <rect x="14" y="3" width="7" height="7"></rect>
+                <rect x="14" y="14" width="7" height="7"></rect>
+                <rect x="3" y="14" width="7" height="7"></rect>
+            </svg>
+            <h2 class="text-xl font-bold text-base-content/60">All modules hidden</h2>
+            <p class="text-base-content/40 mt-2">Click "Customize" to bring some back.</p>
+        </div>
+    </div>
+</div>
+
+{# ─── Customize Modal ──────────────────────────────────────────────────── #}
+<dialog id="customize-modal" class="modal">
+    {% include 'trophies/partials/dashboard/customize_panel.html' %}
+    <form method="dialog" class="modal-backdrop">
+        <button>close</button>
+    </form>
+</dialog>
+{% endblock %}
+
+{% block js_scripts %}
+<script src="{% static 'js/dashboard.js' %}"></script>
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    PlatPursuit.ZoomScaler.init();
+
+    const dashboard = new PlatPursuit.DashboardManager({
+        moduleDataUrl: '/api/v1/dashboard/module/',
+        configUrl: '/api/v1/dashboard/config/',
+        reorderUrl: '/api/v1/dashboard/reorder/',
+        isPremium: {{ is_premium|yesno:"true,false" }},
+        maxFreeHidden: {{ max_free_hidden }},
+        hiddenModules: {{ dashboard_config.hidden_modules|tojson }},
+        moduleSettings: {{ dashboard_config.module_settings|tojson }},
+        lazyModules: [
+            {% for module in modules %}{% if module.load_strategy == 'lazy' %}
+            { slug: '{{ module.slug }}', elementId: 'module-{{ module.slug }}' },
+            {% endif %}{% endfor %}
+        ],
+        moduleSizes: {
+            {% for module in modules %}
+            '{{ module.slug }}': {
+                effectiveSize: '{{ module.effective_size }}',
+                allowedSizes: {{ module.allowed_sizes|tojson }},
+                defaultSize: '{{ module.default_size }}',
+            },
+            {% endfor %}
+        },
+    });
+    dashboard.init();
+});
+</script>
+{% endblock %}

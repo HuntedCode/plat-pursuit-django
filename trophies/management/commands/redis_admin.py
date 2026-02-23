@@ -35,6 +35,11 @@ class Command(BaseCommand):
             type=int,
             help='Flush TokenKeeper for a specific profile.'
         )
+        group.add_argument(
+            '--flush-dashboard',
+            type=int,
+            help='Flush dashboard module caches for a specific profile ID.'
+        )
 
     def handle(self, *args, **options):
         if not settings.DEBUG:
@@ -50,6 +55,8 @@ class Command(BaseCommand):
             self._handle_flush_token_keeper()
         elif options['flush_complete_lock']:
             self._handle_flush_complete_lock(options['flush_complete_lock'])
+        elif options['flush_dashboard']:
+            self._handle_flush_dashboard(options['flush_dashboard'])
 
     def _confirm_action(self, action_desc):
         confirm = input(f"Are you sure you want to {action_desc}? (y/n):").strip().lower()
@@ -175,3 +182,11 @@ class Command(BaseCommand):
             logger.exception(f"Error during complete lock flush: {e}")
             self.stdout.write(self.style.ERROR(f"Error: {e}"))
 
+    def _handle_flush_dashboard(self, profile_id: int):
+        try:
+            from trophies.services.dashboard_service import invalidate_dashboard_cache
+            invalidate_dashboard_cache(profile_id)
+            self.stdout.write(self.style.SUCCESS(f"Dashboard caches flushed for profile {profile_id}."))
+        except Exception as e:
+            logger.exception(f"Error during dashboard flush: {e}")
+            self.stdout.write(self.style.ERROR(f"Error: {e}"))

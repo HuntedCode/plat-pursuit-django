@@ -74,7 +74,7 @@
                     {# Stats #}
                     <div class="flex items-center gap-4 mt-2 text-xs text-base-content/50">
                         <span>{{ challenge.filled_count }}/{{ challenge.total_items }} slots filled</span>
-                        <span>{{ subgenre_count }}/{{ subgenre_total }} subgenres</span>
+                        <span>{{ platted_subgenre_count }}/{{ subgenre_total }} subgenres</span>
                         <span>{{ challenge.view_count }} view{{ challenge.view_count|pluralize }}</span>
                     </div>
                 </div>
@@ -331,7 +331,7 @@
         <div class="collapse collapse-arrow bg-base-100 border-2 border-base-300">
             <input type="checkbox" checked />
             <div class="collapse-title text-base font-bold">
-                Subgenre Bonus Tracker: <span class="text-primary">{{ subgenre_count }}/{{ subgenre_total }}</span>
+                Subgenre Bonus Tracker: <span class="text-primary">{{ platted_subgenre_count }}/{{ subgenre_total }}</span>
             </div>
             <div class="collapse-content">
                 <p class="text-xs text-base-content/50 mb-3">Subgenres are collected automatically from your picks.</p>

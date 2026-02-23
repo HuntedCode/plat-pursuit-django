@@ -68,6 +68,7 @@ from .game_family_views import (
 )
 from .subscription_admin_views import SubscriptionAdminActionView, SubscriptionAdminUserDetailView
 from .fundraiser_views import CreateDonationView, ClaimBadgeView, UpdateClaimStatusView
+from .dashboard_views import DashboardModuleDataView, DashboardConfigUpdateView, DashboardModuleReorderView
 
 app_name = 'api'
 
@@ -249,4 +250,9 @@ urlpatterns = [
     path('fundraiser/<slug:slug>/donate/', CreateDonationView.as_view(), name='fundraiser-donate'),
     path('fundraiser/claim/', ClaimBadgeView.as_view(), name='fundraiser-claim'),
     path('admin/fundraiser/claim-status/', UpdateClaimStatusView.as_view(), name='fundraiser-claim-status'),
+
+    # Dashboard endpoints
+    path('dashboard/module/<str:slug>/', DashboardModuleDataView.as_view(), name='dashboard-module-data'),
+    path('dashboard/config/', DashboardConfigUpdateView.as_view(), name='dashboard-config-update'),
+    path('dashboard/reorder/', DashboardModuleReorderView.as_view(), name='dashboard-reorder'),
 ]
