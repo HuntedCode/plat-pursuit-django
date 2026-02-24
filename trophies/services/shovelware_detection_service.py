@@ -37,6 +37,18 @@ class ShovelwareDetectionService:
         if game.shovelware_lock:
             return
 
+        # Check if publisher is already blacklisted (catches new games from known shovelware publishers
+        # even when their earn rate hasn't reached the 90% threshold yet)
+        concept = game.concept
+        if concept and concept.publisher_name:
+            from trophies.models import PublisherBlacklist
+            if PublisherBlacklist.objects.filter(
+                name=concept.publisher_name, is_blacklisted=True
+            ).exists():
+                if not cls._concept_is_shielded(concept):
+                    cls._flag_game_and_concept(game)
+                    return
+
         plat = game.trophies.filter(trophy_type='platinum').only('trophy_earn_rate').first()
         if not plat:
             return

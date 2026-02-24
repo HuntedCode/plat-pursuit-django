@@ -377,6 +377,10 @@ class PsnApiService:
         if trophy.trophy_type == 'platinum':
             from trophies.services.shovelware_detection_service import ShovelwareDetectionService
             ShovelwareDetectionService.evaluate_game(game)
+            # Refresh in-memory game object: evaluate_game uses queryset .update()
+            # which changes DB but not the in-memory instance. Downstream checks
+            # (deferred notifications, post_save signal) need fresh shovelware_status.
+            game.refresh_from_db()
         return trophy, created
 
     @classmethod

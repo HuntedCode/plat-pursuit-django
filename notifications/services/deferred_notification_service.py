@@ -93,6 +93,12 @@ class DeferredNotificationService:
                 redis_client.delete(key)
                 return
 
+            # Safety net: skip if game was flagged as shovelware after queueing
+            if game.is_shovelware:
+                logger.info(f"Skipping platinum notification for {game.title_name} - flagged as shovelware")
+                redis_client.delete(key)
+                return
+
             # Get notification template
             try:
                 template = NotificationTemplate.objects.get(
