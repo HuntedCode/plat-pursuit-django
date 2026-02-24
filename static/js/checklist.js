@@ -2198,27 +2198,27 @@
 
         document.querySelectorAll('.item-save-btn').forEach(btn => {
             btn.addEventListener('click', async function() {
-                // Support regular items and text area items
+                // Support regular items, text area items, and inline image items
                 const item = this.closest('.checklist-item-edit') ||
-                            this.closest('.checklist-text-area-edit');
+                            this.closest('.checklist-text-area-edit') ||
+                            this.closest('.checklist-image-item');
 
                 if (!item) return;
 
                 const itemId = item.dataset.itemId;
                 const text = item.querySelector('.item-text-input').value.trim();
+                const isImageItem = item.classList.contains('checklist-image-item');
                 const typeSelect = item.querySelector('.item-type-select');
                 const itemType = typeSelect ? typeSelect.value : item.dataset.itemType;
 
-                if (!text) {
+                if (!text && !isImageItem) {
                     PlatPursuit.ToastManager.show('Item text is required', 'error');
                     return;
                 }
 
                 try {
-                    await apiRequest(`${API_BASE}/checklists/items/${itemId}/`, 'PATCH', {
-                        text,
-                        item_type: itemType,
-                    });
+                    const patchData = isImageItem ? { text } : { text, item_type: itemType };
+                    await apiRequest(`${API_BASE}/checklists/items/${itemId}/`, 'PATCH', patchData);
 
                     // Update data attribute
                     item.dataset.itemType = itemType;
@@ -2273,19 +2273,18 @@
                     await apiRequest(`${API_BASE}/checklists/items/${itemId}/`, 'DELETE');
                     item.remove();
 
-                    // Update item count (count all types of items)
-                    const countBadge = section.querySelector('.section-item-count');
-                    const regularItems = section.querySelectorAll('.checklist-item-edit');
-                    const imageItems = section.querySelectorAll('.checklist-image-item');
-                    const textAreaItems = section.querySelectorAll('.checklist-text-area-edit');
-                    const trophyItems = section.querySelectorAll('.checklist-trophy-item-edit');
-                    const totalItems = regularItems.length + imageItems.length + textAreaItems.length + trophyItems.length;
-                    countBadge.textContent = totalItems + ' items';
+                    // Update item count
+                    const countBadge = section?.querySelector('.section-item-count');
+                    if (countBadge) {
+                        const items = section.querySelectorAll('[data-item-id]');
+                        const totalItems = items.length;
+                        countBadge.textContent = `${totalItems} item${totalItems !== 1 ? 's' : ''}`;
 
-                    // Show empty message if no items
-                    if (totalItems === 0) {
-                        const container = section.querySelector('.section-items-container');
-                        container.innerHTML = '<p class="text-base-content/50 italic text-center py-2 empty-items-message">No items yet. Add your first item below.</p>';
+                        // Show empty message if no items
+                        if (totalItems === 0) {
+                            const container = section.querySelector('.section-items-container');
+                            container.innerHTML = '<p class="text-base-content/50 italic text-center py-2 empty-items-message">No items yet. Add your first item below.</p>';
+                        }
                     }
 
                     PlatPursuit.ToastManager.show('Item deleted', 'info');
@@ -2513,8 +2512,10 @@
 
         // Update item count
         const countBadge = section.querySelector('.section-item-count');
-        const items = container.querySelectorAll('.checklist-item-edit');
-        countBadge.textContent = items.length + ' items';
+        if (countBadge) {
+            const items = container.querySelectorAll('[data-item-id]');
+            countBadge.textContent = `${items.length} item${items.length !== 1 ? 's' : ''}`;
+        }
 
         // Re-init event listeners
         initItemOperations(section.closest('#checklist-edit-container').dataset.checklistId);
@@ -4722,10 +4723,9 @@
 
                     // Use FormData for file upload
                     itemData = new FormData();
-                    itemData.append('item_type', 'image');
                     itemData.append('image', imageFile);
                     if (caption) {
-                        itemData.append('caption', caption);
+                        itemData.append('text', caption);
                     }
                     break;
 
