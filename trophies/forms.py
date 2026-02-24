@@ -1,7 +1,7 @@
 import logging
 from django import forms
 from django.db.models import Q
-from trophies.models import Profile, UserConceptRating, Concept, ProfileGame, Title, UserTitle
+from trophies.models import Profile, UserConceptRating, Concept, ProfileGame
 
 logger = logging.getLogger('psn_api')
 
@@ -204,37 +204,6 @@ class GameDetailForm(forms.Form):
 
 class TrophyCaseForm(forms.Form):
     query = forms.CharField(required=False, label='Search by game name')
-
-class TitleSettingsForm(forms.Form):
-    """Title selection form, available to all users with earned titles."""
-    title = forms.ModelChoiceField(
-        queryset=Title.objects.none(),
-        label='User Title',
-        empty_label='No Title',
-        required=False,
-        widget=forms.Select(attrs={'class': 'select w-full'}),
-    )
-
-    def __init__(self, *args, profile=None, **kwargs):
-        super().__init__(*args, **kwargs)
-        if profile:
-            self.profile = profile
-            self.fields['title'].queryset = profile.get_earned_titles()
-            current_title = Title.objects.filter(
-                user_titles__profile=profile, user_titles__is_displayed=True
-            ).first()
-            self.initial['title'] = current_title
-
-    def save(self):
-        selected_title = self.cleaned_data.get('title')
-        if selected_title:
-            self.profile.user_titles.update(is_displayed=False)
-            user_title = UserTitle.objects.get(profile=self.profile, title=selected_title)
-            user_title.is_displayed = True
-            user_title.save(update_fields=['is_displayed'])
-        else:
-            self.profile.user_titles.update(is_displayed=False)
-
 
 class PremiumSettingsForm(forms.ModelForm):
     """Premium-only settings: background and site theme."""

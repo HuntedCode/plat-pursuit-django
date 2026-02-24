@@ -678,3 +678,15 @@ html {
 .animate-spinner-fade-out {
   animation: spinner-fade-out 0.4s ease-in forwards;
 }
+
+/* ─── Knife Easter Egg ───────────────────────────────────────────────────── */
+
+@keyframes spinner-knife-shimmer {
+  0%, 100% { box-shadow: 0 0 8px color-mix(in oklch, var(--color-warning) 40%, transparent); }
+  50% { box-shadow: 0 0 16px color-mix(in oklch, var(--color-warning) 70%, transparent); }
+}
+
+.spinner-tile-knife {
+  border-color: color-mix(in oklch, var(--color-warning) 60%, transparent);
+  animation: spinner-knife-shimmer 1.2s ease-in-out infinite;
+}

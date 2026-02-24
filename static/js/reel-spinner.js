@@ -38,6 +38,11 @@ function ReelSpinner(config) {
     this._resultTimeoutId = null;
     this._resultInnerTimeoutId = null;
 
+    // Knife easter egg
+    this._knifeTileIndex = -1;
+    this._knifeLanded = false;
+    this._nearKnifeHit = false;
+
     // Audio
     this._audioCtx = null;
     this._audioGain = null;
@@ -81,6 +86,26 @@ ReelSpinner.SPEAKER_OFF_SVG = `
         <line x1="17" y1="9" x2="23" y2="15"/>
     </svg>
 `;
+
+// ─── Knife Easter Egg ────────────────────────────────────────────────────────
+
+ReelSpinner.KNIFE_IMAGE = '/static/images/easter-eggs/knife.png';
+ReelSpinner.KNIFE_APPEAR_CHANCE = 0.01;  // 1-in-100: knife shows up in reel
+ReelSpinner.KNIFE_LAND_CHANCE = 0.001;    // 1-in-1000: knife is the winner
+
+ReelSpinner.KNIFE_NEAR_MISS_TEXTS = [
+    'So close to the knife...',
+    'The knife giveth, the knife taketh away.',
+    'A knife was spotted in the reel!',
+    'You almost unboxed a rare one!',
+];
+
+ReelSpinner.KNIFE_WIN_TEXTS = [
+    'You unboxed a knife!',
+    'Against all odds... the knife is yours.',
+    'One in a thousand. Legendary.',
+    'The rarest of pulls. Platinum-tier luck.',
+];
 
 // ─── Public API ──────────────────────────────────────────────────────────────
 
@@ -259,6 +284,16 @@ ReelSpinner.prototype._buildReelStrip = function() {
     strip.innerHTML = '';
     strip.style.transform = 'translateX(0)';
 
+    // Reset knife state
+    this._knifeTileIndex = -1;
+    this._knifeLanded = false;
+    this._nearKnifeHit = false;
+
+    // Roll knife chances once per spin
+    const knifeLandRoll = Math.random() < ReelSpinner.KNIFE_LAND_CHANCE;
+    const knifeAppears = knifeLandRoll || Math.random() < ReelSpinner.KNIFE_APPEAR_CHANCE;
+    if (knifeLandRoll) this._knifeLanded = true;
+
     const e = PlatPursuit.HTMLUtils.escape;
     const slots = this._spinnerSlots;
     const labelClass = this.config.tileLabelClass || 'text-xs font-black';
@@ -283,20 +318,91 @@ ReelSpinner.prototype._buildReelStrip = function() {
             `);
         }
     }
+
+    // Knife insertion is deferred to _insertKnifeTile() so it can be placed
+    // relative to the winner tile (called after _pickWinner in _startSpin)
+    this._knifeAppears = knifeAppears;
+};
+
+/**
+ * Insert the knife tile near the winner. Called after _pickWinner() so we
+ * know this._winnerTileIndex. The knife spawns within a 10-tile window
+ * around the winner: 8 tiles ahead (before) or 2 tiles behind (after).
+ */
+ReelSpinner.prototype._insertKnifeTile = function() {
+    if (!this._knifeAppears || this._reelItems.length === 0) return;
+
+    const e = PlatPursuit.HTMLUtils.escape;
+    const strip = document.getElementById('spinner-strip');
+    const totalTiles = this._reelItems.length;
+    const winner = this._winnerTileIndex;
+
+    // Knife-land: insert at the winner position so the reel lands on it
+    // Knife-appear: insert within a 10-tile window around the winner
+    //   -8 (ahead in scroll, passes center before winner) to +2 (behind)
+    let knifeIdx;
+    if (this._knifeLanded) {
+        knifeIdx = winner;
+    } else {
+        const offsets = [];
+        for (let o = -8; o <= 2; o++) {
+            if (o === 0) continue; // Never on top of the winner itself
+            const idx = winner + o;
+            if (idx >= 0 && idx < totalTiles) offsets.push(idx);
+        }
+        if (offsets.length === 0) return;
+        knifeIdx = offsets[Math.floor(Math.random() * offsets.length)];
+    }
+
+    // Build the knife's own tile HTML
+    const knifeTileHTML = `
+        <div class="spinner-tile spinner-tile-knife flex-shrink-0 w-24 h-32 rounded-lg border-2
+                    border-base-300 bg-base-100 flex flex-col items-center
+                    justify-center gap-1 p-1.5 transition-all duration-300">
+            <span class="text-xs font-black text-warning text-center">???</span>
+            <img src="${e(ReelSpinner.KNIFE_IMAGE)}" alt=""
+                 class="w-16 h-16 rounded object-contain" />
+            <span class="text-[0.6rem] text-warning/70 leading-tight
+                         text-center w-full font-bold">Rare Drop</span>
+        </div>
+    `;
+
+    // Insert into the DOM before the tile at knifeIdx
+    const existingTiles = strip.querySelectorAll('.spinner-tile');
+    const refTile = existingTiles[knifeIdx];
+    if (refTile) {
+        refTile.insertAdjacentHTML('beforebegin', knifeTileHTML);
+    } else {
+        strip.insertAdjacentHTML('beforeend', knifeTileHTML);
+    }
+
+    // Splice a null sentinel into _reelItems so indices stay aligned with DOM
+    this._reelItems.splice(knifeIdx, 0, null);
+    this._knifeTileIndex = knifeIdx;
+
+    if (this._knifeLanded) {
+        // Knife-land: the knife IS the winner, reel should land on it
+        this._winner = null;
+        this._winnerTileIndex = knifeIdx;
+    } else if (knifeIdx <= this._winnerTileIndex) {
+        // Knife was inserted before the winner, shift winner index by 1
+        this._winnerTileIndex += 1;
+    }
 };
 
 // ─── Winner Selection ────────────────────────────────────────────────────────
 
 ReelSpinner.prototype._pickWinner = function() {
+    // Always pick a normal game winner first (used for positioning even on knife-land)
     const idx = Math.floor(Math.random() * this._spinnerSlots.length);
     this._winner = this._spinnerSlots[idx];
 
     const winnerKey = this.config.winnerKey(this._winner);
 
-    // Collect ALL tile indices matching the winner
+    // Collect ALL tile indices matching the winner, excluding the knife tile
     const candidates = [];
     for (let i = 0; i < this._reelItems.length; i++) {
-        if (this.config.winnerKey(this._reelItems[i]) === winnerKey) {
+        if (this._reelItems[i] && this.config.winnerKey(this._reelItems[i]) === winnerKey) {
             candidates.push(i);
         }
     }
@@ -342,6 +448,7 @@ ReelSpinner.prototype._startSpin = function() {
 
     this._buildReelStrip();
     this._pickWinner();
+    this._insertKnifeTile();
     this._calculateFinalPosition();
 
     const strip = document.getElementById('spinner-strip');
@@ -380,18 +487,28 @@ ReelSpinner.prototype._startSpin = function() {
 
 ReelSpinner.prototype._onLandResult = function() {
     this._isSpinning = false;
-    this._lastWinnerKey = this.config.winnerKey(this._winner);
+    this._lastWinnerKey = this._winner ? this.config.winnerKey(this._winner) : null;
 
-    // Play reveal fanfare
-    this._playRevealFanfare();
+    // Detect near-miss: winner adjacent to knife (but not a knife landing itself)
+    this._nearKnifeHit = !this._knifeLanded && this._knifeTileIndex >= 0 &&
+        Math.abs(this._winnerTileIndex - this._knifeTileIndex) <= 1;
 
-    // Highlight the winning tile
+    // Play reveal fanfare (knife landing gets the dramatic version)
+    if (this._knifeLanded) {
+        this._playKnifeFanfare();
+    } else {
+        this._playRevealFanfare();
+    }
+
+    // Highlight the winning tile (gold for knife, secondary for normal)
     const tiles = document.querySelectorAll('#spinner-strip .spinner-tile');
     const winningTile = tiles[this._winnerTileIndex];
     if (winningTile) {
-        winningTile.classList.add(
-            'border-secondary', 'scale-110', 'spinner-winner-glow'
-        );
+        if (this._knifeLanded) {
+            winningTile.classList.add('border-warning', 'scale-110', 'spinner-winner-glow');
+        } else {
+            winningTile.classList.add('border-secondary', 'scale-110', 'spinner-winner-glow');
+        }
     }
 
     // Brief pause, then show result
@@ -410,20 +527,61 @@ ReelSpinner.prototype._showResult = function() {
     const e = PlatPursuit.HTMLUtils.escape;
     const w = this._winner;
     const spinnerArea = document.getElementById('spinner-area');
+    const isKnifeWin = this._knifeLanded;
 
     // Populate result card while still hidden
-    document.getElementById('spinner-result-icon').innerHTML =
-        `<img src="${e(this.config.tileIcon(w))}" alt="" class="w-full h-full object-cover" />`;
-    document.getElementById('spinner-result-badge').textContent = this.config.resultBadge(w);
-    document.getElementById('spinner-result-name').textContent = this.config.tileName(w);
+    const resultIcon = document.getElementById('spinner-result-icon');
+    const resultBadge = document.getElementById('spinner-result-badge');
+    const resultName = document.getElementById('spinner-result-name');
+    const resultProgress = document.getElementById('spinner-result-progress');
+    const resultFlavor = document.getElementById('spinner-result-flavor');
 
-    const progressText = w.progress > 0
-        ? `${w.progress}% complete`
-        : 'Not started yet';
-    document.getElementById('spinner-result-progress').textContent = progressText;
+    if (isKnifeWin) {
+        // Knife celebration: no game, pure glory
+        resultIcon.innerHTML =
+            `<img src="${e(ReelSpinner.KNIFE_IMAGE)}" alt="Knife" class="w-full h-full object-contain p-1" />`;
+        resultIcon.classList.remove('border-secondary', 'shadow-secondary/30');
+        resultIcon.classList.add('border-warning', 'shadow-warning/30');
+        resultBadge.textContent = 'KNIFE!';
+        resultBadge.classList.remove('badge-secondary');
+        resultBadge.classList.add('badge-warning');
+        const winText = ReelSpinner.KNIFE_WIN_TEXTS[Math.floor(Math.random() * ReelSpinner.KNIFE_WIN_TEXTS.length)];
+        resultName.textContent = winText;
+        resultProgress.textContent = '';
+        resultFlavor.textContent = '1 in 1,000';
 
-    const flavor = ReelSpinner.FLAVOR_TEXTS[Math.floor(Math.random() * ReelSpinner.FLAVOR_TEXTS.length)];
-    document.getElementById('spinner-result-flavor').textContent = flavor;
+        // Track the rare knife landing
+        PlatPursuit.API.post('/api/v1/tracking/site-event/', {
+            event_type: 'easter_egg',
+            object_id: 'knife_landed'
+        }).catch(() => {});
+    } else {
+        // Normal game result
+        resultIcon.innerHTML =
+            `<img src="${e(this.config.tileIcon(w))}" alt="" class="w-full h-full object-cover" />`;
+        resultIcon.classList.remove('border-warning', 'shadow-warning/30');
+        resultIcon.classList.add('border-secondary', 'shadow-secondary/30');
+        resultBadge.textContent = this.config.resultBadge(w);
+        resultBadge.classList.remove('badge-warning');
+        resultBadge.classList.add('badge-secondary');
+        resultName.textContent = this.config.tileName(w);
+
+        const progressText = w.progress > 0
+            ? `${w.progress}% complete`
+            : 'Not started yet';
+        resultProgress.textContent = progressText;
+
+        // Near-miss: override flavor text if winner landed adjacent to a knife
+        if (this._nearKnifeHit) {
+            const knifeFlavor = ReelSpinner.KNIFE_NEAR_MISS_TEXTS[
+                Math.floor(Math.random() * ReelSpinner.KNIFE_NEAR_MISS_TEXTS.length)
+            ];
+            resultFlavor.textContent = knifeFlavor;
+        } else {
+            const flavor = ReelSpinner.FLAVOR_TEXTS[Math.floor(Math.random() * ReelSpinner.FLAVOR_TEXTS.length)];
+            resultFlavor.textContent = flavor;
+        }
+    }
 
     // Phase 1: Fade out the reel (opacity only, no layout shift)
     spinnerArea.classList.add('animate-spinner-fade-out');
@@ -449,19 +607,23 @@ ReelSpinner.prototype._showResult = function() {
         document.getElementById('spinner-spin-btn').classList.add('hidden');
         document.getElementById('spinner-again-btn').classList.remove('hidden');
 
-        // Show "Set as Display Cover" button
+        // Show "Set as Display Cover" button (hidden for knife wins)
         const coverBtn = document.getElementById('spinner-set-cover-btn');
         if (coverBtn) {
-            coverBtn.classList.remove('hidden', 'text-success');
-            coverBtn.classList.add('text-base-content/50');
-            coverBtn.disabled = false;
-            coverBtn.innerHTML = `
-                <span class="inline-flex w-3.5 h-3.5">${ReelSpinner.CAMERA_SVG}</span>
-                Set as Display Cover
-            `;
+            if (isKnifeWin) {
+                coverBtn.classList.add('hidden');
+            } else {
+                coverBtn.classList.remove('hidden', 'text-success');
+                coverBtn.classList.add('text-base-content/50');
+                coverBtn.disabled = false;
+                coverBtn.innerHTML = `
+                    <span class="inline-flex w-3.5 h-3.5">${ReelSpinner.CAMERA_SVG}</span>
+                    Set as Display Cover
+                `;
+            }
         }
 
-        // Fire confetti + pop sound
+        // Fire confetti + pop sound (gold confetti for knife, rainbow for normal)
         self._playConfettiPop();
         if (PlatPursuit.CelebrationManager) {
             PlatPursuit.CelebrationManager.loadConfetti().then(() => {
@@ -469,13 +631,24 @@ ReelSpinner.prototype._showResult = function() {
                 const canvas = document.getElementById('spinner-confetti-canvas');
                 if (!canvas) return;
                 const myConfetti = confetti.create(canvas, { resize: true });
-                myConfetti({
-                    particleCount: 80,
-                    spread: 70,
-                    origin: { x: 0.5, y: 0.5 },
-                    colors: ['#67d1f8', '#f472b6', '#a855f7', '#3b82f6', '#22c55e', '#eab308'],
-                    disableForReducedMotion: true,
-                });
+                if (isKnifeWin) {
+                    // Gold confetti burst for knife win
+                    myConfetti({
+                        particleCount: 150,
+                        spread: 100,
+                        origin: { x: 0.5, y: 0.5 },
+                        colors: ['#fbbf24', '#f59e0b', '#d97706', '#fcd34d', '#fffbeb'],
+                        disableForReducedMotion: true,
+                    });
+                } else {
+                    myConfetti({
+                        particleCount: 80,
+                        spread: 70,
+                        origin: { x: 0.5, y: 0.5 },
+                        colors: ['#67d1f8', '#f472b6', '#a855f7', '#3b82f6', '#22c55e', '#eab308'],
+                        disableForReducedMotion: true,
+                    });
+                }
             }).catch(() => {});
         }
     }, 400);
@@ -712,6 +885,53 @@ ReelSpinner.prototype._playConfettiPop = function() {
     gain.connect(this._audioGain);
     noise.start(now);
     noise.stop(now + 0.15);
+};
+
+ReelSpinner.prototype._playKnifeFanfare = function() {
+    if (!this._audioCtx || this._audioMuted) return;
+
+    const ctx = this._audioCtx;
+    const now = ctx.currentTime;
+
+    // Dramatic ascending fanfare: E5, G#5, B5, E6 (E major, brighter than normal C major)
+    const notes = [659.25, 830.61, 987.77, 1318.51];
+
+    for (let i = 0; i < notes.length; i++) {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+
+        osc.type = 'sine';
+        osc.frequency.value = notes[i];
+
+        const start = now + i * 0.12;
+        gain.gain.setValueAtTime(0, start);
+        gain.gain.linearRampToValueAtTime(0.3, start + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.8);
+
+        osc.connect(gain);
+        gain.connect(this._audioGain);
+        osc.start(start);
+        osc.stop(now + 0.85);
+    }
+
+    // Metallic shimmer on top
+    const noise = ctx.createBufferSource();
+    noise.buffer = this._getNoiseBuffer();
+
+    const hp = ctx.createBiquadFilter();
+    hp.type = 'highpass';
+    hp.frequency.value = 4000;
+
+    const noiseGain = ctx.createGain();
+    noiseGain.gain.setValueAtTime(0, now);
+    noiseGain.gain.linearRampToValueAtTime(0.06, now + 0.3);
+    noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.7);
+
+    noise.connect(hp);
+    hp.connect(noiseGain);
+    noiseGain.connect(this._audioGain);
+    noise.start(now);
+    noise.stop(now + 0.75);
 };
 
 ReelSpinner.prototype._onSpinStart = function() {

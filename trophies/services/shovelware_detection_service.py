@@ -1,6 +1,9 @@
 import logging
+import time
 
 from django.utils import timezone
+
+from trophies.util_modules.cache import redis_client
 
 logger = logging.getLogger("psn_api")
 
@@ -63,17 +66,20 @@ class ShovelwareDetectionService:
     @classmethod
     def _flag_game_and_concept(cls, game):
         """Flag this game, all concept siblings, and track on publisher blacklist."""
-        from trophies.models import Game, PublisherBlacklist
+        from trophies.models import PublisherBlacklist
 
         now = timezone.now()
         concept = game.concept
 
         if concept:
-            Game.objects.filter(
-                concept=concept, shovelware_lock=False,
-            ).exclude(
-                shovelware_status='manually_flagged',
-            ).update(shovelware_status='auto_flagged', shovelware_updated_at=now)
+            # Serialize concept-sibling updates to prevent AB/BA deadlocks
+            # when concurrent sync_trophies jobs process games in the same concept.
+            cls._update_concept_games_with_lock(
+                concept,
+                exclude_statuses=['manually_flagged'],
+                new_status='auto_flagged',
+                now=now,
+            )
 
             # Track concept on publisher blacklist
             if concept.publisher_name:
@@ -132,11 +138,12 @@ class ShovelwareDetectionService:
 
             # Safe to unflag entire concept
             now = timezone.now()
-            Game.objects.filter(
-                concept=concept, shovelware_lock=False,
-            ).exclude(
-                shovelware_status__in=['manually_flagged', 'clean'],
-            ).update(shovelware_status='clean', shovelware_updated_at=now)
+            cls._update_concept_games_with_lock(
+                concept,
+                exclude_statuses=['manually_flagged', 'clean'],
+                new_status='clean',
+                now=now,
+            )
 
             # Remove concept from publisher tracking (may un-blacklist)
             if concept.publisher_name:
@@ -152,13 +159,48 @@ class ShovelwareDetectionService:
                 game.save(update_fields=['shovelware_status', 'shovelware_updated_at'])
 
     @classmethod
+    def _update_concept_games_with_lock(cls, concept, exclude_statuses, new_status, now):
+        """Update all games in a concept with a Redis lock to prevent deadlocks.
+
+        Concurrent sync_trophies workers processing games in the same concept
+        can cause AB/BA deadlocks via the bulk Game.objects.filter().update() call.
+        This serializes concept-level writes with a short Redis lock.
+        """
+        from trophies.models import Game
+
+        concept_lock_key = f"shovelware_concept_lock:{concept.concept_id}"
+        for attempt in range(3):
+            if redis_client.set(concept_lock_key, "1", nx=True, ex=10):
+                try:
+                    Game.objects.filter(
+                        concept=concept, shovelware_lock=False,
+                    ).exclude(
+                        shovelware_status__in=exclude_statuses,
+                    ).update(shovelware_status=new_status, shovelware_updated_at=now)
+                finally:
+                    redis_client.delete(concept_lock_key)
+                return
+            time.sleep(0.1 * (attempt + 1))
+
+        # Fallback: proceed without lock (better than skipping the update entirely)
+        logger.warning(
+            f"Could not acquire concept lock for {concept.concept_id} after 3 attempts, "
+            f"proceeding without lock."
+        )
+        Game.objects.filter(
+            concept=concept, shovelware_lock=False,
+        ).exclude(
+            shovelware_status__in=exclude_statuses,
+        ).update(shovelware_status=new_status, shovelware_updated_at=now)
+
+    @classmethod
     def _flag_all_publisher_games(cls, publisher_name, now):
         """When a publisher becomes fully blacklisted, flag their games per-concept.
 
         Applies concept shield: concepts where no game has 80%+ plat rate
         (and at least one game has <=50%) are exempt from the blacklist cascade.
         """
-        from trophies.models import Concept, Game
+        from trophies.models import Concept
 
         concepts = Concept.objects.filter(
             publisher_name=publisher_name,
@@ -169,9 +211,9 @@ class ShovelwareDetectionService:
             if cls._concept_is_shielded(concept):
                 continue
 
-            Game.objects.filter(
-                concept=concept,
-                shovelware_lock=False,
-            ).exclude(
-                shovelware_status='manually_flagged',
-            ).update(shovelware_status='auto_flagged', shovelware_updated_at=now)
+            cls._update_concept_games_with_lock(
+                concept,
+                exclude_statuses=['manually_flagged'],
+                new_status='auto_flagged',
+                now=now,
+            )

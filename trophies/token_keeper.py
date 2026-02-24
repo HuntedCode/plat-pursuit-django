@@ -481,9 +481,23 @@ class TokenKeeper:
 
                 logger.info(f"Job: {job_type} - Profile: {profile_id} completed successfully in {job_duration:.1f}s")
             except OperationalError as db_err:
-                logger.error(f"Database error in job worker: {db_err}")
-                if "database is locked" in str(db_err).lower():
+                err_msg = str(db_err).lower()
+                if "deadlock detected" in err_msg:
+                    logger.warning(
+                        f"Deadlock detected in {job_type} for profile {profile_id}, "
+                        f"re-queuing after 2s delay: {db_err}"
+                    )
+                    time.sleep(2)
+                    if job_type and args is not None and profile_id:
+                        PSNManager.assign_job(
+                            job_type, args=args, profile_id=profile_id,
+                            priority_override=queue_name
+                        )
+                elif "database is locked" in err_msg:
+                    logger.error(f"Database error in job worker: {db_err}")
                     self._record_db_lock_error()
+                else:
+                    logger.error(f"Database error in job worker: {db_err}")
                 self._check_stuck_instances()
             except Exception as e:
                 logger.error(f"Error in job worker: {e}")
@@ -1184,9 +1198,31 @@ class TokenKeeper:
         except Game.DoesNotExist:
             logger.error(f"Game {np_communication_id} does not exist.")
             return
+
+        # Prevent concurrent sync_trophies for the same game.
+        # Health-check re-queuing can dispatch multiple high_priority jobs
+        # for games sharing a concept, causing AB/BA deadlocks via
+        # ShovelwareDetectionService's concept-sibling updates.
+        lock_key = f"sync_trophies_lock:{np_communication_id}"
+        acquired = redis_client.set(lock_key, f"{profile_id}", nx=True, ex=120)
+        if not acquired:
+            logger.info(
+                f"sync_trophies for {np_communication_id} already in progress "
+                f"(profile {profile_id}), skipping duplicate."
+            )
+            profile.increment_sync_progress(value=2)
+            return
+
+        try:
+            self._do_sync_trophies(profile, game, np_communication_id, platform)
+        finally:
+            redis_client.delete(lock_key)
+
+    def _do_sync_trophies(self, profile, game, np_communication_id: str, platform: str):
+        """Execute the actual trophy sync work. Called under a per-game Redis lock."""
         job_type = 'sync_trophies'
 
-        logger.info(f"Fetching trophies for profile {profile_id}, game {np_communication_id} on platform {platform}")
+        logger.info(f"Fetching trophies for profile {profile.id}, game {np_communication_id} on platform {platform}")
         trophies = self._execute_api_call(self._get_instance_for_job(job_type), profile, 'trophies', np_communication_id=np_communication_id, platform=PlatformType(platform), include_progress=True, trophy_group_id='all', page_size=500)
         # Process in batches to avoid long-running transactions that block other DB operations.
         # Suppress the EarnedTrophy pre_save signal during sync: the signal fires a SELECT per
@@ -1207,7 +1243,7 @@ class TokenKeeper:
         try:
             from notifications.services.deferred_notification_service import DeferredNotificationService
             DeferredNotificationService.create_platinum_notification_for_game(
-                profile_id=profile_id,
+                profile_id=profile.id,
                 game_id=game.id
             )
         except Exception as e:

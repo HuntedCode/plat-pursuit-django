@@ -104,7 +104,11 @@
                 </div>
                 <h3 class="text-xs md:text-sm text-base-content/70 text-center pr-1 line-clamp-2 italic">{{ profile.about_me }}</h3>
                 {% if profile.displayed_title %}
-                    <h3 class="text-base md:text-lg {% if profile.user_is_premium %}legendary-title{% else %}text-base-content/70{% endif %} text-center pr-1 line-clamp-1 italic">{{ profile.displayed_title }}</h3>
+                    {% if user.is_authenticated and user.profile == profile %}
+                        <a href="{% url 'my_titles' %}" class="text-base md:text-lg {% if profile.user_is_premium %}legendary-title{% else %}text-base-content/70{% endif %} text-center pr-1 line-clamp-1 italic hover:underline">{{ profile.displayed_title }}</a>
+                    {% else %}
+                        <h3 class="text-base md:text-lg {% if profile.user_is_premium %}legendary-title{% else %}text-base-content/70{% endif %} text-center pr-1 line-clamp-1 italic">{{ profile.displayed_title }}</h3>
+                    {% endif %}
                 {% endif %}
                 <div class="flex flex-col items-center gap-1 w-full">
                     <h3 class="text-base md:text-lg text-base-content text-center">Trophy Level: <span class="text-primary font-bold">{{ profile.trophy_level }}</span></h3>

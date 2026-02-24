@@ -75,27 +75,21 @@
                 </div>
             </div>
 
-            <!-- Title Settings (available to all users) -->
-            {% if profile and title_form %}
+            <!-- Title Settings -->
+            {% if profile %}
                 <div class="divider divider-vertical m-0 mt-2 p-0"></div>
                 <h3 class="text-2xl text-base-content font-semibold italic mb-2">Title</h3>
-                <div class="flex flex-col border-4 border-base-300 shadow-lg shadow-neutral rounded-box p-4 w-7/8 mx-auto">
-                    <form method="post" class="w-7/8 mx-auto" id="title-settings-form">
-                        {% csrf_token %}
-                        <input type="hidden" name="action" value="update_title">
-                        <div class="form-control mb-2">
-                            <label class="label" for="{{ title_form.title.id_for_label }}">Selected Title</label>
-                            {{ title_form.title }}
-                            {% if title_form.title.errors %}
-                                <div class="alert alert-error mt-1">{{ title_form.title.errors }}</div>
-                            {% endif %}
-                        </div>
-                        <p class="text-center text-accent font-bold pr-1 italic mb-4">Earn Badges to unlock more titles!</p>
-                        {% if profile.user_is_premium %}
-                            <p class="text-center text-xs text-base-content/50 mb-4">As a Premium subscriber, your title is displayed with legendary styling.</p>
-                        {% endif %}
-                        <button type="submit" class="btn btn-secondary w-full" id="title-settings-save-btn">Save Title</button>
-                    </form>
+                <div class="flex flex-col border-4 border-base-300 shadow-lg shadow-neutral rounded-box p-4 w-7/8 mx-auto items-center gap-3">
+                    {% if profile.displayed_title %}
+                        <p class="text-lg {% if profile.user_is_premium %}legendary-title{% else %}text-base-content/70{% endif %} italic pr-1">{{ profile.displayed_title }}</p>
+                    {% else %}
+                        <p class="text-base-content/50 italic">No title equipped</p>
+                    {% endif %}
+                    <a href="{% url 'my_titles' %}" class="btn btn-secondary">Manage Titles</a>
+                    <p class="text-center text-accent font-bold pr-1 italic text-sm">Earn Badges and Milestones to unlock more titles!</p>
+                    {% if profile.user_is_premium %}
+                        <p class="text-center text-xs text-base-content/50">As a Premium subscriber, your title is displayed with legendary styling.</p>
+                    {% endif %}
                 </div>
             {% endif %}
 
