@@ -6,7 +6,7 @@ import logging
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status as http_status
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated, IsAdminUser
 from rest_framework.authentication import SessionAuthentication
 
 from trophies.models import UserTitle
@@ -21,7 +21,7 @@ class EquipTitleAPIView(APIView):
 
     Equips the given title for the authenticated user, or unequips if null.
     """
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsAdminUser]
     authentication_classes = [SessionAuthentication]
 
     def post(self, request):

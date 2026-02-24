@@ -1,9 +1,11 @@
 from collections import defaultdict
 
+from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db.models.functions import Lower
 from django.shortcuts import redirect
 from django.urls import reverse_lazy
+from django.utils.decorators import method_decorator
 from django.views.generic import TemplateView
 
 from ..models import (
@@ -13,6 +15,7 @@ from ..models import (
 from trophies.milestone_constants import MILESTONE_CATEGORIES, CRITERIA_TYPE_DISPLAY_NAMES, MONTH_MAP
 
 
+@method_decorator(staff_member_required, name='dispatch')
 class MyTitlesView(LoginRequiredMixin, TemplateView):
     """
     Displays all discoverable titles: earned (with equip controls) and
@@ -20,6 +23,8 @@ class MyTitlesView(LoginRequiredMixin, TemplateView):
 
     Discoverable = assigned to a live badge OR any milestone.
     Excludes orphan titles and titles from non-live badges.
+
+    Staff-only for now.
     """
     template_name = 'trophies/my_titles.html'
     login_url = '/login/'
