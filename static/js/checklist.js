@@ -1126,9 +1126,15 @@
                     const yOffset = -100; // Offset for navbar + breathing room
                     const y = targetSection.getBoundingClientRect().top + window.pageYOffset + yOffset;
 
+                    // Override CSS scroll-behavior: smooth to ensure instant jump
+                    // (prevents loading all lazy images while scrolling through sections)
+                    document.documentElement.style.scrollBehavior = 'auto';
                     window.scrollTo({
                         top: y,
-                        behavior: 'auto'  // Instant jump - prevents race with lazy-loaded images
+                        behavior: 'auto'
+                    });
+                    requestAnimationFrame(() => {
+                        document.documentElement.style.scrollBehavior = '';
                     });
                 }
             });
