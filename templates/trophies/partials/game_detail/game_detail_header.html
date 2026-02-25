@@ -196,7 +196,7 @@
                     <div class="card border-2 border-base-300 shadow-sm shadow-neutral hover:scale-105 hover:border-error hover:shadow-error group cursor-pointer flex-1 lg:flex-initial"
                          onclick="document.getElementById('versions-modal').showModal()" role="button" aria-label="View all versions">
                         <div class="card-body p-2">
-                            <div class="stats overflow-visible">
+                            <div class="stats stat-compact">
                                 <div class="stat">
                                     <div class="stat-figure">
                                         <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 lg:w-8 lg:h-8 hover:scale-105" viewBox="0 0 24 24" fill="none" stroke="var(--color-base-content)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 17 12 22 22 17"></polyline><polyline points="2 12 12 17 22 12"></polyline></svg>
@@ -212,7 +212,7 @@
                         <div class="card border-2 border-base-300 shadow-sm shadow-neutral hover:scale-105 hover:border-error hover:shadow-error group cursor-pointer flex-1 lg:flex-initial"
                                 onclick="document.getElementById('badges-modal').showModal()" role="button" aria-label="View all badges">
                             <div class="card-body p-2">
-                                <div class="stats overflow-visible">
+                                <div class="stats stat-compact">
                                     <div class="stat">
                                         <div class="stat-figure">
                                             <figure class="w-8 h-8" aria-hidden="true">
@@ -232,8 +232,8 @@
                 <div class="grid grid-cols-2 md:grid-cols-3 gap-y-3 gap-x-2">
 
                     <div class="card border-2 border-base-300 shadow-sm shadow-neutral hover:scale-105 hover:border-secondary hover:shadow-secondary group">
-                        <div class="card-body p-2 col-span-1">
-                            <div class="stats overflow-visible">
+                        <div class="card-body p-2">
+                            <div class="stats stat-compact">
                                 <div class="stat">
                                     <div class="stat-figure">
                                         <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 lg:w-8 lg:h-8 hover:scale-105" viewBox="0 0 24 24" fill="none" stroke="var(--color-secondary)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
@@ -246,8 +246,8 @@
                     </div>
 
                     <div class="card border-2 border-base-300 shadow-sm shadow-neutral hover:scale-105 hover:border-accent hover:shadow-accent group">
-                        <div class="card-body p-2 col-span-1">
-                            <div class="stats overflow-visible">
+                        <div class="card-body p-2">
+                            <div class="stats stat-compact">
                                 <div class="stat">
                                     <div class="stat-figure">
                                         <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 lg:w-8 lg:h-8 hover:scale-105" viewBox="0 0 24 24" fill="none" stroke="var(--color-accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
@@ -260,8 +260,8 @@
                     </div>
 
                     <div class="card border-2 border-base-300 shadow-sm shadow-neutral hover:scale-105 hover:border-warning hover:shadow-warning group">
-                        <div class="card-body p-2 col-span-1">
-                            <div class="stats overflow-visible">
+                        <div class="card-body p-2">
+                            <div class="stats stat-compact">
                                 <div class="stat">
                                     <div class="stat-figure">
                                         <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 lg:w-8 lg:h-8 hover:scale-105" viewBox="0 0 24 24" fill="none" stroke="var(--color-warning)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
@@ -274,8 +274,8 @@
                     </div>
 
                     <div class="card border-2 border-base-300 shadow-sm shadow-neutral hover:scale-105 hover:border-primary hover:shadow-primary group">
-                        <div class="card-body p-2 col-span-1">
-                            <div class="stats overflow-visible">
+                        <div class="card-body p-2">
+                            <div class="stats stat-compact">
                                 <div class="stat">
                                     <div class="stat-figure">
                                         {% include 'partials/icons/trophy_cup.html' with color='var(--color-primary)' size='w-6 h-6 lg:w-8 lg:h-8' extra_class='hover:scale-105' %}
@@ -288,8 +288,8 @@
                     </div>
 
                     <div class="card border-2 border-base-300 shadow-sm shadow-neutral hover:scale-105 hover:border-info hover:shadow-info group">
-                        <div class="card-body p-2 col-span-1">
-                            <div class="stats overflow-visible">
+                        <div class="card-body p-2">
+                            <div class="stats stat-compact">
                                 <div class="stat">
                                     <div class="stat-figure">
                                         <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 lg:w-8 lg:h-8 hover:scale-105" viewBox="0 0 24 24" fill="none" stroke="var(--color-info)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 11 12 14 22 4"></polyline><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path></svg>
@@ -302,8 +302,8 @@
                     </div>
 
                     <div class="card border-2 border-base-300 shadow-sm shadow-neutral hover:scale-105 hover:border-success hover:shadow-success group">
-                        <div class="card-body p-2 col-span-1">
-                            <div class="stats overflow-visible">
+                        <div class="card-body p-2">
+                            <div class="stats stat-compact">
                                 <div class="stat">
                                     <div class="stat-figure">
                                         <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 lg:w-8 lg:h-8 hover:scale-105" viewBox="0 0 24 24" fill="none" stroke="var(--color-success)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M18.7 8l-5.1 5.2-2.8-2.7L7 14.3"/></svg>
@@ -322,7 +322,7 @@
                     <div class="grid grid-cols-2 lg:grid-cols-4 gap-2 mt-2">
                         <div class="card border-2 border-base-300 shadow-sm shadow-neutral p-0 hover:scale-105 hover:border-secondary hover:shadow-secondary group">
                             <div class="card-body p-0">
-                                <div class="stats overflow-visible">
+                                <div class="stats stat-compact">
                                     <div class="stat place-items-center p-2">
                                         <div class="stat-value text-base lg:text-xl">{{ profile_progress.progress|floatformat:2|default:0 }}%</div>
                                         <div class="stat-desc italic">Total Completion (PSN)</div>
@@ -332,7 +332,7 @@
                         </div>
                         <div class="card border-2 border-base-300 shadow-sm shadow-neutral p-0 hover:scale-105 hover:border-secondary hover:shadow-secondary group">
                             <div class="card-body p-0">
-                                <div class="stats overflow-visible">
+                                <div class="stats stat-compact">
                                     <div class="stat place-items-center p-2">
                                         <div class="stat-value text-base lg:text-xl">{{ profile_progress.play_count|intcomma|default:0 }}</div>
                                         <div class="stat-desc italic">Play Count</div>
@@ -342,7 +342,7 @@
                         </div>
                         <div class="card border-2 border-base-300 shadow-sm shadow-neutral p-0 hover:scale-105 hover:border-secondary hover:shadow-secondary group">
                             <div class="card-body p-0">
-                                <div class="stats overflow-visible">
+                                <div class="stats stat-compact">
                                     <div class="stat place-items-center p-2">
                                         <div class="stat-value text-lg">{{ profile_progress.play_duration|timedelta_hours|default:'-' }}</div>
                                         <div class="stat-desc italic">Play Duration</div>
@@ -352,7 +352,7 @@
                         </div>
                         <div class="card border-2 border-base-300 shadow-sm shadow-neutral p-0 hover:scale-105 hover:border-secondary hover:shadow-secondary group">
                             <div class="card-body p-0">
-                                <div class="stats overflow-visible">
+                                <div class="stats stat-compact">
                                     <div class="stat place-items-center p-2">
                                         <div class="stat-value text-lg">{{ profile_progress.last_played|date:"F j, Y"|default:'-' }}</div>
                                         <div class="stat-desc italic">Last Played</div>

@@ -402,6 +402,23 @@
   }
 }
 
+/* Compact stat variant for tight grid cards */
+.stat-compact .stat {
+  padding-inline: 0.5rem;
+  padding-block: 0.25rem;
+  column-gap: 0.5rem;
+}
+
+.stat-compact .stat-value {
+  white-space: normal;
+  overflow-wrap: break-word;
+}
+
+.stat-compact .stat-title,
+.stat-compact .stat-desc {
+  white-space: normal;
+}
+
 /* ===== Modal Backdrop Blur ===== */
 .modal[open] {
   -webkit-backdrop-filter: blur(4px);
