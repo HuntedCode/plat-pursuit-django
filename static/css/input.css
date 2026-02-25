@@ -430,6 +430,24 @@
     0 0 6px #c33;
 }
 
+/* Equip glow animation for My Titles page */
+@keyframes title-equip-glow {
+  0% { box-shadow: 0 0 0 0 oklch(var(--s) / 0.6); }
+  50% { box-shadow: 0 0 20px 4px oklch(var(--s) / 0.3); }
+  100% { box-shadow: 0 0 0 0 oklch(var(--s) / 0); }
+}
+.title-equip-glow {
+  animation: title-equip-glow 0.6s ease-out;
+}
+
+/* Banner title name crossfade for equip animation */
+#equipped-title-name {
+  transition: opacity 0.25s ease;
+}
+#equipped-title-name.title-fade-out {
+  opacity: 0;
+}
+
 /* Premium-locked month button hover effect for recap calendar */
 .premium-locked:hover {
   cursor: not-allowed;

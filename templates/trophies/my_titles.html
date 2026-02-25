@@ -9,27 +9,57 @@
     {# ─── Page Header ────────────────────────────────────────────────────── #}
     <div class="flex flex-col items-center gap-2 mb-6">
         <h1 class="text-3xl md:text-4xl font-bold italic text-base-content">My Titles</h1>
-        <p class="text-base-content/60 text-sm">
-            {{ total_earned }} of {{ total_available }} title{{ total_available|pluralize }} earned
-        </p>
+        <p class="text-base-content/50 text-sm italic">Titles are earned through dedication. Wear yours with pride.</p>
+    </div>
+
+    {# ─── Stats Bar ─────────────────────────────────────────────────────── #}
+    <div class="stats stats-vertical md:stats-horizontal bg-base-200/60 shadow-md shadow-neutral border border-base-300 w-full mb-6">
+        <div class="stat py-3 px-4">
+            <div class="stat-figure text-accent">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+            </div>
+            <div class="stat-title italic">Titles Earned</div>
+            <div class="stat-value text-accent text-2xl">{{ total_earned }}<span class="text-base font-normal text-base-content/40">/{{ total_available }}</span></div>
+        </div>
+        <div class="stat py-3 px-4">
+            <div class="stat-figure text-secondary">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+            </div>
+            <div class="stat-title italic">From Badges</div>
+            <div class="stat-value text-secondary text-2xl">{{ badge_title_earned }}</div>
+        </div>
+        <div class="stat py-3 px-4">
+            <div class="stat-figure text-warning">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5C7 4 9 7 9 7"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5C17 4 15 7 15 7"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>
+            </div>
+            <div class="stat-title italic">From Milestones</div>
+            <div class="stat-value text-warning text-2xl">{{ milestone_title_earned }}</div>
+        </div>
     </div>
 
     {# ─── Currently Equipped Banner ──────────────────────────────────────── #}
-    <div id="equipped-banner" class="card bg-base-200/60 border-2 border-secondary/40 max-w-lg mx-auto mb-8">
-        <div class="card-body items-center text-center py-4 gap-2">
+    <div id="equipped-banner" class="card bg-base-200/80 border-2 border-secondary shadow-lg shadow-secondary/20 max-w-xl mx-auto mb-10 rounded-box">
+        <div class="card-body items-center text-center py-5 gap-2">
             <p class="text-xs text-base-content/50 uppercase tracking-wider font-semibold">Currently Equipped</p>
             {% if displayed_title_id %}
-                <p id="equipped-title-name" class="text-xl {% if profile.user_is_premium %}legendary-title{% else %}text-secondary{% endif %} italic pr-1 font-bold">
-                    {% for entry in earned_titles %}{% if entry.is_displayed %}{{ entry.title.name }}{% endif %}{% endfor %}
-                </p>
+                <div class="flex items-center gap-3">
+                    {# Left sparkle #}
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-secondary/60 shrink-0" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" data-sparkle><path d="M12 0L14.59 8.41L23 12L14.59 15.59L12 24L9.41 15.59L1 12L9.41 8.41Z"/></svg>
+                    <p id="equipped-title-name" class="text-2xl lg:text-3xl {% if profile.user_is_premium %}legendary-title{% else %}text-secondary{% endif %} italic pr-1 font-bold">{{ displayed_title_name }}</p>
+                    {# Right sparkle #}
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-secondary/60 shrink-0" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" data-sparkle><path d="M12 0L14.59 8.41L23 12L14.59 15.59L12 24L9.41 15.59L1 12L9.41 8.41Z"/></svg>
+                </div>
+                <p class="text-xs text-base-content/40 italic" data-flavor>Your legend, your identity.</p>
                 <button type="button"
-                        class="btn btn-ghost btn-xs text-base-content/50"
+                        class="btn btn-ghost btn-sm gap-1 text-base-content/50 mt-1"
                         data-action="unequip"
                         aria-label="Unequip title">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
                     Remove Title
                 </button>
             {% else %}
                 <p id="equipped-title-name" class="text-lg text-base-content/40 italic">No title equipped</p>
+                <p class="text-xs text-base-content/30 italic" data-flavor>Every legend needs a name. Equip a title below to claim yours.</p>
             {% endif %}
         </div>
     </div>
@@ -37,52 +67,80 @@
     {# ─── Earned Titles ──────────────────────────────────────────────────── #}
     {% if earned_titles %}
     <div class="mb-10">
-        <h2 class="text-2xl font-bold italic text-base-content mb-4">
-            <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 inline-block mr-1 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
-            Earned Titles
-        </h2>
+        <div class="mb-4">
+            <h2 class="text-2xl font-bold italic text-base-content">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 inline-block mr-1 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+                Earned Titles
+            </h2>
+            <p class="text-sm text-base-content/50 italic ml-7">Click any title to make it yours.</p>
+        </div>
+
+        {# ─── Filter, Sort & View Bar ────────────────────────────────────── #}
+        <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+            <div id="title-filter-tabs" class="tabs tabs-boxed tabs-sm bg-base-200/60">
+                <button type="button" class="tab tab-active" data-filter="all">All ({{ earned_titles|length }})</button>
+                <button type="button" class="tab" data-filter="badge">Badges ({{ badge_title_earned }})</button>
+                <button type="button" class="tab" data-filter="milestone">Milestones ({{ milestone_title_earned }})</button>
+            </div>
+            <div class="flex items-center gap-1">
+                <button type="button" id="title-sort-toggle" class="btn btn-ghost btn-sm gap-1 text-base-content/60" data-sort="newest" title="Toggle sort order">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M3 12h12"/><path d="M3 18h6"/></svg>
+                    <span id="sort-label">Newest</span>
+                </button>
+                <div class="tooltip" data-tip="Switch to List View">
+                    <button type="button" id="title-view-toggle" class="btn btn-ghost btn-sm btn-square text-base-content/60" data-view="grid">
+                        {# List icon (shows what you'll switch TO) #}
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+                    </button>
+                </div>
+            </div>
+        </div>
+
         <div id="earned-grid" class="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {% for entry in earned_titles %}
-            <div class="card bg-base-100 card-interactive cursor-pointer {% if entry.is_displayed %}ring-2 ring-secondary{% endif %}"
+            <div class="card bg-base-100 border-2 border-base-300 shadow-md shadow-neutral card-interactive card-hover-secondary group {% if entry.is_displayed %}ring-2 ring-secondary shadow-lg shadow-secondary/20{% endif %}"
                  data-title-id="{{ entry.title.id }}"
-                 data-title-name="{{ entry.title.name }}">
-                <div class="card-body p-4 gap-2">
+                 data-title-name="{{ entry.title.name }}"
+                 data-earned-at="{{ entry.earned_at|date:'Y-m-d' }}"
+                 data-source-type="{{ entry.source_type }}"
+                 {% if not entry.is_displayed %}title="Click to equip"{% endif %}>
+                <div class="card-body p-3 lg:p-4 gap-2">
                     {# Title name #}
-                    <h3 class="card-title text-base {% if profile.user_is_premium %}legendary-title{% else %}text-secondary{% endif %} italic pr-1 line-clamp-1">
+                    <h3 class="card-title text-base {% if profile.user_is_premium %}legendary-title{% else %}text-secondary{% endif %} italic pr-1 line-clamp-1 {% if not entry.is_displayed %}group-hover:brightness-125 transition-all{% endif %}">
                         {{ entry.title.name }}
                     </h3>
 
                     {# Sources #}
                     {% for source in entry.sources %}
-                    <div class="flex items-center gap-2 mt-1">
+                    <div class="flex items-center gap-3 mt-1">
                         {% if source.type == 'badge' %}
-                            <div class="w-8 h-8 shrink-0 relative">
+                            <div class="w-12 h-12 shrink-0 relative">
                                 {% include 'partials/badge.html' with layers=source.layers %}
                             </div>
                             <div class="min-w-0">
                                 {% if source.url %}
-                                    <a href="{{ source.url }}" class="text-xs font-semibold text-primary hover:underline line-clamp-1">{{ source.name }}</a>
+                                    <a href="{{ source.url }}" class="text-sm font-semibold text-primary hover:underline line-clamp-1">{{ source.name }}</a>
                                 {% else %}
-                                    <span class="text-xs font-semibold line-clamp-1">{{ source.name }}</span>
+                                    <span class="text-sm font-semibold line-clamp-1">{{ source.name }}</span>
                                 {% endif %}
                                 <p class="text-xs text-base-content/50">{{ source.detail }}</p>
                                 {% if source.description %}
-                                    <p class="text-xs text-base-content/40 line-clamp-2 mt-0.5">{{ source.description }}</p>
+                                    <p class="text-xs text-base-content/40 line-clamp-2 mt-0.5 italic pr-1">{{ source.description }}</p>
                                 {% endif %}
                             </div>
                         {% elif source.type == 'milestone' %}
                             {% if source.image %}
-                                <img src="{{ source.image }}" alt="" class="w-8 h-8 shrink-0 object-contain" loading="lazy" />
+                                <img src="{{ source.image }}" alt="" class="w-12 h-12 shrink-0 object-contain" loading="lazy" />
                             {% else %}
-                                <div class="w-8 h-8 shrink-0 flex items-center justify-center bg-base-200 rounded-full">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5C7 4 9 7 9 7"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5C17 4 15 7 15 7"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>
+                                <div class="w-12 h-12 shrink-0 flex items-center justify-center bg-base-200 rounded-full">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5C7 4 9 7 9 7"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5C17 4 15 7 15 7"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>
                                 </div>
                             {% endif %}
                             <div class="min-w-0">
-                                <a href="{{ source.url }}" class="text-xs font-semibold text-primary hover:underline line-clamp-1">{{ source.name }}</a>
+                                <a href="{{ source.url }}" class="text-sm font-semibold text-primary hover:underline line-clamp-1">{{ source.name }}</a>
                                 <p class="text-xs text-base-content/50">{{ source.category_name }}</p>
                                 {% if source.detail %}
-                                    <p class="text-xs text-base-content/40 line-clamp-2 mt-0.5">{{ source.detail }}</p>
+                                    <p class="text-xs text-base-content/40 line-clamp-2 mt-0.5 italic pr-1">{{ source.detail }}</p>
                                 {% endif %}
                             </div>
                         {% endif %}
@@ -91,19 +149,192 @@
 
                     {# Earned date + equip button #}
                     <div class="flex items-center justify-between mt-auto pt-2 border-t border-base-300">
-                        <span class="text-xs text-base-content/40">{{ entry.earned_at|date:"M j, Y" }}</span>
+                        <span class="text-xs text-base-content/40 flex items-center gap-1">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                            {{ entry.earned_at|date:"M j, Y" }}
+                        </span>
                         {% if entry.is_displayed %}
-                            <span class="badge badge-secondary badge-sm">Equipped</span>
+                            <span class="badge badge-secondary badge-sm gap-1">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
+                                Equipped
+                            </span>
                         {% else %}
                             <button type="button"
-                                    class="btn btn-secondary btn-xs"
-                                    data-action="equip"
-                                    data-title-id="{{ entry.title.id }}">
+                                    class="btn btn-secondary btn-sm gap-1"
+                                    data-action="equip">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
                                 Equip
                             </button>
                         {% endif %}
                     </div>
                 </div>
+            </div>
+            {% endfor %}
+        </div>
+
+        {# ─── Earned List View (hidden by default) ───────────────────────── #}
+        <div id="earned-list" class="hidden space-y-0 bg-base-100 rounded-box border border-base-300 shadow-md shadow-neutral overflow-hidden">
+            {% for entry in earned_titles %}
+            <div class="flex items-center gap-3 px-3 py-2.5 cursor-pointer transition-colors hover:bg-base-200/60 {% if entry.is_displayed %}bg-secondary/5 border-l-2 border-l-secondary{% else %}border-l-2 border-l-transparent{% endif %} {% if not forloop.last %}border-b border-base-300/30{% endif %}"
+                 data-title-id="{{ entry.title.id }}"
+                 data-title-name="{{ entry.title.name }}"
+                 data-earned-at="{{ entry.earned_at|date:'Y-m-d' }}"
+                 data-source-type="{{ entry.source_type }}"
+                 {% if not entry.is_displayed %}title="Click to equip"{% endif %}>
+                {# Source icon (first source only for compact view) #}
+                {% with source=entry.sources.0 %}
+                    {% if source.type == 'badge' %}
+                        <div class="w-7 h-7 shrink-0 relative">
+                            {% include 'partials/badge.html' with layers=source.layers %}
+                        </div>
+                    {% elif source.type == 'milestone' %}
+                        {% if source.image %}
+                            <img src="{{ source.image }}" alt="" class="w-7 h-7 shrink-0 object-contain" loading="lazy" />
+                        {% else %}
+                            <div class="w-7 h-7 shrink-0 flex items-center justify-center bg-base-200 rounded-full">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5C7 4 9 7 9 7"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5C17 4 15 7 15 7"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>
+                            </div>
+                        {% endif %}
+                    {% endif %}
+                {% endwith %}
+                {# Title name #}
+                <span class="{% if profile.user_is_premium %}legendary-title{% else %}text-secondary{% endif %} italic font-semibold text-sm line-clamp-1 pr-1 min-w-0 flex-1">{{ entry.title.name }}</span>
+                {# Source name #}
+                <span class="text-xs text-base-content/50 hidden lg:inline shrink-0">{{ entry.sources.0.name }}</span>
+                {# Earned date #}
+                <span class="text-xs text-base-content/40 shrink-0 hidden md:inline">{{ entry.earned_at|date:"M j, Y" }}</span>
+                {# Equip button / equipped badge #}
+                {% if entry.is_displayed %}
+                    <span class="badge badge-secondary badge-sm gap-1 shrink-0">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
+                        Equipped
+                    </span>
+                {% else %}
+                    <button type="button" class="btn btn-secondary btn-xs gap-1 shrink-0" data-action="equip">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                        Equip
+                    </button>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% elif locked_titles %}
+    {# No earned titles but locked titles exist #}
+    <div class="mb-10">
+        <h2 class="text-2xl font-bold italic text-base-content mb-2">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 inline-block mr-1 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+            Earned Titles
+        </h2>
+        <div class="text-center py-12">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-16 h-16 mx-auto text-base-content/20 mb-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M2 4l3 12h14l3-12-5.5 3L12 1 7.5 7 2 4z"/>
+                <path d="M5 16v4h14v-4"/>
+            </svg>
+            <p class="text-base-content/50 text-lg italic">Your first title is just a badge away.</p>
+            <p class="text-sm text-base-content/40 mt-1">Earn badges and milestones to start building your legend.</p>
+        </div>
+    </div>
+    {% endif %}
+
+    {# ─── Special Titles (manually awarded, only shown if earned) ─────────── #}
+    {% if special_titles %}
+    <div class="mb-10">
+        <div class="mb-4">
+            <h2 class="text-2xl font-bold italic text-base-content">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 inline-block mr-1 text-accent" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 0L14.59 8.41L23 12L14.59 15.59L12 24L9.41 15.59L1 12L9.41 8.41Z"/></svg>
+                Special Titles
+            </h2>
+            <p class="text-sm text-base-content/50 italic ml-7">Bestowed upon the worthy. These titles can't be earned through gameplay.</p>
+        </div>
+
+        {# ─── Special Grid View ────────────────────────────────────────────── #}
+        <div id="special-grid" class="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            {% for entry in special_titles %}
+            <div class="card bg-base-100 border-2 border-accent/30 shadow-md shadow-neutral card-interactive card-hover-secondary group {% if entry.is_displayed %}ring-2 ring-secondary shadow-lg shadow-secondary/20{% endif %}"
+                 data-title-id="{{ entry.title.id }}"
+                 {% if not entry.is_displayed %}title="Click to equip"{% endif %}>
+                <div class="card-body p-3 lg:p-4 gap-2">
+                    <h3 class="card-title text-base {% if profile.user_is_premium %}legendary-title{% else %}text-secondary{% endif %} italic pr-1 line-clamp-1 {% if not entry.is_displayed %}group-hover:brightness-125 transition-all{% endif %}">
+                        {{ entry.title.name }}
+                    </h3>
+
+                    {% for source in entry.sources %}
+                    <div class="flex items-center gap-3 mt-1">
+                        {% if source.image %}
+                            <img src="{{ source.image }}" alt="" class="w-12 h-12 shrink-0 object-contain" loading="lazy" />
+                        {% else %}
+                            <div class="w-12 h-12 shrink-0 flex items-center justify-center bg-base-200 rounded-full">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 text-accent" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 0L14.59 8.41L23 12L14.59 15.59L12 24L9.41 15.59L1 12L9.41 8.41Z"/></svg>
+                            </div>
+                        {% endif %}
+                        <div class="min-w-0">
+                            {% if source.url %}
+                                <a href="{{ source.url }}" class="text-sm font-semibold text-primary hover:underline line-clamp-1">{{ source.name }}</a>
+                            {% else %}
+                                <span class="text-sm font-semibold line-clamp-1">{{ source.name }}</span>
+                            {% endif %}
+                            <p class="text-xs text-base-content/50">{{ source.category_name }}</p>
+                            {% if source.detail %}
+                                <p class="text-xs text-base-content/40 line-clamp-2 mt-0.5 italic pr-1">{{ source.detail }}</p>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% endfor %}
+
+                    <div class="flex items-center justify-between mt-auto pt-2 border-t border-base-300">
+                        <span class="text-xs text-base-content/40 flex items-center gap-1">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                            {{ entry.earned_at|date:"M j, Y" }}
+                        </span>
+                        {% if entry.is_displayed %}
+                            <span class="badge badge-secondary badge-sm gap-1">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
+                                Equipped
+                            </span>
+                        {% else %}
+                            <button type="button"
+                                    class="btn btn-secondary btn-sm gap-1"
+                                    data-action="equip">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                                Equip
+                            </button>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+
+        {# ─── Special List View (hidden by default) ────────────────────────── #}
+        <div id="special-list" class="hidden space-y-0 bg-base-100 rounded-box border border-accent/30 shadow-md shadow-neutral overflow-hidden">
+            {% for entry in special_titles %}
+            <div class="flex items-center gap-3 px-3 py-2.5 cursor-pointer transition-colors hover:bg-base-200/60 {% if entry.is_displayed %}bg-secondary/5 border-l-2 border-l-secondary{% else %}border-l-2 border-l-transparent{% endif %} {% if not forloop.last %}border-b border-base-300/30{% endif %}"
+                 data-title-id="{{ entry.title.id }}"
+                 {% if not entry.is_displayed %}title="Click to equip"{% endif %}>
+                {% with source=entry.sources.0 %}
+                    {% if source.image %}
+                        <img src="{{ source.image }}" alt="" class="w-7 h-7 shrink-0 object-contain" loading="lazy" />
+                    {% else %}
+                        <div class="w-7 h-7 shrink-0 flex items-center justify-center bg-base-200 rounded-full">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-accent" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 0L14.59 8.41L23 12L14.59 15.59L12 24L9.41 15.59L1 12L9.41 8.41Z"/></svg>
+                        </div>
+                    {% endif %}
+                {% endwith %}
+                <span class="{% if profile.user_is_premium %}legendary-title{% else %}text-secondary{% endif %} italic font-semibold text-sm line-clamp-1 pr-1 min-w-0 flex-1">{{ entry.title.name }}</span>
+                <span class="text-xs text-base-content/50 hidden lg:inline shrink-0">{{ entry.sources.0.name }}</span>
+                <span class="text-xs text-base-content/40 shrink-0 hidden md:inline">{{ entry.earned_at|date:"M j, Y" }}</span>
+                {% if entry.is_displayed %}
+                    <span class="badge badge-secondary badge-sm gap-1 shrink-0">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
+                        Equipped
+                    </span>
+                {% else %}
+                    <button type="button" class="btn btn-secondary btn-xs gap-1 shrink-0" data-action="equip">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                        Equip
+                    </button>
+                {% endif %}
             </div>
             {% endfor %}
         </div>
@@ -113,14 +344,17 @@
     {# ─── Locked Titles ──────────────────────────────────────────────────── #}
     {% if locked_titles %}
     <div class="mb-10">
-        <h2 class="text-2xl font-bold italic text-base-content mb-4">
-            <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 inline-block mr-1 text-base-content/40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-            Locked Titles
-        </h2>
-        <div class="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+        <div class="mb-4">
+            <h2 class="text-2xl font-bold italic text-base-content">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 inline-block mr-1 text-base-content/40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                Locked Titles
+            </h2>
+            <p class="text-sm text-base-content/50 italic ml-7">These titles await your next achievement.</p>
+        </div>
+        <div id="locked-grid" class="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {% for entry in locked_titles %}
-            <div class="card bg-base-200/40 opacity-60">
-                <div class="card-body p-4 gap-2">
+            <div class="card bg-base-200/50 border-2 border-base-300/40 hover:border-base-content/20 transition-all duration-300">
+                <div class="card-body p-3 lg:p-4 gap-2">
                     {# Title name (dimmed) #}
                     <h3 class="card-title text-base text-base-content/50 italic pr-1 line-clamp-1">
                         {{ entry.title.name }}
@@ -128,67 +362,119 @@
 
                     {# Sources with unlock info #}
                     {% for source in entry.sources %}
-                    <div class="flex items-center gap-2 mt-1">
+                    <div class="flex items-center gap-3 mt-1">
                         {% if source.type == 'badge' %}
-                            <div class="w-8 h-8 shrink-0 relative grayscale">
+                            <div class="w-12 h-12 shrink-0 relative grayscale hover:grayscale-0 transition-all duration-300">
                                 {% include 'partials/badge.html' with layers=source.layers %}
                             </div>
                             <div class="min-w-0">
                                 {% if source.url %}
-                                    <a href="{{ source.url }}" class="text-xs font-semibold text-primary hover:underline line-clamp-1">{{ source.name }}</a>
+                                    <a href="{{ source.url }}" class="text-sm font-semibold text-primary hover:underline line-clamp-1">{{ source.name }}</a>
                                 {% else %}
-                                    <span class="text-xs font-semibold line-clamp-1">{{ source.name }}</span>
+                                    <span class="text-sm font-semibold line-clamp-1">{{ source.name }}</span>
                                 {% endif %}
                                 <p class="text-xs text-base-content/40">{{ source.detail }}</p>
                                 {% if source.description %}
-                                    <p class="text-xs text-base-content/40 line-clamp-2 mt-0.5">{{ source.description }}</p>
+                                    <p class="text-xs text-base-content/40 line-clamp-2 mt-0.5 italic pr-1">{{ source.description }}</p>
                                 {% endif %}
                             </div>
                         {% elif source.type == 'milestone' %}
                             {% if source.image %}
-                                <img src="{{ source.image }}" alt="" class="w-8 h-8 shrink-0 object-contain grayscale" loading="lazy" />
+                                <img src="{{ source.image }}" alt="" class="w-12 h-12 shrink-0 object-contain grayscale hover:grayscale-0 transition-all duration-300" loading="lazy" />
                             {% else %}
-                                <div class="w-8 h-8 shrink-0 flex items-center justify-center bg-base-300 rounded-full">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-base-content/30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5C7 4 9 7 9 7"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5C17 4 15 7 15 7"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>
+                                <div class="w-12 h-12 shrink-0 flex items-center justify-center bg-base-300 rounded-full">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 text-base-content/30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5C7 4 9 7 9 7"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5C17 4 15 7 15 7"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>
                                 </div>
                             {% endif %}
                             <div class="min-w-0 flex-1">
-                                <a href="{{ source.url }}" class="text-xs font-semibold text-primary hover:underline line-clamp-1">{{ source.name }}</a>
+                                <a href="{{ source.url }}" class="text-sm font-semibold text-primary hover:underline line-clamp-1">{{ source.name }}</a>
                                 <p class="text-xs text-base-content/40">{{ source.category_name }}</p>
                                 {% if source.required_value and source.required_value > 0 %}
                                     <div class="flex items-center gap-2 mt-1">
-                                        <progress class="progress progress-accent w-full h-1.5"
+                                        <progress class="progress {% if source.progress_pct < 33 %}progress-error{% elif source.progress_pct < 67 %}progress-warning{% else %}progress-success{% endif %} w-full h-1.5"
                                                   value="{{ source.progress_value|default:0 }}"
                                                   max="{{ source.required_value }}"></progress>
                                         <span class="text-xs text-base-content/40 whitespace-nowrap">{{ source.progress_value|default:0 }}/{{ source.required_value }}</span>
                                     </div>
                                 {% endif %}
                                 {% if source.detail %}
-                                    <p class="text-xs text-base-content/40 line-clamp-2 mt-0.5">{{ source.detail }}</p>
+                                    <p class="text-xs text-base-content/40 line-clamp-2 mt-0.5 italic pr-1">{{ source.detail }}</p>
                                 {% endif %}
                             </div>
                         {% endif %}
                     </div>
                     {% endfor %}
 
-                    {# Lock indicator #}
+                    {# Lock indicator with encouraging text #}
                     <div class="flex items-center justify-end mt-auto pt-2 border-t border-base-300/50">
-                        <span class="badge badge-ghost badge-sm gap-1 text-base-content/30">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-                            Locked
+                        <span class="badge badge-ghost badge-sm gap-1 text-base-content/40 italic">
+                            {{ entry.lock_flavor }}
                         </span>
                     </div>
                 </div>
             </div>
             {% endfor %}
         </div>
+
+        {# ─── Locked List View (hidden by default) ───────────────────────── #}
+        <div id="locked-list" class="hidden space-y-0 bg-base-200/30 rounded-box border border-base-300/40 overflow-hidden">
+            {% for entry in locked_titles %}
+            <div class="flex items-center gap-3 px-3 py-2.5 transition-colors hover:bg-base-200/40 {% if not forloop.last %}border-b border-base-300/20{% endif %}">
+                {# Source icon (first source only, grayscale) #}
+                {% with source=entry.sources.0 %}
+                    {% if source.type == 'badge' %}
+                        <div class="w-7 h-7 shrink-0 relative grayscale">
+                            {% include 'partials/badge.html' with layers=source.layers %}
+                        </div>
+                    {% elif source.type == 'milestone' %}
+                        {% if source.image %}
+                            <img src="{{ source.image }}" alt="" class="w-7 h-7 shrink-0 object-contain grayscale" loading="lazy" />
+                        {% else %}
+                            <div class="w-7 h-7 shrink-0 flex items-center justify-center bg-base-300 rounded-full">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-base-content/30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5C7 4 9 7 9 7"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5C17 4 15 7 15 7"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>
+                            </div>
+                        {% endif %}
+                    {% endif %}
+                {% endwith %}
+                {# Title name (dimmed) #}
+                <span class="text-base-content/50 italic text-sm line-clamp-1 pr-1 min-w-0 flex-1">{{ entry.title.name }}</span>
+                {# Source name #}
+                <span class="text-xs text-base-content/40 hidden lg:inline shrink-0">{{ entry.sources.0.name }}</span>
+                {# Progress (if milestone with required_value) #}
+                {% with source=entry.sources.0 %}
+                    {% if source.required_value and source.required_value > 0 %}
+                        <div class="flex items-center gap-1.5 shrink-0 w-24">
+                            <progress class="progress {% if source.progress_pct < 33 %}progress-error{% elif source.progress_pct < 67 %}progress-warning{% else %}progress-success{% endif %} w-full h-1.5"
+                                      value="{{ source.progress_value|default:0 }}"
+                                      max="{{ source.required_value }}"></progress>
+                            <span class="text-xs text-base-content/40 whitespace-nowrap">{{ source.progress_value|default:0 }}/{{ source.required_value }}</span>
+                        </div>
+                    {% endif %}
+                {% endwith %}
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% elif earned_titles and not locked_titles %}
+    {# All titles earned, none locked #}
+    <div class="text-center py-12 mb-10">
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-16 h-16 mx-auto text-accent/40 mb-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="12" cy="8" r="7"/>
+            <polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"/>
+        </svg>
+        <p class="text-base-content/50 text-lg italic">You've earned every title available. A true completionist!</p>
     </div>
     {% endif %}
 
-    {# ─── Empty State ────────────────────────────────────────────────────── #}
+    {# ─── Empty State (no titles at all) ────────────────────────────────── #}
     {% if not earned_titles and not locked_titles %}
-    <div class="text-center py-16 text-base-content/50">
-        <p class="text-lg italic">No titles available yet. Earn badges and milestones to unlock titles!</p>
+    <div class="text-center py-16">
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-16 h-16 mx-auto text-base-content/20 mb-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M2 4l3 12h14l3-12-5.5 3L12 1 7.5 7 2 4z"/>
+            <path d="M5 16v4h14v-4"/>
+        </svg>
+        <p class="text-base-content/50 text-lg italic">No titles available yet.</p>
+        <p class="text-sm text-base-content/40 mt-1">Earn badges and milestones to unlock titles!</p>
     </div>
     {% endif %}
 {% endblock %}

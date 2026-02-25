@@ -99,9 +99,7 @@
                         <li><a href="{% url 'my_guides' %}">My Guides</a></li>
                         <li><a href="{% url 'my_challenges' %}">My Challenges</a></li>
                         <li><a href="{% url 'my_lists' %}">My Lists</a></li>
-                        {% if user.is_staff %}
                         <li><a href="{% url 'my_titles' %}">My Titles</a></li>
-                        {% endif %}
                         <li><a href="{% url 'profile_detail' user.profile.psn_username %}">My Profile</a></li>
                         <li><a href="{% url 'my_shareables' %}">My Shareables</a></li>
                         <li><a href="{% url 'trophy_case' user.profile.psn_username %}">Trophy Case</a></li>
@@ -253,9 +251,7 @@
                         {% endif %}
                         <li><a href="{% url 'profile_detail' user.profile.psn_username %}">Profile</a></li>
                         <li><a href="{% url 'trophy_case' user.profile.psn_username %}">Trophy Case</a></li>
-                        {% if user.is_staff %}
                         <li><a href="{% url 'my_titles' %}">My Titles</a></li>
-                        {% endif %}
                     {% else %}
                         <li><a href="{% url 'link_psn' %}">Link PSN</a></li>
                     {% endif %}

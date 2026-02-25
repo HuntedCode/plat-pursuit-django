@@ -1,11 +1,9 @@
 from collections import defaultdict
 
-from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db.models.functions import Lower
 from django.shortcuts import redirect
 from django.urls import reverse_lazy
-from django.utils.decorators import method_decorator
 from django.views.generic import TemplateView
 
 from ..models import (
@@ -15,7 +13,6 @@ from ..models import (
 from trophies.milestone_constants import MILESTONE_CATEGORIES, CRITERIA_TYPE_DISPLAY_NAMES, MONTH_MAP
 
 
-@method_decorator(staff_member_required, name='dispatch')
 class MyTitlesView(LoginRequiredMixin, TemplateView):
     """
     Displays all discoverable titles: earned (with equip controls) and
@@ -23,8 +20,6 @@ class MyTitlesView(LoginRequiredMixin, TemplateView):
 
     Discoverable = assigned to a live badge OR any milestone.
     Excludes orphan titles and titles from non-live badges.
-
-    Staff-only for now.
     """
     template_name = 'trophies/my_titles.html'
     login_url = '/login/'
@@ -116,10 +111,20 @@ class MyTitlesView(LoginRequiredMixin, TemplateView):
                 'image': milestone.image.url if milestone.image else None,
             })
 
+        # 3b. Identify manual-only titles (special recognition, not gameplay goals)
+        manual_title_ids = set()
+        for title_id, sources in sources_by_title.items():
+            if all(
+                s['type'] == 'milestone' and s['object'].criteria_type == 'manual'
+                for s in sources
+            ):
+                manual_title_ids.add(title_id)
+
         # 4. Milestone progress for locked titles
         locked_milestone_ids = [
             ms.id for ms in milestone_sources
             if ms.title_id not in earned_map
+            and ms.title_id not in manual_title_ids
         ]
         progress_qs = UserMilestoneProgress.objects.filter(
             profile=profile,
@@ -151,30 +156,83 @@ class MyTitlesView(LoginRequiredMixin, TemplateView):
                         else:
                             source['progress_pct'] = 0
 
-        # 5. Split into earned and locked
+        # 5. Split into earned, locked, and special titles
         earned_titles = []
         locked_titles = []
+        special_titles = []
+        badge_title_earned = 0
+        milestone_title_earned = 0
 
         for title in discoverable_titles:
             ut = earned_map.get(title.id)
             sources = sources_by_title.get(title.id, [])
+            is_manual = title.id in manual_title_ids
+
+            # Manual-only titles: show only if earned, never show locked
+            if is_manual:
+                if ut:
+                    special_titles.append({
+                        'title': title,
+                        'sources': sources,
+                        'is_displayed': ut.is_displayed,
+                        'earned_at': ut.earned_at,
+                    })
+                continue
+
+            # Determine primary source type for filter tabs
+            source_types = {s['type'] for s in sources}
+            if source_types == {'badge'}:
+                primary_source = 'badge'
+            elif source_types == {'milestone'}:
+                primary_source = 'milestone'
+            else:
+                primary_source = 'both'
+
             entry = {
                 'title': title,
                 'sources': sources,
+                'source_type': primary_source,
             }
             if ut:
                 entry['is_displayed'] = ut.is_displayed
                 entry['earned_at'] = ut.earned_at
                 earned_titles.append(entry)
+                if 'badge' in source_types:
+                    badge_title_earned += 1
+                if 'milestone' in source_types:
+                    milestone_title_earned += 1
             else:
+                # Determine encouraging flavor text for locked footer
+                max_pct = max(
+                    (s.get('progress_pct', 0) for s in sources
+                     if s['type'] == 'milestone'),
+                    default=0,
+                )
+                entry['lock_flavor'] = (
+                    'Almost there...' if max_pct > 50
+                    else 'The hunt continues...'
+                )
                 locked_titles.append(entry)
+
+        # Sort earned titles by newest first (default)
+        earned_titles.sort(key=lambda e: e['earned_at'], reverse=True)
+        special_titles.sort(key=lambda e: e['earned_at'], reverse=True)
+
+        # Resolve displayed title name directly (works for both regular and special)
+        displayed_title_name = None
+        if displayed_title_id and displayed_title_id in earned_map:
+            displayed_title_name = earned_map[displayed_title_id].title.name
 
         context.update({
             'earned_titles': earned_titles,
             'locked_titles': locked_titles,
+            'special_titles': special_titles,
             'displayed_title_id': displayed_title_id,
+            'displayed_title_name': displayed_title_name,
             'total_earned': len(earned_titles),
             'total_available': len(earned_titles) + len(locked_titles),
+            'badge_title_earned': badge_title_earned,
+            'milestone_title_earned': milestone_title_earned,
             'profile': profile,
             'breadcrumb': [
                 {'text': 'Home', 'url': reverse_lazy('home')},
