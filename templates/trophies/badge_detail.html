@@ -1,9 +1,8 @@
 {% extends 'base.html' %}
 {% load static custom_filters %}
 {% block title %}{{ badge.effective_display_series }}{% endblock %}
-{% block og_image %}{% if image_urls.recent_concept_icon_url %}{{ image_urls.recent_concept_icon_url }}{% else %}{% static 'images/logo.png' %}{% endif %}{% endblock %}
-{% block twitter_image %}{% if image_urls.recent_concept_icon_url %}{{ image_urls.recent_concept_icon_url }}{% else %}{% static 'images/logo.png' %}{% endif %}{% endblock %}
-{% block twitter_card_type %}summary{% endblock %}
+{% block og_image %}{% if image_urls.recent_concept_icon_url %}{{ image_urls.recent_concept_icon_url }}{% else %}{{ request.scheme }}://{{ request.get_host }}{{ logo_path }}{% endif %}{% endblock %}
+{% block twitter_image %}{% if image_urls.recent_concept_icon_url %}{{ image_urls.recent_concept_icon_url }}{% else %}{{ request.scheme }}://{{ request.get_host }}{{ logo_path }}{% endif %}{% endblock %}
 
 {% block content %}
 {% with target_profile as profile %}

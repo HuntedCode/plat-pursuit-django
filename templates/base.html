@@ -1,4 +1,5 @@
 {% load static %}
+{% static 'images/logo.png' as logo_path %}
 <!doctype html>
 <html lang="en" data-theme="plat-pursuit-dark">
   <head>
@@ -20,15 +21,15 @@
     <meta property="og:description" content="{% block og_description %}Track your PlayStation trophies, earn game badges, and connect with fellow trophy hunters.{% endblock %}">
     <meta property="og:type" content="website">
     <meta property="og:url" content="{{ request.build_absolute_uri }}">
-    <meta property="og:image" content="{% block og_image %}{% static 'images/logo.png' %}{% endblock %}">
+    <meta property="og:image" content="{% block og_image %}{{ request.scheme }}://{{ request.get_host }}{{ logo_path }}{% endblock %}">
     <meta property="og:site_name" content="Platinum Pursuit">
 
     <!-- Twitter Card -->
-    <meta name="twitter:card" content="{% block twitter_card_type %}summary_large_image{% endblock %}">
+    <meta name="twitter:card" content="{% block twitter_card_type %}summary{% endblock %}">
     <meta name="twitter:site" content="@platpursuit">
     <meta name="twitter:title" content="{% block twitter_title %}{{ title|default:'Platinum Pursuit' }} - Platinum Pursuit{% endblock %}">
     <meta name="twitter:description" content="{% block twitter_description %}Track your PlayStation trophies, earn game badges, and connect with fellow trophy hunters.{% endblock %}">
-    <meta name="twitter:image" content="{% block twitter_image %}{% static 'images/logo.png' %}{% endblock %}">
+    <meta name="twitter:image" content="{% block twitter_image %}{{ request.scheme }}://{{ request.get_host }}{{ logo_path }}{% endblock %}">
 
     <link rel="icon" type="image/x-icon" href="{% static 'images/logo.png' %}" />
     <link rel="stylesheet" href="{% static 'css/output.css' %}" />

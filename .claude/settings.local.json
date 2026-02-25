@@ -31,7 +31,8 @@
       "Bash(node:*)",
       "Bash(npx @tailwindcss/cli:*)",
       "WebFetch(domain:docs.stripe.com)",
-      "WebFetch(domain:benfoster.io)"
+      "WebFetch(domain:benfoster.io)",
+      "Bash(identify:*)"
     ]
   }
 }

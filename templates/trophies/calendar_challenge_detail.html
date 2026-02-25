@@ -2,9 +2,8 @@
 {% load static custom_filters %}
 
 {% block title %}{{ challenge.name }} - Platinum Calendar - Platinum Pursuit{% endblock %}
-{% block og_image %}{% if challenge.profile.avatar_url %}{{ challenge.profile.avatar_url }}{% else %}{% static 'images/logo.png' %}{% endif %}{% endblock %}
-{% block twitter_image %}{% if challenge.profile.avatar_url %}{{ challenge.profile.avatar_url }}{% else %}{% static 'images/logo.png' %}{% endif %}{% endblock %}
-{% block twitter_card_type %}summary{% endblock %}
+{% block og_image %}{% if challenge.profile.avatar_url %}{{ challenge.profile.avatar_url }}{% else %}{{ request.scheme }}://{{ request.get_host }}{{ logo_path }}{% endif %}{% endblock %}
+{% block twitter_image %}{% if challenge.profile.avatar_url %}{{ challenge.profile.avatar_url }}{% else %}{{ request.scheme }}://{{ request.get_host }}{{ logo_path }}{% endif %}{% endblock %}
 
 {% block content %}
 <section class="shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 w-full p-0 lg:p-4">
