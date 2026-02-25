@@ -12,9 +12,5 @@ logs/plat_pursuit.log
 /media/
 .VSCodeCounter/
 docker-compose.yml
-REFACTORING_GUIDE.md
-gamification-design.md
-MONTHLY_RECAP_EMAIL_SETUP.md
-CLAUDE.md
 share_temp_images/
 docs/minigames/DEVELOPMENT_GUIDE.md

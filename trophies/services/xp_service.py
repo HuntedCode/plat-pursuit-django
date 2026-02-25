@@ -99,15 +99,16 @@ def calculate_series_xp(profile, series_slug: str) -> int:
     return progress_xp + (badges_earned * BADGE_TIER_XP)
 
 
-def calculate_total_xp(profile) -> tuple[int, dict, int]:
+def calculate_total_xp(profile) -> tuple[int, dict, int, int]:
     """
     Calculate total badge XP for a profile.
 
     Returns:
-        tuple: (total_xp, series_breakdown, total_badges_earned)
+        tuple: (total_xp, series_breakdown, total_badges_earned, unique_badges_earned)
             - total_xp: Combined progress XP + badge completion bonuses
             - series_breakdown: Dict mapping series_slug to XP
             - total_badges_earned: Count of fully earned badges
+            - unique_badges_earned: Count of distinct badge series earned
     """
     from trophies.models import UserBadgeProgress, UserBadge
 
@@ -138,17 +139,19 @@ def calculate_total_xp(profile) -> tuple[int, dict, int]:
     ).select_related('badge')
 
     total_badges = 0
+    earned_series = set()
     for user_badge in earned_badges:
         series_slug = user_badge.badge.series_slug
         if series_slug:
             if series_slug not in series_xp:
                 series_xp[series_slug] = 0
             series_xp[series_slug] += BADGE_TIER_XP
+            earned_series.add(series_slug)
         total_badges += 1
 
     total_xp = total_progress_xp + (total_badges * BADGE_TIER_XP)
 
-    return total_xp, series_xp, total_badges
+    return total_xp, series_xp, total_badges, len(earned_series)
 
 
 @transaction.atomic
@@ -167,7 +170,7 @@ def update_profile_gamification(profile) -> 'ProfileGamification':
     """
     from trophies.models import ProfileGamification
 
-    total_xp, series_xp, total_badges = calculate_total_xp(profile)
+    total_xp, series_xp, total_badges, unique_badges = calculate_total_xp(profile)
 
     gamification, created = ProfileGamification.objects.update_or_create(
         profile=profile,
@@ -175,6 +178,7 @@ def update_profile_gamification(profile) -> 'ProfileGamification':
             'total_badge_xp': total_xp,
             'series_badge_xp': series_xp,
             'total_badges_earned': total_badges,
+            'unique_badges_earned': unique_badges,
         }
     )
 

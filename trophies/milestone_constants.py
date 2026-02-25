@@ -47,7 +47,7 @@ MILESTONE_CATEGORIES = OrderedDict([
     ('collection', {
         'name': 'Collection',
         'icon': 'collection',
-        'criteria_types': ['badge_count', 'stage_count'],
+        'criteria_types': ['badge_count', 'unique_badge_count', 'stage_count'],
     }),
     ('challenges', {
         'name': 'Challenges',
@@ -80,7 +80,8 @@ CRITERIA_TYPE_DISPLAY_NAMES = {
     'rating_count': 'Game Ratings',
     'comment_upvotes': 'Comment Upvotes',
     'checklist_upvotes': 'Checklist Upvotes',
-    'badge_count': 'Badges Earned',
+    'badge_count': 'Badge Tiers Earned',
+    'unique_badge_count': 'Unique Badges Earned',
     'stage_count': 'Badge Stages Completed',
     'az_progress': 'A-Z Challenge Progress',
     'genre_progress': 'Genre Challenge Progress',

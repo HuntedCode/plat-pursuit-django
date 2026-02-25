@@ -75,9 +75,9 @@
         <div class="stat-figure">
             <svg xmlns="http://www.w3.org/2000/svg" width="45" height="45" viewBox="0 0 24 24" fill="none" stroke="var(--color-success)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
         </div>
-        <div class="stat-title">Badges Earned</div>
+        <div class="stat-title">Unique Badges Earned</div>
         <div class="stat-value text-success text-2xl xl:text-3xl">{{ items.badges_earned.total|intcomma }}</div>
-        <div class="stat-desc">Badges Pursued</div>
+        <div class="stat-desc">Across All Pursuers</div>
         {% if items.badges_earned.weekly %}<div class="stat-desc text-success italic">(+{{ items.badges_earned.weekly|intcomma }} this week)</div>{% endif %}
     </div>
 </section>
@@ -161,9 +161,9 @@
         <div class="stat-figure block">
             <svg xmlns="http://www.w3.org/2000/svg" width="45" height="45" viewBox="0 0 24 24" fill="none" stroke="var(--color-success)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
         </div>
-        <div class="stat-title">Badges Earned</div>
+        <div class="stat-title">Unique Badges Earned</div>
         <div class="stat-value text-success text-2xl md:text-3xl">{{ items.badges_earned.total|intcomma }}</div>
-        <div class="stat-desc">Total Achievements</div>
+        <div class="stat-desc">Across All Pursuers</div>
         {% if items.badges_earned.weekly %}<div class="stat-desc text-success italic">(+{{ items.badges_earned.weekly|intcomma }} this week)</div>{% endif %}
     </div>
 </section>

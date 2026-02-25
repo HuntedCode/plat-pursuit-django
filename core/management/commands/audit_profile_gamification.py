@@ -82,7 +82,7 @@ class Command(BaseCommand):
                     continue
 
                 # Recalculate from source
-                calculated_xp, calculated_series_xp, calculated_badges = calculate_total_xp(profile)
+                calculated_xp, calculated_series_xp, calculated_badges, _ = calculate_total_xp(profile)
 
                 # Check for discrepancies
                 xp_mismatch = stored_xp != calculated_xp

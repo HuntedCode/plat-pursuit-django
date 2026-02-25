@@ -51,7 +51,8 @@ class Command(BaseCommand):
                 self.style.SUCCESS(
                     f"Recalculated gamification for {profile.psn_username}:\n"
                     f"  Total XP: {gamification.total_badge_xp}\n"
-                    f"  Badges Earned: {gamification.total_badges_earned}\n"
+                    f"  Badge Tiers Earned: {gamification.total_badges_earned}\n"
+                    f"  Unique Badges Earned: {gamification.unique_badges_earned}\n"
                     f"  Series: {len(gamification.series_badge_xp)} series with XP"
                 )
             )

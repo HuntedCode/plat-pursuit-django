@@ -58,13 +58,13 @@
                     </div>
                 </div>
 
-                <!-- Community Badges Earned -->
+                <!-- Community Tiers Earned -->
                 <div class="flex flex-row items-center gap-2 bg-base-100 rounded-box border-2 border-base-300 px-3 py-2">
                     <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 shrink-0 stroke-info" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                         <circle cx="12" cy="8" r="7"></circle><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"></polyline>
                     </svg>
                     <div class="flex flex-col flex-1">
-                        <span class="text-xs text-info italic font-bold">Badges Earned</span>
+                        <span class="text-xs text-info italic font-bold">Tiers Earned</span>
                         <div class="flex flex-row items-center gap-2 lg:gap-3 mt-0.5">
                             {% for tier_num, count in stats.tier_earner_counts.items %}
                                 {% with tier_num|stringformat:'s' as tier_str %}

@@ -106,7 +106,7 @@ def _calculate_badge_xp(profile, badge):
 
     # Calculate total XP fresh (not from denormalized table)
     # This ensures notifications show the correct total including the badge just earned
-    total_xp, _, _ = calculate_total_xp(profile)
+    total_xp, _, _, _ = calculate_total_xp(profile)
 
     return series_xp, total_xp
 

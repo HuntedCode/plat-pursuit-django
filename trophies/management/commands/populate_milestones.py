@@ -148,12 +148,12 @@ MILESTONE_DEFINITIONS = [
     {'name': 'The Cartographer General', 'criteria_type': 'checklist_upvotes', 'criteria_details': {'target': 1000}, 'description': 'One thousand upvotes. The ultimate guide to all things platinum.', 'title_name': 'The Navigator'},
 
     # ── badge_count (20 tiers, max 200) ─────────────────────────────────
-    {'name': 'Badge Beginner',        'criteria_type': 'badge_count', 'criteria_details': {'target': 1},   'description': 'Your first badge earned. The collection starts here.',                  'title_name': 'Badge Holder'},
+    {'name': 'Badge Beginner',        'criteria_type': 'badge_count', 'criteria_details': {'target': 1},   'description': 'Your first badge tier earned. The collection starts here.',              'title_name': 'Badge Holder'},
     {'name': 'Badge Duo',             'criteria_type': 'badge_count', 'criteria_details': {'target': 2},   'description': 'Two badges. A budding collection.'},
     {'name': 'Tri Badge',             'criteria_type': 'badge_count', 'criteria_details': {'target': 3},   'description': 'Three badges. Things are looking good.'},
     {'name': 'Badge Collector',       'criteria_type': 'badge_count', 'criteria_details': {'target': 5},   'description': 'Five badges in the showcase. Something special is forming.'},
     {'name': 'Badge Enthusiast',      'criteria_type': 'badge_count', 'criteria_details': {'target': 8},   'description': 'Eight badges. Your dedication shows.',                                 'title_name': 'Badge Fan'},
-    {'name': 'Double Digit Badges',   'criteria_type': 'badge_count', 'criteria_details': {'target': 10},  'description': 'Ten badges earned. Now we are talking.'},
+    {'name': 'Double Digit Badges',   'criteria_type': 'badge_count', 'criteria_details': {'target': 10},  'description': 'Ten badge tiers earned. Now we are talking.'},
     {'name': 'Badge Devotee',         'criteria_type': 'badge_count', 'criteria_details': {'target': 15},  'description': 'Fifteen badges. Devoted to the craft.'},
     {'name': 'Badge Curator',         'criteria_type': 'badge_count', 'criteria_details': {'target': 20},  'description': 'Twenty badges. A curated showcase.'},
     {'name': 'Badge Connoisseur',     'criteria_type': 'badge_count', 'criteria_details': {'target': 25},  'description': 'Twenty-five badges. A refined taste in achievements.'},
@@ -168,6 +168,28 @@ MILESTONE_DEFINITIONS = [
     {'name': 'Badge Titan',           'criteria_type': 'badge_count', 'criteria_details': {'target': 160}, 'description': 'One hundred and sixty badges. A titan of collecting.',              'title_name': 'Badge Titan'},
     {'name': 'Badge Colossus',        'criteria_type': 'badge_count', 'criteria_details': {'target': 180}, 'description': 'One hundred and eighty badges. A colossal collection.',             'title_name': 'Badge Colossus'},
     {'name': 'Badge Transcendent',    'criteria_type': 'badge_count', 'criteria_details': {'target': 200}, 'description': 'Two hundred badges. Beyond all expectations.',                        'title_name': 'Badge Immortal'},
+
+    # ── unique_badge_count (20 tiers, max 100) ────────────────────────────
+    {'name': 'First Discovery',         'criteria_type': 'unique_badge_count', 'criteria_details': {'target': 1},   'description': 'Your first unique badge discovered. The world of badges opens up.',    'title_name': 'Seeker'},
+    {'name': 'Dual Discovery',          'criteria_type': 'unique_badge_count', 'criteria_details': {'target': 2},   'description': 'Two unique badges discovered. You are branching out.'},
+    {'name': 'Early Explorer',          'criteria_type': 'unique_badge_count', 'criteria_details': {'target': 3},   'description': 'Three unique badges. The collection is taking shape.'},
+    {'name': 'Curious Collector',       'criteria_type': 'unique_badge_count', 'criteria_details': {'target': 5},   'description': 'Five unique badges. Curiosity drives the hunt.'},
+    {'name': 'Badge Scout',             'criteria_type': 'unique_badge_count', 'criteria_details': {'target': 8},   'description': 'Eight unique badges scouted. You know where to look.',                  'title_name': 'Scout'},
+    {'name': 'Double Digits Diverse',   'criteria_type': 'unique_badge_count', 'criteria_details': {'target': 10},  'description': 'Ten unique badges. Your reach is expanding.'},
+    {'name': 'Broadening Horizons',     'criteria_type': 'unique_badge_count', 'criteria_details': {'target': 15},  'description': 'Fifteen unique badges. Horizons are wide open.'},
+    {'name': 'Twenty Unique',           'criteria_type': 'unique_badge_count', 'criteria_details': {'target': 20},  'description': 'Twenty unique badges. A diverse portfolio of pursuits.'},
+    {'name': 'Quarter Century Unique',  'criteria_type': 'unique_badge_count', 'criteria_details': {'target': 25},  'description': 'Twenty-five unique badges. One-quarter of a hundred.'},
+    {'name': 'Thirty Explored',         'criteria_type': 'unique_badge_count', 'criteria_details': {'target': 30},  'description': 'Thirty unique badges in your collection.',                              'title_name': 'Trailblazer'},
+    {'name': 'Forty Frontiers',         'criteria_type': 'unique_badge_count', 'criteria_details': {'target': 40},  'description': 'Forty unique badges. Pushing into new frontiers.'},
+    {'name': 'Fifty Finds',             'criteria_type': 'unique_badge_count', 'criteria_details': {'target': 50},  'description': 'Fifty unique badges discovered. Halfway to mastery.'},
+    {'name': 'Cartographer of Badges',  'criteria_type': 'unique_badge_count', 'criteria_details': {'target': 55},  'description': 'Fifty-five unique badges. Mapping the badge world.'},
+    {'name': 'Badge Prospector',        'criteria_type': 'unique_badge_count', 'criteria_details': {'target': 60},  'description': 'Sixty unique badges. Striking gold everywhere.'},
+    {'name': 'Vast Collection',         'criteria_type': 'unique_badge_count', 'criteria_details': {'target': 65},  'description': 'Sixty-five unique badges. Your collection is vast.',                    'title_name': 'Curator'},
+    {'name': 'Badge Archaeologist',     'criteria_type': 'unique_badge_count', 'criteria_details': {'target': 70},  'description': 'Seventy unique badges unearthed. You dig deep.',                       'title_name': 'Archaeologist'},
+    {'name': 'Badge Voyager',           'criteria_type': 'unique_badge_count', 'criteria_details': {'target': 75},  'description': 'Seventy-five unique badges. The voyage continues.',                    'title_name': 'Voyager'},
+    {'name': 'Badge Pioneer',           'criteria_type': 'unique_badge_count', 'criteria_details': {'target': 80},  'description': 'Eighty unique badges. Pioneering uncharted territory.',                 'title_name': 'Pioneer'},
+    {'name': 'Badge Expedition',        'criteria_type': 'unique_badge_count', 'criteria_details': {'target': 90},  'description': 'Ninety unique badges. The final expedition begins.',                    'title_name': 'Expedition Captain'},
+    {'name': 'Badge Omnibus',           'criteria_type': 'unique_badge_count', 'criteria_details': {'target': 100}, 'description': 'One hundred unique badges collected. Every corner explored.',            'title_name': 'The Cataloger'},
 
     # ── completion_count (20 tiers, max 500) ────────────────────────────
     {'name': 'Clean Sweep',           'criteria_type': 'completion_count', 'criteria_details': {'target': 1},   'description': 'Your first 100% completion. Every trophy, every challenge.',     'title_name': 'Finisher'},

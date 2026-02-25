@@ -1307,6 +1307,7 @@ class ProfileGamification(models.Model):
     total_badge_xp = models.PositiveIntegerField(default=0, db_index=True)
     series_badge_xp = models.JSONField(default=dict, blank=True, help_text='Per-series XP breakdown: {"resident-evil": 1500, ...}')
     total_badges_earned = models.PositiveIntegerField(default=0)
+    unique_badges_earned = models.PositiveIntegerField(default=0, help_text='Count of distinct badge series earned')
 
     # Tracking
     last_updated = models.DateTimeField(auto_now=True)
@@ -1476,7 +1477,8 @@ class Milestone(models.Model):
         ('trophy_count', 'Total Trophies Earned'),
         ('comment_upvotes', 'Comment Upvotes Received'),
         ('checklist_upvotes', 'Checklist Upvotes Received'),
-        ('badge_count', 'Badges Earned'),
+        ('badge_count', 'Badge Tiers Earned'),
+        ('unique_badge_count', 'Unique Badges Earned'),
         ('completion_count', 'Games 100% Completed'),
         ('stage_count', 'Badge Stages Completed'),
         ('az_progress', 'A-Z Challenge Letters'),

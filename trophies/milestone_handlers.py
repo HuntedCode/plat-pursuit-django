@@ -156,6 +156,25 @@ def handle_badge_count(profile, milestone, _cache=None):
     return {'achieved': achieved, 'progress': current}
 
 
+@register_handler('unique_badge_count')
+def handle_unique_badge_count(profile, milestone, _cache=None):
+    """Check progress for unique badges earned (ProfileGamification.unique_badges_earned)"""
+    from trophies.models import ProfileGamification
+
+    target = milestone.criteria_details.get('target', 0)
+    if _cache is not None and 'unique_badge_count' in _cache:
+        current = _cache['unique_badge_count']
+    else:
+        try:
+            current = profile.gamification.unique_badges_earned
+        except ProfileGamification.DoesNotExist:
+            current = 0
+        if _cache is not None:
+            _cache['unique_badge_count'] = current
+    achieved = current >= target
+    return {'achieved': achieved, 'progress': current}
+
+
 @register_handler('completion_count')
 def handle_completion_count(profile, milestone, _cache=None):
     """Check progress for games at 100% completion (Profile.total_completes)"""

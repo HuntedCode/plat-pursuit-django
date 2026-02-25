@@ -40,11 +40,22 @@ def compute_community_stats():
         stages__series_slug__isnull=False
     ).distinct().count()
 
-    # Badges earned (total UserBadge records)
-    badges_earned_counts = UserBadge.objects.aggregate(
-        total=Count('id'),
-        weekly=Count('id', filter=Q(earned_at__gte=week_ago))
+    # Unique badges earned: sum of per-user distinct series counts
+    per_user_unique = (
+        UserBadge.objects.values('profile')
+        .annotate(unique_series=Count('badge__series_slug', distinct=True))
+        .aggregate(total=Sum('unique_series'))
     )
+    per_user_weekly = (
+        UserBadge.objects.filter(earned_at__gte=week_ago)
+        .values('profile')
+        .annotate(unique_series=Count('badge__series_slug', distinct=True))
+        .aggregate(total=Sum('unique_series'))
+    )
+    badges_earned_counts = {
+        'total': per_user_unique['total'] or 0,
+        'weekly': per_user_weekly['total'] or 0,
+    }
 
     return {
         'profiles': {
