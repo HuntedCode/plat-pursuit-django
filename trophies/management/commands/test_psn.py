@@ -216,7 +216,7 @@ class Command(BaseCommand):
             # self.user_trophy_titles_for_title(user, title_ids)
             #self.user_trophy_groups_summary(user, np_comm_id, platform)
 
-            game_title = psnawp.game_title('PPSA08677_00', PlatformType('PS5'), account_id=user.account_id)
+            game_title = psnawp.game_title('PPSA28997_00', PlatformType('PS5'), account_id=user.account_id)
             #print(game_title)
             #print(game_title.np_communication_id)
             pprint(game_title.get_details())

@@ -33,7 +33,8 @@
       "WebFetch(domain:docs.stripe.com)",
       "WebFetch(domain:benfoster.io)",
       "Bash(identify:*)",
-      "Bash(where:*)"
+      "Bash(where:*)",
+      "WebFetch(domain:raw.githubusercontent.com)"
     ]
   }
 }

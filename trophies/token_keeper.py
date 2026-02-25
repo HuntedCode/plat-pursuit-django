@@ -28,6 +28,7 @@ from .psn_manager import PSNManager
 from trophies.util_modules.cache import redis_client, log_api_call
 from trophies.util_modules.constants import TITLE_ID_BLACKLIST, TITLE_STATS_SUPPORTED_PLATFORMS
 from trophies.util_modules.language import detect_asian_language
+from trophies.util_modules.region import detect_region_from_details
 from trophies.services.profile_stats_service import update_profile_games, update_profile_trophy_counts
 from trophies.services.badge_service import check_profile_badges
 from trophies.services.milestone_service import check_all_milestones_for_user
@@ -1305,7 +1306,14 @@ class TokenKeeper:
                     media_data = self._extract_media(details)
                     concept.update_media(media_data['all_media'], media_data['icon_url'], media_data['bg_url'])
                     game.add_concept(concept)
-                    game.add_region(title_id.region)
+                    detected_region = detect_region_from_details(details)
+                    if detected_region:
+                        if title_id.region == 'IP':
+                            title_id.region = detected_region
+                            title_id.save(update_fields=['region'])
+                        game.add_region(detected_region)
+                    else:
+                        game.add_region(title_id.region)
                     concept.add_title_id(title_id.title_id)
                     concept.check_and_mark_regional()
                     profile.increment_sync_progress()
