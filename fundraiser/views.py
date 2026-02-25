@@ -10,14 +10,14 @@ import stripe
 
 from django.conf import settings
 from django.contrib import messages
-from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db.models import Count, Max, Q, Sum
 from django.db.models.functions import Coalesce, Lower
 from django.shortcuts import get_object_or_404, redirect
 from django.utils import timezone
-from django.utils.decorators import method_decorator
 from django.views.generic import TemplateView
+
+from trophies.mixins import StaffRequiredMixin
 
 from fundraiser.models import Fundraiser, Donation, DonationBadgeClaim
 from trophies.models import Badge, Profile
@@ -327,8 +327,7 @@ class DonationSuccessView(LoginRequiredMixin, TemplateView):
         return redirect('fundraiser', slug=fundraiser.slug)
 
 
-@method_decorator(staff_member_required, name='dispatch')
-class FundraiserAdminView(TemplateView):
+class FundraiserAdminView(StaffRequiredMixin, TemplateView):
     """
     Staff admin page for monitoring fundraiser donations and managing claims.
 

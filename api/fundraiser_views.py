@@ -5,14 +5,14 @@ import json
 import logging
 from decimal import Decimal, InvalidOperation
 
-from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db import transaction
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
-from django.utils.decorators import method_decorator
 from django.views import View
+
+from trophies.mixins import StaffRequiredAPIMixin
 
 from fundraiser.models import Fundraiser, Donation, DonationBadgeClaim
 from fundraiser.services.donation_service import DonationService
@@ -154,8 +154,7 @@ class ClaimBadgeView(LoginRequiredMixin, View):
             return JsonResponse({'error': str(e)}, status=400)
 
 
-@method_decorator(staff_member_required, name='dispatch')
-class UpdateClaimStatusView(View):
+class UpdateClaimStatusView(StaffRequiredAPIMixin, View):
     """POST: Update the artwork status of a badge claim (staff only)."""
 
     def post(self, request):

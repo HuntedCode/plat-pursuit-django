@@ -5,6 +5,20 @@ from allauth.account.admin import EmailAddressAdmin as BaseEmailAddressAdmin
 from .models import CustomUser, SubscriptionPeriod
 from .forms import CustomUserCreationForm
 
+class PSNLinkedFilter(admin.SimpleListFilter):
+    title = "PSN linked"
+    parameter_name = "psn_linked"
+
+    def lookups(self, request, model_admin):
+        return [("yes", "Yes"), ("no", "No")]
+
+    def queryset(self, request, queryset):
+        if self.value() == "yes":
+            return queryset.filter(profile__is_linked=True)
+        if self.value() == "no":
+            return queryset.exclude(profile__is_linked=True)
+
+
 @admin.register(CustomUser)
 class CustomUserAdmin(UserAdmin):
     add_form = CustomUserCreationForm
@@ -12,7 +26,7 @@ class CustomUserAdmin(UserAdmin):
     # Fields for list view (efficient, searchable)
     list_display = ('email', 'is_linked_to_profile', 'premium_tier', 'subscription_provider', 'email_prefs_summary', 'user_timezone', 'default_region', 'is_staff', 'is_active', 'date_joined')
     list_select_related = ('profile',)
-    list_filter = ('is_staff', 'is_active', 'user_timezone')
+    list_filter = ('is_staff', 'is_active', 'user_timezone', PSNLinkedFilter)
     search_fields = ('email',)
     ordering = ('email',)
 

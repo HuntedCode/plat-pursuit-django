@@ -10,11 +10,11 @@ Provides:
 import logging
 from datetime import datetime, timedelta, timezone as dt_timezone
 
-from django.contrib.admin.views.decorators import staff_member_required
 from django.db.models import Count, Q
 from django.utils import timezone
-from django.utils.decorators import method_decorator
 from django.views.generic import TemplateView
+
+from trophies.mixins import StaffRequiredMixin
 
 from core.models import EmailLog
 from notifications.models import Notification
@@ -31,8 +31,7 @@ def _get_psn(user):
     return profile.psn_username if profile else 'N/A'
 
 
-@method_decorator(staff_member_required, name='dispatch')
-class SubscriptionAdminView(TemplateView):
+class SubscriptionAdminView(StaffRequiredMixin, TemplateView):
     template_name = 'users/admin/subscription_dashboard.html'
 
     def get_context_data(self, **kwargs):

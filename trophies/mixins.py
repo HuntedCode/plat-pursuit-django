@@ -1,4 +1,5 @@
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.http import JsonResponse
 from django.shortcuts import redirect
 from django.views.generic import View
 
@@ -19,6 +20,37 @@ class PremiumRequiredMixin(LoginRequiredMixin):
 
         # Redirect non-premium users to beta access page
         return redirect('beta_access_required')
+
+
+class StaffRequiredMixin(LoginRequiredMixin):
+    """
+    Mixin that requires the user to be a staff member.
+    Unauthenticated users are redirected to the login page.
+    Authenticated non-staff users are redirected to the home page.
+    """
+    def dispatch(self, request, *args, **kwargs):
+        if not request.user.is_authenticated:
+            return self.handle_no_permission()
+
+        if request.user.is_staff:
+            return super().dispatch(request, *args, **kwargs)
+
+        return redirect('home')
+
+
+class StaffRequiredAPIMixin:
+    """
+    Mixin for non-DRF API views that require staff access.
+    Returns JSON error responses instead of redirects.
+    """
+    def dispatch(self, request, *args, **kwargs):
+        if not request.user.is_authenticated:
+            return JsonResponse({'error': 'Authentication required.'}, status=401)
+
+        if not request.user.is_staff:
+            return JsonResponse({'error': 'Staff access required.'}, status=403)
+
+        return super().dispatch(request, *args, **kwargs)
 
 
 class RecapSyncGateMixin:

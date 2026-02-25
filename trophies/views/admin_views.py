@@ -4,18 +4,17 @@ from collections import defaultdict
 from datetime import timedelta
 
 from django.contrib import messages
-from django.contrib.admin.views.decorators import staff_member_required
 from django.db.models import Count, Q
 from django.db.models.functions import Lower
 from django.http import JsonResponse
 from django.shortcuts import redirect, get_object_or_404
 from django.urls import reverse_lazy
 from django.utils import timezone
-from django.utils.decorators import method_decorator
 from django.views import View
 from django.views.generic import ListView, TemplateView
 from django.views.generic.edit import FormView
 
+from trophies.mixins import StaffRequiredMixin
 from trophies.services.psn_api_service import PsnApiService
 from ..models import CommentReport, GameFamily, GameFamilyProposal, ModerationLog, Trophy
 from ..forms import BadgeCreationForm
@@ -24,8 +23,7 @@ from trophies.util_modules.cache import redis_client
 logger = logging.getLogger("psn_api")
 
 
-@method_decorator(staff_member_required, name='dispatch')
-class TokenMonitoringView(TemplateView):
+class TokenMonitoringView(StaffRequiredMixin, TemplateView):
     """
     Admin dashboard for monitoring PSN API token usage and sync worker machines.
 
@@ -101,8 +99,7 @@ class TokenMonitoringView(TemplateView):
         return stats
 
 
-@method_decorator(staff_member_required, name='dispatch')
-class BadgeCreationView(FormView):
+class BadgeCreationView(StaffRequiredMixin, FormView):
     """
     Admin tool for creating new badge series with multiple tiers.
 
@@ -130,8 +127,7 @@ class BadgeCreationView(FormView):
         return super().form_valid(form)
 
 
-@method_decorator(staff_member_required, name='dispatch')
-class CommentModerationView(ListView):
+class CommentModerationView(StaffRequiredMixin, ListView):
     """
     Staff-only comment moderation dashboard.
 
@@ -206,8 +202,7 @@ class CommentModerationView(ListView):
         return context
 
 
-@method_decorator(staff_member_required, name='dispatch')
-class ModerationActionView(View):
+class ModerationActionView(StaffRequiredMixin, View):
     """
     Handle moderation actions (delete, dismiss, review).
 
@@ -303,8 +298,7 @@ class ModerationActionView(View):
         return redirect('comment_moderation')
 
 
-@method_decorator(staff_member_required, name='dispatch')
-class ModerationLogView(ListView):
+class ModerationLogView(StaffRequiredMixin, ListView):
     """
     View complete moderation action history.
 
@@ -378,8 +372,7 @@ class ModerationLogView(ListView):
         return context
 
 
-@method_decorator(staff_member_required, name='dispatch')
-class GameFamilyManagementView(TemplateView):
+class GameFamilyManagementView(StaffRequiredMixin, TemplateView):
     """Staff-only dashboard for managing GameFamily records and reviewing proposals."""
     template_name = 'trophies/game_family_management.html'
 

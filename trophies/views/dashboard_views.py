@@ -1,15 +1,12 @@
 """
 Dashboard views: the personal trophy hunting command center.
 
-DashboardView serves the main page at /dashboard/ (login required).
+DashboardView serves the main page at /dashboard/ (staff required).
 """
-from django.contrib.admin.views.decorators import staff_member_required
-from django.contrib.auth.mixins import LoginRequiredMixin
 from django.urls import reverse_lazy
-from django.utils.decorators import method_decorator
 from django.views.generic import TemplateView
 
-from trophies.mixins import ProfileHotbarMixin
+from trophies.mixins import ProfileHotbarMixin, StaffRequiredMixin
 from trophies.models import DashboardConfig
 from trophies.services.dashboard_service import (
     get_ordered_modules,
@@ -19,8 +16,7 @@ from trophies.services.dashboard_service import (
 )
 
 
-@method_decorator(staff_member_required, name='dispatch')
-class DashboardView(LoginRequiredMixin, ProfileHotbarMixin, TemplateView):
+class DashboardView(StaffRequiredMixin, ProfileHotbarMixin, TemplateView):
     """
     Personal trophy hunting dashboard.
 

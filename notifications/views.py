@@ -1,14 +1,12 @@
 from django.views.generic import TemplateView, ListView, View
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.contrib.admin.views.decorators import staff_member_required
-from django.utils.decorators import method_decorator
 from django.shortcuts import redirect
 from django.contrib import messages
 from django.utils import timezone
 from datetime import datetime
 
 from core.services.tracking import track_page_view
-from trophies.mixins import ProfileHotbarMixin
+from trophies.mixins import ProfileHotbarMixin, StaffRequiredMixin
 from notifications.models import (
     NotificationTemplate, ScheduledNotification, NotificationLog
 )
@@ -51,8 +49,7 @@ class NotificationInboxView(LoginRequiredMixin, ProfileHotbarMixin, TemplateView
         return context
 
 
-@method_decorator(staff_member_required, name='dispatch')
-class AdminNotificationCenterView(TemplateView):
+class AdminNotificationCenterView(StaffRequiredMixin, TemplateView):
     """
     Main admin notification center - compose and send notifications.
     Staff-only access.
@@ -220,8 +217,7 @@ class AdminNotificationCenterView(TemplateView):
         return redirect('admin_notification_center')
 
 
-@method_decorator(staff_member_required, name='dispatch')
-class AdminNotificationHistoryView(ListView):
+class AdminNotificationHistoryView(StaffRequiredMixin, ListView):
     """View sent notification history. Staff-only access."""
     model = NotificationLog
     template_name = 'notifications/admin/notification_history.html'
@@ -239,8 +235,7 @@ class AdminNotificationHistoryView(ListView):
         return context
 
 
-@method_decorator(staff_member_required, name='dispatch')
-class AdminScheduledNotificationsView(ListView):
+class AdminScheduledNotificationsView(StaffRequiredMixin, ListView):
     """View and manage scheduled notifications. Staff-only access."""
     model = ScheduledNotification
     template_name = 'notifications/admin/scheduled_notifications.html'
@@ -267,8 +262,7 @@ class AdminScheduledNotificationsView(ListView):
         return context
 
 
-@method_decorator(staff_member_required, name='dispatch')
-class AdminCancelScheduledView(View):
+class AdminCancelScheduledView(StaffRequiredMixin, View):
     """Cancel a scheduled notification. Staff-only access."""
 
     def post(self, request, pk):

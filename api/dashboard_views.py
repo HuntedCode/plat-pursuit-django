@@ -4,12 +4,11 @@ Dashboard API views for lazy-loading modules and saving user config.
 import json
 import logging
 
-from django.contrib.admin.views.decorators import staff_member_required
-from django.contrib.auth.mixins import LoginRequiredMixin
 from django.http import JsonResponse
 from django.template.loader import render_to_string
-from django.utils.decorators import method_decorator
 from django.views import View
+
+from trophies.mixins import StaffRequiredAPIMixin
 
 from trophies.models import DashboardConfig
 from trophies.services.dashboard_service import (
@@ -24,8 +23,7 @@ from trophies.services.dashboard_service import (
 logger = logging.getLogger(__name__)
 
 
-@method_decorator(staff_member_required, name='dispatch')
-class DashboardModuleDataView(LoginRequiredMixin, View):
+class DashboardModuleDataView(StaffRequiredAPIMixin, View):
     """
     GET /api/v1/dashboard/module/<slug>/
 
@@ -68,8 +66,7 @@ class DashboardModuleDataView(LoginRequiredMixin, View):
         return JsonResponse({'html': html})
 
 
-@method_decorator(staff_member_required, name='dispatch')
-class DashboardConfigUpdateView(LoginRequiredMixin, View):
+class DashboardConfigUpdateView(StaffRequiredAPIMixin, View):
     """
     POST /api/v1/dashboard/config/
 
@@ -162,8 +159,7 @@ class DashboardConfigUpdateView(LoginRequiredMixin, View):
         })
 
 
-@method_decorator(staff_member_required, name='dispatch')
-class DashboardModuleReorderView(LoginRequiredMixin, View):
+class DashboardModuleReorderView(StaffRequiredAPIMixin, View):
     """
     POST /api/v1/dashboard/reorder/
 

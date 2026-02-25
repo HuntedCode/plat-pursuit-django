@@ -183,6 +183,7 @@ else:
     SENDGRID_SANDBOX_MODE_IN_DEBUG = False
     EMAIL_HOST_USER = 'apikey'
 
+LOGIN_URL = '/accounts/login/'
 LOGIN_REDIRECT_URL = 'home'
 SITE_ID = 1
 
