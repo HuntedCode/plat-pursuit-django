@@ -34,7 +34,8 @@
       "WebFetch(domain:benfoster.io)",
       "Bash(identify:*)",
       "Bash(where:*)",
-      "WebFetch(domain:raw.githubusercontent.com)"
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(curl:*)"
     ]
   }
 }
