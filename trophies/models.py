@@ -24,6 +24,13 @@ from trophies.managers import (
 import re
 
 
+def clean_title_field(value: str) -> str:
+    """Strip trademark symbols and normalize Unicode Roman numerals."""
+    from trophies.util_modules.roman_numerals import normalize_unicode_roman_numerals
+    cleaned = re.sub(r'[™®]|\bTM\b|\(R\)', '', value).strip()
+    return normalize_unicode_roman_numerals(cleaned)
+
+
 # Create your models here.
 
 class Profile(models.Model):
@@ -477,13 +484,8 @@ class Game(models.Model):
         ]
     
     def save(self, *args, **kwargs):
-        fields_to_clean = ['title_name']
-        
-        for field in fields_to_clean:
-            if hasattr(self, field):
-                value = getattr(self, field)
-                cleaned_value = re.sub(r'[™®]|(\bTM\b)|(\(R\))', '', value).strip()
-                setattr(self, field, cleaned_value)
+        if self.title_name:
+            self.title_name = clean_title_field(self.title_name)
         super().save(*args, **kwargs)
 
     def add_concept(self, concept):
@@ -600,6 +602,11 @@ class GameFamily(models.Model):
         verbose_name_plural = "Game families"
         ordering = ['canonical_name']
 
+    def save(self, *args, **kwargs):
+        if self.canonical_name:
+            self.canonical_name = clean_title_field(self.canonical_name)
+        super().save(*args, **kwargs)
+
     def __str__(self):
         return self.canonical_name
 
@@ -663,15 +670,10 @@ class Concept(models.Model):
         ]
     
     def save(self, *args, **kwargs):
-        fields_to_clean = ['unified_title']
-        
-        for field in fields_to_clean:
-            if hasattr(self, field):
-                value = getattr(self, field)
-                cleaned_value = re.sub(r'[™®]|(\bTM\b)|(\(R\))', '', value).strip()
-                setattr(self, field, cleaned_value)
+        if self.unified_title:
+            self.unified_title = clean_title_field(self.unified_title)
         super().save(*args, **kwargs)
-    
+
     @classmethod
     def create_default_concept(cls, game):
         """Create a stub Concept for games that couldn't be looked up via PSN API.
@@ -944,15 +946,10 @@ class Trophy(models.Model):
         ]
     
     def save(self, *args, **kwargs):
-        fields_to_clean = ['trophy_name']
-        
-        for field in fields_to_clean:
-            if hasattr(self, field):
-                value = getattr(self, field)
-                cleaned_value = re.sub(r'[™®]|(\bTM\b)|(\(R\))', '', value).strip()
-                setattr(self, field, cleaned_value)
+        if self.trophy_name:
+            self.trophy_name = clean_title_field(self.trophy_name)
         super().save(*args, **kwargs)
-    
+
     def get_pp_rarity_tier(self):
         """Compute Plat Pursuit specific rarity tier based on earn_rate.
         

@@ -1,8 +1,9 @@
 """
-Roman numeral utilities for search query expansion.
+Roman numeral utilities for search query expansion and Unicode normalization.
 
 Provides functions to convert between Roman numerals (I, II, XV) and
-Arabic numerals (1, 2, 15) to enhance game title searches.
+Arabic numerals (1, 2, 15) to enhance game title searches, plus
+normalization of Unicode Roman numeral codepoints to ASCII equivalents.
 """
 import re
 
@@ -72,3 +73,37 @@ def expand_numeral_query(query: str) -> list[str]:
                 variations.append(converted)
 
     return variations
+
+
+# Unicode Roman numeral codepoints -> ASCII equivalents
+# U+2160-U+216B (uppercase I-XII) and U+2170-U+217B (lowercase i-xii)
+_UNICODE_ROMAN_MAP = {
+    '\u2160': 'I',    '\u2161': 'II',   '\u2162': 'III',  '\u2163': 'IV',
+    '\u2164': 'V',    '\u2165': 'VI',   '\u2166': 'VII',  '\u2167': 'VIII',
+    '\u2168': 'IX',   '\u2169': 'X',    '\u216A': 'XI',   '\u216B': 'XII',
+    '\u2170': 'i',    '\u2171': 'ii',   '\u2172': 'iii',  '\u2173': 'iv',
+    '\u2174': 'v',    '\u2175': 'vi',   '\u2176': 'vii',  '\u2177': 'viii',
+    '\u2178': 'ix',   '\u2179': 'x',    '\u217A': 'xi',   '\u217B': 'xii',
+}
+
+_UNICODE_ROMAN_RE = re.compile(
+    '[' + ''.join(_UNICODE_ROMAN_MAP.keys()) + ']'
+)
+
+
+def normalize_unicode_roman_numerals(text: str) -> str:
+    """Replace Unicode Roman numeral characters with ASCII equivalents.
+
+    PSN game titles sometimes use single-codepoint Unicode Roman numerals
+    (e.g., U+2162 for III) instead of regular ASCII letters, making games
+    unsearchable when users type normal characters.
+
+    Args:
+        text: The string to normalize.
+
+    Returns:
+        The string with Unicode Roman numerals replaced by ASCII equivalents.
+    """
+    if not text:
+        return text
+    return _UNICODE_ROMAN_RE.sub(lambda m: _UNICODE_ROMAN_MAP[m.group()], text)

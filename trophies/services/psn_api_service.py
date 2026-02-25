@@ -159,12 +159,13 @@ class PsnApiService:
     @classmethod
     def create_or_update_game(cls, trophy_title: TrophyTitle):
         """Create or update Game model from PSN trophy title data."""
+        from trophies.models import clean_title_field
         game, created = Game.objects.get_or_create(
             np_communication_id=trophy_title.np_communication_id.strip(),
             defaults={
                 "np_service_name": trophy_title.np_service_name,
                 "trophy_set_version": trophy_title.trophy_set_version,
-                "title_name": trophy_title.title_name.strip(),
+                "title_name": clean_title_field(trophy_title.title_name.strip()),
                 "title_detail": trophy_title.title_detail,
                 "title_icon_url": trophy_title.title_icon_url,
                 "force_title_icon": False,
@@ -247,10 +248,11 @@ class PsnApiService:
         except Exception:
             descriptions_long = ''
 
+        from trophies.models import clean_title_field
         return Concept.objects.get_or_create(
             concept_id=details.get('id'),
             defaults={
-                'unified_title': details.get('nameEn', ''),
+                'unified_title': clean_title_field(details.get('nameEn', '')),
                 'publisher_name': details.get('publisherName', ''),
                 'genres': details.get('genres', []),
                 'subgenres': details.get('subGenres', []),
@@ -341,13 +343,14 @@ class PsnApiService:
         trophy_rarity = getattr(trophy_data, 'trophy_rarity', None) or None
         trophy_earn_rate = getattr(trophy_data, 'trophy_earn_rate', 0.0) or 0.0
 
+        from trophies.models import clean_title_field
         trophy, created = Trophy.objects.get_or_create(
             trophy_id=trophy_data.trophy_id,
             game=game,
             defaults={
                 "trophy_set_version": trophy_data.trophy_set_version,
                 "trophy_type": trophy_data.trophy_type.value,
-                "trophy_name": trophy_data.trophy_name.strip(),
+                "trophy_name": clean_title_field(trophy_data.trophy_name.strip()),
                 "trophy_detail": trophy_data.trophy_detail,
                 "trophy_icon_url": trophy_data.trophy_icon_url,
                 "trophy_group_id": trophy_data.trophy_group_id,
