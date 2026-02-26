@@ -2,8 +2,9 @@
 Enforce A-Z Challenge anti-stack rules on existing challenges.
 
 Removes non-completed slot assignments where the game is now excluded
-by the updated get_excluded_game_ids() logic (concept siblings, GameFamily
-siblings of platinumed games, or >50% progress games).
+by get_excluded_game_ids() logic: platinumed games, games with >=50%
+base-game trophy progress, and all related versions via Concept/GameFamily
+siblings.
 
 Usage:
     python manage.py enforce_az_challenge_rules --dry-run

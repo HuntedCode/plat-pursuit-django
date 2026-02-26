@@ -9,7 +9,7 @@ import random
 import logging
 
 import pytz
-from django.db.models import Q
+from django.db.models import Count, Q
 from django.utils import timezone
 
 from trophies.models import (
@@ -156,32 +156,54 @@ def auto_set_cover_letter(challenge):
 def get_excluded_game_ids(profile):
     """
     Return set of game IDs to exclude from AZ search:
-    - Games user has >50% progress on (that specific game only)
-    - Games user already has platinum for, PLUS all related versions:
-      - Concept siblings (same Concept, different platform/region)
-      - GameFamily siblings (different Concept, same GameFamily)
+    - Games where user has earned >=50% of base-game (default group) trophies.
+      This implicitly covers platinumed games (platinum = 100% base-game).
+    - All related versions via Concept siblings and GameFamily siblings.
     """
-    # Tier 1: >50% progress — excludes only the specific game
-    progress_excluded = set(
-        ProfileGame.objects.filter(
-            profile=profile, progress__gt=50,
-        ).values_list('game_id', flat=True)
+    played_game_ids = set(
+        ProfileGame.objects.filter(profile=profile)
+        .values_list('game_id', flat=True)
     )
 
-    # Tier 2: Platinumed games + concept/family expansion
-    plat_game_ids = set(
-        ProfileGame.objects.filter(
-            profile=profile, has_plat=True,
-        ).values_list('game_id', flat=True)
+    if not played_game_ids:
+        return set()
+
+    # Count earned base-game trophies per game (single aggregated query)
+    earned_counts = dict(
+        EarnedTrophy.objects.filter(
+            profile=profile, earned=True,
+            trophy__trophy_group_id='default',
+            trophy__game_id__in=played_game_ids,
+        ).values('trophy__game_id')
+        .annotate(count=Count('id'))
+        .values_list('trophy__game_id', 'count')
     )
 
-    if not plat_game_ids:
-        return progress_excluded
+    # Get total base-game trophies per game (single query)
+    game_totals = dict(
+        Game.objects.filter(id__in=played_game_ids)
+        .values_list('id', 'defined_trophies')
+    )
 
-    # Expand via Concept: all games sharing a Concept with any platted game
+    excluded = set()
+    for game_id, earned_count in earned_counts.items():
+        defined = game_totals.get(game_id)
+        if not defined:
+            continue
+        total_base = sum(
+            defined.get(t, 0)
+            for t in ('bronze', 'silver', 'gold', 'platinum')
+        )
+        if total_base > 0 and (earned_count / total_base) >= 0.50:
+            excluded.add(game_id)
+
+    if not excluded:
+        return set()
+
+    # Expand via Concept: all games sharing a Concept with any excluded game
     concept_ids = set(
         Game.objects.filter(
-            id__in=plat_game_ids, concept__isnull=False,
+            id__in=excluded, concept__isnull=False,
         ).values_list('concept_id', flat=True)
     )
     concept_siblings = set(
@@ -189,10 +211,10 @@ def get_excluded_game_ids(profile):
         .values_list('id', flat=True)
     ) if concept_ids else set()
 
-    # Expand via GameFamily: all games in families that contain any platted game's concept
+    # Expand via GameFamily: all games in families containing any excluded game
     family_ids = set(
         Game.objects.filter(
-            id__in=plat_game_ids, concept__family__isnull=False,
+            id__in=excluded, concept__family__isnull=False,
         ).values_list('concept__family_id', flat=True)
     )
     family_siblings = set(
@@ -200,7 +222,7 @@ def get_excluded_game_ids(profile):
         .values_list('id', flat=True)
     ) if family_ids else set()
 
-    return progress_excluded | plat_game_ids | concept_siblings | family_siblings
+    return excluded | concept_siblings | family_siblings
 
 
 def _create_completion_notification(challenge):

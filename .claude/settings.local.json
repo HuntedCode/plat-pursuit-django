@@ -35,7 +35,10 @@
       "Bash(identify:*)",
       "Bash(where:*)",
       "WebFetch(domain:raw.githubusercontent.com)",
-      "Bash(curl:*)"
+      "Bash(curl:*)",
+      "Bash(/c/Users/Jlowe/Desktop/PlatPursuit/venv/Scripts/python:*)",
+      "Bash(cygpath:*)",
+      "Bash(echo:*)"
     ]
   }
 }
