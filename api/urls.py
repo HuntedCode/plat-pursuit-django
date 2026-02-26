@@ -1,8 +1,9 @@
 from django.urls import path
 from .views import (
     SummaryView, GenerateCodeView, VerifyView, UnlinkView, CheckLinkedView,
-    RefreshView, SyncRolesView, TrophyCaseView, CommentListView, CommentCreateView,
-    CommentDetailView, CommentVoteView, CommentReportView, AgreeToGuidelinesView
+    RefreshView, SyncRolesView, RecheckBadgesView, TrophyCaseView, CommentListView,
+    CommentCreateView, CommentDetailView, CommentVoteView, CommentReportView,
+    AgreeToGuidelinesView
 )
 from .checklist_views import (
     ChecklistListView, ChecklistCreateView, ChecklistDetailView,
@@ -79,6 +80,7 @@ urlpatterns = [
     path('check-linked/', CheckLinkedView.as_view(), name='check-linked'),
     path('unlink/', UnlinkView.as_view(), name='unlink'),
     path('sync-roles/', SyncRolesView.as_view(), name='sync-roles'),
+    path('recheck-badges/', RecheckBadgesView.as_view(), name='recheck-badges'),
     path('refresh/', RefreshView.as_view(), name='refresh'),
     path('summary/', SummaryView.as_view(), name='summary'),
     path('trophy-case/', TrophyCaseView.as_view(), name='trophy-case'),

@@ -32,7 +32,7 @@ class ProfileAdmin(admin.ModelAdmin):
     search_fields = ("psn_username", "account_id", "user__username__iexact", "about_me")
     raw_id_fields = ("user",)
     ordering = ("psn_username",)
-    actions = ['subtract_10_days_and_mark_synced']
+    actions = ['subtract_10_days_and_mark_synced', 'recheck_badges']
     fieldsets = (
         (
             "Core Info",
@@ -69,6 +69,34 @@ class ProfileAdmin(admin.ModelAdmin):
             request,
             f"Successfully updated {updated_count} profile(s): subtracted 10 days from last_synced and set sync_status to 'synced'."
         )
+
+    @admin.action(description="Recheck all badges for selected profiles")
+    def recheck_badges(self, request, queryset):
+        """Run a full badge recheck for selected profiles."""
+        import logging
+        from trophies.services.badge_service import initial_badge_check
+
+        logger = logging.getLogger("psn_api")
+        success = 0
+        failed_profiles = []
+        for profile in queryset:
+            try:
+                initial_badge_check(profile, discord_notify=False)
+                success += 1
+            except Exception as e:
+                logger.exception(f"Badge recheck failed for {profile.psn_username}")
+                failed_profiles.append(profile.psn_username)
+
+        if success:
+            messages.success(
+                request,
+                f"Successfully rechecked badges for {success} profile(s)."
+            )
+        if failed_profiles:
+            messages.error(
+                request,
+                f"Failed to recheck badges for: {', '.join(failed_profiles)}"
+            )
 
 
 class RegionListFilter(SimpleListFilter):

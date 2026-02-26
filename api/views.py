@@ -175,6 +175,61 @@ class SyncRolesView(APIView):
         })
 
 
+class RecheckBadgesView(APIView):
+    """
+    Recheck all badges for a verified user.
+
+    Called by the bot via the /recheck-badges slash command. Runs a full badge
+    evaluation against all of the user's games and reports any changes.
+    """
+    permission_classes = [IsAuthenticated, IsDiscordBot]
+
+    @method_decorator(ratelimit(key='user', rate='5/m', method='POST', block=True))
+    def post(self, request):
+        from trophies.models import UserBadge, Badge
+
+        discord_id = request.data.get('discord_id')
+        if not discord_id:
+            return Response({'error': 'discord_id required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            profile = Profile.objects.select_related('user').get(discord_id=discord_id)
+        except Profile.DoesNotExist:
+            return Response({'error': 'No linked profile found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        if not profile.is_discord_verified:
+            return Response({'error': 'Profile is not Discord verified.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        before_ids = set(
+            UserBadge.objects.filter(profile=profile).values_list('badge_id', flat=True)
+        )
+
+        try:
+            badges_checked = initial_badge_check(profile, discord_notify=False)
+        except Exception:
+            logger.exception(f"Badge recheck failed for {profile.psn_username}")
+            return Response({'error': 'Badge recheck failed.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        after_ids = set(
+            UserBadge.objects.filter(profile=profile).values_list('badge_id', flat=True)
+        )
+
+        awarded_ids = after_ids - before_ids
+        revoked_ids = before_ids - after_ids
+
+        badge_names = dict(
+            Badge.objects.filter(id__in=awarded_ids | revoked_ids).values_list('id', 'name')
+        ) if awarded_ids or revoked_ids else {}
+
+        return Response({
+            'success': True,
+            'badges_checked': badges_checked,
+            'awarded': [badge_names.get(bid, f'Badge #{bid}') for bid in awarded_ids],
+            'revoked': [badge_names.get(bid, f'Badge #{bid}') for bid in revoked_ids],
+            'psn_username': profile.display_psn_username,
+        })
+
+
 class RefreshView(APIView):
     permission_classes = [IsAuthenticated, IsDiscordBot]
 
