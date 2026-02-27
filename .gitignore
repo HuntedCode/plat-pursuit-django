@@ -14,3 +14,4 @@ logs/plat_pursuit.log
 docker-compose.yml
 share_temp_images/
 docs/minigames/DEVELOPMENT_GUIDE.md
+.claude
