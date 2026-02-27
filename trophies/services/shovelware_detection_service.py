@@ -18,12 +18,12 @@ class ShovelwareDetectionService:
 
     Concept Shield (universal, applies to ALL flagging scenarios):
       A concept is only flagged if at least one game in it has 80%+ plat rate.
-      If a game in the concept has <=50% and no sibling is 80%+, the concept
+      If a game in the concept has <=30% and no sibling is 80%+, the concept
       stays clean. This check applies during sync unflagging AND publisher
       blacklist cascades.
 
     Unflagging (at sync time, when plat data updates):
-      1. Game's plat earn rate <= 50%
+      1. Game's plat earn rate <= 30%
       2. Check ALL games in concept: if ANY has 80%+ plat rate, concept stays flagged
       3. On unflag: remove concept from publisher tracking, potentially un-blacklist
 
@@ -31,7 +31,7 @@ class ShovelwareDetectionService:
     """
 
     FLAG_THRESHOLD = 90.0
-    UNFLAG_THRESHOLD = 50.0
+    UNFLAG_THRESHOLD = 30.0
     SIBLING_HOLD = 80.0
 
     @classmethod
@@ -97,7 +97,7 @@ class ShovelwareDetectionService:
     def _concept_is_shielded(cls, concept):
         """Check if a concept is shielded from flagging.
 
-        A concept is shielded if ANY game in it has <=50% plat rate AND no
+        A concept is shielded if ANY game in it has <=30% plat rate AND no
         game in the concept has 80%+ plat rate. This means no game qualifies
         as "hot", so the entire concept should not be considered shovelware.
         """
@@ -118,7 +118,7 @@ class ShovelwareDetectionService:
 
     @classmethod
     def _maybe_unflag_game(cls, game):
-        """Check if a game/concept can be unflagged (<=50% rate, no hot siblings).
+        """Check if a game/concept can be unflagged (<=30% rate, no hot siblings).
 
         The concept shield check overrides everything, including publisher blacklists.
         If no game in the concept has 80%+ plat rate, the concept is unflagged.

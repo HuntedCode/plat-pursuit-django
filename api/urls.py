@@ -71,6 +71,7 @@ from .subscription_admin_views import SubscriptionAdminActionView, SubscriptionA
 from .fundraiser_views import CreateDonationView, ClaimBadgeView, UpdateClaimStatusView
 from .dashboard_views import DashboardModuleDataView, DashboardConfigUpdateView, DashboardModuleReorderView
 from .title_views import EquipTitleAPIView
+from .game_player_views import GamePlayersAPIView
 
 app_name = 'api'
 
@@ -196,6 +197,9 @@ urlpatterns = [
 
     # Game search (for list typeahead)
     path('games/search/', GameSearchView.as_view(), name='game-search'),
+
+    # Game players
+    path('games/<str:np_communication_id>/players/', GamePlayersAPIView.as_view(), name='game-players'),
 
     # A-Z Challenge endpoints (static paths before <int:> to avoid URL conflicts)
     path('challenges/az/', AZChallengeCreateAPIView.as_view(), name='az-challenge-create'),

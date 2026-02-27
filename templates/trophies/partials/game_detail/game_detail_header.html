@@ -231,7 +231,8 @@
                 <div class="flex-1 min-w-0">
                 <div class="grid grid-cols-2 md:grid-cols-3 gap-y-3 gap-x-2">
 
-                    <div class="card border-2 border-base-300 shadow-sm shadow-neutral hover:scale-105 hover:border-secondary hover:shadow-secondary group">
+                    <div class="card border-2 border-base-300 shadow-sm shadow-neutral hover:scale-105 hover:border-secondary hover:shadow-secondary group cursor-pointer"
+                         role="button" aria-label="View all players" onclick="window.GamePlayersModal && window.GamePlayersModal.open('total')">
                         <div class="card-body p-2">
                             <div class="stats stat-compact">
                                 <div class="stat">
@@ -245,7 +246,8 @@
                         </div>
                     </div>
 
-                    <div class="card border-2 border-base-300 shadow-sm shadow-neutral hover:scale-105 hover:border-accent hover:shadow-accent group">
+                    <div class="card border-2 border-base-300 shadow-sm shadow-neutral hover:scale-105 hover:border-accent hover:shadow-accent group cursor-pointer"
+                         role="button" aria-label="View monthly players" onclick="window.GamePlayersModal && window.GamePlayersModal.open('monthly')">
                         <div class="card-body p-2">
                             <div class="stats stat-compact">
                                 <div class="stat">
@@ -259,7 +261,8 @@
                         </div>
                     </div>
 
-                    <div class="card border-2 border-base-300 shadow-sm shadow-neutral hover:scale-105 hover:border-warning hover:shadow-warning group">
+                    <div class="card border-2 border-base-300 shadow-sm shadow-neutral hover:scale-105 hover:border-warning hover:shadow-warning group cursor-pointer"
+                         role="button" aria-label="View players by trophies earned" onclick="window.GamePlayersModal && window.GamePlayersModal.open('trophies')">
                         <div class="card-body p-2">
                             <div class="stats stat-compact">
                                 <div class="stat">
@@ -273,7 +276,8 @@
                         </div>
                     </div>
 
-                    <div class="card border-2 border-base-300 shadow-sm shadow-neutral hover:scale-105 hover:border-primary hover:shadow-primary group">
+                    <div class="card border-2 border-base-300 shadow-sm shadow-neutral hover:scale-105 hover:border-primary hover:shadow-primary group cursor-pointer"
+                         role="button" aria-label="View platinum earners" onclick="window.GamePlayersModal && window.GamePlayersModal.open('plats')">
                         <div class="card-body p-2">
                             <div class="stats stat-compact">
                                 <div class="stat">
@@ -287,7 +291,8 @@
                         </div>
                     </div>
 
-                    <div class="card border-2 border-base-300 shadow-sm shadow-neutral hover:scale-105 hover:border-info hover:shadow-info group">
+                    <div class="card border-2 border-base-300 shadow-sm shadow-neutral hover:scale-105 hover:border-info hover:shadow-info group cursor-pointer"
+                         role="button" aria-label="View 100% completionists" onclick="window.GamePlayersModal && window.GamePlayersModal.open('completes')">
                         <div class="card-body p-2">
                             <div class="stats stat-compact">
                                 <div class="stat">
@@ -301,7 +306,8 @@
                         </div>
                     </div>
 
-                    <div class="card border-2 border-base-300 shadow-sm shadow-neutral hover:scale-105 hover:border-success hover:shadow-success group">
+                    <div class="card border-2 border-base-300 shadow-sm shadow-neutral hover:scale-105 hover:border-success hover:shadow-success group cursor-pointer"
+                         role="button" aria-label="View players by completion" onclick="window.GamePlayersModal && window.GamePlayersModal.open('avg')">
                         <div class="card-body p-2">
                             <div class="stats stat-compact">
                                 <div class="stat">
@@ -573,6 +579,8 @@
     <form method="dialog" class="modal-backdrop"><button>close</button></form>
 </dialog>
 {% endif %}
+
+{% include 'trophies/partials/game_detail/game_players_modal.html' %}
 
 <script>
     document.addEventListener('DOMContentLoaded', function() {

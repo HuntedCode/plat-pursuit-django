@@ -1,0 +1,76 @@
+<dialog id="game-players-modal" class="modal" data-np-id="{{ game.np_communication_id }}">
+    <div class="modal-box max-w-xl bg-base-200 border-2 border-base-300">
+        <form method="dialog">
+            <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2" aria-label="Close">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+            </button>
+        </form>
+        <h3 id="gp-title" class="font-bold text-lg mb-3">Game Players</h3>
+
+        <!-- Filter Controls -->
+        <div class="flex flex-col gap-2 mb-3">
+            <!-- Row 1: Search + Sort -->
+            <div class="flex gap-2">
+                <input type="text" id="gp-search" placeholder="Search username..."
+                       class="input input-sm input-bordered flex-1 min-w-0" autocomplete="off" />
+                <select id="gp-sort" class="select select-sm select-bordered w-36 lg:w-40">
+                    <option value="progress">Completion %</option>
+                    <option value="recent">Most Recent</option>
+                    <option value="name">Username</option>
+                </select>
+            </div>
+            <!-- Row 2: Platinum toggle + Progress range -->
+            <div class="flex gap-2 items-center flex-wrap">
+                <label class="label cursor-pointer gap-2 p-0">
+                    <span class="label-text text-xs">Platinum only</span>
+                    <input type="checkbox" id="gp-plat-toggle" class="toggle toggle-sm toggle-primary" />
+                </label>
+                <div class="flex items-center gap-1 ml-auto">
+                    <span class="text-xs text-base-content/70">Progress:</span>
+                    <input type="number" id="gp-min-progress" min="0" max="100" value="0"
+                           class="input input-xs input-bordered w-14 text-center" />
+                    <span class="text-xs text-base-content/50">to</span>
+                    <input type="number" id="gp-max-progress" min="0" max="100" value="100"
+                           class="input input-xs input-bordered w-14 text-center" />
+                    <span class="text-xs text-base-content/50">%</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Player Count -->
+        <div class="text-xs text-base-content/50 mb-2">
+            <span id="gp-count">0</span> players found
+        </div>
+
+        <!-- Player List (scrollable) -->
+        <div id="gp-list" class="max-h-[50vh] overflow-y-auto space-y-1">
+            <!-- Populated by JS -->
+        </div>
+
+        <!-- Load More -->
+        <div id="gp-load-more-wrap" class="flex justify-center pt-2 hidden">
+            <button id="gp-load-more" class="btn btn-sm btn-ghost">Load More</button>
+        </div>
+
+        <!-- Loading Spinner -->
+        <div id="gp-loading" class="flex justify-center py-4 hidden">
+            <span class="loading loading-spinner loading-md"></span>
+        </div>
+
+        <!-- Empty State -->
+        <div id="gp-empty" class="text-center py-6 hidden">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-10 h-10 mx-auto text-base-content/30 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z"/>
+            </svg>
+            <p class="text-base-content/50 text-sm italic">No hunters found matching your search.</p>
+            <p class="text-base-content/30 text-xs mt-1">Try adjusting your filters or broadening your search.</p>
+        </div>
+
+        <div class="modal-action">
+            <form method="dialog">
+                <button class="btn btn-ghost">Close</button>
+            </form>
+        </div>
+    </div>
+    <form method="dialog" class="modal-backdrop"><button>close</button></form>
+</dialog>

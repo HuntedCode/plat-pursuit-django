@@ -130,7 +130,24 @@ Currently handled by `absorb()`:
 - Italic glyphs slant beyond the text box boundary, and `line-clamp` clips overflow, causing the rightmost characters to be visually cut off
 - `pr-1` (4px) provides enough breathing room to prevent clipping
 
-## Inline Audit Checkpoints
+## Quality Workflow: Plan, Build, Polish
+
+The development workflow has three distinct audit phases. Each phase catches different categories of issues at the cheapest possible time.
+
+### Phase 1: Planning — Reuse Verification (Mandatory)
+
+Before finalizing any plan, grep the codebase for existing implementations that overlap with the proposed work. This is a structural concern, not a style concern.
+
+**Checklist before exiting plan mode:**
+- Search `static/js/utils.js` for utilities that cover the proposed functionality (API, ToastManager, HTMLUtils, debounce, InfiniteScroller, UnsavedChangesManager, ZoomScaler)
+- Search existing JS files for similar UI patterns (modals, tabs, infinite scroll, form handling)
+- Search existing templates for component patterns that can be reused or extended
+- Search existing Django views/services for logic that can be shared rather than duplicated
+- If the plan proposes a new helper, utility, or abstraction: verify nothing equivalent already exists
+
+**If existing code covers the need**: reuse it. If it almost covers it: extend it. Only create new abstractions when nothing suitable exists.
+
+### Phase 2: Implementation — Inline Audits (Background)
 
 During implementation, launch a background **Explore subagent** after each logical chunk of work (a completed file, a feature slice, or a significant set of changes) to audit what was just written. The audit agent should check for:
 
@@ -138,6 +155,24 @@ During implementation, launch a background **Explore subagent** after each logic
 - Missed edge cases or potential bugs
 - Consistency with existing project patterns and conventions
 - Security issues (OWASP top 10, Django-specific pitfalls)
-- Adherence to CLAUDE.md standards (responsive design, image styling, writing style, etc.)
+- Code duplication: is the new code reimplementing something that already exists?
 
-Continue implementing the next chunk while the audit runs in the background. When audit results come back, surface any findings and fix issues immediately rather than accumulating them. This keeps the workflow as: **brainstorm -> plan -> (implement + audit in parallel) -> final review**.
+Continue implementing the next chunk while the audit runs in the background. When audit results come back, surface any findings and fix issues immediately rather than accumulating them.
+
+### Phase 3: Post-Implementation — Style Audit Pass (Mandatory)
+
+After all functional code is complete and working, run a dedicated style audit before marking the task as done. This is the "polish" step. The framework gets built first, then refined.
+
+**The style audit agent should review every new/modified template and JS file against:**
+
+1. **Platinum Pursuit Standard**: Does it feel professional, sleek, and modern while retaining the indie charm? Or does it feel generic/sterile?
+2. **Responsive design compliance**: Two-layout system, no `sm:` breakpoints, base styles correct at 768px, proper `md:`/`lg:` progression
+3. **Visual cohesion**: Consistent spacing, colors, and component patterns with existing pages (reference: `profile_detail.html`, `game_detail.html`, `badge_detail.html`)
+4. **Interactive polish**: Hover states, transitions, focus indicators, loading states
+5. **Image styling**: `object-cover` for game/trophy icons, `object-contain` for badges, no `object-fill`
+6. **Text handling**: `pr-1` on italic + line-clamped text, proper truncation
+7. **Tailwind consistency**: Using project-standard classes rather than one-off values
+
+Surface all findings and fix them before presenting the work as complete. The goal: the user should not need to do their own style audit pass.
+
+**Overall workflow**: brainstorm -> plan (with reuse check) -> implement (with inline audits) -> style polish -> done.
