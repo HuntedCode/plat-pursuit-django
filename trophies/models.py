@@ -659,6 +659,7 @@ class Concept(models.Model):
     concept_icon_url = models.URLField(null=True, blank=True)
     guide_slug = models.CharField(max_length=50, blank=True, null=True)
     guide_created_at = models.DateTimeField(null=True, blank=True)
+    slug = models.SlugField(max_length=300, unique=True, blank=True, null=True)
     comment_count = models.PositiveIntegerField(default=0, help_text="Denormalized count of concept-level comments (excludes trophy and checklist comments)")
 
     class Meta:
@@ -667,11 +668,23 @@ class Concept(models.Model):
             models.Index(fields=['unified_title'], name='concept_title_idx'),
             models.Index(fields=['publisher_name'], name='content_publisher_idx'),
             models.Index(fields=['release_date'], name='concept_release_date_idx'),
+            models.Index(fields=['slug'], name='concept_slug_idx'),
         ]
-    
+
     def save(self, *args, **kwargs):
         if self.unified_title:
             self.unified_title = clean_title_field(self.unified_title)
+        if not self.slug and self.unified_title:
+            from django.utils.text import slugify
+            base_slug = slugify(self.unified_title)[:280]
+            if not base_slug:
+                base_slug = f"concept-{self.concept_id}"
+            slug = base_slug
+            counter = 1
+            while Concept.objects.filter(slug=slug).exclude(pk=self.pk).exists():
+                slug = f"{base_slug}-{counter}"
+                counter += 1
+            self.slug = slug
         super().save(*args, **kwargs)
 
     @classmethod
@@ -721,9 +734,38 @@ class Concept(models.Model):
         # Comments (concept-level, trophy-level, checklist-level)
         other.comments.update(concept=self)
 
-        # Ratings: re-point non-duplicate, duplicates cascade-delete with old concept
-        existing_raters = set(self.user_ratings.values_list('profile_id', flat=True))
-        other.user_ratings.exclude(profile_id__in=existing_raters).update(concept=self)
+        # Ratings: re-point non-duplicate (keyed by profile + concept_trophy_group)
+        existing_rating_keys = set(
+            self.user_ratings.values_list('profile_id', 'concept_trophy_group_id')
+        )
+        for rating in other.user_ratings.all():
+            key = (rating.profile_id, rating.concept_trophy_group_id)
+            if key not in existing_rating_keys:
+                rating.concept = self
+                rating.save(update_fields=['concept'])
+
+        # ConceptTrophyGroups: merge by trophy_group_id, re-point unique ones.
+        # Ordering matters: CTGs must be merged BEFORE reviews so that
+        # re-pointed reviews can reference the surviving CTG on self.
+        # Duplicate CTGs left on 'other' cascade-delete with it, but their
+        # reviews are already re-pointed or intentionally skipped (deduped).
+        existing_ctg_ids = set(
+            self.concept_trophy_groups.values_list('trophy_group_id', flat=True)
+        )
+        for ctg in other.concept_trophy_groups.all():
+            if ctg.trophy_group_id not in existing_ctg_ids:
+                ctg.concept = self
+                ctg.save(update_fields=['concept'])
+
+        # Reviews: re-point non-duplicate (keyed by profile + concept_trophy_group)
+        existing_review_keys = set(
+            self.reviews.values_list('profile_id', 'concept_trophy_group_id')
+        )
+        for review in other.reviews.all():
+            key = (review.profile_id, review.concept_trophy_group_id)
+            if key not in existing_review_keys:
+                review.concept = self
+                review.save(update_fields=['concept'])
 
         # Checklists
         other.checklists.update(concept=self)
@@ -834,6 +876,11 @@ class TitleID(models.Model):
 class UserConceptRating(models.Model):
     profile = models.ForeignKey(Profile, on_delete=models.CASCADE, related_name='concept_ratings')
     concept = models.ForeignKey(Concept, on_delete=models.CASCADE, related_name='user_ratings')
+    concept_trophy_group = models.ForeignKey(
+        'ConceptTrophyGroup', null=True, blank=True, on_delete=models.CASCADE,
+        related_name='user_ratings',
+        help_text="Null = base game rating (backward compatible). Set = DLC-specific rating."
+    )
     difficulty = models.IntegerField(validators=[MinValueValidator(1), MaxValueValidator(10)], help_text='Platinum Difficulty rating (1-10)')
     grindiness = models.IntegerField(validators=[MinValueValidator(1), MaxValueValidator(10)], help_text='Platinum grindiness rating (1-10)')
     hours_to_platinum = models.PositiveIntegerField(help_text='Estimated hours to achieve platinum.')
@@ -843,15 +890,16 @@ class UserConceptRating(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        unique_together = ['profile', 'concept']
+        unique_together = ['profile', 'concept', 'concept_trophy_group']
         indexes = [
             models.Index(fields=['concept'], name='user_rating_concept_idx'),
             models.Index(fields=['profile', 'concept'], name='user_rating_unique_idx'),
         ]
         ordering = ['-updated_at']
-    
+
     def __str__(self):
-        return f"{self.profile.display_psn_username}'s rating for {self.concept.unified_title}"
+        group_label = f" ({self.concept_trophy_group.display_name})" if self.concept_trophy_group else ""
+        return f"{self.profile.display_psn_username}'s rating for {self.concept.unified_title}{group_label}"
 
 class ProfileGame(models.Model):
     profile = models.ForeignKey(
@@ -1002,6 +1050,41 @@ class TrophyGroup(models.Model):
     
     def __str__(self):
         return f"{self.trophy_group_name or self.trophy_group_id} ({self.game.title_name})"
+
+
+class ConceptTrophyGroup(models.Model):
+    """Concept-level abstraction of DLC trophy groups.
+
+    Unifies trophy groups across game stacks of the same concept.
+    trophy_group_id='default' is the base game; '001', '002', etc. are DLC.
+    Auto-synced from game-level TrophyGroup records during PSN sync.
+    """
+    concept = models.ForeignKey(
+        Concept, on_delete=models.CASCADE, related_name='concept_trophy_groups'
+    )
+    trophy_group_id = models.CharField(
+        max_length=10,
+        help_text="Matches TrophyGroup.trophy_group_id ('default', '001', etc.)"
+    )
+    display_name = models.CharField(
+        max_length=255,
+        help_text="Canonical display name for this group (e.g., 'Base Game', 'DLC Pack 1')"
+    )
+    icon_url = models.URLField(blank=True, null=True)
+    sort_order = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        unique_together = ['concept', 'trophy_group_id']
+        ordering = ['sort_order', 'trophy_group_id']
+        indexes = [
+            models.Index(
+                fields=['concept', 'trophy_group_id'], name='ctg_concept_group_idx'
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.display_name} ({self.concept.unified_title})"
+
 
 class EarnedTrophy(models.Model):
     profile = models.ForeignKey(
@@ -1966,6 +2049,300 @@ class ModerationLog(models.Model):
     def comment_preview(self):
         """Return truncated original body for display."""
         return self.original_body[:100] + '...' if len(self.original_body) > 100 else self.original_body
+
+
+# ==================== Review System ====================
+
+class Review(models.Model):
+    """User review for a game concept, scoped to a trophy group (base game or DLC).
+
+    Separate from UserConceptRating. Reviews are text-based with a thumbs up/down
+    recommendation, markdown formatting, and helpful/funny voting.
+    One review per user per concept per trophy group.
+    """
+    concept = models.ForeignKey(
+        Concept, on_delete=models.CASCADE, related_name='reviews'
+    )
+    concept_trophy_group = models.ForeignKey(
+        ConceptTrophyGroup, on_delete=models.CASCADE, related_name='reviews',
+        help_text="Which trophy group this review is for (base game or specific DLC)"
+    )
+    profile = models.ForeignKey(
+        Profile, on_delete=models.CASCADE, related_name='reviews'
+    )
+
+    # Content
+    body = models.TextField(
+        max_length=8000,
+        help_text="Review text (50-8000 characters, markdown supported)"
+    )
+    recommended = models.BooleanField(
+        help_text="True = thumbs up (recommended), False = thumbs down (not recommended)"
+    )
+
+    # Denormalized vote counts
+    helpful_count = models.PositiveIntegerField(default=0)
+    funny_count = models.PositiveIntegerField(default=0)
+
+    # Denormalized reply count
+    reply_count = models.PositiveIntegerField(default=0)
+
+    # Timestamps
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    # Edit tracking
+    is_edited = models.BooleanField(default=False)
+
+    # Soft delete
+    is_deleted = models.BooleanField(default=False)
+    deleted_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        unique_together = ['profile', 'concept', 'concept_trophy_group']
+        indexes = [
+            models.Index(
+                fields=['concept', 'concept_trophy_group', '-created_at'],
+                name='review_concept_group_idx'
+            ),
+            models.Index(
+                fields=['concept', 'concept_trophy_group', '-helpful_count'],
+                name='review_helpful_idx'
+            ),
+            models.Index(
+                fields=['profile', '-created_at'],
+                name='review_profile_idx'
+            ),
+            models.Index(
+                fields=['is_deleted', 'created_at'],
+                name='review_moderation_idx'
+            ),
+        ]
+        ordering = ['-helpful_count', '-created_at']
+
+    def __str__(self):
+        rec = "Recommended" if self.recommended else "Not Recommended"
+        return f"Review by {self.profile.psn_username}: {rec} ({self.concept.unified_title})"
+
+    @property
+    def display_body(self):
+        """Returns '[deleted]' if soft-deleted, else actual body."""
+        return '[deleted]' if self.is_deleted else self.body
+
+    def soft_delete(self, moderator=None, reason="", request=None):
+        """Soft delete preserving thread structure and logging to ReviewModerationLog.
+
+        Args:
+            moderator: CustomUser performing deletion (None = user self-delete)
+            reason: Reason for deletion (for audit trail)
+            request: HttpRequest object to capture IP address
+        """
+        original_body = self.body
+        self.is_deleted = True
+        self.deleted_at = timezone.now()
+        self.body = '[deleted]'
+        self.save(update_fields=['is_deleted', 'deleted_at', 'body'])
+
+        if moderator:
+            ip_address = None
+            if request:
+                x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+                if x_forwarded_for:
+                    ip_address = x_forwarded_for.split(',')[0]
+                else:
+                    ip_address = request.META.get('REMOTE_ADDR')
+
+            ReviewModerationLog.objects.create(
+                moderator=moderator,
+                review=self,
+                review_id_snapshot=self.id,
+                review_author=self.profile,
+                original_body=original_body,
+                concept=self.concept,
+                reason=reason,
+                ip_address=ip_address,
+            )
+
+
+class ReviewVote(models.Model):
+    """Helpful or Funny vote on a review. One vote per type per profile per review."""
+    VOTE_TYPES = [
+        ('helpful', 'Helpful'),
+        ('funny', 'Funny'),
+    ]
+
+    review = models.ForeignKey(
+        Review, on_delete=models.CASCADE, related_name='votes'
+    )
+    profile = models.ForeignKey(
+        Profile, on_delete=models.CASCADE, related_name='review_votes'
+    )
+    vote_type = models.CharField(max_length=10, choices=VOTE_TYPES)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ['review', 'profile', 'vote_type']
+        indexes = [
+            models.Index(
+                fields=['review', 'profile'], name='reviewvote_lookup_idx'
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.profile.psn_username} voted {self.vote_type} on review {self.review_id}"
+
+
+class ReviewReply(models.Model):
+    """Single-level reply to a review. No nesting (flat replies only)."""
+    review = models.ForeignKey(
+        Review, on_delete=models.CASCADE, related_name='replies'
+    )
+    profile = models.ForeignKey(
+        Profile, on_delete=models.CASCADE, related_name='review_replies'
+    )
+    body = models.TextField(max_length=2000)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    is_edited = models.BooleanField(default=False)
+    is_deleted = models.BooleanField(default=False)
+    deleted_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['created_at']
+        indexes = [
+            models.Index(
+                fields=['review', 'created_at'], name='reviewreply_review_idx'
+            ),
+        ]
+
+    def __str__(self):
+        return f"Reply by {self.profile.psn_username} on review {self.review_id}"
+
+    @property
+    def display_body(self):
+        """Returns '[deleted]' if soft-deleted, else actual body."""
+        return '[deleted]' if self.is_deleted else self.body
+
+
+class ReviewReport(models.Model):
+    """User report on a review for moderation. Follows CommentReport pattern."""
+    REPORT_REASONS = [
+        ('spam', 'Spam'),
+        ('harassment', 'Harassment'),
+        ('inappropriate', 'Inappropriate Content'),
+        ('spoiler', 'Unmarked Spoiler'),
+        ('misinformation', 'Misinformation'),
+        ('other', 'Other'),
+    ]
+    REPORT_STATUS = [
+        ('pending', 'Pending Review'),
+        ('reviewed', 'Reviewed'),
+        ('dismissed', 'Dismissed'),
+        ('action_taken', 'Action Taken'),
+    ]
+
+    review = models.ForeignKey(
+        Review, on_delete=models.CASCADE, related_name='reports'
+    )
+    reporter = models.ForeignKey(
+        Profile, on_delete=models.CASCADE, related_name='submitted_review_reports'
+    )
+    reason = models.CharField(max_length=20, choices=REPORT_REASONS)
+    details = models.TextField(
+        max_length=500, blank=True,
+        help_text="Additional context for the report"
+    )
+    status = models.CharField(
+        max_length=20, choices=REPORT_STATUS, default='pending'
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    reviewed_by = models.ForeignKey(
+        CustomUser, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='reviewed_review_reports'
+    )
+    admin_notes = models.TextField(blank=True)
+
+    class Meta:
+        unique_together = ['review', 'reporter']
+        indexes = [
+            models.Index(
+                fields=['status', '-created_at'], name='reviewreport_status_idx'
+            ),
+            models.Index(
+                fields=['review'], name='reviewreport_review_idx'
+            ),
+        ]
+
+    def __str__(self):
+        return f"Report on review {self.review_id} by {self.reporter.psn_username}"
+
+
+class ReviewModerationLog(models.Model):
+    """Audit trail for review moderation actions. Follows ModerationLog pattern."""
+    ACTION_TYPES = [
+        ('delete', 'Review Deleted'),
+        ('restore', 'Review Restored'),
+        ('dismiss_report', 'Report Dismissed'),
+        ('report_reviewed', 'Report Reviewed'),
+    ]
+
+    timestamp = models.DateTimeField(auto_now_add=True, db_index=True)
+    moderator = models.ForeignKey(
+        CustomUser, on_delete=models.PROTECT,
+        related_name='review_moderation_actions'
+    )
+    action_type = models.CharField(
+        max_length=20, choices=ACTION_TYPES, default='delete', db_index=True
+    )
+    review = models.ForeignKey(
+        Review, on_delete=models.SET_NULL, null=True,
+        related_name='moderation_logs'
+    )
+    review_id_snapshot = models.IntegerField()
+    review_author = models.ForeignKey(
+        Profile, on_delete=models.SET_NULL, null=True,
+        related_name='moderated_reviews'
+    )
+    original_body = models.TextField(
+        help_text="Original review text preserved for context"
+    )
+    concept = models.ForeignKey(
+        Concept, on_delete=models.SET_NULL, null=True
+    )
+    reason = models.TextField(blank=True, help_text="Moderator's reason for action")
+    ip_address = models.GenericIPAddressField(
+        null=True, blank=True,
+        help_text="IP address of review author at time of action"
+    )
+    related_report = models.ForeignKey(
+        ReviewReport, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='action_logs'
+    )
+
+    class Meta:
+        ordering = ['-timestamp']
+        indexes = [
+            models.Index(
+                fields=['-timestamp', 'moderator'], name='reviewmodlog_timestamp_idx'
+            ),
+            models.Index(
+                fields=['action_type', '-timestamp'], name='reviewmodlog_action_idx'
+            ),
+            models.Index(
+                fields=['review_author', '-timestamp'], name='reviewmodlog_author_idx'
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.get_action_type_display()} by {self.moderator.username} at {self.timestamp}"
+
+    @property
+    def review_preview(self):
+        """Return truncated original body for display."""
+        if len(self.original_body) > 100:
+            return self.original_body[:100] + '...'
+        return self.original_body
 
 
 class BannedWord(models.Model):

@@ -3,6 +3,7 @@ Game rating aggregation service.
 
 This module handles the calculation and caching of community rating averages
 for game concepts, including difficulty, grindiness, fun, and time estimates.
+Supports both base game ratings (concept_trophy_group=NULL) and DLC group ratings.
 """
 from django.db.models import Avg, Count
 from django.core.cache import cache
@@ -16,19 +17,42 @@ class RatingService:
     RATING_CACHE_TIMEOUT = 3600
 
     @staticmethod
+    def _compute_averages(ratings_qs):
+        """Shared aggregation logic for a filtered ratings queryset.
+
+        Args:
+            ratings_qs: QuerySet of UserConceptRating
+
+        Returns:
+            dict or None
+        """
+        if not ratings_qs.exists():
+            return None
+
+        aggregates = ratings_qs.aggregate(
+            avg_difficulty=Avg('difficulty'),
+            avg_grindiness=Avg('grindiness'),
+            avg_fun=Avg('fun_ranking'),
+            avg_rating=Avg('overall_rating'),
+            count=Count('id')
+        )
+
+        hours_list = list(ratings_qs.values_list('hours_to_platinum', flat=True))
+        aggregates['avg_hours'] = (
+            calculate_trimmed_mean(hours_list, trim_percent=0.1)
+            if hours_list
+            else None
+        )
+
+        return aggregates
+
+    @staticmethod
     def get_community_averages(concept):
         """
-        Calculate community rating averages for a game concept.
+        Calculate community rating averages for a game concept (base game only).
 
-        Aggregates user ratings to calculate:
-        - Average difficulty (1-10 scale)
-        - Average grindiness (1-10 scale)
-        - Average fun ranking (1-10 scale)
-        - Average overall rating (1-10 scale)
-        - Average hours to platinum (trimmed mean with 10% trim)
-        - Total rating count
-
-        Uses trimmed mean for hours to reduce impact of outliers.
+        Filters to base game ratings (concept_trophy_group=NULL) so DLC ratings
+        do not skew the base game averages.
 
         Args:
             concept: Concept instance to calculate averages for
@@ -43,35 +67,9 @@ class RatingService:
                     'avg_hours': float,
                     'count': int
                 }
-
-        Example:
-            >>> averages = RatingService.get_community_averages(concept)
-            >>> if averages:
-            ...     print(f"Average difficulty: {averages['avg_difficulty']}")
-            ...     print(f"Based on {averages['count']} ratings")
         """
-        ratings = concept.user_ratings.all()
-        if not ratings.exists():
-            return None
-
-        # Calculate standard aggregates
-        aggregates = ratings.aggregate(
-            avg_difficulty=Avg('difficulty'),
-            avg_grindiness=Avg('grindiness'),
-            avg_fun=Avg('fun_ranking'),
-            avg_rating=Avg('overall_rating'),
-            count=Count('id')
-        )
-
-        # Calculate trimmed mean for hours (removes outliers)
-        hours_list = list(ratings.values_list('hours_to_platinum', flat=True))
-        aggregates['avg_hours'] = (
-            calculate_trimmed_mean(hours_list, trim_percent=0.1)
-            if hours_list
-            else None
-        )
-
-        return aggregates
+        ratings = concept.user_ratings.filter(concept_trophy_group__isnull=True)
+        return RatingService._compute_averages(ratings)
 
     @staticmethod
     def get_cached_community_averages(concept):
@@ -153,7 +151,7 @@ class RatingService:
             >>> stats = RatingService.get_rating_statistics(concept)
             >>> print(f"Median difficulty: {stats.get('median_difficulty')}")
         """
-        ratings = concept.user_ratings.all()
+        ratings = concept.user_ratings.filter(concept_trophy_group__isnull=True)
         if not ratings.exists():
             return None
 
@@ -167,3 +165,67 @@ class RatingService:
         # - Recent trends
 
         return stats
+
+    # ------------------------------------------------------------------ #
+    #  DLC / Trophy Group rating methods
+    # ------------------------------------------------------------------ #
+
+    @staticmethod
+    def get_community_averages_for_group(concept, concept_trophy_group):
+        """Calculate community rating averages for a specific trophy group.
+
+        For base game (trophy_group_id='default'): filters where
+        concept_trophy_group IS NULL (backward compat with existing rows).
+        For DLC: filters by the specific ConceptTrophyGroup FK.
+
+        Args:
+            concept: Concept instance
+            concept_trophy_group: ConceptTrophyGroup instance
+
+        Returns:
+            dict or None: Rating averages dictionary
+        """
+        if concept_trophy_group.trophy_group_id == 'default':
+            # Base game ratings have concept_trophy_group=NULL
+            ratings = concept.user_ratings.filter(concept_trophy_group__isnull=True)
+        else:
+            ratings = concept.user_ratings.filter(
+                concept_trophy_group=concept_trophy_group,
+            )
+        return RatingService._compute_averages(ratings)
+
+    @staticmethod
+    def get_cached_community_averages_for_group(concept, concept_trophy_group):
+        """Get community averages for a trophy group with caching.
+
+        Args:
+            concept: Concept instance
+            concept_trophy_group: ConceptTrophyGroup instance
+
+        Returns:
+            dict or None
+        """
+        cache_key = (
+            f"concept:averages:{concept.id}:group:{concept_trophy_group.id}"
+        )
+        averages = cache.get(cache_key)
+        if averages is None:
+            averages = RatingService.get_community_averages_for_group(
+                concept, concept_trophy_group,
+            )
+            if averages:
+                cache.set(cache_key, averages, RatingService.RATING_CACHE_TIMEOUT)
+        return averages
+
+    @staticmethod
+    def invalidate_group_cache(concept, concept_trophy_group):
+        """Invalidate cached rating averages for a specific trophy group.
+
+        Args:
+            concept: Concept instance
+            concept_trophy_group: ConceptTrophyGroup instance
+        """
+        cache_key = (
+            f"concept:averages:{concept.id}:group:{concept_trophy_group.id}"
+        )
+        cache.delete(cache_key)

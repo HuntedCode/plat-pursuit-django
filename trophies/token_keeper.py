@@ -1133,6 +1133,12 @@ class TokenKeeper:
         trophy_groups_summary = self._execute_api_call(self._get_instance_for_job(job_type), profile, 'trophy_groups_summary', np_communication_id=np_communication_id, platform=PlatformType(platform))
         for group in trophy_groups_summary.trophy_groups:
             trophy_group, created = PsnApiService.create_or_update_trophy_groups_from_summary(game, group)
+
+        # Sync concept-level trophy groups for the Community Hub
+        if game.concept:
+            from trophies.services.concept_trophy_group_service import ConceptTrophyGroupService
+            ConceptTrophyGroupService.sync_for_concept(game.concept)
+
         profile.increment_sync_progress()
         logger.info(f"Trophy group summaries for {game.title_name} synced successfully!")
 

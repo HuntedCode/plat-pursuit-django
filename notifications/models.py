@@ -19,6 +19,8 @@ class NotificationTemplate(models.Model):
         ('subscription_updated', 'Subscription Updated'),
         ('discord_verified', 'Discord Verified'),
         ('challenge_completed', 'Challenge Completed'),
+        ('review_reply', 'Review Reply'),
+        ('review_milestone', 'Review Milestone'),
         ('admin_announcement', 'Admin Announcement'),
         ('system_alert', 'System Alert'),
         ('payment_failed', 'Payment Failed'),

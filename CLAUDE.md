@@ -93,12 +93,17 @@ The `Concept.absorb(other)` method in `trophies/models.py` migrates ALL related 
 
 Currently handled by `absorb()`:
 - Comments (concept-level, trophy-level, checklist-level) + votes + reports
-- UserConceptRating (skip duplicates, keep new concept's rating)
+- UserConceptRating (skip duplicates by profile + concept_trophy_group)
+- ConceptTrophyGroups (merge by trophy_group_id, orphans cascade-delete)
+- Reviews (skip duplicates by profile + concept_trophy_group)
 - Checklists + sections, items, votes, reports, user progress
 - FeaturedGuide entries
 - Profile.selected_background
 - Badge.most_recent_concept
 - Stage.concepts (M2M)
+- GameFamilyProposal M2M
+- Genre challenge slots + bonus slots
+- GameFamily (inherit if target has none)
 - Concept.title_ids (merged/deduplicated)
 - Concept.comment_count (recalculated)
 

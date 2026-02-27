@@ -40,6 +40,11 @@ class Command(BaseCommand):
             type=int,
             help='Flush dashboard module caches for a specific profile ID.'
         )
+        group.add_argument(
+            '--flush-community',
+            action='store_true',
+            help='Flush Community Hub caches (review recommendations + DLC rating averages).'
+        )
 
     def handle(self, *args, **options):
         if not settings.DEBUG:
@@ -57,6 +62,8 @@ class Command(BaseCommand):
             self._handle_flush_complete_lock(options['flush_complete_lock'])
         elif options['flush_dashboard']:
             self._handle_flush_dashboard(options['flush_dashboard'])
+        elif options['flush_community']:
+            self._handle_flush_community()
 
     def _confirm_action(self, action_desc):
         confirm = input(f"Are you sure you want to {action_desc}? (y/n):").strip().lower()
@@ -189,4 +196,30 @@ class Command(BaseCommand):
             self.stdout.write(self.style.SUCCESS(f"Dashboard caches flushed for profile {profile_id}."))
         except Exception as e:
             logger.exception(f"Error during dashboard flush: {e}")
+            self.stdout.write(self.style.ERROR(f"Error: {e}"))
+
+    def _handle_flush_community(self):
+        if not self._confirm_action("flush Community Hub caches (review recommendations + DLC rating averages)"):
+            self.stdout.write(self.style.ERROR("Operation cancelled."))
+            return
+
+        cache_config = settings.CACHES['default']
+        prefix = f"{cache_config['KEY_PREFIX']}:1:"
+
+        community_patterns = [
+            f"{prefix}review:recommend:*",
+            f"{prefix}concept:averages:*:group:*",
+        ]
+
+        try:
+            deleted_count = 0
+            for pattern in community_patterns:
+                matching_keys = redis_client.keys(pattern)
+                if matching_keys:
+                    redis_client.delete(*matching_keys)
+                    deleted_count += len(matching_keys)
+            logger.info(f"Flushed {deleted_count} Community Hub cache keys.")
+            self.stdout.write(self.style.SUCCESS(f"Flushed {deleted_count} Community Hub cache keys."))
+        except Exception as e:
+            logger.exception(f"Error during community flush: {e}")
             self.stdout.write(self.style.ERROR(f"Error: {e}"))
