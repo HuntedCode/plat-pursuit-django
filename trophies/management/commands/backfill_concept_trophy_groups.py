@@ -64,13 +64,20 @@ class Command(BaseCommand):
 
     def _handle_mismatch_check(self, collections_only=False):
         """Scan all multi-stack concepts for trophy group mismatches."""
-        from django.db.models import Count
+        from django.db.models import Count, Q
 
-        # Only check concepts with 2+ games (single-stack can't have mismatches)
+        # Only check concepts with 2+ games (single-stack can't have mismatches).
+        # Skip concepts where ALL games are shovelware.
         concepts = (
             Concept.objects
-            .annotate(game_count=Count('games'))
-            .filter(game_count__gte=2)
+            .annotate(
+                game_count=Count('games'),
+                non_shovelware_count=Count(
+                    'games',
+                    filter=~Q(games__shovelware_status__in=['auto_flagged', 'manually_flagged']),
+                ),
+            )
+            .filter(game_count__gte=2, non_shovelware_count__gt=0)
             .order_by('unified_title')
         )
         total = concepts.count()
