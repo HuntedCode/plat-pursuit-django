@@ -17,6 +17,7 @@ from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.generic import ListView, DetailView
 from urllib.parse import urlencode
 from trophies.mixins import ProfileHotbarMixin
+from ..constants import CACHE_TIMEOUT_IMAGES
 from ..models import Game, Trophy, Profile, EarnedTrophy, ProfileGame, TrophyGroup, Badge, Concept, FeaturedGuide, Stage, Checklist
 from ..forms import GameSearchForm, GameDetailForm, UserConceptRatingForm, GuideSearchForm
 from trophies.util_modules.constants import MODERN_PLATFORMS, ALL_PLATFORMS
@@ -363,7 +364,7 @@ class GameDetailView(ProfileHotbarMixin, DetailView):
             dict: Image URLs or empty dict on error
         """
         images_cache_key = f"game:imageurls:{game.np_communication_id}"
-        images_timeout = 604800  # 1 week
+        images_timeout = CACHE_TIMEOUT_IMAGES
 
         try:
             cached_images = cache.get(images_cache_key)

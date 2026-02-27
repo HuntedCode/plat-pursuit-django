@@ -41,6 +41,11 @@ class Command(BaseCommand):
             help='Flush dashboard module caches for a specific profile ID.'
         )
         group.add_argument(
+            '--flush-concept',
+            type=int,
+            help='Flush image/trophy/stats caches for all games under a specific concept ID.'
+        )
+        group.add_argument(
             '--flush-community',
             action='store_true',
             help='Flush Community Hub caches (review recommendations + DLC rating averages).'
@@ -60,6 +65,8 @@ class Command(BaseCommand):
             self._handle_flush_token_keeper()
         elif options['flush_complete_lock']:
             self._handle_flush_complete_lock(options['flush_complete_lock'])
+        elif options['flush_concept']:
+            self._handle_flush_concept(options['flush_concept'])
         elif options['flush_dashboard']:
             self._handle_flush_dashboard(options['flush_dashboard'])
         elif options['flush_community']:
@@ -137,6 +144,44 @@ class Command(BaseCommand):
             self.stdout.write(self.style.SUCCESS(f"Flushed {deleted_count} keys for game {np_communication_id} page."))
         except Exception as e:
             logger.exception(f"Error during game page flush: {e}")
+            self.stdout.write(self.style.ERROR(f"Error: {e}"))
+
+    def _handle_flush_concept(self, concept_id: int):
+        from trophies.models import Game
+
+        np_ids = list(
+            Game.objects.filter(concept_id=concept_id)
+            .values_list('np_communication_id', flat=True)
+        )
+
+        if not np_ids:
+            self.stdout.write(self.style.WARNING(f"No games found for concept {concept_id}."))
+            return
+
+        self.stdout.write(f"Found {len(np_ids)} game(s) for concept {concept_id}: {', '.join(filter(None, np_ids))}")
+
+        if not self._confirm_action(f"flush image/trophy/stats caches for these {len(np_ids)} game(s)"):
+            self.stdout.write(self.style.ERROR("Operation cancelled."))
+            return
+
+        cache_config = settings.CACHES['default']
+        prefix = f"{cache_config['KEY_PREFIX']}:1:"
+
+        try:
+            deleted_count = 0
+            for np_id in np_ids:
+                if not np_id:
+                    continue
+                deleted_count += redis_client.delete(
+                    f"{prefix}game:imageurls:{np_id}",
+                    f"{prefix}game:trophygroups:{np_id}",
+                )
+                for key in redis_client.scan_iter(match=f"{prefix}game:stats:{np_id}:*"):
+                    deleted_count += redis_client.delete(key)
+            logger.info(f"Flushed {deleted_count} keys for concept {concept_id}.")
+            self.stdout.write(self.style.SUCCESS(f"Flushed {deleted_count} keys for concept {concept_id}."))
+        except Exception as e:
+            logger.exception(f"Error during concept flush: {e}")
             self.stdout.write(self.style.ERROR(f"Error: {e}"))
 
     def _handle_flush_token_keeper(self):
