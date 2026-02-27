@@ -15,13 +15,19 @@ class Command(BaseCommand):
             '--check-mismatches', action='store_true',
             help='Scan for trophy group mismatches across game stacks (name differences, trophy count differences, missing groups)',
         )
+        parser.add_argument(
+            '--collections-only', action='store_true',
+            help='With --check-mismatches: only show concepts where the base game (default) group has a trophy count mismatch, indicating bundled collections that need concept splitting',
+        )
 
     def handle(self, *args, **options):
         dry_run = options['dry_run']
         check_mismatches = options['check_mismatches']
 
         if check_mismatches:
-            self._handle_mismatch_check()
+            self._handle_mismatch_check(
+                collections_only=options['collections_only'],
+            )
             return
 
         total = Concept.objects.count()
@@ -56,7 +62,7 @@ class Command(BaseCommand):
             summary += f", {errors} error(s)"
         self.stdout.write(self.style.SUCCESS(summary))
 
-    def _handle_mismatch_check(self):
+    def _handle_mismatch_check(self, collections_only=False):
         """Scan all multi-stack concepts for trophy group mismatches."""
         from django.db.models import Count
 
@@ -68,7 +74,11 @@ class Command(BaseCommand):
             .order_by('unified_title')
         )
         total = concepts.count()
-        self.stdout.write(f"Checking {total} multi-stack concepts for trophy group mismatches...\n")
+
+        if collections_only:
+            self.stdout.write(f"Checking {total} multi-stack concepts for bundled collections...\n")
+        else:
+            self.stdout.write(f"Checking {total} multi-stack concepts for trophy group mismatches...\n")
 
         concepts_with_issues = 0
         total_mismatches = 0
@@ -77,6 +87,20 @@ class Command(BaseCommand):
             mismatches = ConceptTrophyGroupService.detect_mismatches(concept)
             if not mismatches:
                 continue
+
+            if collections_only:
+                # Only keep concepts where the default group has a count mismatch
+                has_default_count_issue = any(
+                    m['type'] == 'trophy_count_mismatch' and m['group_id'] == 'default'
+                    for m in mismatches
+                )
+                if not has_default_count_issue:
+                    continue
+                # Show only the default group count mismatch + game titles
+                mismatches = [
+                    m for m in mismatches
+                    if m['group_id'] == 'default'
+                ]
 
             concepts_with_issues += 1
             total_mismatches += len(mismatches)
@@ -95,14 +119,25 @@ class Command(BaseCommand):
 
         self.stdout.write("")
         if concepts_with_issues == 0:
-            self.stdout.write(self.style.SUCCESS(
-                f"All {total} multi-stack concepts have consistent trophy groups."
-            ))
+            if collections_only:
+                self.stdout.write(self.style.SUCCESS(
+                    f"No bundled collections found among {total} multi-stack concepts."
+                ))
+            else:
+                self.stdout.write(self.style.SUCCESS(
+                    f"All {total} multi-stack concepts have consistent trophy groups."
+                ))
         else:
             self.stdout.write(self.style.WARNING(
                 f"Found {total_mismatches} mismatch(es) across {concepts_with_issues} concept(s)."
             ))
-            self.stdout.write(
-                "Review these concepts. Mismatches may indicate games that should "
-                "not share a concept, or DLC packs that differ between platforms."
-            )
+            if collections_only:
+                self.stdout.write(
+                    "These concepts likely contain bundled collections (multiple different "
+                    "games under one concept). Consider splitting into separate concepts."
+                )
+            else:
+                self.stdout.write(
+                    "Review these concepts. Mismatches may indicate games that should "
+                    "not share a concept, or DLC packs that differ between platforms."
+                )
