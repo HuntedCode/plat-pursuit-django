@@ -189,7 +189,7 @@ class GameAdmin(admin.ModelAdmin):
         ),
     )
     readonly_fields = ('shovelware_updated_at',)
-    actions = ['toggle_is_regional', 'add_psvr_platform', 'mark_concepts_stale', 'mark_as_shovelware', 'clear_shovelware_flag', 'reset_shovelware_auto']
+    actions = ['toggle_is_regional', 'add_psvr_platform', 'mark_concepts_stale', 'copy_concept_icon', 'mark_as_shovelware', 'clear_shovelware_flag', 'reset_shovelware_auto']
     autocomplete_fields=['concept']
 
     @admin.action(description="Toggle is_regional for selected games")
@@ -221,6 +221,22 @@ class GameAdmin(admin.ModelAdmin):
         updated = queryset.filter(concept_stale=False).update(concept_stale=True)
         messages.success(request, f"Marked {updated} game(s) as concept_stale. Concepts will be re-looked up on next sync.")
 
+    @admin.action(description="Copy concept icon to title_image")
+    def copy_concept_icon(self, request, queryset):
+        updated = 0
+        skipped = 0
+        for game in queryset.select_related('concept'):
+            if game.concept and game.concept.concept_icon_url:
+                game.title_image = game.concept.concept_icon_url
+                game.save(update_fields=['title_image'])
+                updated += 1
+            else:
+                skipped += 1
+        msg = f"Updated title_image for {updated} game(s)."
+        if skipped:
+            msg += f" Skipped {skipped} (no concept or no concept icon)."
+        messages.success(request, msg)
+
     @admin.action(description="Mark as shovelware (manual override)")
     def mark_as_shovelware(self, request, queryset):
         from django.utils import timezone as tz
@@ -251,6 +267,27 @@ class GameAdmin(admin.ModelAdmin):
             ShovelwareDetectionService.evaluate_game(game)
             count += 1
         messages.success(request, f"Unlocked and re-evaluated {count} game(s) with auto-detection.")
+
+    def save_model(self, request, obj, form, change):
+        if change and 'concept' in form.changed_data:
+            old_concept_id = form.initial.get('concept')
+            old_concept = Concept.objects.filter(pk=old_concept_id).first() if old_concept_id else None
+            new_concept = obj.concept
+            super().save_model(request, obj, form, change)
+            # Invalidate game page caches
+            from django.core.cache import cache
+            cache.delete(f"game:imageurls:{obj.np_communication_id}")
+            cache.delete(f"game:trophygroups:{obj.np_communication_id}")
+            # Absorb orphaned old concept
+            if old_concept and old_concept.games.count() == 0:
+                new_concept.absorb(old_concept)
+                old_concept.delete()
+                from trophies.services.comment_service import CommentService
+                from trophies.services.rating_service import RatingService
+                CommentService.invalidate_cache(new_concept)
+                RatingService.invalidate_cache(new_concept)
+        else:
+            super().save_model(request, obj, form, change)
 
     def total_defined_trophies(self, obj):
         return sum(obj.defined_trophies.values()) if obj.defined_trophies else 0
