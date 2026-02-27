@@ -874,6 +874,16 @@ class TokenKeeper:
                         except Game.DoesNotExist:
                             game, _, _ = PsnApiService.create_or_update_game(title)
                             tracked = {'total': 0}  # Initialize tracked if game was just created
+                            # Health check only queues sync_trophies, which has no concept
+                            # assignment pathway. Assign a default concept so the game
+                            # is never left without one.
+                            if game.concept is None:
+                                try:
+                                    default_concept = Concept.create_default_concept(game)
+                                    game.add_concept(default_concept)
+                                    logger.info(f"Health check: created default concept for {game.title_name}")
+                                except Exception:
+                                    logger.exception(f"Health check: failed to create default concept for {game.title_name}")
 
                         pgame = None
                         try:
@@ -1138,6 +1148,8 @@ class TokenKeeper:
         if game.concept:
             from trophies.services.concept_trophy_group_service import ConceptTrophyGroupService
             ConceptTrophyGroupService.sync_for_concept(game.concept)
+        else:
+            logger.warning(f"Game {game.title_name} ({game.np_communication_id}) has no concept during trophy group sync.")
 
         profile.increment_sync_progress()
         logger.info(f"Trophy group summaries for {game.title_name} synced successfully!")
@@ -1342,10 +1354,32 @@ class TokenKeeper:
             else:
                 profile.increment_sync_progress()
                 logger.warning(f"Couldn't get game_title for Title ID {title_id.title_id}")
+                if game.concept is None:
+                    try:
+                        region_code = detect_asian_language(game.title_name)
+                        if region_code != 'Unknown':
+                            game.add_region(region_code)
+                            game.is_regional = True
+                            game.save(update_fields=['is_regional'])
+                            logger.info(f"Game {game.title_name} detected as Asian regional.")
+                        default_concept = Concept.create_default_concept(game)
+                        game.add_concept(default_concept)
+                        logger.info(f"Created default concept for {game.title_name} (game_title was None)")
+                    except Exception:
+                        logger.exception(f"Failed to create default concept for {game.title_name} (Title ID {title_id.title_id})")
         except Exception as e:
             profile.increment_sync_progress()
             logger.exception(f"Error while syncing Title ID {title_id.title_id}: {e}")
-    
+            # Last-resort: ensure the game has a concept even if sync failed
+            try:
+                game.refresh_from_db()
+                if game.concept is None:
+                    default_concept = Concept.create_default_concept(game)
+                    game.add_concept(default_concept)
+                    logger.info(f"Exception recovery: created default concept for {game.title_name} (Title ID {title_id.title_id})")
+            except Exception as recovery_err:
+                logger.exception(f"Exception recovery also failed for {game.title_name} (Title ID {title_id.title_id}): {recovery_err}")
+
     def _extract_media(self, details: dict) -> list[dict]:
         """Extract and combine unique media (images/videos) from JSON, deduped by URL per type."""
         all_media = []
