@@ -23,6 +23,7 @@ logger = logging.getLogger('psn_api')
 SORT_OPTIONS = {
     'progress': ['-progress', Lower('profile__psn_username')],
     'recent': [F('most_recent_trophy_date').desc(nulls_last=True), Lower('profile__psn_username')],
+    'first': [F('most_recent_trophy_date').asc(nulls_last=True), Lower('profile__psn_username')],
     'name': [Lower('profile__psn_username')],
 }
 
