@@ -421,6 +421,7 @@ class ConceptAdmin(admin.ModelAdmin):
             # Clear title_ids to prevent sync ambiguity (duplicate title_ids
             # would cause game lookups to match against the wrong concept)
             new_concept.title_ids = []
+            new_concept.slug = ''  # Let save() regenerate with deduplication
 
             i = 1
             while True:
