@@ -158,7 +158,7 @@ class BadgeListView(ProfileHotbarMixin, ListView):
                 # Calculate progress
                 progress = progress_dict.get(progress_badge.id) if progress_badge else None
                 required_stages = progress_badge.required_stages
-                if progress and progress_badge.badge_type in ['series', 'collection', 'megamix']:
+                if progress and progress_badge.badge_type in ['series', 'collection', 'megamix', 'developer']:
                     completed_concepts = progress.completed_concepts
                     progress_percentage = (completed_concepts / required_stages) * 100 if required_stages > 0 else 0
                 else:

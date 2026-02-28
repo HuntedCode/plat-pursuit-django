@@ -325,7 +325,7 @@ class BadgeQuerySet(models.QuerySet):
         Filter badges by type.
 
         Args:
-            badge_type: Type of badge ('series', 'collection', 'misc')
+            badge_type: Type of badge ('series', 'collection', 'megamix', 'developer', 'misc')
 
         Returns:
             QuerySet: Badges of the specified type

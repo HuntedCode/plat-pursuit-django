@@ -606,12 +606,20 @@ class PsnApiService:
             title = 'Collector'
         elif badge_type_name == 'Megamix':
             title = 'Mega Master'
+        elif badge_type_name == 'Developer':
+            title = 'Studio Champion'
         else:
             title = 'Series Master'
+
+        if badge_type_name == 'Developer':
+            description = f"Earn plats from {name} games!"
+        else:
+            description = f"Earn plats in the {name} {badge_type_name}!"
+
         base_badge = Badge.objects.create(
             name=name + ' Bronze',
             series_slug=form_data['series_slug'] or '',
-            description=f"Earn plats in the {name} {badge_type_name}!",
+            description=description,
             display_title=f"{name} {title}",
             display_series=f"{name} {badge_type_name}",
             tier=1,

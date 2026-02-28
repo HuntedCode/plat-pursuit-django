@@ -1148,6 +1148,7 @@ class Badge(models.Model):
         ('series', 'Series'),
         ('collection', 'Collection'),
         ('megamix', 'Megamix'),
+        ('developer', 'Developer'),
         ('misc', 'Miscellaneous'),
     ]
 
@@ -1258,7 +1259,7 @@ class Badge(models.Model):
 
     def update_required(self):
         from trophies.models import Stage
-        if self.badge_type in ['series', 'collection', 'megamix']:
+        if self.badge_type in ['series', 'collection', 'megamix', 'developer']:
             stages = Stage.objects.filter(series_slug=self.series_slug)
             required_count = 0
             for stage in stages:
@@ -1291,7 +1292,7 @@ class Badge(models.Model):
         is_plat_check = False
         is_progress_check = False
 
-        if badge_type in ['series', 'collection']:
+        if badge_type in ['series', 'collection', 'developer']:
             is_plat_check = self.tier in [1, 3]
             is_progress_check = self.tier in [2, 4]
         elif badge_type == 'megamix':

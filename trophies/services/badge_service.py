@@ -97,7 +97,7 @@ def _get_stage_completion_from_cache(badge, _context):
     is_plat_check = False
     is_progress_check = False
 
-    if badge.badge_type in ['series', 'collection']:
+    if badge.badge_type in ['series', 'collection', 'developer']:
         is_plat_check = badge.tier in [1, 3]
         is_progress_check = badge.tier in [2, 4]
     elif badge.badge_type == 'megamix':
@@ -422,8 +422,8 @@ def handle_badge(profile, badge, add_role_only=False, _context=None):
     # Check prerequisite: Previous tier must be earned first
     prev_badge_earned = _check_prerequisite_tier(profile, badge, _context=_context)
 
-    # Handle series and collection badges (concept-based)
-    if badge.badge_type in ['series', 'collection']:
+    # Handle series, collection, and developer badges (concept-based)
+    if badge.badge_type in ['series', 'collection', 'developer']:
         # Use pre-fetched cache when available (batch path), fall back to per-badge query (standalone)
         if _context and 'stage_data' in _context:
             stage_completion_dict = _get_stage_completion_from_cache(badge, _context)
