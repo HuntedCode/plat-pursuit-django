@@ -181,6 +181,7 @@ class BadgeListView(ProfileHotbarMixin, ListView):
                 'trophy_types': trophy_types,
                 'total_games': total_games,
                 'is_earned': is_earned,
+                'user_highest_tier': earned_dict.get(slug, 0),
             })
 
         return display_data
@@ -211,19 +212,19 @@ class BadgeListView(ProfileHotbarMixin, ListView):
         display_data = self._build_badge_display_data(grouped_badges, profile)
 
         # Sort data
-        sort_val = self.request.GET.get('sort', 'tier')
-        if sort_val == 'name':
-            display_data.sort(key=lambda d: d['badge'].effective_display_title or '')
-        elif sort_val == 'tier':
-            display_data.sort(key=lambda d: (d['badge'].tier, d['badge'].effective_display_title or ''))
-        elif sort_val == 'tier_desc':
-            display_data.sort(key=lambda d: (-d['badge'].tier, d['badge'].effective_display_title or ''))
-        elif sort_val == 'earned':
-            display_data.sort(key=lambda d: (-d['tier1_earned_count'], d['badge'].effective_display_title or ''))
+        sort_val = self.request.GET.get('sort', 'name')
+        if sort_val == 'earned':
+            display_data.sort(key=lambda d: (-d['tier1_earned_count'], (d['badge'].effective_display_title or '').lower()))
         elif sort_val == 'earned_inv':
-            display_data.sort(key=lambda d: (d['tier1_earned_count'], d['badge'].effective_display_title or ''))
+            display_data.sort(key=lambda d: (d['tier1_earned_count'], (d['badge'].effective_display_title or '').lower()))
+        elif sort_val == 'my_tier' and profile:
+            # Unearned (0) first, then earned ascending (1, 2, 3...)
+            display_data.sort(key=lambda d: (d['user_highest_tier'], (d['badge'].effective_display_title or '').lower()))
+        elif sort_val == 'my_tier_desc' and profile:
+            # Highest earned first, unearned (0) last
+            display_data.sort(key=lambda d: (-d['user_highest_tier'], (d['badge'].effective_display_title or '').lower()))
         else:
-            display_data.sort(key=lambda d: d['badge'].effective_display_series or '')
+            display_data.sort(key=lambda d: (d['badge'].effective_display_title or '').lower())
 
         # Paginate
         paginate_by = 25
@@ -288,7 +289,6 @@ class BadgeListView(ProfileHotbarMixin, ListView):
             {'text': 'Badges'},
         ]
         context['form'] = BadgeSearchForm(self.request.GET)
-        context['selected_tiers'] = self.request.GET.getlist('tier')
 
         track_page_view('badges_list', 'list', self.request)
         return context

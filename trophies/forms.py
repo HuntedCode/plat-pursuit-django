@@ -149,12 +149,11 @@ class BadgeSearchForm(forms.Form):
     series_slug = forms.CharField(required=False, label='Search by Series')
     sort = forms.ChoiceField(
         choices=[
-            ('series', 'Series'),
             ('name', 'Alphabetical'),
-            ('tier', 'Tier Ascending'),
-            ('tier_desc', 'Tier Descending'),
             ('earned', 'Most Earned (Tier 1)'),
             ('earned_inv', 'Least Earned (Tier 1)'),
+            ('my_tier', 'My Progress Ascending'),
+            ('my_tier_desc', 'My Progress Descending'),
         ],
         required=False,
         label='Sort By'
