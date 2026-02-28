@@ -101,6 +101,10 @@
                                 onclick="PlatPursuit.SubAdmin.showUserDetail({{ user.id }})">
                             View History
                         </button>
+                        <button class="btn btn-outline btn-error btn-sm"
+                                onclick="PlatPursuit.SubAdmin.confirmDeactivate({{ user.id }}, '{{ user.psn_username|escapejs }}')">
+                            Force Deactivate
+                        </button>
                     </div>
                 </div>
             </div>
