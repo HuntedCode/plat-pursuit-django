@@ -189,7 +189,7 @@ class GameAdmin(admin.ModelAdmin):
         ),
     )
     readonly_fields = ('shovelware_updated_at',)
-    actions = ['toggle_is_regional', 'add_psvr_platform', 'mark_concepts_stale', 'copy_concept_icon', 'mark_as_shovelware', 'clear_shovelware_flag', 'reset_shovelware_auto']
+    actions = ['toggle_is_regional', 'add_psvr_platform', 'mark_concepts_stale', 'copy_concept_icon', 'lock_concept', 'unlock_concept', 'mark_as_shovelware', 'clear_shovelware_flag', 'reset_shovelware_auto']
     autocomplete_fields=['concept']
 
     @admin.action(description="Toggle is_regional for selected games")
@@ -236,6 +236,16 @@ class GameAdmin(admin.ModelAdmin):
         if skipped:
             msg += f" Skipped {skipped} (no concept or no concept icon)."
         messages.success(request, msg)
+
+    @admin.action(description="Lock concept on selected games")
+    def lock_concept(self, request, queryset):
+        updated = queryset.filter(concept_lock=False).update(concept_lock=True)
+        messages.success(request, f"Locked concept on {updated} game(s).")
+
+    @admin.action(description="Unlock concept on selected games")
+    def unlock_concept(self, request, queryset):
+        updated = queryset.filter(concept_lock=True).update(concept_lock=False)
+        messages.success(request, f"Unlocked concept on {updated} game(s).")
 
     @admin.action(description="Mark as shovelware (manual override)")
     def mark_as_shovelware(self, request, queryset):
