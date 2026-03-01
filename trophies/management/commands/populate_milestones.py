@@ -323,6 +323,7 @@ MILESTONE_DEFINITIONS = [
 
     # ── manual (special milestones, granted programmatically) ──────────
     {'name': 'Badge Artwork Patron',  'criteria_type': 'manual', 'criteria_details': {'target': 1}, 'description': 'Donated to the Badge Artwork Fundraiser. Your generosity brings our badges to life.', 'title_name': 'Patron of the Arts'},
+    {'name': 'Platinum Race Winner',  'criteria_type': 'manual', 'criteria_details': {'target': 1}, 'description': 'Won an official Plat Pursuit Plat Race! Gotta go fast!', 'title_name': 'Fastest Plat in the West'},
 ]
 # fmt: on
 
