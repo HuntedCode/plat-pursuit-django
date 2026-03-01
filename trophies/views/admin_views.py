@@ -72,7 +72,7 @@ class TokenMonitoringView(StaffRequiredMixin, TemplateView):
         return aggregated
 
     def get_queue_stats(self):
-        queues = ['high_priority_jobs', 'medium_priority_jobs', 'low_priority_jobs']
+        queues = ['orchestrator_jobs', 'high_priority_jobs', 'medium_priority_jobs', 'low_priority_jobs', 'bulk_priority_jobs']
         stats = {}
         for queue in queues:
             try:
@@ -85,7 +85,7 @@ class TokenMonitoringView(StaffRequiredMixin, TemplateView):
 
     def get_profile_queue_stats(self):
         stats = {}
-        queues = ['high_priority', 'medium_priority', 'low_priority']
+        queues = ['low_priority', 'medium_priority', 'bulk_priority']
         for queue in queues:
             keys = redis_client.keys(f"profile_jobs:*:{queue}")
             for key in keys:

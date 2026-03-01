@@ -50,6 +50,16 @@ class Command(BaseCommand):
             action='store_true',
             help='Flush Community Hub caches (review recommendations + DLC rating averages).'
         )
+        group.add_argument(
+            '--get-bulk-threshold',
+            action='store_true',
+            help='Get the current bulk priority queue threshold.'
+        )
+        group.add_argument(
+            '--set-bulk-threshold',
+            type=int,
+            help='Set the bulk priority queue threshold (jobs above this go to bulk_priority queue).'
+        )
 
     def handle(self, *args, **options):
         if not settings.DEBUG:
@@ -71,6 +81,10 @@ class Command(BaseCommand):
             self._handle_flush_dashboard(options['flush_dashboard'])
         elif options['flush_community']:
             self._handle_flush_community()
+        elif options['get_bulk_threshold']:
+            self._handle_get_bulk_threshold()
+        elif options['set_bulk_threshold'] is not None:
+            self._handle_set_bulk_threshold(options['set_bulk_threshold'])
 
     def _confirm_action(self, action_desc):
         confirm = input(f"Are you sure you want to {action_desc}? (y/n):").strip().lower()
@@ -193,12 +207,12 @@ class Command(BaseCommand):
             deleted_count = 0
 
             # Clear job queues
-            queues = ['high_priority_jobs', 'medium_priority_jobs', 'low_priority_jobs']
+            queues = ['orchestrator_jobs', 'high_priority_jobs', 'medium_priority_jobs', 'low_priority_jobs', 'bulk_priority_jobs']
             for queue in queues:
                 deleted_count += redis_client.delete(queue)
 
-            # Clear profile_jobs:* (all queues) and sync locks
-            for pattern in ['profile_jobs:*', 'deferred_jobs:*', 'pending_sync_complete:*', 'sync_started_at:*', 'sync_trophies_lock:*', 'shovelware_concept_lock:*']:
+            # Clear profile_jobs:* (all queues), sync locks, orchestrator pending flags, and dedup sets
+            for pattern in ['profile_jobs:*', 'deferred_jobs:*', 'pending_sync_complete:*', 'sync_started_at:*', 'sync_trophies_lock:*', 'shovelware_concept_lock:*', 'sync_orchestrator_pending:*', 'sync_queued_games:*', 'sync_complete_in_progress:*']:
                 matching_keys = redis_client.keys(pattern)
                 if matching_keys:
                     deleted_count += redis_client.delete(*matching_keys)
@@ -224,12 +238,21 @@ class Command(BaseCommand):
             lock_key = f"complete_lock:{profile_id}"
             profile_jobs_key = f"pending_sync_complete:{profile_id}"
             sync_started_key = f"sync_started_at:{profile_id}"
+            orchestrator_key = f"sync_orchestrator_pending:{profile_id}"
+            dedup_key = f"sync_queued_games:{profile_id}"
+            sync_complete_key = f"sync_complete_in_progress:{profile_id}"
             redis_client.delete(lock_key)
             self.stdout.write(self.style.SUCCESS(f"Lock successfully flushed!"))
             redis_client.delete(profile_jobs_key)
             self.stdout.write(self.style.SUCCESS(f"Pending complete successfully flushed!"))
             redis_client.delete(sync_started_key)
             self.stdout.write(self.style.SUCCESS(f"Sync started timestamp successfully flushed!"))
+            redis_client.delete(orchestrator_key)
+            self.stdout.write(self.style.SUCCESS(f"Orchestrator pending flag successfully flushed!"))
+            redis_client.delete(dedup_key)
+            self.stdout.write(self.style.SUCCESS(f"Queued games dedup set successfully flushed!"))
+            redis_client.delete(sync_complete_key)
+            self.stdout.write(self.style.SUCCESS(f"Sync complete in-progress flag successfully flushed!"))
         except Exception as e:
             logger.exception(f"Error during complete lock flush: {e}")
             self.stdout.write(self.style.ERROR(f"Error: {e}"))
@@ -267,4 +290,27 @@ class Command(BaseCommand):
             self.stdout.write(self.style.SUCCESS(f"Flushed {deleted_count} Community Hub cache keys."))
         except Exception as e:
             logger.exception(f"Error during community flush: {e}")
+            self.stdout.write(self.style.ERROR(f"Error: {e}"))
+
+    def _handle_get_bulk_threshold(self):
+        try:
+            value = redis_client.get('sync:bulk_threshold')
+            if value is None:
+                self.stdout.write(f"Bulk threshold: not set (default: 5000)")
+            else:
+                self.stdout.write(f"Bulk threshold: {int(value)}")
+        except Exception as e:
+            logger.exception(f"Error reading bulk threshold: {e}")
+            self.stdout.write(self.style.ERROR(f"Error: {e}"))
+
+    def _handle_set_bulk_threshold(self, value: int):
+        if value < 0:
+            self.stdout.write(self.style.ERROR("Threshold must be a non-negative integer."))
+            return
+        try:
+            redis_client.set('sync:bulk_threshold', str(value))
+            logger.info(f"Bulk threshold set to {value}.")
+            self.stdout.write(self.style.SUCCESS(f"Bulk threshold set to {value}."))
+        except Exception as e:
+            logger.exception(f"Error setting bulk threshold: {e}")
             self.stdout.write(self.style.ERROR(f"Error: {e}"))

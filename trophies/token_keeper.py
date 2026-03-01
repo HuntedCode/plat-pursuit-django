@@ -445,7 +445,7 @@ class TokenKeeper:
             job_start = None
             job_type = None
             try:
-                queue_b, job_json = redis_client.brpop(['high_priority_jobs', 'medium_priority_jobs', 'low_priority_jobs'])
+                queue_b, job_json = redis_client.brpop(['orchestrator_jobs', 'high_priority_jobs', 'medium_priority_jobs', 'low_priority_jobs', 'bulk_priority_jobs'])
                 queue_name = queue_b.decode()[:-5] # remove '_jobs'
                 job_data = json.loads(job_json)
                 job_type = job_data['job_type']
@@ -505,7 +505,7 @@ class TokenKeeper:
                 # Reset any instances stuck in busy state for too long
                 self._check_stuck_instances()
             finally:
-                if profile_id and queue_name != 'high_priority':
+                if profile_id and queue_name not in ('high_priority', 'orchestrator'):
                     self._complete_job(profile_id, queue_name)
                 # Close stale DB connections to prevent pool exhaustion
                 connection.close()
@@ -513,7 +513,7 @@ class TokenKeeper:
     @retry(stop=stop_after_attempt(5), wait=wait_fixed(0.2))
     def _complete_job(self, profile_id, queue_name):
         """Handle finished job, check for deferred."""
-        if queue_name in ('low_priority', 'medium_priority'):
+        if queue_name in ('low_priority', 'medium_priority', 'bulk_priority'):
 
             counter_key = f"profile_jobs:{profile_id}:{queue_name}"
 
@@ -527,23 +527,28 @@ class TokenKeeper:
                 current_jobs = self._get_current_jobs_for_profile(profile_id)
                 pending_key = f"pending_sync_complete:{profile_id}"
                 if current_jobs <= 0 and redis_client.exists(pending_key):
-                    raw_pending = redis_client.get(pending_key)
-                    try:
-                        pending_data = json.loads(raw_pending)
-                        if not isinstance(pending_data, dict):
-                            raise ValueError("Pending data is not a dictionary")
-                        args = [pending_data['touched_profilegame_ids'], pending_data['queue_name']]
-                        PSNManager.assign_job('sync_complete', args, profile_id, priority_override=pending_data['queue_name'])
-                        redis_client.delete(pending_key)
-                        logger.info(f"Triggered sync_complete for profile {profile_id}")
-                    except (json.JSONDecodeError, ValueError, KeyError) as parse_err:
-                        logger.error(f"Failed to parse pending_sync_complete for profile {profile_id}: {parse_err}")
+                    # Don't trigger sync_complete if one is already running for this profile
+                    sync_complete_key = f"sync_complete_in_progress:{profile_id}"
+                    if redis_client.get(sync_complete_key):
+                        logger.info(f"sync_complete already in progress for profile {profile_id}, leaving pending data for follow-up")
+                    else:
+                        raw_pending = redis_client.get(pending_key)
+                        try:
+                            pending_data = json.loads(raw_pending)
+                            if not isinstance(pending_data, dict):
+                                raise ValueError("Pending data is not a dictionary")
+                            args = [pending_data['touched_profilegame_ids'], pending_data['queue_name']]
+                            PSNManager.assign_job('sync_complete', args, profile_id, priority_override=pending_data['queue_name'])
+                            redis_client.delete(pending_key)
+                            logger.info(f"Triggered sync_complete for profile {profile_id}")
+                        except (json.JSONDecodeError, ValueError, KeyError) as parse_err:
+                            logger.error(f"Failed to parse pending_sync_complete for profile {profile_id}: {parse_err}")
             except Exception as e:
                 logger.error(f"Error in _complete_job for profile {profile_id}: {e}")
 
     def _get_current_jobs_for_profile(self, profile_id):
         total = 0
-        for queue in ['low_priority', 'medium_priority']:
+        for queue in ['low_priority', 'medium_priority', 'bulk_priority']:
             total += int(redis_client.get(f"profile_jobs:{profile_id}:{queue}") or 0)
         return total
 
@@ -577,6 +582,11 @@ class TokenKeeper:
                     except (ValueError, TypeError):
                         pass
 
+                # Skip profiles with pending orchestrator jobs (sync_trophy_titles
+                # or profile_refresh hasn't run yet to create the real sync jobs)
+                if redis_client.get(f"sync_orchestrator_pending:{profile.id}"):
+                    continue
+
                 # Check if there are any pending jobs for this profile
                 current_jobs = self._get_current_jobs_for_profile(profile.id)
 
@@ -589,9 +599,6 @@ class TokenKeeper:
                     # No pending jobs, this profile is stuck - assign sync_complete
                     logger.warning(f"Found stuck syncing profile {profile.id}, assigning sync_complete job")
                     stuck_count += 1
-
-                    # Mark sync_complete as in progress (expires in 30 minutes as safety net)
-                    redis_client.set(sync_complete_key, "1", ex=1800)
 
                     # Check for pending sync_complete data in Redis
                     pending_key = f"pending_sync_complete:{profile.id}"
@@ -830,6 +837,19 @@ class TokenKeeper:
 
     def _job_sync_complete(self, profile_id: int, touched_profilegame_ids: list[int], queue_name: str):
         sync_complete_key = f"sync_complete_in_progress:{profile_id}"
+
+        # Atomic guard: only one sync_complete runs at a time per profile.
+        # If another is already in progress, re-store pending data and bail out.
+        if not redis_client.set(sync_complete_key, "1", nx=True, ex=1800):
+            logger.info(f"sync_complete already in progress for profile {profile_id}, skipping duplicate")
+            pending_key = f"pending_sync_complete:{profile_id}"
+            pending_data = json.dumps({
+                'touched_profilegame_ids': touched_profilegame_ids,
+                'queue_name': queue_name
+            })
+            redis_client.set(pending_key, pending_data, ex=21600)
+            return
+
         try:
             profile = Profile.objects.get(id=profile_id)
         except Profile.DoesNotExist:
@@ -928,7 +948,6 @@ class TokenKeeper:
                     # Re-enter syncing state with progress tracking
                     profile.reset_sync_progress()
                     profile.set_sync_status('syncing')
-                    profile.add_to_sync_target(len(trophy_titles_to_be_updated) * 2)  # sync_trophies increments by 2
 
                     # Set up pending_sync_complete so a follow-up runs after these jobs finish.
                     # This ensures badges, milestones, challenges, etc. run AFTER the re-queued
@@ -940,10 +959,13 @@ class TokenKeeper:
                     })
                     redis_client.set(pending_key, pending_data, ex=21600)
 
+                    queued_count = 0
                     for title in trophy_titles_to_be_updated:
                         game = title['game']
-                        args = [game.np_communication_id, game.title_platform[0] if not game.title_platform[0] == 'PSPC' else game.title_platform[1]]
-                        PSNManager.assign_job('sync_trophies', args=args, profile_id=profile.id, priority_override='low_priority')
+                        platform = game.title_platform[0] if not game.title_platform[0] == 'PSPC' else game.title_platform[1]
+                        if PSNManager.assign_sync_trophies(profile.id, game.np_communication_id, platform, priority_override='low_priority'):
+                            queued_count += 1
+                    profile.add_to_sync_target(queued_count * 2)  # sync_trophies increments by 2
 
                     # Early return: skip badge/milestone/challenge checks.
                     # The follow-up sync_complete (triggered by pending_sync_complete
@@ -1074,6 +1096,8 @@ class TokenKeeper:
         PsnApiService.update_profile_region(profile, region)
 
     def _job_sync_trophy_titles(self, profile_id: int, force_title_stats:bool=False):
+        # Clear the orchestrator pending flag now that this job is executing
+        redis_client.delete(f"sync_orchestrator_pending:{profile_id}")
         try:
             profile = Profile.objects.get(id=profile_id)
         except Profile.DoesNotExist:
@@ -1122,14 +1146,29 @@ class TokenKeeper:
         # Set target BEFORE assigning any jobs to prevent race condition
         profile.add_to_sync_target(job_counter)
 
+        # Determine queue for sync_trophies: bulk_priority for whale accounts
+        bulk_threshold = int(redis_client.get('sync:bulk_threshold') or 5000)
+        trophy_queue = 'bulk_priority' if job_counter > bulk_threshold else None  # None = default (low_priority)
+        if trophy_queue == 'bulk_priority':
+            logger.info(f"Profile {profile_id}: {job_counter} jobs exceeds bulk threshold ({bulk_threshold}), using bulk_priority queue")
+
         # SECOND PASS: Now assign the jobs (using cached games from first pass)
+        skipped = 0
         for title in trophy_titles:
             game = games_by_comm_id[title.np_communication_id]
-            args = [game.np_communication_id, game.title_platform[0] if not game.title_platform[0] == 'PSPC' else game.title_platform[1]]
+            platform = game.title_platform[0] if not game.title_platform[0] == 'PSPC' else game.title_platform[1]
 
             if game in games_needing_groups:
+                args = [game.np_communication_id, platform]
                 PSNManager.assign_job('sync_trophy_groups', args, profile.id)
-            PSNManager.assign_job('sync_trophies', args, profile.id)
+            queued = PSNManager.assign_sync_trophies(profile.id, game.np_communication_id, platform, priority_override=trophy_queue)
+            if not queued:
+                skipped += 1
+
+        # Adjust target if any games were already queued from a prior pass
+        if skipped > 0:
+            logger.info(f"Profile {profile_id}: skipped {skipped} duplicate sync_trophies jobs")
+            profile.add_to_sync_target(-(skipped * 2))
 
         update_profile_games(profile)
 
@@ -1188,7 +1227,7 @@ class TokenKeeper:
             logger.error(f"Profile {profile_id} does not exist.")
             return
         job_type = 'sync_title_stats'
-        job_counter = 1 # Default 1 job for badge checking at the end
+        job_counter = 0
 
         title_stats = self._execute_api_call(self._get_instance_for_job(job_type), profile, 'title_stats', limit=limit, offset=offset, page_size=page_size)
 
@@ -1255,6 +1294,7 @@ class TokenKeeper:
                 f"sync_trophies for {np_communication_id} already in progress "
                 f"(profile {profile_id}), skipping duplicate."
             )
+            redis_client.srem(f"sync_queued_games:{profile_id}", np_communication_id)
             profile.increment_sync_progress(value=2)
             return
 
@@ -1262,6 +1302,7 @@ class TokenKeeper:
             self._do_sync_trophies(profile, game, np_communication_id, platform)
         finally:
             redis_client.delete(lock_key)
+            redis_client.srem(f"sync_queued_games:{profile_id}", np_communication_id)
 
     def _do_sync_trophies(self, profile, game, np_communication_id: str, platform: str):
         """Execute the actual trophy sync work. Called under a per-game Redis lock."""
@@ -1455,13 +1496,15 @@ class TokenKeeper:
         return media_data
     
     def _job_profile_refresh(self, profile_id: int):
+        # Clear the orchestrator pending flag now that this job is executing
+        redis_client.delete(f"sync_orchestrator_pending:{profile_id}")
         try:
             profile = Profile.objects.get(id=profile_id)
         except Profile.DoesNotExist:
             logger.error(f"Profile {profile_id} does not exist.")
             return
         job_type = 'profile_refresh'
-        job_counter = 1 # Default 1 job for badge checking at the end
+        job_counter = 0
 
         last_sync = profile.last_synced
         PSNManager.assign_job('sync_profile_data', args=[], profile_id=profile.id)
@@ -1504,14 +1547,29 @@ class TokenKeeper:
         # Set target BEFORE assigning any jobs to prevent race condition
         profile.add_to_sync_target(job_counter)
 
+        # Determine queue for sync_trophies: bulk_priority for whale accounts
+        bulk_threshold = int(redis_client.get('sync:bulk_threshold') or 5000)
+        trophy_queue = 'bulk_priority' if job_counter > bulk_threshold else 'medium_priority'
+        if trophy_queue == 'bulk_priority':
+            logger.info(f"Profile {profile_id}: {job_counter} refresh jobs exceeds bulk threshold ({bulk_threshold}), using bulk_priority queue")
+
         # SECOND PASS: Now assign the jobs
+        skipped = 0
         for title in trophy_titles_to_be_updated:
             game = Game.objects.get(np_communication_id=title.np_communication_id)
-            args = [game.np_communication_id, game.title_platform[0] if not game.title_platform[0] == 'PSPC' else game.title_platform[1]]
+            platform = game.title_platform[0] if not game.title_platform[0] == 'PSPC' else game.title_platform[1]
 
             if game in games_needing_groups:
+                args = [game.np_communication_id, platform]
                 PSNManager.assign_job('sync_trophy_groups', args, profile.id)
-            PSNManager.assign_job('sync_trophies', args, profile.id, priority_override='medium_priority')
+            queued = PSNManager.assign_sync_trophies(profile.id, game.np_communication_id, platform, priority_override=trophy_queue)
+            if not queued:
+                skipped += 1
+
+        # Adjust target if any games were already queued
+        if skipped > 0:
+            logger.info(f"Profile {profile_id}: skipped {skipped} duplicate sync_trophies jobs in refresh")
+            profile.add_to_sync_target(-(skipped * 2))
 
         update_profile_games(profile)
         job_counter = 0

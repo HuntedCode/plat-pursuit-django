@@ -39,6 +39,7 @@ class ProfileAdmin(admin.ModelAdmin):
         'move_jobs_to_high_priority',
         'move_jobs_to_medium_priority',
         'move_jobs_to_low_priority',
+        'move_jobs_to_bulk_priority',
     ]
     fieldsets = (
         (
@@ -117,6 +118,13 @@ class ProfileAdmin(admin.ModelAdmin):
     def move_jobs_to_low_priority(self, request, queryset):
         self._move_jobs_to_queue(request, queryset, 'low_priority')
 
+    @admin.action(description="Move queued sync jobs to BULK priority (lowest)")
+    def move_jobs_to_bulk_priority(self, request, queryset):
+        self._move_jobs_to_queue(request, queryset, 'bulk_priority')
+
+    # Queues that track per-profile job counters (must match PSNManager.COUNTED_QUEUES)
+    _COUNTED_QUEUES = ('low_priority', 'medium_priority', 'bulk_priority')
+
     def _move_jobs_to_queue(self, request, queryset, target_queue):
         """Move all queued sync jobs for selected profiles to the target priority queue."""
         import json
@@ -125,7 +133,7 @@ class ProfileAdmin(admin.ModelAdmin):
 
         logger = logging.getLogger("psn_api")
         target_queue_key = f"{target_queue}_jobs"
-        source_queues = ['high_priority', 'medium_priority', 'low_priority']
+        source_queues = ['orchestrator', 'high_priority', 'medium_priority', 'low_priority', 'bulk_priority']
         profile_ids = {str(p.id) for p in queryset}
         profile_names = {str(p.id): p.psn_username for p in queryset}
 
@@ -157,8 +165,8 @@ class ProfileAdmin(admin.ModelAdmin):
                 total_moved += 1
                 per_profile_moved[job_profile_id] = per_profile_moved.get(job_profile_id, 0) + 1
 
-                # Update counters (only low/medium are counter-tracked per assign_job/complete_job)
-                if source_queue in ('low_priority', 'medium_priority'):
+                # Update counters for counted queues
+                if source_queue in self._COUNTED_QUEUES:
                     counter_key = f"profile_jobs:{job_profile_id}:{source_queue}"
                     current = int(redis_client.get(counter_key) or 0)
                     if current > 0:
@@ -166,18 +174,20 @@ class ProfileAdmin(admin.ModelAdmin):
                     if current <= 1:
                         redis_client.delete(counter_key)
 
-                if target_queue in ('low_priority', 'medium_priority'):
+                if target_queue in self._COUNTED_QUEUES:
                     redis_client.incr(f"profile_jobs:{job_profile_id}:{target_queue}")
                     redis_client.sadd("active_profiles", job_profile_id)
 
-        # Clean up active_profiles for profiles that may now have zero low/medium jobs
+        # Clean up active_profiles for profiles with zero counted jobs
         for pid in profile_ids:
-            low = int(redis_client.get(f"profile_jobs:{pid}:low_priority") or 0)
-            med = int(redis_client.get(f"profile_jobs:{pid}:medium_priority") or 0)
-            if low <= 0 and med <= 0:
+            total = sum(
+                int(redis_client.get(f"profile_jobs:{pid}:{q}") or 0)
+                for q in self._COUNTED_QUEUES
+            )
+            if total <= 0:
                 redis_client.srem("active_profiles", pid)
-                redis_client.delete(f"profile_jobs:{pid}:low_priority")
-                redis_client.delete(f"profile_jobs:{pid}:medium_priority")
+                for q in self._COUNTED_QUEUES:
+                    redis_client.delete(f"profile_jobs:{pid}:{q}")
 
         queue_display = target_queue.replace('_', ' ').upper()
         if total_moved > 0:

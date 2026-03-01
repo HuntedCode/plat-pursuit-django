@@ -105,9 +105,9 @@
                             <thead>
                                 <tr>
                                     <th>Profile ID</th>
-                                    <th>High Priority</th>
                                     <th>Medium Priority</th>
                                     <th>Low Priority</th>
+                                    <th>Bulk Priority</th>
                                     <th>Total Pending</th>
                                 </tr>
                             </thead>
@@ -115,9 +115,9 @@
                                 {% for profile_id, queues in profile_queue_stats.items %}
                                     <tr>
                                         <td>{{ profile_id }}</td>
-                                        <td>{{ queues.high_priority|default:0 }}</td>
                                         <td>{{ queues.medium_priority|default:0 }}</td>
                                         <td>{{ queues.low_priority|default:0 }}</td>
+                                        <td>{{ queues.bulk_priority|default:0 }}</td>
                                         <td>{{ queues.total }}</td>
                                     </tr>
                                 {% endfor %}

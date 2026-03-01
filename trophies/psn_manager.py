@@ -14,14 +14,17 @@ class PSNManager:
     
     max_jobs_per_profile = int(os.getenv("MAX_JOBS_PER_PROFILE", 3))
     
+    # Queues that track per-profile job counters for sync completion detection
+    COUNTED_QUEUES = ("low_priority", "medium_priority", "bulk_priority")
+
     @classmethod
     def assign_job(cls, job_type: str, args: list, profile_id: int, priority_override: str=None):
         """Assign job to queue, respecting priorities."""
         queue_name = priority_override or cls._get_queue_for_job(job_type)
-        if queue_name in ("low_priority", "medium_priority"):
+        if queue_name in cls.COUNTED_QUEUES:
             redis_client.incr(f"profile_jobs:{profile_id}:{queue_name}")
             redis_client.sadd("active_profiles", profile_id)
-        
+
         json_data = json.dumps({
             'job_type': job_type,
             'args': args,
@@ -29,11 +32,21 @@ class PSNManager:
         })
         redis_client.lpush(f"{queue_name}_jobs", json_data)
         logger.info(f"Assigned {job_type} for profile {profile_id} to queue {queue_name}")
-    
+
     @classmethod
     def _get_queue_for_job(cls, job_type):
-        """Map job type to queue."""
-        if job_type in ["sync_profile_data", "sync_trophy_titles", "profile_refresh", "check_profile_health"]:
+        """Map job type to queue.
+
+        Queue priority order (highest first):
+        - orchestrator: profile-level orchestrators (sync_trophy_titles, profile_refresh, sync_profile_data)
+        - high_priority: sync_complete, check_profile_badges, handle_privacy_error
+        - medium_priority: sync_title_stats, sync_title_id, sync_trophy_groups
+        - low_priority: sync_trophies (default)
+        - bulk_priority: large account sync_trophies (assigned via threshold override)
+        """
+        if job_type in ["sync_profile_data", "sync_trophy_titles", "profile_refresh"]:
+            return "orchestrator"
+        elif job_type in ["check_profile_health"]:
             return "high_priority"
         elif job_type in ["sync_title_stats", "sync_title_id", "sync_trophy_groups"]:
             return "medium_priority"
@@ -57,9 +70,12 @@ class PSNManager:
             profile.reset_sync_progress()
             profile.set_sync_status('syncing')
             redis_client.set(f"sync_started_at:{profile.id}", str(time.time()), ex=7200)
+            # Mark orchestrator as pending so the stuck checker doesn't fire
+            # sync_complete before sync_trophy_titles has created the real jobs
+            redis_client.set(f"sync_orchestrator_pending:{profile.id}", "1", ex=1800)
             cls.assign_job('sync_profile_data', args=[], profile_id=profile.id)
             cls.assign_job('sync_trophy_titles', args=[], profile_id=profile.id)
-    
+
     @classmethod
     def profile_refresh(cls, profile: Profile):
         if profile.sync_status == 'error':
@@ -68,6 +84,7 @@ class PSNManager:
             profile.reset_sync_progress()
             profile.set_sync_status('syncing')
             redis_client.set(f"sync_started_at:{profile.id}", str(time.time()), ex=7200)
+            redis_client.set(f"sync_orchestrator_pending:{profile.id}", "1", ex=1800)
             cls.assign_job('profile_refresh', args=[], profile_id=profile.id)
 
     @classmethod
@@ -86,6 +103,23 @@ class PSNManager:
     @classmethod
     def sync_profile_data(cls, profile: Profile):
         cls.assign_job('sync_profile_data', args=[], profile_id=profile.id)
+
+    @classmethod
+    def assign_sync_trophies(cls, profile_id: int, np_communication_id: str, platform: str, priority_override: str = None):
+        """Queue a sync_trophies job with per-profile deduplication.
+
+        Uses a Redis set to skip games already queued for this sync cycle.
+        Returns True if the job was queued, False if it was a duplicate.
+        """
+        dedup_key = f"sync_queued_games:{profile_id}"
+        if redis_client.sismember(dedup_key, np_communication_id):
+            logger.info(f"sync_trophies for {np_communication_id} already queued for profile {profile_id}, skipping")
+            return False
+        redis_client.sadd(dedup_key, np_communication_id)
+        redis_client.expire(dedup_key, 7200)  # 2 hour TTL as safety net
+        args = [np_communication_id, platform]
+        cls.assign_job('sync_trophies', args, profile_id, priority_override=priority_override)
+        return True
 
     @classmethod
     def sync_profile_game_trophies(cls, profile: Profile, game: Game):

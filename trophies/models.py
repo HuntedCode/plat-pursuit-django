@@ -377,6 +377,9 @@ class Profile(models.Model):
         self.sync_progress_value = 0
         self.save(update_fields=['sync_progress_target', 'sync_progress_value'])
         self.refresh_from_db(fields=['sync_progress_target', 'sync_progress_value'])
+        # Clear the queued games dedup set for this sync cycle
+        from trophies.util_modules.cache import redis_client
+        redis_client.delete(f"sync_queued_games:{self.id}")
 
     @property
     def sync_percentage(self):
