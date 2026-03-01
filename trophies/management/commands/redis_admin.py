@@ -60,6 +60,11 @@ class Command(BaseCommand):
             type=int,
             help='Set the bulk priority queue threshold (jobs above this go to bulk_priority queue).'
         )
+        group.add_argument(
+            '--move-whale-jobs',
+            action='store_true',
+            help='Move sync_trophies jobs from low_priority to bulk_priority for profiles exceeding the bulk threshold.'
+        )
 
     def handle(self, *args, **options):
         if not settings.DEBUG:
@@ -85,6 +90,8 @@ class Command(BaseCommand):
             self._handle_get_bulk_threshold()
         elif options['set_bulk_threshold'] is not None:
             self._handle_set_bulk_threshold(options['set_bulk_threshold'])
+        elif options['move_whale_jobs']:
+            self._handle_move_whale_jobs()
 
     def _confirm_action(self, action_desc):
         confirm = input(f"Are you sure you want to {action_desc}? (y/n):").strip().lower()
@@ -313,4 +320,77 @@ class Command(BaseCommand):
             self.stdout.write(self.style.SUCCESS(f"Bulk threshold set to {value}."))
         except Exception as e:
             logger.exception(f"Error setting bulk threshold: {e}")
+            self.stdout.write(self.style.ERROR(f"Error: {e}"))
+
+    def _handle_move_whale_jobs(self):
+        """Scan low_priority_jobs, group by profile, move whale profiles to bulk_priority."""
+        import json as json_mod
+        try:
+            bulk_threshold = int(redis_client.get('sync:bulk_threshold') or 5000)
+            self.stdout.write(f"Using bulk threshold: {bulk_threshold}")
+
+            # Read all jobs from low_priority without removing them yet
+            all_jobs = redis_client.lrange('low_priority_jobs', 0, -1)
+            if not all_jobs:
+                self.stdout.write(self.style.WARNING("No jobs in low_priority_jobs."))
+                return
+
+            self.stdout.write(f"Found {len(all_jobs)} jobs in low_priority_jobs.")
+
+            # Group jobs by profile_id
+            profile_jobs = {}
+            for raw_job in all_jobs:
+                try:
+                    job = json_mod.loads(raw_job)
+                    pid = job.get('profile_id')
+                    if pid is not None:
+                        profile_jobs.setdefault(pid, []).append(raw_job)
+                except (json_mod.JSONDecodeError, TypeError):
+                    continue
+
+            # Find profiles exceeding threshold
+            whale_profiles = {pid: jobs for pid, jobs in profile_jobs.items() if len(jobs) > bulk_threshold}
+            if not whale_profiles:
+                self.stdout.write(self.style.WARNING(f"No profiles exceed the threshold of {bulk_threshold} jobs in low_priority."))
+                return
+
+            summary = ", ".join(f"profile {pid} ({len(jobs)} jobs)" for pid, jobs in whale_profiles.items())
+            self.stdout.write(f"Whale profiles found: {summary}")
+
+            if not self._confirm_action(f"move {sum(len(j) for j in whale_profiles.values())} jobs from low_priority to bulk_priority"):
+                self.stdout.write(self.style.ERROR("Operation cancelled."))
+                return
+
+            # Use a pipeline for atomicity: remove whale jobs from low, push to bulk, fix counters
+            total_moved = 0
+            for pid, jobs in whale_profiles.items():
+                pipe = redis_client.pipeline(transaction=True)
+                for raw_job in jobs:
+                    pipe.lrem('low_priority_jobs', 1, raw_job)
+                    pipe.lpush('bulk_priority_jobs', raw_job)
+                pipe.execute()
+
+                # Fix per-profile counters: move count from low_priority to bulk_priority
+                job_count = len(jobs)
+                low_counter = int(redis_client.get(f"profile_jobs:{pid}:low_priority") or 0)
+                bulk_counter = int(redis_client.get(f"profile_jobs:{pid}:bulk_priority") or 0)
+
+                new_low = max(low_counter - job_count, 0)
+                new_bulk = bulk_counter + job_count
+
+                if new_low > 0:
+                    redis_client.set(f"profile_jobs:{pid}:low_priority", str(new_low))
+                else:
+                    redis_client.delete(f"profile_jobs:{pid}:low_priority")
+
+                redis_client.set(f"profile_jobs:{pid}:bulk_priority", str(new_bulk))
+                redis_client.sadd("active_profiles", pid)
+
+                total_moved += job_count
+                self.stdout.write(f"  Moved {job_count} jobs for profile {pid}")
+
+            logger.info(f"Moved {total_moved} whale jobs from low_priority to bulk_priority.")
+            self.stdout.write(self.style.SUCCESS(f"Done! Moved {total_moved} total jobs to bulk_priority."))
+        except Exception as e:
+            logger.exception(f"Error during whale job migration: {e}")
             self.stdout.write(self.style.ERROR(f"Error: {e}"))
