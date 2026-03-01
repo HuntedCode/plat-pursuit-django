@@ -133,7 +133,7 @@ class ProfileAdmin(admin.ModelAdmin):
 
         logger = logging.getLogger("psn_api")
         target_queue_key = f"{target_queue}_jobs"
-        source_queues = ['orchestrator', 'high_priority', 'medium_priority', 'low_priority', 'bulk_priority']
+        source_queues = ['high_priority', 'medium_priority', 'low_priority', 'bulk_priority']
         profile_ids = {str(p.id) for p in queryset}
         profile_names = {str(p.id): p.psn_username for p in queryset}
 

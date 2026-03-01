@@ -38,13 +38,13 @@ class PSNManager:
         """Map job type to queue.
 
         Queue priority order (highest first):
-        - orchestrator: profile-level orchestrators (sync_trophy_titles, profile_refresh, sync_profile_data)
-        - high_priority: sync_complete, check_profile_badges, handle_privacy_error
+        - orchestrator: profile-level orchestrators (sync_trophy_titles, profile_refresh, sync_profile_data, sync_complete)
+        - high_priority: check_profile_health, handle_privacy_error
         - medium_priority: sync_title_stats, sync_title_id, sync_trophy_groups
         - low_priority: sync_trophies (default)
         - bulk_priority: large account sync_trophies (assigned via threshold override)
         """
-        if job_type in ["sync_profile_data", "sync_trophy_titles", "profile_refresh"]:
+        if job_type in ["sync_profile_data", "sync_trophy_titles", "profile_refresh", "sync_complete"]:
             return "orchestrator"
         elif job_type in ["check_profile_health"]:
             return "high_priority"

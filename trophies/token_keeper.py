@@ -618,7 +618,7 @@ class TokenKeeper:
                         queue_name = 'low_priority'
 
                     args = [touched_profilegame_ids, queue_name]
-                    PSNManager.assign_job('sync_complete', args, profile.id, priority_override='high_priority')
+                    PSNManager.assign_job('sync_complete', args, profile.id, priority_override='orchestrator')
 
             if stuck_count > 0:
                 logger.info(f"Stuck syncing check complete. Triggered sync_complete for {stuck_count} profiles.")
@@ -955,7 +955,7 @@ class TokenKeeper:
                     pending_key = f"pending_sync_complete:{profile_id}"
                     pending_data = json.dumps({
                         'touched_profilegame_ids': touched_profilegame_ids,
-                        'queue_name': 'high_priority'
+                        'queue_name': 'orchestrator'
                     })
                     redis_client.set(pending_key, pending_data, ex=21600)
 
@@ -1208,10 +1208,10 @@ class TokenKeeper:
         pending_key = f"pending_sync_complete:{profile_id}"
         pending_data = json.dumps({
             'touched_profilegame_ids': touched_profilegame_ids,
-            'queue_name': 'high_priority'
+            'queue_name': 'orchestrator'
         })
         redis_client.set(pending_key, pending_data, ex=21600)
-    
+
     def _job_sync_trophy_groups(self, profile_id: int, np_communication_id: str, platform: str):
         try:
             profile = Profile.objects.get(id=profile_id)
@@ -1651,7 +1651,7 @@ class TokenKeeper:
         pending_key = f"pending_sync_complete:{profile_id}"
         pending_data = json.dumps({
             'touched_profilegame_ids': touched_profilegame_ids,
-            'queue_name': 'high_priority'
+            'queue_name': 'orchestrator'
         })
         redis_client.set(pending_key, pending_data, ex=7200)
 
@@ -1660,8 +1660,8 @@ class TokenKeeper:
         current_jobs = self._get_current_jobs_for_profile(profile_id)
         if current_jobs <= 0:
             logger.info(f"No pending jobs for profile {profile_id}, triggering sync_complete immediately")
-            args = [touched_profilegame_ids, 'high_priority']
-            PSNManager.assign_job('sync_complete', args, profile_id, priority_override='high_priority')
+            args = [touched_profilegame_ids, 'orchestrator']
+            PSNManager.assign_job('sync_complete', args, profile_id, priority_override='orchestrator')
             redis_client.delete(pending_key)
 
     @property
