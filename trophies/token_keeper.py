@@ -878,7 +878,7 @@ class TokenKeeper:
 
             logger.info(f"Profile {profile_id} health: Summary: {summary_total} | Tracked: {total_tracked} (Hidden: {profile.total_hiddens}) | Profilegame: {profilegame_total} | {summary_total == total_tracked}")
 
-            if summary_total != total_tracked or total_tracked != profilegame_total:
+            if summary_total != total_tracked:
                 trophy_titles_to_be_updated = []
                 current_tracked_games = list(ProfileGame.objects.filter(profile=profile))
                 page_size = 400
@@ -979,6 +979,25 @@ class TokenKeeper:
                     logger.info(f"New total hiddens for profile {profile.id}: {summary_total - total_tracked}")
 
                 # Check badges
+                profile.last_profile_health_check = timezone.now()
+                profile.save(update_fields=['last_profile_health_check'])
+
+            elif total_tracked != profilegame_total:
+                # EarnedTrophy data matches PSN, but ProfileGame stats are stale.
+                # No PSN API calls needed: just queue all ProfileGames for recalculation.
+                logger.info(
+                    f"ProfileGame stats drift for profile {profile_id}: "
+                    f"tracked={total_tracked}, profilegame={profilegame_total}. "
+                    f"Recalculating stats (no resync needed)."
+                )
+                all_pg_ids = list(
+                    ProfileGame.objects.filter(profile=profile)
+                    .values_list('id', flat=True)
+                )
+                existing_set = set(touched_profilegame_ids)
+                for pg_id in all_pg_ids:
+                    if pg_id not in existing_set:
+                        touched_profilegame_ids.append(pg_id)
                 profile.last_profile_health_check = timezone.now()
                 profile.save(update_fields=['last_profile_health_check'])
 
