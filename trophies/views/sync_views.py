@@ -6,6 +6,7 @@ from django.utils.decorators import method_decorator
 from django.views.generic import View
 from django_ratelimit.decorators import ratelimit
 
+from core.services.tracking import track_site_event
 from trophies.psn_manager import PSNManager
 from trophies.util_modules.cache import redis_client
 from ..models import Profile
@@ -113,8 +114,11 @@ class SearchSyncProfileView(LoginRequiredMixin, View):
 
     Creates profile if it doesn't exist and initiates initial sync.
     If profile exists, triggers a sync update.
-    Used by admin/moderator tools for adding new profiles.
+    Available to all authenticated users via the navigation hotbar.
+
+    Rate limited to 10 requests per hour per user.
     """
+    @method_decorator(ratelimit(key='user', rate='10/h', method='POST', block=True))
     def post(self, request):
         psn_username = request.POST.get('psn_username')
         if not psn_username:
@@ -129,6 +133,11 @@ class SearchSyncProfileView(LoginRequiredMixin, View):
                 view_count=0
             )
             is_new = True
+
+        result_tag = 'new' if is_new else 'existing'
+        searcher_pid = getattr(getattr(request.user, 'profile', None), 'id', None)
+        object_id = f'{psn_username.lower()}|{result_tag}|pid:{searcher_pid}'
+        track_site_event('sync_search', object_id, request)
 
         if is_new:
             PSNManager.initial_sync(profile)

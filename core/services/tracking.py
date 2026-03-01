@@ -208,7 +208,9 @@ def track_site_event(event_type, object_id, request):
             - 'game_list_share' - User copies/shares a game list URL
             - 'challenge_create' - User creates a new challenge
             - 'challenge_complete' - User completes a challenge (all slots done)
-        object_id: Related object identifier (guide_slug, earned_trophy_id, 'YYYY-MM', challenge_id)
+            - 'sync_search' - User searches for a PSN profile via hotbar sync
+        object_id: Related object identifier (guide_slug, earned_trophy_id, 'YYYY-MM', challenge_id,
+            'username|new|pid:N' or 'username|existing|pid:N' for sync_search)
         request: Django HttpRequest object
     """
     try:
