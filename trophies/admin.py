@@ -33,7 +33,13 @@ class ProfileAdmin(admin.ModelAdmin):
     search_fields = ("psn_username", "account_id", "user__username__iexact", "about_me")
     raw_id_fields = ("user",)
     ordering = ("psn_username",)
-    actions = ['subtract_10_days_and_mark_synced', 'recheck_badges']
+    actions = [
+        'subtract_10_days_and_mark_synced',
+        'recheck_badges',
+        'move_jobs_to_high_priority',
+        'move_jobs_to_medium_priority',
+        'move_jobs_to_low_priority',
+    ]
     fieldsets = (
         (
             "Core Info",
@@ -97,6 +103,100 @@ class ProfileAdmin(admin.ModelAdmin):
             messages.error(
                 request,
                 f"Failed to recheck badges for: {', '.join(failed_profiles)}"
+            )
+
+    @admin.action(description="Move queued sync jobs to HIGH priority")
+    def move_jobs_to_high_priority(self, request, queryset):
+        self._move_jobs_to_queue(request, queryset, 'high_priority')
+
+    @admin.action(description="Move queued sync jobs to MEDIUM priority")
+    def move_jobs_to_medium_priority(self, request, queryset):
+        self._move_jobs_to_queue(request, queryset, 'medium_priority')
+
+    @admin.action(description="Move queued sync jobs to LOW priority")
+    def move_jobs_to_low_priority(self, request, queryset):
+        self._move_jobs_to_queue(request, queryset, 'low_priority')
+
+    def _move_jobs_to_queue(self, request, queryset, target_queue):
+        """Move all queued sync jobs for selected profiles to the target priority queue."""
+        import json
+        import logging
+        from trophies.util_modules.cache import redis_client
+
+        logger = logging.getLogger("psn_api")
+        target_queue_key = f"{target_queue}_jobs"
+        source_queues = ['high_priority', 'medium_priority', 'low_priority']
+        profile_ids = {str(p.id) for p in queryset}
+        profile_names = {str(p.id): p.psn_username for p in queryset}
+
+        total_moved = 0
+        per_profile_moved = {}
+
+        for source_queue in source_queues:
+            if source_queue == target_queue:
+                continue
+
+            source_queue_key = f"{source_queue}_jobs"
+            all_jobs = redis_client.lrange(source_queue_key, 0, -1)
+
+            for job_json in all_jobs:
+                try:
+                    job_data = json.loads(job_json)
+                    job_profile_id = str(job_data.get('profile_id', ''))
+                except (json.JSONDecodeError, TypeError):
+                    continue
+
+                if job_profile_id not in profile_ids:
+                    continue
+
+                removed = redis_client.lrem(source_queue_key, 1, job_json)
+                if removed == 0:
+                    continue
+
+                redis_client.lpush(target_queue_key, job_json)
+                total_moved += 1
+                per_profile_moved[job_profile_id] = per_profile_moved.get(job_profile_id, 0) + 1
+
+                # Update counters (only low/medium are counter-tracked per assign_job/complete_job)
+                if source_queue in ('low_priority', 'medium_priority'):
+                    counter_key = f"profile_jobs:{job_profile_id}:{source_queue}"
+                    current = int(redis_client.get(counter_key) or 0)
+                    if current > 0:
+                        redis_client.decr(counter_key)
+                    if current <= 1:
+                        redis_client.delete(counter_key)
+
+                if target_queue in ('low_priority', 'medium_priority'):
+                    redis_client.incr(f"profile_jobs:{job_profile_id}:{target_queue}")
+                    redis_client.sadd("active_profiles", job_profile_id)
+
+        # Clean up active_profiles for profiles that may now have zero low/medium jobs
+        for pid in profile_ids:
+            low = int(redis_client.get(f"profile_jobs:{pid}:low_priority") or 0)
+            med = int(redis_client.get(f"profile_jobs:{pid}:medium_priority") or 0)
+            if low <= 0 and med <= 0:
+                redis_client.srem("active_profiles", pid)
+                redis_client.delete(f"profile_jobs:{pid}:low_priority")
+                redis_client.delete(f"profile_jobs:{pid}:medium_priority")
+
+        queue_display = target_queue.replace('_', ' ').upper()
+        if total_moved > 0:
+            details = ", ".join(
+                f"{profile_names.get(pid, pid)}: {count}"
+                for pid, count in per_profile_moved.items()
+            )
+            logger.info(
+                f"Admin '{request.user.username}' moved {total_moved} sync job(s) "
+                f"to {queue_display} queue. [{details}]"
+            )
+            messages.success(
+                request,
+                f"Moved {total_moved} job(s) to {queue_display} queue. [{details}]"
+            )
+        else:
+            messages.info(
+                request,
+                f"No pending jobs found for the selected profile(s) to move to {queue_display}."
             )
 
 
