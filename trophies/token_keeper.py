@@ -886,6 +886,9 @@ class TokenKeeper:
                 offset = 0
                 is_full = True
                 has_mismatch = False
+                mismatch_count = 0
+                pgame_drift_count = 0
+                games_checked = 0
                 while is_full:
                     titles = self._execute_api_call(self._get_instance_for_job(job_type), profile, 'trophy_titles', limit=limit, offset=offset, page_size=page_size)
                     for title in titles:
@@ -918,14 +921,20 @@ class TokenKeeper:
                         title_total = title.earned_trophies.bronze + title.earned_trophies.silver + title.earned_trophies.gold + title.earned_trophies.platinum
                         if tracked['total'] != title_total:
                             has_mismatch = True
+                            mismatch_count += 1
                             trophy_titles_to_be_updated.append({'title': title, 'game': game})
-                            logger.info(f"Mismatch for profile {profile_id} - {title.np_communication_id}: Tracked: {tracked['total']} | Title: {title_total}")
                         elif pgame and tracked['total'] != pgame.earned_trophies_count and pgame.id not in touched_profilegame_ids:
+                            pgame_drift_count += 1
                             touched_profilegame_ids.append(pgame.id)
-                            logger.warning(f"ProfileGame/tracked total mismatch, appending {pgame} to be updated. | Tracked: {tracked['total']} | PGame: {pgame.earned_trophies_count}")
+
+                        games_checked += 1
+                        if games_checked % 100 == 0:
+                            logger.info(f"Health check progress for profile {profile_id}: {games_checked} games checked, {mismatch_count} mismatches, {pgame_drift_count} PGame drifts")
                     is_full = len(titles) == page_size
                     limit += page_size
                     offset += page_size
+
+                logger.info(f"Health check complete for profile {profile_id}: {games_checked} games checked, {mismatch_count} mismatches, {pgame_drift_count} ProfileGame drifts")
 
                 if len(current_tracked_games) > 0:
                     # Use bulk update instead of individual saves to reduce DB locks
