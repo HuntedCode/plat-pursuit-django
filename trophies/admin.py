@@ -1,7 +1,8 @@
 from django.contrib import admin, messages
 from django.contrib.admin import SimpleListFilter
 from django.db import transaction
-from django.db.models import Count, Q
+from django.db.models import Count, F, Q, Value
+from django.db.models.functions import Coalesce
 from datetime import timedelta
 from .models import Profile, Game, Trophy, EarnedTrophy, ProfileGame, APIAuditLog, FeaturedGame, FeaturedProfile, Concept, TitleID, TrophyGroup, UserTrophySelection, UserConceptRating, Badge, UserBadge, UserBadgeProgress, FeaturedGuide, Stage, PublisherBlacklist, Title, UserTitle, Milestone, UserMilestone, UserMilestoneProgress, Comment, CommentVote, CommentReport, ModerationLog, BannedWord, Checklist, ChecklistSection, ChecklistItem, ChecklistVote, UserChecklistProgress, ChecklistReport, ProfileGamification, StatType, StageStatValue, MonthlyRecap, GameList, GameListItem, GameListLike, Challenge, AZChallengeSlot, GameFamily, GameFamilyProposal
 
@@ -299,10 +300,22 @@ class GameAdmin(admin.ModelAdmin):
         else:
             super().save_model(request, obj, form, change)
 
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        return qs.annotate(
+            total_trophies_count=(
+                Coalesce(F('defined_trophies__bronze'), Value(0)) +
+                Coalesce(F('defined_trophies__silver'), Value(0)) +
+                Coalesce(F('defined_trophies__gold'), Value(0)) +
+                Coalesce(F('defined_trophies__platinum'), Value(0))
+            )
+        )
+
     def total_defined_trophies(self, obj):
-        return sum(obj.defined_trophies.values()) if obj.defined_trophies else 0
+        return getattr(obj, 'total_trophies_count', 0)
 
     total_defined_trophies.short_description = "Total Trophies"
+    total_defined_trophies.admin_order_field = 'total_trophies_count'
 
 
 @admin.register(ProfileGame)
