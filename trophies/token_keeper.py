@@ -921,10 +921,36 @@ class TokenKeeper:
                         ).update(user_hidden=True)
 
                 if has_mismatch and len(trophy_titles_to_be_updated) > 0:
+                    logger.info(
+                        f"Health check for profile {profile_id}: {len(trophy_titles_to_be_updated)} games need re-sync"
+                    )
+
+                    # Re-enter syncing state with progress tracking
+                    profile.reset_sync_progress()
+                    profile.set_sync_status('syncing')
+                    profile.add_to_sync_target(len(trophy_titles_to_be_updated) * 2)  # sync_trophies increments by 2
+
+                    # Set up pending_sync_complete so a follow-up runs after these jobs finish.
+                    # This ensures badges, milestones, challenges, etc. run AFTER the re-queued
+                    # games have actually finished syncing (not on stale data).
+                    pending_key = f"pending_sync_complete:{profile_id}"
+                    pending_data = json.dumps({
+                        'touched_profilegame_ids': touched_profilegame_ids,
+                        'queue_name': 'high_priority'
+                    })
+                    redis_client.set(pending_key, pending_data, ex=21600)
+
                     for title in trophy_titles_to_be_updated:
                         game = title['game']
                         args = [game.np_communication_id, game.title_platform[0] if not game.title_platform[0] == 'PSPC' else game.title_platform[1]]
-                        PSNManager.assign_job('sync_trophies', args=args, profile_id=profile.id, priority_override='high_priority')
+                        PSNManager.assign_job('sync_trophies', args=args, profile_id=profile.id, priority_override='low_priority')
+
+                    # Early return: skip badge/milestone/challenge checks.
+                    # The follow-up sync_complete (triggered by pending_sync_complete
+                    # when all re-queued jobs finish) will handle all of that.
+                    profile.last_profile_health_check = timezone.now()
+                    profile.save(update_fields=['last_profile_health_check'])
+                    return
                 else:
                     profile.total_hiddens = summary_total - total_tracked if summary_total - total_tracked >= 0 else 0
                     profile.save(update_fields=['total_hiddens'])
