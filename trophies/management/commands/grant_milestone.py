@@ -57,7 +57,7 @@ class Command(BaseCommand):
 
         self.stdout.write(f'Milestone: {milestone.name} (criteria_type={milestone.criteria_type})')
         if milestone.title:
-            self.stdout.write(f'Title: {milestone.title.title_text}')
+            self.stdout.write(f'Title: {milestone.title.name}')
 
         granted = 0
         skipped = 0
