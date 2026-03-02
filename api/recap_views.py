@@ -14,12 +14,15 @@ from rest_framework.authentication import SessionAuthentication, TokenAuthentica
 from django.template.loader import render_to_string
 from django.http import HttpResponse
 from django.utils.decorators import method_decorator
-from django.utils import timezone
 from core.services.tracking import track_site_event
 from django_ratelimit.decorators import ratelimit
 
 from trophies.models import MonthlyRecap
 from trophies.services.monthly_recap_service import MonthlyRecapService
+from trophies.recap_utils import (
+    get_user_local_now, get_most_recent_completed_month,
+    is_most_recent_completed_month, check_sync_freshness,
+)
 from core.services.share_image_cache import ShareImageCache
 
 logger = logging.getLogger(__name__)
@@ -41,36 +44,22 @@ def _check_profile_synced(request):
     return None
 
 
-def _get_user_local_now(request):
-    """Get current time in the authenticated user's timezone."""
-    import pytz
-    now = timezone.now()
-    if request.user.is_authenticated:
-        try:
-            return now.astimezone(pytz.timezone(request.user.user_timezone or 'UTC'))
-        except pytz.exceptions.UnknownTimeZoneError:
-            pass
-    return now
-
-
-def _get_most_recent_completed_month(now_local):
+def _check_sync_freshness_api(profile, year, month, now_local):
     """
-    Get the (year, month) tuple for the most recent completed month.
-
-    Matches RecapIndexView logic: The previous calendar month is
-    always considered the "featured" recap for non-premium users.
-
-    Args:
-        now_local: datetime in user's local timezone
-
-    Returns:
-        tuple: (year, month)
+    Returns a 403 Response if the requested month is the most recent completed
+    month and the user hasn't synced this calendar month. Returns None otherwise.
     """
-    # Previous month is always the featured/accessible recap
-    if now_local.month == 1:
-        return (now_local.year - 1, 12)
-    else:
-        return (now_local.year, now_local.month - 1)
+    if is_most_recent_completed_month(year, month, now_local):
+        if not check_sync_freshness(profile, now_local):
+            return Response(
+                {
+                    'error': 'Your trophy data needs a fresh sync before viewing this recap.',
+                    'sync_gate': 'sync_stale',
+                },
+                status=http_status.HTTP_403_FORBIDDEN,
+            )
+    return None
+
 
 # Flavor text for each slide type (randomly selected)
 SLIDE_FLAVOR_TEXT = {
@@ -175,7 +164,7 @@ class RecapDetailView(APIView):
         if gate:
             return gate
         profile = request.user.profile
-        now_local = _get_user_local_now(request)
+        now_local = get_user_local_now(request)
 
         # Validate month
         if not 1 <= month <= 12:
@@ -187,7 +176,7 @@ class RecapDetailView(APIView):
         # Check premium gating for past months
         # Non-premium users can access the most recent completed month + literal current month
         # Anything older requires premium
-        recent_year, recent_month = _get_most_recent_completed_month(now_local)
+        recent_year, recent_month = get_most_recent_completed_month(now_local)
         is_recent_or_current = (
             (year == now_local.year and month == now_local.month) or  # Current calendar month
             (year == recent_year and month == recent_month)           # Most recent completed month
@@ -201,6 +190,11 @@ class RecapDetailView(APIView):
                 },
                 status=http_status.HTTP_403_FORBIDDEN
             )
+
+        # Check sync freshness for the most recent completed month
+        stale_gate = _check_sync_freshness_api(profile, year, month, now_local)
+        if stale_gate:
+            return stale_gate
 
         # Validate year range
         if year < 2023:
@@ -259,7 +253,7 @@ class RecapRegenerateView(APIView):
         if gate:
             return gate
         profile = request.user.profile
-        now_local = _get_user_local_now(request)
+        now_local = get_user_local_now(request)
 
         # Validate month
         if not 1 <= month <= 12:
@@ -320,7 +314,7 @@ class RecapShareImageHTMLView(APIView):
         if gate:
             return gate
         profile = request.user.profile
-        now_local = _get_user_local_now(request)
+        now_local = get_user_local_now(request)
 
         logger.info(f"[RECAP-HTML] Request for {profile.psn_username} - {year}/{month}")
 
@@ -334,7 +328,7 @@ class RecapShareImageHTMLView(APIView):
         # Check premium gating for past months
         # Non-premium users can access the most recent completed month + literal current month
         # Anything older requires premium
-        recent_year, recent_month = _get_most_recent_completed_month(now_local)
+        recent_year, recent_month = get_most_recent_completed_month(now_local)
         is_recent_or_current = (
             (year == now_local.year and month == now_local.month) or  # Current calendar month
             (year == recent_year and month == recent_month)           # Most recent completed month
@@ -345,6 +339,11 @@ class RecapShareImageHTMLView(APIView):
                 {'error': 'Premium subscription required to share past recaps.'},
                 status=http_status.HTTP_403_FORBIDDEN
             )
+
+        # Check sync freshness for the most recent completed month
+        stale_gate = _check_sync_freshness_api(profile, year, month, now_local)
+        if stale_gate:
+            return stale_gate
 
         # Get format
         format_type = request.query_params.get('image_format', 'landscape')
@@ -455,7 +454,7 @@ class RecapShareImagePNGView(APIView):
         if gate:
             return gate
         profile = request.user.profile
-        now_local = _get_user_local_now(request)
+        now_local = get_user_local_now(request)
 
         if not 1 <= month <= 12:
             return Response(
@@ -464,7 +463,7 @@ class RecapShareImagePNGView(APIView):
             )
 
         # Check premium gating
-        recent_year, recent_month = _get_most_recent_completed_month(now_local)
+        recent_year, recent_month = get_most_recent_completed_month(now_local)
         is_recent_or_current = (
             (year == now_local.year and month == now_local.month) or
             (year == recent_year and month == recent_month)
@@ -475,6 +474,11 @@ class RecapShareImagePNGView(APIView):
                 {'error': 'Premium subscription required to share past recaps.'},
                 status=http_status.HTTP_403_FORBIDDEN
             )
+
+        # Check sync freshness for the most recent completed month
+        stale_gate = _check_sync_freshness_api(profile, year, month, now_local)
+        if stale_gate:
+            return stale_gate
 
         format_type = request.query_params.get('image_format', 'landscape')
         if format_type not in ['landscape', 'portrait']:
@@ -558,7 +562,7 @@ class RecapSlidePartialView(APIView):
         if gate:
             return gate
         profile = request.user.profile
-        now_local = _get_user_local_now(request)
+        now_local = get_user_local_now(request)
 
         # Validate slide type
         if slide_type not in self.SLIDE_TEMPLATES:
@@ -577,7 +581,7 @@ class RecapSlidePartialView(APIView):
         # Check premium gating for past months
         # Non-premium users can access the most recent completed month + literal current month
         # Anything older requires premium
-        recent_year, recent_month = _get_most_recent_completed_month(now_local)
+        recent_year, recent_month = get_most_recent_completed_month(now_local)
         is_recent_or_current = (
             (year == now_local.year and month == now_local.month) or  # Current calendar month
             (year == recent_year and month == recent_month)           # Most recent completed month
@@ -588,6 +592,11 @@ class RecapSlidePartialView(APIView):
                 {'error': 'Premium subscription required.'},
                 status=http_status.HTTP_403_FORBIDDEN
             )
+
+        # Check sync freshness for the most recent completed month
+        stale_gate = _check_sync_freshness_api(profile, year, month, now_local)
+        if stale_gate:
+            return stale_gate
 
         # Get the recap
         recap = MonthlyRecapService.get_or_generate_recap(profile, year, month)

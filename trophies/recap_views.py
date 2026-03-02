@@ -6,45 +6,15 @@ import json
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.views.generic import TemplateView
 from django.http import Http404
-from django.utils import timezone
-from django.shortcuts import redirect
+from django.shortcuts import redirect, render
 
 from core.services.tracking import track_page_view, track_site_event
 from trophies.services.monthly_recap_service import MonthlyRecapService
 from trophies.mixins import ProfileHotbarMixin, RecapSyncGateMixin
+from trophies.recap_utils import (
+    get_user_local_now, get_most_recent_completed_month, check_sync_freshness,
+)
 from trophies.themes import get_available_themes_for_grid
-
-
-def _get_user_local_now(request):
-    """Get current time in the authenticated user's timezone."""
-    import pytz
-    now = timezone.now()
-    if request.user.is_authenticated:
-        try:
-            return now.astimezone(pytz.timezone(request.user.user_timezone or 'UTC'))
-        except pytz.exceptions.UnknownTimeZoneError:
-            pass
-    return now
-
-
-def _get_most_recent_completed_month(now_local):
-    """
-    Get the (year, month) tuple for the most recent completed month.
-
-    Matches RecapIndexView logic (lines 45-60): The previous calendar month is
-    always considered the "featured" recap for non-premium users.
-
-    Args:
-        now_local: datetime in user's local timezone
-
-    Returns:
-        tuple: (year, month)
-    """
-    # Previous month is always the featured/accessible recap
-    if now_local.month == 1:
-        return (now_local.year - 1, 12)
-    else:
-        return (now_local.year, now_local.month - 1)
 
 
 class RecapIndexView(LoginRequiredMixin, RecapSyncGateMixin, ProfileHotbarMixin, TemplateView):
@@ -58,27 +28,19 @@ class RecapIndexView(LoginRequiredMixin, RecapSyncGateMixin, ProfileHotbarMixin,
         if gate:
             return gate
         profile = request.user.profile
-        now_local = _get_user_local_now(request)
+        now_local = get_user_local_now(request)
 
-        # Default to the most recent fully completed month
-        # A month is "complete" after the 2nd day of the following month
-        # This gives time for final syncs and makes the recap more interesting
-        if now_local.day <= 2:
-            # We're in the first 2 days of the month, show previous month's recap
-            if now_local.month == 1:
-                target_year = now_local.year - 1
-                target_month = 12
-            else:
-                target_year = now_local.year
-                target_month = now_local.month - 1
-        else:
-            # After the 2nd, show the previous month (not current month-in-progress)
-            if now_local.month == 1:
-                target_year = now_local.year - 1
-                target_month = 12
-            else:
-                target_year = now_local.year
-                target_month = now_local.month - 1
+        # Default to the most recent fully completed month (always previous month)
+        target_year, target_month = get_most_recent_completed_month(now_local)
+
+        # Check sync freshness: user must have synced within the current month
+        if not check_sync_freshness(profile, now_local):
+            return render(request, 'recap/recap_index.html', {
+                'sync_gate': 'sync_stale',
+                'profile': profile,
+                'stale_month_name': calendar.month_name[target_month],
+                'stale_year': target_year,
+            })
 
         # Try to get the target month's recap
         recap = MonthlyRecapService.get_or_generate_recap(
@@ -128,7 +90,7 @@ class RecapSlideView(LoginRequiredMixin, RecapSyncGateMixin, ProfileHotbarMixin,
         if gate:
             return gate
         profile = request.user.profile
-        now_local = _get_user_local_now(request)
+        now_local = get_user_local_now(request)
 
         # Validate month
         if not 1 <= month <= 12:
@@ -143,12 +105,21 @@ class RecapSlideView(LoginRequiredMixin, RecapSyncGateMixin, ProfileHotbarMixin,
         # Check premium gating for past months
         # Non-premium users can access the most recent completed month only
         # Anything older requires premium
-        recent_year, recent_month = _get_most_recent_completed_month(now_local)
+        recent_year, recent_month = get_most_recent_completed_month(now_local)
         is_recent = (year == recent_year and month == recent_month)  # Most recent completed month only
 
         if not is_recent and not profile.user_is_premium:
             # Trying to access older month without premium
             return redirect('recap_index')
+
+        # Check sync freshness for the most recent completed month
+        if is_recent and not check_sync_freshness(profile, now_local):
+            return render(request, 'recap/recap_index.html', {
+                'sync_gate': 'sync_stale',
+                'profile': profile,
+                'stale_month_name': calendar.month_name[month],
+                'stale_year': year,
+            })
 
         # Don't allow future months
         if (year > now_local.year) or (year == now_local.year and month > now_local.month):
@@ -159,7 +130,7 @@ class RecapSlideView(LoginRequiredMixin, RecapSyncGateMixin, ProfileHotbarMixin,
     def get_context_data(self, year, month, **kwargs):
         context = super().get_context_data(**kwargs)
         profile = self.request.user.profile
-        now_local = _get_user_local_now(self.request)
+        now_local = get_user_local_now(self.request)
 
         # Always provide base context (needed for calendar month selector on no-activity pages too)
         context['year'] = year

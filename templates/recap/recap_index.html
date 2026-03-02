@@ -24,6 +24,14 @@
             Your trophy data is still syncing. Once it's complete, your Monthly Recap will be ready.
         </p>
         <a href="{% url 'profile_detail' profile.psn_username %}" class="btn btn-primary">View Sync Progress</a>
+        {% elif sync_gate == 'sync_stale' %}
+        <h2 class="text-xl font-semibold mb-4">Fresh Sync Needed</h2>
+        <p class="text-base-content/70 mb-6">
+            Your trophy data needs a fresh sync before your {{ stale_month_name }} {{ stale_year }} recap
+            can be generated. Head to your profile page to kick off a sync and make sure your recap
+            is accurate and complete.
+        </p>
+        <a href="{% url 'profile_detail' profile.psn_username %}" class="btn btn-primary">Go to Profile</a>
         {% else %}
         <h2 class="text-xl font-semibold mb-4">Sync Error</h2>
         <p class="text-base-content/70 mb-6">
