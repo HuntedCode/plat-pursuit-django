@@ -174,21 +174,24 @@ class Command(BaseCommand):
         ):
             actual_counts[(row['game_id'], row['trophy_group_id'])] = row['count']
 
-        # Fetch all TrophyGroups with their game info in one query
+        # Fetch all TrophyGroups with their game info in one query.
+        # order_by game_id aligns with the groupby key for stable grouping.
         all_trophy_groups = (
             TrophyGroup.objects
             .select_related('game')
-            .order_by('game__title_name', 'trophy_group_id')
+            .order_by('game_id', 'trophy_group_id')
         )
 
         games_with_issues = 0
         total_missing_groups = 0
 
-        for game, tg_iter in groupby(all_trophy_groups, key=lambda tg: tg.game):
+        for _, tg_iter in groupby(all_trophy_groups, key=lambda tg: tg.game_id):
+            tg_list = list(tg_iter)
+            game = tg_list[0].game
             game_has_issue = False
             group_lines = []
 
-            for tg in tg_iter:
+            for tg in tg_list:
                 dt = tg.defined_trophies or {}
                 expected = (
                     dt.get('bronze', 0) + dt.get('silver', 0)

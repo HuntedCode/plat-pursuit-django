@@ -1010,6 +1010,58 @@ class TokenKeeper:
                 profile.last_profile_health_check = timezone.now()
                 profile.save(update_fields=['last_profile_health_check'])
 
+            # Trophy record completeness check: detect games where sync_trophies
+            # failed but the Game still has defined_trophies > 0 with zero Trophy
+            # records in the DB.  Cooldown prevents infinite re-queue loops if
+            # sync_trophies keeps failing for the same games.
+            #
+            # Single query with annotation: count Trophy records per game and
+            # filter for 0, scoped to this user's games only.
+            completeness_cooldown_key = f"trophy_completeness_check:{profile_id}"
+            if not redis_client.exists(completeness_cooldown_key):
+                from django.db.models import Count as _Count
+                incomplete_games = list(
+                    Game.objects.filter(
+                        profilegame__profile=profile,
+                        defined_trophies__has_key='bronze',
+                    ).annotate(
+                        trophy_record_count=_Count('trophies'),
+                    ).filter(
+                        trophy_record_count=0,
+                    )
+                )
+
+                if incomplete_games:
+                    logger.warning(
+                        f"Trophy record completeness: profile {profile_id} has "
+                        f"{len(incomplete_games)} game(s) with 0 Trophy records. "
+                        f"Re-queuing sync_trophies."
+                    )
+                    # Set cooldown so we don't retry again for 6 hours
+                    redis_client.set(completeness_cooldown_key, "1", ex=21600)
+
+                    profile.reset_sync_progress()
+                    profile.set_sync_status('syncing')
+                    pending_key = f"pending_sync_complete:{profile_id}"
+                    pending_data = json.dumps({
+                        'touched_profilegame_ids': touched_profilegame_ids,
+                        'queue_name': 'orchestrator'
+                    })
+                    redis_client.set(pending_key, pending_data, ex=21600)
+
+                    queued_count = 0
+                    for game in incomplete_games:
+                        platform = game.title_platform[0] if not game.title_platform[0] == 'PSPC' else game.title_platform[1]
+                        if PSNManager.assign_sync_trophies(
+                            profile.id, game.np_communication_id, platform,
+                            priority_override='low_priority'
+                        ):
+                            queued_count += 1
+                    profile.add_to_sync_target(queued_count * 2)
+                    profile.last_profile_health_check = timezone.now()
+                    profile.save(update_fields=['last_profile_health_check'])
+                    return
+
             logger.info(f"Updating plats for {profile_id}...")
             profile.update_plats()
             logger.info(f"Updating profilegame stats for {profile_id}...")
