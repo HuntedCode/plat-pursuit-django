@@ -28,6 +28,8 @@ class ProfileAdmin(admin.ModelAdmin):
         "psn_history_public",
         'country_code',
         "is_plus",
+        "total_trophies",
+        "total_unearned",
     )
     list_filter = ("is_linked", "is_plus", "sync_tier", "sync_status", "user_is_premium",)
     search_fields = ("psn_username", "account_id", "user__username__iexact", "about_me")
