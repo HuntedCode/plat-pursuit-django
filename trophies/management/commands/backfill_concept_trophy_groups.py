@@ -19,10 +19,18 @@ class Command(BaseCommand):
             '--collections-only', action='store_true',
             help='With --check-mismatches: only show concepts where the base game (default) group has a trophy count mismatch, indicating bundled collections that need concept splitting',
         )
+        parser.add_argument(
+            '--audit-missing-trophies', action='store_true',
+            help='Find games with TrophyGroup records but missing Trophy records (sync gaps). Outputs np_communication_id for re-sync.',
+        )
 
     def handle(self, *args, **options):
         dry_run = options['dry_run']
         check_mismatches = options['check_mismatches']
+
+        if options['audit_missing_trophies']:
+            self._handle_audit_missing_trophies()
+            return
 
         if check_mismatches:
             self._handle_mismatch_check(
@@ -148,3 +156,80 @@ class Command(BaseCommand):
                     "Review these concepts. Mismatches may indicate games that should "
                     "not share a concept, or DLC packs that differ between platforms."
                 )
+
+    def _handle_audit_missing_trophies(self):
+        """Find games where TrophyGroup records exist but Trophy records are missing."""
+        from itertools import groupby
+        from django.db.models import Count
+        from trophies.models import TrophyGroup, Trophy
+
+        self.stdout.write("Auditing games for missing trophy records...\n")
+
+        # Batch: actual Trophy counts per (game_id, trophy_group_id)
+        actual_counts = {}
+        for row in (
+            Trophy.objects
+            .values('game_id', 'trophy_group_id')
+            .annotate(count=Count('id'))
+        ):
+            actual_counts[(row['game_id'], row['trophy_group_id'])] = row['count']
+
+        # Fetch all TrophyGroups with their game info in one query
+        all_trophy_groups = (
+            TrophyGroup.objects
+            .select_related('game')
+            .order_by('game__title_name', 'trophy_group_id')
+        )
+
+        games_with_issues = 0
+        total_missing_groups = 0
+
+        for game, tg_iter in groupby(all_trophy_groups, key=lambda tg: tg.game):
+            game_has_issue = False
+            group_lines = []
+
+            for tg in tg_iter:
+                dt = tg.defined_trophies or {}
+                expected = (
+                    dt.get('bronze', 0) + dt.get('silver', 0)
+                    + dt.get('gold', 0) + dt.get('platinum', 0)
+                )
+                actual = actual_counts.get((game.id, tg.trophy_group_id), 0)
+
+                if expected > 0 and actual == 0:
+                    game_has_issue = True
+                    total_missing_groups += 1
+                    group_lines.append(
+                        f'    TrophyGroup "{tg.trophy_group_id}": '
+                        f'expected {expected}, actual {actual}'
+                    )
+                elif expected > 0 and actual < expected:
+                    game_has_issue = True
+                    total_missing_groups += 1
+                    group_lines.append(self.style.WARNING(
+                        f'    TrophyGroup "{tg.trophy_group_id}": '
+                        f'expected {expected}, actual {actual} (partial)'
+                    ))
+
+            if game_has_issue:
+                games_with_issues += 1
+                self.stdout.write(self.style.WARNING(
+                    f"\n  {game.title_name} (np_communication_id={game.np_communication_id})"
+                ))
+                for line in group_lines:
+                    self.stdout.write(line)
+
+        self.stdout.write("")
+        if games_with_issues == 0:
+            self.stdout.write(self.style.SUCCESS(
+                "All games with TrophyGroup records have matching Trophy records."
+            ))
+        else:
+            self.stdout.write(self.style.WARNING(
+                f"Found {total_missing_groups} trophy group(s) with missing records "
+                f"across {games_with_issues} game(s)."
+            ))
+            self.stdout.write(
+                "Use the np_communication_id values above to trigger re-syncs "
+                "for these games."
+            )

@@ -86,7 +86,7 @@ class ConceptTrophyGroupService:
             list[dict]: List of mismatch findings, empty if all clean.
                 Each dict has: {type, group_id, detail, games}
         """
-        from trophies.models import TrophyGroup, Trophy
+        from trophies.models import TrophyGroup
 
         mismatches = []
 
@@ -102,43 +102,34 @@ class ConceptTrophyGroupService:
                 'groups': {},
             }
 
+        # Use TrophyGroup.defined_trophies (PSN API metadata) for counts and type
+        # distribution. This is more reliable than counting Trophy records, which
+        # may be missing if sync_trophies failed independently of sync_trophy_groups.
         tg_data = (
             TrophyGroup.objects
             .filter(game__concept=concept)
-            .values('game_id', 'trophy_group_id', 'trophy_group_name')
+            .values('game_id', 'trophy_group_id', 'trophy_group_name', 'defined_trophies')
         )
         for row in tg_data:
-            game_groups[row['game_id']]['groups'][row['trophy_group_id']] = {
-                'name': row['trophy_group_name'] or row['trophy_group_id'],
+            dt = row['defined_trophies'] or {}
+            bronze = dt.get('bronze', 0)
+            silver = dt.get('silver', 0)
+            gold = dt.get('gold', 0)
+            platinum = dt.get('platinum', 0)
+            total = bronze + silver + gold + platinum
+
+            type_dist = {
+                'bronze': bronze,
+                'silver': silver,
+                'gold': gold,
+                'platinum': platinum,
             }
 
-        # Get trophy counts per game per group
-        trophy_counts = (
-            Trophy.objects
-            .filter(game__concept=concept)
-            .values('game_id', 'trophy_group_id')
-            .annotate(count=Count('id'))
-        )
-        for row in trophy_counts:
-            gid = row['trophy_group_id']
-            if gid in game_groups.get(row['game_id'], {}).get('groups', {}):
-                game_groups[row['game_id']]['groups'][gid]['trophy_count'] = row['count']
-
-        # Get trophy type distribution per game per group
-        # Returns rows like: {game_id, trophy_group_id, trophy_type, type_count}
-        type_dist = (
-            Trophy.objects
-            .filter(game__concept=concept)
-            .values('game_id', 'trophy_group_id', 'trophy_type')
-            .annotate(type_count=Count('id'))
-        )
-        for row in type_dist:
-            gid = row['trophy_group_id']
-            group_info = game_groups.get(row['game_id'], {}).get('groups', {}).get(gid)
-            if group_info:
-                if 'type_dist' not in group_info:
-                    group_info['type_dist'] = {}
-                group_info['type_dist'][row['trophy_type']] = row['type_count']
+            game_groups[row['game_id']]['groups'][row['trophy_group_id']] = {
+                'name': row['trophy_group_name'] or row['trophy_group_id'],
+                'trophy_count': total,
+                'type_dist': type_dist,
+            }
 
         # Collect all unique group IDs across stacks
         all_group_ids = set()
