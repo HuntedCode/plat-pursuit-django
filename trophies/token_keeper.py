@@ -881,12 +881,6 @@ class TokenKeeper:
             if summary_total != total_tracked:
                 trophy_titles_to_be_updated = []
                 current_tracked_games = list(ProfileGame.objects.filter(profile=profile))
-                # Pre-fetch game IDs that have TrophyGroup records for completeness check
-                games_with_groups = set(
-                    TrophyGroup.objects.filter(
-                        game__played_by__profile=profile
-                    ).values_list('game_id', flat=True).distinct()
-                )
                 games_needing_groups = []
                 page_size = 400
                 limit = page_size
@@ -935,7 +929,7 @@ class TokenKeeper:
                             touched_profilegame_ids.append(pgame.id)
 
                         # Check if game is missing TrophyGroup records
-                        if game.id not in games_with_groups:
+                        if not TrophyGroup.objects.filter(game=game).exists():
                             games_needing_groups.append(game)
 
                         games_checked += 1
