@@ -1,7 +1,7 @@
 from django.contrib import admin, messages
 from django.contrib.admin import SimpleListFilter
 from django.db import transaction
-from django.db.models import Count, F, Q, Value
+from django.db.models import Count, F, IntegerField, Q, Value
 from django.db.models.functions import Coalesce
 from datetime import timedelta
 from .models import Profile, Game, Trophy, EarnedTrophy, ProfileGame, APIAuditLog, FeaturedGame, FeaturedProfile, Concept, TitleID, TrophyGroup, UserTrophySelection, UserConceptRating, Badge, UserBadge, UserBadgeProgress, FeaturedGuide, Stage, PublisherBlacklist, Title, UserTitle, Milestone, UserMilestone, UserMilestoneProgress, Comment, CommentVote, CommentReport, ModerationLog, BannedWord, Checklist, ChecklistSection, ChecklistItem, ChecklistVote, UserChecklistProgress, ChecklistReport, ProfileGamification, StatType, StageStatValue, MonthlyRecap, GameList, GameListItem, GameListLike, Challenge, AZChallengeSlot, GameFamily, GameFamilyProposal
@@ -414,10 +414,10 @@ class GameAdmin(admin.ModelAdmin):
         qs = super().get_queryset(request)
         return qs.annotate(
             total_trophies_count=(
-                Coalesce(F('defined_trophies__bronze'), Value(0)) +
-                Coalesce(F('defined_trophies__silver'), Value(0)) +
-                Coalesce(F('defined_trophies__gold'), Value(0)) +
-                Coalesce(F('defined_trophies__platinum'), Value(0))
+                Coalesce(F('defined_trophies__bronze'), Value(0), output_field=IntegerField()) +
+                Coalesce(F('defined_trophies__silver'), Value(0), output_field=IntegerField()) +
+                Coalesce(F('defined_trophies__gold'), Value(0), output_field=IntegerField()) +
+                Coalesce(F('defined_trophies__platinum'), Value(0), output_field=IntegerField())
             )
         )
 
