@@ -4,9 +4,11 @@ Cache utilities - Redis client and caching helpers.
 Provides Redis client configuration and utility functions for caching.
 """
 import os
+import logging
 import redis
 import hashlib
 import requests
+from django.db import IntegrityError
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -57,26 +59,33 @@ def log_api_call(endpoint, token, profile_id, status_code, response_time, error_
         if Profile.objects.filter(id=profile_id).exists():
             validated_profile_id = profile_id
 
+    logger = logging.getLogger(__name__)
+    log_kwargs = dict(
+        token_id=hashlib.sha256(token.encode()).hexdigest()[:64],
+        ip_used=(
+            requests.get("https://api.ipify.org", timeout=5).text
+            if not error_message
+            else "unknown"
+        ),
+        endpoint=endpoint,
+        profile_id=validated_profile_id,
+        status_code=status_code,
+        response_time=response_time,
+        error_message=error_message,
+        calls_remaining=max(
+            0, 300 - int(redis_client.zcard(f"token:{token}:timestamps") or 0)
+        ),
+    )
+
     try:
-        APIAuditLog.objects.create(
-            token_id=hashlib.sha256(token.encode()).hexdigest()[:64],
-            ip_used=(
-                requests.get("https://api.ipify.org", timeout=5).text
-                if not error_message
-                else "unknown"
-            ),
-            endpoint=endpoint,
-            profile_id=validated_profile_id,
-            status_code=status_code,
-            response_time=response_time,
-            error_message=error_message,
-            calls_remaining=max(
-                0, 300 - int(redis_client.zcard(f"token:{token}:timestamps") or 0)
-            ),
-        )
+        APIAuditLog.objects.create(**log_kwargs)
+    except IntegrityError:
+        # Race condition: profile was deleted between exists() check and create()
+        # Retry without the profile FK to preserve the audit log entry
+        log_kwargs['profile_id'] = None
+        try:
+            APIAuditLog.objects.create(**log_kwargs)
+        except Exception as e:
+            logger.error(f"Failed to create API audit log: {e}")
     except Exception as e:
-        # Log the error but don't crash the application
-        # API audit logging is important but shouldn't break core functionality
-        import logging
-        logger = logging.getLogger(__name__)
         logger.error(f"Failed to create API audit log: {e}")
