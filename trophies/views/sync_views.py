@@ -116,9 +116,9 @@ class SearchSyncProfileView(LoginRequiredMixin, View):
     If profile exists, triggers a sync update.
     Available to all authenticated users via the navigation hotbar.
 
-    Rate limited to 10 requests per hour per user.
+    Rate limited to 5 requests per minute per user.
     """
-    @method_decorator(ratelimit(key='user', rate='10/h', method='POST', block=True))
+    @method_decorator(ratelimit(key='user', rate='5/m', method='POST', block=True))
     def post(self, request):
         psn_username = request.POST.get('psn_username')
         if not psn_username:
