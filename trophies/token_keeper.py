@@ -426,8 +426,9 @@ class TokenKeeper:
             inst.cleanup_cache()
         except OperationalError as db_err:
             # Database lock errors are transient - don't mark instance unhealthy
+            err_msg = str(db_err).lower()
             logger.warning(f"Database error in health check for instance {inst.instance_id}: {db_err}")
-            if "database is locked" in str(db_err).lower():
+            if "database is locked" in err_msg or "lock timeout" in err_msg:
                 self._record_db_lock_error()
         except Exception as e:
             logger.error(f"Health check failed for {inst.instance_id}: {e}")
@@ -483,11 +484,13 @@ class TokenKeeper:
                 logger.info(f"Job: {job_type} - Profile: {profile_id} completed successfully in {job_duration:.1f}s")
             except OperationalError as db_err:
                 err_msg = str(db_err).lower()
-                if "deadlock detected" in err_msg:
+                if "deadlock detected" in err_msg or "lock timeout" in err_msg:
+                    error_type = "Deadlock" if "deadlock" in err_msg else "Lock timeout"
                     logger.warning(
-                        f"Deadlock detected in {job_type} for profile {profile_id}, "
+                        f"{error_type} in {job_type} for profile {profile_id}, "
                         f"re-queuing after 2s delay: {db_err}"
                     )
+                    self._record_db_lock_error()
                     time.sleep(2)
                     if job_type and args is not None and profile_id:
                         PSNManager.assign_job(

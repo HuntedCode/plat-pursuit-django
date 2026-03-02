@@ -2,7 +2,8 @@ import logging
 import time
 from datetime import timedelta
 from django.utils import timezone
-from django.db import transaction, IntegrityError
+from django.db import transaction, IntegrityError, OperationalError
+from tenacity import retry, stop_after_attempt, wait_fixed, retry_if_exception_type
 from django.db.models import F, Count, Max, Q
 from trophies.models import Profile, Game, ProfileGame, Trophy, EarnedTrophy, Concept, TrophyGroup, Badge
 from psnawp_api.models.title_stats import TitleStats
@@ -157,6 +158,7 @@ class PsnApiService:
         return profile
 
     @classmethod
+    @retry(stop=stop_after_attempt(3), wait=wait_fixed(1), retry=retry_if_exception_type(OperationalError), reraise=True)
     def create_or_update_game(cls, trophy_title: TrophyTitle):
         """Create or update Game model from PSN trophy title data."""
         from trophies.models import clean_title_field
@@ -191,8 +193,13 @@ class PsnApiService:
                 # NEED TO UPDATE ALL TROPHIES FOR THIS GAME!
                 needs_trophy_update = True
                 logger.warning(f"TROPHIES NEED TO BE UPDATED FOR {game.title_name}")
+            update_fields = [
+                'trophy_set_version', 'np_service_name', 'title_detail',
+                'title_icon_url', 'has_trophy_groups', 'defined_trophies',
+            ]
             if not game.lock_title:
                 game.title_name = trophy_title.title_name
+                update_fields.append('title_name')
             game.trophy_set_version = trophy_title.trophy_set_version
             game.np_service_name = trophy_title.np_service_name
             game.title_detail = trophy_title.title_detail
@@ -204,7 +211,7 @@ class PsnApiService:
                 "gold": trophy_title.defined_trophies.gold,
                 "platinum": trophy_title.defined_trophies.platinum
             }
-            game.save()
+            game.save(update_fields=update_fields)
         return game, created, needs_trophy_update
     
     @classmethod

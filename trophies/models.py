@@ -515,31 +515,42 @@ class Game(models.Model):
             CommentService.invalidate_cache(concept)
             RatingService.invalidate_cache(concept)
     
+    @retry(stop=stop_after_attempt(3), wait=wait_fixed(0.5), retry=retry_if_exception_type(OperationalError))
     def add_region(self, region: str):
-        if region and not self.region_lock:
-            if region in NA_REGION_CODES:
-                region = 'NA'
-            elif region in EU_REGION_CODES:
-                region = 'EU'
-            elif region in JP_REGION_CODES:
-                region = 'JP'
-            elif region in AS_REGION_CODES:
-                region = 'AS'
-            elif region in KR_REGION_CODES:
-                region = 'KR'
-            elif region in CN_REGION_CODES:
-                region = 'CN'
-            else:
-                return
-            if region not in self.region:
-                self.region.append(region)
-                self.save(update_fields=['region'])
+        if not region or self.region_lock:
+            return
+        if region in NA_REGION_CODES:
+            region = 'NA'
+        elif region in EU_REGION_CODES:
+            region = 'EU'
+        elif region in JP_REGION_CODES:
+            region = 'JP'
+        elif region in AS_REGION_CODES:
+            region = 'AS'
+        elif region in KR_REGION_CODES:
+            region = 'KR'
+        elif region in CN_REGION_CODES:
+            region = 'CN'
+        else:
+            return
+        with transaction.atomic():
+            game = Game.objects.select_for_update(nowait=True).get(pk=self.pk)
+            if region not in game.region:
+                game.region.append(region)
+                game.save(update_fields=['region'])
+                self.region = game.region
     
+    @retry(stop=stop_after_attempt(3), wait=wait_fixed(0.5), retry=retry_if_exception_type(OperationalError))
     def add_title_id(self, title_id: str):
-        if title_id and title_id not in self.title_ids:
-            self.title_ids.append(title_id)
-            self.save(update_fields=['title_ids'])
-    
+        if not title_id:
+            return
+        with transaction.atomic():
+            game = Game.objects.select_for_update(nowait=True).get(pk=self.pk)
+            if title_id not in game.title_ids:
+                game.title_ids.append(title_id)
+                game.save(update_fields=['title_ids'])
+                self.title_ids = game.title_ids
+
     @property
     def is_shovelware(self):
         """Whether this game is flagged as shovelware (auto or manual)."""
@@ -816,10 +827,16 @@ class Concept(models.Model):
         ).count()
         self.save(update_fields=['comment_count'])
 
+    @retry(stop=stop_after_attempt(3), wait=wait_fixed(0.5), retry=retry_if_exception_type(OperationalError))
     def add_title_id(self, title_id: str):
-        if title_id and title_id not in self.title_ids:
-            self.title_ids.append(title_id)
-            self.save(update_fields=['title_ids'])
+        if not title_id:
+            return
+        with transaction.atomic():
+            concept = Concept.objects.select_for_update(nowait=True).get(pk=self.pk)
+            if title_id not in concept.title_ids:
+                concept.title_ids.append(title_id)
+                concept.save(update_fields=['title_ids'])
+                self.title_ids = concept.title_ids
 
     def check_and_mark_regional(self):
         """Check if this concept has multiple games for the same platform. If so, mark as regional. Run post sync."""
