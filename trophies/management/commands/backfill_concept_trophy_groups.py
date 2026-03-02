@@ -23,6 +23,10 @@ class Command(BaseCommand):
             '--audit-missing-trophies', action='store_true',
             help='Find games with TrophyGroup records but missing Trophy records (sync gaps). Outputs np_communication_id for re-sync.',
         )
+        parser.add_argument(
+            '--audit-missing-groups', action='store_true',
+            help='Find games with defined_trophies data but no TrophyGroup records (sync_trophy_groups failed). Outputs np_communication_id for re-sync.',
+        )
 
     def handle(self, *args, **options):
         dry_run = options['dry_run']
@@ -30,6 +34,10 @@ class Command(BaseCommand):
 
         if options['audit_missing_trophies']:
             self._handle_audit_missing_trophies()
+            return
+
+        if options['audit_missing_groups']:
+            self._handle_audit_missing_groups()
             return
 
         if check_mismatches:
@@ -231,6 +239,51 @@ class Command(BaseCommand):
             self.stdout.write(self.style.WARNING(
                 f"Found {total_missing_groups} trophy group(s) with missing records "
                 f"across {games_with_issues} game(s)."
+            ))
+            self.stdout.write(
+                "Use the np_communication_id values above to trigger re-syncs "
+                "for these games."
+            )
+
+    def _handle_audit_missing_groups(self):
+        """Find games with defined_trophies data but no TrophyGroup records."""
+        from trophies.models import Game
+
+        self.stdout.write("Auditing games for missing TrophyGroup records...\n")
+
+        games_missing_groups = (
+            Game.objects.filter(
+                defined_trophies__has_key='bronze',
+            ).exclude(
+                trophy_groups__isnull=False,
+            ).order_by('title_name')
+        )
+
+        count = 0
+        for game in games_missing_groups.iterator():
+            count += 1
+            dt = game.defined_trophies or {}
+            bronze = dt.get('bronze', 0)
+            silver = dt.get('silver', 0)
+            gold = dt.get('gold', 0)
+            platinum = dt.get('platinum', 0)
+
+            self.stdout.write(self.style.WARNING(
+                f"\n  {game.title_name} (np_communication_id={game.np_communication_id})"
+            ))
+            self.stdout.write(
+                f"    defined_trophies: {bronze}B {silver}S {gold}G {platinum}P "
+                f"(0 TrophyGroup records)"
+            )
+
+        self.stdout.write("")
+        if count == 0:
+            self.stdout.write(self.style.SUCCESS(
+                "All games with defined_trophies have TrophyGroup records."
+            ))
+        else:
+            self.stdout.write(self.style.WARNING(
+                f"Found {count} game(s) with missing TrophyGroup records."
             ))
             self.stdout.write(
                 "Use the np_communication_id values above to trigger re-syncs "

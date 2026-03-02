@@ -881,6 +881,13 @@ class TokenKeeper:
             if summary_total != total_tracked:
                 trophy_titles_to_be_updated = []
                 current_tracked_games = list(ProfileGame.objects.filter(profile=profile))
+                # Pre-fetch game IDs that have TrophyGroup records for completeness check
+                games_with_groups = set(
+                    TrophyGroup.objects.filter(
+                        game__played_by__profile=profile
+                    ).values_list('game_id', flat=True).distinct()
+                )
+                games_needing_groups = []
                 page_size = 400
                 limit = page_size
                 offset = 0
@@ -927,6 +934,10 @@ class TokenKeeper:
                             pgame_drift_count += 1
                             touched_profilegame_ids.append(pgame.id)
 
+                        # Check if game is missing TrophyGroup records
+                        if game.id not in games_with_groups:
+                            games_needing_groups.append(game)
+
                         games_checked += 1
                         if games_checked % 100 == 0:
                             logger.info(f"Health check progress for profile {profile_id}: {games_checked} games checked, {mismatch_count} mismatches, {pgame_drift_count} PGame drifts")
@@ -949,10 +960,18 @@ class TokenKeeper:
                             game_id__in=hidden_game_ids
                         ).update(user_hidden=True)
 
-                if has_mismatch and len(trophy_titles_to_be_updated) > 0:
-                    logger.info(
-                        f"Health check for profile {profile_id}: {len(trophy_titles_to_be_updated)} games need re-sync"
-                    )
+                has_trophy_mismatch = has_mismatch and len(trophy_titles_to_be_updated) > 0
+                has_missing_groups = len(games_needing_groups) > 0
+
+                if has_trophy_mismatch or has_missing_groups:
+                    if has_trophy_mismatch:
+                        logger.info(
+                            f"Health check for profile {profile_id}: {len(trophy_titles_to_be_updated)} games need re-sync"
+                        )
+                    if has_missing_groups:
+                        logger.warning(
+                            f"Health check for profile {profile_id}: {len(games_needing_groups)} game(s) missing TrophyGroup records"
+                        )
 
                     # Re-enter syncing state with progress tracking
                     profile.reset_sync_progress()
@@ -969,12 +988,20 @@ class TokenKeeper:
                     redis_client.set(pending_key, pending_data, ex=21600)
 
                     queued_count = 0
+                    # Re-queue sync_trophy_groups for games missing groups
+                    for game in games_needing_groups:
+                        platform = game.title_platform[0] if not game.title_platform[0] == 'PSPC' else game.title_platform[1]
+                        args = [game.np_communication_id, platform]
+                        PSNManager.assign_job('sync_trophy_groups', args, profile.id)
+                        queued_count += 1  # group sync = 1 progress tick
+
+                    # Re-queue sync_trophies for games with earned mismatches
                     for title in trophy_titles_to_be_updated:
                         game = title['game']
                         platform = game.title_platform[0] if not game.title_platform[0] == 'PSPC' else game.title_platform[1]
                         if PSNManager.assign_sync_trophies(profile.id, game.np_communication_id, platform, priority_override='low_priority'):
-                            queued_count += 1
-                    profile.add_to_sync_target(queued_count * 2)  # sync_trophies increments by 2
+                            queued_count += 2  # sync_trophies = 2 progress ticks
+                    profile.add_to_sync_target(queued_count)
 
                     # Early return: skip badge/milestone/challenge checks.
                     # The follow-up sync_complete (triggered by pending_sync_complete
@@ -1010,35 +1037,60 @@ class TokenKeeper:
                 profile.last_profile_health_check = timezone.now()
                 profile.save(update_fields=['last_profile_health_check'])
 
-            # Trophy record completeness check: detect games where sync_trophies
-            # failed but the Game still has defined_trophies > 0 with zero Trophy
-            # records in the DB.  Cooldown prevents infinite re-queue loops if
-            # sync_trophies keeps failing for the same games.
-            #
-            # Single query with annotation: count Trophy records per game and
-            # filter for 0, scoped to this user's games only.
-            completeness_cooldown_key = f"trophy_completeness_check:{profile_id}"
-            if not redis_client.exists(completeness_cooldown_key):
-                from django.db.models import Count as _Count
-                incomplete_games = list(
-                    Game.objects.filter(
-                        played_by__profile=profile,
-                        defined_trophies__has_key='bronze',
-                    ).annotate(
-                        trophy_record_count=_Count('trophies'),
-                    ).filter(
-                        trophy_record_count=0,
-                    )
-                )
+            # Trophy/TrophyGroup completeness check: detect games where sync jobs
+            # failed, leaving the Game with defined_trophies > 0 but zero Trophy
+            # records or zero TrophyGroup records in the DB.  Separate cooldowns
+            # per check type so one failure doesn't block the other from retrying.
+            trophy_cooldown_key = f"trophy_completeness_check:{profile_id}"
+            group_cooldown_key = f"group_completeness_check:{profile_id}"
+            check_trophies = not redis_client.exists(trophy_cooldown_key)
+            check_groups = not redis_client.exists(group_cooldown_key)
 
-                if incomplete_games:
-                    logger.warning(
-                        f"Trophy record completeness: profile {profile_id} has "
-                        f"{len(incomplete_games)} game(s) with 0 Trophy records. "
-                        f"Re-queuing sync_trophies."
+            if check_trophies or check_groups:
+                from django.db.models import Count as _Count
+
+                incomplete_trophy_games = []
+                incomplete_group_games = []
+
+                if check_trophies:
+                    # Games with 0 Trophy records (sync_trophies failed)
+                    incomplete_trophy_games = list(
+                        Game.objects.filter(
+                            played_by__profile=profile,
+                            defined_trophies__has_key='bronze',
+                        ).annotate(
+                            trophy_record_count=_Count('trophies'),
+                        ).filter(
+                            trophy_record_count=0,
+                        )
                     )
-                    # Set cooldown so we don't retry again for 6 hours
-                    redis_client.set(completeness_cooldown_key, "1", ex=21600)
+
+                if check_groups:
+                    # Games with 0 TrophyGroup records (sync_trophy_groups failed)
+                    incomplete_group_games = list(
+                        Game.objects.filter(
+                            played_by__profile=profile,
+                            defined_trophies__has_key='bronze',
+                        ).annotate(
+                            group_count=_Count('trophy_groups'),
+                        ).filter(
+                            group_count=0,
+                        )
+                    )
+
+                if incomplete_trophy_games or incomplete_group_games:
+                    if incomplete_trophy_games:
+                        logger.warning(
+                            f"Trophy record completeness: profile {profile_id} has "
+                            f"{len(incomplete_trophy_games)} game(s) with 0 Trophy records."
+                        )
+                        redis_client.set(trophy_cooldown_key, "1", ex=21600)
+                    if incomplete_group_games:
+                        logger.warning(
+                            f"TrophyGroup completeness: profile {profile_id} has "
+                            f"{len(incomplete_group_games)} game(s) with 0 TrophyGroup records."
+                        )
+                        redis_client.set(group_cooldown_key, "1", ex=21600)
 
                     profile.reset_sync_progress()
                     profile.set_sync_status('syncing')
@@ -1050,14 +1102,23 @@ class TokenKeeper:
                     redis_client.set(pending_key, pending_data, ex=21600)
 
                     queued_count = 0
-                    for game in incomplete_games:
+                    # Re-queue sync_trophy_groups for games missing groups
+                    for game in incomplete_group_games:
+                        platform = game.title_platform[0] if not game.title_platform[0] == 'PSPC' else game.title_platform[1]
+                        args = [game.np_communication_id, platform]
+                        PSNManager.assign_job('sync_trophy_groups', args, profile.id)
+                        queued_count += 1  # group sync = 1 progress tick
+
+                    # Re-queue sync_trophies for games missing trophy records
+                    for game in incomplete_trophy_games:
                         platform = game.title_platform[0] if not game.title_platform[0] == 'PSPC' else game.title_platform[1]
                         if PSNManager.assign_sync_trophies(
                             profile.id, game.np_communication_id, platform,
                             priority_override='low_priority'
                         ):
-                            queued_count += 1
-                    profile.add_to_sync_target(queued_count * 2)
+                            queued_count += 2  # sync_trophies = 2 progress ticks
+
+                    profile.add_to_sync_target(queued_count)
                     profile.last_profile_health_check = timezone.now()
                     profile.save(update_fields=['last_profile_health_check'])
                     return
