@@ -1022,7 +1022,7 @@ class TokenKeeper:
                 from django.db.models import Count as _Count
                 incomplete_games = list(
                     Game.objects.filter(
-                        profilegame__profile=profile,
+                        played_by__profile=profile,
                         defined_trophies__has_key='bronze',
                     ).annotate(
                         trophy_record_count=_Count('trophies'),
