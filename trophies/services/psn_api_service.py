@@ -4,7 +4,7 @@ from datetime import timedelta
 from django.utils import timezone
 from django.db import transaction, IntegrityError, OperationalError
 from tenacity import retry, stop_after_attempt, wait_fixed, retry_if_exception_type
-from django.db.models import F, Count, Max, Q, Subquery, OuterRef, FloatField, Case, When, Value
+from django.db.models import F, Count, Max, Q, Subquery, OuterRef, FloatField
 from django.db.models.functions import Coalesce, Cast
 from trophies.models import Profile, Game, ProfileGame, Trophy, EarnedTrophy, Concept, TrophyGroup, Badge
 from psnawp_api.models.title_stats import TitleStats
@@ -595,18 +595,13 @@ class PsnApiService:
                 .values('played_count')[:1]
             )
             new_earned = Coalesce(Subquery(earned_subq), 0)
-            played = Coalesce(Subquery(game_played_subq), 0)
+            # Coalesce to 1 (not 0) to prevent division by zero. Games with
+            # 0 players also have 0 earned trophies, so 0/1 = 0.0 is correct.
+            played = Coalesce(Subquery(game_played_subq), 1)
 
             Trophy.objects.filter(game_id__in=game_batch_ids).update(
                 earned_count=new_earned,
-                earn_rate=Case(
-                    When(
-                        condition=played > Value(0),
-                        then=Cast(new_earned, FloatField()) / Cast(played, FloatField()),
-                    ),
-                    default=Value(0.0),
-                    output_field=FloatField(),
-                ),
+                earn_rate=Cast(new_earned, FloatField()) / Cast(played, FloatField()),
             )
 
             logger.info(f"Updated Trophies for {len(game_batch_ids)} games.")
