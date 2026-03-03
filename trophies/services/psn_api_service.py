@@ -601,7 +601,7 @@ class PsnApiService:
                 earned_count=new_earned,
                 earn_rate=Case(
                     When(
-                        game__played_count__gt=0,
+                        condition=played > Value(0),
                         then=Cast(new_earned, FloatField()) / Cast(played, FloatField()),
                     ),
                     default=Value(0.0),
