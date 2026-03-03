@@ -4,7 +4,8 @@ from datetime import timedelta
 from django.utils import timezone
 from django.db import transaction, IntegrityError, OperationalError
 from tenacity import retry, stop_after_attempt, wait_fixed, retry_if_exception_type
-from django.db.models import F, Count, Max, Q
+from django.db.models import F, Count, Max, Q, Subquery, OuterRef, FloatField
+from django.db.models.functions import Coalesce, Cast
 from trophies.models import Profile, Game, ProfileGame, Trophy, EarnedTrophy, Concept, TrophyGroup, Badge
 from psnawp_api.models.title_stats import TitleStats
 from psnawp_api.models.trophies import TrophyTitle, TrophyGroupSummary
@@ -502,7 +503,6 @@ class PsnApiService:
         return game, trophies
     
     @classmethod
-    @transaction.atomic
     def update_profilegame_stats(cls, profilegame_ids: list[int]):
         start_time = time.time()
         batch_size = 500
@@ -557,50 +557,58 @@ class PsnApiService:
 
         unique_game_ids = list(unique_game_ids)
         total_games = len(unique_game_ids)
-        games_to_update = []
-        trophies_to_update = []
 
+        # Update Game.played_count and Trophy.earned_count/earn_rate using
+        # subquery-based UPDATEs. This avoids loading thousands of objects into
+        # Python and holds row locks only for the duration of each UPDATE
+        # statement, preventing the long lock holds that caused cross-profile
+        # lock timeouts with the old bulk_update approach.
         for i in range(0, total_games, batch_size):
             game_batch_ids = unique_game_ids[i:i + batch_size]
 
-            played_counts_qs = ProfileGame.objects.filter(game__id__in=game_batch_ids).values('game__id').annotate(new_played_count=Count('id'))
-            played_counts_dict = {item['game__id']: item['new_played_count'] for item in played_counts_qs}
+            # Game.played_count via subquery
+            played_subq = (
+                ProfileGame.objects
+                .filter(game=OuterRef('pk'))
+                .values('game')
+                .annotate(cnt=Count('id'))
+                .values('cnt')
+            )
+            updated_games = Game.objects.filter(id__in=game_batch_ids).update(
+                played_count=Coalesce(Subquery(played_subq), 0)
+            )
+            if updated_games:
+                logger.info(f"Updated {updated_games} Games.")
 
-            games_qs = Game.objects.filter(id__in=game_batch_ids)
-            for game in games_qs:
-                new_played_count = played_counts_dict.get(game.id, 0)
-                if new_played_count != game.played_count:
-                    game.played_count = new_played_count
-                    games_to_update.append(game)
+            # Trophy.earned_count via subquery
+            earned_subq = (
+                EarnedTrophy.objects
+                .filter(trophy=OuterRef('pk'), earned=True)
+                .values('trophy')
+                .annotate(cnt=Count('id'))
+                .values('cnt')
+            )
+            Trophy.objects.filter(game_id__in=game_batch_ids).update(
+                earned_count=Coalesce(Subquery(earned_subq), 0)
+            )
 
-            earned_counts_qs = EarnedTrophy.objects.filter(trophy__game__id__in=game_batch_ids, earned=True).values('trophy__id').annotate(new_earned_count=Count('id'))
+            # Trophy.earn_rate = earned_count / game.played_count (0.0 if no players)
+            # Game.played_count was already updated above, so we can reference it directly.
+            Trophy.objects.filter(
+                game_id__in=game_batch_ids,
+                game__played_count__gt=0,
+            ).update(
+                earn_rate=Cast(F('earned_count'), FloatField()) / Cast(
+                    F('game__played_count'), FloatField()
+                )
+            )
+            Trophy.objects.filter(
+                game_id__in=game_batch_ids,
+                game__played_count=0,
+            ).update(earn_rate=0.0)
 
-            earned_counts_dict = {item['trophy__id']: item['new_earned_count'] for item in earned_counts_qs}
+            logger.info(f"Updated Trophies for {len(game_batch_ids)} games.")
 
-            trophies_qs = Trophy.objects.filter(game__id__in=game_batch_ids).select_related('game')
-            for trophy in trophies_qs:
-                new_earned_count = earned_counts_dict.get(trophy.id, 0)
-                new_earn_rate = new_earned_count / played_counts_dict.get(trophy.game.id, 1) if played_counts_dict.get(trophy.game.id, 0) > 0 else 0.0
-                updated = False
-                if new_earned_count != trophy.earned_count:
-                    trophy.earned_count = new_earned_count
-                    updated = True
-                if new_earn_rate != trophy.earn_rate:
-                    trophy.earn_rate = new_earn_rate
-                    updated = True
-                if updated:
-                    trophies_to_update.append(trophy)
-        
-            if games_to_update:
-                Game.objects.bulk_update(games_to_update, ['played_count'])
-                logger.info(f"Updated {len(games_to_update)} Games.")
-                games_to_update = []
-            
-            if trophies_to_update:
-                Trophy.objects.bulk_update(trophies_to_update, ['earned_count', 'earn_rate'])
-                logger.info(f"Updated {len(trophies_to_update)} Trophies.")
-                trophies_to_update = []
-        
         duration = time.time() - start_time
         logger.info(f"Completed stats update for {len(profilegame_ids)} ProfileGames ({total_games} unique games) in {duration:2f}s")
             

@@ -280,7 +280,10 @@ class TokenKeeper:
             self._health_thread.join(timeout=self.health_interval + 5)
         if self._stats_thread and self._stats_thread.is_alive():
             self._stats_thread.join(timeout=self.stats_interval + 5)
+        current_thread = threading.current_thread()
         for worker in self._job_workers:
+            if worker is current_thread:
+                continue
             if worker.is_alive():
                 worker.join(timeout=5)
         self._job_workers = []
