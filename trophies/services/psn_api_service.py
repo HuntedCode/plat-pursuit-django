@@ -593,13 +593,18 @@ class PsnApiService:
             )
 
             # Trophy.earn_rate = earned_count / game.played_count (0.0 if no players)
-            # Game.played_count was already updated above, so we can reference it directly.
+            # Django disallows F() FK traversal in .update() SET clause, so use a Subquery.
+            game_played_subq = (
+                Game.objects
+                .filter(pk=OuterRef('game_id'))
+                .values('played_count')[:1]
+            )
             Trophy.objects.filter(
                 game_id__in=game_batch_ids,
                 game__played_count__gt=0,
             ).update(
                 earn_rate=Cast(F('earned_count'), FloatField()) / Cast(
-                    F('game__played_count'), FloatField()
+                    Coalesce(Subquery(game_played_subq), 1), FloatField()
                 )
             )
             Trophy.objects.filter(
