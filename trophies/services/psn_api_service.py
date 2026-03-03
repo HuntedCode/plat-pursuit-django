@@ -4,7 +4,7 @@ from datetime import timedelta
 from django.utils import timezone
 from django.db import transaction, IntegrityError, OperationalError
 from tenacity import retry, stop_after_attempt, wait_fixed, retry_if_exception_type
-from django.db.models import F, Count, Max, Q, Subquery, OuterRef, FloatField
+from django.db.models import F, Count, Max, Q, Subquery, OuterRef, FloatField, Case, When, Value
 from django.db.models.functions import Coalesce, Cast
 from trophies.models import Profile, Game, ProfileGame, Trophy, EarnedTrophy, Concept, TrophyGroup, Badge
 from psnawp_api.models.title_stats import TitleStats
@@ -555,7 +555,7 @@ class PsnApiService:
             logger.info(f"Updated batch of {len(batch)} ProfileGames.")
         logger.info(f"Updated {total_pgs} ProfileGames.")
 
-        unique_game_ids = list(unique_game_ids)
+        unique_game_ids = sorted(unique_game_ids)
         total_games = len(unique_game_ids)
 
         # Update Game.played_count and Trophy.earned_count/earn_rate using
@@ -580,7 +580,8 @@ class PsnApiService:
             if updated_games:
                 logger.info(f"Updated {updated_games} Games.")
 
-            # Trophy.earned_count via subquery
+            # Trophy.earned_count + earn_rate in a single UPDATE to avoid
+            # AB/BA deadlocks with concurrent sync_trophies workers.
             earned_subq = (
                 EarnedTrophy.objects
                 .filter(trophy=OuterRef('pk'), earned=True)
@@ -588,29 +589,25 @@ class PsnApiService:
                 .annotate(cnt=Count('id'))
                 .values('cnt')
             )
-            Trophy.objects.filter(game_id__in=game_batch_ids).update(
-                earned_count=Coalesce(Subquery(earned_subq), 0)
-            )
-
-            # Trophy.earn_rate = earned_count / game.played_count (0.0 if no players)
-            # Django disallows F() FK traversal in .update() SET clause, so use a Subquery.
             game_played_subq = (
                 Game.objects
                 .filter(pk=OuterRef('game_id'))
                 .values('played_count')[:1]
             )
-            Trophy.objects.filter(
-                game_id__in=game_batch_ids,
-                game__played_count__gt=0,
-            ).update(
-                earn_rate=Cast(F('earned_count'), FloatField()) / Cast(
-                    Coalesce(Subquery(game_played_subq), 1), FloatField()
-                )
+            new_earned = Coalesce(Subquery(earned_subq), 0)
+            played = Coalesce(Subquery(game_played_subq), 0)
+
+            Trophy.objects.filter(game_id__in=game_batch_ids).update(
+                earned_count=new_earned,
+                earn_rate=Case(
+                    When(
+                        game__played_count__gt=0,
+                        then=Cast(new_earned, FloatField()) / Cast(played, FloatField()),
+                    ),
+                    default=Value(0.0),
+                    output_field=FloatField(),
+                ),
             )
-            Trophy.objects.filter(
-                game_id__in=game_batch_ids,
-                game__played_count=0,
-            ).update(earn_rate=0.0)
 
             logger.info(f"Updated Trophies for {len(game_batch_ids)} games.")
 
