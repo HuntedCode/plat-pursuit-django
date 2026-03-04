@@ -63,7 +63,7 @@ class CustomAccountAdapter(DefaultAccountAdapter):
             logger.exception(f"Failed to send verification email to {email}: {e}")
             raise  # Re-raise so allauth knows sending failed
 
-    def send_password_reset_mail(self, request, user, password_reset_url):
+    def send_password_reset_mail(self, user, email, context):
         """
         Override to send custom HTML password reset email using EmailService.
         Matches the styling of our monthly recap emails for brand consistency.
@@ -71,7 +71,8 @@ class CustomAccountAdapter(DefaultAccountAdapter):
         from core.services.email_service import EmailService
         from users.services.email_preference_service import EmailPreferenceService
 
-        email = user.email
+        # password_reset_url is inside the context dict (allauth 65.x API)
+        password_reset_url = context.get('password_reset_url', '')
 
         # Generate email preferences token
         try:
@@ -82,7 +83,7 @@ class CustomAccountAdapter(DefaultAccountAdapter):
             preference_url = f"{settings.SITE_URL}/users/email-preferences/"
 
         # Build template context
-        context = {
+        template_context = {
             'username': user.username or email.split('@')[0],  # Fallback to email prefix
             'password_reset_url': password_reset_url,
             'site_url': settings.SITE_URL,
@@ -95,7 +96,7 @@ class CustomAccountAdapter(DefaultAccountAdapter):
                 subject='Reset Your Password',
                 to_emails=[email],
                 template_name='emails/password_reset.html',
-                context=context,
+                context=template_context,
                 fail_silently=False,
                 log_email_type='password_reset',
                 log_user=user,
