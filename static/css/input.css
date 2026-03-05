@@ -335,6 +335,16 @@
     @apply w-5 h-5;
   }
 
+  /* ===== Toast Container (clear mobile tabbar) ===== */
+  #toast-container {
+    bottom: 5rem;
+  }
+  @media (min-width: 1024px) {
+    #toast-container {
+      bottom: 1rem;
+    }
+  }
+
   /* ===== Expandable Search Bar ===== */
   .search-expandable {
     max-width: 0;
