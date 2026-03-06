@@ -355,6 +355,43 @@ class ScheduledNotification(models.Model):
         return True, None
 
 
+class DeviceToken(models.Model):
+    """
+    Push notification device token for a user's mobile device.
+    Registered on app launch/login, removed on logout.
+    Used by PushNotificationService to deliver FCM push notifications
+    to iOS (via FCM APNs bridge) and Android devices.
+    """
+    PLATFORM_CHOICES = [
+        ('ios', 'iOS'),
+        ('android', 'Android'),
+    ]
+
+    user = models.ForeignKey(
+        CustomUser,
+        on_delete=models.CASCADE,
+        related_name='device_tokens',
+    )
+    token = models.CharField(
+        max_length=512,
+        unique=True,
+        help_text="Expo push token or raw FCM/APNs device token",
+    )
+    platform = models.CharField(max_length=10, choices=PLATFORM_CHOICES)
+    created_at = models.DateTimeField(auto_now_add=True)
+    last_used = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Device Token'
+        verbose_name_plural = 'Device Tokens'
+        indexes = [
+            models.Index(fields=['user']),
+        ]
+
+    def __str__(self):
+        return f"{self.user.email} [{self.platform}] {self.token[:20]}..."
+
+
 class NotificationLog(models.Model):
     """
     Audit log for sent bulk notifications.

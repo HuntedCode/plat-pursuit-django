@@ -40,6 +40,7 @@ class RecapIndexView(LoginRequiredMixin, RecapSyncGateMixin, ProfileHotbarMixin,
                 'profile': profile,
                 'stale_month_name': calendar.month_name[target_month],
                 'stale_year': target_year,
+                'user_timezone': request.user.user_timezone or 'UTC',
             })
 
         # Try to get the target month's recap
@@ -75,6 +76,7 @@ class RecapIndexView(LoginRequiredMixin, RecapSyncGateMixin, ProfileHotbarMixin,
         context['available_months'] = available_months
         context['is_premium'] = profile.user_is_premium
         context['no_activity'] = len(available_months) == 0
+        context['user_timezone'] = self.request.user.user_timezone or 'UTC'
 
         return context
 
@@ -119,6 +121,7 @@ class RecapSlideView(LoginRequiredMixin, RecapSyncGateMixin, ProfileHotbarMixin,
                 'profile': profile,
                 'stale_month_name': calendar.month_name[month],
                 'stale_year': year,
+                'user_timezone': request.user.user_timezone or 'UTC',
             })
 
         # Don't allow future months
@@ -137,6 +140,7 @@ class RecapSlideView(LoginRequiredMixin, RecapSyncGateMixin, ProfileHotbarMixin,
         context['month'] = month
         context['month_name'] = calendar.month_name[month]
         context['is_premium'] = profile.user_is_premium
+        context['user_timezone'] = self.request.user.user_timezone or 'UTC'
 
         # Calendar month selector
         calendar_data = MonthlyRecapService.get_available_months_by_year(

@@ -11,6 +11,7 @@
         <h1 class="text-3xl font-bold text-primary mb-2">Monthly Recap</h1>
         <p class="text-base-content/70">Your trophy hunting highlights, wrapped!</p>
     </div>
+    {% include 'recap/_timezone_section.html' %}
     <div class="card bg-base-200 shadow-xl p-8">
         {% if sync_gate == 'no_profile' %}
         <h2 class="text-xl font-semibold mb-4">Link Your PSN First</h2>
@@ -48,6 +49,7 @@
         <h1 class="text-3xl font-bold text-primary mb-2">Monthly Recap</h1>
         <p class="text-base-content/70">Your trophy hunting highlights, wrapped!</p>
     </div>
+    {% include 'recap/_timezone_section.html' %}
 
     {% if no_activity %}
     <div class="card bg-base-200 shadow-xl p-8">
@@ -105,6 +107,7 @@
 {% endblock %}
 
 {% block js_scripts %}
+{% include 'recap/_timezone_section_js.html' %}
 <script>
     PlatPursuit.ZoomScaler.init();
 </script>

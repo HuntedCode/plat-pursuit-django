@@ -129,6 +129,7 @@ INSTALLED_APPS = [
     "trophies.apps.TrophiesConfig",
     'rest_framework',
     'rest_framework.authtoken',
+    'corsheaders',
     'api',
     'django_extensions',
     'storages',
@@ -147,6 +148,7 @@ AUTHENTICATION_BACKENDS = [
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
+    "corsheaders.middleware.CorsMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -164,7 +166,11 @@ ACCOUNT_SIGNUP_FIELDS = ['email*', 'email2*', 'password1*', 'password2*']
 ACCOUNT_UNIQUE_EMAIL = True
 ACCOUNT_EMAIL_VERIFICATION = 'mandatory'
 ACCOUNT_PASSWORD_MIN_LENGTH = 8
-ACCOUNT_RATE_LIMITS = {'reset_password': '5/m', 'confirm_email': '5/m'}
+ACCOUNT_RATE_LIMITS = {
+    'reset_password': '5/m',
+    'confirm_email': '5/m',
+    'login_failed': '10/m/ip,5/300s/key',  # 10/min per IP + 5 per 5min per email
+}
 ACCOUNT_CONFIRM_EMAIL_ON_GET = True
 ACCOUNT_LOGIN_ON_EMAIL_CONFIRMATION = True
 ACCOUNT_EMAIL_CONFIRMATION_AUTO_LOGIN = True
@@ -252,6 +258,28 @@ REST_FRAMEWORK = {
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': 10,
 }
+
+# CORS configuration for mobile app
+# Token-auth API requests are CSRF-exempt, so CORS is the only cross-origin guard needed.
+CORS_ALLOWED_ORIGINS = [origin.strip() for origin in os.getenv('CORS_ALLOWED_ORIGINS', '').split(',') if origin.strip()]
+CORS_ALLOWED_ORIGINS += [
+    'http://localhost:8081',   # Expo dev server (default)
+    'http://localhost:19006',  # Expo web dev server
+]
+# Allow Authorization header so mobile clients can send the DRF token
+CORS_ALLOW_HEADERS = [
+    'accept',
+    'accept-encoding',
+    'authorization',
+    'content-type',
+    'dnt',
+    'origin',
+    'user-agent',
+    'x-csrftoken',
+    'x-requested-with',
+]
+# Only expose the API prefix to CORS — the rest of the site is same-origin only
+CORS_URLS_REGEX = r'^/api/v1/.*$'
 
 # Password validation
 # https://docs.djangoproject.com/en/5.2/ref/settings/#auth-password-validators

@@ -1,0 +1,129 @@
+<script>
+(function() {
+    const select = document.getElementById('recap-timezone-select');
+    if (!select) return;
+
+    const currentTz = select.dataset.current;
+
+    const TIMEZONE_GROUPS = {
+        'Americas': [
+            'America/New_York', 'America/Chicago', 'America/Denver',
+            'America/Los_Angeles', 'America/Anchorage', 'Pacific/Honolulu',
+            'America/Phoenix', 'America/Toronto', 'America/Vancouver',
+            'America/Halifax', 'America/St_Johns', 'America/Mexico_City',
+            'America/Bogota', 'America/Lima', 'America/Santiago',
+            'America/Sao_Paulo', 'America/Argentina/Buenos_Aires', 'America/Caracas',
+        ],
+        'Europe': [
+            'Europe/London', 'Europe/Dublin', 'Europe/Lisbon',
+            'Europe/Paris', 'Europe/Berlin', 'Europe/Madrid',
+            'Europe/Rome', 'Europe/Amsterdam', 'Europe/Brussels',
+            'Europe/Vienna', 'Europe/Warsaw', 'Europe/Prague',
+            'Europe/Budapest', 'Europe/Bucharest', 'Europe/Athens',
+            'Europe/Helsinki', 'Europe/Stockholm', 'Europe/Oslo',
+            'Europe/Copenhagen', 'Europe/Moscow', 'Europe/Istanbul',
+        ],
+        'Asia & Middle East': [
+            'Asia/Dubai', 'Asia/Riyadh', 'Asia/Tehran',
+            'Asia/Karachi', 'Asia/Kolkata', 'Asia/Dhaka',
+            'Asia/Bangkok', 'Asia/Singapore', 'Asia/Hong_Kong',
+            'Asia/Shanghai', 'Asia/Taipei', 'Asia/Seoul',
+            'Asia/Tokyo', 'Asia/Manila', 'Asia/Jakarta',
+        ],
+        'Oceania': [
+            'Pacific/Auckland', 'Australia/Sydney', 'Australia/Melbourne',
+            'Australia/Brisbane', 'Australia/Perth', 'Australia/Adelaide',
+            'Pacific/Fiji',
+        ],
+        'Africa': [
+            'Africa/Cairo', 'Africa/Johannesburg', 'Africa/Lagos',
+            'Africa/Nairobi', 'Africa/Casablanca',
+        ],
+        'Other': ['UTC'],
+    };
+
+    const listedTimezones = new Set();
+    Object.values(TIMEZONE_GROUPS).forEach(tzs => tzs.forEach(tz => listedTimezones.add(tz)));
+
+    let browserTz = null;
+    try {
+        browserTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    } catch (e) { /* ignore */ }
+
+    // Add detected/current timezones not in the curated list
+    const extrasToAdd = [];
+    if (currentTz && !listedTimezones.has(currentTz)) extrasToAdd.push(currentTz);
+    if (browserTz && !listedTimezones.has(browserTz) && browserTz !== currentTz) extrasToAdd.push(browserTz);
+
+    if (extrasToAdd.length > 0) {
+        const extraGroup = document.createElement('optgroup');
+        extraGroup.label = 'Detected / Current';
+        extrasToAdd.forEach(tz => {
+            const opt = document.createElement('option');
+            opt.value = tz;
+            opt.textContent = tz.replace(/_/g, ' ');
+            if (tz === currentTz) opt.selected = true;
+            extraGroup.appendChild(opt);
+        });
+        select.appendChild(extraGroup);
+    }
+
+    // Build grouped options
+    Object.entries(TIMEZONE_GROUPS).forEach(([group, tzs]) => {
+        const optgroup = document.createElement('optgroup');
+        optgroup.label = group;
+        tzs.forEach(tz => {
+            const opt = document.createElement('option');
+            opt.value = tz;
+            opt.textContent = tz.replace(/^[^/]+\//, '').replace(/_/g, ' ');
+            if (tz === currentTz) opt.selected = true;
+            optgroup.appendChild(opt);
+        });
+        select.appendChild(optgroup);
+    });
+
+    // Browser timezone mismatch hint
+    if (browserTz && browserTz !== currentTz) {
+        const container = document.getElementById('tz-hint-container');
+        const hint = document.createElement('p');
+        hint.className = 'text-xs text-warning mt-2';
+        const friendlyBrowserTz = browserTz.replace(/_/g, ' ');
+        hint.innerHTML =
+            'Your browser reports <strong>' + PlatPursuit.HTMLUtils.escape(friendlyBrowserTz) + '</strong>. ' +
+            '<button type="button" class="link link-warning text-xs font-semibold" id="tz-use-browser-btn">Use this instead?</button>';
+        container.appendChild(hint);
+
+        document.getElementById('tz-use-browser-btn').addEventListener('click', function() {
+            saveTimezone(browserTz);
+        });
+    }
+
+    // Save timezone on change
+    select.addEventListener('change', function() {
+        const newTz = select.value;
+        if (newTz === currentTz) return;
+        saveTimezone(newTz);
+    });
+
+    async function saveTimezone(tz) {
+        select.disabled = true;
+        try {
+            const result = await PlatPursuit.API.post('/api/v1/user/timezone/', { timezone: tz });
+            const msg = result.recaps_reset > 0
+                ? 'Timezone updated. Your recaps will regenerate with the new timezone.'
+                : 'Timezone updated.';
+            PlatPursuit.ToastManager.success(msg + ' Reloading...');
+            setTimeout(() => window.location.reload(), 1500);
+        } catch (err) {
+            let msg = 'Failed to update timezone.';
+            try {
+                const errData = await err.response?.json();
+                msg = errData?.error || msg;
+            } catch { /* ignore */ }
+            PlatPursuit.ToastManager.error(msg);
+            select.value = currentTz;
+            select.disabled = false;
+        }
+    }
+})();
+</script>

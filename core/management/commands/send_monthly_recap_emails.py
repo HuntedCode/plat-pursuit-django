@@ -8,7 +8,7 @@ Designed to run via Render cron on the 2nd-3rd of each month after recaps
 have been generated and finalized.
 
 Usage:
-    python manage.py send_monthly_recap_emails                      # Send all pending emails & notifications
+    python manage.py send_monthly_recap_emails                      # Send for previous month (default)
     python manage.py send_monthly_recap_emails --dry-run            # Preview what would be sent
     python manage.py send_monthly_recap_emails --year 2026 --month 1  # Specific month only
     python manage.py send_monthly_recap_emails --profile-id 123     # Specific user only
@@ -112,6 +112,16 @@ class Command(BaseCommand):
 
     def _build_queryset(self, year, month, profile_id, force):
         """Build queryset of recaps that need emails sent."""
+        # Default to previous month when no year/month specified.
+        # This prevents user-generated recaps (from browsing old months)
+        # from being picked up by the cron job.
+        if not year and not month:
+            now = timezone.now()
+            if now.month == 1:
+                year, month = now.year - 1, 12
+            else:
+                year, month = now.year, now.month - 1
+
         # Base query: finalized recaps with linked profiles and user emails
         queryset = MonthlyRecap.objects.filter(
             is_finalized=True,
@@ -126,7 +136,7 @@ class Command(BaseCommand):
         if not force:
             queryset = queryset.filter(email_sent=False)
 
-        # Filter by year/month if specified
+        # Filter by year/month
         if year:
             queryset = queryset.filter(year=year)
         if month:
@@ -312,6 +322,10 @@ class Command(BaseCommand):
         Returns:
             bool: True if notification sent successfully, False otherwise
         """
+        # Skip if notification already sent (prevents duplicates on re-runs)
+        if recap.notification_sent:
+            return False
+
         user = recap.profile.user
 
         # Build notification context (teaser only needs base fields)

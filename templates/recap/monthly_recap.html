@@ -367,6 +367,8 @@
     </div>
     {% endif %}
 
+    {% include 'recap/_timezone_section.html' %}
+
     <!-- Recap data for JS -->
     <script id="recap-data" type="application/json">{{ recap_json|safe }}</script>
 
@@ -462,6 +464,7 @@
 {% endblock %}
 
 {% block js_scripts %}
+{% include 'recap/_timezone_section_js.html' %}
 <!-- Gradient themes from server (single source of truth) -->
 <script>window.GRADIENT_THEMES = {% gradient_themes_json %};</script>
 <!-- Color grid modal -->
