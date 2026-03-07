@@ -1171,6 +1171,25 @@ class TokenKeeper:
 
             logger.info(f"{profile.display_psn_username} account has finished syncing!")
         except Exception as e:
+            # Deadlock/lock-timeout errors are transient (our fault, not the user's).
+            # Instead of marking 'error', reset to 'synced' with a stale last_synced
+            # so the cron picks the profile up for a normal profile_refresh.
+            if isinstance(e, OperationalError):
+                err_msg = str(e).lower()
+                if "deadlock detected" in err_msg or "lock timeout" in err_msg:
+                    logger.warning(
+                        f"Deadlock/lock-timeout in sync_complete for profile {profile_id}, "
+                        f"resetting for cron retry: {e}"
+                    )
+                    try:
+                        profile.refresh_from_db()
+                        profile.last_synced = profile.last_synced - timedelta(days=10)
+                        profile.sync_status = 'synced'
+                        profile.save(update_fields=['last_synced', 'sync_status'])
+                    except Profile.DoesNotExist:
+                        logger.warning(f"Profile {profile_id} no longer exists during deadlock recovery.")
+                    return
+
             logger.exception(f"Error during sync_complete for profile {profile_id}: {e}")
             try:
                 profile.refresh_from_db()

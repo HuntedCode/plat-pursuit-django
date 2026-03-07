@@ -503,6 +503,7 @@ class PsnApiService:
         return game, trophies
     
     @classmethod
+    @retry(stop=stop_after_attempt(3), wait=wait_fixed(1), retry=retry_if_exception_type(OperationalError), reraise=True)
     def update_profilegame_stats(cls, profilegame_ids: list[int]):
         start_time = time.time()
         batch_size = 500
