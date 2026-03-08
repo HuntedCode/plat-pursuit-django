@@ -176,3 +176,25 @@ After all functional code is complete and working, run a dedicated style audit b
 Surface all findings and fix them before presenting the work as complete. The goal: the user should not need to do their own style audit pass.
 
 **Overall workflow**: brainstorm -> plan (with reuse check) -> implement (with inline audits) -> style polish -> done.
+
+## Documentation Maintenance
+
+All system documentation lives in `docs/`. See [docs/README.md](docs/README.md) for the full index.
+
+**Mandatory**: When creating, modifying, or extending any system, update the corresponding doc in the same PR. If no doc exists yet, create one using [docs/TEMPLATE.md](docs/TEMPLATE.md). Every doc must include a **Gotchas and Pitfalls** section.
+
+**What counts as a doc-worthy change:**
+- New models, services, views, or management commands
+- New API endpoints or changed endpoint behavior
+- New Redis keys or cache patterns
+- New JS utilities or significant changes to existing ones
+- New template patterns, context processors, or templatetags
+- Changes to the sync pipeline, badge evaluation, or payment flows
+- New cron jobs or changes to scheduling
+
+**Doc categories:**
+- `docs/architecture/` : Cross-cutting engine systems (sync, badges, payments, notifications, data model)
+- `docs/features/` : Self-contained feature docs (checklists, challenges, dashboard, etc.)
+- `docs/guides/` : How-to and operational docs (setup, commands, cron, email)
+- `docs/reference/` : Quick-lookup tables (API endpoints, JS utils, Redis keys, settings)
+- `docs/design/` : Long-form vision docs for unimplemented systems
