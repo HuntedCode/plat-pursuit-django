@@ -58,6 +58,7 @@ How-to and operational documentation.
 | [Cron Jobs](guides/cron-jobs.md) | Scheduled tasks: what runs when, dependencies |
 | [Email Setup](guides/email-setup.md) | SendGrid configuration, Cloudflare email routing |
 | [Mobile App](guides/mobile-app.md) | Mobile backend API, implementation status |
+| [Social Media Strategy](guides/social-media-strategy.md) | Platform strategy, content pillars, calendar, growth tactics |
 
 ## Reference
 
