@@ -31,6 +31,22 @@ def clean_title_field(value: str) -> str:
     return normalize_unicode_roman_numerals(cleaned)
 
 
+_GAME_SUFFIX_PATTERNS = [
+    re.compile(r'\s*-\s*trophy set\s*$', re.IGNORECASE),
+    re.compile(r'\s+trophy set\s*$', re.IGNORECASE),
+    re.compile(r'\s*-\s*trophies\s*$', re.IGNORECASE),
+    re.compile(r'\s+trophies\s*$', re.IGNORECASE),
+]
+
+
+def clean_game_title(value: str) -> str:
+    """Apply shared cleanup plus Game-specific suffix stripping."""
+    cleaned = clean_title_field(value)
+    for pattern in _GAME_SUFFIX_PATTERNS:
+        cleaned = pattern.sub('', cleaned).strip()
+    return cleaned
+
+
 # Create your models here.
 
 class Profile(models.Model):
@@ -488,7 +504,7 @@ class Game(models.Model):
     
     def save(self, *args, **kwargs):
         if self.title_name:
-            self.title_name = clean_title_field(self.title_name)
+            self.title_name = clean_game_title(self.title_name)
         super().save(*args, **kwargs)
 
     def add_concept(self, concept):
@@ -1070,6 +1086,11 @@ class TrophyGroup(models.Model):
     
     def __str__(self):
         return f"{self.trophy_group_name or self.trophy_group_id} ({self.game.title_name})"
+
+    def save(self, *args, **kwargs):
+        if self.trophy_group_name:
+            self.trophy_group_name = clean_title_field(self.trophy_group_name)
+        super().save(*args, **kwargs)
 
 
 class ConceptTrophyGroup(models.Model):

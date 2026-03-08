@@ -1,25 +1,9 @@
-import re
-
 from django.core.management.base import BaseCommand
 
-from trophies.models import Game, GameFamily, Concept, Trophy, clean_title_field
-
-
-# Game-specific patterns (some PSN titles include these suffixes)
-_GAME_SUFFIX_PATTERNS = [
-    re.compile(r'- trophy set', re.IGNORECASE),
-    re.compile(r'trophy set', re.IGNORECASE),
-    re.compile(r'- trophies', re.IGNORECASE),
-    re.compile(r'trophies', re.IGNORECASE),
-]
-
-
-def _clean_game_title(value: str) -> str:
-    """Apply shared cleanup plus Game-specific suffix stripping."""
-    cleaned = clean_title_field(value)
-    for pattern in _GAME_SUFFIX_PATTERNS:
-        cleaned = pattern.sub('', cleaned).strip()
-    return cleaned
+from trophies.models import (
+    Game, GameFamily, Concept, Trophy, TrophyGroup,
+    clean_title_field, clean_game_title,
+)
 
 
 class Command(BaseCommand):
@@ -73,7 +57,7 @@ class Command(BaseCommand):
 
         # Games (extra suffix stripping + lock_title flag)
         game_count = self._bulk_clean(
-            Game.objects.all(), 'title_name', _clean_game_title,
+            Game.objects.all(), 'title_name', clean_game_title,
             extra_setters={'lock_title': True}, dry_run=dry_run,
         )
         self.stdout.write(f"{'Would clean' if dry_run else 'Cleaned'} {game_count} games.")
@@ -90,13 +74,19 @@ class Command(BaseCommand):
         )
         self.stdout.write(f"{'Would clean' if dry_run else 'Cleaned'} {trophy_count} trophies.")
 
+        # Trophy Groups
+        group_count = self._bulk_clean(
+            TrophyGroup.objects.all(), 'trophy_group_name', clean_title_field, dry_run=dry_run,
+        )
+        self.stdout.write(f"{'Would clean' if dry_run else 'Cleaned'} {group_count} trophy groups.")
+
         # Game Families
         family_count = self._bulk_clean(
             GameFamily.objects.all(), 'canonical_name', clean_title_field, dry_run=dry_run,
         )
         self.stdout.write(f"{'Would clean' if dry_run else 'Cleaned'} {family_count} game families.")
 
-        total = game_count + concept_count + trophy_count + family_count
+        total = game_count + concept_count + trophy_count + group_count + family_count
         if total == 0:
             self.stdout.write(self.style.SUCCESS('All titles are already clean!'))
         elif dry_run:

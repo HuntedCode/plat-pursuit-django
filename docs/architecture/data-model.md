@@ -17,7 +17,9 @@ Key relationships:
 - `selected_background` FK to `Concept`
 
 ### Game
-A single PSN trophy list (one per `np_communication_id`). Different regional stacks of the same game are separate Game rows. Key fields include `title_name`, `title_platform` (JSON list of platforms), `title_image`, `region` (JSON list), `title_ids` (JSON list), `defined_trophies` (JSON dict of counts by type), and moderation flags (`shovelware_status`, `is_obtainable`, `is_delisted`, `has_online_trophies`). The `concept_lock` flag prevents sync from overwriting an admin-assigned concept.
+A single PSN trophy list (one per `np_communication_id`). Different regional stacks of the same game are separate Game rows. Key fields include `title_name`, `title_platform` (JSON list of platforms), `title_image`, `region` (JSON list), `title_ids` (JSON list), `defined_trophies` (JSON dict of counts by type), and moderation flags (`shovelware_status`, `is_obtainable`, `is_delisted`, `has_online_trophies`). The `concept_lock` flag prevents sync from overwriting an admin-assigned concept. The `lock_title` flag prevents sync from overwriting an admin-cleaned title.
+
+**Title cleaning:** All title/name fields are automatically cleaned on `save()` via model overrides. `clean_title_field()` strips trademark symbols and normalizes Unicode Roman numerals. Game titles additionally use `clean_game_title()`, which also strips PSN suffixes like "Trophy Set" and "Trophies". The `clean_titles` management command runs these same functions in bulk for retroactive cleanup. Both functions live in `trophies/models.py`.
 
 Key relationships:
 - `concept` FK to `Concept` (nullable, SET_NULL)
