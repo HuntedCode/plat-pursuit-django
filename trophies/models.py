@@ -1622,6 +1622,8 @@ class Milestone(models.Model):
         ('calendar_complete', 'Calendar Challenge Complete'),
         ('is_premium', 'Premium Subscriber'),
         ('subscription_months', 'Subscription Months'),
+        ('review_count', 'Quality Reviews Written'),
+        ('review_helpful_count', 'Review Helpful Votes Received'),
     ]
 
     name = models.CharField(max_length=255, unique=True, help_text="Unique name")
@@ -2128,6 +2130,9 @@ class Review(models.Model):
 
     # Denormalized reply count
     reply_count = models.PositiveIntegerField(default=0)
+
+    # Computed word count (auto-set on create/update, used by milestone handlers)
+    word_count = models.PositiveIntegerField(default=0)
 
     # Timestamps
     created_at = models.DateTimeField(auto_now_add=True)

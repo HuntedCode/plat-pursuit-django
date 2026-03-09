@@ -390,3 +390,45 @@ def handle_subscription_months(profile, milestone, _cache=None):
 
     achieved = current >= target
     return {'achieved': achieved, 'progress': current}
+
+
+# ── Review milestones ────────────────────────────────────────────────── #
+
+@register_handler('review_count')
+def handle_review_count(profile, milestone, _cache=None):
+    """Count of non-deleted reviews with 150+ words."""
+    from trophies.models import Review
+
+    target = milestone.criteria_details.get('target', 0)
+    cache_key = 'review_count'
+    if _cache is not None and cache_key in _cache:
+        current = _cache[cache_key]
+    else:
+        current = Review.objects.filter(
+            profile=profile, is_deleted=False, word_count__gte=150
+        ).count()
+        if _cache is not None:
+            _cache[cache_key] = current
+
+    return {'achieved': current >= target, 'progress': current}
+
+
+@register_handler('review_helpful_count')
+def handle_review_helpful_count(profile, milestone, _cache=None):
+    """Total helpful votes received across all non-deleted reviews."""
+    from django.db.models import Sum
+    from trophies.models import Review
+
+    target = milestone.criteria_details.get('target', 0)
+    cache_key = 'review_helpful_count'
+    if _cache is not None and cache_key in _cache:
+        current = _cache[cache_key]
+    else:
+        total = Review.objects.filter(
+            profile=profile, is_deleted=False
+        ).aggregate(total=Sum('helpful_count'))['total']
+        current = total or 0
+        if _cache is not None:
+            _cache[cache_key] = current
+
+    return {'achieved': current >= target, 'progress': current}

@@ -42,7 +42,7 @@ MILESTONE_CATEGORIES = OrderedDict([
     ('community', {
         'name': 'Community',
         'icon': 'community',
-        'criteria_types': ['rating_count', 'comment_upvotes', 'checklist_upvotes'],
+        'criteria_types': ['rating_count', 'comment_upvotes', 'checklist_upvotes', 'review_count', 'review_helpful_count'],
     }),
     ('collection', {
         'name': 'Collection',
@@ -93,6 +93,8 @@ CRITERIA_TYPE_DISPLAY_NAMES = {
     'discord_linked': 'Discord Account',
     'manual': 'Special Awards',
     'subscription_months': 'Subscription Loyalty',
+    'review_count': 'Quality Reviews',
+    'review_helpful_count': 'Review Helpful Votes',
 }
 for _m in ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec']:
     CRITERIA_TYPE_DISPLAY_NAMES[f'calendar_month_{_m}'] = f'{_m.capitalize()} Calendar'

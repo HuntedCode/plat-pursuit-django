@@ -165,6 +165,8 @@ _MILESTONE_DESCRIPTIONS = {
     'subgenre_progress': '{n} subgenre collections',
     'calendar_months_total': '{n} calendar months completed',
     'subscription_months': '{n} months subscribed',
+    'review_count': '{n} quality reviews written (150+ words)',
+    'review_helpful_count': '{n} helpful votes received on reviews',
 }
 
 
