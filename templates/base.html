@@ -38,7 +38,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&family=Poppins:wght@400;600;700&display=swap" rel="stylesheet">
     {% block extra_head %}{% endblock %}
   </head>
-  <body class="bg-base-100 text-base-content" {% if user.is_authenticated %}data-authenticated="true"{% endif %} {% if image_urls.bg_url %}style="background-image: url('{{ image_urls.bg_url }}'); background-size: cover; background-position: center; background-attachment: fixed;"{% elif user_theme_style %}style="{{ user_theme_style }}"{% endif %}>
+  <body class="bg-base-100 text-base-content{% if ADSENSE_ENABLED %} has-mobile-ad{% endif %}" {% if user.is_authenticated %}data-authenticated="true"{% endif %} {% if image_urls.bg_url %}style="background-image: url('{{ image_urls.bg_url }}'); background-size: cover; background-position: center; background-attachment: fixed;"{% elif user_theme_style %}style="{{ user_theme_style }}"{% endif %}>
     <div id="zoom-container">
     <div id="zoom-wrapper" class="min-h-screen flex flex-col">
     <a href="#main-content" class="sr-only focus:not-sr-only focus:absolute focus:top-0 focus:left-0 focus:z-50 focus:p-4 focus:bg-primary focus:text-primary-content focus:outline-none focus:ring-2 focus:ring-primary-focus">
@@ -101,6 +101,18 @@
     </div>
     {% include 'partials/back_to_top.html' %}
     {% block fixed_overlays %}{% endblock %}
+    {% if ADSENSE_ENABLED %}
+    <div id="mobile-ad-banner" class="fixed left-0 right-0 z-40 flex justify-center bg-base-300/90 lg:hidden"
+         style="bottom: calc(3.5rem + env(safe-area-inset-bottom, 0));">
+        <ins class="adsbygoogle"
+             style="display:inline-block;width:320px;height:50px;"
+             data-ad-client="{{ ADSENSE_PUB_ID }}"
+             data-ad-slot="9347573919"
+             data-ad-format="inline"
+             {% if ADSENSE_TEST_MODE %}data-adtest="on"{% endif %}></ins>
+        <script>(adsbygoogle = window.adsbygoogle || []).push({});</script>
+    </div>
+    {% endif %}
     {% include 'partials/mobile_tabbar.html' %}
 
     <!-- Toast Notification Container -->

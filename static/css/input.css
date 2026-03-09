@@ -339,9 +339,22 @@
   #toast-container {
     bottom: 5rem;
   }
+  .has-mobile-ad #toast-container {
+    bottom: 8.5rem;
+  }
+  /* ===== Back-to-Top Button (clear mobile tabbar + ad) ===== */
+  #back-to-top {
+    bottom: 6rem;
+  }
+  .has-mobile-ad #back-to-top {
+    bottom: 9.5rem;
+  }
   @media (min-width: 1024px) {
     #toast-container {
       bottom: 1rem;
+    }
+    #back-to-top {
+      bottom: 2rem;
     }
   }
 
@@ -408,6 +421,9 @@
   @media (max-width: 1023px) {
     #zoom-wrapper {
       padding-bottom: 3.5rem;
+    }
+    .has-mobile-ad #zoom-wrapper {
+      padding-bottom: 7rem;
     }
   }
 }
