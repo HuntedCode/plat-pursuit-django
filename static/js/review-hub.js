@@ -1,12 +1,12 @@
 /**
- * Community Hub: Review feed, voting, replies, ratings.
+ * Review Hub: Review feed, voting, replies, ratings.
  *
  * Client-side rendering of review cards from JSON API responses.
  * Uses IntersectionObserver for infinite scroll.
  */
 window.PlatPursuit = window.PlatPursuit || {};
 
-PlatPursuit.CommunityHub = {
+PlatPursuit.ReviewHub = {
     config: null,
     observer: null,
     offset: 0,
@@ -115,15 +115,15 @@ PlatPursuit.CommunityHub = {
 
         const editedTag = review.is_edited ? ' (edited)' : '';
         const ownActions = review.is_own ? `
-            <button class="btn btn-xs btn-ghost" onclick="PlatPursuit.CommunityHub.startInlineEdit(${review.id})" aria-label="Edit">
+            <button class="btn btn-xs btn-ghost" onclick="PlatPursuit.ReviewHub.startInlineEdit(${review.id})" aria-label="Edit">
                 <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
             </button>
-            <button class="btn btn-xs btn-ghost text-error" onclick="PlatPursuit.CommunityHub.deleteReview(${review.id})" aria-label="Delete">
+            <button class="btn btn-xs btn-ghost text-error" onclick="PlatPursuit.ReviewHub.deleteReview(${review.id})" aria-label="Delete">
                 <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
             </button>` : '';
 
         const reportBtn = (!review.is_own && this.config.isAuthenticated) ? `
-            <button class="btn btn-xs btn-ghost text-base-content/40 hover:text-warning" onclick="PlatPursuit.CommunityHub.reportReview(${review.id})" aria-label="Report">
+            <button class="btn btn-xs btn-ghost text-base-content/40 hover:text-warning" onclick="PlatPursuit.ReviewHub.reportReview(${review.id})" aria-label="Report">
                 <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 21v-16l5 3 4-4 4 4 5-3v16l-5-3-4 4-4-4-5 3z"/></svg>
             </button>` : '';
 
@@ -154,15 +154,15 @@ PlatPursuit.CommunityHub = {
                     </div>
                     <div class="review-body-display prose prose-sm max-w-none">${review.body_html || ''}</div>
                     <div class="flex flex-wrap items-center gap-3 mt-4 text-sm">
-                        <button class="btn btn-sm btn-ghost gap-1.5 vote-btn ${helpfulActive}" onclick="PlatPursuit.CommunityHub.toggleVote(${review.id}, 'helpful')" data-review-id="${review.id}" data-vote="helpful">
+                        <button class="btn btn-sm btn-ghost gap-1.5 vote-btn ${helpfulActive}" onclick="PlatPursuit.ReviewHub.toggleVote(${review.id}, 'helpful')" data-review-id="${review.id}" data-vote="helpful">
                             <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor"><path d="M2 21h4V9H2v12zm22-11c0-1.1-.9-2-2-2h-6.31l.95-4.57.03-.32c0-.41-.17-.79-.44-1.06L15.17 1 7.59 8.59C7.22 8.95 7 9.45 7 10v10c0 1.1.9 2 2 2h9c.83 0 1.54-.5 1.84-1.22l3.02-7.05c.09-.23.14-.47.14-.73v-2z"/></svg>
                             Helpful <span class="helpful-count">${review.helpful_count}</span>
                         </button>
-                        <button class="btn btn-sm btn-ghost gap-1.5 vote-btn ${funnyActive}" onclick="PlatPursuit.CommunityHub.toggleVote(${review.id}, 'funny')" data-review-id="${review.id}" data-vote="funny">
+                        <button class="btn btn-sm btn-ghost gap-1.5 vote-btn ${funnyActive}" onclick="PlatPursuit.ReviewHub.toggleVote(${review.id}, 'funny')" data-review-id="${review.id}" data-vote="funny">
                             <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M15.5 11c.5 0 .5-2 0-2s-.5 2 0 2zM8.5 11c.5 0 .5-2 0-2s-.5 2 0 2z"/><path d="M7 13c0 3 2.5 4.5 5 4.5s5-1.5 5-4.5H7z"/></svg>
                             Funny <span class="funny-count">${review.funny_count}</span>
                         </button>
-                        <button class="btn btn-sm btn-ghost gap-1.5" onclick="PlatPursuit.CommunityHub.toggleReplies(${review.id})" aria-label="Toggle replies">
+                        <button class="btn btn-sm btn-ghost gap-1.5" onclick="PlatPursuit.ReviewHub.toggleReplies(${review.id})" aria-label="Toggle replies">
                             <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>
                             Replies <span class="reply-count">${review.reply_count}</span>
                         </button>
@@ -278,7 +278,7 @@ PlatPursuit.CommunityHub = {
                 html += `
                 <div class="mt-3 flex gap-2">
                     <input type="text" class="input input-bordered input-sm flex-1 reply-input" placeholder="Write a reply..." maxlength="2000" data-review-id="${reviewId}" />
-                    <button class="btn btn-sm btn-primary" onclick="PlatPursuit.CommunityHub.submitReply(${reviewId})">Reply</button>
+                    <button class="btn btn-sm btn-primary" onclick="PlatPursuit.ReviewHub.submitReply(${reviewId})">Reply</button>
                 </div>`;
             }
 
@@ -306,10 +306,10 @@ PlatPursuit.CommunityHub = {
         const editedTag = reply.is_edited ? ' (edited)' : '';
 
         const ownActions = reply.is_own ? `
-            <button class="btn btn-xs btn-ghost" onclick="PlatPursuit.CommunityHub.editReply(${reply.id})" aria-label="Edit reply">
+            <button class="btn btn-xs btn-ghost" onclick="PlatPursuit.ReviewHub.editReply(${reply.id})" aria-label="Edit reply">
                 <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
             </button>
-            <button class="btn btn-xs btn-ghost text-error" onclick="PlatPursuit.CommunityHub.deleteReply(${reply.id})" aria-label="Delete reply">
+            <button class="btn btn-xs btn-ghost text-error" onclick="PlatPursuit.ReviewHub.deleteReply(${reply.id})" aria-label="Delete reply">
                 <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
             </button>` : '';
 

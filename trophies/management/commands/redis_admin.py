@@ -48,7 +48,7 @@ class Command(BaseCommand):
         group.add_argument(
             '--flush-community',
             action='store_true',
-            help='Flush Community Hub caches (review recommendations + DLC rating averages).'
+            help='Flush Review Hub caches (review recommendations + DLC rating averages).'
         )
         group.add_argument(
             '--get-bulk-threshold',
@@ -274,7 +274,7 @@ class Command(BaseCommand):
             self.stdout.write(self.style.ERROR(f"Error: {e}"))
 
     def _handle_flush_community(self):
-        if not self._confirm_action("flush Community Hub caches (review recommendations + DLC rating averages)"):
+        if not self._confirm_action("flush Review Hub caches (review recommendations + DLC rating averages)"):
             self.stdout.write(self.style.ERROR("Operation cancelled."))
             return
 
@@ -293,8 +293,8 @@ class Command(BaseCommand):
                 if matching_keys:
                     redis_client.delete(*matching_keys)
                     deleted_count += len(matching_keys)
-            logger.info(f"Flushed {deleted_count} Community Hub cache keys.")
-            self.stdout.write(self.style.SUCCESS(f"Flushed {deleted_count} Community Hub cache keys."))
+            logger.info(f"Flushed {deleted_count} Review Hub cache keys.")
+            self.stdout.write(self.style.SUCCESS(f"Flushed {deleted_count} Review Hub cache keys."))
         except Exception as e:
             logger.exception(f"Error during community flush: {e}")
             self.stdout.write(self.style.ERROR(f"Error: {e}"))

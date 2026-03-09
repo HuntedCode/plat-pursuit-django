@@ -297,7 +297,7 @@ class ReviewService:
                 f"by {count} people. Keep sharing your insights!"
             ),
             icon='👍',
-            action_url=f"/community/{review.concept.slug}/",
+            action_url=f"/reviews/{review.concept.slug}/",
             action_text='View Review',
         )
 
@@ -366,7 +366,7 @@ class ReviewService:
                     title=f"{profile.display_psn_username or profile.psn_username} replied to your review",
                     message=f"New reply on your review of {concept_title}.",
                     icon='💬',
-                    action_url=f"/community/{review.concept.slug}/",
+                    action_url=f"/reviews/{review.concept.slug}/",
                     action_text='View Reply',
                 )
 

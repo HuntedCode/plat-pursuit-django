@@ -1,8 +1,8 @@
 """
-Community Hub views.
+Review Hub views.
 
-Displays the Community Reviews & Ratings Hub for a Concept, with DLC-aware
-trophy group tabs, recommendation stats, community ratings, and a review feed.
+Displays the Review Hub for a Concept, with DLC-aware trophy group tabs,
+recommendation stats, community ratings, and a review feed.
 """
 import logging
 
@@ -20,11 +20,11 @@ from trophies.forms import UserConceptRatingForm
 logger = logging.getLogger('psn_api')
 
 
-class CommunityHubView(ProfileHotbarMixin, BackgroundContextMixin, DetailView):
-    """Community Reviews & Ratings Hub for a game concept."""
+class ReviewHubDetailView(ProfileHotbarMixin, BackgroundContextMixin, DetailView):
+    """Review Hub detail page for a game concept."""
 
     model = Concept
-    template_name = 'trophies/community_hub.html'
+    template_name = 'trophies/review_hub_detail.html'
     slug_field = 'slug'
     slug_url_kwarg = 'slug'
     context_object_name = 'concept'
@@ -37,7 +37,7 @@ class CommunityHubView(ProfileHotbarMixin, BackgroundContextMixin, DetailView):
         if games.exists() and not games.exclude(
             shovelware_status__in=['auto_flagged', 'manually_flagged']
         ).exists():
-            raise Http404("Community Hub is not available for this game.")
+            raise Http404("Review Hub is not available for this game.")
 
         return concept
 
@@ -52,7 +52,7 @@ class CommunityHubView(ProfileHotbarMixin, BackgroundContextMixin, DetailView):
         # Breadcrumb
         context['breadcrumb'] = [
             {'text': 'Home', 'url': reverse('home')},
-            {'text': 'Community Hub'},
+            {'text': 'Review Hub'},
             {'text': concept.unified_title},
         ]
 

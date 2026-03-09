@@ -1,7 +1,7 @@
 """
 Review API views.
 
-Handles all REST endpoints for community reviews: CRUD, voting, replies, reporting,
+Handles all REST endpoints for reviews: CRUD, voting, replies, reporting,
 and DLC group ratings. All business logic lives in ReviewService,
 ConceptTrophyGroupService, and RatingService.
 """
@@ -64,7 +64,7 @@ def _get_concept_and_group(concept_id, group_id_str):
         shovelware_status__in=['auto_flagged', 'manually_flagged'],
     ).exists():
         return None, None, Response(
-            {'error': 'Community Hub is not available for this game.'},
+            {'error': 'Review Hub is not available for this game.'},
             status=status.HTTP_403_FORBIDDEN,
         )
 
