@@ -404,3 +404,66 @@ class FundraiserAdminView(StaffRequiredMixin, TemplateView):
             context['claims_completed'] = context['claims'].filter(status='completed').count()
 
         return context
+
+
+class BadgeRevealView(StaffRequiredMixin, TemplateView):
+    """
+    Staff-only page for randomly selecting which badge artwork to reveal.
+
+    Uses the ReelSpinner slot-machine component to pick from badges with
+    in-progress artwork claims. The actual reveal (uploading artwork,
+    marking claim as completed) happens through the fundraiser admin page.
+    """
+    template_name = 'fundraiser/badge_reveal.html'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+
+        # All claims grouped by status for stats
+        all_claims = DonationBadgeClaim.objects.all()
+        context['total_claimed'] = all_claims.filter(status='claimed').count()
+        context['total_in_progress'] = all_claims.filter(status='in_progress').count()
+        context['total_completed'] = all_claims.filter(status='completed').count()
+
+        # Pool: in-progress claims (artwork being created, not yet uploaded)
+        pool_claims = list(
+            DonationBadgeClaim.objects
+            .filter(status='in_progress')
+            .select_related('badge', 'badge__most_recent_concept', 'profile')
+            .order_by(Lower('series_name'))
+        )
+
+        # Build pool data for template and JSON serialization
+        pool_badges = []
+        for claim in pool_claims:
+            badge = claim.badge
+            concept = badge.most_recent_concept if badge else None
+
+            # Use game icon from the badge's most recent concept, fall back to badge layers
+            icon_url = ''
+            if concept and concept.title_image:
+                icon_url = concept.title_image
+            elif badge:
+                layers = badge.get_badge_layers()
+                icon_url = layers.get('main', '')
+
+            game_name = ''
+            if concept:
+                game_name = concept.name or ''
+
+            donor_name = ''
+            if claim.profile:
+                donor_name = claim.profile.display_psn_username or ''
+
+            pool_badges.append({
+                'badge_id': badge.id if badge else 0,
+                'series_name': claim.series_name or (badge.name if badge else ''),
+                'game_name': game_name,
+                'icon': icon_url,
+                'donor': donor_name,
+            })
+
+        context['pool_badges'] = pool_badges
+        context['pool_badges_json'] = json.dumps(pool_badges)
+
+        return context

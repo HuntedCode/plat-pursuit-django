@@ -1,0 +1,180 @@
+{% extends 'base.html' %}
+{% load static humanize %}
+
+{% block title %}Badge Reveal Spinner - PlatPursuit{% endblock %}
+
+{% block content %}
+<div class="container mx-auto p-4 max-w-6xl">
+
+    {# ─── Header ──────────────────────────────────────────────────────── #}
+    <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-6">
+        <h1 class="text-3xl font-bold mb-4 md:mb-0">Badge Reveal Spinner</h1>
+        {% if request.user.is_superuser %}
+        <div class="flex gap-2 flex-wrap">
+            <a href="{% url 'fundraiser_admin' %}" class="btn btn-ghost btn-sm">Fundraiser</a>
+            <a href="{% url 'subscription_admin' %}" class="btn btn-ghost btn-sm">Subscriptions</a>
+            <a href="{% url 'admin_notification_center' %}" class="btn btn-ghost btn-sm">Notifications</a>
+            <a href="{% url 'comment_moderation' %}" class="btn btn-ghost btn-sm">Moderation</a>
+        </div>
+        {% endif %}
+    </div>
+
+    {# ─── Stats Cards ─────────────────────────────────────────────────── #}
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        <div class="stat bg-base-100 border-2 border-base-300 rounded-box">
+            <div class="stat-title">Claimed</div>
+            <div class="stat-value text-info">{{ total_claimed }}</div>
+            <div class="stat-desc">Awaiting artwork</div>
+        </div>
+        <div class="stat bg-base-100 border-2 border-base-300 rounded-box">
+            <div class="stat-title">In Progress</div>
+            <div class="stat-value text-warning">{{ total_in_progress }}</div>
+            <div class="stat-desc">Artwork being created</div>
+        </div>
+        <div class="stat bg-base-100 border-2 border-base-300 rounded-box">
+            <div class="stat-title">Completed</div>
+            <div class="stat-value text-success">{{ total_completed }}</div>
+            <div class="stat-desc">Artwork revealed</div>
+        </div>
+        <div class="stat bg-base-100 border-2 border-base-300 rounded-box">
+            <div class="stat-title">In Pool</div>
+            <div class="stat-value text-secondary" id="pool-count-stat">{{ total_in_progress }}</div>
+            <div class="stat-desc">Ready to spin</div>
+        </div>
+    </div>
+
+    {# ─── Main Content ────────────────────────────────────────────────── #}
+    <div class="flex flex-col lg:flex-row gap-6">
+
+        {# ─── Spin Section ─────────────────────────────────────────── #}
+        <div class="lg:w-1/2">
+            <div class="card bg-base-100 border-2 border-base-300">
+                <div class="card-body items-center text-center">
+                    <h2 class="card-title text-2xl mb-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 text-secondary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <rect x="2" y="2" width="20" height="20" rx="2"/>
+                            <circle cx="8" cy="8" r="1.5" fill="currentColor"/>
+                            <circle cx="16" cy="8" r="1.5" fill="currentColor"/>
+                            <circle cx="8" cy="16" r="1.5" fill="currentColor"/>
+                            <circle cx="16" cy="16" r="1.5" fill="currentColor"/>
+                            <circle cx="12" cy="12" r="1.5" fill="currentColor"/>
+                        </svg>
+                        Spin the Reel!
+                    </h2>
+                    <p class="text-base-content/60 mb-4">
+                        Randomly select which badge artwork gets revealed today.
+                        Toggle badges in the pool using the checklist, then hit spin!
+                    </p>
+                    <button id="badge-reveal-spin-btn" class="btn btn-secondary btn-lg gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/>
+                        </svg>
+                        Spin!
+                    </button>
+                    <p class="text-xs text-base-content/40 mt-3">
+                        <span id="pool-count-label">{{ total_in_progress }}</span> badge{{ total_in_progress|pluralize }} in the pool
+                    </p>
+                </div>
+            </div>
+
+            {# ─── Last Spin Result (shows after first spin) ─────── #}
+            <div id="last-spin-result" class="card bg-base-100 border-2 border-base-300 mt-4 hidden">
+                <div class="card-body items-center text-center py-4">
+                    <p class="text-xs text-base-content/50 uppercase tracking-wider mb-2">Last Pick</p>
+                    <div class="flex items-center gap-3">
+                        <div class="w-12 h-12 rounded-lg overflow-hidden border border-base-300">
+                            <img id="last-spin-icon" src="" alt="" class="w-full h-full object-cover" />
+                        </div>
+                        <div class="text-left">
+                            <p class="font-bold" id="last-spin-name"></p>
+                            <p class="text-sm text-base-content/60" id="last-spin-donor"></p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        {# ─── Pool Checklist ───────────────────────────────────────── #}
+        <div class="lg:w-1/2">
+            <div class="card bg-base-100 border-2 border-base-300">
+                <div class="card-body p-4">
+                    <div class="flex items-center justify-between mb-3">
+                        <h2 class="card-title text-lg">Badge Pool</h2>
+                        <div class="flex gap-2">
+                            <button id="pool-select-all" class="btn btn-ghost btn-xs">All</button>
+                            <button id="pool-select-none" class="btn btn-ghost btn-xs">None</button>
+                        </div>
+                    </div>
+
+                    {% if pool_badges %}
+                    <div class="overflow-y-auto max-h-[28rem]">
+                        <table class="table table-sm">
+                            <thead>
+                                <tr>
+                                    <th class="w-10">
+                                        <span class="text-xs text-base-content/50">In</span>
+                                    </th>
+                                    <th>Badge</th>
+                                    <th class="hidden lg:table-cell">Game</th>
+                                    <th>Claimed By</th>
+                                </tr>
+                            </thead>
+                            <tbody id="pool-table-body">
+                                {% for badge in pool_badges %}
+                                <tr class="pool-row transition-opacity duration-200" data-badge-id="{{ badge.badge_id }}">
+                                    <td>
+                                        <input type="checkbox"
+                                               class="checkbox checkbox-sm checkbox-secondary pool-checkbox"
+                                               data-badge-id="{{ badge.badge_id }}"
+                                               checked />
+                                    </td>
+                                    <td>
+                                        <div class="flex items-center gap-2">
+                                            <div class="w-8 h-8 rounded overflow-hidden border border-base-300 shrink-0">
+                                                {% if badge.icon %}
+                                                <img src="{{ badge.icon }}" alt="" class="w-full h-full object-cover" loading="lazy" />
+                                                {% else %}
+                                                <div class="w-full h-full bg-base-300 flex items-center justify-center text-xs text-base-content/30">?</div>
+                                                {% endif %}
+                                            </div>
+                                            <span class="font-medium text-sm truncate max-w-[10rem]">{{ badge.series_name }}</span>
+                                        </div>
+                                    </td>
+                                    <td class="hidden lg:table-cell">
+                                        <span class="text-sm text-base-content/60 truncate max-w-[10rem] block">{{ badge.game_name|default:"-" }}</span>
+                                    </td>
+                                    <td>
+                                        <span class="text-sm text-base-content/60">{{ badge.donor|default:"-" }}</span>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="text-center py-8 text-base-content/50">
+                        <p class="text-lg mb-1">No badges in the pool</p>
+                        <p class="text-sm">Badges appear here when their artwork claims are marked as "In Progress" on the
+                            <a href="{% url 'fundraiser_admin' %}" class="link link-primary">Fundraiser Admin</a> page.</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+</div>
+{% endblock %}
+
+{% block js_scripts %}
+<script src="{% static 'js/reel-spinner.js' %}"></script>
+<script src="{% static 'js/badge-reveal.js' %}"></script>
+<script>
+    window._BADGE_REVEAL_POOL = {{ pool_badges_json|safe }};
+    document.addEventListener('DOMContentLoaded', function() {
+        PlatPursuit.BadgeReveal.init();
+        PlatPursuit.ZoomScaler.init();
+    });
+</script>
+{% endblock %}

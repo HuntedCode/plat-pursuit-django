@@ -34,7 +34,7 @@ from trophies.views import GamesListView, TrophiesListView, ProfilesListView, Se
 from trophies.recap_views import RecapIndexView, RecapSlideView
 from users.views import CustomConfirmEmailView, stripe_webhook, paypal_webhook
 from users.subscription_admin_views import SubscriptionAdminView
-from fundraiser.views import FundraiserView, DonationSuccessView, FundraiserAdminView
+from fundraiser.views import FundraiserView, DonationSuccessView, FundraiserAdminView, BadgeRevealView
 from notifications.views import (
     NotificationInboxView,
     AdminNotificationCenterView,
@@ -117,6 +117,7 @@ urlpatterns = [
     path('staff/notifications/scheduled/<int:pk>/cancel/', AdminCancelScheduledView.as_view(), name='admin_cancel_scheduled'),
     path('staff/subscriptions/', SubscriptionAdminView.as_view(), name='subscription_admin'),
     path('staff/fundraiser/', FundraiserAdminView.as_view(), name='fundraiser_admin'),
+    path('staff/badge-reveal/', BadgeRevealView.as_view(), name='badge_reveal'),
 
     # Fundraiser
     path('fundraiser/<slug:slug>/', FundraiserView.as_view(), name='fundraiser'),
