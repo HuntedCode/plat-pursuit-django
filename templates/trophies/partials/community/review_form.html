@@ -8,7 +8,7 @@
             <div class="flex items-center gap-3 mb-4">
                 <span class="text-sm font-bold text-base-content">Do you recommend this game?</span>
                 <div class="flex gap-2">
-                    <button type="button" class="btn btn-sm recommend-toggle active btn-success" data-value="true" aria-pressed="true">
+                    <button type="button" class="btn btn-sm recommend-toggle btn-ghost border border-base-300" data-value="true" aria-pressed="false">
                         <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M2 21h4V9H2v12zm22-11c0-1.1-.9-2-2-2h-6.31l.95-4.57.03-.32c0-.41-.17-.79-.44-1.06L15.17 1 7.59 8.59C7.22 8.95 7 9.45 7 10v10c0 1.1.9 2 2 2h9c.83 0 1.54-.5 1.84-1.22l3.02-7.05c.09-.23.14-.47.14-.73v-2z"/></svg>
                         Yes
                     </button>
@@ -26,12 +26,64 @@
                     placeholder="Share your experience with this game. What did you enjoy? What was challenging? Would you recommend it to other trophy hunters?"
                     minlength="50" maxlength="8000"></textarea>
                 <div class="flex justify-between mt-1">
-                    <span class="text-xs text-base-content/50">Markdown supported. Minimum 50 characters.</span>
+                    <button type="button" id="markdown-help-toggle" class="text-xs text-primary hover:underline cursor-pointer inline-flex items-center gap-1">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                        Formatting guide
+                        <svg id="markdown-help-chevron" xmlns="http://www.w3.org/2000/svg" class="w-3 h-3 transition-transform duration-200" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+                    </button>
                     <span id="review-char-count" class="text-xs text-base-content/50">0 / 8000</span>
+                </div>
+                {# Expandable markdown guide #}
+                <div id="markdown-help-panel" class="hidden mt-2 rounded-box bg-base-200/50 border border-base-300 p-3 text-xs">
+                    <div class="grid grid-cols-2 gap-x-4 gap-y-1.5">
+                        <div class="text-base-content/60 font-mono">**bold**</div>
+                        <div class="text-base-content/80"><strong>bold</strong></div>
+                        <div class="text-base-content/60 font-mono">*italic*</div>
+                        <div class="text-base-content/80"><em>italic</em></div>
+                        <div class="text-base-content/60 font-mono">__underline__</div>
+                        <div class="text-base-content/80"><u>underline</u></div>
+                        <div class="text-base-content/60 font-mono">~~strike~~</div>
+                        <div class="text-base-content/80"><s>strike</s></div>
+                        <div class="text-base-content/60 font-mono">[text](url)</div>
+                        <div class="text-base-content/80"><span class="text-primary">link</span></div>
+                        <div class="text-base-content/60 font-mono">`code`</div>
+                        <div class="text-base-content/80"><code class="bg-base-300 px-1 rounded">code</code></div>
+                        <div class="text-base-content/60 font-mono">> quote</div>
+                        <div class="text-base-content/80 border-l-2 border-base-content/30 pl-2 italic">quote</div>
+                        <div class="text-base-content/60 font-mono">- list item</div>
+                        <div class="text-base-content/80">&bull; list item</div>
+                    </div>
                 </div>
             </div>
 
-            <button type="submit" id="review-submit-btn" class="btn btn-primary btn-sm w-full mt-4">
+            {# Word count progress bar #}
+            <div id="review-progress-section" class="mt-3">
+                <div class="flex items-center gap-2">
+                    <div id="review-progress-icon" class="shrink-0 transition-all duration-300" style="color: var(--color-base-content); opacity: 0.25;">
+                        {% include 'partials/icons/trophy_cup.html' with color='currentColor' size='w-5 h-5' %}
+                    </div>
+                    <div class="flex-1 bg-base-300 rounded-full h-2 overflow-hidden">
+                        <div id="review-progress-bar" class="h-full rounded-full transition-all duration-300 ease-out bg-error" style="width: 0%"></div>
+                    </div>
+                </div>
+                <p id="review-progress-text" class="text-xs text-base-content/50 mt-1 italic">Write at least 10 words to get started...</p>
+            </div>
+
+            {# Submission requirements checklist #}
+            <div class="flex flex-wrap gap-x-4 gap-y-1 mt-3 text-xs text-base-content/50">
+                <div class="flex items-center gap-1.5" id="req-recommend">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-error req-icon-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-success req-icon-check hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                    <span>Select recommend / not recommend</span>
+                </div>
+                <div class="flex items-center gap-1.5" id="req-length">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-error req-icon-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-success req-icon-check hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                    <span>Write at least 50 characters</span>
+                </div>
+            </div>
+
+            <button type="submit" id="review-submit-btn" class="btn btn-primary btn-sm w-full mt-3" disabled>
                 Submit Review
             </button>
         </form>

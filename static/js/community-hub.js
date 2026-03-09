@@ -28,6 +28,7 @@ PlatPursuit.CommunityHub = {
         this.initReviewForm();
         this.initRatingForm();
         this.initYourReview();
+        this.initRatingsToggle();
     },
 
     // ------------------------------------------------------------------ //
@@ -65,10 +66,7 @@ PlatPursuit.CommunityHub = {
 
             const reviews = data.reviews || [];
 
-            // Filter out user's own review (shown separately in "Your Review" section)
-            const filteredReviews = reviews.filter(r => r.id !== this.config.userReviewId);
-
-            filteredReviews.forEach(review => {
+            reviews.forEach(review => {
                 feed.insertAdjacentHTML('beforeend', this.buildReviewCard(review));
             });
 
@@ -108,9 +106,9 @@ PlatPursuit.CommunityHub = {
         const hoursDisplay = stats.hours_played != null ? `${stats.hours_played}h` : '';
         const statsLine = [
             `${stats.completion_pct || 0}%`,
-            stats.has_plat ? 'Plat' : '',
             hoursDisplay,
         ].filter(Boolean).join(' | ');
+        const platImg = `<img src="/static/images/plat.png" alt="Platinum" class="w-4 h-4 inline-block${stats.has_plat ? '' : ' grayscale opacity-40'}" loading="lazy" />`;
 
         const helpfulActive = review.user_voted_helpful ? 'btn-active btn-primary' : '';
         const funnyActive = review.user_voted_funny ? 'btn-active btn-secondary' : '';
@@ -132,11 +130,19 @@ PlatPursuit.CommunityHub = {
         return `
         <div class="review-card border-2 border-base-300 rounded-box p-4" data-review-id="${review.id}">
             <div class="flex flex-col md:flex-row lg:flex-row gap-4">
-                <div class="flex flex-row md:flex-col lg:flex-col items-center md:items-start lg:items-start gap-3 md:w-32 lg:w-36 shrink-0">
-                    <img src="${esc(author.avatar_url || '')}" alt="${esc(author.display_psn_username || '')}" class="w-10 h-10 md:w-11 md:h-11 lg:w-12 lg:h-12 rounded-full object-cover border border-base-300" loading="lazy" />
+                <div class="flex flex-row md:flex-col lg:flex-col items-center gap-3 md:w-32 lg:w-36 shrink-0">
+                    <div class="avatar">
+                        <div class="w-10 h-10 md:w-11 md:h-11 lg:w-12 lg:h-12 rounded-full ring-2 ring-primary">
+                            <img src="${esc(author.avatar_url || '')}" alt="${esc(author.display_psn_username || '')}" class="rounded-full object-cover" loading="lazy" />
+                        </div>
+                    </div>
                     <div class="text-center md:text-left lg:text-left">
-                        <a href="/profiles/${esc(author.psn_username || '')}/" class="font-bold text-sm text-primary hover:underline line-clamp-1">${esc(author.display_psn_username || author.psn_username || '')}</a>
-                        <p class="text-xs text-base-content/50">${esc(statsLine)}</p>
+                        <a href="/profiles/${esc(author.psn_username || '')}/" class="font-bold text-sm ${author.is_premium ? 'legendary-title' : 'text-primary'} hover:underline line-clamp-1 pr-1">${esc(author.display_psn_username || author.psn_username || '')}</a>
+                        ${author.displayed_title ? (author.title_source
+                            ? `<div class="tooltip tooltip-bottom cursor-help" data-tip="${esc(author.title_source)}"><p class="text-xs ${author.is_premium ? 'legendary-title' : 'text-secondary'} italic pr-1 line-clamp-1">${esc(author.displayed_title)}</p></div>`
+                            : `<p class="text-xs ${author.is_premium ? 'legendary-title' : 'text-secondary'} italic pr-1 line-clamp-1">${esc(author.displayed_title)}</p>`)
+                        : ''}
+                        <p class="text-xs text-base-content/50 flex items-center gap-1 mt-1">${platImg} ${esc(statsLine)}</p>
                     </div>
                 </div>
                 <div class="flex-1 min-w-0">
@@ -148,17 +154,17 @@ PlatPursuit.CommunityHub = {
                     </div>
                     <div class="review-body-display prose prose-sm max-w-none">${review.body_html || ''}</div>
                     <div class="flex flex-wrap items-center gap-3 mt-4 text-sm">
-                        <button class="btn btn-xs btn-ghost gap-1 vote-btn ${helpfulActive}" onclick="PlatPursuit.CommunityHub.toggleVote(${review.id}, 'helpful')" data-review-id="${review.id}" data-vote="helpful">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M2 21h4V9H2v12zm22-11c0-1.1-.9-2-2-2h-6.31l.95-4.57.03-.32c0-.41-.17-.79-.44-1.06L15.17 1 7.59 8.59C7.22 8.95 7 9.45 7 10v10c0 1.1.9 2 2 2h9c.83 0 1.54-.5 1.84-1.22l3.02-7.05c.09-.23.14-.47.14-.73v-2z"/></svg>
-                            <span class="helpful-count">${review.helpful_count}</span>
+                        <button class="btn btn-sm btn-ghost gap-1.5 vote-btn ${helpfulActive}" onclick="PlatPursuit.CommunityHub.toggleVote(${review.id}, 'helpful')" data-review-id="${review.id}" data-vote="helpful">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor"><path d="M2 21h4V9H2v12zm22-11c0-1.1-.9-2-2-2h-6.31l.95-4.57.03-.32c0-.41-.17-.79-.44-1.06L15.17 1 7.59 8.59C7.22 8.95 7 9.45 7 10v10c0 1.1.9 2 2 2h9c.83 0 1.54-.5 1.84-1.22l3.02-7.05c.09-.23.14-.47.14-.73v-2z"/></svg>
+                            Helpful <span class="helpful-count">${review.helpful_count}</span>
                         </button>
-                        <button class="btn btn-xs btn-ghost gap-1 vote-btn ${funnyActive}" onclick="PlatPursuit.CommunityHub.toggleVote(${review.id}, 'funny')" data-review-id="${review.id}" data-vote="funny">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>
-                            <span class="funny-count">${review.funny_count}</span>
+                        <button class="btn btn-sm btn-ghost gap-1.5 vote-btn ${funnyActive}" onclick="PlatPursuit.CommunityHub.toggleVote(${review.id}, 'funny')" data-review-id="${review.id}" data-vote="funny">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M15.5 11c.5 0 .5-2 0-2s-.5 2 0 2zM8.5 11c.5 0 .5-2 0-2s-.5 2 0 2z"/><path d="M7 13c0 3 2.5 4.5 5 4.5s5-1.5 5-4.5H7z"/></svg>
+                            Funny <span class="funny-count">${review.funny_count}</span>
                         </button>
-                        <button class="btn btn-xs btn-ghost gap-1" onclick="PlatPursuit.CommunityHub.toggleReplies(${review.id})" aria-label="Toggle replies">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>
-                            <span class="reply-count">${review.reply_count}</span>
+                        <button class="btn btn-sm btn-ghost gap-1.5" onclick="PlatPursuit.CommunityHub.toggleReplies(${review.id})" aria-label="Toggle replies">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>
+                            Replies <span class="reply-count">${review.reply_count}</span>
                         </button>
                         <span class="text-xs text-base-content/40 ml-auto">${esc(timeAgo)}${editedTag}</span>
                     </div>
@@ -309,10 +315,14 @@ PlatPursuit.CommunityHub = {
 
         return `
         <div class="reply-item flex gap-2 py-2" data-reply-id="${reply.id}">
-            <img src="${esc(author.avatar_url || '')}" alt="" class="w-7 h-7 rounded-full object-cover shrink-0" loading="lazy" />
+            <div class="avatar shrink-0">
+                <div class="w-7 h-7 rounded-full ring-2 ring-primary">
+                    <img src="${esc(author.avatar_url || '')}" alt="" class="rounded-full object-cover" loading="lazy" />
+                </div>
+            </div>
             <div class="flex-1 min-w-0">
                 <div class="flex items-center gap-2">
-                    <a href="/profiles/${esc(author.psn_username || '')}/" class="text-sm font-bold text-primary hover:underline">${esc(author.display_psn_username || author.psn_username || '')}</a>
+                    <a href="/profiles/${esc(author.psn_username || '')}/" class="text-sm font-bold ${author.is_premium ? 'legendary-title' : 'text-primary'} hover:underline">${esc(author.display_psn_username || author.psn_username || '')}</a>
                     <span class="text-xs text-base-content/40">${esc(timeAgo)}${editedTag}</span>
                     ${ownActions}
                 </div>
@@ -434,8 +444,27 @@ PlatPursuit.CommunityHub = {
         const form = document.getElementById('review-create-form');
         if (!form) return;
 
-        // Thumbs toggle
-        let recommended = true;
+        // Thumbs toggle (neither selected by default)
+        let recommended = null;
+        const submitBtn = document.getElementById('review-submit-btn');
+
+        const reqRecommend = document.getElementById('req-recommend');
+        const reqLength = document.getElementById('req-length');
+
+        const updateSubmitState = () => {
+            const charCount = textarea ? textarea.value.trim().length : 0;
+            const hasRecommend = recommended !== null;
+            const hasLength = charCount >= 50;
+
+            [reqRecommend, reqLength].forEach((el, i) => {
+                if (!el) return;
+                const met = i === 0 ? hasRecommend : hasLength;
+                el.querySelector('.req-icon-x').classList.toggle('hidden', met);
+                el.querySelector('.req-icon-check').classList.toggle('hidden', !met);
+            });
+            if (submitBtn) submitBtn.disabled = !hasRecommend || !hasLength;
+        };
+
         form.querySelectorAll('.recommend-toggle').forEach(btn => {
             btn.addEventListener('click', () => {
                 recommended = btn.dataset.value === 'true';
@@ -449,15 +478,103 @@ PlatPursuit.CommunityHub = {
                     b.classList.toggle('border-base-300', !isActive);
                     b.setAttribute('aria-pressed', String(isActive));
                 });
+                updateSubmitState();
             });
         });
 
-        // Character counter
+        // Markdown help toggle
+        const helpToggle = document.getElementById('markdown-help-toggle');
+        const helpPanel = document.getElementById('markdown-help-panel');
+        const helpChevron = document.getElementById('markdown-help-chevron');
+        if (helpToggle && helpPanel) {
+            helpToggle.addEventListener('click', () => {
+                helpPanel.classList.toggle('hidden');
+                if (helpChevron) helpChevron.classList.toggle('rotate-180');
+            });
+        }
+
+        // Character counter + word progress bar
         const textarea = document.getElementById('review-body');
         const counter = document.getElementById('review-char-count');
-        if (textarea && counter) {
+        const progressBar = document.getElementById('review-progress-bar');
+        const progressText = document.getElementById('review-progress-text');
+        const progressIcon = document.getElementById('review-progress-icon');
+
+        // Trophy icon tiers using project CSS vars (fewer breakpoints than text)
+        const iconTiers = [
+            { words: 0,   cssColor: 'var(--color-base-content)', opacity: '0.25' },
+            { words: 25,  cssColor: 'var(--color-trophy-bronze)', opacity: '1' },
+            { words: 75,  cssColor: 'var(--color-trophy-silver)', opacity: '1' },
+            { words: 100, cssColor: 'var(--color-trophy-gold)',   opacity: '1' },
+        ];
+
+        // Text tiers with countdown messages toward the next threshold
+        const progressTiers = [
+            { words: 0,   pct: 0,   color: 'bg-error',   nextWords: 10,  nextLabel: 'getting started' },
+            { words: 10,  pct: 15,  color: 'bg-error',   nextWords: 25,  nextLabel: 'a solid start' },
+            { words: 25,  pct: 35,  color: 'bg-warning',  nextWords: 50,  nextLabel: 'a good review' },
+            { words: 50,  pct: 55,  color: 'bg-warning',  nextWords: 75,  nextLabel: 'a great review' },
+            { words: 75,  pct: 75,  color: 'bg-info',     nextWords: 100, nextLabel: 'an excellent review' },
+            { words: 100, pct: 90,  color: 'bg-success',  nextWords: 150, nextLabel: 'an outstanding review' },
+            { words: 150, pct: 100, color: 'bg-success',  nextWords: null, nextLabel: null },
+        ];
+
+        let currentIconTier = -1;
+
+        if (textarea) {
             textarea.addEventListener('input', () => {
-                counter.textContent = `${textarea.value.length} / 8000`;
+                // Character count + submit gate
+                if (counter) counter.textContent = `${textarea.value.length} / 8000`;
+                updateSubmitState();
+
+                // Word count progress
+                if (!progressBar || !progressText) return;
+                const wordCount = textarea.value.trim() ? textarea.value.trim().split(/\s+/).length : 0;
+
+                let tier = progressTiers[0];
+                for (let i = progressTiers.length - 1; i >= 0; i--) {
+                    if (wordCount >= progressTiers[i].words) {
+                        tier = progressTiers[i];
+                        break;
+                    }
+                }
+
+                // Smooth width between tiers
+                let barWidth = tier.pct;
+                const tierIdx = progressTiers.indexOf(tier);
+                if (tierIdx < progressTiers.length - 1) {
+                    const next = progressTiers[tierIdx + 1];
+                    const progress = (wordCount - tier.words) / (next.words - tier.words);
+                    barWidth = tier.pct + (next.pct - tier.pct) * Math.min(progress, 1);
+                }
+
+                progressBar.style.width = `${barWidth}%`;
+                progressBar.className = `h-full rounded-full transition-all duration-300 ease-out ${tier.color}`;
+
+                // Countdown text toward next threshold
+                if (tier.nextWords) {
+                    const remaining = tier.nextWords - wordCount;
+                    progressText.textContent = `${remaining} word${remaining === 1 ? '' : 's'} until ${tier.nextLabel}!`;
+                } else {
+                    progressText.textContent = 'Outstanding review! The community thanks you.';
+                }
+
+                // Trophy icon color (uses CSS vars, updates at fewer breakpoints)
+                if (progressIcon) {
+                    let newIconTier = 0;
+                    for (let i = iconTiers.length - 1; i >= 0; i--) {
+                        if (wordCount >= iconTiers[i].words) {
+                            newIconTier = i;
+                            break;
+                        }
+                    }
+                    if (newIconTier !== currentIconTier) {
+                        currentIconTier = newIconTier;
+                        const it = iconTiers[newIconTier];
+                        progressIcon.style.color = it.cssColor;
+                        progressIcon.style.opacity = it.opacity;
+                    }
+                }
             });
         }
 
@@ -469,8 +586,11 @@ PlatPursuit.CommunityHub = {
                 PlatPursuit.ToastManager.error('Review must be at least 50 characters.');
                 return;
             }
+            if (recommended === null) {
+                PlatPursuit.ToastManager.error('Please select whether you recommend this game.');
+                return;
+            }
 
-            const submitBtn = document.getElementById('review-submit-btn');
             if (submitBtn) submitBtn.disabled = true;
 
             try {
@@ -483,7 +603,7 @@ PlatPursuit.CommunityHub = {
             } catch (error) {
                 const errData = await error.response?.json().catch(() => null);
                 PlatPursuit.ToastManager.error(errData?.error || 'Failed to submit review.');
-                if (submitBtn) submitBtn.disabled = false;
+                updateSubmitState();
             }
         });
     },
@@ -708,6 +828,22 @@ PlatPursuit.CommunityHub = {
             const errData = await error.response?.json().catch(() => null);
             PlatPursuit.ToastManager.error(errData?.error || 'Failed to report review.');
         }
+    },
+
+    // ------------------------------------------------------------------ //
+    //  Ratings Display Toggle
+    // ------------------------------------------------------------------ //
+
+    initRatingsToggle() {
+        const toggleBtn = document.getElementById('toggle-ratings-display');
+        const content = document.getElementById('ratings-display-content');
+        const chevron = document.getElementById('ratings-chevron');
+        if (!toggleBtn || !content) return;
+
+        toggleBtn.addEventListener('click', () => {
+            content.classList.toggle('hidden');
+            if (chevron) chevron.classList.toggle('rotate-180');
+        });
     },
 
     // ------------------------------------------------------------------ //

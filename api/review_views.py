@@ -101,12 +101,82 @@ def _get_review_or_error(review_id):
 
 def _serialize_author(profile):
     """Serialize a Profile to an author dict."""
+    # Use prefetched user_titles if available, otherwise fall back to property
+    displayed_title = None
+    title_source = None
+    if hasattr(profile, '_prefetched_objects_cache') and 'user_titles' in profile._prefetched_objects_cache:
+        for ut in profile.user_titles.all():
+            if ut.is_displayed:
+                displayed_title = ut.title.name
+                title_source = _resolve_title_source(ut)
+                break
+    else:
+        ut = profile.user_titles.filter(is_displayed=True).select_related('title').first()
+        if ut:
+            displayed_title = ut.title.name
+            title_source = _resolve_title_source(ut)
+
     return {
         'profile_id': profile.id,
         'psn_username': profile.psn_username,
         'display_psn_username': profile.display_psn_username,
         'avatar_url': profile.avatar_url,
+        'is_premium': profile.user_is_premium,
+        'displayed_title': displayed_title,
+        'title_source': title_source,
     }
+
+
+def _resolve_title_source(user_title):
+    """Build a human-readable source string for a UserTitle."""
+    from trophies.models import Badge, Milestone
+    if user_title.source_type == 'badge' and user_title.source_id:
+        badge = Badge.objects.filter(id=user_title.source_id).values_list('name', flat=True).first()
+        return f"Earned from badge: {badge}" if badge else "Earned from a badge"
+    elif user_title.source_type == 'milestone' and user_title.source_id:
+        milestone = Milestone.objects.filter(
+            id=user_title.source_id
+        ).values('name', 'criteria_type', 'required_value').first()
+        if not milestone:
+            return "Earned from a milestone"
+        line = f"Earned from milestone: {milestone['name']}"
+        desc = _milestone_description(milestone['criteria_type'], milestone['required_value'])
+        if desc:
+            line += f" ({desc})"
+        return line
+    return None
+
+
+# Map criteria_type to a human-readable template.
+# {n} is replaced with required_value. Omitted types get no extra description.
+_MILESTONE_DESCRIPTIONS = {
+    'plat_count': '{n} platinums earned',
+    'trophy_count': '{n} trophies earned',
+    'rating_count': '{n} games rated',
+    'playtime_hours': '{n} hours played',
+    'comment_upvotes': '{n} comment upvotes received',
+    'checklist_upvotes': '{n} checklist upvotes received',
+    'badge_count': '{n} badge tiers earned',
+    'unique_badge_count': '{n} unique badges earned',
+    'completion_count': '{n} games 100% completed',
+    'stage_count': '{n} badge stages completed',
+    'az_progress': '{n} A-Z challenge letters',
+    'genre_progress': '{n} genre challenge genres',
+    'subgenre_progress': '{n} subgenre collections',
+    'calendar_months_total': '{n} calendar months completed',
+    'subscription_months': '{n} months subscribed',
+}
+
+
+def _milestone_description(criteria_type, required_value):
+    """Return a short description like '300 platinums earned', or None."""
+    template = _MILESTONE_DESCRIPTIONS.get(criteria_type)
+    if template and required_value:
+        return template.format(n=required_value)
+    # For boolean-style milestones (psn_linked, is_premium, etc.), use the display label
+    from trophies.models import Milestone
+    label = dict(Milestone.CRITERIA_TYPES).get(criteria_type)
+    return label or None
 
 
 def _serialize_review(review, reviewer_stats=None, user_voted_helpful=False,
@@ -193,7 +263,9 @@ class ReviewListView(APIView):
                 concept=concept,
                 concept_trophy_group=ctg,
                 is_deleted=False,
-            ).select_related('profile').order_by(*sort_map[sort])
+            ).select_related('profile').prefetch_related(
+                'profile__user_titles__title',
+            ).order_by(*sort_map[sort])
 
             # Get user profile and their own review (if authenticated)
             profile = None
@@ -201,7 +273,7 @@ class ReviewListView(APIView):
             if request.user.is_authenticated:
                 profile = getattr(request.user, 'profile', None)
 
-            # Find user's own review for this group (shown separately at top)
+            # Find user's own review for this group
             if profile:
                 user_review = qs.filter(profile=profile).first()
                 if user_review:
@@ -211,8 +283,6 @@ class ReviewListView(APIView):
                         reviewer_stats=user_stats,
                         is_own=True,
                     )
-                    # Exclude the user's own review from the main feed
-                    qs = qs.exclude(id=user_review.id)
 
             total_count = qs.count()
             paginated = list(qs[offset:offset + limit])
@@ -597,7 +667,9 @@ class ReviewReplyListView(APIView):
 
             qs = ReviewReply.objects.filter(
                 review=review, is_deleted=False,
-            ).select_related('profile').order_by('created_at')
+            ).select_related('profile').prefetch_related(
+                'profile__user_titles__title',
+            ).order_by('created_at')
 
             total_count = qs.count()
             paginated = list(qs[offset:offset + limit])

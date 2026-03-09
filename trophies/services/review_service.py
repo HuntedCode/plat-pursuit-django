@@ -522,16 +522,20 @@ class ReviewService:
             is_deleted=False,
         )
         agg = qs.aggregate(
-            recommended=Count('id', filter=Q(recommended=True)),
-            not_recommended=Count('id', filter=Q(recommended=False)),
+            rec_count=Count('id', filter=Q(recommended=True)),
+            not_rec_count=Count('id', filter=Q(recommended=False)),
             total=Count('id'),
         )
 
         if agg['total'] == 0:
             return None
 
-        agg['percent'] = round(agg['recommended'] / agg['total'] * 100, 1)
-        return agg
+        return {
+            'recommended': agg['rec_count'],
+            'not_recommended': agg['not_rec_count'],
+            'total': agg['total'],
+            'percent': round(agg['rec_count'] / agg['total'] * 100, 1),
+        }
 
     @staticmethod
     def get_reviewer_stats(profile, concept):
