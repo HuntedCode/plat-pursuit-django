@@ -449,7 +449,7 @@ class BadgeRevealView(StaffRequiredMixin, TemplateView):
 
             game_name = ''
             if concept:
-                game_name = concept.name or ''
+                game_name = concept.unified_title or ''
 
             donor_name = ''
             if claim.profile:
