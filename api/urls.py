@@ -82,6 +82,12 @@ from .mobile_badge_views import (
     MobileUserBadgesView, MobileProfileBadgesView,
 )
 from .mobile_game_views import MobileProfileGamesView, MobileGameTrophiesView
+from .review_views import (
+    ReviewListView, ReviewCreateView, ReviewDetailView,
+    ReviewVoteView, ReviewReportView,
+    ReviewReplyListView, ReviewReplyDetailView,
+    GroupRatingView,
+)
 
 app_name = 'api'
 
@@ -308,4 +314,14 @@ urlpatterns = [
 
     # User settings endpoints
     path('user/timezone/', UpdateTimezoneAPIView.as_view(), name='user-timezone-update'),
+
+    # Community review endpoints
+    path('reviews/<int:concept_id>/group/<str:group_id>/', ReviewListView.as_view(), name='review-list'),
+    path('reviews/<int:concept_id>/group/<str:group_id>/create/', ReviewCreateView.as_view(), name='review-create'),
+    path('reviews/<int:concept_id>/group/<str:group_id>/rate/', GroupRatingView.as_view(), name='review-group-rate'),
+    path('reviews/<int:review_id>/', ReviewDetailView.as_view(), name='review-detail'),
+    path('reviews/<int:review_id>/vote/', ReviewVoteView.as_view(), name='review-vote'),
+    path('reviews/<int:review_id>/report/', ReviewReportView.as_view(), name='review-report'),
+    path('reviews/<int:review_id>/replies/', ReviewReplyListView.as_view(), name='review-reply-list'),
+    path('reviews/replies/<int:reply_id>/', ReviewReplyDetailView.as_view(), name='review-reply-detail'),
 ]

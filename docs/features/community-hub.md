@@ -2,7 +2,7 @@
 
 A Steam-inspired community review system for PlatPursuit. Users can write thumbs-up/thumbs-down reviews with markdown text, vote reviews as helpful/funny, reply to reviews, and rate DLC packs independently. Everything lives on a dedicated Community Hub page at `/community/<concept-slug>/` with tab navigation per trophy group (base game + each DLC).
 
-**Status**: Phases 1-3 complete (models, services, management commands). Phase 4 (API views) is next.
+**Status**: Phases 1-4 complete (models, services, management commands, API views). Phase 5 (page view + templates) is next.
 
 ## Architecture Overview
 
@@ -25,10 +25,11 @@ The review feed uses **client-side rendering** from JSON API responses (not serv
 | `notifications/models.py` | `review_reply` and `review_milestone` notification types |
 | `trophies/token_keeper.py` | Sync hook for `ConceptTrophyGroupService.sync_for_concept()` |
 
-### Files To Create (Phases 4-8)
+| `api/review_views.py` | 8 view classes covering 12 API endpoints (832 lines) |
+
+### Files To Create (Phases 5-8)
 | File | Purpose |
 |------|---------|
-| `api/review_views.py` | 12 API endpoints for reviews, voting, replies, reporting |
 | `trophies/views/community_views.py` | `CommunityHubView` page view |
 | `static/js/community-hub.js` | Frontend logic (CommunityHub class) |
 | `templates/trophies/community_hub.html` | Main page template |
@@ -104,7 +105,7 @@ The review feed uses **client-side rendering** from JSON API responses (not serv
 | Review | ProfileGame exists | 1+ earned trophy in group |
 | Vote/Reply | Authenticated | Authenticated |
 
-## API Endpoints (Planned, Phase 4)
+## API Endpoints (Phase 4, Implemented)
 
 | Method | Path | Auth | Purpose |
 |--------|------|------|---------|

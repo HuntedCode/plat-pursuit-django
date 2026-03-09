@@ -216,6 +216,23 @@ All API endpoints live under `/api/v1/` and are defined in `api/urls.py`. The we
 | POST | `/api/v1/admin/subscriptions/action/` | Staff | Admin action (resend, deactivate) |
 | GET | `/api/v1/admin/subscriptions/user/<id>/` | Staff | User subscription detail |
 
+### Community Reviews
+
+| Method | Path | Auth | Purpose |
+|--------|------|------|---------|
+| GET | `/api/v1/reviews/<concept_id>/group/<group_id>/` | No | List reviews (sort: helpful/newest/oldest) |
+| POST | `/api/v1/reviews/<concept_id>/group/<group_id>/create/` | Login | Create review (body + recommended) |
+| POST | `/api/v1/reviews/<concept_id>/group/<group_id>/rate/` | Login | Submit/update DLC rating |
+| GET | `/api/v1/reviews/<review_id>/` | No | Single review detail |
+| PUT | `/api/v1/reviews/<review_id>/` | Login | Edit own review |
+| DELETE | `/api/v1/reviews/<review_id>/` | Login | Delete own review |
+| POST | `/api/v1/reviews/<review_id>/vote/` | Login | Toggle helpful/funny vote |
+| POST | `/api/v1/reviews/<review_id>/report/` | Login | Report review |
+| GET | `/api/v1/reviews/<review_id>/replies/` | No | List replies |
+| POST | `/api/v1/reviews/<review_id>/replies/` | Login | Create reply |
+| PUT | `/api/v1/reviews/replies/<reply_id>/` | Login | Edit own reply |
+| DELETE | `/api/v1/reviews/replies/<reply_id>/` | Login | Delete own reply |
+
 ### Misc
 
 | Method | Path | Auth | Purpose |
