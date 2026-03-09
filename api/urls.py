@@ -83,6 +83,7 @@ from .mobile_badge_views import (
 )
 from .mobile_game_views import MobileProfileGamesView, MobileGameTrophiesView
 from .review_views import (
+    RecentReviewsView,
     ReviewListView, ReviewCreateView, ReviewDetailView,
     ReviewVoteView, ReviewReportView,
     ReviewReplyListView, ReviewReplyDetailView,
@@ -315,7 +316,8 @@ urlpatterns = [
     # User settings endpoints
     path('user/timezone/', UpdateTimezoneAPIView.as_view(), name='user-timezone-update'),
 
-    # Community review endpoints
+    # Review Hub endpoints
+    path('reviews/recent/', RecentReviewsView.as_view(), name='review-recent'),
     path('reviews/<int:concept_id>/group/<str:group_id>/', ReviewListView.as_view(), name='review-list'),
     path('reviews/<int:concept_id>/group/<str:group_id>/create/', ReviewCreateView.as_view(), name='review-create'),
     path('reviews/<int:concept_id>/group/<str:group_id>/rate/', GroupRatingView.as_view(), name='review-group-rate'),

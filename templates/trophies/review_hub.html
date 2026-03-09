@@ -1,0 +1,208 @@
+{% extends 'base.html' %}
+{% load custom_filters humanize static markdown_filters %}
+
+{% block title %}Review Hub - Platinum Pursuit{% endblock %}
+
+{% block content %}
+{# ─── Header ─────────────────────────────────────────────────────────── #}
+<section class="section-container w-full">
+    {% include 'partials/breadcrumb.html' with items=breadcrumb %}
+
+    <div class="card bg-base-100 border-4 border-base-300 shadow-md shadow-neutral">
+        <div class="card-body">
+            <div class="flex flex-row items-center justify-between gap-4">
+                <div>
+                    <h1 class="text-2xl lg:text-3xl font-bold">Review Hub</h1>
+                    <p class="text-base-content/70">
+                        Discover what the community thinks. Read reviews, find hidden gems, and share your own takes.
+                    </p>
+                </div>
+                {% if user.is_authenticated and user.profile %}
+                    <a href="{% url 'rate_my_games' %}" class="btn btn-primary btn-md shrink-0">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+                        </svg>
+                        Rate My Games
+                    </a>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</section>
+
+{# ─── Stats Banner ────────────────────────────────────────────────────── #}
+{% if stats %}
+<div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mt-4">
+    <div class="stat bg-base-100 border-2 border-base-300 rounded-box p-4 text-center">
+        <div class="stat-title text-xs text-base-content/50">Total Reviews</div>
+        <div class="stat-value text-xl lg:text-2xl text-primary">{{ stats.total_reviews|intcomma }}</div>
+    </div>
+    <div class="stat bg-base-100 border-2 border-base-300 rounded-box p-4 text-center">
+        <div class="stat-title text-xs text-base-content/50">Total Ratings</div>
+        <div class="stat-value text-xl lg:text-2xl text-accent">{{ stats.total_ratings|intcomma }}</div>
+    </div>
+    <div class="stat bg-base-100 border-2 border-base-300 rounded-box p-4 text-center">
+        <div class="stat-title text-xs text-base-content/50">Active Reviewers</div>
+        <div class="stat-value text-xl lg:text-2xl text-secondary">{{ stats.unique_reviewers|intcomma }}</div>
+    </div>
+    <div class="stat bg-base-100 border-2 border-base-300 rounded-box p-4 text-center">
+        <div class="stat-title text-xs text-base-content/50">Helpful Votes</div>
+        <div class="stat-value text-xl lg:text-2xl text-success">{{ stats.total_helpful_votes|intcomma }}</div>
+    </div>
+</div>
+{% endif %}
+
+{# ─── CTA Card (authenticated, has unrated games) ────────────────────── #}
+{% if unrated_count and unrated_count > 0 %}
+<div class="card bg-gradient-to-r from-primary/10 to-accent/10 border-2 border-primary/30 shadow-sm mt-4">
+    <div class="card-body p-4 flex flex-row items-center gap-4">
+        <div class="shrink-0">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-10 h-10 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"/>
+            </svg>
+        </div>
+        <div class="flex-1">
+            <p class="font-bold text-base-content">
+                You have <span class="text-primary">{{ unrated_count }}</span> platinum{{ unrated_count|pluralize }} waiting to be rated!
+            </p>
+            <p class="text-sm text-base-content/60">Help the community by sharing your thoughts on the games you've conquered.</p>
+        </div>
+        <a href="{% url 'rate_my_games' %}" class="btn btn-primary btn-sm shrink-0">Rate My Games</a>
+    </div>
+</div>
+{% endif %}
+
+{# ─── Main Content ────────────────────────────────────────────────────── #}
+<div class="flex flex-col lg:flex-row gap-4 mt-4 items-start">
+
+    {# ── Sidebar ──────────────────────────────────────────────────────── #}
+    <aside class="w-full lg:w-1/3 flex flex-col gap-4">
+
+        {# Most Reviewed Games #}
+        <div class="card bg-base-100 border-2 border-base-300 shadow-sm">
+            <div class="card-body p-4">
+                <h2 class="text-lg font-bold flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-accent" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/>
+                    </svg>
+                    Most Reviewed
+                </h2>
+                <div class="divider divider-vertical m-0 p-0"></div>
+                {% if most_reviewed %}
+                <ul class="flex flex-col gap-2">
+                    {% for game in most_reviewed %}
+                    <li>
+                        <a href="{% url 'review_hub' game.slug %}" class="flex items-center gap-3 p-2 rounded-lg hover:bg-base-200 transition-colors group">
+                            <div class="shrink-0 w-10 h-10 rounded-lg overflow-hidden border border-base-300">
+                                {% if game.concept_icon_url %}
+                                    <img src="{{ game.concept_icon_url }}" alt="" class="w-full h-full object-cover" loading="lazy" />
+                                {% else %}
+                                    <div class="w-full h-full bg-base-300 flex items-center justify-center">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-base-content/30" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                                    </div>
+                                {% endif %}
+                            </div>
+                            <div class="flex-1 min-w-0">
+                                <p class="text-sm font-bold text-base-content line-clamp-1 pr-1 group-hover:text-primary transition-colors">{{ game.unified_title }}</p>
+                                <div class="flex items-center gap-2 text-xs text-base-content/50">
+                                    <span>{{ game.review_count }} review{{ game.review_count|pluralize }}</span>
+                                    {% if game.recommendation_pct > 0 %}
+                                    <span class="text-success">{{ game.recommendation_pct }}% rec.</span>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </a>
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% else %}
+                <p class="text-sm text-base-content/50 italic py-4 text-center">No reviews yet. Be the first!</p>
+                {% endif %}
+            </div>
+        </div>
+
+        {# Trending Reviews (server-rendered) #}
+        {% if trending_reviews %}
+        <div class="card bg-base-100 border-2 border-base-300 shadow-sm">
+            <div class="card-body p-4">
+                <h2 class="text-lg font-bold flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-warning" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M17.657 18.657A8 8 0 016.343 7.343S7 9 9 10c0-2 .5-5 2.986-7C14 5 16.09 5.777 17.656 7.343A7.975 7.975 0 0120 13a7.975 7.975 0 01-2.343 5.657z"/>
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M9.879 16.121A3 3 0 1012.015 11L11 14H9c0 .768.293 1.536.879 2.121z"/>
+                    </svg>
+                    Trending This Week
+                </h2>
+                <div class="divider divider-vertical m-0 p-0"></div>
+                <ul class="flex flex-col gap-3">
+                    {% for review in trending_reviews %}
+                    <li class="border border-base-300 rounded-box p-3">
+                        <div class="flex items-center gap-2 mb-2">
+                            <a href="{% url 'review_hub' review.concept.slug %}" class="flex items-center gap-2 min-w-0">
+                                {% if review.concept.concept_icon_url %}
+                                    <img src="{{ review.concept.concept_icon_url }}" alt="" class="w-6 h-6 rounded object-cover shrink-0" loading="lazy" />
+                                {% endif %}
+                                <span class="text-xs font-bold text-primary line-clamp-1 pr-1 hover:underline">{{ review.concept.unified_title }}</span>
+                            </a>
+                        </div>
+                        <div class="flex items-center gap-2 mb-1">
+                            {% if review.recommended %}
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-success shrink-0" viewBox="0 0 24 24" fill="currentColor"><path d="M2 21h4V9H2v12zm22-11c0-1.1-.9-2-2-2h-6.31l.95-4.57.03-.32c0-.41-.17-.79-.44-1.06L15.17 1 7.59 8.59C7.22 8.95 7 9.45 7 10v10c0 1.1.9 2 2 2h9c.83 0 1.54-.5 1.84-1.22l3.02-7.05c.09-.23.14-.47.14-.73v-2z"/></svg>
+                            {% else %}
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-error shrink-0" viewBox="0 0 24 24" fill="currentColor"><path d="M15 3H6c-.83 0-1.54.5-1.84 1.22l-3.02 7.05c-.09.23-.14.47-.14.73v2c0 1.1.9 2 2 2h6.31l-.95 4.57-.03.32c0 .41.17.79.44 1.06L9.83 23l7.58-7.59c.36-.36.59-.86.59-1.41V5c0-1.1-.9-2-2-2zm4 0v12h4V3h-4z"/></svg>
+                            {% endif %}
+                            <a href="/profiles/{{ review.profile.psn_username }}/" class="text-xs font-bold text-primary hover:underline">{{ review.profile.display_psn_username }}</a>
+                            <span class="text-xs text-base-content/40 ml-auto flex items-center gap-1">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M2 21h4V9H2v12zm22-11c0-1.1-.9-2-2-2h-6.31l.95-4.57.03-.32c0-.41-.17-.79-.44-1.06L15.17 1 7.59 8.59C7.22 8.95 7 9.45 7 10v10c0 1.1.9 2 2 2h9c.83 0 1.54-.5 1.84-1.22l3.02-7.05c.09-.23.14-.47.14-.73v-2z"/></svg>
+                                {{ review.helpful_count }}
+                            </span>
+                        </div>
+                        <p class="text-sm text-base-content/80 line-clamp-3 pr-1 italic">{{ review.body|truncatewords:40 }}</p>
+                    </li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+        {% endif %}
+    </aside>
+
+    {# ── Main Feed ────────────────────────────────────────────────────── #}
+    <main class="w-full lg:w-2/3 flex flex-col gap-4">
+
+        {# Sort Controls #}
+        <div class="flex items-center gap-2">
+            <h2 class="text-lg font-bold flex-1">Recent Reviews</h2>
+            <button class="btn btn-sm btn-primary landing-sort-btn" data-sort="newest">Newest</button>
+            <button class="btn btn-sm btn-ghost border border-base-300 landing-sort-btn" data-sort="helpful">Most Helpful</button>
+        </div>
+
+        {# Review Feed (populated by JS) #}
+        <div id="landing-review-feed" class="flex flex-col gap-4"></div>
+
+        {# Empty State #}
+        <div id="landing-feed-empty" class="hidden text-center py-8">
+            <p class="text-base-content/50 italic">No reviews yet. Be the first to share your thoughts!</p>
+        </div>
+
+        {# Loading Indicator #}
+        <div id="landing-review-loading" class="hidden flex justify-center py-4">
+            <span class="loading loading-dots loading-lg text-primary"></span>
+        </div>
+
+        {# Scroll Sentinel #}
+        <div id="landing-review-sentinel" class="h-1"></div>
+    </main>
+</div>
+{% endblock %}
+
+{% block js_scripts %}
+<script src="{% static 'js/review-hub-landing.js' %}"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        PlatPursuit.ZoomScaler.init();
+        PlatPursuit.ReviewHubLanding.init({
+            isAuthenticated: {{ user.is_authenticated|yesno:'true,false' }},
+            profileId: {{ user.profile.id|default:'null' }},
+        });
+    });
+</script>
+{% endblock %}

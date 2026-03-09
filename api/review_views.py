@@ -229,6 +229,90 @@ def _serialize_reply(reply, is_own=False):
 
 
 # ------------------------------------------------------------------ #
+#  Recent Reviews (Landing Page Feed)
+# ------------------------------------------------------------------ #
+
+class RecentReviewsView(APIView):
+    """Recent reviews feed across all games for the Review Hub landing page."""
+    authentication_classes = [SessionAuthentication, TokenAuthentication]
+    permission_classes = []
+
+    def get(self, request):
+        """
+        GET /api/v1/reviews/recent/?sort=newest|helpful&limit=10&offset=0
+        Returns paginated reviews with concept metadata for the landing feed.
+        """
+        try:
+            sort = request.query_params.get('sort', 'newest')
+            if sort not in ('newest', 'helpful'):
+                sort = 'newest'
+            limit = min(safe_int(request.query_params.get('limit', 10), 10), 50)
+            offset = max(safe_int(request.query_params.get('offset', 0), 0), 0)
+
+            sort_map = {
+                'newest': ('-created_at',),
+                'helpful': ('-helpful_count', '-created_at'),
+            }
+
+            qs = (
+                Review.objects
+                .filter(is_deleted=False)
+                .select_related('profile', 'concept')
+                .prefetch_related('profile__user_titles__title')
+                .order_by(*sort_map[sort])
+            )
+
+            total_count = qs.count()
+            paginated = list(qs[offset:offset + limit])
+            has_more = (offset + limit) < total_count
+
+            # Batch-fetch user votes
+            profile = None
+            if request.user.is_authenticated:
+                profile = getattr(request.user, 'profile', None)
+
+            user_votes = {}
+            if profile and paginated:
+                review_ids = [r.id for r in paginated]
+                votes = ReviewVote.objects.filter(
+                    review_id__in=review_ids, profile=profile,
+                ).values_list('review_id', 'vote_type')
+                for rid, vtype in votes:
+                    user_votes.setdefault(rid, set()).add(vtype)
+
+            reviews_data = []
+            for review in paginated:
+                rv = user_votes.get(review.id, set())
+                data = _serialize_review(
+                    review,
+                    user_voted_helpful='helpful' in rv,
+                    user_voted_funny='funny' in rv,
+                    is_own=(profile and review.profile_id == profile.id),
+                )
+                # Add concept metadata for landing page cards
+                data['concept'] = {
+                    'unified_title': review.concept.unified_title,
+                    'slug': review.concept.slug,
+                    'concept_icon_url': review.concept.concept_icon_url or '',
+                }
+                reviews_data.append(data)
+
+            return Response({
+                'reviews': reviews_data,
+                'count': total_count,
+                'has_more': has_more,
+                'next_offset': offset + limit,
+                'sort': sort,
+            })
+        except Exception as e:
+            logger.exception(f"Error loading recent reviews: {e}")
+            return Response(
+                {'error': 'Failed to load reviews.'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+
+# ------------------------------------------------------------------ #
 #  Review List & Create
 # ------------------------------------------------------------------ #
 

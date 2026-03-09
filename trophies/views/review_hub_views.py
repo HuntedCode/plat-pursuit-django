@@ -1,23 +1,53 @@
 """
 Review Hub views.
 
-Displays the Review Hub for a Concept, with DLC-aware trophy group tabs,
-recommendation stats, community ratings, and a review feed.
+ReviewHubLandingView: Discovery page at /reviews/ with stats, trending, and recent feed.
+ReviewHubDetailView: Per-concept detail page at /reviews/<slug>/ with ratings and reviews.
 """
 import logging
 
 from django.http import Http404
 from django.urls import reverse
-from django.views.generic import DetailView
+from django.views.generic import DetailView, TemplateView
 
 from trophies.mixins import ProfileHotbarMixin, BackgroundContextMixin
 from trophies.models import Concept, Review, UserConceptRating, ConceptTrophyGroup
 from trophies.services.review_service import ReviewService
+from trophies.services.review_hub_service import ReviewHubService
 from trophies.services.rating_service import RatingService
 from trophies.services.concept_trophy_group_service import ConceptTrophyGroupService
 from trophies.forms import UserConceptRatingForm
 
 logger = logging.getLogger('psn_api')
+
+
+class ReviewHubLandingView(ProfileHotbarMixin, TemplateView):
+    """Review Hub landing page with discovery content."""
+
+    template_name = 'trophies/review_hub.html'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+
+        context['breadcrumb'] = [
+            {'text': 'Home', 'url': reverse('home')},
+            {'text': 'Review Hub'},
+        ]
+
+        context['stats'] = ReviewHubService.get_hub_stats()
+        context['most_reviewed'] = ReviewHubService.get_most_reviewed_games(limit=10)
+        context['trending_reviews'] = ReviewHubService.get_trending_reviews(days=7, limit=5)
+
+        if (
+            self.request.user.is_authenticated
+            and hasattr(self.request.user, 'profile')
+            and self.request.user.profile
+        ):
+            profile = self.request.user.profile
+            context['unrated_count'] = ReviewHubService.get_unrated_platinum_count(profile)
+            context['unreviewed_count'] = ReviewHubService.get_unreviewed_platinum_count(profile)
+
+        return context
 
 
 class ReviewHubDetailView(ProfileHotbarMixin, BackgroundContextMixin, DetailView):
