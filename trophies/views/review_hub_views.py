@@ -3,15 +3,19 @@ Review Hub views.
 
 ReviewHubLandingView: Discovery page at /reviews/ with stats, trending, and recent feed.
 ReviewHubDetailView: Per-concept detail page at /reviews/<slug>/ with ratings and reviews.
+RateMyGamesView: Wizard for quickly rating/reviewing platinumed games.
 """
 import logging
 
+from django.contrib.auth.mixins import LoginRequiredMixin  # noqa: F401 - restore when review hub goes public
 from django.http import Http404
 from django.urls import reverse
 from django.views.generic import DetailView, TemplateView
 
-from trophies.mixins import ProfileHotbarMixin, BackgroundContextMixin
-from trophies.models import Concept, Review, UserConceptRating, ConceptTrophyGroup
+from trophies.mixins import ProfileHotbarMixin, BackgroundContextMixin, StaffRequiredMixin
+from trophies.models import (
+    Concept, ConceptTrophyGroup, EarnedTrophy, Review, Trophy, UserConceptRating,
+)
 from trophies.services.review_service import ReviewService
 from trophies.services.review_hub_service import ReviewHubService
 from trophies.services.rating_service import RatingService
@@ -21,7 +25,7 @@ from trophies.forms import UserConceptRatingForm
 logger = logging.getLogger('psn_api')
 
 
-class ReviewHubLandingView(ProfileHotbarMixin, TemplateView):
+class ReviewHubLandingView(StaffRequiredMixin, ProfileHotbarMixin, TemplateView):
     """Review Hub landing page with discovery content."""
 
     template_name = 'trophies/review_hub.html'
@@ -50,7 +54,32 @@ class ReviewHubLandingView(ProfileHotbarMixin, TemplateView):
         return context
 
 
-class ReviewHubDetailView(ProfileHotbarMixin, BackgroundContextMixin, DetailView):
+class RateMyGamesView(StaffRequiredMixin, ProfileHotbarMixin, TemplateView):
+    """Wizard for quickly rating and reviewing platinumed games."""
+
+    template_name = 'trophies/rate_my_games.html'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+
+        context['breadcrumb'] = [
+            {'text': 'Home', 'url': reverse('home')},
+            {'text': 'Review Hub', 'url': reverse('reviews_landing')},
+            {'text': 'Rate My Games'},
+        ]
+
+        profile = getattr(self.request.user, 'profile', None)
+        if profile:
+            context['unrated_count'] = ReviewHubService.get_unrated_platinum_count(profile)
+            context['unreviewed_count'] = ReviewHubService.get_unreviewed_platinum_count(profile)
+        else:
+            context['unrated_count'] = 0
+            context['unreviewed_count'] = 0
+
+        return context
+
+
+class ReviewHubDetailView(StaffRequiredMixin, ProfileHotbarMixin, BackgroundContextMixin, DetailView):
     """Review Hub detail page for a game concept."""
 
     model = Concept
@@ -82,7 +111,7 @@ class ReviewHubDetailView(ProfileHotbarMixin, BackgroundContextMixin, DetailView
         # Breadcrumb
         context['breadcrumb'] = [
             {'text': 'Home', 'url': reverse('home')},
-            {'text': 'Review Hub'},
+            {'text': 'Review Hub', 'url': reverse('reviews_landing')},
             {'text': concept.unified_title},
         ]
 
@@ -125,6 +154,7 @@ class ReviewHubDetailView(ProfileHotbarMixin, BackgroundContextMixin, DetailView
             context['review_count'] = 0
             context['concept_games'] = concept.games.all()[:5]
             context['concept_icon'] = self._get_concept_icon(concept)
+            context['unique_platforms'] = self._get_unique_platforms(context['concept_games'])
             return context
 
         # Recommendation stats
@@ -189,6 +219,11 @@ class ReviewHubDetailView(ProfileHotbarMixin, BackgroundContextMixin, DetailView
                 context['rating_form'] = UserConceptRatingForm(instance=user_rating)
             else:
                 context['rating_form'] = None
+
+            # User's gameplay stats for this concept
+            context['user_game_stats'] = self._get_user_game_stats(
+                profile, concept
+            )
         else:
             context['user_review'] = None
             context['can_review'] = False
@@ -198,11 +233,67 @@ class ReviewHubDetailView(ProfileHotbarMixin, BackgroundContextMixin, DetailView
             context['user_rating'] = None
             context['rating_form'] = None
 
+        # Condensed trophy list for sidebar
+        context['trophy_list'] = self._get_trophy_list(
+            concept, active_group, profile
+        )
+
         # Concept games for header
         context['concept_games'] = concept.games.all()[:5]
         context['concept_icon'] = self._get_concept_icon(concept)
 
+        context['unique_platforms'] = self._get_unique_platforms(context['concept_games'])
+
         return context
+
+    @staticmethod
+    def _get_trophy_list(concept, active_group, profile):
+        """Build a condensed, deduplicated trophy list for the active group."""
+        trophies_qs = Trophy.objects.filter(
+            game__concept=concept,
+            trophy_group_id=active_group.trophy_group_id,
+        ).order_by('trophy_id').values(
+            'trophy_id', 'trophy_type', 'trophy_name',
+            'trophy_detail', 'trophy_icon_url',
+        )
+
+        # Deduplicate by trophy_id (same trophy across multi-region stacks)
+        seen_ids = set()
+        trophy_list = []
+        for t in trophies_qs:
+            if t['trophy_id'] not in seen_ids:
+                seen_ids.add(t['trophy_id'])
+                trophy_list.append(t)
+
+        # Add earned status for authenticated user
+        if profile:
+            earned_ids = set(
+                EarnedTrophy.objects.filter(
+                    profile=profile,
+                    earned=True,
+                    trophy__game__concept=concept,
+                    trophy__trophy_group_id=active_group.trophy_group_id,
+                ).values_list('trophy__trophy_id', flat=True).distinct()
+            )
+            for t in trophy_list:
+                t['earned'] = t['trophy_id'] in earned_ids
+        else:
+            for t in trophy_list:
+                t['earned'] = False
+
+        return trophy_list
+
+    @staticmethod
+    def _get_unique_platforms(games):
+        """Deduplicate platforms across multiple Game records (avoids 'PS4 PS4 PS4')."""
+        seen = set()
+        platforms = []
+        for game in games:
+            for platform in (game.title_platform or []):
+                if platform not in seen:
+                    seen.add(platform)
+                    platforms.append(platform)
+        return platforms
 
     @staticmethod
     def _get_profile(request):
@@ -214,6 +305,51 @@ class ReviewHubDetailView(ProfileHotbarMixin, BackgroundContextMixin, DetailView
         ):
             return request.user.profile
         return None
+
+    @staticmethod
+    def _get_user_game_stats(profile, concept):
+        """Get the authenticated user's gameplay stats for this concept."""
+        from trophies.models import ProfileGame, EarnedTrophy
+        from django.db.models import Sum, Max
+
+        row = ProfileGame.objects.filter(
+            profile=profile,
+            game__concept=concept,
+        ).aggregate(
+            max_progress=Max('progress'),
+            total_earned=Sum('earned_trophies_count'),
+            total_unearned=Sum('unearned_trophies_count'),
+            total_play=Sum('play_duration'),
+        )
+
+        earned = row['total_earned'] or 0
+        unearned = row['total_unearned'] or 0
+        total = earned + unearned
+        progress = row['max_progress'] or 0
+        play_hours = None
+        if row['total_play']:
+            play_hours = int(row['total_play'].total_seconds()) // 3600
+
+        # Platinum date (most recent platinum across multi-region stacks)
+        plat_trophy = EarnedTrophy.objects.filter(
+            profile=profile,
+            earned=True,
+            trophy__trophy_type='platinum',
+            trophy__game__concept=concept,
+        ).order_by('-earned_date_time').values_list(
+            'earned_date_time', flat=True
+        ).first()
+
+        if not total and not plat_trophy:
+            return None
+
+        return {
+            'earned_trophies': earned,
+            'total_trophies': total,
+            'progress': progress,
+            'play_hours': play_hours,
+            'platinum_date': plat_trophy,
+        }
 
     @staticmethod
     def _get_concept_icon(concept):

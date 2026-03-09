@@ -874,11 +874,11 @@ const InfiniteScroller = {
             }
         }
 
-        const observer = new IntersectionObserver(entries => {
+        const observer = new ZoomAwareObserver(entries => {
             if (entries[0].isIntersecting) {
                 loadMore();
             }
-        }, { threshold: 1.0 });
+        }, { threshold: 0.1, scrollBuffer: 100 });
 
         if (grid.children.length >= config.paginateBy) {
             observer.observe(sentinel);
@@ -936,6 +936,108 @@ const ZoomScaler = {
 };
 
 /**
+ * ZoomAwareObserver - Drop-in IntersectionObserver replacement that works under ZoomScaler.
+ *
+ * When ZoomScaler is active (sub-768px), CSS transform: scale() + overflow: hidden on
+ * #zoom-container breaks IntersectionObserver's clipping calculations. This utility
+ * switches to a scroll-event fallback using getBoundingClientRect() (which correctly
+ * accounts for CSS transforms) when zoom scaling is detected.
+ *
+ * On desktop (no zoom), delegates 100% to native IntersectionObserver with zero overhead.
+ *
+ * Options: all standard IntersectionObserver options, plus:
+ *   scrollBuffer {number} - pixels beyond viewport to trigger in scroll mode (default: 100)
+ *
+ * Usage: new PlatPursuit.ZoomAwareObserver(callback, { threshold: 0.1, scrollBuffer: 100 })
+ */
+class ZoomAwareObserver {
+    constructor(callback, options = {}) {
+        this._callback = callback;
+        this._targets = new Set();
+        this._scrollBuffer = options.scrollBuffer ?? 100;
+        this._ticking = false;
+        this._nativeOptions = { ...options };
+        delete this._nativeOptions.scrollBuffer;
+
+        this._useScroll = this._isZoomActive();
+        if (this._useScroll) {
+            this._initScrollMode();
+        } else {
+            this._observer = new IntersectionObserver(callback, this._nativeOptions);
+        }
+
+        this._onResize = () => {
+            const shouldUseScroll = this._isZoomActive();
+            if (shouldUseScroll !== this._useScroll) {
+                this._switchMode(shouldUseScroll);
+            }
+        };
+        window.addEventListener('resize', this._onResize);
+    }
+
+    _isZoomActive() {
+        const container = document.getElementById('zoom-container');
+        return container?.classList.contains('zoom-active') && window.innerWidth < 768;
+    }
+
+    _initScrollMode() {
+        this._onScroll = this._checkIntersections.bind(this);
+        window.addEventListener('scroll', this._onScroll, { passive: true });
+    }
+
+    _checkIntersections() {
+        if (this._ticking) return;
+        this._ticking = true;
+        requestAnimationFrame(() => {
+            this._ticking = false;
+            for (const target of this._targets) {
+                const rect = target.getBoundingClientRect();
+                const isIntersecting = rect.top < window.innerHeight + this._scrollBuffer
+                    && rect.bottom > -this._scrollBuffer;
+                if (isIntersecting) {
+                    this._callback([{ isIntersecting: true, target }], this);
+                }
+            }
+        });
+    }
+
+    _switchMode(useScroll) {
+        const savedTargets = [...this._targets];
+        if (this._observer) this._observer.disconnect();
+        if (this._onScroll) window.removeEventListener('scroll', this._onScroll);
+        this._observer = null;
+        this._onScroll = null;
+        this._targets = new Set();
+        this._useScroll = useScroll;
+        if (useScroll) {
+            this._initScrollMode();
+        } else {
+            this._observer = new IntersectionObserver(this._callback, this._nativeOptions);
+        }
+        savedTargets.forEach(t => this.observe(t));
+    }
+
+    observe(target) {
+        this._targets.add(target);
+        if (this._observer) this._observer.observe(target);
+    }
+
+    unobserve(target) {
+        this._targets.delete(target);
+        if (this._observer) this._observer.unobserve(target);
+    }
+
+    disconnect() {
+        this._targets.clear();
+        if (this._observer) this._observer.disconnect();
+        if (this._onScroll) window.removeEventListener('scroll', this._onScroll);
+        window.removeEventListener('resize', this._onResize);
+        this._observer = null;
+        this._onScroll = null;
+    }
+}
+
+/**
  * Leaderboard Utilities
  * Shared helpers for leaderboard page interactions
  */
@@ -962,6 +1064,159 @@ const LeaderboardUtils = {
     }
 };
 
+/**
+ * ReviewProgressTiers: Shared word-count tier data for review progress bars.
+ * Used by both review-hub.js and rate-my-games.js to drive trophy icon
+ * colors and progress bar styling as the reviewer writes.
+ */
+const ReviewProgressTiers = {
+    iconTiers: [
+        { words: 0,   cssColor: 'var(--color-base-content)', opacity: '0.25' },
+        { words: 25,  cssColor: 'var(--color-trophy-bronze)', opacity: '1' },
+        { words: 75,  cssColor: 'var(--color-trophy-silver)', opacity: '1' },
+        { words: 100, cssColor: 'var(--color-trophy-gold)',   opacity: '1' },
+    ],
+    progressTiers: [
+        { words: 0,   pct: 0,   color: 'bg-error',   nextWords: 10,  nextLabel: 'getting started' },
+        { words: 10,  pct: 15,  color: 'bg-error',   nextWords: 25,  nextLabel: 'a solid start' },
+        { words: 25,  pct: 35,  color: 'bg-warning',  nextWords: 50,  nextLabel: 'a good review' },
+        { words: 50,  pct: 55,  color: 'bg-warning',  nextWords: 75,  nextLabel: 'a great review' },
+        { words: 75,  pct: 75,  color: 'bg-info',     nextWords: 100, nextLabel: 'an excellent review' },
+        { words: 100, pct: 90,  color: 'bg-success',  nextWords: 150, nextLabel: 'an outstanding review' },
+        { words: 150, pct: 100, color: 'bg-success',  nextWords: null, nextLabel: null },
+    ],
+
+    /** Trophy cup SVG for dynamic HTML (mirrors partials/icons/trophy_cup.html). */
+    trophyCupSvg: '<svg class="w-5 h-5 inline-block flex-shrink-0" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="currentColor" aria-hidden="true"><path d="M102.49,0c0,27.414,0,104.166,0,137.062c0,112.391,99.33,156.25,153.51,156.25c54.18,0,153.51-43.859,153.51-156.25c0-32.896,0-109.648,0-137.062H102.49z M256.289,50.551l-68.164,29.768v98.474l-0.049,19.53c-0.526-0.112-47.274-10.112-47.274-78.391c0-28.17,0-69.6,0-69.6h60.385L256.289,50.551z"/><polygon points="315.473,400.717 291.681,367.482 279.791,318.506 256,322.004 232.209,318.506 220.314,367.482 205.347,388.394 196.527,400.476 196.699,400.476 196.527,400.717"/><polygon points="366.93,432.24 366.93,432 145.07,432 145.07,511.598 145.07,511.76 145.07,511.76 145.07,512 366.93,512 366.93,432.402 366.93,432.24"/><path d="M511.638,96.668c-0.033-1.268-0.068-2.336-0.068-3.174V45.1h-73.889v38.736h35.152v9.658c0,1.127,0.037,2.557,0.086,4.258c0.389,13.976,1.303,46.707-21.545,70.203c-5.121,5.266-11.221,9.787-18.219,13.613c-3.883,17.635-10.109,33.564-18.104,47.814c26.561-6.406,48.026-17.898,64.096-34.422C513.402,159.734,512.121,113.918,511.638,96.668z"/><path d="M60.625,167.955c-22.848-23.496-21.934-56.227-21.541-70.203c0.047-1.701,0.082-3.131,0.082-4.258v-9.658h34.842h0.07l0,0h0.24V45.1H0.43v48.394c0,0.838-0.032,1.906-0.068,3.174c-0.482,17.25-1.76,63.066,32.494,98.293c16.068,16.524,37.531,28.014,64.092,34.422c-7.996-14.25-14.22-30.182-18.103-47.816C71.846,177.74,65.746,173.221,60.625,167.955z"/></svg>',
+
+    /**
+     * Update a word-count progress bar, text label, and trophy icon.
+     * Shared by review creation, wizard, and both edit forms.
+     *
+     * @param {Object} els - DOM elements: { bar, text, icon } (all optional)
+     * @param {number} wordCount - Current word count
+     */
+    updateWordProgress(els, wordCount) {
+        const { bar, text, icon } = els;
+
+        // Find current tier
+        let tier = this.progressTiers[0];
+        for (let i = this.progressTiers.length - 1; i >= 0; i--) {
+            if (wordCount >= this.progressTiers[i].words) {
+                tier = this.progressTiers[i];
+                break;
+            }
+        }
+
+        // Smooth width interpolation between tiers
+        if (bar) {
+            let barWidth = tier.pct;
+            const tierIdx = this.progressTiers.indexOf(tier);
+            if (tierIdx < this.progressTiers.length - 1) {
+                const next = this.progressTiers[tierIdx + 1];
+                const progress = (wordCount - tier.words) / (next.words - tier.words);
+                barWidth = tier.pct + (next.pct - tier.pct) * Math.min(progress, 1);
+            }
+            bar.style.width = `${barWidth}%`;
+            bar.className = `h-full rounded-full transition-all duration-300 ease-out ${tier.color}`;
+        }
+
+        // Countdown text
+        if (text) {
+            if (wordCount === 0) {
+                text.textContent = 'Write at least 10 words to get started...';
+            } else if (tier.nextWords) {
+                const remaining = tier.nextWords - wordCount;
+                text.textContent = `${remaining} word${remaining === 1 ? '' : 's'} until ${tier.nextLabel}!`;
+            } else {
+                text.textContent = 'Outstanding review! The community thanks you.';
+            }
+        }
+
+        // Trophy icon color
+        if (icon) {
+            let iconTier = this.iconTiers[0];
+            for (let i = this.iconTiers.length - 1; i >= 0; i--) {
+                if (wordCount >= this.iconTiers[i].words) {
+                    iconTier = this.iconTiers[i];
+                    break;
+                }
+            }
+            icon.style.color = iconTier.cssColor;
+            icon.style.opacity = iconTier.opacity;
+        }
+    },
+};
+
+/**
+ * TrophyListRenderer: Builds condensed trophy list HTML for review hub sidebar
+ * and Rate My Games wizard. Renders compact trophy cards with earned status,
+ * type badges, and a summary header showing counts by type.
+ */
+const TrophyListRenderer = {
+    /** Tailwind classes for each trophy type (already safeguarded in the app theme). */
+    TROPHY_STYLES: {
+        platinum: { cls: 'text-trophy-platinum', label: 'platinum' },
+        gold:     { cls: 'text-trophy-gold',     label: 'gold' },
+        silver:   { cls: 'text-trophy-silver',   label: 'silver' },
+        bronze:   { cls: 'text-trophy-bronze',   label: 'bronze' },
+    },
+
+    /**
+     * Build HTML for a condensed trophy list.
+     * @param {Array} trophies - Array of trophy objects from API
+     * @param {Object} [options]
+     * @param {boolean} [options.showEarned=true] - Whether to show earned indicators
+     * @returns {string} HTML string
+     */
+    buildList(trophies, options = {}) {
+        const { showEarned = true } = options;
+        const esc = HTMLUtils.escape;
+
+        if (!trophies || trophies.length === 0) {
+            return '<p class="text-sm text-base-content/50 italic py-2 pr-1">No trophy data available.</p>';
+        }
+
+        // Count by type for summary header
+        const counts = { platinum: 0, gold: 0, silver: 0, bronze: 0 };
+        trophies.forEach(t => {
+            if (counts[t.trophy_type] !== undefined) counts[t.trophy_type]++;
+        });
+
+        let html = '<div class="flex flex-wrap items-center gap-2 mb-2 text-xs">';
+        for (const [type, count] of Object.entries(counts)) {
+            if (count > 0) {
+                const style = this.TROPHY_STYLES[type];
+                html += `<span class="badge badge-xs font-bold ${style.cls}">${count} ${style.label}</span>`;
+            }
+        }
+        html += `<span class="text-base-content/40 ml-auto">${trophies.length} total</span></div>`;
+
+        html += '<div class="space-y-1 max-h-64 lg:max-h-96 overflow-y-auto pr-1">';
+        for (const t of trophies) {
+            const style = this.TROPHY_STYLES[t.trophy_type] || {};
+            const isEarned = showEarned && t.earned;
+            const earnedClasses = isEarned ? 'bg-success/10 border-l-2 border-success' : '';
+            const earnedIcon = isEarned
+                ? '<svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-success shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>'
+                : '';
+
+            html += `<div class="flex items-center gap-2 p-1.5 rounded ${earnedClasses} hover:bg-base-200/50 transition-colors">`;
+            html += `<img src="${esc(t.trophy_icon_url || '')}" alt="" class="w-8 h-8 object-cover rounded shrink-0" loading="lazy" />`;
+            html += '<div class="flex-1 min-w-0">';
+            html += `<p class="text-xs font-semibold line-clamp-1 pr-1">${esc(t.trophy_name)}</p>`;
+            html += `<p class="text-xs text-base-content/50 line-clamp-1 italic pr-1">${esc(t.trophy_detail || '')}</p>`;
+            html += '</div>';
+            html += `<span class="badge badge-xs font-bold shrink-0 ${style.cls || ''}">${esc(t.trophy_type)}</span>`;
+            html += earnedIcon;
+            html += '</div>';
+        }
+        html += '</div>';
+
+        return html;
+    },
+};
+
 // Export for use in other modules
 window.PlatPursuit = window.PlatPursuit || {};
 window.PlatPursuit.ToastManager = ToastManager;
@@ -974,4 +1229,7 @@ window.PlatPursuit.debounce = debounce;
 window.PlatPursuit.InfiniteScroller = InfiniteScroller;
 window.PlatPursuit.DragReorderManager = DragReorderManager;
 window.PlatPursuit.ZoomScaler = ZoomScaler;
+window.PlatPursuit.ZoomAwareObserver = ZoomAwareObserver;
 window.PlatPursuit.LeaderboardUtils = LeaderboardUtils;
+window.PlatPursuit.ReviewProgressTiers = ReviewProgressTiers;
+window.PlatPursuit.TrophyListRenderer = TrophyListRenderer;

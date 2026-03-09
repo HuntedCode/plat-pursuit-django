@@ -28,7 +28,9 @@ PlatPursuit.ReviewHub = {
         this.initReviewForm();
         this.initRatingForm();
         this.initYourReview();
+        this.initUserRatingToggle();
         this.initRatingsToggle();
+        this.initTrophyListToggle();
     },
 
     // ------------------------------------------------------------------ //
@@ -39,11 +41,11 @@ PlatPursuit.ReviewHub = {
         const sentinel = document.getElementById('review-sentinel');
         if (!sentinel) return;
 
-        this.observer = new IntersectionObserver((entries) => {
+        this.observer = new PlatPursuit.ZoomAwareObserver((entries) => {
             if (entries[0].isIntersecting && !this.isLoading && this.hasMore) {
                 this.loadReviews();
             }
-        }, { rootMargin: '200px' });
+        }, { rootMargin: '200px', scrollBuffer: 200 });
 
         this.observer.observe(sentinel);
         this.loadReviews();
@@ -496,85 +498,19 @@ PlatPursuit.ReviewHub = {
         // Character counter + word progress bar
         const textarea = document.getElementById('review-body');
         const counter = document.getElementById('review-char-count');
-        const progressBar = document.getElementById('review-progress-bar');
-        const progressText = document.getElementById('review-progress-text');
-        const progressIcon = document.getElementById('review-progress-icon');
-
-        // Trophy icon tiers using project CSS vars (fewer breakpoints than text)
-        const iconTiers = [
-            { words: 0,   cssColor: 'var(--color-base-content)', opacity: '0.25' },
-            { words: 25,  cssColor: 'var(--color-trophy-bronze)', opacity: '1' },
-            { words: 75,  cssColor: 'var(--color-trophy-silver)', opacity: '1' },
-            { words: 100, cssColor: 'var(--color-trophy-gold)',   opacity: '1' },
-        ];
-
-        // Text tiers with countdown messages toward the next threshold
-        const progressTiers = [
-            { words: 0,   pct: 0,   color: 'bg-error',   nextWords: 10,  nextLabel: 'getting started' },
-            { words: 10,  pct: 15,  color: 'bg-error',   nextWords: 25,  nextLabel: 'a solid start' },
-            { words: 25,  pct: 35,  color: 'bg-warning',  nextWords: 50,  nextLabel: 'a good review' },
-            { words: 50,  pct: 55,  color: 'bg-warning',  nextWords: 75,  nextLabel: 'a great review' },
-            { words: 75,  pct: 75,  color: 'bg-info',     nextWords: 100, nextLabel: 'an excellent review' },
-            { words: 100, pct: 90,  color: 'bg-success',  nextWords: 150, nextLabel: 'an outstanding review' },
-            { words: 150, pct: 100, color: 'bg-success',  nextWords: null, nextLabel: null },
-        ];
-
-        let currentIconTier = -1;
+        const progressEls = {
+            bar: document.getElementById('review-progress-bar'),
+            text: document.getElementById('review-progress-text'),
+            icon: document.getElementById('review-progress-icon'),
+        };
 
         if (textarea) {
             textarea.addEventListener('input', () => {
-                // Character count + submit gate
                 if (counter) counter.textContent = `${textarea.value.length} / 8000`;
                 updateSubmitState();
 
-                // Word count progress
-                if (!progressBar || !progressText) return;
                 const wordCount = textarea.value.trim() ? textarea.value.trim().split(/\s+/).length : 0;
-
-                let tier = progressTiers[0];
-                for (let i = progressTiers.length - 1; i >= 0; i--) {
-                    if (wordCount >= progressTiers[i].words) {
-                        tier = progressTiers[i];
-                        break;
-                    }
-                }
-
-                // Smooth width between tiers
-                let barWidth = tier.pct;
-                const tierIdx = progressTiers.indexOf(tier);
-                if (tierIdx < progressTiers.length - 1) {
-                    const next = progressTiers[tierIdx + 1];
-                    const progress = (wordCount - tier.words) / (next.words - tier.words);
-                    barWidth = tier.pct + (next.pct - tier.pct) * Math.min(progress, 1);
-                }
-
-                progressBar.style.width = `${barWidth}%`;
-                progressBar.className = `h-full rounded-full transition-all duration-300 ease-out ${tier.color}`;
-
-                // Countdown text toward next threshold
-                if (tier.nextWords) {
-                    const remaining = tier.nextWords - wordCount;
-                    progressText.textContent = `${remaining} word${remaining === 1 ? '' : 's'} until ${tier.nextLabel}!`;
-                } else {
-                    progressText.textContent = 'Outstanding review! The community thanks you.';
-                }
-
-                // Trophy icon color (uses CSS vars, updates at fewer breakpoints)
-                if (progressIcon) {
-                    let newIconTier = 0;
-                    for (let i = iconTiers.length - 1; i >= 0; i--) {
-                        if (wordCount >= iconTiers[i].words) {
-                            newIconTier = i;
-                            break;
-                        }
-                    }
-                    if (newIconTier !== currentIconTier) {
-                        currentIconTier = newIconTier;
-                        const it = iconTiers[newIconTier];
-                        progressIcon.style.color = it.cssColor;
-                        progressIcon.style.opacity = it.opacity;
-                    }
-                }
+                PlatPursuit.ReviewProgressTiers.updateWordProgress(progressEls, wordCount);
             });
         }
 
@@ -641,12 +577,20 @@ PlatPursuit.ReviewHub = {
             });
         });
 
-        // Edit char counter
+        // Edit char counter + word progress bar
         const editBody = document.getElementById('your-review-edit-body');
         const editCounter = document.getElementById('edit-char-count');
-        if (editBody && editCounter) {
+        const editProgressEls = {
+            bar: document.getElementById('edit-progress-bar'),
+            text: document.getElementById('edit-progress-text'),
+            icon: document.getElementById('edit-progress-icon'),
+        };
+
+        if (editBody) {
             editBody.addEventListener('input', () => {
-                editCounter.textContent = `${editBody.value.length} / 8000`;
+                if (editCounter) editCounter.textContent = `${editBody.value.length} / 8000`;
+                const wordCount = editBody.value.trim() ? editBody.value.trim().split(/\s+/).length : 0;
+                PlatPursuit.ReviewProgressTiers.updateWordProgress(editProgressEls, wordCount);
             });
         }
     },
@@ -654,6 +598,17 @@ PlatPursuit.ReviewHub = {
     enterEditMode() {
         document.getElementById('your-review-display')?.classList.add('hidden');
         document.getElementById('your-review-edit')?.classList.remove('hidden');
+
+        // Initialize progress bar with existing content
+        const editBody = document.getElementById('your-review-edit-body');
+        if (editBody) {
+            const wordCount = editBody.value.trim() ? editBody.value.trim().split(/\s+/).length : 0;
+            PlatPursuit.ReviewProgressTiers.updateWordProgress({
+                bar: document.getElementById('edit-progress-bar'),
+                text: document.getElementById('edit-progress-text'),
+                icon: document.getElementById('edit-progress-icon'),
+            }, wordCount);
+        }
     },
 
     exitEditMode() {
@@ -724,10 +679,36 @@ PlatPursuit.ReviewHub = {
                     <button type="button" class="btn btn-xs inline-rec-toggle ${!currentRec ? 'btn-error active' : 'btn-ghost border border-base-300'}" data-value="false">No</button>
                 </div>
                 <textarea class="textarea textarea-bordered w-full text-sm inline-edit-body" rows="4" maxlength="8000">${PlatPursuit.HTMLUtils.escape(currentBody)}</textarea>
+                <div class="mt-2">
+                    <div class="flex items-center gap-2">
+                        <div class="inline-edit-progress-icon shrink-0 transition-all duration-300" style="color: var(--color-base-content); opacity: 0.25;">
+                            ${PlatPursuit.ReviewProgressTiers.trophyCupSvg}
+                        </div>
+                        <div class="flex-1 bg-base-300 rounded-full h-2 overflow-hidden">
+                            <div class="inline-edit-progress-bar h-full rounded-full transition-all duration-300 ease-out bg-error" style="width: 0%"></div>
+                        </div>
+                    </div>
+                    <p class="inline-edit-progress-text text-xs text-base-content/50 mt-1 italic pr-1">Write at least 10 words to get started...</p>
+                </div>
                 <div class="flex gap-2 mt-2">
                     <button class="btn btn-xs btn-primary inline-save-btn">Save</button>
                     <button class="btn btn-xs btn-ghost inline-cancel-btn">Cancel</button>
                 </div>`;
+
+            // Wire up progress bar
+            const inlineProgressEls = {
+                bar: bodyDisplay.querySelector('.inline-edit-progress-bar'),
+                text: bodyDisplay.querySelector('.inline-edit-progress-text'),
+                icon: bodyDisplay.querySelector('.inline-edit-progress-icon'),
+            };
+            const inlineTextarea = bodyDisplay.querySelector('.inline-edit-body');
+            const initialWords = currentBody.trim() ? currentBody.trim().split(/\s+/).length : 0;
+            PlatPursuit.ReviewProgressTiers.updateWordProgress(inlineProgressEls, initialWords);
+
+            inlineTextarea.addEventListener('input', () => {
+                const wc = inlineTextarea.value.trim() ? inlineTextarea.value.trim().split(/\s+/).length : 0;
+                PlatPursuit.ReviewProgressTiers.updateWordProgress(inlineProgressEls, wc);
+            });
 
             // Toggle handlers
             bodyDisplay.querySelectorAll('.inline-rec-toggle').forEach(btn => {
@@ -831,6 +812,22 @@ PlatPursuit.ReviewHub = {
     },
 
     // ------------------------------------------------------------------ //
+    //  User Rating Panel Toggle
+    // ------------------------------------------------------------------ //
+
+    initUserRatingToggle() {
+        const toggleBtn = document.getElementById('toggle-user-rating');
+        const content = document.getElementById('user-rating-content');
+        const chevron = document.getElementById('user-rating-chevron');
+        if (!toggleBtn || !content) return;
+
+        toggleBtn.addEventListener('click', () => {
+            content.classList.toggle('hidden');
+            if (chevron) chevron.classList.toggle('rotate-180');
+        });
+    },
+
+    // ------------------------------------------------------------------ //
     //  Ratings Display Toggle
     // ------------------------------------------------------------------ //
 
@@ -846,25 +843,24 @@ PlatPursuit.ReviewHub = {
         });
     },
 
+    initTrophyListToggle() {
+        const toggleBtn = document.getElementById('toggle-trophy-list');
+        const content = document.getElementById('trophy-list-content');
+        const chevron = document.getElementById('trophy-list-chevron');
+        if (!toggleBtn || !content) return;
+
+        toggleBtn.addEventListener('click', () => {
+            content.classList.toggle('hidden');
+            if (chevron) chevron.classList.toggle('rotate-180');
+        });
+    },
+
     // ------------------------------------------------------------------ //
     //  Rating Form
     // ------------------------------------------------------------------ //
 
     initRatingForm() {
-        const toggleBtn = document.getElementById('toggle-rating-form');
-        const container = document.getElementById('rating-form-container');
         const form = document.getElementById('rating-form');
-
-        if (toggleBtn && container) {
-            toggleBtn.dataset.originalText = toggleBtn.textContent;
-            toggleBtn.addEventListener('click', () => {
-                container.classList.toggle('hidden');
-                toggleBtn.textContent = container.classList.contains('hidden')
-                    ? toggleBtn.dataset.originalText
-                    : 'Cancel';
-            });
-        }
-
         if (!form) return;
 
         form.addEventListener('submit', async (e) => {
@@ -889,9 +885,13 @@ PlatPursuit.ReviewHub = {
                 );
                 PlatPursuit.ToastManager.success(data.message || 'Rating submitted!');
 
+                // Update submit button text for subsequent submissions
+                const submitBtn2 = form.querySelector('button[type="submit"]');
+                if (submitBtn2) submitBtn2.textContent = 'Update Rating';
+
                 // Update community averages display
                 if (data.community_averages) {
-                    setTimeout(() => window.location.reload(), 1000);
+                    this.updateCommunityStatsDisplay(data.community_averages);
                 }
             } catch (error) {
                 const errData = await error.response?.json().catch(() => null);
@@ -900,5 +900,84 @@ PlatPursuit.ReviewHub = {
                 if (submitBtn) submitBtn.disabled = false;
             }
         });
+    },
+
+    // ------------------------------------------------------------------ //
+    //  Dynamic Stats Updates
+    // ------------------------------------------------------------------ //
+
+    _getColorClass(value, thresholds) {
+        for (const [max, cls] of thresholds) {
+            if (value < max) return cls;
+        }
+        return thresholds[thresholds.length - 1][1];
+    },
+
+    _getProgressClass(value, thresholds) {
+        for (const [max, cls] of thresholds) {
+            if (value < max) return cls;
+        }
+        return thresholds[thresholds.length - 1][1];
+    },
+
+    updateCommunityStatsDisplay(avg) {
+        if (!avg) return;
+        const container = document.getElementById('ratings-display-content');
+        if (!container) return;
+
+        // Update each community stat inline
+        const statMap = {
+            difficulty: { val: avg.avg_difficulty, fmt: v => v.toFixed(1) },
+            grindiness: { val: avg.avg_grindiness, fmt: v => v.toFixed(1) },
+            hours: { val: avg.avg_hours, fmt: v => Math.round(v).toLocaleString() },
+            fun: { val: avg.avg_fun, fmt: v => v.toFixed(1) },
+            overall: { val: avg.avg_rating, fmt: v => v.toFixed(1) },
+        };
+
+        // Find all stat value spans within the community panel grid
+        const grid = container.querySelector('[role="list"]');
+        if (!grid) return;
+
+        const items = grid.querySelectorAll('[role="listitem"]');
+        const labels = ['Difficulty', 'Grindiness', 'Hours To Plat', 'Fun Ranking', 'Overall Rating'];
+        const keys = ['difficulty', 'grindiness', 'hours', 'fun', 'overall'];
+
+        const stdThresholds = [[4, 'text-success'], [8, 'text-warning'], [Infinity, 'text-error']];
+        const stdBarThresholds = [[4, 'progress-success'], [8, 'progress-warning'], [Infinity, 'progress-error']];
+        const funThresholds = [[4, 'text-error'], [8, 'text-warning'], [Infinity, 'text-success']];
+        const funBarThresholds = [[4, 'progress-error'], [8, 'progress-warning'], [Infinity, 'progress-success']];
+        const hoursThresholds = [[25, 'text-success'], [75, 'text-warning'], [100, 'text-accent'], [Infinity, 'text-error']];
+        const hoursBarThresholds = [[25, 'progress-success'], [75, 'progress-warning'], [100, 'progress-accent'], [Infinity, 'progress-error']];
+        const overallThresholds = [[2, 'text-error'], [4, 'text-warning'], [Infinity, 'text-success']];
+        const overallBarThresholds = [[2, 'progress-error'], [4, 'progress-warning'], [Infinity, 'progress-success']];
+
+        const thresholdSets = [stdThresholds, stdThresholds, hoursThresholds, funThresholds, overallThresholds];
+        const barThresholdSets = [stdBarThresholds, stdBarThresholds, hoursBarThresholds, funBarThresholds, overallBarThresholds];
+
+        items.forEach((item, i) => {
+            if (i >= keys.length) return;
+            const key = keys[i];
+            const data = statMap[key];
+            if (data.val == null) return;
+
+            const valSpan = item.querySelector('.text-xl');
+            const bar = item.querySelector('progress');
+            if (valSpan) {
+                valSpan.textContent = data.fmt(data.val);
+                valSpan.className = valSpan.className.replace(/text-(success|warning|error|accent)/g, '');
+                valSpan.classList.add(this._getColorClass(data.val, thresholdSets[i]));
+            }
+            if (bar) {
+                bar.value = data.val;
+                bar.className = bar.className.replace(/progress-(success|warning|error|accent)/g, '');
+                bar.classList.add(this._getProgressClass(data.val, barThresholdSets[i]));
+            }
+        });
+
+        // Update count text
+        const countText = container.querySelector('.text-xs.text-center.italic');
+        if (countText && avg.count != null) {
+            countText.textContent = `Based on ${avg.count.toLocaleString()} rating${avg.count === 1 ? '' : 's'}.`;
+        }
     },
 };

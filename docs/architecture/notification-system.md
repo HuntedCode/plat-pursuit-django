@@ -142,7 +142,7 @@ Captures a snapshot of what was sent: notification_type, title, message, detail,
 |------|---------|----------------|-------|
 | `platinum_earned` | EarnedTrophy post_save (platinum, earned=True flip) | `notify_platinum_earned` signal | 2-day threshold, shovelware filter, deferred during sync |
 | `badge_awarded` | UserBadge post_save (created=True) | `notify_badge_awarded` signal | Always deferred for series consolidation |
-| `milestone_achieved` | Called from milestone_service.py | `create_milestone_notification()` function | Not a signal; called directly for batch consolidation |
+| `milestone_achieved` | Called from milestone_service.py | `create_milestone_notification()` function | Not a signal; called directly for batch consolidation. Context includes `title_name` for milestones with title rewards. |
 | `monthly_recap` | Monthly recap generation | Created externally | Monthly recap availability |
 | `subscription_created` | Subscription activation | Created externally | Welcome notification |
 | `subscription_updated` | Subscription change | Created externally | Plan change notification |
@@ -289,6 +289,10 @@ This prevents double-processing if the cron job overlaps (unlikely with hourly r
 ### 11. Milestone Notifications Bypass Signals
 
 `create_milestone_notification()` is a plain function, not a signal handler. It is called directly from `milestone_service.py` to allow batch consolidation (only the highest tier per criteria type gets a notification). If you refactor milestone processing, ensure this function is still called at the right consolidation point.
+
+### 12. Milestone Title Rewards in Detail View
+
+When a milestone has an associated `title` FK (to the `Title` model), `_build_milestone_context()` includes `title_name` and `title_text` in the context dict. These flow into `notification.metadata` and are rendered by `renderMilestoneDetail()` in `notification-inbox.js` as a styled callout card. The title info appears only in the expanded detail view, not in the preview `message` text. Milestones without a title reward have empty strings for both fields.
 
 ## Management Commands
 

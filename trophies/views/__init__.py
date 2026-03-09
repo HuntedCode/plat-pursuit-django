@@ -20,7 +20,7 @@ from .challenge_views import (
     GenreChallengeCreateView, GenreChallengeSetupView,
     GenreChallengeDetailView, GenreChallengeEditView,
 )
-from .review_hub_views import ReviewHubLandingView, ReviewHubDetailView
+from .review_hub_views import ReviewHubLandingView, RateMyGamesView, ReviewHubDetailView
 from .dashboard_views import DashboardView
 from .title_views import MyTitlesView
 
@@ -51,7 +51,7 @@ __all__ = [
     'GenreChallengeCreateView', 'GenreChallengeSetupView',
     'GenreChallengeDetailView', 'GenreChallengeEditView',
     # Review Hub views
-    'ReviewHubLandingView', 'ReviewHubDetailView',
+    'ReviewHubLandingView', 'RateMyGamesView', 'ReviewHubDetailView',
     # Dashboard views
     'DashboardView',
     # Title views

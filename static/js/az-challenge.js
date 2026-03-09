@@ -593,7 +593,7 @@ const AZChallengeSetup = {
         const sentinel = document.getElementById('az-scroll-sentinel');
         if (!sentinel) return;
 
-        this._scrollObserver = new IntersectionObserver((entries) => {
+        this._scrollObserver = new PlatPursuit.ZoomAwareObserver((entries) => {
             if (entries[0].isIntersecting && !this._isSearching) {
                 this._doSearch(true);
             }

@@ -515,6 +515,12 @@ def _build_milestone_context(user_milestone_instance):
         else:
             next_milestone_text = ''
 
+    # Title reward text
+    if milestone.title:
+        title_text = f' Title earned: "{milestone.title.name}"!'
+    else:
+        title_text = ''
+
     # Map criteria_type to milestone page category tab slug
     from trophies.milestone_constants import MILESTONE_CATEGORIES
     category_slug = 'overview'
@@ -544,6 +550,8 @@ def _build_milestone_context(user_milestone_instance):
         'is_max_tier': is_max_tier,
         'is_one_off': is_one_off,
         'tier_text': tier_text,
+        'title_text': title_text,
+        'title_name': milestone.title.name if milestone.title else '',
         'next_milestone_text': next_milestone_text,
     }
 

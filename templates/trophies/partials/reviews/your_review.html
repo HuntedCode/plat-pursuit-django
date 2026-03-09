@@ -57,6 +57,18 @@
                 <span class="text-xs text-base-content/50">Markdown supported. Minimum 50 characters.</span>
                 <span id="edit-char-count" class="text-xs text-base-content/50">{{ user_review.body|length }} / 8000</span>
             </div>
+            {# Word count progress bar #}
+            <div class="mt-3">
+                <div class="flex items-center gap-2">
+                    <div id="edit-progress-icon" class="shrink-0 transition-all duration-300" style="color: var(--color-base-content); opacity: 0.25;">
+                        {% include 'partials/icons/trophy_cup.html' with color='currentColor' size='w-5 h-5' %}
+                    </div>
+                    <div class="flex-1 bg-base-300 rounded-full h-2 overflow-hidden">
+                        <div id="edit-progress-bar" class="h-full rounded-full transition-all duration-300 ease-out bg-error" style="width: 0%"></div>
+                    </div>
+                </div>
+                <p id="edit-progress-text" class="text-xs text-base-content/50 mt-1 italic pr-1">Write at least 10 words to get started...</p>
+            </div>
             <div class="flex gap-2 mt-3">
                 <button class="btn btn-sm btn-primary flex-1" id="your-review-save-btn">Save Changes</button>
                 <button class="btn btn-sm btn-ghost" id="your-review-cancel-btn">Cancel</button>

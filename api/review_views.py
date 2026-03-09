@@ -313,6 +313,434 @@ class RecentReviewsView(APIView):
 
 
 # ------------------------------------------------------------------ #
+#  Trophy List (condensed, for review hub sidebar & wizard)
+# ------------------------------------------------------------------ #
+
+class TrophyListView(APIView):
+    """Condensed trophy list for a concept trophy group."""
+    authentication_classes = [SessionAuthentication, TokenAuthentication]
+    permission_classes = []
+
+    def get(self, request, concept_id, group_id):
+        """
+        GET /api/v1/reviews/<concept_id>/group/<group_id>/trophies/
+
+        Returns a deduplicated trophy list for the specified group with
+        the authenticated user's earned status (if logged in).
+        """
+        concept, ctg, err = _get_concept_and_group(concept_id, group_id)
+        if err:
+            return err
+
+        from trophies.models import Trophy, EarnedTrophy
+
+        trophies_qs = Trophy.objects.filter(
+            game__concept=concept,
+            trophy_group_id=group_id,
+        ).order_by('trophy_id').values(
+            'trophy_id', 'trophy_type', 'trophy_name',
+            'trophy_detail', 'trophy_icon_url',
+        )
+
+        # Deduplicate by trophy_id (same trophy across multi-region stacks)
+        seen = set()
+        trophies = []
+        for t in trophies_qs:
+            if t['trophy_id'] not in seen:
+                seen.add(t['trophy_id'])
+                trophies.append(t)
+
+        # Earned status for authenticated user
+        earned_set = set()
+        if request.user.is_authenticated:
+            profile = getattr(request.user, 'profile', None)
+            if profile:
+                earned_set = set(
+                    EarnedTrophy.objects.filter(
+                        profile=profile,
+                        earned=True,
+                        trophy__game__concept=concept,
+                        trophy__trophy_group_id=group_id,
+                    ).values_list('trophy__trophy_id', flat=True).distinct()
+                )
+
+        result = []
+        for t in trophies:
+            result.append({
+                'trophy_id': t['trophy_id'],
+                'trophy_type': t['trophy_type'],
+                'trophy_name': t['trophy_name'],
+                'trophy_detail': t['trophy_detail'],
+                'trophy_icon_url': t['trophy_icon_url'] or '',
+                'earned': t['trophy_id'] in earned_set,
+            })
+
+        return Response({
+            'trophies': result,
+            'count': len(result),
+            'group_name': ctg.display_name,
+        })
+
+
+# ------------------------------------------------------------------ #
+#  Wizard Queue (Rate My Games)
+# ------------------------------------------------------------------ #
+
+class WizardQueueView(APIView):
+    """Queue of platinumed games waiting to be rated/reviewed for the wizard."""
+    authentication_classes = [SessionAuthentication, TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        """
+        GET /api/v1/reviews/wizard/queue/?filter=unrated|unreviewed|both
+            &queue_type=base|dlc&limit=20&offset=0
+
+        queue_type=base: Returns base game concepts missing ratings/reviews.
+        queue_type=dlc: Returns DLC groups grouped by parent concept.
+        """
+        try:
+            profile, err = _get_profile_or_error(request)
+            if err:
+                return err
+
+            from trophies.models import (
+                EarnedTrophy, UserConceptRating,
+            )
+            from django.db.models.functions import Lower
+
+            filter_mode = request.query_params.get('filter', 'unrated')
+            if filter_mode not in ('unrated', 'unreviewed', 'both'):
+                filter_mode = 'unrated'
+            queue_type = request.query_params.get('queue_type', 'base')
+            if queue_type not in ('base', 'dlc'):
+                queue_type = 'base'
+            limit = min(safe_int(request.query_params.get('limit', 20), 20), 50)
+            offset = max(safe_int(request.query_params.get('offset', 0), 0), 0)
+
+            # Get all concept IDs where user has a platinum (non-shovelware)
+            plat_concept_ids = list(
+                EarnedTrophy.objects.filter(
+                    profile=profile,
+                    earned=True,
+                    trophy__trophy_type='platinum',
+                ).exclude(
+                    trophy__game__shovelware_status__in=['auto_flagged', 'manually_flagged'],
+                ).values_list('trophy__game__concept_id', flat=True).distinct()
+            )
+
+            if not plat_concept_ids:
+                if queue_type == 'dlc':
+                    return Response({'groups': [], 'total_items': 0, 'has_more': False})
+                return Response({'queue': [], 'count': 0, 'has_more': False})
+
+            if queue_type == 'dlc':
+                return self._get_dlc_queue(
+                    profile, plat_concept_ids, filter_mode, limit, offset,
+                )
+
+            # ── Base game queue ──────────────────────────────────────── #
+            rated_concept_ids = set(
+                UserConceptRating.objects.filter(
+                    profile=profile,
+                    concept_id__in=plat_concept_ids,
+                    concept_trophy_group__isnull=True,
+                ).values_list('concept_id', flat=True)
+            )
+
+            reviewed_concept_ids = set(
+                Review.objects.filter(
+                    profile=profile,
+                    concept_id__in=plat_concept_ids,
+                    is_deleted=False,
+                    concept_trophy_group__trophy_group_id='default',
+                ).values_list('concept_id', flat=True)
+            )
+
+            # Filter based on mode
+            if filter_mode == 'unrated':
+                wanted_ids = [cid for cid in plat_concept_ids if cid not in rated_concept_ids]
+            elif filter_mode == 'unreviewed':
+                wanted_ids = [cid for cid in plat_concept_ids if cid not in reviewed_concept_ids]
+            else:  # both: missing EITHER rating OR review
+                wanted_ids = [
+                    cid for cid in plat_concept_ids
+                    if cid not in rated_concept_ids or cid not in reviewed_concept_ids
+                ]
+
+            # Fetch concepts ordered alphabetically
+            concepts = list(
+                Concept.objects.filter(id__in=wanted_ids)
+                .order_by(Lower('unified_title'))
+                .values(
+                    'id', 'unified_title', 'concept_icon_url', 'slug',
+                )
+            )
+
+            total_count = len(concepts)
+            paginated = concepts[offset:offset + limit]
+            has_more = (offset + limit) < total_count
+
+            # Pre-fetch existing ratings for games that have been rated
+            paginated_ids = [c['id'] for c in paginated]
+            existing_ratings = {}
+            rated_in_page = [cid for cid in paginated_ids if cid in rated_concept_ids]
+            if rated_in_page:
+                for r in UserConceptRating.objects.filter(
+                    profile=profile,
+                    concept_id__in=rated_in_page,
+                    concept_trophy_group__isnull=True,
+                ).values('concept_id', 'difficulty', 'grindiness', 'hours_to_platinum', 'fun_ranking', 'overall_rating'):
+                    existing_ratings[r['concept_id']] = {
+                        'difficulty': r['difficulty'],
+                        'grindiness': r['grindiness'],
+                        'hours_to_platinum': r['hours_to_platinum'],
+                        'fun_ranking': r['fun_ranking'],
+                        'overall_rating': float(r['overall_rating']),
+                    }
+
+            # Pre-fetch user's gameplay stats for these concepts
+            from trophies.models import ProfileGame
+            from django.db.models import Sum, Max
+            game_stats = {}
+            for row in ProfileGame.objects.filter(
+                profile=profile,
+                game__concept_id__in=paginated_ids,
+            ).values('game__concept_id').annotate(
+                max_progress=Max('progress'),
+                total_earned=Sum('earned_trophies_count'),
+                total_unearned=Sum('unearned_trophies_count'),
+                total_play=Sum('play_duration'),
+            ):
+                cid = row['game__concept_id']
+                hours = None
+                if row['total_play']:
+                    hours = int(row['total_play'].total_seconds()) // 3600
+                earned = row['total_earned'] or 0
+                unearned = row['total_unearned'] or 0
+                game_stats[cid] = {
+                    'progress': row['max_progress'] or 0,
+                    'earned_trophies': earned,
+                    'total_trophies': earned + unearned,
+                    'play_hours': hours,
+                }
+
+            # Pre-fetch platinum dates
+            plat_dates = {}
+            for et in EarnedTrophy.objects.filter(
+                profile=profile,
+                earned=True,
+                trophy__trophy_type='platinum',
+                trophy__game__concept_id__in=paginated_ids,
+            ).values('trophy__game__concept_id', 'earned_date_time'):
+                cid = et['trophy__game__concept_id']
+                dt = et['earned_date_time']
+                if dt and (cid not in plat_dates or dt > plat_dates[cid]):
+                    plat_dates[cid] = dt
+
+            queue = []
+            for c in paginated:
+                cid = c['id']
+                item = {
+                    'concept_id': cid,
+                    'unified_title': c['unified_title'],
+                    'concept_icon_url': c['concept_icon_url'] or '',
+                    'slug': c['slug'],
+                    'has_rating': cid in rated_concept_ids,
+                    'has_review': cid in reviewed_concept_ids,
+                    'trophy_group_id': 'default',
+                    'trophy_group_name': 'Base Game',
+                }
+                if cid in existing_ratings:
+                    item['existing_rating'] = existing_ratings[cid]
+                if cid in game_stats:
+                    item['stats'] = game_stats[cid]
+                if cid in plat_dates:
+                    item['platinum_date'] = plat_dates[cid].isoformat()
+                queue.append(item)
+
+            return Response({
+                'queue': queue,
+                'count': total_count,
+                'has_more': has_more,
+                'next_offset': offset + limit,
+            })
+
+        except Exception as e:
+            logger.exception(f"Wizard queue error: {e}")
+            return Response(
+                {'error': 'Failed to load game queue.'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+    def _get_dlc_queue(self, profile, plat_concept_ids, filter_mode, limit, offset):
+        """Build DLC queue grouped by parent concept."""
+        from trophies.models import Trophy, EarnedTrophy, UserConceptRating
+        from django.db.models import Count
+        from django.db.models.functions import Lower
+
+        # Find all DLC groups for user's platinumed concepts
+        all_dlc_groups = list(
+            ConceptTrophyGroup.objects.filter(
+                concept_id__in=plat_concept_ids,
+            ).exclude(
+                trophy_group_id='default',
+            ).select_related('concept')
+            .order_by(Lower('concept__unified_title'), 'sort_order')
+        )
+
+        if not all_dlc_groups:
+            return Response({'groups': [], 'total_items': 0, 'has_more': False})
+
+        # Filter to only DLC groups where user has 100% completion in at
+        # least one game stack. Two bulk queries instead of 2N.
+        dlc_concept_ids = {g.concept_id for g in all_dlc_groups}
+        dlc_group_ids = {g.trophy_group_id for g in all_dlc_groups}
+
+        # Total trophies per (game_id, trophy_group_id)
+        totals = {}
+        for row in Trophy.objects.filter(
+            game__concept_id__in=dlc_concept_ids,
+            trophy_group_id__in=dlc_group_ids,
+        ).values('game_id', 'game__concept_id', 'trophy_group_id').annotate(
+            total=Count('id'),
+        ):
+            totals[(row['game_id'], row['trophy_group_id'])] = (row['total'], row['game__concept_id'])
+
+        # Earned trophies per (game_id, trophy_group_id) for this profile
+        earned = {}
+        if totals:
+            for row in EarnedTrophy.objects.filter(
+                profile=profile,
+                trophy__game_id__in={k[0] for k in totals},
+                trophy__trophy_group_id__in=dlc_group_ids,
+                earned=True,
+            ).values('trophy__game_id', 'trophy__trophy_group_id').annotate(
+                cnt=Count('id'),
+            ):
+                earned[(row['trophy__game_id'], row['trophy__trophy_group_id'])] = row['cnt']
+
+        # Build set of (concept_id, trophy_group_id) pairs with 100% completion
+        completed_pairs = set()
+        for (game_id, group_id), (total, concept_id) in totals.items():
+            if total > 0 and earned.get((game_id, group_id), 0) >= total:
+                completed_pairs.add((concept_id, group_id))
+
+        # Keep only DLC groups where user has 100% in at least one stack
+        dlc_groups = [
+            g for g in all_dlc_groups
+            if (g.concept_id, g.trophy_group_id) in completed_pairs
+        ]
+
+        if not dlc_groups:
+            return Response({'groups': [], 'total_items': 0, 'has_more': False})
+
+        # Check which DLC groups user has already rated/reviewed
+        dlc_ctg_ids = [g.id for g in dlc_groups]
+        dlc_rated = set(
+            UserConceptRating.objects.filter(
+                profile=profile,
+                concept_trophy_group_id__in=dlc_ctg_ids,
+            ).values_list('concept_trophy_group_id', flat=True)
+        )
+        dlc_reviewed = set(
+            Review.objects.filter(
+                profile=profile,
+                is_deleted=False,
+                concept_trophy_group_id__in=dlc_ctg_ids,
+            ).values_list('concept_trophy_group_id', flat=True)
+        )
+
+        # Pre-fetch existing DLC ratings
+        dlc_existing_ratings = {}
+        rated_dlc_ids = [gid for gid in dlc_ctg_ids if gid in dlc_rated]
+        if rated_dlc_ids:
+            for r in UserConceptRating.objects.filter(
+                profile=profile,
+                concept_trophy_group_id__in=rated_dlc_ids,
+            ).values(
+                'concept_trophy_group_id', 'difficulty', 'grindiness',
+                'hours_to_platinum', 'fun_ranking', 'overall_rating',
+            ):
+                dlc_existing_ratings[r['concept_trophy_group_id']] = {
+                    'difficulty': r['difficulty'],
+                    'grindiness': r['grindiness'],
+                    'hours_to_platinum': r['hours_to_platinum'],
+                    'fun_ranking': r['fun_ranking'],
+                    'overall_rating': float(r['overall_rating']),
+                }
+
+        # Build groups dict keyed by concept_id preserving order
+        from collections import OrderedDict
+        groups_dict = OrderedDict()
+        total_items = 0
+
+        for g in dlc_groups:
+            has_rating = g.id in dlc_rated
+            has_review = g.id in dlc_reviewed
+
+            # Apply filter
+            if filter_mode == 'unrated' and has_rating:
+                continue
+            elif filter_mode == 'unreviewed' and has_review:
+                continue
+            elif filter_mode == 'both' and has_rating and has_review:
+                continue
+
+            cid = g.concept_id
+            if cid not in groups_dict:
+                groups_dict[cid] = {
+                    'concept_id': cid,
+                    'unified_title': g.concept.unified_title,
+                    'concept_icon_url': g.concept.concept_icon_url or '',
+                    'slug': g.concept.slug,
+                    'items': [],
+                }
+
+            item = {
+                'trophy_group_id': g.trophy_group_id,
+                'trophy_group_name': g.display_name,
+                'has_rating': has_rating,
+                'has_review': has_review,
+                'is_dlc': True,
+            }
+            if g.id in dlc_existing_ratings:
+                item['existing_rating'] = dlc_existing_ratings[g.id]
+
+            groups_dict[cid]['items'].append(item)
+            total_items += 1
+
+        all_groups = list(groups_dict.values())
+
+        # Flatten all items, paginate at item level, then re-group
+        flat_items = []
+        for grp in all_groups:
+            for item in grp['items']:
+                flat_items.append((grp, item))
+
+        page_items = flat_items[offset:offset + limit]
+        has_more = (offset + limit) < len(flat_items)
+
+        # Re-group paginated items
+        page_groups_dict = OrderedDict()
+        for grp, item in page_items:
+            cid = grp['concept_id']
+            if cid not in page_groups_dict:
+                page_groups_dict[cid] = {
+                    k: v for k, v in grp.items() if k != 'items'
+                }
+                page_groups_dict[cid]['items'] = []
+            page_groups_dict[cid]['items'].append(item)
+
+        return Response({
+            'groups': list(page_groups_dict.values()),
+            'total_items': total_items,
+            'has_more': has_more,
+            'next_offset': offset + limit,
+        })
+
+
+# ------------------------------------------------------------------ #
 #  Review List & Create
 # ------------------------------------------------------------------ #
 

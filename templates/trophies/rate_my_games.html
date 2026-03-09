@@ -1,0 +1,310 @@
+{% extends 'base.html' %}
+{% load custom_filters humanize static %}
+
+{% block title %}Rate My Games - Platinum Pursuit{% endblock %}
+
+{% block content %}
+{# ─── Header ─────────────────────────────────────────────────────────── #}
+<section class="section-container w-full">
+    {% include 'partials/breadcrumb.html' with items=breadcrumb %}
+
+    <div class="card bg-base-100 border-4 border-base-300 shadow-md shadow-neutral">
+        <div class="card-body">
+            <div class="flex flex-row items-center justify-between gap-4">
+                <div>
+                    <h1 class="text-2xl lg:text-3xl font-bold">Rate My Games</h1>
+                    <p class="text-base-content/70">
+                        Quickly rate and review your platinumed games. The community will thank you!
+                    </p>
+                </div>
+                <div id="wizard-progress-badge" class="hidden shrink-0">
+                    <div class="badge badge-lg badge-primary gap-1">
+                        <span id="wizard-current-num">0</span> / <span id="wizard-total-num">0</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+{# ─── Filter Bar ─────────────────────────────────────────────────────── #}
+<section class="section-container w-full">
+<div class="flex flex-row items-center justify-between gap-3 mt-4">
+    <div class="flex items-center gap-2">
+        {# Queue type tabs #}
+        <div class="flex items-center gap-1 mr-3 border-r border-base-300 pr-3">
+            <button class="btn btn-sm btn-primary wizard-queue-tab transition-colors" data-queue="base">Base Games</button>
+            <button class="btn btn-sm btn-ghost border border-base-300 wizard-queue-tab transition-colors" data-queue="dlc">DLC</button>
+        </div>
+        {# Filters #}
+        <button class="btn btn-sm btn-primary wizard-filter-btn transition-colors" data-filter="unrated">
+            Unrated
+            {% if unrated_count %}<span class="badge badge-sm badge-ghost ml-1">{{ unrated_count }}</span>{% endif %}
+        </button>
+        <button class="btn btn-sm btn-ghost border border-base-300 wizard-filter-btn transition-colors" data-filter="unreviewed">
+            Unreviewed
+            {% if unreviewed_count %}<span class="badge badge-sm badge-ghost ml-1">{{ unreviewed_count }}</span>{% endif %}
+        </button>
+    </div>
+</div>
+
+{# ─── Progress Bar ────────────────────────────────────────────────────── #}
+<div id="wizard-progress-section" class="hidden mt-4">
+    <div class="flex items-center justify-between text-sm text-base-content/60 mb-1">
+        <span id="wizard-progress-text">Game 0 of 0</span>
+        <span id="wizard-progress-pct">0%</span>
+    </div>
+    <progress id="wizard-progress-bar" class="progress progress-primary w-full" value="0" max="100"></progress>
+</div>
+
+{# ─── Game Card Area ──────────────────────────────────────────────────── #}
+<div id="wizard-game-area" class="mt-4 flex justify-center">
+    {# Loading state #}
+    <div id="wizard-loading" class="flex flex-col items-center py-12">
+        <span class="loading loading-dots loading-lg text-primary"></span>
+        <p class="text-base-content/50 mt-2">Loading your games...</p>
+    </div>
+
+    {# Main wizard card (hidden initially) #}
+    <div id="wizard-card" class="hidden w-full">
+        {# Game header card #}
+        <div class="card bg-base-100 border-2 border-base-300 shadow-md shadow-neutral mb-4">
+            <div class="card-body p-4 md:p-5 lg:p-6">
+                <div class="flex items-center gap-4">
+                    <div id="wizard-game-icon" class="w-20 h-20 md:w-22 md:h-22 lg:w-24 lg:h-24 rounded-xl overflow-hidden border-2 border-base-300 shrink-0">
+                        <img id="wizard-game-img" src="" alt="" class="w-full h-full object-cover" />
+                    </div>
+                    <div class="flex-1 min-w-0">
+                        <div class="flex items-center gap-2">
+                            <h2 id="wizard-game-title" class="text-lg md:text-xl lg:text-2xl font-bold line-clamp-2 pr-1"></h2>
+                            <span id="wizard-dlc-badge" class="hidden badge badge-sm badge-secondary font-bold shrink-0">DLC</span>
+                        </div>
+                        <p id="wizard-group-name" class="text-sm text-base-content/50 hidden"></p>
+                        <div class="flex items-center gap-2 mt-1">
+                            <span id="wizard-has-rating" class="hidden badge badge-sm badge-success gap-1">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+                                Rated
+                            </span>
+                            <span id="wizard-has-review" class="hidden badge badge-sm badge-success gap-1">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+                                Reviewed
+                            </span>
+                            <a id="wizard-hub-link" href="" class="text-xs text-primary hover:underline ml-auto">View in Review Hub</a>
+                        </div>
+                    </div>
+                </div>
+
+                {# User's gameplay stats for reference #}
+                <div id="wizard-stats-bar" class="hidden flex flex-wrap gap-x-5 gap-y-1.5 mt-3 pt-3 border-t border-base-content/10 text-xs text-base-content/60">
+                    <div id="wizard-stat-plat" class="hidden flex items-center gap-1.5">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-info" viewBox="0 0 24 24" fill="currentColor"><path d="M5 3h14a2 2 0 012 2v2a5 5 0 01-3.07 4.62A5 5 0 0113 16.92V19h2a1 1 0 010 2H9a1 1 0 010-2h2v-2.08A5 5 0 016.07 11.62 5 5 0 013 7V5a2 2 0 012-2z"/></svg>
+                        <span id="wizard-stat-plat-text"></span>
+                    </div>
+                    <div id="wizard-stat-trophies" class="hidden flex items-center gap-1.5">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-warning" viewBox="0 0 24 24" fill="currentColor"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+                        <span id="wizard-stat-trophies-text"></span>
+                    </div>
+                    <div id="wizard-stat-progress" class="hidden flex items-center gap-1.5">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-success" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                        <span id="wizard-stat-progress-text"></span>
+                    </div>
+                    <div id="wizard-stat-playtime" class="hidden flex items-center gap-1.5">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-accent" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                        <span id="wizard-stat-playtime-text"></span>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+        {# Trophy + Rating + Review: 3-col at desktop, stacked on tablet #}
+        <div class="flex flex-col lg:flex-row gap-4">
+            {# Trophy Panel (left column on desktop) #}
+            <div id="wizard-trophy-section" class="w-full lg:w-1/4 lg:order-first">
+                <div class="card bg-base-100 border-2 border-base-300 shadow-sm shadow-neutral lg:h-full">
+                    <div class="card-body p-3 md:p-4">
+                        {# Tablet: collapsible header. Desktop: always visible #}
+                        <button type="button" id="wizard-trophy-toggle" class="w-full flex items-center justify-between cursor-pointer group lg:cursor-default">
+                            <h3 class="text-sm md:text-base font-bold flex items-center gap-2">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 md:w-5 md:h-5 text-warning shrink-0" viewBox="0 0 24 24" fill="currentColor"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+                                Trophy List
+                                <span id="wizard-trophy-count" class="badge badge-xs badge-ghost"></span>
+                            </h3>
+                            <svg id="wizard-trophy-chevron" xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-base-content/50 transition-transform duration-200 shrink-0 group-hover:text-base-content lg:hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+                        </button>
+                        <div id="wizard-trophy-content" class="hidden lg:block mt-2 max-h-[50vh] lg:max-h-[70vh] overflow-y-auto"></div>
+                    </div>
+                </div>
+            </div>
+
+            {# Rating Panel #}
+            <div id="wizard-rating-section" class="flex-1">
+                <div class="card bg-base-100 border-2 border-base-300 shadow-sm shadow-neutral h-full">
+                    <div class="card-body p-4 md:p-5 lg:p-6">
+                        <h3 class="text-base md:text-lg font-bold mb-3 flex items-center gap-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-warning" viewBox="0 0 24 24" fill="currentColor"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+                            Rate This Game
+                        </h3>
+                        <form id="wizard-rating-form" class="space-y-3">
+                            <div class="form-control">
+                                <label class="label py-1"><span class="label-text text-base-content text-sm">Difficulty</span></label>
+                                <input type="range" name="difficulty" min="1" max="10" value="5" class="range range-error range-sm w-full" step="1" />
+                                <div class="w-full flex justify-between text-xs px-1"><span>1</span><span>2</span><span>3</span><span>4</span><span>5</span><span>6</span><span>7</span><span>8</span><span>9</span><span>10</span></div>
+                            </div>
+                            <div class="form-control">
+                                <label class="label py-1"><span class="label-text text-base-content text-sm">Grindiness</span></label>
+                                <input type="range" name="grindiness" min="1" max="10" value="5" class="range range-accent range-sm w-full" step="1" />
+                                <div class="w-full flex justify-between text-xs px-1"><span>1</span><span>2</span><span>3</span><span>4</span><span>5</span><span>6</span><span>7</span><span>8</span><span>9</span><span>10</span></div>
+                            </div>
+                            <div class="form-control">
+                                <label class="label py-1"><span class="label-text text-base-content text-sm">Hours to Platinum</span></label>
+                                <input type="number" name="hours_to_platinum" value="0" min="0" class="input input-secondary input-sm w-full" placeholder="e.g., 20" />
+                            </div>
+                            <div class="form-control">
+                                <label class="label py-1"><span class="label-text text-base-content text-sm">Fun Ranking</span></label>
+                                <input type="range" name="fun_ranking" min="1" max="10" value="5" class="range range-info range-sm w-full" step="1" />
+                                <div class="w-full flex justify-between text-xs px-1"><span>1</span><span>2</span><span>3</span><span>4</span><span>5</span><span>6</span><span>7</span><span>8</span><span>9</span><span>10</span></div>
+                            </div>
+                            <div class="form-control">
+                                <label class="label py-1"><span class="label-text text-base-content text-sm">Overall Rating</span></label>
+                                <input type="range" name="overall_rating" min="0" max="5.0" value="3" class="range range-warning range-sm w-full" step="0.5" />
+                                <div class="w-full flex justify-between text-xs"><span>0</span><span>1</span><span>2</span><span>3</span><span>4</span><span>5</span></div>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            {# Review Panel #}
+            <div id="wizard-review-section" class="flex-1">
+                <div class="card bg-base-100 border-2 border-base-300 shadow-sm shadow-neutral h-full">
+                    <div class="card-body p-4 md:p-5 lg:p-6 flex flex-col">
+                        <h3 class="text-base md:text-lg font-bold mb-3 flex items-center gap-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+                            </svg>
+                            Review This Game
+                        </h3>
+
+                        {# Recommend toggle #}
+                        <div class="flex items-center gap-3 mb-3">
+                            <span class="text-sm font-bold text-base-content">Do you recommend this game?</span>
+                            <div class="flex gap-2">
+                                <button type="button" class="btn btn-sm btn-ghost border border-base-300 wizard-recommend-btn" data-value="true">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M2 21h4V9H2v12zm22-11c0-1.1-.9-2-2-2h-6.31l.95-4.57.03-.32c0-.41-.17-.79-.44-1.06L15.17 1 7.59 8.59C7.22 8.95 7 9.45 7 10v10c0 1.1.9 2 2 2h9c.83 0 1.54-.5 1.84-1.22l3.02-7.05c.09-.23.14-.47.14-.73v-2z"/></svg>
+                                    Yes
+                                </button>
+                                <button type="button" class="btn btn-sm btn-ghost border border-base-300 wizard-recommend-btn" data-value="false">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M15 3H6c-.83 0-1.54.5-1.84 1.22l-3.02 7.05c-.09.23-.14.47-.14.73v2c0 1.1.9 2 2 2h6.31l-.95 4.57-.03.32c0 .41.17.79.44 1.06L9.83 23l7.58-7.59c.36-.36.59-.86.59-1.41V5c0-1.1-.9-2-2-2zm4 0v12h4V3h-4z"/></svg>
+                                    No
+                                </button>
+                            </div>
+                        </div>
+
+                        {# Review body #}
+                        <div class="form-control flex-1 flex flex-col">
+                            <textarea id="wizard-review-body" class="textarea textarea-bordered w-full flex-1 min-h-[140px] md:min-h-[160px] lg:min-h-[200px] text-sm" maxlength="8000" placeholder="Share your experience with this game. What did you enjoy? What was challenging? Would you recommend it to other trophy hunters?"></textarea>
+                            <div class="flex justify-between mt-1">
+                                <button type="button" id="wizard-markdown-help-toggle" class="text-xs text-primary hover:underline cursor-pointer inline-flex items-center gap-1">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                                    Formatting guide
+                                    <svg id="wizard-markdown-chevron" xmlns="http://www.w3.org/2000/svg" class="w-3 h-3 transition-transform duration-200" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+                                </button>
+                                <span id="wizard-char-count" class="text-xs text-base-content/50">0 / 8000</span>
+                            </div>
+                            {# Expandable markdown guide #}
+                            <div id="wizard-markdown-help-panel" class="hidden mt-2 rounded-box bg-base-200/50 border border-base-300 p-3 text-xs">
+                                <div class="grid grid-cols-2 gap-x-4 gap-y-1.5">
+                                    <div class="text-base-content/60 font-mono">**bold**</div>
+                                    <div class="text-base-content/80"><strong>bold</strong></div>
+                                    <div class="text-base-content/60 font-mono">*italic*</div>
+                                    <div class="text-base-content/80"><em>italic</em></div>
+                                    <div class="text-base-content/60 font-mono">__underline__</div>
+                                    <div class="text-base-content/80"><u>underline</u></div>
+                                    <div class="text-base-content/60 font-mono">~~strike~~</div>
+                                    <div class="text-base-content/80"><s>strike</s></div>
+                                    <div class="text-base-content/60 font-mono">[text](url)</div>
+                                    <div class="text-base-content/80"><span class="text-primary">link</span></div>
+                                    <div class="text-base-content/60 font-mono">`code`</div>
+                                    <div class="text-base-content/80"><code class="bg-base-300 px-1 rounded">code</code></div>
+                                    <div class="text-base-content/60 font-mono">> quote</div>
+                                    <div class="text-base-content/80 border-l-2 border-base-content/30 pl-2 italic pr-1">quote</div>
+                                    <div class="text-base-content/60 font-mono">- list item</div>
+                                    <div class="text-base-content/80">&bull; list item</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {# Trophy cup word progress bar #}
+                        <div class="mt-3">
+                            <div class="flex items-center gap-2">
+                                <div id="wizard-progress-icon" class="shrink-0 transition-all duration-300" style="color: var(--color-base-content); opacity: 0.25;">
+                                    {% include 'partials/icons/trophy_cup.html' with color='currentColor' size='w-5 h-5' %}
+                                </div>
+                                <div class="flex-1 bg-base-300 rounded-full h-2 overflow-hidden">
+                                    <div id="wizard-word-bar" class="h-full rounded-full transition-all duration-300 ease-out bg-error" style="width: 0%"></div>
+                                </div>
+                            </div>
+                            <p id="wizard-word-text" class="text-xs text-base-content/50 mt-1 italic pr-1">Write at least 10 words to get started...</p>
+                        </div>
+
+                        {# Submission requirements checklist #}
+                        <div class="flex flex-wrap gap-x-4 gap-y-1 mt-3 text-xs text-base-content/50">
+                            <div class="flex items-center gap-1.5" id="wizard-req-recommend">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-error wizard-req-icon-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-success wizard-req-icon-check hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                                <span>Select recommend / not recommend</span>
+                            </div>
+                            <div class="flex items-center gap-1.5" id="wizard-req-length">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-error wizard-req-icon-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-success wizard-req-icon-check hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                                <span>Write at least 50 characters</span>
+                            </div>
+                        </div>
+                        <p class="text-xs text-base-content/40 mt-2 italic pr-1">Optional: leave blank to submit only a rating.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        {# Action buttons #}
+        <div class="flex items-center gap-3 mt-4">
+            <button id="wizard-skip-btn" type="button" class="btn btn-ghost btn-sm">Skip</button>
+            <div class="flex-1"></div>
+            <button id="wizard-submit-btn" type="button" class="btn btn-primary btn-sm gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+                Submit Rating
+            </button>
+        </div>
+    </div>
+
+    {# Empty state #}
+    <div id="wizard-empty" class="hidden w-full max-w-md">
+        <div class="card bg-base-100 border-2 border-base-300 shadow-sm shadow-neutral">
+            <div class="card-body items-center text-center py-12">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-16 h-16 text-success mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                </svg>
+                <h3 class="text-xl font-bold mb-2">All caught up!</h3>
+                <p class="text-base-content/60 mb-4">
+                    You've rated all your platinumed games with the current filters. Nice work, hunter!
+                </p>
+                <a href="{% url 'reviews_landing' %}" class="btn btn-primary btn-sm">Back to Review Hub</a>
+            </div>
+        </div>
+    </div>
+</div>
+</section>
+{% endblock %}
+
+{% block js_scripts %}
+<script src="{% static 'js/rate-my-games.js' %}"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        PlatPursuit.ZoomScaler.init();
+        PlatPursuit.RateMyGames.init({
+            profileId: {{ user.profile.id|default:'null' }},
+        });
+    });
+</script>
+{% endblock %}

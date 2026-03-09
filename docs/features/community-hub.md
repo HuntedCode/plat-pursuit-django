@@ -1,8 +1,8 @@
 # Community Reviews & Ratings Hub
 
-A Steam-inspired community review system for PlatPursuit. Users can write thumbs-up/thumbs-down reviews with markdown text, vote reviews as helpful/funny, reply to reviews, and rate DLC packs independently. Everything lives on a dedicated Community Hub page at `/community/<concept-slug>/` with tab navigation per trophy group (base game + each DLC).
+A Steam-inspired community review system for PlatPursuit. Users can write thumbs-up/thumbs-down reviews with markdown text, vote reviews as helpful/funny, reply to reviews, and rate DLC packs independently. The system spans three pages: a discovery landing at `/reviews/`, per-game detail pages at `/reviews/<slug>/`, and a Rate My Games wizard at `/reviews/rate-my-games/`.
 
-**Status**: Phases 1-5 complete (models, services, management commands, API views, page view + templates). Phase 6 (admin moderation) is next.
+**Status**: Phases 1-5 complete (models, services, management commands, API views, page views + templates). Phase 6 (admin moderation) is next. Currently staff-only gated via `StaffRequiredMixin` for testing.
 
 ## Architecture Overview
 
@@ -25,16 +25,20 @@ The review feed uses **client-side rendering** from JSON API responses (not serv
 | `notifications/models.py` | `review_reply` and `review_milestone` notification types |
 | `trophies/token_keeper.py` | Sync hook for `ConceptTrophyGroupService.sync_for_concept()` |
 
-| `api/review_views.py` | 8 view classes covering 12 API endpoints (832 lines) |
-| `trophies/views/community_views.py` | `CommunityHubView` page view |
-| `static/js/community-hub.js` | Frontend logic (CommunityHub class) |
-| `templates/trophies/community_hub.html` | Main page template |
-| `templates/trophies/partials/community/` | 7 partial templates (header, tabs, banner, ratings, form, your review, feed) |
+| `api/review_views.py` | 10 view classes covering 14 API endpoints |
+| `trophies/views/review_hub_views.py` | `ReviewHubLandingView`, `ReviewHubDetailView`, `RateMyGamesView` |
+| `static/js/review-hub.js` | Detail page logic (ReviewHub class) |
+| `static/js/review-hub-landing.js` | Landing page logic (recent feed with infinite scroll) |
+| `static/js/rate-my-games.js` | Wizard logic (RateMyGamesWizard class) |
+| `templates/trophies/review_hub.html` | Landing page template |
+| `templates/trophies/review_hub_detail.html` | Detail page template |
+| `templates/trophies/rate_my_games.html` | Rate My Games wizard template |
+| `templates/trophies/partials/reviews/` | 8 partial templates (header, tabs, banner, ratings, form, your review, feed, trophy strip, user rating panel) |
 
-### Files To Create (Phases 6-8)
+### Files To Create (Phase 6+)
 | File | Purpose |
 |------|---------|
-| `trophies/views/admin_views.py` | Review moderation views |
+| `trophies/views/admin_views.py` | Review moderation views (add to existing) |
 
 ## Data Model
 
@@ -106,12 +110,16 @@ The review feed uses **client-side rendering** from JSON API responses (not serv
 | Review | ProfileGame exists | 1+ earned trophy in group |
 | Vote/Reply | Authenticated | Authenticated |
 
-## API Endpoints (Phase 4, Implemented)
+## API Endpoints
 
 | Method | Path | Auth | Purpose |
 |--------|------|------|---------|
+| GET | `/api/v1/reviews/recent/` | No | Recent reviews feed (paginated, for landing page) |
+| GET | `/api/v1/reviews/wizard/queue/` | Yes | Rate My Games queue (filters: unrated/unreviewed/both, queue_type: base/dlc) |
 | GET | `/api/v1/reviews/<concept_id>/group/<group_id>/` | No | List reviews (paginated, sortable) |
 | POST | `/api/v1/reviews/<concept_id>/group/<group_id>/create/` | Yes | Create review |
+| POST | `/api/v1/reviews/<concept_id>/group/<group_id>/rate/` | Yes | Submit/update rating |
+| GET | `/api/v1/reviews/<concept_id>/group/<group_id>/trophies/` | No | Condensed trophy list with earned status |
 | GET | `/api/v1/reviews/<review_id>/` | No | Single review detail |
 | PUT | `/api/v1/reviews/<review_id>/` | Yes | Edit own review |
 | DELETE | `/api/v1/reviews/<review_id>/` | Yes | Delete own review |
@@ -121,26 +129,45 @@ The review feed uses **client-side rendering** from JSON API responses (not serv
 | POST | `/api/v1/reviews/<review_id>/replies/` | Yes | Create reply |
 | PUT | `/api/v1/reviews/replies/<reply_id>/` | Yes | Edit reply |
 | DELETE | `/api/v1/reviews/replies/<reply_id>/` | Yes | Delete reply |
-| POST | `/api/v1/reviews/<concept_id>/group/<group_id>/rate/` | Yes | DLC rating |
 
-## Page View (Phase 5, Implemented)
+## Page Views (Phase 5, Implemented)
 
-**Route**: `/community/<slug>/` with optional `?group=<trophy_group_id>` query param.
+All three page views are currently gated behind `StaffRequiredMixin` for testing. When ready to go public: remove `StaffRequiredMixin`, restore `LoginRequiredMixin` on `RateMyGamesView`, and remove `user.is_staff` checks from navbar.html and game_detail.html.
 
-**CommunityHubView** extends `DetailView` + `ProfileHotbarMixin` + `BackgroundContextMixin`. Uses Concept slug for URL lookup. Shovelware gate returns 404 if all games in concept are flagged.
+### Landing Page
+
+**Route**: `/reviews/`
+
+**ReviewHubLandingView** extends `StaffRequiredMixin` + `ProfileHotbarMixin` + `TemplateView`. Shows community stats (total reviews, ratings, reviewers), most-reviewed games grid, and an infinite-scroll recent reviews feed via `RecentReviewsView` API.
+
+### Detail Page
+
+**Route**: `/reviews/<slug>/` with optional `?group=<trophy_group_id>` query param.
+
+**ReviewHubDetailView** extends `StaffRequiredMixin` + `ProfileHotbarMixin` + `BackgroundContextMixin` + `DetailView`. Uses Concept slug for URL lookup. Shovelware gate returns 404 if all games in concept are flagged.
 
 **Layout**: Two-column on desktop (sidebar 33%, main 67%), stacked on tablet. Tab bar for trophy groups (hidden if only base game).
 
-**Sidebar**: Recommendation banner (Steam-style percentage) + community ratings grid (reuses `community_ratings.html` visual pattern) + collapsible rating form.
+**Sidebar**: Recommendation banner (Steam-style percentage) + community ratings panel + collapsible user rating form + collapsible trophy list strip.
 
-**Main content**: Review form (if user can review), "Your Review" section (server-rendered with `render_markdown`), review feed (client-rendered from JSON API via InfiniteScroller-style IntersectionObserver).
+**Main content**: Review form (if user can review), "Your Review" section (server-rendered with `render_markdown`), review feed (client-rendered from JSON API via ZoomAwareObserver-based infinite scroll).
 
-**Key design decisions**:
+### Rate My Games Wizard
+
+**Route**: `/reviews/rate-my-games/`
+
+**RateMyGamesView** extends `StaffRequiredMixin` + `ProfileHotbarMixin` + `TemplateView`. Side-by-side wizard for quickly rating and reviewing platinumed games. Left panel shows game queue (base games and 100%-completed DLC), right panel shows rating form + review form with progress bar. Fetches game queue via `WizardQueueView` API.
+
+**DLC filtering**: Only DLC groups where the user has 100% trophy completion appear in the wizard queue. This is enforced server-side in `_get_dlc_queue()` via bulk Trophy/EarnedTrophy aggregate queries.
+
+### Key Design Decisions
+
 - Review feed is **client-rendered** from JSON. API returns `body_html` (server-rendered markdown via `ChecklistService.process_markdown()`), so no client-side markdown library needed.
 - Tab switching uses **full page reload** with `?group=<id>` query param for simplicity and bookmarkability.
 - Rating form is **collapsible** (collapsed by default) in the sidebar.
 - User's own review is a **separate section** above the feed (server-rendered), not part of the paginated feed.
-- Game detail page links to Community Hub via a button below the header action bar.
+- Game detail page links to Review Hub via a button below the header action bar (staff-only during testing).
+- Review word-count progress bars use the shared `ReviewProgressTiers.updateWordProgress()` utility from `utils.js` across all three locations (new review form, edit review, inline edit).
 
 ## Integration Points
 
@@ -159,6 +186,8 @@ The review feed uses **client-side rendering** from JSON API responses (not serv
 - **CTG deduplication across stacks**: `sync_for_concept()` uses a `seen` dict keyed by `trophy_group_id`. First name/icon found wins. The mismatch checker (`detect_mismatches()`) flags structural issues.
 - **Reply count decrement**: Uses `Greatest(F('reply_count') - 1, Value(0))` for safe clamping (prevents negative counts).
 - **Client-side rendering**: Review feed is JSON from API, not server-rendered partials. This is intentional for infinite scroll performance.
+- **ZoomAwareObserver**: Infinite scroll sentinels use `ZoomAwareObserver` (not raw `IntersectionObserver`) to work correctly when the page is scaled via `ZoomScaler` on sub-768px screens.
+- **Staff-only gating**: All three page views (`ReviewHubLandingView`, `ReviewHubDetailView`, `RateMyGamesView`) use `StaffRequiredMixin`. The navbar link and game detail button are wrapped in `{% if user.is_staff %}`. Remove these when going public.
 
 ## Management Commands
 

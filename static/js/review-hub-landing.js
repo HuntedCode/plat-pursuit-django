@@ -33,11 +33,11 @@ PlatPursuit.ReviewHubLanding = {
         const sentinel = document.getElementById('landing-review-sentinel');
         if (!sentinel) return;
 
-        this.observer = new IntersectionObserver((entries) => {
+        this.observer = new PlatPursuit.ZoomAwareObserver((entries) => {
             if (entries[0].isIntersecting && !this.isLoading && this.hasMore) {
                 this.loadReviews();
             }
-        }, { rootMargin: '200px' });
+        }, { rootMargin: '200px', scrollBuffer: 200 });
 
         this.observer.observe(sentinel);
         this.loadReviews();

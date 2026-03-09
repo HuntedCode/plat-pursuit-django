@@ -222,9 +222,12 @@ Review responses include a `body_html` field containing server-rendered markdown
 
 | Method | Path | Auth | Purpose |
 |--------|------|------|---------|
+| GET | `/api/v1/reviews/recent/` | No | Recent reviews feed (paginated, for landing page) |
+| GET | `/api/v1/reviews/wizard/queue/` | Login | Rate My Games queue (filters: unrated/unreviewed/both, queue_type: base/dlc) |
 | GET | `/api/v1/reviews/<concept_id>/group/<group_id>/` | No | List reviews (sort: helpful/newest/oldest) |
 | POST | `/api/v1/reviews/<concept_id>/group/<group_id>/create/` | Login | Create review (body + recommended) |
-| POST | `/api/v1/reviews/<concept_id>/group/<group_id>/rate/` | Login | Submit/update DLC rating |
+| POST | `/api/v1/reviews/<concept_id>/group/<group_id>/rate/` | Login | Submit/update rating |
+| GET | `/api/v1/reviews/<concept_id>/group/<group_id>/trophies/` | No | Condensed trophy list with earned status |
 | GET | `/api/v1/reviews/<review_id>/` | No | Single review detail |
 | PUT | `/api/v1/reviews/<review_id>/` | Login | Edit own review |
 | DELETE | `/api/v1/reviews/<review_id>/` | Login | Delete own review |

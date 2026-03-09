@@ -1110,6 +1110,14 @@ class NotificationInboxManager {
                     ` : ''}
                 </div>
 
+                <!-- Title Reward -->
+                ${metadata.title_name ? `
+                    <div class="bg-gradient-to-r from-primary/10 to-secondary/10 rounded-lg p-3 text-center">
+                        <p class="text-xs font-semibold text-base-content/60 uppercase tracking-wider">Title Earned</p>
+                        <p class="text-lg font-bold text-primary mt-1">${metadata.title_name}</p>
+                    </div>
+                ` : ''}
+
                 <!-- Next Milestone Progress (if not max tier and not one-off) -->
                 ${!isMaxTier && !isOneOff && nextMilestone ? this.renderNextMilestoneProgress(nextMilestone) : ''}
 
@@ -1652,16 +1660,16 @@ class NotificationInboxManager {
     }
 
     setupInfiniteScroll() {
-        const observer = new IntersectionObserver(
+        this.scrollObserver = new PlatPursuit.ZoomAwareObserver(
             (entries) => {
                 if (entries[0].isIntersecting && this.hasMore && !this.loading) {
                     this.loadNotifications(true);
                 }
             },
-            { threshold: 0.1 }
+            { threshold: 0.1, scrollBuffer: 100 }
         );
 
-        observer.observe(this.scrollLoader);
+        this.scrollObserver.observe(this.scrollLoader);
     }
 
     showLoading() {

@@ -39,7 +39,7 @@
                         <li><a href="{% url 'challenges_browse' %}">Challenges</a></li>
                         <li><a href="{% url 'lists_browse' %}">Game Lists</a></li>
                         <li><a href="{% url 'overall_badge_leaderboards' %}">Leaderboards</a></li>
-                        <li><a href="{% url 'reviews_landing' %}">Review Hub</a></li>
+                        {% if user.is_staff %}<li><a href="{% url 'reviews_landing' %}">Review Hub</a></li>{% endif %}
                         {% if active_fundraiser %}
                             <li>
                                 <a href="{% url 'fundraiser' active_fundraiser.slug %}">

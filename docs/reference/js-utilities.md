@@ -135,6 +135,27 @@ PlatPursuit.ZoomScaler.init();  // Call once per page in {% block js_scripts %}
 
 Adds `.zoom-active` to `#zoom-container`, which activates CSS rules in `input.css`. Handles height correction via MutationObserver since `transform: scale()` doesn't change the layout box. See CLAUDE.md for the full zoom wrapper architecture.
 
+### PlatPursuit.ZoomAwareObserver
+
+Drop-in `IntersectionObserver` replacement that works correctly when ZoomScaler is active.
+
+```js
+const observer = new PlatPursuit.ZoomAwareObserver((entries) => {
+    if (entries[0].isIntersecting) { loadMore(); }
+}, { threshold: 0.1, scrollBuffer: 100 });
+
+observer.observe(sentinel);
+observer.disconnect();
+```
+
+When `ZoomScaler` is active (sub-768px), `overflow: hidden` on `#zoom-container` breaks `IntersectionObserver`'s clipping calculations. `ZoomAwareObserver` detects this and switches to a scroll-event fallback using `getBoundingClientRect()` (which correctly accounts for CSS transforms). On desktop, it delegates to native `IntersectionObserver` with zero overhead.
+
+**Options:** All standard `IntersectionObserver` options, plus `scrollBuffer` (default 100): pixels beyond viewport to trigger detection in scroll fallback mode.
+
+**API:** `observe(target)`, `unobserve(target)`, `disconnect()` (same as `IntersectionObserver`).
+
+**Important:** Use `ZoomAwareObserver` instead of `IntersectionObserver` for any viewport-relative infinite scroll sentinel. Do NOT use it for observers with a custom `root` element (e.g., modal scroll containers), as those are unaffected by the zoom transform.
+
 ### PlatPursuit.DragReorderManager
 
 Drag-and-drop reordering with position caching for performance.
@@ -172,6 +193,12 @@ window.PlatPursuit.API = API;
 ```
 
 To add a new utility: define it above the export block, then add a `window.PlatPursuit.YourUtility = YourUtility;` line.
+
+## Gotchas and Pitfalls
+
+- **Never use raw `IntersectionObserver` for viewport-relative infinite scroll sentinels.** CSS `transform: scale()` combined with `overflow: hidden` (from ZoomScaler) breaks `IntersectionObserver` clipping on sub-768px screens. Always use `ZoomAwareObserver` instead. Observers with a custom `root` element (e.g., inside a modal scroll container) are unaffected and can use `IntersectionObserver` directly.
+- **`PlatPursuit.API.request()` throws an `Error` with a `.response` property** (raw Response object) on non-ok status. Extract messages with `await error.response?.json().catch(() => null)`. Pass `{}` as body for no-body POSTs.
+- **Don't migrate binary fetches** (blob/image downloads) to `PlatPursuit.API`. It's designed for JSON APIs.
 
 ## Related Docs
 
