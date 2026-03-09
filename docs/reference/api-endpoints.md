@@ -218,6 +218,8 @@ All API endpoints live under `/api/v1/` and are defined in `api/urls.py`. The we
 
 ### Community Reviews
 
+Review responses include a `body_html` field containing server-rendered markdown (via `ChecklistService.process_markdown()`), ready for direct insertion into the DOM without a client-side markdown library.
+
 | Method | Path | Auth | Purpose |
 |--------|------|------|---------|
 | GET | `/api/v1/reviews/<concept_id>/group/<group_id>/` | No | List reviews (sort: helpful/newest/oldest) |

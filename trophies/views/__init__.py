@@ -20,6 +20,7 @@ from .challenge_views import (
     GenreChallengeCreateView, GenreChallengeSetupView,
     GenreChallengeDetailView, GenreChallengeEditView,
 )
+from .community_views import CommunityHubView
 from .dashboard_views import DashboardView
 from .title_views import MyTitlesView
 
@@ -49,6 +50,8 @@ __all__ = [
     'CalendarChallengeCreateView', 'CalendarChallengeDetailView',
     'GenreChallengeCreateView', 'GenreChallengeSetupView',
     'GenreChallengeDetailView', 'GenreChallengeEditView',
+    # Community views
+    'CommunityHubView',
     # Dashboard views
     'DashboardView',
     # Title views

@@ -1,0 +1,46 @@
+{% load humanize %}
+
+<div class="card bg-base-100 border-2 border-base-300 shadow-sm shadow-neutral">
+    <div class="card-body p-4">
+        {% if recommendation_stats and recommendation_stats.total > 0 %}
+            <div class="flex flex-col items-center gap-3">
+                {# Main recommendation indicator #}
+                {% if recommendation_stats.percent >= 50 %}
+                    <div class="flex items-center gap-3">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-12 h-12 text-success" viewBox="0 0 24 24" fill="currentColor"><path d="M2 21h4V9H2v12zm22-11c0-1.1-.9-2-2-2h-6.31l.95-4.57.03-.32c0-.41-.17-.79-.44-1.06L15.17 1 7.59 8.59C7.22 8.95 7 9.45 7 10v10c0 1.1.9 2 2 2h9c.83 0 1.54-.5 1.84-1.22l3.02-7.05c.09-.23.14-.47.14-.73v-2z"/></svg>
+                        <div>
+                            <p class="text-3xl md:text-3xl lg:text-4xl font-bold text-success">{{ recommendation_stats.percent|floatformat:0 }}%</p>
+                            <p class="text-sm text-base-content/70 italic">Recommended</p>
+                        </div>
+                    </div>
+                {% else %}
+                    <div class="flex items-center gap-3">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-12 h-12 text-error" viewBox="0 0 24 24" fill="currentColor"><path d="M22 3h-4v12h4V3zm-6 11c0 1.1-.9 2-2 2H7.69l-.95 4.57-.03.32c0 .41.17.79.44 1.06L8.83 23l7.58-7.59c.36-.36.59-.86.59-1.41V4c0-1.1-.9-2-2-2H5c-.83 0-1.54.5-1.84 1.22l-3.02 7.05c-.09.23-.14.47-.14.73v2c0 1.1.9 2 2 2h6.31l-.95 4.57"/></svg>
+                        <div>
+                            <p class="text-3xl md:text-3xl lg:text-4xl font-bold text-error">{{ recommendation_stats.percent|floatformat:0 }}%</p>
+                            <p class="text-sm text-base-content/70 italic">Recommended</p>
+                        </div>
+                    </div>
+                {% endif %}
+
+                {# Visual bar #}
+                <div class="w-full">
+                    <div class="flex w-full h-3 rounded-full overflow-hidden bg-error/30">
+                        <div class="bg-success h-full transition-all duration-500" style="width: {{ recommendation_stats.percent }}%"></div>
+                    </div>
+                    <div class="flex justify-between mt-1">
+                        <span class="text-xs text-success font-bold">{{ recommendation_stats.recommended|intcomma }} Yes</span>
+                        <span class="text-xs text-error font-bold">{{ recommendation_stats.not_recommended|intcomma }} No</span>
+                    </div>
+                </div>
+
+                <p class="text-xs text-base-content/50 text-center italic">Based on {{ recommendation_stats.total|intcomma }} review{{ recommendation_stats.total|pluralize }}.</p>
+            </div>
+        {% else %}
+            <div class="flex flex-col items-center gap-2 py-4">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-10 h-10 text-base-content/30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.129.166 2.27.293 3.423.379.35.026.67.21.865.501L12 21l2.755-4.133a1.14 1.14 0 01.865-.501 48.172 48.172 0 003.423-.379c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z"/></svg>
+                <p class="text-sm text-base-content/50 italic text-center">No reviews yet. Be the first to share your thoughts!</p>
+            </div>
+        {% endif %}
+    </div>
+</div>

@@ -1,0 +1,98 @@
+{% load humanize %}
+
+<div class="card bg-base-100 border-2 border-base-300 shadow-sm shadow-neutral">
+    <div class="card-body p-4">
+        <p class="text-lg md:text-lg lg:text-xl text-center text-base-content italic font-bold">Community Ratings</p>
+        <div class="divider divider-vertical m-0 p-0"></div>
+
+        {% if community_averages %}
+            <div class="grid grid-cols-2 w-full gap-0 mb-2" role="list">
+                <div class="flex flex-col gap-2 px-2 lg:px-4 pb-2 border-r-2 border-b-2 border-base-content/10 border-dashed" role="listitem">
+                    <p class="text-sm text-base-content font-bold">Difficulty</p>
+                    <div class="flex flex-row justify-between gap-4">
+                        <p class="text-base lg:text-lg text-base-content font-bold"><span class="text-xl 2xl:text-3xl {% if community_averages.avg_difficulty < 4 %}text-success{% elif community_averages.avg_difficulty < 8 %}text-warning{% else %}text-error{% endif %}">{{ community_averages.avg_difficulty|floatformat:1 }}</span> /10</p>
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-7 2xl:w-10 h-7 2xl:h-10" viewBox="0 0 24 24" fill="none" stroke="{% if community_averages.avg_difficulty < 4 %}var(--color-success){% elif community_averages.avg_difficulty < 8 %}var(--color-warning){% else %}var(--color-error){% endif %}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M16.2 7.8l-2 6.3-6.4 2.1 2-6.3z"/></svg>
+                    </div>
+                    <progress class="progress {% if community_averages.avg_difficulty < 4 %}progress-success{% elif community_averages.avg_difficulty < 8 %}progress-warning{% else %}progress-error{% endif %}" value="{{ community_averages.avg_difficulty }}" max="10"></progress>
+                </div>
+                <div class="flex flex-col gap-2 px-2 lg:px-4 pb-2 border-b-2 border-base-content/10 border-dashed" role="listitem">
+                    <p class="text-sm text-base-content font-bold">Grindiness</p>
+                    <div class="flex flex-row justify-between gap-4">
+                        <p class="text-base lg:text-lg text-base-content font-bold"><span class="text-xl 2xl:text-3xl {% if community_averages.avg_grindiness < 4 %}text-success{% elif community_averages.avg_grindiness < 8 %}text-warning{% else %}text-error{% endif %}">{{ community_averages.avg_grindiness|floatformat:1 }}</span> /10</p>
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-7 2xl:w-10 h-7 2xl:h-10" viewBox="0 0 24 24" fill="none" stroke="{% if community_averages.avg_grindiness < 4 %}var(--color-success){% elif community_averages.avg_grindiness < 8 %}var(--color-warning){% else %}var(--color-error){% endif %}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 2v6h6M21.5 22v-6h-6"/><path d="M22 11.5A10 10 0 0 0 3.2 7.2M2 12.5a10 10 0 0 0 18.8 4.2"/></svg>
+                    </div>
+                    <progress class="progress {% if community_averages.avg_grindiness < 4 %}progress-success{% elif community_averages.avg_grindiness < 8 %}progress-warning{% else %}progress-error{% endif %}" value="{{ community_averages.avg_grindiness }}" max="10"></progress>
+                </div>
+                <div class="flex flex-col gap-2 px-2 lg:px-4 pb-2 pt-2 border-b-2 border-r-2 border-base-content/10 border-dashed" role="listitem">
+                    <p class="text-sm text-base-content font-bold">Hours To Plat</p>
+                    <div class="flex flex-row justify-between gap-4">
+                        <p class="text-base lg:text-lg text-base-content font-bold"><span class="text-xl 2xl:text-3xl {% if community_averages.avg_hours < 25 %}text-success{% elif community_averages.avg_hours < 75 %}text-warning{% elif community_averages.avg_hours < 100 %}text-accent{% else %}text-error{% endif %}">{{ community_averages.avg_hours|floatformat:0|intcomma }}</span></p>
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-7 2xl:w-10 h-7 2xl:h-10" viewBox="0 0 24 24" fill="none" stroke="{% if community_averages.avg_hours < 25 %}var(--color-success){% elif community_averages.avg_hours < 75 %}var(--color-warning){% elif community_averages.avg_hours < 100 %}var(--color-accent){% else %}var(--color-error){% endif %}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                    </div>
+                    <progress class="progress {% if community_averages.avg_hours < 25 %}progress-success{% elif community_averages.avg_hours < 75 %}progress-warning{% elif community_averages.avg_hours < 100 %}progress-accent{% else %}progress-error{% endif %}" value="{{ community_averages.avg_hours }}" max="100"></progress>
+                </div>
+                <div class="flex flex-col gap-2 px-2 lg:px-4 pb-2 pt-2 border-b-2 border-base-content/10 border-dashed" role="listitem">
+                    <p class="text-sm text-base-content font-bold">Fun Ranking</p>
+                    <div class="flex flex-row justify-between gap-4">
+                        <p class="text-base lg:text-lg text-base-content font-bold"><span class="text-xl 2xl:text-3xl {% if community_averages.avg_fun < 4 %}text-error{% elif community_averages.avg_fun < 8 %}text-warning{% else %}text-success{% endif %}">{{ community_averages.avg_fun|floatformat:1 }}</span> /10</p>
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-7 2xl:w-10 h-7 2xl:h-10" viewBox="0 0 24 24" fill="none" stroke="{% if community_averages.avg_fun < 4 %}var(--color-error){% elif community_averages.avg_fun < 8 %}var(--color-warning){% else %}var(--color-success){% endif %}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>
+                    </div>
+                    <progress class="progress {% if community_averages.avg_fun < 4 %}progress-error{% elif community_averages.avg_fun < 8 %}progress-warning{% else %}progress-success{% endif %}" value="{{ community_averages.avg_fun }}" max="10"></progress>
+                </div>
+                <div class="flex flex-col col-span-2 gap-2 px-2 lg:px-4 pt-2 border-base-content/10 border-dashed" role="listitem">
+                    <p class="text-sm text-base-content font-bold">Overall Rating</p>
+                    <div class="flex flex-row justify-between gap-4">
+                        <p class="text-base lg:text-lg text-base-content font-bold"><span class="text-xl 2xl:text-3xl {% if community_averages.avg_rating < 2 %}text-error{% elif community_averages.avg_rating < 4 %}text-warning{% else %}text-success{% endif %}">{{ community_averages.avg_rating|floatformat:1 }}</span> /5</p>
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-7 2xl:w-10 h-7 2xl:h-10" viewBox="0 0 24 24" fill="none" stroke="{% if community_averages.avg_rating < 2 %}var(--color-error){% elif community_averages.avg_rating < 4 %}var(--color-warning){% else %}var(--color-success){% endif %}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+                    </div>
+                    <progress class="progress {% if community_averages.avg_rating < 2 %}progress-error{% elif community_averages.avg_rating < 4 %}progress-warning{% else %}progress-success{% endif %}" value="{{ community_averages.avg_rating }}" max="5"></progress>
+                </div>
+            </div>
+            <p class="text-xs text-base-content/50 text-center italic">Based on {{ community_averages.count|intcomma }} rating{{ community_averages.count|pluralize }}.</p>
+        {% else %}
+            <p class="text-sm text-base-content/50 text-center italic py-4">No community ratings yet.</p>
+        {% endif %}
+
+        {# Collapsible rating form #}
+        {% if can_rate %}
+            <div class="divider divider-vertical m-0 p-0"></div>
+            <div id="rating-form-section">
+                <button id="toggle-rating-form" class="btn btn-sm btn-outline btn-primary w-full" type="button">
+                    {% if user_rating %}Update Your Rating{% else %}Rate This Game{% endif %}
+                </button>
+                <div id="rating-form-container" class="hidden mt-4">
+                    <form id="rating-form" class="space-y-4">
+                        <div class="form-control">
+                            <label class="label"><span class="label-text text-base-content">Difficulty</span></label>
+                            <input type="range" name="difficulty" min="1" max="10" value="{{ user_rating.difficulty|default:5 }}" class="range range-error range-sm w-full" step="1" />
+                            <div class="w-full flex justify-between text-xs px-1"><span>1</span><span>2</span><span>3</span><span>4</span><span>5</span><span>6</span><span>7</span><span>8</span><span>9</span><span>10</span></div>
+                        </div>
+                        <div class="form-control">
+                            <label class="label"><span class="label-text text-base-content">Grindiness</span></label>
+                            <input type="range" name="grindiness" min="1" max="10" value="{{ user_rating.grindiness|default:5 }}" class="range range-accent range-sm w-full" step="1" />
+                            <div class="w-full flex justify-between text-xs px-1"><span>1</span><span>2</span><span>3</span><span>4</span><span>5</span><span>6</span><span>7</span><span>8</span><span>9</span><span>10</span></div>
+                        </div>
+                        <div class="form-control">
+                            <label class="label"><span class="label-text text-base-content">Hours to Platinum</span></label>
+                            <input type="number" name="hours_to_platinum" value="{{ user_rating.hours_to_platinum|default:0 }}" min="0" class="input input-secondary input-sm w-full" placeholder="e.g., 20" />
+                        </div>
+                        <div class="form-control">
+                            <label class="label"><span class="label-text text-base-content">Fun Ranking</span></label>
+                            <input type="range" name="fun_ranking" min="1" max="10" value="{{ user_rating.fun_ranking|default:5 }}" class="range range-info range-sm w-full" step="1" />
+                            <div class="w-full flex justify-between text-xs px-1"><span>1</span><span>2</span><span>3</span><span>4</span><span>5</span><span>6</span><span>7</span><span>8</span><span>9</span><span>10</span></div>
+                        </div>
+                        <div class="form-control">
+                            <label class="label"><span class="label-text text-base-content">Overall Rating</span></label>
+                            <input type="range" name="overall_rating" min="0" max="5.0" value="{{ user_rating.overall_rating|default:3 }}" class="range range-warning range-sm w-full" step="0.5" />
+                            <div class="w-full flex justify-between text-xs"><span>0</span><span>1</span><span>2</span><span>3</span><span>4</span><span>5</span></div>
+                        </div>
+                        <button type="submit" class="btn btn-primary btn-sm w-full">Submit Rating</button>
+                    </form>
+                </div>
+            </div>
+        {% elif user.is_authenticated and can_rate_reason %}
+            <div class="divider divider-vertical m-0 p-0"></div>
+            <p class="text-xs text-base-content/50 text-center italic">{{ can_rate_reason }}</p>
+        {% endif %}
+    </div>
+</div>

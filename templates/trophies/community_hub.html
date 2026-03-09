@@ -1,0 +1,74 @@
+{% extends 'base.html' %}
+{% load custom_filters humanize static markdown_filters %}
+
+{% block title %}Community Hub: {{ concept.unified_title }}{% endblock %}
+{% block og_image %}{% if concept_icon %}{{ concept_icon }}{% else %}{{ request.scheme }}://{{ request.get_host }}{{ logo_path }}{% endif %}{% endblock %}
+{% block twitter_image %}{% if concept_icon %}{{ concept_icon }}{% else %}{{ request.scheme }}://{{ request.get_host }}{{ logo_path }}{% endif %}{% endblock %}
+
+{% block content %}
+<div id="community-hub-container"
+     data-concept-id="{{ concept.id }}"
+     data-active-group="{{ active_group_id }}"
+     data-is-authenticated="{{ user.is_authenticated|yesno:'true,false' }}"
+     data-user-review-id="{{ user_review.id|default:'' }}">
+
+    <section class="section-container w-full">
+        {% include 'partials/breadcrumb.html' with items=breadcrumb %}
+
+        {% include 'trophies/partials/community/hub_header.html' %}
+
+        {% if trophy_groups|length > 1 %}
+            {% include 'trophies/partials/community/tab_bar.html' %}
+        {% endif %}
+    </section>
+
+    <div class="flex flex-col md:flex-col lg:flex-row gap-4 mt-4 items-start">
+        {# SIDEBAR #}
+        <aside class="w-full md:w-full lg:w-1/3 flex flex-col gap-4">
+            {% include 'trophies/partials/community/recommendation_banner.html' %}
+            {% include 'trophies/partials/community/ratings_panel.html' %}
+        </aside>
+
+        {# MAIN CONTENT #}
+        <main class="w-full md:w-full lg:w-2/3 flex flex-col gap-4">
+            {% if user.is_authenticated %}
+                {% if can_review and not user_review %}
+                    {% include 'trophies/partials/community/review_form.html' %}
+                {% elif not can_review and can_review_reason %}
+                    <div class="alert alert-info">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                        <span>{{ can_review_reason }}</span>
+                    </div>
+                {% endif %}
+            {% else %}
+                <div class="alert alert-info">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                    <span>Log in to write reviews and rate games!</span>
+                </div>
+            {% endif %}
+
+            {% if user_review %}
+                {% include 'trophies/partials/community/your_review.html' %}
+            {% endif %}
+
+            {% include 'trophies/partials/community/review_feed.html' %}
+        </main>
+    </div>
+</div>
+{% endblock %}
+
+{% block js_scripts %}
+<script src="{% static 'js/community-hub.js' %}"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        PlatPursuit.ZoomScaler.init();
+        PlatPursuit.CommunityHub.init({
+            conceptId: {{ concept.id }},
+            activeGroup: '{{ active_group_id }}',
+            isAuthenticated: {{ user.is_authenticated|yesno:'true,false' }},
+            profileId: {{ user.profile.id|default:'null' }},
+            userReviewId: {{ user_review.id|default:'null' }},
+        });
+    });
+</script>
+{% endblock %}

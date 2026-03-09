@@ -1,0 +1,13 @@
+<div class="flex flex-row gap-2 overflow-x-auto py-3 mt-2" role="tablist" aria-label="Trophy group tabs">
+    {% for group in trophy_groups %}
+        <a href="?group={{ group.trophy_group_id }}"
+           class="btn btn-sm {% if group.trophy_group_id == active_group_id %}btn-primary{% else %}btn-ghost border border-base-300{% endif %} whitespace-nowrap"
+           role="tab"
+           aria-selected="{% if group.trophy_group_id == active_group_id %}true{% else %}false{% endif %}">
+            {% if group.icon_url %}
+                <img src="{{ group.icon_url }}" alt="" class="w-5 h-5 rounded object-cover" loading="lazy" />
+            {% endif %}
+            {{ group.name }}
+        </a>
+    {% endfor %}
+</div>

@@ -1,0 +1,39 @@
+<div class="card bg-base-100 border-2 border-base-300 shadow-sm shadow-neutral">
+    <div class="card-body p-4">
+        <h2 class="text-lg font-bold text-base-content italic">Write a Review</h2>
+        <div class="divider divider-vertical m-0 p-0"></div>
+
+        <form id="review-create-form">
+            {# Thumbs toggle #}
+            <div class="flex items-center gap-3 mb-4">
+                <span class="text-sm font-bold text-base-content">Do you recommend this game?</span>
+                <div class="flex gap-2">
+                    <button type="button" class="btn btn-sm recommend-toggle active btn-success" data-value="true" aria-pressed="true">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M2 21h4V9H2v12zm22-11c0-1.1-.9-2-2-2h-6.31l.95-4.57.03-.32c0-.41-.17-.79-.44-1.06L15.17 1 7.59 8.59C7.22 8.95 7 9.45 7 10v10c0 1.1.9 2 2 2h9c.83 0 1.54-.5 1.84-1.22l3.02-7.05c.09-.23.14-.47.14-.73v-2z"/></svg>
+                        Yes
+                    </button>
+                    <button type="button" class="btn btn-sm recommend-toggle btn-ghost border border-base-300" data-value="false" aria-pressed="false">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M15 3H6c-.83 0-1.54.5-1.84 1.22l-3.02 7.05c-.09.23-.14.47-.14.73v2c0 1.1.9 2 2 2h6.31l-.95 4.57-.03.32c0 .41.17.79.44 1.06L9.83 23l7.58-7.59c.36-.36.59-.86.59-1.41V5c0-1.1-.9-2-2-2zm4 0v12h4V3h-4z"/></svg>
+                        No
+                    </button>
+                </div>
+            </div>
+
+            {# Review body #}
+            <div class="form-control">
+                <textarea id="review-body" name="body" rows="6"
+                    class="textarea textarea-bordered w-full text-sm"
+                    placeholder="Share your experience with this game. What did you enjoy? What was challenging? Would you recommend it to other trophy hunters?"
+                    minlength="50" maxlength="8000"></textarea>
+                <div class="flex justify-between mt-1">
+                    <span class="text-xs text-base-content/50">Markdown supported. Minimum 50 characters.</span>
+                    <span id="review-char-count" class="text-xs text-base-content/50">0 / 8000</span>
+                </div>
+            </div>
+
+            <button type="submit" id="review-submit-btn" class="btn btn-primary btn-sm w-full mt-4">
+                Submit Review
+            </button>
+        </form>
+    </div>
+</div>

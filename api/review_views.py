@@ -19,6 +19,7 @@ from trophies.models import (
     Concept, ConceptTrophyGroup, Review, ReviewReply, ReviewVote,
 )
 from trophies.services.review_service import ReviewService
+from trophies.services.checklist_service import ChecklistService
 from api.utils import safe_int
 
 logger = logging.getLogger('psn_api')
@@ -123,6 +124,7 @@ def _serialize_review(review, reviewer_stats=None, user_voted_helpful=False,
     return {
         'id': review.id,
         'body': review.body,
+        'body_html': ChecklistService.process_markdown(review.body) if review.body else '',
         'recommended': review.recommended,
         'helpful_count': review.helpful_count,
         'funny_count': review.funny_count,

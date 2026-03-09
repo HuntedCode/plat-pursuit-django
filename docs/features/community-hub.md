@@ -2,7 +2,7 @@
 
 A Steam-inspired community review system for PlatPursuit. Users can write thumbs-up/thumbs-down reviews with markdown text, vote reviews as helpful/funny, reply to reviews, and rate DLC packs independently. Everything lives on a dedicated Community Hub page at `/community/<concept-slug>/` with tab navigation per trophy group (base game + each DLC).
 
-**Status**: Phases 1-4 complete (models, services, management commands, API views). Phase 5 (page view + templates) is next.
+**Status**: Phases 1-5 complete (models, services, management commands, API views, page view + templates). Phase 6 (admin moderation) is next.
 
 ## Architecture Overview
 
@@ -26,14 +26,15 @@ The review feed uses **client-side rendering** from JSON API responses (not serv
 | `trophies/token_keeper.py` | Sync hook for `ConceptTrophyGroupService.sync_for_concept()` |
 
 | `api/review_views.py` | 8 view classes covering 12 API endpoints (832 lines) |
-
-### Files To Create (Phases 5-8)
-| File | Purpose |
-|------|---------|
 | `trophies/views/community_views.py` | `CommunityHubView` page view |
 | `static/js/community-hub.js` | Frontend logic (CommunityHub class) |
 | `templates/trophies/community_hub.html` | Main page template |
-| `templates/trophies/partials/community/` | 7 partial templates |
+| `templates/trophies/partials/community/` | 7 partial templates (header, tabs, banner, ratings, form, your review, feed) |
+
+### Files To Create (Phases 6-8)
+| File | Purpose |
+|------|---------|
+| `trophies/views/admin_views.py` | Review moderation views |
 
 ## Data Model
 
@@ -121,6 +122,25 @@ The review feed uses **client-side rendering** from JSON API responses (not serv
 | PUT | `/api/v1/reviews/replies/<reply_id>/` | Yes | Edit reply |
 | DELETE | `/api/v1/reviews/replies/<reply_id>/` | Yes | Delete reply |
 | POST | `/api/v1/reviews/<concept_id>/group/<group_id>/rate/` | Yes | DLC rating |
+
+## Page View (Phase 5, Implemented)
+
+**Route**: `/community/<slug>/` with optional `?group=<trophy_group_id>` query param.
+
+**CommunityHubView** extends `DetailView` + `ProfileHotbarMixin` + `BackgroundContextMixin`. Uses Concept slug for URL lookup. Shovelware gate returns 404 if all games in concept are flagged.
+
+**Layout**: Two-column on desktop (sidebar 33%, main 67%), stacked on tablet. Tab bar for trophy groups (hidden if only base game).
+
+**Sidebar**: Recommendation banner (Steam-style percentage) + community ratings grid (reuses `community_ratings.html` visual pattern) + collapsible rating form.
+
+**Main content**: Review form (if user can review), "Your Review" section (server-rendered with `render_markdown`), review feed (client-rendered from JSON API via InfiniteScroller-style IntersectionObserver).
+
+**Key design decisions**:
+- Review feed is **client-rendered** from JSON. API returns `body_html` (server-rendered markdown via `ChecklistService.process_markdown()`), so no client-side markdown library needed.
+- Tab switching uses **full page reload** with `?group=<id>` query param for simplicity and bookmarkability.
+- Rating form is **collapsible** (collapsed by default) in the sidebar.
+- User's own review is a **separate section** above the feed (server-rendered), not part of the paginated feed.
+- Game detail page links to Community Hub via a button below the header action bar.
 
 ## Integration Points
 
