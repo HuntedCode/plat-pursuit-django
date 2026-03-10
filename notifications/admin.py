@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import NotificationTemplate, Notification, ScheduledNotification, NotificationLog
+from .models import NotificationTemplate, Notification, ScheduledNotification, NotificationLog, DeviceToken
 
 
 @admin.register(NotificationTemplate)
@@ -152,3 +152,19 @@ class NotificationLogAdmin(admin.ModelAdmin):
     def has_delete_permission(self, request, obj=None):
         """Allow deletion for cleanup purposes."""
         return True
+
+
+@admin.register(DeviceToken)
+class DeviceTokenAdmin(admin.ModelAdmin):
+    """Admin interface for push notification device tokens."""
+    list_display = ['id', 'user', 'platform', 'token_preview', 'created_at', 'last_used']
+    list_select_related = ('user',)
+    list_filter = ['platform', 'created_at']
+    search_fields = ['user__email', 'user__username', 'token']
+    raw_id_fields = ['user']
+    readonly_fields = ['created_at', 'last_used']
+    ordering = ['-last_used']
+
+    def token_preview(self, obj):
+        return obj.token[:20] + '...' if len(obj.token) > 20 else obj.token
+    token_preview.short_description = 'Token'

@@ -4,7 +4,7 @@ from django.db import transaction
 from django.db.models import Count, F, IntegerField, Q, Value
 from django.db.models.functions import Cast, Coalesce
 from datetime import timedelta
-from .models import Profile, Game, Trophy, EarnedTrophy, ProfileGame, APIAuditLog, FeaturedGame, FeaturedProfile, Concept, TitleID, TrophyGroup, UserTrophySelection, UserConceptRating, Badge, UserBadge, UserBadgeProgress, FeaturedGuide, Stage, PublisherBlacklist, Title, UserTitle, Milestone, UserMilestone, UserMilestoneProgress, Comment, CommentVote, CommentReport, ModerationLog, BannedWord, Checklist, ChecklistSection, ChecklistItem, ChecklistVote, UserChecklistProgress, ChecklistReport, ProfileGamification, StatType, StageStatValue, MonthlyRecap, GameList, GameListItem, GameListLike, Challenge, AZChallengeSlot, GameFamily, GameFamilyProposal
+from .models import Profile, Game, Trophy, EarnedTrophy, ProfileGame, APIAuditLog, FeaturedGame, FeaturedProfile, Concept, TitleID, TrophyGroup, ConceptTrophyGroup, UserTrophySelection, UserConceptRating, Badge, UserBadge, UserBadgeProgress, FeaturedGuide, Stage, PublisherBlacklist, Title, UserTitle, Milestone, UserMilestone, UserMilestoneProgress, Comment, CommentVote, CommentReport, ModerationLog, BannedWord, Checklist, ChecklistSection, ChecklistItem, ChecklistVote, UserChecklistProgress, ChecklistReport, ProfileGamification, StatType, StageStatValue, MonthlyRecap, GameList, GameListItem, GameListLike, Challenge, AZChallengeSlot, GameFamily, GameFamilyProposal, Review, ReviewVote, ReviewReply, ReviewReport, ReviewModerationLog, DashboardConfig
 
 
 # Register your models here.
@@ -1850,3 +1850,325 @@ class GameFamilyProposalAdmin(admin.ModelAdmin):
         return obj._concept_count
     concept_count.short_description = 'Concepts'
     concept_count.admin_order_field = '_concept_count'
+
+
+# ---------- Review System Admin ----------
+
+@admin.register(Review)
+class ReviewAdmin(admin.ModelAdmin):
+    """Admin interface for review moderation."""
+    list_display = [
+        'id',
+        'profile',
+        'concept',
+        'concept_trophy_group',
+        'recommended',
+        'body_preview',
+        'helpful_count',
+        'funny_count',
+        'reply_count',
+        'is_deleted',
+        'created_at',
+    ]
+    list_select_related = ('profile', 'concept', 'concept_trophy_group')
+    list_filter = [
+        'recommended',
+        'is_deleted',
+        'is_edited',
+        'created_at',
+    ]
+    search_fields = [
+        'body',
+        'profile__psn_username',
+        'concept__unified_title',
+    ]
+    raw_id_fields = ['profile', 'concept', 'concept_trophy_group']
+    readonly_fields = [
+        'created_at',
+        'updated_at',
+        'deleted_at',
+        'helpful_count',
+        'funny_count',
+        'reply_count',
+        'word_count',
+    ]
+    ordering = ['-created_at']
+    date_hierarchy = 'created_at'
+    actions = ['soft_delete_reviews', 'restore_reviews']
+
+    fieldsets = (
+        ('Content', {
+            'fields': ('concept', 'concept_trophy_group', 'profile', 'body', 'recommended')
+        }),
+        ('Stats', {
+            'fields': ('helpful_count', 'funny_count', 'reply_count', 'word_count')
+        }),
+        ('Status', {
+            'fields': ('is_edited', 'is_deleted', 'deleted_at')
+        }),
+        ('Timestamps', {
+            'fields': ('created_at', 'updated_at')
+        }),
+    )
+
+    def body_preview(self, obj):
+        if obj.is_deleted:
+            return '[deleted]'
+        return obj.body[:100] + '...' if len(obj.body) > 100 else obj.body
+    body_preview.short_description = 'Body'
+
+    @admin.action(description='Soft delete selected reviews')
+    def soft_delete_reviews(self, request, queryset):
+        count = 0
+        for review in queryset.filter(is_deleted=False):
+            review.soft_delete(moderator=request.user, reason="Admin bulk action")
+            count += 1
+        self.message_user(request, f"Soft-deleted {count} review(s).", messages.SUCCESS)
+
+    @admin.action(description='Restore soft-deleted reviews')
+    def restore_reviews(self, request, queryset):
+        count = queryset.filter(is_deleted=True).update(
+            is_deleted=False,
+            deleted_at=None
+        )
+        self.message_user(request, f"Restored {count} review(s).", messages.SUCCESS)
+
+
+@admin.register(ReviewVote)
+class ReviewVoteAdmin(admin.ModelAdmin):
+    """Admin interface for review votes."""
+    list_display = ['id', 'review', 'profile', 'vote_type', 'created_at']
+    list_select_related = ('review', 'profile')
+    list_filter = ['vote_type', 'created_at']
+    search_fields = ['profile__psn_username']
+    raw_id_fields = ['review', 'profile']
+    readonly_fields = ['created_at']
+    ordering = ['-created_at']
+    date_hierarchy = 'created_at'
+
+
+@admin.register(ReviewReply)
+class ReviewReplyAdmin(admin.ModelAdmin):
+    """Admin interface for review replies."""
+    list_display = ['id', 'review', 'profile', 'body_preview', 'is_deleted', 'created_at']
+    list_select_related = ('review', 'profile')
+    list_filter = ['is_deleted', 'is_edited', 'created_at']
+    search_fields = ['body', 'profile__psn_username']
+    raw_id_fields = ['review', 'profile']
+    readonly_fields = ['created_at', 'updated_at', 'deleted_at']
+    ordering = ['-created_at']
+    date_hierarchy = 'created_at'
+
+    def body_preview(self, obj):
+        if obj.is_deleted:
+            return '[deleted]'
+        return obj.body[:100] + '...' if len(obj.body) > 100 else obj.body
+    body_preview.short_description = 'Body'
+
+
+class ReviewReportStatusFilter(SimpleListFilter):
+    """Filter review reports by status."""
+    title = 'Status'
+    parameter_name = 'status'
+
+    def lookups(self, request, model_admin):
+        return ReviewReport.REPORT_STATUS
+
+    def queryset(self, request, queryset):
+        if self.value():
+            return queryset.filter(status=self.value())
+        return queryset
+
+
+@admin.register(ReviewReport)
+class ReviewReportAdmin(admin.ModelAdmin):
+    """Admin interface for review report moderation queue."""
+    list_display = [
+        'id',
+        'review_preview',
+        'reporter',
+        'reason',
+        'status',
+        'created_at',
+        'reviewed_by',
+        'reviewed_at',
+    ]
+    list_select_related = ('review', 'reporter', 'reviewed_by')
+    list_filter = [
+        ReviewReportStatusFilter,
+        'reason',
+        'created_at',
+        'reviewed_at',
+    ]
+    search_fields = [
+        'review__body',
+        'reporter__psn_username',
+        'details',
+        'admin_notes',
+    ]
+    raw_id_fields = ['review', 'reporter', 'reviewed_by']
+    readonly_fields = ['created_at', 'reviewed_at']
+    ordering = ['-created_at']
+    date_hierarchy = 'created_at'
+    actions = ['mark_as_reviewed', 'mark_as_dismissed', 'take_action_and_delete']
+
+    fieldsets = (
+        ('Report Info', {
+            'fields': ('review', 'reporter', 'reason', 'details')
+        }),
+        ('Status', {
+            'fields': ('status', 'reviewed_at', 'reviewed_by', 'admin_notes')
+        }),
+        ('Timestamps', {
+            'fields': ('created_at',)
+        }),
+    )
+
+    def review_preview(self, obj):
+        review = obj.review
+        if review.is_deleted:
+            return '[deleted review]'
+        return review.body[:75] + '...' if len(review.body) > 75 else review.body
+    review_preview.short_description = 'Review'
+
+    @admin.action(description='Mark selected reports as reviewed')
+    def mark_as_reviewed(self, request, queryset):
+        from django.utils import timezone
+        count = queryset.filter(status='pending').update(
+            status='reviewed',
+            reviewed_at=timezone.now(),
+            reviewed_by=request.user
+        )
+        self.message_user(request, f"Marked {count} report(s) as reviewed.", messages.SUCCESS)
+
+    @admin.action(description='Mark selected reports as dismissed')
+    def mark_as_dismissed(self, request, queryset):
+        from django.utils import timezone
+        count = queryset.filter(status='pending').update(
+            status='dismissed',
+            reviewed_at=timezone.now(),
+            reviewed_by=request.user
+        )
+        self.message_user(request, f"Dismissed {count} report(s).", messages.SUCCESS)
+
+    @admin.action(description='Take action: Mark reviewed & soft-delete review')
+    def take_action_and_delete(self, request, queryset):
+        from django.utils import timezone
+        count = 0
+        for report in queryset.filter(status='pending'):
+            report.review.soft_delete(
+                moderator=request.user,
+                reason=f"Admin action via Django admin on report #{report.id}",
+                request=request
+            )
+            report.status = 'action_taken'
+            report.reviewed_at = timezone.now()
+            report.reviewed_by = request.user
+            report.save(update_fields=['status', 'reviewed_at', 'reviewed_by'])
+            count += 1
+        self.message_user(
+            request,
+            f"Took action on {count} report(s) and soft-deleted the reviews.",
+            messages.WARNING
+        )
+
+
+@admin.register(ReviewModerationLog)
+class ReviewModerationLogAdmin(admin.ModelAdmin):
+    """Admin interface for review moderation log (read-only)."""
+    list_display = [
+        'timestamp',
+        'moderator',
+        'action_type',
+        'review_author',
+        'review_preview_short',
+        'concept',
+    ]
+    list_select_related = ('moderator', 'review_author', 'concept')
+    list_filter = [
+        'action_type',
+        'moderator',
+        'timestamp',
+    ]
+    search_fields = [
+        'original_body',
+        'review_author__psn_username',
+        'moderator__username',
+        'reason',
+        'internal_notes',
+    ]
+    readonly_fields = [
+        'timestamp',
+        'moderator',
+        'action_type',
+        'review',
+        'review_id_snapshot',
+        'review_author',
+        'original_body',
+        'concept',
+        'related_report',
+        'reason',
+        'internal_notes',
+        'ip_address',
+    ]
+    ordering = ['-timestamp']
+    date_hierarchy = 'timestamp'
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    def review_preview_short(self, obj):
+        return obj.original_body[:50] + '...' if len(obj.original_body) > 50 else obj.original_body
+    review_preview_short.short_description = 'Review'
+
+
+# ---------- Other Missing Admin ----------
+
+@admin.register(ConceptTrophyGroup)
+class ConceptTrophyGroupAdmin(admin.ModelAdmin):
+    """Admin interface for concept-level trophy groups."""
+    list_display = ['id', 'concept', 'trophy_group_id', 'display_name', 'sort_order']
+    list_select_related = ('concept',)
+    list_filter = ['trophy_group_id']
+    search_fields = ['concept__unified_title', 'display_name']
+    raw_id_fields = ['concept']
+    ordering = ['concept', 'sort_order']
+
+
+@admin.register(GameListItem)
+class GameListItemAdmin(admin.ModelAdmin):
+    """Admin interface for game list items."""
+    list_display = ['id', 'game_list', 'game', 'position', 'note_preview', 'added_at']
+    list_select_related = ('game_list', 'game')
+    search_fields = ['game__title_name', 'game_list__name', 'game_list__profile__psn_username']
+    raw_id_fields = ['game_list', 'game']
+    readonly_fields = ['added_at']
+    ordering = ['game_list', 'position']
+
+    def note_preview(self, obj):
+        if not obj.note:
+            return '-'
+        return obj.note[:50] + '...' if len(obj.note) > 50 else obj.note
+    note_preview.short_description = 'Note'
+
+
+@admin.register(DashboardConfig)
+class DashboardConfigAdmin(admin.ModelAdmin):
+    """Admin interface for dashboard configurations."""
+    list_display = ['profile', 'module_count', 'hidden_count', 'updated_at']
+    list_select_related = ('profile',)
+    search_fields = ['profile__psn_username']
+    raw_id_fields = ['profile']
+    readonly_fields = ['updated_at']
+    ordering = ['-updated_at']
+
+    def module_count(self, obj):
+        return len(obj.module_order) if obj.module_order else 0
+    module_count.short_description = 'Modules'
+
+    def hidden_count(self, obj):
+        return len(obj.hidden_modules) if obj.hidden_modules else 0
+    hidden_count.short_description = 'Hidden'

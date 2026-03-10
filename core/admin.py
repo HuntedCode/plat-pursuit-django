@@ -4,7 +4,7 @@ from django.contrib import admin
 from django.http import HttpResponse
 from django.utils import timezone
 
-from .models import AnalyticsSession, EmailLog, PageView, SiteEvent
+from .models import AnalyticsSession, EmailLog, PageView, SiteEvent, SiteSettings
 
 
 def _export_pageviews_csv(modeladmin, request, queryset):
@@ -93,6 +93,19 @@ class SiteEventAdmin(admin.ModelAdmin):
     readonly_fields = ('event_type', 'object_id', 'occurred_at', 'user_id')
 
     def has_add_permission(self, request):
+        return False
+
+
+@admin.register(SiteSettings)
+class SiteSettingsAdmin(admin.ModelAdmin):
+    """Admin interface for site-wide settings (singleton)."""
+    list_display = ['__str__', 'index_page_view_count', 'session_tracking_enabled_at']
+    readonly_fields = ['id']
+
+    def has_add_permission(self, request):
+        return not SiteSettings.objects.exists()
+
+    def has_delete_permission(self, request, obj=None):
         return False
 
 
