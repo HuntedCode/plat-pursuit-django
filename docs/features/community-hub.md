@@ -35,6 +35,8 @@ The review feed uses **client-side rendering** from JSON API responses (not serv
 | `templates/trophies/rate_my_games.html` | Rate My Games wizard template |
 | `templates/trophies/partials/reviews/` | 8 partial templates (header, tabs, banner, ratings, form, your review, feed, trophy strip, user rating panel) |
 
+| `trophies/views/game_views.py` | `_build_concept_context()` provides review/recommendation context for game detail community section |
+| `templates/trophies/partials/game_detail/community_section.html` | Unified community card: recommendation banner, ratings grid, user review, Review Hub CTA |
 | `trophies/views/admin_views.py` | `ReviewModerationView`, `ReviewModerationActionView`, `ReviewModerationLogView` |
 | `templates/trophies/moderation/review_moderation.html` | Review moderation dashboard |
 | `templates/trophies/moderation/review_moderation_log.html` | Review moderation action log |
@@ -167,7 +169,7 @@ All three page views are currently gated behind `StaffRequiredMixin` for testing
 - Tab switching uses **full page reload** with `?group=<id>` query param for simplicity and bookmarkability.
 - Rating form is **collapsible** (collapsed by default) in the sidebar.
 - User's own review is a **separate section** above the feed (server-rendered), not part of the paginated feed.
-- Game detail page links to Review Hub via a button below the header action bar (staff-only during testing).
+- Game detail page shows a unified "Community" card with recommendation stats, ratings grid, user review preview, and Review Hub CTA (staff-only during testing).
 - Review word-count progress bars use the shared `ReviewProgressTiers.updateWordProgress()` utility from `utils.js` across all three locations (new review form, edit review, inline edit).
 
 ## Integration Points
@@ -198,6 +200,25 @@ All actions record `reason` and optional `internal_notes` (staff-only, not visib
 ### Cross-links
 Comment and review moderation pages cross-link to each other via header buttons.
 
+## Game Detail Integration
+
+The game detail page shows a single unified "Community" card (`community_section.html`) containing recommendation stats, ratings grid, user review preview, and a Review Hub CTA.
+
+| File | Purpose |
+|------|---------|
+| `trophies/views/game_views.py` | `_build_concept_context()` fetches `recommendation_stats`, `review_count`, `user_review`, `can_review` for the base game CTG (staff-only) |
+| `templates/trophies/partials/game_detail/community_section.html` | Unified community card with all sections |
+
+**Sections within the card:**
+1. **Recommendation banner** (staff-only): Thumbs up/down percentage with visual bar. Content inlined from `recommendation_banner.html` pattern to avoid card-within-card nesting.
+2. **Ratings grid** (visible to everyone): 2x3 grid showing Difficulty, Grindiness, Hours, Fun, Overall with color-coded progress bars.
+3. **User review** (staff-only): Truncated preview of user's review with recommendation badge, or CTA to write a review if eligible.
+4. **Review Hub CTA** (staff-only): Full-width button linking to the Review Hub detail page.
+
+**Rating form**: Removed from the game detail page. Users submit ratings via the Review Hub's rating panel instead. The `post()` method on `GameDetailView` has been removed.
+
+When going public: remove the `user.is_staff` checks in the template and the `if self.request.user.is_staff` guard in `_build_concept_context()`.
+
 ## Gotchas and Pitfalls
 
 - **Base game rating filter**: Use `concept_trophy_group__isnull=True`, NOT FK lookup by trophy_group_id. Existing ratings have NULL for backward compatibility.
@@ -208,7 +229,8 @@ Comment and review moderation pages cross-link to each other via header buttons.
 - **Reply count decrement**: Uses `Greatest(F('reply_count') - 1, Value(0))` for safe clamping (prevents negative counts).
 - **Client-side rendering**: Review feed is JSON from API, not server-rendered partials. This is intentional for infinite scroll performance.
 - **ZoomAwareObserver**: Infinite scroll sentinels use `ZoomAwareObserver` (not raw `IntersectionObserver`) to work correctly when the page is scaled via `ZoomScaler` on sub-768px screens.
-- **Staff-only gating**: All three page views (`ReviewHubLandingView`, `ReviewHubDetailView`, `RateMyGamesView`) use `StaffRequiredMixin`. The navbar link and game detail button are wrapped in `{% if user.is_staff %}`. Remove these when going public.
+- **Staff-only gating**: All three page views (`ReviewHubLandingView`, `ReviewHubDetailView`, `RateMyGamesView`) use `StaffRequiredMixin`. The navbar link and game detail community section review portions are wrapped in `{% if user.is_staff %}`. Remove these when going public.
+- **Rating form removed from game detail**: The `GameDetailView.post()` method and `UserConceptRatingForm` usage were removed. Ratings are submitted exclusively via the Review Hub's rating panel.
 
 ## Management Commands
 

@@ -19,7 +19,7 @@ from urllib.parse import urlencode
 from trophies.mixins import ProfileHotbarMixin
 from ..constants import CACHE_TIMEOUT_IMAGES
 from ..models import Game, Trophy, Profile, EarnedTrophy, ProfileGame, TrophyGroup, Badge, Concept, FeaturedGuide, Stage, Checklist
-from ..forms import GameSearchForm, GameDetailForm, UserConceptRatingForm, GuideSearchForm
+from ..forms import GameSearchForm, GameDetailForm, GuideSearchForm
 from trophies.util_modules.constants import MODERN_PLATFORMS, ALL_PLATFORMS
 
 logger = logging.getLogger("psn_api")
@@ -568,6 +568,42 @@ class GameDetailView(ProfileHotbarMixin, DetailView):
         # Community averages
         context['community_averages'] = RatingService.get_cached_community_averages(game.concept)
 
+        # Review and recommendation data (staff-only, base game group)
+        if self.request.user.is_staff:
+            from trophies.models import ConceptTrophyGroup, Review
+            from trophies.services.review_service import ReviewService
+
+            base_ctg = ConceptTrophyGroup.objects.filter(
+                concept=game.concept, trophy_group_id='default'
+            ).first()
+            if base_ctg:
+                context['recommendation_stats'] = ReviewService.get_recommendation_stats(
+                    game.concept, base_ctg
+                )
+                context['review_count'] = Review.objects.filter(
+                    concept=game.concept,
+                    concept_trophy_group=base_ctg,
+                    is_deleted=False,
+                ).count()
+
+                # User review context
+                user = self.request.user
+                profile = getattr(user, 'profile', None)
+                if profile and profile.is_linked:
+                    context['user_review'] = Review.objects.filter(
+                        concept=game.concept,
+                        concept_trophy_group=base_ctg,
+                        profile=profile,
+                        is_deleted=False,
+                    ).first()
+
+                    from trophies.services.concept_trophy_group_service import ConceptTrophyGroupService
+                    can_review, can_review_reason = ConceptTrophyGroupService.can_review_group(
+                        profile, game.concept, base_ctg
+                    )
+                    context['can_review'] = can_review
+                    context['can_review_reason'] = can_review_reason
+
         # Related badges
         series_slugs = Stage.objects.filter(concepts__games=game).values_list('series_slug', flat=True).distinct()
         badges = Badge.objects.live().filter(series_slug__in=Subquery(series_slugs), tier=1).distinct().order_by('tier')
@@ -585,14 +621,14 @@ class GameDetailView(ProfileHotbarMixin, DetailView):
 
     def _build_rating_context(self, user, game):
         """
-        Build user rating context if user has earned platinum.
+        Build user platinum context for share card button.
 
         Args:
             user: Request user
             game: Game instance
 
         Returns:
-            dict: Rating context or empty dict
+            dict: Platinum context or empty dict
         """
         profile = user.profile if user.is_authenticated and hasattr(user, 'profile') and user.profile and user.profile.is_linked else None
         if not profile or not game.concept:
@@ -602,11 +638,7 @@ class GameDetailView(ProfileHotbarMixin, DetailView):
         if not has_platinum:
             return {}
 
-        user_rating = game.concept.user_ratings.filter(profile=profile).first()
-        result = {
-            'has_platinum': has_platinum,
-            'rating_form': UserConceptRatingForm(instance=user_rating),
-        }
+        result = {'has_platinum': has_platinum}
 
         # Query earned trophy ID for share card button
         earned_trophy_id = EarnedTrophy.objects.filter(
@@ -737,37 +769,6 @@ class GameDetailView(ProfileHotbarMixin, DetailView):
         context['view_count'] = game.view_count
 
         return context
-
-    def post(self, request, *args, **kwargs):
-        self.object = self.get_object()
-        game = self.object
-        concept = game.concept
-        if not concept:
-            return HttpResponseRedirect(request.path)
-
-        user = request.user
-        profile = user.profile if user.is_authenticated and hasattr(user, 'profile') and user.profile and user.profile.is_linked else None
-        if profile and concept.has_user_earned_platinum(profile):
-            rating = concept.user_ratings.filter(profile=profile).first()
-            form = UserConceptRatingForm(request.POST, instance=rating)
-            if form.is_valid():
-                rating = form.save(commit=False)
-                rating.profile = profile
-                rating.concept = concept
-                rating.save()
-                from trophies.services.rating_service import RatingService
-                RatingService.invalidate_cache(concept)
-
-                # Check for rating milestones
-                from trophies.services.milestone_service import check_all_milestones_for_user
-                check_all_milestones_for_user(profile, criteria_type='rating_count')
-
-                messages.success(request, 'Your rating has been submitted!')
-            else:
-                messages.error(request, "Invalid form submission.")
-
-        return HttpResponseRedirect(request.path)
-
 
 class GuideListView(ProfileHotbarMixin, ListView):
     """

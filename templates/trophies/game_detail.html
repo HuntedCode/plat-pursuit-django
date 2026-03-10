@@ -43,30 +43,12 @@
                 </div>
             </div>
             {% endif %}
-            {% if game.concept and game.concept.slug and user.is_staff %}
-                <a href="{% url 'review_hub' game.concept.slug %}" class="btn btn-sm btn-outline btn-accent">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
-                    </svg>
-                    Review Hub
-                </a>
-            {% endif %}
         </section>
 
-    <div class="flex flex-col xl:flex-row gap-4 mt-8 items-start">
-        {% if game.concept.guide_slug %}
-            <section class="section-container w-full xl:w-1/3">
-                {% include 'trophies/partials/game_detail/community_ratings.html' %}
-            </section>
-
-            <section class="section-container w-full xl:w-2/3 xl:sticky xl:top-2">
-                {% include 'trophies/partials/game_detail/guide_embed.html' %}
-            </section>
-        {% else %}
-            <section class="flex flex-col lg:flex-row section-container w-auto !p-4 mx-auto gap-4 items-center lg:items-start">
-                {% include 'trophies/partials/game_detail/community_ratings.html' %}
-            </section>
-        {% endif %}
+    <div class="mt-8">
+        <section class="section-container w-full">
+            {% include 'trophies/partials/game_detail/community_section.html' %}
+        </section>
     </div>
 
     {% include 'partials/ad_unit.html' with ad_slot="8393162469" %}
