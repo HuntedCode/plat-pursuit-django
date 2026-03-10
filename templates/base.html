@@ -102,13 +102,13 @@
     {% include 'partials/back_to_top.html' %}
     {% block fixed_overlays %}{% endblock %}
     {% if ADSENSE_ENABLED %}
-    <div id="mobile-ad-banner" class="fixed left-0 right-0 z-40 flex justify-center items-center max-h-[50px] overflow-hidden bg-base-300/90 lg:hidden"
-         style="bottom: calc(3.5rem + env(safe-area-inset-bottom, 0));">
+    <div id="mobile-ad-banner" class="fixed left-0 right-0 z-40 flex justify-center items-center overflow-hidden bg-base-300/90 lg:hidden"
+         style="bottom: calc(3.5rem + env(safe-area-inset-bottom, 0)); max-height:50px !important; overflow:hidden !important;">
         <ins class="adsbygoogle"
              style="display:inline-block;width:320px;height:50px;"
              data-ad-client="{{ ADSENSE_PUB_ID }}"
              data-ad-slot="9347573919"
-             data-ad-format="inline"
+             data-ad-format="banner"
              {% if ADSENSE_TEST_MODE %}data-adtest="on"{% endif %}></ins>
         <script>(adsbygoogle = window.adsbygoogle || []).push({});</script>
     </div>
