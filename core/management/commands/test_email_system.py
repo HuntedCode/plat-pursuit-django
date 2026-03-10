@@ -24,6 +24,7 @@ Usage:
     python manage.py test_email_system your.email@example.com --milestone-preview
     python manage.py test_email_system your.email@example.com --free-welcome-preview
     python manage.py test_email_system your.email@example.com --broadcast-preview
+    python manage.py test_email_system your.email@example.com --weekly-digest-preview
 """
 from django.core.management.base import BaseCommand, CommandError
 from django.conf import settings
@@ -119,6 +120,11 @@ class Command(BaseCommand):
             action='store_true',
             help='Send a preview of the admin broadcast email template'
         )
+        parser.add_argument(
+            '--weekly-digest-preview',
+            action='store_true',
+            help='Send a preview of the weekly digest email template'
+        )
 
     def handle(self, *args, **options):
         recipient_email = options['recipient_email']
@@ -138,6 +144,7 @@ class Command(BaseCommand):
         milestone_preview = options.get('milestone_preview', False)
         free_welcome_preview = options.get('free_welcome_preview', False)
         broadcast_preview = options.get('broadcast_preview', False)
+        weekly_digest_preview = options.get('weekly_digest_preview', False)
 
         self.stdout.write("=" * 70)
         self.stdout.write("Email System Test")
@@ -178,6 +185,8 @@ class Command(BaseCommand):
             self._send_free_welcome_preview(recipient_email)
         elif broadcast_preview:
             self._send_broadcast_preview(recipient_email)
+        elif weekly_digest_preview:
+            self._send_weekly_digest_preview(recipient_email)
         else:
             self._send_simple_test(recipient_email)
 
@@ -1003,6 +1012,108 @@ class Command(BaseCommand):
             )
             if sent_count > 0:
                 self.stdout.write(self.style.SUCCESS('Broadcast preview sent successfully!'))
+            else:
+                self.stdout.write(self.style.ERROR('Email was not sent'))
+        except Exception as e:
+            self.stdout.write(self.style.ERROR(f'Failed: {e}'))
+            raise CommandError(f'Email sending failed: {e}')
+
+    def _send_weekly_digest_preview(self, recipient_email):
+        """Send a preview of the weekly digest email template."""
+        from users.services.email_preference_service import EmailPreferenceService
+
+        self.stdout.write("\nSending weekly digest email preview...")
+
+        sample_user_id = 1
+        try:
+            preference_token = EmailPreferenceService.generate_preference_token(sample_user_id)
+            preference_url = f"{settings.SITE_URL}/users/email-preferences/?token={preference_token}"
+        except Exception:
+            preference_url = f"{settings.SITE_URL}/users/email-preferences/"
+
+        context = {
+            'username': 'TestUser',
+            'week_start_display': 'Mar 3',
+            'week_end_display': 'Mar 9',
+            # Trophy stats
+            'total_trophies': 27,
+            'bronze_count': 15,
+            'silver_count': 7,
+            'gold_count': 4,
+            'platinum_count': 1,
+            'active_days': 5,
+            'games_started': 2,
+            # Platinums
+            'has_platinums': True,
+            'platinums_earned': [
+                {'game_name': 'Astro Bot', 'game_image': '', 'earned_date': 'Mar 7'},
+            ],
+            # Challenges
+            'has_challenges': True,
+            'challenges': [
+                {
+                    'challenge_type': 'A-Z Platinum Challenge',
+                    'name': 'My A-Z Challenge',
+                    'completed_count': 14,
+                    'total_items': 26,
+                    'progress_percentage': 54,
+                    'weekly_delta': 2,
+                },
+                {
+                    'challenge_type': 'Genre Challenge',
+                    'name': 'Genre Gauntlet',
+                    'completed_count': 8,
+                    'total_items': 15,
+                    'progress_percentage': 53,
+                    'weekly_delta': 0,
+                },
+            ],
+            # Badges
+            'has_badges_earned': True,
+            'badges_earned': [
+                {'name': 'Souls Series', 'tier_name': 'Gold', 'image_url': ''},
+            ],
+            'has_closest_badge': True,
+            'closest_badge': {
+                'name': 'Final Fantasy',
+                'progress_pct': 67,
+                'completed': 2,
+                'required': 3,
+                'image_url': '',
+            },
+            # Community
+            'has_top_review': True,
+            'top_review': {
+                'author_username': 'TrophyHunter99',
+                'game_name': 'Elden Ring',
+                'game_image': '',
+                'game_slug': 'elden-ring',
+                'body_snippet': 'An absolute masterpiece that rewards every ounce of patience and skill you invest',
+                'helpful_count': 12,
+                'recommended': True,
+            },
+            'review_url': f'{settings.SITE_URL}/reviews/elden-ring/',
+            'site_stats': {
+                'total_trophies': 48523,
+                'total_platinums': 387,
+                'total_reviews': 42,
+            },
+            # Links
+            'profile_url': f'{settings.SITE_URL}/profiles/TestUser/',
+            'site_url': settings.SITE_URL,
+            'preference_url': preference_url,
+        }
+
+        try:
+            sent_count = EmailService.send_html_email(
+                subject='[PREVIEW] Your Weekly Digest: Mar 3 - Mar 9',
+                to_emails=[recipient_email],
+                template_name='emails/weekly_digest.html',
+                context=context,
+                fail_silently=False,
+            )
+            if sent_count > 0:
+                self.stdout.write(self.style.SUCCESS('Weekly digest preview sent successfully!'))
             else:
                 self.stdout.write(self.style.ERROR('Email was not sent'))
         except Exception as e:

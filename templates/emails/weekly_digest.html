@@ -1,0 +1,459 @@
+{% extends "emails/base_email.html" %}
+
+{% block extra_styles %}
+    <style>
+        /* Stats grid */
+        .digest-stats {
+            background-color: #667eea;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 12px;
+            padding: 24px;
+            margin: 25px 0;
+            color: #ffffff;
+            text-align: center;
+        }
+
+        .digest-stats h2 {
+            margin: 0 0 16px 0;
+            font-size: 20px;
+            font-weight: 600;
+        }
+
+        .stats-grid {
+            width: 100%;
+            margin: 0 auto;
+            border-spacing: 10px 0;
+            border-collapse: separate;
+        }
+
+        .stat-cell {
+            text-align: center;
+            padding: 8px 4px;
+        }
+
+        .stat-number {
+            font-size: 32px;
+            font-weight: 700;
+            display: block;
+            margin-bottom: 4px;
+        }
+
+        .stat-label {
+            font-size: 12px;
+            opacity: 0.9;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        /* No-activity card */
+        .quiet-week {
+            background-color: #f8f9fa;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 25px 0;
+            text-align: center;
+            color: #666666;
+            font-size: 15px;
+        }
+
+        /* Section cards */
+        .section-card {
+            background-color: #f8f9fa;
+            border-radius: 8px;
+            padding: 20px 24px;
+            margin-bottom: 20px;
+        }
+
+        .section-title {
+            font-size: 18px;
+            font-weight: 700;
+            color: #333333;
+            margin: 0 0 14px 0;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #e0e0e0;
+        }
+
+        /* Platinum showcase */
+        .plat-list {
+            width: 100%;
+            border-spacing: 0;
+        }
+
+        .plat-row td {
+            padding: 8px 0;
+            vertical-align: middle;
+            border-bottom: 1px solid #eee;
+        }
+
+        .plat-row:last-child td {
+            border-bottom: none;
+        }
+
+        .plat-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 6px;
+            object-fit: cover;
+        }
+
+        .plat-name {
+            font-size: 15px;
+            font-weight: 600;
+            color: #333333;
+            padding-left: 12px;
+        }
+
+        .plat-date {
+            font-size: 13px;
+            color: #888888;
+            text-align: right;
+        }
+
+        /* Challenge progress */
+        .challenge-item {
+            margin-bottom: 16px;
+        }
+
+        .challenge-item:last-child {
+            margin-bottom: 0;
+        }
+
+        .challenge-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 6px;
+        }
+
+        .challenge-name {
+            font-size: 15px;
+            font-weight: 600;
+            color: #333333;
+        }
+
+        .challenge-type-badge {
+            display: inline-block;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            padding: 2px 8px;
+            border-radius: 4px;
+            background-color: #e8e8ff;
+            color: #667eea;
+            margin-left: 8px;
+            vertical-align: middle;
+        }
+
+        .progress-bar-bg {
+            background-color: #e0e0e0;
+            border-radius: 4px;
+            height: 8px;
+            width: 100%;
+            margin: 6px 0;
+        }
+
+        .progress-bar-fill {
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+            border-radius: 4px;
+            height: 8px;
+            min-width: 2px;
+        }
+
+        .challenge-stats {
+            font-size: 13px;
+            color: #666666;
+        }
+
+        .weekly-delta {
+            color: #38a169;
+            font-weight: 600;
+            margin-left: 8px;
+        }
+
+        /* Badge section */
+        .badge-earned-item {
+            padding: 8px 0;
+            border-bottom: 1px solid #eee;
+        }
+
+        .badge-earned-item:last-child {
+            border-bottom: none;
+        }
+
+        .badge-name {
+            font-size: 15px;
+            font-weight: 600;
+            color: #333333;
+        }
+
+        .badge-tier {
+            font-size: 13px;
+            color: #667eea;
+            font-weight: 600;
+        }
+
+        .badge-closest {
+            background-color: #f0f0ff;
+            border-left: 4px solid #667eea;
+            border-radius: 0 8px 8px 0;
+            padding: 14px 18px;
+            margin-top: 12px;
+        }
+
+        .badge-closest-label {
+            font-size: 13px;
+            color: #666666;
+            margin: 0 0 4px 0;
+        }
+
+        .badge-closest-name {
+            font-size: 16px;
+            font-weight: 700;
+            color: #333333;
+            margin: 0 0 8px 0;
+        }
+
+        .badge-progress-text {
+            font-size: 13px;
+            color: #555555;
+        }
+
+        /* Community spotlight */
+        .review-card {
+            border-left: 4px solid #667eea;
+            background-color: #ffffff;
+            border-radius: 0 8px 8px 0;
+            padding: 14px 18px;
+            margin-bottom: 16px;
+        }
+
+        .review-game {
+            font-size: 15px;
+            font-weight: 700;
+            color: #333333;
+        }
+
+        .review-author {
+            font-size: 13px;
+            color: #888888;
+            margin-bottom: 6px;
+        }
+
+        .review-snippet {
+            font-size: 14px;
+            color: #555555;
+            font-style: italic;
+            line-height: 1.6;
+            margin: 8px 0;
+        }
+
+        .review-helpful {
+            font-size: 12px;
+            color: #667eea;
+            font-weight: 600;
+        }
+
+        .site-stats-grid {
+            width: 100%;
+            margin-top: 12px;
+            border-spacing: 0;
+        }
+
+        .site-stat-cell {
+            text-align: center;
+            padding: 10px 8px;
+            background-color: #ffffff;
+            border-radius: 6px;
+        }
+
+        .site-stat-value {
+            font-size: 20px;
+            font-weight: 700;
+            color: #667eea;
+            display: block;
+        }
+
+        .site-stat-label {
+            font-size: 11px;
+            color: #888888;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+        }
+
+        /* Responsive */
+        @media only screen and (max-width: 600px) {
+            .digest-stats { padding: 18px 12px; }
+            .stat-number { font-size: 24px; }
+            .stat-label { font-size: 10px; letter-spacing: 0; }
+            .stats-grid { border-spacing: 4px 0; }
+            .section-card { padding: 16px; }
+            .plat-icon { width: 32px; height: 32px; }
+        }
+    </style>
+{% endblock %}
+
+{% block title %}Your Weekly Trophy Digest{% endblock %}
+
+{% block header_content %}
+    <h1>Weekly Digest</h1>
+    <p>{{ week_start_display }} - {{ week_end_display }}</p>
+{% endblock %}
+
+{% block content %}
+    <p class="greeting">Hey {{ username }}!</p>
+    <p class="intro">Here's your week in review. Let's see how the hunt went.</p>
+
+    {# ── Section 1: Stats Grid ── #}
+    {% if total_trophies > 0 %}
+    <div class="digest-stats">
+        <h2>Your Week in Numbers</h2>
+        <table class="stats-grid" role="presentation" cellpadding="0" cellspacing="0" align="center">
+            <tr>
+                <td class="stat-cell">
+                    <span class="stat-number">{{ total_trophies }}</span>
+                    <span class="stat-label">Trophies</span>
+                </td>
+                <td class="stat-cell">
+                    <span class="stat-number">{{ platinum_count }}</span>
+                    <span class="stat-label">Platinum{{ platinum_count|pluralize }}</span>
+                </td>
+                <td class="stat-cell">
+                    <span class="stat-number">{{ games_started }}</span>
+                    <span class="stat-label">New Game{{ games_started|pluralize }}</span>
+                </td>
+                <td class="stat-cell">
+                    <span class="stat-number">{{ active_days }}</span>
+                    <span class="stat-label">Active Day{{ active_days|pluralize }}</span>
+                </td>
+            </tr>
+        </table>
+    </div>
+    {% else %}
+    <div class="quiet-week">
+        <p style="margin:0;">A quiet week on the trophy front, but there's still plenty to check out below. 🎮</p>
+    </div>
+    {% endif %}
+
+    {# ── Section 2: Platinum Showcase ── #}
+    {% if has_platinums %}
+    <div class="section-card">
+        <div class="section-title">🏆 Platinum Showcase</div>
+        <table class="plat-list" role="presentation" cellpadding="0" cellspacing="0">
+            {% for plat in platinums_earned %}
+            <tr class="plat-row">
+                <td style="width:40px;">
+                    {% if plat.game_image %}
+                    <img src="{{ plat.game_image }}" alt="" class="plat-icon">
+                    {% endif %}
+                </td>
+                <td class="plat-name">{{ plat.game_name }}</td>
+                <td class="plat-date">{{ plat.earned_date }}</td>
+            </tr>
+            {% endfor %}
+        </table>
+    </div>
+    {% endif %}
+
+    {# ── Section 3: Challenge Progress ── #}
+    {% if has_challenges %}
+    <div class="section-card">
+        <div class="section-title">🎯 Challenge Progress</div>
+        {% for challenge in challenges %}
+        <div class="challenge-item">
+            <div>
+                <span class="challenge-name">{{ challenge.name }}</span>
+                <span class="challenge-type-badge">{{ challenge.challenge_type }}</span>
+            </div>
+            <div class="progress-bar-bg">
+                <div class="progress-bar-fill" style="width: {{ challenge.progress_percentage }}%;"></div>
+            </div>
+            <div class="challenge-stats">
+                {{ challenge.completed_count }}/{{ challenge.total_items }} completed
+                {% if challenge.weekly_delta > 0 %}
+                <span class="weekly-delta">+{{ challenge.weekly_delta }} this week</span>
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    {# ── Section 4: Badge Update ── #}
+    {% if has_badges_earned or has_closest_badge %}
+    <div class="section-card">
+        <div class="section-title">🏅 Badge Update</div>
+
+        {% if has_badges_earned %}
+        <p style="font-size:14px; color:#555555; margin:0 0 8px 0;">Earned this week:</p>
+        {% for badge in badges_earned %}
+        <div class="badge-earned-item">
+            <span class="badge-name">{{ badge.name }}</span>
+            <span class="badge-tier">&middot; {{ badge.tier_name }}</span>
+        </div>
+        {% endfor %}
+        {% endif %}
+
+        {% if has_closest_badge %}
+        <div class="badge-closest">
+            <p class="badge-closest-label">Closest to earning:</p>
+            <p class="badge-closest-name">{{ closest_badge.name }}</p>
+            <div class="progress-bar-bg">
+                <div class="progress-bar-fill" style="width: {{ closest_badge.progress_pct }}%;"></div>
+            </div>
+            <span class="badge-progress-text">{{ closest_badge.completed }}/{{ closest_badge.required }} games ({{ closest_badge.progress_pct }}%)</span>
+        </div>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    {# ── Section 5: Community Spotlight ── #}
+    <div class="section-card">
+        <div class="section-title">🌟 Community Spotlight</div>
+
+        {% if has_top_review %}
+        <div class="review-card">
+            <div class="review-game">
+                {% if top_review.recommended %}👍{% else %}👎{% endif %}
+                {{ top_review.game_name }}
+            </div>
+            <div class="review-author">reviewed by {{ top_review.author_username }}</div>
+            <div class="review-snippet">"{{ top_review.body_snippet }}..."</div>
+            <div class="review-helpful">
+                {{ top_review.helpful_count }} found this helpful
+                {% if review_url %}
+                &middot; <a href="{{ review_url }}" style="color:#667eea; text-decoration:underline;">Read full review</a>
+                {% endif %}
+            </div>
+        </div>
+        {% else %}
+        <p style="font-size:14px; color:#888888; margin:0 0 12px 0;">No reviews submitted this week. Be the first!</p>
+        {% endif %}
+
+        <p style="font-size:13px; color:#888888; margin:12px 0 8px 0;">This week across PlatPursuit:</p>
+        <table class="site-stats-grid" role="presentation" cellpadding="0" cellspacing="8">
+            <tr>
+                <td class="site-stat-cell">
+                    <span class="site-stat-value">{{ site_stats.total_trophies|default:"0" }}</span>
+                    <span class="site-stat-label">Trophies</span>
+                </td>
+                <td class="site-stat-cell">
+                    <span class="site-stat-value">{{ site_stats.total_platinums|default:"0" }}</span>
+                    <span class="site-stat-label">Platinums</span>
+                </td>
+                <td class="site-stat-cell">
+                    <span class="site-stat-value">{{ site_stats.total_reviews|default:"0" }}</span>
+                    <span class="site-stat-label">New Reviews</span>
+                </td>
+            </tr>
+        </table>
+    </div>
+
+    {# ── CTA Button ── #}
+    <div class="cta-container">
+        <a href="{{ profile_url }}" class="cta-button">View Your Profile</a>
+    </div>
+{% endblock %}
+
+{% block footer_note %}
+    You're receiving this weekly digest because you have a linked PlatPursuit account.<br>
+    <a href="{{ preference_url }}" style="color: #999999; text-decoration: underline;">Manage your email preferences</a>.
+{% endblock %}

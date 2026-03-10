@@ -18,6 +18,7 @@ PlatPursuit uses **Render Cron Jobs** to run scheduled management commands. Each
 | 03:00 UTC daily | `match_game_families` | Daily | `populate_title_ids` should have completed |
 | 04:00 UTC daily | `update_shovelware` | Daily | None |
 | Weekly (Sunday) | `cleanup_old_analytics --force` | Weekly | None |
+| Weekly (Monday 08:00 UTC) | `send_weekly_digest` | Weekly | None |
 | 3rd of month, 00:05 UTC | `generate_monthly_recaps --finalize` | Monthly | All profile syncs for the previous month should be complete |
 | 3rd of month, 06:00 UTC | `send_monthly_recap_emails` | Monthly | `generate_monthly_recaps` must have completed first |
 
@@ -124,6 +125,16 @@ PlatPursuit uses **Render Cron Jobs** to run scheduled management commands. Each
 - **Idempotency**: Safe to re-run. Uses `get_or_generate_recap()` which returns existing recaps if already generated. The finalize step is also idempotent (already-finalized recaps are skipped).
 - **Failure impact**: Recap emails cannot be sent (they require finalized recaps). Users cannot view their monthly recap page until recaps are generated.
 
+### send_weekly_digest
+
+- **Schedule**: Monday at 08:00 UTC
+- **Command**: `python manage.py send_weekly_digest`
+- **What it does**: Sends personalized weekly digest emails to all linked profiles summarizing their previous week's trophy activity. Covers: trophy stats (total, by type), platinum showcase, active challenge progress with weekly deltas, badge updates (earned + closest to earning), and a community spotlight (top review + site-wide stats). Community data is pre-fetched once per batch to avoid redundant queries.
+- **Dependencies**: None. Reads trophy, challenge, badge, and review data directly from the database.
+- **Idempotency**: Safe to re-run. Uses `EmailLog` deduplication with a 6-day window. Profiles that already received a digest within the past 6 days are skipped. Use `--force` to bypass the dedup check.
+- **Failure impact**: Users don't receive their weekly digest. No data loss. Can be retried on Tuesday by re-running the command.
+- **Smart suppression**: Profiles with zero trophy activity, no active challenges, no badges earned, and no closest badge are automatically skipped (no email sent). This prevents empty/useless digest emails.
+
 ### send_monthly_recap_emails
 
 - **Schedule**: 3rd of month at 06:00 UTC
@@ -178,7 +189,8 @@ The following diagram shows ordering constraints between jobs. Jobs on the same 
                         update_shovelware
 
 
-    WEEKLY ─────────── cleanup_old_analytics --force
+    WEEKLY ─────────── cleanup_old_analytics --force       [Sunday]
+                        send_weekly_digest                  [Monday 08:00 UTC]
 
 
     MONTHLY (3rd) ──── generate_monthly_recaps --finalize   [00:05 UTC]
@@ -192,7 +204,8 @@ Key ordering rules:
 1. `refresh_profiles` depends on TokenKeeper being alive to process queued syncs.
 2. `send_monthly_recap_emails` **must** run after `generate_monthly_recaps --finalize`. The 6-hour gap (00:05 to 06:00) on the 3rd of each month ensures this.
 3. `match_game_families` benefits from running after `populate_title_ids` so new title data is available, but it will not fail without it.
-4. All other jobs are independent and can run in any order relative to each other.
+4. `send_weekly_digest` runs Monday morning, covering the previous ISO week (Monday to Sunday). The Sunday `cleanup_old_analytics` job has no dependency relationship.
+5. All other jobs are independent and can run in any order relative to each other.
 
 ---
 
@@ -230,7 +243,7 @@ python manage.py <command>              # execute
 
 ## Related Docs
 
-- [Management Commands](management-commands.md): Full reference for all 57+ management commands
+- [Management Commands](management-commands.md): Full reference for all 58+ management commands
 - [Token Keeper](../architecture/token-keeper.md): Architecture of the PSN sync worker
 - [Monthly Recap](../features/monthly-recap.md): Recap generation and delivery pipeline
 - [Notification System](../architecture/notification-system.md): Scheduled notification delivery

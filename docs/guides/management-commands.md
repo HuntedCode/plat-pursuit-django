@@ -1,6 +1,6 @@
 # Management Commands
 
-PlatPursuit has **57 custom management commands** spread across 4 Django apps: `trophies` (28), `core` (17), `notifications` (5), and `users` (2). All commands follow the standard Django pattern and are invoked with `python manage.py <command_name>`. Many support `--dry-run` for safe previewing before applying changes.
+PlatPursuit has **58 custom management commands** spread across 4 Django apps: `trophies` (28), `core` (18), `notifications` (5), and `users` (2). All commands follow the standard Django pattern and are invoked with `python manage.py <command_name>`. Many support `--dry-run` for safe previewing before applying changes.
 
 ---
 
@@ -59,7 +59,8 @@ PlatPursuit has **57 custom management commands** spread across 4 Django apps: `
 | `populate_title_ids` | Populate TitleID table from external PlayStation Titles GitHub repository (PS4 + PS5 TSV files). | (none) | `python manage.py populate_title_ids` |
 | `match_game_families` | Find and group related Concepts into GameFamily records using name-based and trophy-based matching algorithms. | `--dry-run`, `--auto-only`, `--verbose`, `--diagnose <concept_id>`, `--top` (default: 10) | `python manage.py match_game_families --dry-run --verbose` |
 | `backfill_guide_view_counts` | Reconcile `Checklist.view_count` from actual PageView records after the `page_type` rename from `checklist` to `guide`. | `--dry-run` | `python manage.py backfill_guide_view_counts` |
-| `test_email_system` | Send test emails for any template to verify email delivery. Supports 16+ email template previews. | `recipient_email` (positional, required), `--recap-preview`, `--verification-preview`, `--password-reset-preview`, `--payment-failed-preview`, `--payment-failed-final-preview`, `--cancelled-preview`, `--welcome-preview`, `--payment-succeeded-preview`, `--payment-action-required-preview`, `--donation-receipt-preview`, `--badge-claim-preview`, `--artwork-complete-preview`, `--badge-earned-preview`, `--milestone-preview`, `--free-welcome-preview`, `--broadcast-preview` | `python manage.py test_email_system your@email.com --recap-preview` |
+| `send_weekly_digest` | Send personalized weekly digest emails covering the previous week's trophy activity, challenge progress, badge updates, and community spotlight. | `--dry-run`, `--profile-id`, `--force`, `--batch-size` (default: 100) | `python manage.py send_weekly_digest --dry-run` |
+| `test_email_system` | Send test emails for any template to verify email delivery. Supports 17+ email template previews. | `recipient_email` (positional, required), `--recap-preview`, `--verification-preview`, `--password-reset-preview`, `--payment-failed-preview`, `--payment-failed-final-preview`, `--cancelled-preview`, `--welcome-preview`, `--payment-succeeded-preview`, `--payment-action-required-preview`, `--donation-receipt-preview`, `--badge-claim-preview`, `--artwork-complete-preview`, `--badge-earned-preview`, `--milestone-preview`, `--free-welcome-preview`, `--broadcast-preview`, `--weekly-digest-preview` | `python manage.py test_email_system your@email.com --recap-preview` |
 | `update_leaderboards` | Recompute and cache all badge leaderboards: per-series earners, per-series progress, total progress, total XP, and community series XP. | (none) | `python manage.py update_leaderboards` |
 | `lock_shovelware` | Lock or unlock a game's shovelware status. Propagates to all games sharing the same concept. | `np_communication_id` (positional, required), `--flag`, `--clear`, `--unlock` (mutually exclusive, required) | `python manage.py lock_shovelware NPWR12345_00 --flag` |
 | `update_shovelware` | Full rebuild of the shovelware list using rule-based detection. Resets auto-flags, scans for high-rate platinums, updates publisher blacklist, applies concept shielding. | `--dry-run`, `--verbose` | `python manage.py update_shovelware --dry-run --verbose` |
@@ -102,6 +103,7 @@ These commands run on automated schedules. See your hosting provider's cron conf
 | `cleanup_old_analytics` | Weekly or monthly | GDPR cleanup of old session/IP data |
 | `generate_monthly_recaps` | 3rd of month, 00:05 UTC | Generate and finalize previous month's recaps |
 | `send_monthly_recap_emails` | 3rd of month, 06:00 UTC | Send recap emails + in-app notifications |
+| `send_weekly_digest` | Monday 08:00 UTC | Send personalized weekly digest emails |
 | `populate_title_ids` | Daily or weekly | Sync TitleID table from GitHub |
 | `match_game_families` | Daily | Find and group related Concepts |
 | `update_shovelware` | Daily or weekly | Rebuild shovelware detection flags |
@@ -178,7 +180,7 @@ Commands for debugging and monitoring. These do not modify data (except where no
 
 The most common flag across the codebase. When provided, the command previews what changes would be made without writing to the database. Always run with `--dry-run` first when using a command for the first time or on production data.
 
-Commands that support `--dry-run`: `backfill_default_concepts`, `backfill_concept_slugs`, `backfill_stub_concept_icons`, `backfill_game_regions`, `backfill_guide_view_counts`, `backfill_subscription_periods`, `backfill_platted_subgenre_count`, `check_all_badges`, `check_subscription_milestones`, `clean_titles`, `cleanup_old_analytics`, `enforce_az_challenge_rules`, `generate_monthly_recaps`, `grant_milestone`, `lock_admin_concepts`, `mark_recaps_sent`, `match_game_families`, `populate_banned_words`, `populate_milestones`, `populate_user_titles`, `process_scheduled_notifications`, `recalc_earn_rates`, `recalculate_gamification`, `send_monthly_recap_emails`, `sync_all_discord_roles`, `update_shovelware`.
+Commands that support `--dry-run`: `backfill_default_concepts`, `backfill_concept_slugs`, `backfill_stub_concept_icons`, `backfill_game_regions`, `backfill_guide_view_counts`, `backfill_subscription_periods`, `backfill_platted_subgenre_count`, `check_all_badges`, `check_subscription_milestones`, `clean_titles`, `cleanup_old_analytics`, `enforce_az_challenge_rules`, `generate_monthly_recaps`, `grant_milestone`, `lock_admin_concepts`, `mark_recaps_sent`, `match_game_families`, `populate_banned_words`, `populate_milestones`, `populate_user_titles`, `process_scheduled_notifications`, `recalc_earn_rates`, `recalculate_gamification`, `send_monthly_recap_emails`, `send_weekly_digest`, `sync_all_discord_roles`, `update_shovelware`.
 
 ### `--username` / `--profile`
 
@@ -186,13 +188,13 @@ Many commands accept a PSN username to target a single profile instead of proces
 
 - `--username`: `populate_profilegame_stats`, `check_profile_badge_series`, `populate_badges`, `populate_user_milestones`, `check_all_badges`, `audit_user_awards`, `grant_milestone`
 - `--profile`: `recalculate_gamification`, `sync_all_discord_roles`, `audit_profile_gamification`
-- `--profile-id`: `generate_monthly_recaps`, `send_monthly_recap_emails`
+- `--profile-id`: `generate_monthly_recaps`, `send_monthly_recap_emails`, `send_weekly_digest`
 
 ### `--batch-size`
 
 Controls the number of records processed per database batch. Used by commands that handle large datasets:
 
-- `populate_profilegame_stats`, `backfill_default_concepts`, `backfill_concept_slugs`, `backfill_stub_concept_icons`, `recalc_earn_rates`, `sync_all_discord_roles`, `send_monthly_recap_emails`
+- `populate_profilegame_stats`, `backfill_default_concepts`, `backfill_concept_slugs`, `backfill_stub_concept_icons`, `recalc_earn_rates`, `sync_all_discord_roles`, `send_monthly_recap_emails`, `send_weekly_digest`
 
 ### `--verbose`
 
@@ -208,7 +210,7 @@ Suppresses in-app notifications when awarding milestones. Used by: `populate_use
 
 ### `--force`
 
-Skips confirmation prompts or re-processes already-completed records. Used by: `cleanup_old_analytics` (skip prompt), `send_monthly_recap_emails` (resend to already-emailed users).
+Skips confirmation prompts or re-processes already-completed records. Used by: `cleanup_old_analytics` (skip prompt), `send_monthly_recap_emails` (resend to already-emailed users), `send_weekly_digest` (bypass EmailLog dedup).
 
 ---
 
