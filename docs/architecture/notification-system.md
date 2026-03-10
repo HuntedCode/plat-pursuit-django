@@ -103,6 +103,11 @@ Admin-created notifications with future delivery. Processed by the hourly cron c
 | `sections` | JSONField | Structured sections (max 5, validated) |
 | `created_by` | FK(CustomUser) | Staff user who created it |
 | `recipient_count` | PositiveIntegerField | Estimated at creation, actual at send |
+| `send_email` | BooleanField | Whether to also send a companion email alongside the in-app notification |
+| `email_subject` | CharField | Legacy. Defaults to notification title if blank |
+| `email_body_markdown` | TextField | Legacy. If populated, email uses `_send_broadcast_emails_legacy`. New notifications leave this blank and mirror in-app content via `broadcast_email_renderer.py` |
+| `email_cta_url` | URLField | Legacy. Defaults to `action_url` if blank |
+| `email_cta_text` | CharField | Legacy. Defaults to `action_text` if blank |
 
 Status lifecycle: `pending` -> `processing` -> `sent` (or `failed`). Can be `cancelled` while still `pending`.
 
@@ -134,7 +139,7 @@ Push notification device tokens for mobile.
 
 Audit trail for bulk sends (both immediate and scheduled).
 
-Captures a snapshot of what was sent: notification_type, title, message, detail, target_type, target_criteria, recipient_count, sent_by, was_scheduled.
+Captures a snapshot of what was sent: notification_type, title, message, detail, target_type, target_criteria, recipient_count, sent_by, was_scheduled. Also tracks `emails_sent` and `emails_suppressed` counts for broadcast emails.
 
 ## Notification Types
 
