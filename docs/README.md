@@ -73,6 +73,7 @@ Quick-lookup tables for mid-task reference.
 | [Redis Keys](reference/redis-keys.md) | Complete key map for raw Redis and Django cache |
 | [Shovelware Detection](reference/shovelware-detection.md) | Detection algorithm, thresholds, management commands |
 | [Homepage Services](reference/homepage-services.md) | Featured content, What's New, community stats |
+| [SEO & Meta Tags](reference/seo-meta-tags.md) | Meta tags, JSON-LD structured data, sitemaps, robots directives |
 
 ## Mini-Games
 
