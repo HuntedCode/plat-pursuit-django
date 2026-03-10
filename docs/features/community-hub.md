@@ -20,15 +20,16 @@ The review feed uses **client-side rendering** from JSON API responses (not serv
 | `trophies/services/review_service.py` | Full CRUD + voting + replies + reporting + stats (641 lines) |
 | `trophies/services/concept_trophy_group_service.py` | Sync, access checks, mismatch detection (346 lines) |
 | `trophies/services/rating_service.py` | Extended with DLC group rating methods (232 lines) |
+| `trophies/services/review_hub_service.py` | Hub landing page queries: stats, most-reviewed, trending, search, unrated/unreviewed counts |
 | `trophies/management/commands/backfill_concept_slugs.py` | One-time slug generation for all Concepts (88 lines) |
 | `trophies/management/commands/backfill_concept_trophy_groups.py` | Trophy group sync + mismatch auditing (292 lines) |
 | `notifications/models.py` | `review_reply` and `review_milestone` notification types |
 | `trophies/token_keeper.py` | Sync hook for `ConceptTrophyGroupService.sync_for_concept()` |
 
-| `api/review_views.py` | 10 view classes covering 14 API endpoints |
+| `api/review_views.py` | 11 view classes covering 15 API endpoints |
 | `trophies/views/review_hub_views.py` | `ReviewHubLandingView`, `ReviewHubDetailView`, `RateMyGamesView` |
 | `static/js/review-hub.js` | Detail page logic (ReviewHub class) |
-| `static/js/review-hub-landing.js` | Landing page logic (recent feed with infinite scroll) |
+| `static/js/review-hub-landing.js` | Landing page logic (game search typeahead, recent feed with infinite scroll) |
 | `static/js/rate-my-games.js` | Wizard logic (RateMyGamesWizard class) |
 | `templates/trophies/review_hub.html` | Landing page template |
 | `templates/trophies/review_hub_detail.html` | Detail page template |
@@ -118,6 +119,7 @@ The review feed uses **client-side rendering** from JSON API responses (not serv
 | Method | Path | Auth | Purpose |
 |--------|------|------|---------|
 | GET | `/api/v1/reviews/recent/` | No | Recent reviews feed (paginated, for landing page) |
+| GET | `/api/v1/reviews/search/?q=<query>&limit=8` | No | Concept search by title for landing page typeahead (excludes shovelware, PP_ stubs) |
 | GET | `/api/v1/reviews/wizard/queue/` | Yes | Rate My Games queue (filters: unrated/unreviewed/both, queue_type: base/dlc) |
 | GET | `/api/v1/reviews/<concept_id>/group/<group_id>/` | No | List reviews (paginated, sortable) |
 | POST | `/api/v1/reviews/<concept_id>/group/<group_id>/create/` | Yes | Create review |
@@ -139,7 +141,7 @@ The review feed uses **client-side rendering** from JSON API responses (not serv
 
 **Route**: `/reviews/` (public, no auth required)
 
-**ReviewHubLandingView** extends `ProfileHotbarMixin` + `TemplateView`. Shows community stats (total reviews, ratings, reviewers), most-reviewed games grid, and an infinite-scroll recent reviews feed via `RecentReviewsView` API. Accessible via "Review Hub" link in both desktop navbar (Community dropdown) and mobile tabbar (More drawer, Community section).
+**ReviewHubLandingView** extends `ProfileHotbarMixin` + `TemplateView`. Shows a game search typeahead (searches concepts via `ConceptReviewSearchView` API), community stats (total reviews, ratings, reviewers, helpful votes), most-reviewed games sidebar, trending reviews sidebar, and an infinite-scroll recent reviews feed (sortable by newest/most helpful) via `RecentReviewsView` API. Authenticated users see a CTA card with unrated/unreviewed platinum counts. Accessible via "Review Hub" link in both desktop navbar (Community dropdown) and mobile tabbar (More drawer, Community section).
 
 ### Detail Page
 
@@ -244,6 +246,7 @@ The game detail page shows a single unified "Community" card (`community_section
 
 | Key Pattern | TTL | Purpose |
 |-------------|-----|---------|
+| `review_hub:stats` | 15m | Hub landing page aggregate stats (total reviews, ratings, reviewers, helpful votes) |
 | `review:recommend:{concept_id}:{group_id}` | 30m | Recommendation percentage stats |
 | `concept:averages:{concept_id}:group:{group_id}` | varies | DLC-specific rating averages |
 

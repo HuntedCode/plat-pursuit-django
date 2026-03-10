@@ -122,6 +122,69 @@ class ReviewHubService:
         )
 
     @staticmethod
+    def search_concepts(query, limit=8):
+        """Search concepts by title for the Review Hub search bar.
+
+        Returns list of dicts with review-relevant metadata.
+        Excludes PP_ stubs, shovelware-only concepts, and concepts without slugs.
+        Results ordered by review count (descending), then title (alphabetical).
+        """
+        query = (query or '').strip()[:200]
+        if len(query) < 2:
+            return []
+
+        from trophies.models import Concept
+
+        concepts = list(
+            Concept.objects
+            .filter(unified_title__icontains=query)
+            .exclude(slug__isnull=True)
+            .exclude(slug='')
+            .exclude(concept_id__startswith='PP_')
+            .annotate(
+                non_sw_game_count=Count(
+                    'games',
+                    filter=~Q(
+                        games__shovelware_status__in=[
+                            'auto_flagged', 'manually_flagged',
+                        ],
+                    ),
+                ),
+                review_count=Count(
+                    'reviews',
+                    filter=Q(reviews__is_deleted=False),
+                ),
+                recommended_count=Count(
+                    'reviews',
+                    filter=Q(
+                        reviews__is_deleted=False,
+                        reviews__recommended=True,
+                    ),
+                ),
+            )
+            .filter(non_sw_game_count__gt=0)
+            .order_by('-review_count', 'unified_title')[:limit]
+            .values(
+                'unified_title', 'slug', 'concept_icon_url',
+                'review_count', 'recommended_count',
+            )
+        )
+
+        result = []
+        for c in concepts:
+            total = c['review_count']
+            pct = round(c['recommended_count'] / total * 100) if total else 0
+            result.append({
+                'unified_title': c['unified_title'],
+                'slug': c['slug'],
+                'concept_icon_url': c['concept_icon_url'] or '',
+                'review_count': total,
+                'recommendation_pct': pct,
+            })
+
+        return result
+
+    @staticmethod
     def get_unrated_platinum_count(profile):
         """Count of platinumed concepts (non-shovelware) not yet base-game rated."""
         from trophies.models import EarnedTrophy, UserConceptRating

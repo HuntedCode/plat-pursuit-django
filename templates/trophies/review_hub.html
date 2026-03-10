@@ -26,9 +26,37 @@
                     </a>
                 {% endif %}
             </div>
+
         </div>
     </div>
 </section>
+
+{# ─── Game Search ─────────────────────────────────────────────────────── #}
+<div class="card bg-base-100 border-2 border-base-300 shadow-sm mt-4">
+    <div class="card-body p-4">
+        <div class="flex items-center gap-3 mb-2">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-primary shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <circle cx="11" cy="11" r="8"></circle>
+                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+            </svg>
+            <h2 class="text-lg font-bold">Find a Game</h2>
+            <span class="text-sm text-base-content/50 hidden lg:inline">Search by title to jump straight to its reviews and ratings.</span>
+        </div>
+        <div class="relative">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 absolute left-3 top-1/2 -translate-y-1/2 text-base-content/40 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <circle cx="11" cy="11" r="8"></circle>
+                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+            </svg>
+            <input type="text"
+                   id="review-search-input"
+                   class="input input-bordered input-lg w-full pl-10 pr-10 focus:outline-none focus:ring-2 focus:ring-primary"
+                   placeholder="Search for a game..."
+                   autocomplete="off" />
+            <span id="review-search-loading" class="loading loading-spinner loading-sm absolute right-3 top-1/2 -translate-y-1/2 hidden"></span>
+            <div id="review-search-results" class="absolute z-50 w-full mt-1 bg-base-100 border-2 border-base-300 rounded-box shadow-xl max-h-80 overflow-y-auto hidden"></div>
+        </div>
+    </div>
+</div>
 
 {# ─── Stats Banner ────────────────────────────────────────────────────── #}
 {% if stats %}
@@ -52,20 +80,27 @@
 </div>
 {% endif %}
 
-{# ─── CTA Card (authenticated, has unrated games) ────────────────────── #}
-{% if unrated_count and unrated_count > 0 %}
+{# ─── CTA Card (authenticated, has unrated/unreviewed games) ─────────── #}
+{% if unrated_count > 0 or unreviewed_count > 0 %}
 <div class="card bg-gradient-to-r from-primary/10 to-accent/10 border-2 border-primary/30 shadow-sm mt-4">
-    <div class="card-body p-4 flex flex-row items-center gap-4">
+    <div class="card-body p-4 flex flex-col md:flex-row items-center gap-4">
         <div class="shrink-0">
             <svg xmlns="http://www.w3.org/2000/svg" class="w-10 h-10 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"/>
             </svg>
         </div>
         <div class="flex-1">
+            {% if unrated_count > 0 %}
             <p class="font-bold text-base-content">
                 You have <span class="text-primary">{{ unrated_count }}</span> platinum{{ unrated_count|pluralize }} waiting to be rated!
             </p>
-            <p class="text-sm text-base-content/60">Help the community by sharing your thoughts on the games you've conquered.</p>
+            {% endif %}
+            {% if unreviewed_count > 0 %}
+            <p class="font-bold text-base-content{% if unrated_count > 0 %} mt-1{% endif %}">
+                <span class="text-accent">{{ unreviewed_count }}</span> platinum{{ unreviewed_count|pluralize }} {{ unreviewed_count|pluralize:"is,are" }} waiting for your review.
+            </p>
+            {% endif %}
+            <p class="text-sm text-base-content/60 mt-1">Help the community by sharing your thoughts on the games you've conquered.</p>
         </div>
         <a href="{% url 'rate_my_games' %}" class="btn btn-primary btn-sm shrink-0">Rate My Games</a>
     </div>
@@ -73,10 +108,10 @@
 {% endif %}
 
 {# ─── Main Content ────────────────────────────────────────────────────── #}
-<div class="flex flex-col lg:flex-row gap-4 mt-4 items-start">
+<div class="flex flex-col md:flex-col lg:flex-row gap-4 mt-4 items-start">
 
     {# ── Sidebar ──────────────────────────────────────────────────────── #}
-    <aside class="w-full lg:w-1/3 flex flex-col gap-4">
+    <aside class="w-full md:w-full lg:w-1/3 flex flex-col gap-4">
 
         {# Most Reviewed Games #}
         <div class="card bg-base-100 border-2 border-base-300 shadow-sm">
@@ -116,13 +151,12 @@
                     {% endfor %}
                 </ul>
                 {% else %}
-                <p class="text-sm text-base-content/50 italic py-4 text-center">No reviews yet. Be the first!</p>
+                <p class="text-sm text-base-content/50 italic py-4 text-center pr-1">No reviews yet. Be the first!</p>
                 {% endif %}
             </div>
         </div>
 
-        {# Trending Reviews (server-rendered) #}
-        {% if trending_reviews %}
+        {# Trending Reviews (server-rendered, always shown with fallback) #}
         <div class="card bg-base-100 border-2 border-base-300 shadow-sm">
             <div class="card-body p-4">
                 <h2 class="text-lg font-bold flex items-center gap-2">
@@ -133,6 +167,7 @@
                     Trending This Week
                 </h2>
                 <div class="divider divider-vertical m-0 p-0"></div>
+                {% if trending_reviews %}
                 <ul class="flex flex-col gap-3">
                     {% for review in trending_reviews %}
                     <li class="border border-base-300 rounded-box p-3">
@@ -160,17 +195,19 @@
                     </li>
                     {% endfor %}
                 </ul>
+                {% else %}
+                <p class="text-sm text-base-content/50 italic py-4 text-center pr-1">No trending reviews this week yet. Write a review and get helpful votes to appear here!</p>
+                {% endif %}
             </div>
         </div>
-        {% endif %}
     </aside>
 
     {# ── Main Feed ────────────────────────────────────────────────────── #}
-    <main class="w-full lg:w-2/3 flex flex-col gap-4">
+    <main class="w-full md:w-full lg:w-2/3 flex flex-col gap-4">
 
         {# Sort Controls #}
         <div class="flex items-center gap-2">
-            <h2 class="text-lg font-bold flex-1">Recent Reviews</h2>
+            <h2 id="landing-feed-title" class="text-lg font-bold flex-1">Recent Reviews</h2>
             <button class="btn btn-sm btn-primary landing-sort-btn" data-sort="newest">Newest</button>
             <button class="btn btn-sm btn-ghost border border-base-300 landing-sort-btn" data-sort="helpful">Most Helpful</button>
         </div>
@@ -179,8 +216,15 @@
         <div id="landing-review-feed" class="flex flex-col gap-4"></div>
 
         {# Empty State #}
-        <div id="landing-feed-empty" class="hidden text-center py-8">
-            <p class="text-base-content/50 italic">No reviews yet. Be the first to share your thoughts!</p>
+        <div id="landing-feed-empty" class="hidden text-center py-16 px-4">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 mx-auto text-base-content/30" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
+            </svg>
+            <p class="text-base-content/60 mt-4 mb-2 text-lg font-semibold">No reviews yet</p>
+            <p class="text-base-content/50 mb-6">Be the first to share your thoughts on a game you've platinumed.</p>
+            {% if user.is_authenticated and user.profile %}
+                <a href="{% url 'rate_my_games' %}" class="btn btn-primary">Write Your First Review</a>
+            {% endif %}
         </div>
 
         {# Loading Indicator #}

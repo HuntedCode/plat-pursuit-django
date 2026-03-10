@@ -19,6 +19,7 @@ from trophies.models import (
     Concept, ConceptTrophyGroup, Review, ReviewReply, ReviewVote,
 )
 from trophies.services.review_service import ReviewService
+from trophies.services.review_hub_service import ReviewHubService
 from trophies.services.checklist_service import ChecklistService
 from api.utils import safe_int
 
@@ -307,6 +308,41 @@ class RecentReviewsView(APIView):
             logger.exception(f"Error loading recent reviews: {e}")
             return Response(
                 {'error': 'Failed to load reviews.'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+
+# ------------------------------------------------------------------ #
+#  Concept Search (for review hub search bar)
+# ------------------------------------------------------------------ #
+
+class ConceptReviewSearchView(APIView):
+    """Search concepts by title for the Review Hub search bar."""
+    authentication_classes = [SessionAuthentication, TokenAuthentication]
+    permission_classes = []
+
+    @method_decorator(ratelimit(key='ip', rate='60/m', method='GET', block=True))
+    def get(self, request):
+        """
+        GET /api/v1/reviews/search/?q=<query>&limit=8
+        Returns matching concepts with review-relevant metadata.
+        """
+        try:
+            query = (request.query_params.get('q') or '').strip()
+            if len(query) < 2:
+                return Response({'results': [], 'count': 0})
+
+            limit = min(safe_int(request.query_params.get('limit', 8), 8), 20)
+            results = ReviewHubService.search_concepts(query, limit=limit)
+
+            return Response({
+                'results': results,
+                'count': len(results),
+            })
+        except Exception as e:
+            logger.exception(f"Error searching concepts: {e}")
+            return Response(
+                {'error': 'Failed to search games.'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
