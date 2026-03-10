@@ -31,6 +31,8 @@ from ..models import (
     UserBadge,
     UserBadgeProgress,
     GameList,
+    Challenge,
+    Review,
 )
 from trophies.mixins import ProfileHotbarMixin
 from trophies.psn_manager import PSNManager
@@ -477,6 +479,29 @@ class ProfileDetailView(ProfileHotbarMixin, DetailView):
         """Build context for lists tab — public game lists for this profile."""
         return {'profile_lists': public_lists_qs.order_by('-like_count', '-created_at')}
 
+    def _build_challenges_tab_context(self, profile):
+        """Build context for challenges tab — all challenges by this profile."""
+        challenges = Challenge.objects.filter(
+            profile=profile, is_deleted=False
+        ).order_by('-created_at')
+        return {'profile_challenges': challenges}
+
+    def _build_reviews_tab_context(self, profile, per_page, page_number):
+        """Build context for reviews tab — reviews written by this profile."""
+        reviews_qs = Review.objects.filter(
+            profile=profile, is_deleted=False
+        ).select_related(
+            'concept_trophy_group__concept'
+        ).order_by('-created_at')
+
+        paginator = Paginator(reviews_qs, per_page)
+        if int(page_number) > paginator.num_pages:
+            page_obj = []
+        else:
+            page_obj = paginator.get_page(page_number)
+
+        return {'profile_reviews': page_obj}
+
     def get_context_data(self, **kwargs):
         """Build context for profile detail page with tab-specific content.
 
@@ -512,6 +537,10 @@ class ProfileDetailView(ProfileHotbarMixin, DetailView):
         public_lists_qs = GameList.objects.filter(profile=profile, is_public=True, is_deleted=False)
         context['profile_lists_count'] = public_lists_qs.count()
 
+        # Challenge and review counts (shown in tab headers and quick links)
+        context['profile_challenge_count'] = Challenge.objects.filter(profile=profile, is_deleted=False).count()
+        context['profile_review_count'] = Review.objects.filter(profile=profile, is_deleted=False).count()
+
         # Delegate to tab-specific handler methods
         if tab == 'games':
             tab_context = self._build_games_tab_context(profile, per_page, page_number)
@@ -521,6 +550,10 @@ class ProfileDetailView(ProfileHotbarMixin, DetailView):
             tab_context = self._build_badges_tab_context(profile)
         elif tab == 'lists':
             tab_context = self._build_lists_tab_context(public_lists_qs)
+        elif tab == 'challenges':
+            tab_context = self._build_challenges_tab_context(profile)
+        elif tab == 'reviews':
+            tab_context = self._build_reviews_tab_context(profile, per_page, page_number)
         else:
             # Default to games tab if invalid tab specified
             tab_context = self._build_games_tab_context(profile, per_page, page_number)
@@ -556,7 +589,9 @@ class ProfileDetailView(ProfileHotbarMixin, DetailView):
             if tab == 'games':
                 return ['trophies/partials/profile_detail/game_list_items.html']
             elif tab == 'trophies':
-               return ['trophies/partials/profile_detail/trophy_list_items.html']
+                return ['trophies/partials/profile_detail/trophy_list_items.html']
+            elif tab == 'reviews':
+                return ['trophies/partials/profile_detail/review_list_items.html']
         return super().get_template_names()
 
 

@@ -25,6 +25,15 @@
                     {% endif %}
                 </div>
                 <p class="text-sm text-base-content/70 italic pr-1 line-clamp-1">{{ badge.effective_display_title }}</p>
+                {% if badge.effective_user_title %}
+                    <div class="flex items-center gap-1.5 text-xs text-warning">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+                        <span>Earns the title: <strong>{{ badge.effective_user_title }}</strong></span>
+                        {% if user.is_authenticated and user.profile %}
+                            <a href="{% url 'my_titles' %}" class="link link-warning">(Manage Titles)</a>
+                        {% endif %}
+                    </div>
+                {% endif %}
                 {% if badge.most_recent_concept %}
                     <p class="text-xs text-base-content/50 italic">Latest addition: {{ badge.most_recent_concept.unified_title }}</p>
                 {% endif %}

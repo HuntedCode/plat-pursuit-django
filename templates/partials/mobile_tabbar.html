@@ -42,7 +42,6 @@
         <li><a href="https://discord.gg/platpursuit" target="_blank" rel="noopener noreferrer">Discord</a></li>
         <li><a href="{% url 'challenges_browse' %}">Challenges</a></li>
         <li><a href="{% url 'lists_browse' %}">Game Lists</a></li>
-        <li><a href="{% url 'overall_badge_leaderboards' %}">Leaderboards</a></li>
         <li><a href="{% url 'reviews_landing' %}">Review Hub</a></li>
         {% if active_fundraiser %}
             <li>
@@ -61,6 +60,10 @@
     <ul class="menu menu-sm px-2">
         <li><a href="{% url 'badges_list' %}">Badges</a></li>
         <li><a href="{% url 'milestones_list' %}">Milestones</a></li>
+        <li><a href="{% url 'overall_badge_leaderboards' %}">Leaderboards</a></li>
+        {% if user.is_authenticated and user.profile %}
+            <li><a href="{% url 'my_titles' %}">Titles</a></li>
+        {% endif %}
     </ul>
 
     <!-- Guides -->
@@ -95,10 +98,8 @@
         <li><a href="{% url 'my_guides' %}">My Guides</a></li>
         <li><a href="{% url 'my_challenges' %}">My Challenges</a></li>
         <li><a href="{% url 'my_lists' %}">My Lists</a></li>
-        <li><a href="{% url 'my_titles' %}">My Titles</a></li>
         <li><a href="{% url 'profile_detail' user.profile.psn_username %}">My Profile</a></li>
         <li><a href="{% url 'my_shareables' %}">My Shareables</a></li>
-        <li><a href="{% url 'trophy_case' user.profile.psn_username %}">Trophy Case</a></li>
     </ul>
     {% endif %}
 

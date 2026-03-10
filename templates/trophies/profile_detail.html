@@ -85,9 +85,35 @@
                     </div>
                 {% else %}
                     <div class="text-center py-8">
-                        <p class="text-base-content/60 italic">No public lists yet.</p>
+                        <p class="text-base-content/60 italic pr-1">No public lists yet.</p>
                     </div>
                 {% endif %}
+            </div>
+            <a href="?tab=challenges" id="challenges-tab" class="tab {% if current_tab == 'challenges' %}tab-active{% endif %}" role="tab" aria-selected="{% if current_tab == 'challenges' %}true{% else %}false{% endif %}" aria-controls="challenges-panel">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 mr-2" fill="none" viewBox="0 0 24 24" stroke="var(--color-secondary)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"></path>
+                    <line x1="4" y1="22" x2="4" y2="15"></line>
+                </svg>
+                Challenges{% if profile_challenge_count %} ({{ profile_challenge_count }}){% endif %}
+            </a>
+            <div id="challenges-panel" class="tab-content bg-base-100/90 border-2 border-base-300 shadow-md shadow-neutral p-4" role="tabpanel" aria-labelledby="challenges-tab">
+                {% include 'trophies/partials/profile_detail/challenge_list_items.html' %}
+            </div>
+            <a href="?tab=reviews" id="reviews-tab" class="tab {% if current_tab == 'reviews' %}tab-active{% endif %}" role="tab" aria-selected="{% if current_tab == 'reviews' %}true{% else %}false{% endif %}" aria-controls="reviews-panel">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 mr-2" fill="none" viewBox="0 0 24 24" stroke="var(--color-success)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                </svg>
+                Reviews{% if profile_review_count %} ({{ profile_review_count }}){% endif %}
+            </a>
+            <div id="reviews-panel" class="tab-content bg-base-100/90 border-2 border-base-300 shadow-md shadow-neutral p-4" role="tabpanel" aria-labelledby="reviews-tab">
+                <div id="reviews-grid" class="flex flex-col gap-3">
+                    {% include 'trophies/partials/profile_detail/review_list_items.html' %}
+                </div>
+                <div id="reviews-loading" class="hidden mt-4 text-center" role="status" aria-live="polite">
+                    <span class="loading loading-spinner loading-lg"></span>
+                    <span class="sr-only">Loading more reviews...</span>
+                </div>
+                <div id="reviews-sentinel" class="h-1"></div>
             </div>
         </div>
     {% endif %}

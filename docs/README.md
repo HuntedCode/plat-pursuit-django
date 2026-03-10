@@ -44,6 +44,7 @@ Self-contained feature documentation. Read the relevant doc when working on that
 | [Fundraiser](features/fundraiser.md) | Campaign system, donations, badge claims |
 | [Game Family](features/game-family.md) | Cross-generation game matching and unification |
 | [Monthly Recap](features/monthly-recap.md) | Recap generation, slides, email, share cards |
+| [Navigation & Site Organization](features/navigation.md) | Navbar, footer, cross-links, profile tabs |
 | [Share Images](features/share-images.md) | Playwright renderer, caching, card types |
 | [Subscription Lifecycle](features/subscription-lifecycle.md) | Activation, cancellation, renewal, admin dashboard |
 

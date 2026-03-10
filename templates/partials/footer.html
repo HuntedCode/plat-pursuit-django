@@ -1,33 +1,117 @@
 {% load static %}
-<footer class="footer sm:footer-horizontal bg-neutral text-neutral-content items-center p-4" role="contentinfo">
-    <aside class="grid-flow-col items-center">
-        <img id="pp-footer-logo" src="{% static 'images/logo.png' %}" alt="Platinum Pursuit Logo" class="h-8 w-8 mr-2 rounded-full cursor-pointer" loading="lazy" decoding="async" />
-        <p>Copyright &copy; {% now "Y" %} Platinum Pursuit. All rights reserved.</p>
-    </aside>
-    <nav class="grid-flow-col gap-4 md:place-self-center justify-self-center" aria-label="Legal pages">
-        <a href="{% url 'privacy' %}" class="link link-hover">Privacy</a>
-        <a href="{% url 'terms' %}" class="link link-hover">Terms</a>
-        <a href="{% url 'about' %}" class="link link-hover">About</a>
-        <a href="{% url 'contact' %}" class="link link-hover">Contact</a>
-    </nav>
-    <nav class="grid-flow-col gap-4 md:place-self-center justify-self-center md:justify-self-end" aria-label="Social media links">
-        <a href="https://www.x.com/platpursuit" target="_blank" rel="noopener noreferrer" aria-label="Follow us on X (formerly Twitter)">
-            <svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24" fill="oklch(92% 0.004 286.32)" role="img" aria-labelledby="x-icon">
-                <title id="x-icon">X (Twitter)</title>
-                <path d="M24 4.37a9.6 9.6 0 0 1-2.83.8 5.04 5.04 0 0 0 2.17-2.8c-.95.58-2 1-3.13 1.22A4.86 4.86 0 0 0 16.61 2a4.99 4.99 0 0 0-4.79 6.2A13.87 13.87 0 0 1 1.67 2.92 5.12 5.12 0 0 0 3.2 9.67a4.82 4.82 0 0 1-2.23-.64v.07c0 2.44 1.7 4.48 3.95 4.95a4.84 4.84 0 0 1-2.22.08c.63 2.01 2.45 3.47 4.6 3.51A9.72 9.72 0 0 1 0 19.74 13.68 13.68 0 0 0 7.55 22c9.06 0 14-7.7 14-14.37v-.65c.96-.71 1.79-1.6 2.45-2.61z"/>
-            </svg>
-        </a>
-        <a href="https://www.youtube.com/@PlatPursuit" target="_blank" rel="noopener noreferrer" aria-label="Subscribe to our YouTube channel">
-            <svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24" fill="oklch(92% 0.004 286.32)" role="img" aria-labelledby="youtube-icon">
-                <title id="youtube-icon">YouTube</title>
-                <path d="M12.04 3.5c.59 0 7.54.02 9.34.5a3.02 3.02 0 0 1 2.12 2.15C24 8.05 24 12 24 12v.04c0 .43-.03 4.03-.5 5.8A3.02 3.02 0 0 1 21.38 20c-1.76.48-8.45.5-9.3.51h-.17c-.85 0-7.54-.03-9.29-.5A3.02 3.02 0 0 1 .5 17.84c-.42-1.61-.49-4.7-.5-5.6v-.5c.01-.9.08-3.99.5-5.6a3.02 3.02 0 0 1 2.12-2.14c1.8-.49 8.75-.51 9.34-.51zM9.54 8.4v7.18L15.82 12 9.54 8.41z"/>
-            </svg>
-        </a>
-        <a href="https://discord.gg/platpursuit" target="_blank" rel="noopener noreferrer" aria-label="Join our Discord community">
-            <svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" fill="oklch(92% 0.004 286.32)" viewBox="0 0 16 16" role="img" aria-labelledby="discord-icon">
-                <title id="discord-icon">Discord</title>
-                <path d="M13.545 2.907a13.2 13.2 0 0 0-3.257-1.011.05.05 0 0 0-.052.025c-.141.25-.297.577-.406.833a12.2 12.2 0 0 0-3.658 0 8 8 0 0 0-.412-.833.05.05 0 0 0-.052-.025c-1.125.194-2.22.534-3.257 1.011a.04.04 0 0 0-.021.018C.356 6.024-.213 9.047.066 12.032q.003.022.021.037a13.3 13.3 0 0 0 3.995 2.02.05.05 0 0 0 .056-.019q.463-.63.818-1.329a.05.05 0 0 0-.01-.059l-.018-.011a9 9 0 0 1-1.248-.595.05.05 0 0 1-.02-.066l.015-.019q.127-.095.248-.195a.05.05 0 0 1 .051-.007c2.619 1.196 5.454 1.196 8.041 0a.05.05 0 0 1 .053.007q.121.1.248.195a.05.05 0 0 1-.004.085 8 8 0 0 1-1.249.594.05.05 0 0 0-.03.03.05.05 0 0 0 .003.041c.24.465.515.909.817 1.329a.05.05 0 0 0 .056.019 13.2 13.2 0 0 0 4.001-2.02.05.05 0 0 0 .021-.037c.334-3.451-.559-6.449-2.366-9.106a.03.03 0 0 0-.02-.019m-8.198 7.307c-.789 0-1.438-.724-1.438-1.612s.637-1.613 1.438-1.613c.807 0 1.45.73 1.438 1.613 0 .888-.637 1.612-1.438 1.612m5.316 0c-.788 0-1.438-.724-1.438-1.612s.637-1.613 1.438-1.613c.807 0 1.451.73 1.438 1.613 0 .888-.631 1.612-1.438 1.612"/>
-            </svg>
-        </a>
-    </nav>
+<footer class="bg-neutral text-neutral-content" role="contentinfo">
+    <!-- Sitemap Grid -->
+    <div class="max-w-7xl mx-auto px-6 pt-10 pb-6">
+        <div class="grid grid-cols-3 lg:grid-cols-6 gap-8 lg:gap-6">
+
+            <!-- Browse -->
+            <nav aria-label="Browse pages">
+                <h3 class="font-bold text-sm uppercase tracking-wider text-neutral-content/80 mb-3">Browse</h3>
+                <ul class="space-y-2 text-sm">
+                    <li><a href="{% url 'games_list' %}" class="text-neutral-content/60 hover:text-neutral-content transition-colors">Games</a></li>
+                    <li><a href="{% url 'profiles_list' %}" class="text-neutral-content/60 hover:text-neutral-content transition-colors">Profiles</a></li>
+                    <li><a href="{% url 'trophies_list' %}" class="text-neutral-content/60 hover:text-neutral-content transition-colors">Trophies</a></li>
+                </ul>
+            </nav>
+
+            <!-- Community -->
+            <nav aria-label="Community pages">
+                <h3 class="font-bold text-sm uppercase tracking-wider text-neutral-content/80 mb-3">Community</h3>
+                <ul class="space-y-2 text-sm">
+                    <li><a href="https://discord.gg/platpursuit" target="_blank" rel="noopener noreferrer" class="text-neutral-content/60 hover:text-neutral-content transition-colors">Discord</a></li>
+                    <li><a href="{% url 'challenges_browse' %}" class="text-neutral-content/60 hover:text-neutral-content transition-colors">Challenges</a></li>
+                    <li><a href="{% url 'lists_browse' %}" class="text-neutral-content/60 hover:text-neutral-content transition-colors">Game Lists</a></li>
+                    <li><a href="{% url 'reviews_landing' %}" class="text-neutral-content/60 hover:text-neutral-content transition-colors">Review Hub</a></li>
+                </ul>
+            </nav>
+
+            <!-- Earn -->
+            <nav aria-label="Earn pages">
+                <h3 class="font-bold text-sm uppercase tracking-wider text-neutral-content/80 mb-3">Earn</h3>
+                <ul class="space-y-2 text-sm">
+                    <li><a href="{% url 'badges_list' %}" class="text-neutral-content/60 hover:text-neutral-content transition-colors">Badges</a></li>
+                    <li><a href="{% url 'milestones_list' %}" class="text-neutral-content/60 hover:text-neutral-content transition-colors">Milestones</a></li>
+                    <li><a href="{% url 'overall_badge_leaderboards' %}" class="text-neutral-content/60 hover:text-neutral-content transition-colors">Leaderboards</a></li>
+                    {% if user.is_authenticated and user.profile %}
+                    <li><a href="{% url 'my_titles' %}" class="text-neutral-content/60 hover:text-neutral-content transition-colors">Titles</a></li>
+                    {% endif %}
+                </ul>
+            </nav>
+
+            <!-- Guides -->
+            <nav aria-label="Guides pages">
+                <h3 class="font-bold text-sm uppercase tracking-wider text-neutral-content/80 mb-3">Guides</h3>
+                <ul class="space-y-2 text-sm">
+                    <li><a href="{% url 'guides_browse' %}" class="text-neutral-content/60 hover:text-neutral-content transition-colors">Guide Hub</a></li>
+                    <li><a href="{% url 'guides_list' %}" class="text-neutral-content/60 hover:text-neutral-content transition-colors">PPTV Guides</a></li>
+                </ul>
+            </nav>
+
+            <!-- My Pursuit (auth only) / Account (guests) -->
+            {% if user.is_authenticated and user.profile %}
+            <nav aria-label="My Pursuit pages">
+                <h3 class="font-bold text-sm uppercase tracking-wider text-neutral-content/80 mb-3">My Pursuit</h3>
+                <ul class="space-y-2 text-sm">
+                    <li><a href="{% url 'profile_detail' user.profile.psn_username %}" class="text-neutral-content/60 hover:text-neutral-content transition-colors">My Profile</a></li>
+                    <li><a href="{% url 'my_guides' %}" class="text-neutral-content/60 hover:text-neutral-content transition-colors">My Guides</a></li>
+                    <li><a href="{% url 'my_challenges' %}" class="text-neutral-content/60 hover:text-neutral-content transition-colors">My Challenges</a></li>
+                    <li><a href="{% url 'my_lists' %}" class="text-neutral-content/60 hover:text-neutral-content transition-colors">My Lists</a></li>
+                    <li><a href="{% url 'my_shareables' %}" class="text-neutral-content/60 hover:text-neutral-content transition-colors">My Shareables</a></li>
+                </ul>
+            </nav>
+            {% else %}
+            <nav aria-label="Account pages">
+                <h3 class="font-bold text-sm uppercase tracking-wider text-neutral-content/80 mb-3">Account</h3>
+                <ul class="space-y-2 text-sm">
+                    <li><a href="{% url 'account_login' %}" class="text-neutral-content/60 hover:text-neutral-content transition-colors">Sign In</a></li>
+                    <li><a href="{% url 'account_signup' %}" class="text-neutral-content/60 hover:text-neutral-content transition-colors">Sign Up</a></li>
+                </ul>
+            </nav>
+            {% endif %}
+
+            <!-- Legal & Connect -->
+            <div>
+                <nav aria-label="Legal pages">
+                    <h3 class="font-bold text-sm uppercase tracking-wider text-neutral-content/80 mb-3">Legal</h3>
+                    <ul class="space-y-2 text-sm">
+                        <li><a href="{% url 'privacy' %}" class="text-neutral-content/60 hover:text-neutral-content transition-colors">Privacy</a></li>
+                        <li><a href="{% url 'terms' %}" class="text-neutral-content/60 hover:text-neutral-content transition-colors">Terms</a></li>
+                        <li><a href="{% url 'about' %}" class="text-neutral-content/60 hover:text-neutral-content transition-colors">About</a></li>
+                        <li><a href="{% url 'contact' %}" class="text-neutral-content/60 hover:text-neutral-content transition-colors">Contact</a></li>
+                    </ul>
+                </nav>
+                <nav class="mt-6" aria-label="Social media links">
+                    <h3 class="font-bold text-sm uppercase tracking-wider text-neutral-content/80 mb-3">Connect</h3>
+                    <div class="flex gap-3">
+                        <a href="https://www.x.com/platpursuit" target="_blank" rel="noopener noreferrer" aria-label="Follow us on X (formerly Twitter)">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="currentColor" class="text-neutral-content/60 hover:text-neutral-content transition-colors" aria-hidden="true">
+                                <path d="M24 4.37a9.6 9.6 0 0 1-2.83.8 5.04 5.04 0 0 0 2.17-2.8c-.95.58-2 1-3.13 1.22A4.86 4.86 0 0 0 16.61 2a4.99 4.99 0 0 0-4.79 6.2A13.87 13.87 0 0 1 1.67 2.92 5.12 5.12 0 0 0 3.2 9.67a4.82 4.82 0 0 1-2.23-.64v.07c0 2.44 1.7 4.48 3.95 4.95a4.84 4.84 0 0 1-2.22.08c.63 2.01 2.45 3.47 4.6 3.51A9.72 9.72 0 0 1 0 19.74 13.68 13.68 0 0 0 7.55 22c9.06 0 14-7.7 14-14.37v-.65c.96-.71 1.79-1.6 2.45-2.61z"/>
+                            </svg>
+                        </a>
+                        <a href="https://www.youtube.com/@PlatPursuit" target="_blank" rel="noopener noreferrer" aria-label="Subscribe to our YouTube channel">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="currentColor" class="text-neutral-content/60 hover:text-neutral-content transition-colors" aria-hidden="true">
+                                <path d="M12.04 3.5c.59 0 7.54.02 9.34.5a3.02 3.02 0 0 1 2.12 2.15C24 8.05 24 12 24 12v.04c0 .43-.03 4.03-.5 5.8A3.02 3.02 0 0 1 21.38 20c-1.76.48-8.45.5-9.3.51h-.17c-.85 0-7.54-.03-9.29-.5A3.02 3.02 0 0 1 .5 17.84c-.42-1.61-.49-4.7-.5-5.6v-.5c.01-.9.08-3.99.5-5.6a3.02 3.02 0 0 1 2.12-2.14c1.8-.49 8.75-.51 9.34-.51zM9.54 8.4v7.18L15.82 12 9.54 8.41z"/>
+                            </svg>
+                        </a>
+                        <a href="https://discord.gg/platpursuit" target="_blank" rel="noopener noreferrer" aria-label="Join our Discord community">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" fill="currentColor" viewBox="0 0 16 16" class="text-neutral-content/60 hover:text-neutral-content transition-colors" aria-hidden="true">
+                                <path d="M13.545 2.907a13.2 13.2 0 0 0-3.257-1.011.05.05 0 0 0-.052.025c-.141.25-.297.577-.406.833a12.2 12.2 0 0 0-3.658 0 8 8 0 0 0-.412-.833.05.05 0 0 0-.052-.025c-1.125.194-2.22.534-3.257 1.011a.04.04 0 0 0-.021.018C.356 6.024-.213 9.047.066 12.032q.003.022.021.037a13.3 13.3 0 0 0 3.995 2.02.05.05 0 0 0 .056-.019q.463-.63.818-1.329a.05.05 0 0 0-.01-.059l-.018-.011a9 9 0 0 1-1.248-.595.05.05 0 0 1-.02-.066l.015-.019q.127-.095.248-.195a.05.05 0 0 1 .051-.007c2.619 1.196 5.454 1.196 8.041 0a.05.05 0 0 1 .053.007q.121.1.248.195a.05.05 0 0 1-.004.085 8 8 0 0 1-1.249.594.05.05 0 0 0-.03.03.05.05 0 0 0 .003.041c.24.465.515.909.817 1.329a.05.05 0 0 0 .056.019 13.2 13.2 0 0 0 4.001-2.02.05.05 0 0 0 .021-.037c.334-3.451-.559-6.449-2.366-9.106a.03.03 0 0 0-.02-.019m-8.198 7.307c-.789 0-1.438-.724-1.438-1.612s.637-1.613 1.438-1.613c.807 0 1.45.73 1.438 1.613 0 .888-.637 1.612-1.438 1.612m5.316 0c-.788 0-1.438-.724-1.438-1.612s.637-1.613 1.438-1.613c.807 0 1.451.73 1.438 1.613 0 .888-.631 1.612-1.438 1.612"/>
+                            </svg>
+                        </a>
+                    </div>
+                </nav>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- Bottom Bar -->
+    <div class="border-t border-neutral-content/10">
+        <div class="max-w-7xl mx-auto px-6 py-4 flex flex-col md:flex-row items-center justify-between gap-2">
+            <div class="flex items-center gap-2">
+                <img id="pp-footer-logo" src="{% static 'images/logo.png' %}" alt="Platinum Pursuit Logo" class="h-6 w-6 rounded-full cursor-pointer" loading="lazy" decoding="async" />
+                <p class="text-sm text-neutral-content/50">Copyright &copy; {% now "Y" %} Platinum Pursuit. All rights reserved.</p>
+            </div>
+        </div>
+    </div>
 </footer>
