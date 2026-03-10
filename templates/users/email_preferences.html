@@ -278,6 +278,24 @@
                         </label>
                     </div>
 
+                    <!-- Weekly Digest -->
+                    <div class="preference-item">
+                        <label class="preference-label">
+                            <input
+                                type="checkbox"
+                                name="weekly_digest"
+                                class="preference-checkbox checkbox checkbox-primary"
+                                {% if form.weekly_digest.value %}checked{% endif %}
+                            >
+                            <div class="preference-content">
+                                <div class="preference-title">Weekly Digest</div>
+                                <div class="preference-description">
+                                    Get a personalized weekly summary of your trophy stats, challenge progress, and community highlights every Monday
+                                </div>
+                            </div>
+                        </label>
+                    </div>
+
                     <div class="divider"></div>
 
                     <!-- Global Unsubscribe (danger) -->

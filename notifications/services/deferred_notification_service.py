@@ -13,6 +13,7 @@ import json
 import logging
 from collections import defaultdict
 from datetime import datetime
+from django.conf import settings
 from django.utils import timezone
 from notifications.services.notification_service import NotificationService
 from notifications.services.shareable_data_service import ShareableDataService
@@ -321,5 +322,79 @@ class DeferredNotificationService:
                 except Exception as e:
                     logger.exception(f"Failed to create badge notification for series {series_slug}: {e}")
 
+            # Send consolidated badge email (all earned badges in one email)
+            DeferredNotificationService._send_badge_email(profile, badge_list, no_series, by_series)
+
         except Exception as e:
             logger.exception(f"Failed to create badge notifications for profile {profile_id}: {e}")
+
+    @staticmethod
+    def _send_badge_email(profile, all_badges, no_series_badges, by_series_badges):
+        """
+        Send a consolidated badge achievement email after in-app notifications are created.
+
+        Collects the same badge list used for in-app (highest tier per series + all misc badges)
+        and sends one email listing everything.
+        """
+        from core.services.email_service import EmailService
+        from users.services.email_preference_service import EmailPreferenceService
+
+        user = profile.user
+        if not user or not user.email:
+            return
+
+        if not EmailPreferenceService.should_send_email(user, 'badge_notifications'):
+            EmailService.log_suppressed(
+                email_type='badge_earned',
+                user=user,
+                subject='You earned new badges!',
+                triggered_by='system',
+            )
+            return
+
+        # Build badge list for email: misc badges + highest tier per series
+        email_badges = list(no_series_badges)
+        for series_slug, badge_contexts in by_series_badges.items():
+            badge_contexts_sorted = sorted(badge_contexts, key=lambda x: x.get('badge_tier', 0), reverse=True)
+            email_badges.append(badge_contexts_sorted[0])
+
+        if not email_badges:
+            return
+
+        try:
+            preference_token = EmailPreferenceService.generate_preference_token(user.id)
+            preference_url = f"{settings.SITE_URL}/users/email-preferences/?token={preference_token}"
+            profile_slug = profile.slug or profile.psn_username
+
+            context = {
+                'username': profile.display_psn_username or profile.psn_username,
+                'badges': email_badges,
+                'badges_url': f"{settings.SITE_URL}/profile/{profile_slug}/badges/",
+                'site_url': settings.SITE_URL,
+                'preference_url': preference_url,
+            }
+
+            badge_count = len(email_badges)
+            subject = (
+                f"You earned a new badge!"
+                if badge_count == 1
+                else f"You earned {badge_count} new badges!"
+            )
+
+            EmailService.send_html_email(
+                subject=subject,
+                to_emails=[user.email],
+                template_name='emails/badge_earned.html',
+                context=context,
+                fail_silently=True,
+                log_email_type='badge_earned',
+                log_user=user,
+                log_triggered_by='system',
+                log_metadata={
+                    'badge_count': badge_count,
+                    'badge_names': [b.get('badge_name', '') for b in email_badges],
+                },
+            )
+            logger.info(f"Sent badge email to {user.email} ({badge_count} badges)")
+        except Exception as e:
+            logger.exception(f"Failed to send badge email for {profile.psn_username}: {e}")

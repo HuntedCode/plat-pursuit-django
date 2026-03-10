@@ -244,3 +244,49 @@ class EmailService:
         )
 
         return success_count, failure_count
+
+
+def send_welcome_email_if_first_sync(profile):
+    """
+    Send a one-time welcome email after a user's first successful sync.
+
+    Idempotent: checks EmailLog to ensure we never send more than once.
+    No preference gate (transactional one-time email).
+    """
+    from core.models import EmailLog
+    from users.services.email_preference_service import EmailPreferenceService
+
+    user = profile.user
+    if not user or not user.email:
+        return
+
+    # Already sent?
+    if EmailLog.objects.filter(user=user, email_type='welcome').exists():
+        return
+
+    try:
+        preference_token = EmailPreferenceService.generate_preference_token(user.id)
+        preference_url = f"{settings.SITE_URL}/users/email-preferences/?token={preference_token}"
+        profile_slug = profile.slug or profile.psn_username
+
+        context = {
+            'username': profile.display_psn_username or profile.psn_username,
+            'profile_url': f"{settings.SITE_URL}/profile/{profile_slug}/",
+            'discord_url': getattr(settings, 'DISCORD_INVITE_URL', ''),
+            'site_url': settings.SITE_URL,
+            'preference_url': preference_url,
+        }
+
+        EmailService.send_html_email(
+            subject='Welcome to PlatPursuit!',
+            to_emails=[user.email],
+            template_name='emails/welcome.html',
+            context=context,
+            fail_silently=True,
+            log_email_type='welcome',
+            log_user=user,
+            log_triggered_by='system',
+        )
+        logger.info(f"Sent welcome email to {user.email}")
+    except Exception as e:
+        logger.exception(f"Failed to send welcome email: {e}")

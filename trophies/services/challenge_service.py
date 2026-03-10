@@ -113,9 +113,12 @@ def check_az_challenge_progress(profile):
                     'completed_count', 'filled_count', 'updated_at',
                 ])
 
-            # Check A-Z milestone progress
+            # Check A-Z milestone progress (return notified for consolidated email)
             from trophies.services.milestone_service import check_all_milestones_for_user
-            check_all_milestones_for_user(profile, criteria_type='az_progress')
+            _, notified = check_all_milestones_for_user(profile, criteria_type='az_progress', send_email=False)
+            # az_progress milestones only need one check regardless of challenge count
+            return notified
+    return []
 
 
 def recalculate_challenge_counts(challenge):
@@ -416,6 +419,8 @@ def check_calendar_challenge_progress(profile):
     """
     Check active Calendar challenges for newly filled days.
     Called during sync in _job_sync_complete(). Excludes shovelware games.
+
+    Returns list of notified UserMilestone instances for consolidated email.
     """
     challenges = Challenge.objects.filter(
         profile=profile, challenge_type='calendar',
@@ -520,25 +525,35 @@ def check_calendar_challenge_progress(profile):
                     'completed_count', 'filled_count', 'updated_at',
                 ])
 
-            # Check calendar milestone progress (sync path)
-            _check_calendar_milestones(profile)
+            # Check calendar milestone progress (sync path, email deferred to token_keeper)
+            return _check_calendar_milestones(profile, send_email=False)
         elif to_update:
             # plat_counts changed but no new days filled; advance the watermark
             # so the early-exit check doesn't re-scan the same platinums next sync
             challenge.save(update_fields=['updated_at'])
+    return []
 
 
-def _check_calendar_milestones(profile):
-    """Check all calendar-related milestones for a profile in a single batch."""
+def _check_calendar_milestones(profile, send_email=True):
+    """Check all calendar-related milestones for a profile in a single batch.
+
+    Args:
+        profile: Profile instance to check
+        send_email: If True, send email immediately. Pass False when the
+                    caller will send a consolidated email (e.g., sync path).
+
+    Returns list of notified UserMilestone instances for consolidated email.
+    """
     # Skip entirely if user has no calendar challenge
     if not Challenge.objects.filter(
         profile=profile, challenge_type='calendar', is_deleted=False
     ).exists():
-        return
+        return []
 
     from trophies.milestone_constants import ALL_CALENDAR_TYPES
     from trophies.services.milestone_service import check_all_milestones_for_user
-    check_all_milestones_for_user(profile, criteria_types=ALL_CALENDAR_TYPES)
+    _, notified = check_all_milestones_for_user(profile, criteria_types=ALL_CALENDAR_TYPES, send_email=send_email)
+    return notified
 
 
 def _get_calendar_year():
@@ -690,6 +705,8 @@ def check_genre_challenge_progress(profile):
     Called during sync in _job_sync_complete().
 
     A slot is completed when ANY game under the assigned concept has been platted.
+
+    Returns list of notified UserMilestone instances for consolidated email.
     """
     challenges = Challenge.objects.filter(
         profile=profile, challenge_type='genre',
@@ -790,7 +807,8 @@ def check_genre_challenge_progress(profile):
 
     # Check genre milestone progress after processing all challenges
     from trophies.services.milestone_service import check_all_milestones_for_user
-    check_all_milestones_for_user(profile, criteria_types=['genre_progress', 'subgenre_progress'])
+    _, notified = check_all_milestones_for_user(profile, criteria_types=['genre_progress', 'subgenre_progress'], send_email=False)
+    return notified
 
 
 def auto_set_cover_genre(challenge):

@@ -224,6 +224,12 @@ class EmailLog(models.Model):
         ('password_reset', 'Password Reset'),
         # Content
         ('monthly_recap', 'Monthly Recap'),
+        ('weekly_digest', 'Weekly Digest'),
+        # Achievements
+        ('badge_earned', 'Badge Earned'),
+        ('milestone_achieved', 'Milestone Achieved'),
+        # Onboarding
+        ('welcome', 'Welcome'),
         # Admin
         ('admin_announcement', 'Admin Announcement'),
         # Fundraiser

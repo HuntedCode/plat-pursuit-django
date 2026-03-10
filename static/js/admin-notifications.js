@@ -37,6 +37,13 @@
             this.bannerPreviewImg = document.getElementById('banner-preview-img');
             this.clearBannerBtn = document.getElementById('clear-banner-btn');
 
+            // Email fields
+            this.emailToggle = document.getElementById('email-toggle');
+            this.emailFields = document.getElementById('email-fields');
+            this.emailSubjectInput = document.getElementById('email-subject-input');
+            this.emailBodyInput = document.getElementById('email-body-input');
+            this.emailBodyCount = document.getElementById('email-body-count');
+
             this.selectedUsers = [];
             this.searchTimeout = null;
 
@@ -124,6 +131,21 @@
                 });
             }
 
+            // Email toggle
+            if (this.emailToggle) {
+                this.emailToggle.addEventListener('change', (e) => {
+                    this.handleEmailToggle(e.target.checked);
+                });
+            }
+
+            if (this.emailBodyInput) {
+                this.emailBodyInput.addEventListener('input', () => {
+                    if (this.emailBodyCount) {
+                        this.emailBodyCount.textContent = this.emailBodyInput.value.length;
+                    }
+                });
+            }
+
             // User search for individual targeting
             if (this.userSearchInput) {
                 this.userSearchInput.addEventListener('input', (e) => {
@@ -169,6 +191,16 @@
                 this.scheduleDatetime?.classList.add('hidden');
                 this.sendBtn?.classList.remove('hidden');
                 this.scheduleBtn?.classList.add('hidden');
+            }
+        }
+
+        handleEmailToggle(isEnabled) {
+            if (this.emailFields) {
+                this.emailFields.classList.toggle('hidden', !isEnabled);
+            }
+            // Auto-fill email subject from title if empty
+            if (isEnabled && this.emailSubjectInput && !this.emailSubjectInput.value && this.titleInput) {
+                this.emailSubjectInput.placeholder = this.titleInput.value || 'Defaults to notification title';
             }
         }
 

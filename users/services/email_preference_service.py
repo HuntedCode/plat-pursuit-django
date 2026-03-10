@@ -21,6 +21,7 @@ DEFAULT_EMAIL_PREFERENCES = {
     "milestone_notifications": True,
     "subscription_notifications": True,
     "admin_announcements": True,
+    "weekly_digest": True,
     "global_unsubscribe": False,
 }
 

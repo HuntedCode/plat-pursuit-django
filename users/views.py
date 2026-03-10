@@ -471,6 +471,18 @@ class SubscriptionManagementView(LoginRequiredMixin, TemplateView):
         return context
 
 
+class EmailPreferencesRedirectView(LoginRequiredMixin, View):
+    """
+    Redirect logged-in users to the token-based email preferences page.
+    Generates a fresh preference token and redirects to EmailPreferencesView.
+    """
+
+    def get(self, request):
+        from users.services.email_preference_service import EmailPreferenceService
+        token = EmailPreferenceService.generate_preference_token(request.user.id)
+        return redirect(f"{reverse('email_preferences')}?token={token}")
+
+
 class EmailPreferencesView(View):
     """
     Standalone view for managing email preferences via token-based authentication.
@@ -567,6 +579,7 @@ class EmailPreferencesView(View):
                 'milestone_notifications': form.cleaned_data.get('milestone_notifications', False),
                 'subscription_notifications': form.cleaned_data.get('subscription_notifications', False),
                 'admin_announcements': form.cleaned_data.get('admin_announcements', False),
+                'weekly_digest': form.cleaned_data.get('weekly_digest', False),
                 'global_unsubscribe': form.cleaned_data.get('global_unsubscribe', False),
             }
 

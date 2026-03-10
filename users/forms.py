@@ -84,6 +84,13 @@ class EmailPreferencesForm(forms.Form):
         widget=forms.CheckboxInput(attrs={'class': 'checkbox'})
     )
 
+    weekly_digest = forms.BooleanField(
+        required=False,
+        label='Weekly Digest',
+        help_text='Get a personalized weekly summary of your trophy stats, challenge progress, and community highlights',
+        widget=forms.CheckboxInput(attrs={'class': 'checkbox'})
+    )
+
     global_unsubscribe = forms.BooleanField(
         required=False,
         label='Unsubscribe from all emails',
@@ -106,5 +113,6 @@ class EmailPreferencesForm(forms.Form):
             cleaned_data['milestone_notifications'] = False
             cleaned_data['subscription_notifications'] = False
             cleaned_data['admin_announcements'] = False
+            cleaned_data['weekly_digest'] = False
 
         return cleaned_data

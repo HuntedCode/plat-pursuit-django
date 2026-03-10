@@ -230,6 +230,8 @@ Milestones use a **handler registry pattern**:
    - Groups milestones by `criteria_type`.
    - For **tiered types** (plat_count, trophy_count, etc.): checks all tiers but only sends an in-app notification for the highest newly earned tier. This prevents notification spam when a user qualifies for multiple tiers at once.
    - For **one-off types** (psn_linked, discord_linked, calendar months): notifies individually since there is at most one tier.
+   - Returns `(all_awarded, notified_user_milestones)` tuple. The second value is used for consolidated milestone emails.
+   - `send_email` parameter (default `True`): when `True`, sends a consolidated email immediately. The sync path passes `False` so `token_keeper.py` can collect milestones from multiple calls and send one email.
 
 5. Calendar month milestones use a parameterized handler: a single `_handle_calendar_month()` function is registered for all 12 `calendar_month_*` types. It shares a pre-fetched `_calendar_month_counts` cache across all months to avoid 12 separate COUNT queries.
 
@@ -254,7 +256,7 @@ Cache TTL is 7 hours (25,200 seconds). Companion keys `{key}_refresh_time` store
 ## Integration Points
 
 ### Sync Pipeline (token_keeper.py)
-`_job_sync_complete()` calls `check_profile_badges()` after all trophy data is processed, then calls `check_all_milestones_for_user()` excluding challenge-specific types (those are checked by their own services). Deferred badge notifications are consolidated afterward via `DeferredNotificationService`.
+`_job_sync_complete()` calls `check_profile_badges()` after all trophy data is processed, then calls `check_all_milestones_for_user(send_email=False)` excluding challenge-specific types (those are checked by their own services). Notified milestones from all checks (main + AZ + calendar + genre) are collected and sent as one consolidated email via `send_consolidated_milestone_email()`. Deferred badge notifications are consolidated afterward via `DeferredNotificationService`.
 
 ### Discord Bot
 - **Role assignment**: `notify_bot_role_earned()` calls POST to `BOT_API_URL/assign-role`.

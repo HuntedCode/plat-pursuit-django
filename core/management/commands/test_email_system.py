@@ -20,6 +20,10 @@ Usage:
     python manage.py test_email_system your.email@example.com --donation-receipt-preview
     python manage.py test_email_system your.email@example.com --badge-claim-preview
     python manage.py test_email_system your.email@example.com --artwork-complete-preview
+    python manage.py test_email_system your.email@example.com --badge-earned-preview
+    python manage.py test_email_system your.email@example.com --milestone-preview
+    python manage.py test_email_system your.email@example.com --free-welcome-preview
+    python manage.py test_email_system your.email@example.com --broadcast-preview
 """
 from django.core.management.base import BaseCommand, CommandError
 from django.conf import settings
@@ -95,6 +99,26 @@ class Command(BaseCommand):
             action='store_true',
             help='Send a preview of the badge artwork complete notification email'
         )
+        parser.add_argument(
+            '--badge-earned-preview',
+            action='store_true',
+            help='Send a preview of the badge earned achievement email'
+        )
+        parser.add_argument(
+            '--milestone-preview',
+            action='store_true',
+            help='Send a preview of the milestone achieved email'
+        )
+        parser.add_argument(
+            '--free-welcome-preview',
+            action='store_true',
+            help='Send a preview of the free user welcome email (post first sync)'
+        )
+        parser.add_argument(
+            '--broadcast-preview',
+            action='store_true',
+            help='Send a preview of the admin broadcast email template'
+        )
 
     def handle(self, *args, **options):
         recipient_email = options['recipient_email']
@@ -110,6 +134,10 @@ class Command(BaseCommand):
         donation_receipt_preview = options.get('donation_receipt_preview', False)
         badge_claim_preview = options.get('badge_claim_preview', False)
         artwork_complete_preview = options.get('artwork_complete_preview', False)
+        badge_earned_preview = options.get('badge_earned_preview', False)
+        milestone_preview = options.get('milestone_preview', False)
+        free_welcome_preview = options.get('free_welcome_preview', False)
+        broadcast_preview = options.get('broadcast_preview', False)
 
         self.stdout.write("=" * 70)
         self.stdout.write("Email System Test")
@@ -142,6 +170,14 @@ class Command(BaseCommand):
             self._send_badge_claim_preview(recipient_email)
         elif artwork_complete_preview:
             self._send_artwork_complete_preview(recipient_email)
+        elif badge_earned_preview:
+            self._send_badge_earned_preview(recipient_email)
+        elif milestone_preview:
+            self._send_milestone_preview(recipient_email)
+        elif free_welcome_preview:
+            self._send_free_welcome_preview(recipient_email)
+        elif broadcast_preview:
+            self._send_broadcast_preview(recipient_email)
         else:
             self._send_simple_test(recipient_email)
 
@@ -728,4 +764,230 @@ class Command(BaseCommand):
             self.stdout.write(
                 self.style.ERROR(f'✗ Failed to send artwork complete preview: {e}')
             )
+            raise CommandError(f'Email sending failed: {e}')
+
+    def _send_badge_earned_preview(self, recipient_email):
+        """Send a preview of the badge earned achievement email."""
+        from users.services.email_preference_service import EmailPreferenceService
+
+        self.stdout.write("\nSending badge earned email preview...")
+
+        sample_user_id = 1
+        try:
+            preference_token = EmailPreferenceService.generate_preference_token(sample_user_id)
+            preference_url = f"{settings.SITE_URL}/users/email-preferences/?token={preference_token}"
+        except Exception:
+            preference_url = f"{settings.SITE_URL}/users/email-preferences/"
+
+        context = {
+            'username': 'TestUser',
+            'badges': [
+                {
+                    'series_name': 'Souls Series',
+                    'tier_name': 'Gold',
+                    'tier_emoji': '\U0001f947',
+                    'progress_current': 3,
+                    'progress_total': 4,
+                    'next_tier': 'Platinum',
+                    'badge_url': f'{settings.SITE_URL}/badges/souls-series/',
+                },
+                {
+                    'series_name': 'Final Fantasy',
+                    'tier_name': 'Silver',
+                    'tier_emoji': '\U0001f948',
+                    'progress_current': 2,
+                    'progress_total': 3,
+                    'next_tier': 'Gold',
+                    'badge_url': f'{settings.SITE_URL}/badges/final-fantasy/',
+                },
+            ],
+            'badges_url': f'{settings.SITE_URL}/profile/TestUser/badges/',
+            'site_url': settings.SITE_URL,
+            'preference_url': preference_url,
+        }
+
+        try:
+            sent_count = EmailService.send_html_email(
+                subject='[PREVIEW] New badges earned!',
+                to_emails=[recipient_email],
+                template_name='emails/badge_earned.html',
+                context=context,
+                fail_silently=False,
+            )
+            if sent_count > 0:
+                self.stdout.write(self.style.SUCCESS('Badge earned preview sent successfully!'))
+            else:
+                self.stdout.write(self.style.ERROR('Email was not sent'))
+        except Exception as e:
+            self.stdout.write(self.style.ERROR(f'Failed: {e}'))
+            raise CommandError(f'Email sending failed: {e}')
+
+    def _send_milestone_preview(self, recipient_email):
+        """Send a preview of the milestone achieved email."""
+        from users.services.email_preference_service import EmailPreferenceService
+
+        self.stdout.write("\nSending milestone achieved email preview...")
+
+        sample_user_id = 1
+        try:
+            preference_token = EmailPreferenceService.generate_preference_token(sample_user_id)
+            preference_url = f"{settings.SITE_URL}/users/email-preferences/?token={preference_token}"
+        except Exception:
+            preference_url = f"{settings.SITE_URL}/users/email-preferences/"
+
+        milestones_url = f'{settings.SITE_URL}/profile/TestUser/milestones/'
+
+        # Sample milestone contexts (consolidated format)
+        sample_milestones = [
+            {
+                'milestone_name': '50 Platinum Trophies',
+                'milestone_description': 'Earn 50 Platinum trophies across any games.',
+                'title_name': 'Veteran Hunter',
+                'tier_text': 'Tier 3 of 5',
+                'is_one_off': False,
+                'is_max_tier': False,
+                'next_milestone': {
+                    'name': '100 Platinum Trophies',
+                    'progress_value': 50,
+                    'required_value': 100,
+                    'progress_percentage': 50,
+                },
+                'milestones_url': milestones_url,
+            },
+            {
+                'milestone_name': '1,000 Trophies Earned',
+                'milestone_description': 'Collect 1,000 trophies of any type.',
+                'title_name': '',
+                'tier_text': 'Tier 2 of 4',
+                'is_one_off': False,
+                'is_max_tier': False,
+                'next_milestone': {
+                    'name': '2,500 Trophies Earned',
+                    'progress_value': 1000,
+                    'required_value': 2500,
+                    'progress_percentage': 40,
+                },
+                'milestones_url': milestones_url,
+            },
+        ]
+
+        context = {
+            'username': 'TestUser',
+            'milestones': sample_milestones,
+            'milestone_count': len(sample_milestones),
+            'is_single': len(sample_milestones) == 1,
+            'profile_milestones_url': milestones_url,
+            'site_url': settings.SITE_URL,
+            'preference_url': preference_url,
+        }
+
+        try:
+            sent_count = EmailService.send_html_email(
+                subject='[PREVIEW] You achieved 2 milestones!',
+                to_emails=[recipient_email],
+                template_name='emails/milestone_achieved.html',
+                context=context,
+                fail_silently=False,
+            )
+            if sent_count > 0:
+                self.stdout.write(self.style.SUCCESS('Milestone preview sent successfully!'))
+            else:
+                self.stdout.write(self.style.ERROR('Email was not sent'))
+        except Exception as e:
+            self.stdout.write(self.style.ERROR(f'Failed: {e}'))
+            raise CommandError(f'Email sending failed: {e}')
+
+    def _send_free_welcome_preview(self, recipient_email):
+        """Send a preview of the free user welcome email."""
+        from users.services.email_preference_service import EmailPreferenceService
+
+        self.stdout.write("\nSending free user welcome email preview...")
+
+        sample_user_id = 1
+        try:
+            preference_token = EmailPreferenceService.generate_preference_token(sample_user_id)
+            preference_url = f"{settings.SITE_URL}/users/email-preferences/?token={preference_token}"
+        except Exception:
+            preference_url = f"{settings.SITE_URL}/users/email-preferences/"
+
+        context = {
+            'username': 'TestUser',
+            'profile_url': f'{settings.SITE_URL}/profile/TestUser/',
+            'discord_url': getattr(settings, 'DISCORD_INVITE_URL', 'https://discord.gg/example'),
+            'site_url': settings.SITE_URL,
+            'preference_url': preference_url,
+        }
+
+        try:
+            sent_count = EmailService.send_html_email(
+                subject='[PREVIEW] Welcome to PlatPursuit!',
+                to_emails=[recipient_email],
+                template_name='emails/welcome.html',
+                context=context,
+                fail_silently=False,
+            )
+            if sent_count > 0:
+                self.stdout.write(self.style.SUCCESS('Free welcome preview sent successfully!'))
+            else:
+                self.stdout.write(self.style.ERROR('Email was not sent'))
+        except Exception as e:
+            self.stdout.write(self.style.ERROR(f'Failed: {e}'))
+            raise CommandError(f'Email sending failed: {e}')
+
+    def _send_broadcast_preview(self, recipient_email):
+        """Send a preview of the admin broadcast email template."""
+        from users.services.email_preference_service import EmailPreferenceService
+        import markdown as md
+
+        self.stdout.write("\nSending broadcast email preview...")
+
+        sample_user_id = 1
+        try:
+            preference_token = EmailPreferenceService.generate_preference_token(sample_user_id)
+            preference_url = f"{settings.SITE_URL}/users/email-preferences/?token={preference_token}"
+        except Exception:
+            preference_url = f"{settings.SITE_URL}/users/email-preferences/"
+
+        sample_markdown = (
+            "## What's New This Week\n\n"
+            "We have been busy building some exciting features:\n\n"
+            "- **Genre Challenge** is now live! Test your range across 15 genres.\n"
+            "- The **Review Hub** has been overhauled with ratings, filters, and community highlights.\n"
+            "- Bug fixes and performance improvements across the board.\n\n"
+            "> \"No trophy can hide from us.\"\n\n"
+            "### Discord Events\n\n"
+            "Join us this Saturday for our monthly **Platinum Race** event! "
+            "Details in the #events channel.\n\n"
+            "Happy hunting!"
+        )
+
+        email_body_html = md.markdown(
+            sample_markdown,
+            extensions=['extra', 'nl2br', 'sane_lists'],
+        )
+
+        context = {
+            'username': 'TestUser',
+            'email_subject': 'PlatPursuit Weekly Update',
+            'email_body_html': email_body_html,
+            'cta_url': f'{settings.SITE_URL}/dashboard/',
+            'cta_text': 'Visit Your Dashboard',
+            'site_url': settings.SITE_URL,
+            'preference_url': preference_url,
+        }
+
+        try:
+            sent_count = EmailService.send_html_email(
+                subject='[PREVIEW] PlatPursuit Weekly Update',
+                to_emails=[recipient_email],
+                template_name='emails/broadcast.html',
+                context=context,
+                fail_silently=False,
+            )
+            if sent_count > 0:
+                self.stdout.write(self.style.SUCCESS('Broadcast preview sent successfully!'))
+            else:
+                self.stdout.write(self.style.ERROR('Email was not sent'))
+        except Exception as e:
+            self.stdout.write(self.style.ERROR(f'Failed: {e}'))
             raise CommandError(f'Email sending failed: {e}')

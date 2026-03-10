@@ -69,18 +69,23 @@ Users can opt out of emails via token-based preference URLs. `EmailPreferenceSer
 
 ### Email Types
 
-| Type | Template | Trigger |
-|------|----------|---------|
-| `monthly_recap` | `emails/monthly_recap.html` | Cron: `send_monthly_recap_emails` |
-| `subscription_welcome` | `emails/subscription_welcome.html` | `activate_subscription()` (first time) |
-| `payment_succeeded` | `emails/payment_succeeded.html` | Stripe/PayPal renewal webhook |
-| `payment_failed` | `emails/payment_failed.html` | Stripe `invoice.payment_failed` webhook |
-| `payment_failed_final` | `emails/payment_failed_final.html` | Final retry failure |
-| `payment_action_required` | `emails/payment_action_required.html` | 3D Secure or action needed |
-| `subscription_cancelled` | `emails/subscription_cancelled.html` | Cancellation confirmation |
-| `donation_receipt` | `emails/donation_receipt.html` | Donation completion |
-| `badge_claim_confirmation` | `emails/badge_claim_confirmation.html` | Fundraiser badge claim |
-| `artwork_complete` | `emails/artwork_complete.html` | Admin marks artwork done |
+| Type | Template | Trigger | Preference Gate |
+|------|----------|---------|-----------------|
+| `monthly_recap` | `emails/monthly_recap.html` | Cron: `send_monthly_recap_emails` | `monthly_recap` |
+| `weekly_digest` | `emails/weekly_digest.html` | Cron: `send_weekly_digest` (Phase 2) | `weekly_digest` |
+| `badge_earned` | `emails/badge_earned.html` | Sync: `DeferredNotificationService._flush_profile_badges()` | `badge_notifications` |
+| `milestone_achieved` | `emails/milestone_achieved.html` | Sync: `send_consolidated_milestone_email()` in signals.py | `milestone_notifications` |
+| `welcome` | `emails/welcome.html` | Sync: first successful sync (`_job_sync_complete`) | None (transactional) |
+| `admin_announcement` | `emails/broadcast.html` | Admin: Notification Center broadcast | `admin_announcements` |
+| `subscription_welcome` | `emails/subscription_welcome.html` | `activate_subscription()` (first time) | `subscription_notifications` |
+| `payment_succeeded` | `emails/payment_succeeded.html` | Stripe/PayPal renewal webhook | `subscription_notifications` |
+| `payment_failed` | `emails/payment_failed.html` | Stripe `invoice.payment_failed` webhook | `subscription_notifications` |
+| `payment_failed_final` | `emails/payment_failed_final.html` | Final retry failure | `subscription_notifications` |
+| `payment_action_required` | `emails/payment_action_required.html` | 3D Secure or action needed | `subscription_notifications` |
+| `subscription_cancelled` | `emails/subscription_cancelled.html` | Cancellation confirmation | `subscription_notifications` |
+| `donation_receipt` | `emails/donation_receipt.html` | Donation completion | None (transactional) |
+| `badge_claim_confirmation` | `emails/badge_claim_confirmation.html` | Fundraiser badge claim | None (transactional) |
+| `artwork_complete` | `emails/artwork_complete.html` | Admin marks artwork done | None (transactional) |
 
 ### Email Template Pattern
 
@@ -89,6 +94,45 @@ All email templates extend `templates/emails/base_email.html` which provides:
 - Responsive table-based layout (email client compatible)
 - Footer with unsubscribe link
 - Consistent gradient styling
+
+### Achievement Emails (Badge & Milestone)
+
+Badge and milestone emails are sent automatically during the PSN sync cycle:
+
+**Badge Earned Email** (`badge_earned`): Consolidates all badges earned in a single sync into one email. Triggered from `DeferredNotificationService._flush_profile_badges()` after in-app badge notifications are created. Lists each badge with series name, tier, progress bar, and next tier info.
+
+**Milestone Achieved Email** (`milestone_achieved`): Consolidates all milestones earned in a single sync into one email. Triggered from `send_consolidated_milestone_email()` in `notifications/signals.py`, called by `token_keeper.py` after all milestone checks complete. For non-sync paths (reviews, ratings, etc.), `check_all_milestones_for_user()` sends the email immediately via the `send_email=True` default. Shows milestone name, description, title reward (if any), tier info, and next milestone progress. Handles both single and multiple milestones in one email.
+
+Both are gated by their respective email preferences (`badge_notifications`, `milestone_notifications`). Suppressed sends are logged to EmailLog.
+
+### Welcome Email
+
+Sent once after a user's first successful PSN sync. Triggered from `_job_sync_complete()` in `trophies/token_keeper.py`. Idempotent: checks `EmailLog.objects.filter(user=user, email_type='welcome').exists()` before sending. No preference gate (one-time transactional email).
+
+### Broadcast Center (Admin Email)
+
+The Notification Center at `/staff/notifications/` supports sending companion emails alongside in-app notifications:
+
+1. Compose notification as normal (title, message, sections, audience, etc.)
+2. Toggle "Also send email" to reveal email-specific fields
+3. Optionally customize: email subject, markdown body, CTA button
+4. Send immediately or schedule for later
+
+Email fields on `ScheduledNotification`:
+- `send_email` (bool): Whether to also send email
+- `email_subject`: Defaults to notification title if blank
+- `email_body_markdown`: Rendered to HTML via Python `markdown` library
+- `email_cta_url` / `email_cta_text`: Defaults to action_url/action_text if blank
+
+Emails are gated by the `admin_announcements` preference. `NotificationLog` tracks `emails_sent` and `emails_suppressed` counts.
+
+### Email Preferences Access
+
+Users can manage email preferences via:
+- Token-based links in email footers (works without login)
+- Settings page: `/users/settings/` has an "Email Preferences" section that generates a token and redirects to the preference page
+
+The `EmailPreferencesRedirectView` at `/users/email-preferences/redirect/` handles the logged-in redirect flow.
 
 ### Testing Emails
 
@@ -99,6 +143,16 @@ python manage.py test_email_system user@example.com --recap-preview
 # Preview subscription emails
 python manage.py test_email_system user@example.com --welcome-preview
 python manage.py test_email_system user@example.com --payment-succeeded-preview
+
+# Preview new achievement emails
+python manage.py test_email_system user@example.com --badge-earned-preview
+python manage.py test_email_system user@example.com --milestone-preview
+
+# Preview free user welcome email
+python manage.py test_email_system user@example.com --free-welcome-preview
+
+# Preview admin broadcast email
+python manage.py test_email_system user@example.com --broadcast-preview
 ```
 
 ## Cloudflare Email Routing (PSN Token Emails)
@@ -147,6 +201,10 @@ For email to work correctly, the domain needs:
 - **Suppressed emails**: If a user opts out via `EmailPreferenceService`, use `log_suppressed()` to record that the email was intentionally not sent.
 - **PayPal double-email guard**: For payment_succeeded emails, the system checks for a recent `subscription_welcome` EmailLog to prevent sending both welcome + payment emails on initial subscription.
 - **SendGrid rate limits**: Bulk email commands use `--batch-size` (default 100) to avoid hitting SendGrid's API limits.
+- **Broadcast emails iterate individually**: Each recipient gets a personalized email (with their name and preference token). This uses `iterator(chunk_size=200)` to avoid loading all users into memory at once.
+- **Badge email consolidation**: One email per sync cycle, matching the in-app notification consolidation pattern. All badges earned in that sync are listed in a single email.
+- **Welcome email idempotency**: Checked via EmailLog, not a user field. If the EmailLog record is deleted, the email could re-send on next sync. This is by design (safe to re-send a welcome).
+- **Broadcast markdown rendering**: Uses Python `markdown` library with `extra`, `nl2br`, and `sane_lists` extensions. The rendered HTML is passed to the template as `email_body_html|safe`, so admin-authored content is trusted.
 
 ## Related Docs
 

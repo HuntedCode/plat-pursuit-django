@@ -37,7 +37,7 @@ class Command(BaseCommand):
             self.stdout.write(self.style.ERROR(f"Error: profile with name {username} does not exist."))
             return
 
-        awarded = check_all_milestones_for_user(
+        awarded, _ = check_all_milestones_for_user(
             profile=profile,
             criteria_type=criteria_type,
             notify_webapp=notify_webapp,
@@ -50,7 +50,7 @@ class Command(BaseCommand):
         profiles_checked = 0
 
         for profile in Profile.objects.all().iterator():
-            awarded = check_all_milestones_for_user(
+            awarded, _ = check_all_milestones_for_user(
                 profile=profile,
                 criteria_type=criteria_type,
                 notify_webapp=notify_webapp,

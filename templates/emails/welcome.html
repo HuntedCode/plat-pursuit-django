@@ -1,0 +1,192 @@
+{% extends "emails/base_email.html" %}
+
+{% block extra_styles %}
+    <style>
+        .welcome-hero {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 12px;
+            padding: 30px;
+            margin: 25px 0;
+            color: #ffffff;
+            text-align: center;
+        }
+
+        .welcome-hero .welcome-icon {
+            font-size: 42px;
+            margin-bottom: 10px;
+            display: block;
+        }
+
+        .welcome-hero h2 {
+            margin: 0 0 10px 0;
+            font-size: 22px;
+            font-weight: 700;
+        }
+
+        .welcome-hero p {
+            margin: 0;
+            font-size: 15px;
+            opacity: 0.95;
+            line-height: 1.6;
+        }
+
+        .features-grid {
+            margin: 25px 0;
+        }
+
+        .feature-card {
+            background-color: #f8f9ff;
+            border-radius: 8px;
+            padding: 16px 20px;
+            margin-bottom: 12px;
+            border-left: 4px solid #667eea;
+        }
+
+        .feature-card-icon {
+            font-size: 20px;
+            margin-bottom: 6px;
+            display: block;
+        }
+
+        .feature-card-name {
+            font-size: 15px;
+            font-weight: 700;
+            color: #333333;
+            margin: 0 0 4px 0;
+        }
+
+        .feature-card-desc {
+            font-size: 13px;
+            color: #555555;
+            margin: 0;
+            line-height: 1.5;
+        }
+
+        .community-box {
+            background-color: #f0f4ff;
+            border-radius: 8px;
+            padding: 20px 25px;
+            margin: 25px 0;
+            text-align: center;
+        }
+
+        .community-box h3 {
+            margin: 0 0 8px 0;
+            font-size: 16px;
+            color: #333333;
+        }
+
+        .community-box p {
+            margin: 0;
+            font-size: 14px;
+            color: #555555;
+            line-height: 1.6;
+        }
+
+        .community-box a {
+            color: #667eea;
+            text-decoration: none;
+            font-weight: 600;
+        }
+
+        .flavor-text {
+            text-align: center;
+            font-style: italic;
+            color: #777777;
+            font-size: 15px;
+            margin: 30px 0 10px 0;
+            line-height: 1.6;
+        }
+
+        @media only screen and (max-width: 600px) {
+            .welcome-hero { padding: 20px 15px; }
+            .feature-card { padding: 12px 15px; }
+        }
+    </style>
+{% endblock %}
+
+{% block title %}Welcome to PlatPursuit!{% endblock %}
+
+{% block header_content %}
+    <h1>Welcome, Hunter!</h1>
+    <p>Your trophy journey just got an upgrade</p>
+{% endblock %}
+
+{% block content %}
+    <p class="greeting">Hey {{ username }},</p>
+
+    <div class="welcome-hero">
+        <span class="welcome-icon">&#127942;</span>
+        <h2>Your profile is synced and ready!</h2>
+        <p>
+            We have pulled in your trophy collection and you are officially part of the pursuit.
+            Here is what you can do now:
+        </p>
+    </div>
+
+    <div class="features-grid">
+        <div class="feature-card">
+            <span class="feature-card-icon">&#127941;</span>
+            <div class="feature-card-name">Badge System</div>
+            <div class="feature-card-desc">
+                Earn badges across 40+ series by platinuming games. Each badge has four tiers to climb.
+            </div>
+        </div>
+
+        <div class="feature-card">
+            <span class="feature-card-icon">&#128202;</span>
+            <div class="feature-card-name">Challenges</div>
+            <div class="feature-card-desc">
+                Take on the A-Z Challenge, Calendar Challenge, or Genre Challenge to test your range.
+            </div>
+        </div>
+
+        <div class="feature-card">
+            <span class="feature-card-icon">&#9989;</span>
+            <div class="feature-card-name">Checklists</div>
+            <div class="feature-card-desc">
+                Follow community-made platinum guides or create your own to help fellow hunters.
+            </div>
+        </div>
+
+        <div class="feature-card">
+            <span class="feature-card-icon">&#11088;</span>
+            <div class="feature-card-name">Reviews & Ratings</div>
+            <div class="feature-card-desc">
+                Rate the games you have platted and write reviews to help the community pick their next hunt.
+            </div>
+        </div>
+
+        <div class="feature-card">
+            <span class="feature-card-icon">&#127895;</span>
+            <div class="feature-card-name">Milestones</div>
+            <div class="feature-card-desc">
+                Track your progress across 200+ milestones and unlock exclusive titles for your profile.
+            </div>
+        </div>
+    </div>
+
+    {% if discord_url %}
+        <div class="community-box">
+            <h3>Join the Community</h3>
+            <p>
+                Our Discord server is where hunters hang out, share tips, and participate in events.
+                <br>
+                <a href="{{ discord_url }}">Join the PlatPursuit Discord</a>
+            </p>
+        </div>
+    {% endif %}
+
+    <div class="cta-container">
+        <a href="{{ profile_url }}" class="cta-button">View Your Profile</a>
+    </div>
+
+    <p class="flavor-text">
+        No trophy can hide from us. Welcome to the pursuit!
+    </p>
+{% endblock %}
+
+{% block footer_note %}
+    You're receiving this because you just linked your PSN profile to PlatPursuit.<br>
+    <a href="{{ preference_url }}" style="color: #999999; text-decoration: underline;">Manage your email preferences</a>.
+{% endblock %}

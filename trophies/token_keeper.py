@@ -1141,33 +1141,48 @@ class TokenKeeper:
             from trophies.milestone_constants import ALL_CALENDAR_TYPES, ALL_GENRE_TYPES
             # Challenge-specific types are excluded here because they're checked
             # separately by their respective check_*_challenge_progress() functions below
-            check_all_milestones_for_user(profile, exclude_types=ALL_CALENDAR_TYPES | {'az_progress'} | ALL_GENRE_TYPES)
+            _, notified_milestones = check_all_milestones_for_user(profile, exclude_types=ALL_CALENDAR_TYPES | {'az_progress'} | ALL_GENRE_TYPES, send_email=False)
             logger.info(f"Milestones checked for {profile_id} successfully!")
 
             # Check A-Z challenge progress
             from trophies.services.challenge_service import check_az_challenge_progress, check_calendar_challenge_progress, check_genre_challenge_progress
             try:
-                check_az_challenge_progress(profile)
+                notified_milestones.extend(check_az_challenge_progress(profile))
             except Exception:
                 logger.exception(f"Failed to check A-Z challenge progress for profile {profile_id}")
 
             # Check Calendar challenge progress
             try:
-                check_calendar_challenge_progress(profile)
+                notified_milestones.extend(check_calendar_challenge_progress(profile))
             except Exception:
                 logger.exception(f"Failed to check calendar challenge progress for profile {profile_id}")
 
             # Check Genre challenge progress
             try:
-                check_genre_challenge_progress(profile)
+                notified_milestones.extend(check_genre_challenge_progress(profile))
             except Exception:
                 logger.exception(f"Failed to check genre challenge progress for profile {profile_id}")
+
+            # Send one consolidated milestone email for all milestones earned this sync
+            if notified_milestones:
+                try:
+                    from notifications.signals import send_consolidated_milestone_email
+                    send_consolidated_milestone_email(notified_milestones)
+                except Exception:
+                    logger.exception(f"Failed to send consolidated milestone email for profile {profile_id}")
 
             update_profile_trophy_counts(profile)
             profile.set_sync_status('synced')
 
             from trophies.services.timeline_service import invalidate_timeline_cache
             invalidate_timeline_cache(profile_id)
+
+            # Send welcome email on first successful sync (one-time, idempotent)
+            try:
+                from core.services.email_service import send_welcome_email_if_first_sync
+                send_welcome_email_if_first_sync(profile)
+            except Exception:
+                logger.exception(f"Failed to send welcome email for profile {profile_id}")
 
             logger.info(f"{profile.display_psn_username} account has finished syncing!")
         except Exception as e:

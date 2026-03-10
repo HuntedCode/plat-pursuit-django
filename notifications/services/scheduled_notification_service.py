@@ -145,6 +145,11 @@ class ScheduledNotificationService:
             scheduled_at=scheduled_at,
             created_by=created_by,
             recipient_count=recipient_count,
+            send_email=kwargs.get('send_email', False),
+            email_subject=kwargs.get('email_subject', ''),
+            email_body_markdown=kwargs.get('email_body_markdown', ''),
+            email_cta_url=kwargs.get('email_cta_url', ''),
+            email_cta_text=kwargs.get('email_cta_text', ''),
         )
 
         format_type = 'structured' if sections else 'markdown'
@@ -217,6 +222,22 @@ class ScheduledNotificationService:
             priority=kwargs.get('priority', 'normal'),
         )
 
+        # Send companion emails if enabled
+        emails_sent = 0
+        emails_suppressed = 0
+        send_email = kwargs.get('send_email', False)
+        if send_email:
+            emails_sent, emails_suppressed = ScheduledNotificationService._send_broadcast_emails(
+                recipients=recipients,
+                title=title,
+                email_subject=kwargs.get('email_subject', ''),
+                email_body_markdown=kwargs.get('email_body_markdown', ''),
+                action_url=kwargs.get('action_url'),
+                action_text=kwargs.get('action_text', ''),
+                email_cta_url=kwargs.get('email_cta_url', ''),
+                email_cta_text=kwargs.get('email_cta_text', ''),
+            )
+
         # Create log entry
         log = NotificationLog.objects.create(
             notification_type=notification_type,
@@ -228,12 +249,15 @@ class ScheduledNotificationService:
             recipient_count=created_count,
             sent_by=sent_by,
             was_scheduled=False,
+            emails_sent=emails_sent,
+            emails_suppressed=emails_suppressed,
         )
 
         format_type = 'structured' if sections else 'markdown'
+        email_info = f", {emails_sent} emails sent, {emails_suppressed} suppressed" if send_email else ""
         logger.info(
             f"Immediate notification sent by {sent_by.email}: "
-            f"'{title}' to {created_count} recipients ({format_type} format)"
+            f"'{title}' to {created_count} recipients ({format_type} format){email_info}"
         )
 
         return log, created_count
@@ -262,7 +286,7 @@ class ScheduledNotificationService:
                 ScheduledNotificationService._process_single(scheduled)
                 processed_count += 1
             except Exception as e:
-                logger.error(
+                logger.exception(
                     f"Failed to process scheduled notification {scheduled.id}: {e}"
                 )
                 scheduled.status = 'failed'
@@ -308,6 +332,21 @@ class ScheduledNotificationService:
             priority=scheduled.priority,
         )
 
+        # Send companion emails if enabled
+        emails_sent = 0
+        emails_suppressed = 0
+        if scheduled.send_email:
+            emails_sent, emails_suppressed = ScheduledNotificationService._send_broadcast_emails(
+                recipients=recipients,
+                title=scheduled.title,
+                email_subject=scheduled.email_subject,
+                email_body_markdown=scheduled.email_body_markdown,
+                action_url=scheduled.action_url,
+                action_text=scheduled.action_text,
+                email_cta_url=scheduled.email_cta_url,
+                email_cta_text=scheduled.email_cta_text,
+            )
+
         # Update scheduled notification
         scheduled.status = 'sent'
         scheduled.sent_at = timezone.now()
@@ -326,12 +365,110 @@ class ScheduledNotificationService:
             recipient_count=created_count,
             sent_by=scheduled.created_by,
             was_scheduled=True,
+            emails_sent=emails_sent,
+            emails_suppressed=emails_suppressed,
         )
 
+        email_info = f", {emails_sent} emails sent, {emails_suppressed} suppressed" if scheduled.send_email else ""
         logger.info(
             f"Scheduled notification {scheduled.id} sent: "
-            f"'{scheduled.title}' to {created_count} recipients"
+            f"'{scheduled.title}' to {created_count} recipients{email_info}"
         )
+
+    @staticmethod
+    def _send_broadcast_emails(
+        recipients, title, email_subject, email_body_markdown,
+        action_url, action_text, email_cta_url, email_cta_text,
+    ):
+        """
+        Send broadcast emails to recipients who have admin_announcements enabled.
+
+        Args:
+            recipients: QuerySet of CustomUser instances
+            title: Notification title (fallback for email subject)
+            email_subject: Explicit email subject (or blank for title fallback)
+            email_body_markdown: Markdown content for email body
+            action_url: In-app action URL (fallback for CTA)
+            action_text: In-app action text (fallback for CTA text)
+            email_cta_url: Explicit email CTA URL (or blank for action_url fallback)
+            email_cta_text: Explicit email CTA text (or blank for action_text fallback)
+
+        Returns:
+            tuple: (emails_sent, emails_suppressed)
+        """
+        from django.conf import settings
+        from core.services.email_service import EmailService
+        from users.services.email_preference_service import EmailPreferenceService
+        import markdown
+
+        subject = email_subject or title
+        cta_url = email_cta_url or action_url or ''
+        cta_text = email_cta_text or action_text or ''
+
+        # Render markdown to HTML (staff-authored content, trusted)
+        email_body_html = ''
+        if email_body_markdown:
+            try:
+                email_body_html = markdown.markdown(
+                    email_body_markdown,
+                    extensions=['extra', 'nl2br', 'sane_lists'],
+                )
+            except Exception:
+                logger.exception("Failed to render broadcast email markdown, falling back to escaped text")
+                from django.utils.html import escape, linebreaks
+                email_body_html = linebreaks(escape(email_body_markdown))
+
+        emails_sent = 0
+        emails_suppressed = 0
+
+        for user in recipients.select_related('profile').iterator(chunk_size=200):
+            if not user.email:
+                continue
+
+            if not EmailPreferenceService.should_send_email(user, 'admin_announcements'):
+                EmailService.log_suppressed(
+                    email_type='admin_announcement',
+                    user=user,
+                    subject=subject,
+                    triggered_by='admin_manual',
+                )
+                emails_suppressed += 1
+                continue
+
+            try:
+                preference_token = EmailPreferenceService.generate_preference_token(user.id)
+                preference_url = f"{settings.SITE_URL}/users/email-preferences/?token={preference_token}"
+
+                context = {
+                    'username': getattr(user, 'profile', None) and (
+                        user.profile.display_psn_username or user.profile.psn_username
+                    ) or user.email,
+                    'email_subject': subject,
+                    'email_body_html': email_body_html,
+                    'cta_url': cta_url,
+                    'cta_text': cta_text,
+                    'site_url': settings.SITE_URL,
+                    'preference_url': preference_url,
+                }
+
+                sent = EmailService.send_html_email(
+                    subject=subject,
+                    to_emails=[user.email],
+                    template_name='emails/broadcast.html',
+                    context=context,
+                    fail_silently=True,
+                    log_email_type='admin_announcement',
+                    log_user=user,
+                    log_triggered_by='admin_manual',
+                )
+
+                if sent:
+                    emails_sent += 1
+            except Exception:
+                logger.exception(f"Failed to send broadcast email to {user.email}")
+
+        logger.info(f"Broadcast email complete: {emails_sent} sent, {emails_suppressed} suppressed")
+        return emails_sent, emails_suppressed
 
     @staticmethod
     def cancel(scheduled_id, user):

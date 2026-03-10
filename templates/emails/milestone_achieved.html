@@ -1,0 +1,227 @@
+{% extends "emails/base_email.html" %}
+
+{% block extra_styles %}
+    <style>
+        .milestone-hero {
+            background: linear-gradient(135deg, #f6d365 0%, #fda085 50%, #667eea 100%);
+            border-radius: 12px;
+            padding: 30px;
+            margin: 25px 0;
+            color: #ffffff;
+            text-align: center;
+        }
+
+        .milestone-hero .milestone-icon {
+            font-size: 42px;
+            margin-bottom: 10px;
+            display: block;
+        }
+
+        .milestone-hero h2 {
+            margin: 0 0 10px 0;
+            font-size: 22px;
+            font-weight: 700;
+        }
+
+        .milestone-hero p {
+            margin: 0;
+            font-size: 15px;
+            opacity: 0.95;
+            line-height: 1.6;
+        }
+
+        .milestone-card {
+            background-color: #f8f9ff;
+            border-radius: 8px;
+            padding: 20px 25px;
+            margin: 15px 0;
+            border-left: 4px solid #667eea;
+        }
+
+        .milestone-card-name {
+            font-size: 18px;
+            font-weight: 700;
+            color: #333333;
+            margin: 0 0 6px 0;
+        }
+
+        .milestone-card-desc {
+            font-size: 15px;
+            color: #555555;
+            margin: 0 0 12px 0;
+            line-height: 1.6;
+        }
+
+        .title-reward {
+            display: inline-block;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: #ffffff;
+            font-size: 13px;
+            font-weight: 600;
+            padding: 4px 14px;
+            border-radius: 16px;
+            margin-top: 4px;
+        }
+
+        .tier-info {
+            font-size: 13px;
+            color: #888888;
+            margin: 8px 0 0 0;
+        }
+
+        .next-milestone-box {
+            background-color: #f0f4ff;
+            border-radius: 8px;
+            padding: 16px 20px;
+            margin: 20px 0;
+        }
+
+        .next-milestone-box h3 {
+            font-size: 14px;
+            font-weight: 600;
+            color: #333333;
+            margin: 0 0 6px 0;
+        }
+
+        .next-milestone-box p {
+            font-size: 13px;
+            color: #555555;
+            margin: 0;
+        }
+
+        .progress-bar {
+            background-color: #e0e0e0;
+            border-radius: 6px;
+            height: 8px;
+            margin-top: 8px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            height: 100%;
+            border-radius: 6px;
+        }
+
+        .flavor-text {
+            text-align: center;
+            font-style: italic;
+            color: #777777;
+            font-size: 15px;
+            margin: 30px 0 10px 0;
+            line-height: 1.6;
+        }
+
+        .milestone-divider {
+            border: none;
+            border-top: 1px solid #e8e8f0;
+            margin: 5px 0;
+        }
+
+        @media only screen and (max-width: 600px) {
+            .milestone-hero { padding: 20px 15px; }
+            .milestone-card { padding: 16px 20px; }
+        }
+    </style>
+{% endblock %}
+
+{% block title %}{% if is_single %}Milestone Achieved!{% else %}You achieved {{ milestone_count }} milestones!{% endif %}{% endblock %}
+
+{% block header_content %}
+    {% if is_single %}
+        <h1>Milestone Achieved!</h1>
+        <p>You just hit a new milestone on your journey</p>
+    {% else %}
+        <h1>{{ milestone_count }} Milestones Achieved!</h1>
+        <p>Your latest sync was a big one</p>
+    {% endif %}
+{% endblock %}
+
+{% block content %}
+    <p class="greeting">Hey {{ username }},</p>
+
+    {% if is_single %}
+        {# Single milestone: full detail layout (identical to original) #}
+        {% with m=milestones.0 %}
+            <div class="milestone-hero">
+                <span class="milestone-icon">&#11088;</span>
+                <h2>{{ m.milestone_name }}</h2>
+                <p>{{ m.milestone_description }}</p>
+            </div>
+
+            <div class="milestone-card">
+                <div class="milestone-card-name">{{ m.milestone_name }}</div>
+                <div class="milestone-card-desc">{{ m.milestone_description }}</div>
+                {% if m.title_name %}
+                    <div class="title-reward">Title Unlocked: "{{ m.title_name }}"</div>
+                {% endif %}
+                {% if m.tier_text %}
+                    <div class="tier-info">{{ m.tier_text }}</div>
+                {% endif %}
+            </div>
+
+            {% if m.next_milestone and not m.is_max_tier %}
+                <div class="next-milestone-box">
+                    <h3>Next Milestone: {{ m.next_milestone.name }}</h3>
+                    <p>{{ m.next_milestone.progress_value }} / {{ m.next_milestone.required_value }} ({{ m.next_milestone.progress_percentage }}% complete)</p>
+                    <div class="progress-bar">
+                        <div class="progress-fill" style="width: {{ m.next_milestone.progress_percentage }}%;"></div>
+                    </div>
+                </div>
+            {% elif m.is_max_tier and not m.is_one_off %}
+                <div class="next-milestone-box">
+                    <h3>You have reached the highest tier!</h3>
+                    <p>Congratulations: there is nothing left to prove here. You are the best of the best.</p>
+                </div>
+            {% endif %}
+
+            <div class="cta-container">
+                <a href="{{ m.milestones_url }}" class="cta-button">View Your Milestones</a>
+            </div>
+
+            <p class="flavor-text">
+                {% if m.title_name %}
+                    Go show off that new title. You earned it!
+                {% else %}
+                    Another step on the journey. Keep pushing, hunter!
+                {% endif %}
+            </p>
+        {% endwith %}
+    {% else %}
+        {# Multiple milestones: hero summary + card list #}
+        <div class="milestone-hero">
+            <span class="milestone-icon">&#11088;</span>
+            <h2>{{ milestone_count }} New Milestones</h2>
+            <p>Your latest sync unlocked a wave of achievements. Here's what you earned:</p>
+        </div>
+
+        {% for m in milestones %}
+            <div class="milestone-card">
+                <div class="milestone-card-name">{{ m.milestone_name }}</div>
+                <div class="milestone-card-desc">{{ m.milestone_description }}</div>
+                {% if m.title_name %}
+                    <div class="title-reward">Title Unlocked: "{{ m.title_name }}"</div>
+                {% endif %}
+                {% if m.tier_text %}
+                    <div class="tier-info">{{ m.tier_text }}</div>
+                {% endif %}
+            </div>
+            {% if not forloop.last %}
+                <hr class="milestone-divider">
+            {% endif %}
+        {% endfor %}
+
+        <div class="cta-container">
+            <a href="{{ profile_milestones_url }}" class="cta-button">View All Milestones</a>
+        </div>
+
+        <p class="flavor-text">
+            That's {{ milestone_count }} milestones in one go. Not bad at all, hunter!
+        </p>
+    {% endif %}
+{% endblock %}
+
+{% block footer_note %}
+    You're receiving this because you have milestone emails enabled.<br>
+    <a href="{{ preference_url }}" style="color: #999999; text-decoration: underline;">Manage your email preferences</a>.
+{% endblock %}

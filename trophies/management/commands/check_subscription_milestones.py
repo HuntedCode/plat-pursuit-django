@@ -59,7 +59,7 @@ class Command(BaseCommand):
                 profiles_checked += 1
                 continue
 
-            awarded = check_all_milestones_for_user(
+            awarded, _ = check_all_milestones_for_user(
                 profile=profile,
                 criteria_type='subscription_months',
                 notify_webapp=notify_webapp,

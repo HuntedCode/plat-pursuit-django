@@ -303,6 +303,31 @@ class ScheduledNotification(models.Model):
         db_index=True
     )
 
+    # Email integration
+    send_email = models.BooleanField(
+        default=False,
+        help_text='Also send an email alongside the in-app notification'
+    )
+    email_subject = models.CharField(
+        max_length=255,
+        blank=True,
+        help_text='Email subject line (defaults to notification title if blank)'
+    )
+    email_body_markdown = models.TextField(
+        blank=True,
+        help_text='Markdown content for email body (rendered as HTML)'
+    )
+    email_cta_url = models.URLField(
+        blank=True,
+        max_length=500,
+        help_text='Email CTA button URL (defaults to action_url if blank)'
+    )
+    email_cta_text = models.CharField(
+        max_length=100,
+        blank=True,
+        help_text='Email CTA button text (defaults to action_text if blank)'
+    )
+
     # Tracking
     created_by = models.ForeignKey(
         CustomUser,
@@ -427,6 +452,10 @@ class NotificationLog(models.Model):
     # Was it immediate or scheduled?
     was_scheduled = models.BooleanField(default=False)
 
+    # Email stats (populated when send_email=True on the notification)
+    emails_sent = models.PositiveIntegerField(default=0)
+    emails_suppressed = models.PositiveIntegerField(default=0)
+
     class Meta:
         ordering = ['-sent_at']
         verbose_name = 'Notification Log'
@@ -434,4 +463,5 @@ class NotificationLog(models.Model):
 
     def __str__(self):
         scheduled_text = " (scheduled)" if self.was_scheduled else ""
-        return f"{self.title} - {self.recipient_count} recipients{scheduled_text}"
+        email_text = f" ({self.emails_sent} emails)" if self.emails_sent else ""
+        return f"{self.title} - {self.recipient_count} recipients{scheduled_text}{email_text}"

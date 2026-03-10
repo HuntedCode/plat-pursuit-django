@@ -1,0 +1,201 @@
+{% extends "emails/base_email.html" %}
+
+{% block extra_styles %}
+    <style>
+        .badge-hero {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 12px;
+            padding: 30px;
+            margin: 25px 0;
+            color: #ffffff;
+            text-align: center;
+        }
+
+        .badge-hero .badge-icon {
+            font-size: 42px;
+            margin-bottom: 10px;
+            display: block;
+        }
+
+        .badge-hero h2 {
+            margin: 0 0 10px 0;
+            font-size: 22px;
+            font-weight: 700;
+        }
+
+        .badge-hero p {
+            margin: 0;
+            font-size: 15px;
+            opacity: 0.95;
+            line-height: 1.6;
+        }
+
+        .badge-list {
+            margin: 25px 0;
+        }
+
+        .badge-item {
+            background-color: #f8f9ff;
+            border-radius: 8px;
+            padding: 16px 20px;
+            margin-bottom: 12px;
+            border-left: 4px solid #667eea;
+        }
+
+        .badge-item-name {
+            font-size: 16px;
+            font-weight: 700;
+            color: #333333;
+            margin: 0 0 4px 0;
+        }
+
+        .badge-item-series {
+            font-size: 13px;
+            color: #667eea;
+            font-weight: 600;
+            margin: 0 0 6px 0;
+        }
+
+        .badge-item-tier {
+            display: inline-block;
+            font-size: 12px;
+            font-weight: 600;
+            padding: 2px 10px;
+            border-radius: 12px;
+            color: #ffffff;
+        }
+
+        .tier-bronze { background-color: #cd7f32; }
+        .tier-silver { background-color: #a0a0a0; }
+        .tier-gold { background-color: #daa520; }
+        .tier-platinum { background: linear-gradient(135deg, #667eea, #764ba2); }
+
+        .badge-item-desc {
+            font-size: 14px;
+            color: #555555;
+            margin: 8px 0 0 0;
+            line-height: 1.5;
+        }
+
+        .next-tier-box {
+            background-color: #f0f4ff;
+            border-radius: 8px;
+            padding: 16px 20px;
+            margin: 8px 0 0 0;
+        }
+
+        .next-tier-box p {
+            font-size: 13px;
+            color: #555555;
+            margin: 0;
+        }
+
+        .next-tier-box strong {
+            color: #333333;
+        }
+
+        .progress-bar {
+            background-color: #e0e0e0;
+            border-radius: 6px;
+            height: 8px;
+            margin-top: 8px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            height: 100%;
+            border-radius: 6px;
+        }
+
+        .flavor-text {
+            text-align: center;
+            font-style: italic;
+            color: #777777;
+            font-size: 15px;
+            margin: 30px 0 10px 0;
+            line-height: 1.6;
+        }
+
+        @media only screen and (max-width: 600px) {
+            .badge-hero { padding: 20px 15px; }
+            .badge-item { padding: 12px 15px; }
+        }
+    </style>
+{% endblock %}
+
+{% block title %}You earned new badges!{% endblock %}
+
+{% block header_content %}
+    <h1>Badge{% if badges|length > 1 %}s{% endif %} Earned!</h1>
+    <p>{{ badges|length }} new badge{{ badges|length|pluralize }} added to your collection</p>
+{% endblock %}
+
+{% block content %}
+    <p class="greeting">Hey {{ username }},</p>
+
+    <div class="badge-hero">
+        <span class="badge-icon">&#127942;</span>
+        <h2>
+            {% if badges|length == 1 %}
+                You earned a new badge!
+            {% else %}
+                You earned {{ badges|length }} new badges!
+            {% endif %}
+        </h2>
+        <p>
+            {% if badges|length == 1 %}
+                Your latest sync just unlocked a shiny new badge tier. Here's what you earned:
+            {% else %}
+                Your latest sync just lit up the badge showcase. Here's what you earned:
+            {% endif %}
+        </p>
+    </div>
+
+    <div class="badge-list">
+        {% for badge in badges %}
+            <div class="badge-item">
+                <div class="badge-item-name">{{ badge.badge_name }}</div>
+                {% if badge.badge_series %}
+                    <div class="badge-item-series">{{ badge.badge_series }}</div>
+                {% endif %}
+                <span class="badge-item-tier tier-{{ badge.badge_tier_name|lower }}">{{ badge.badge_tier_name }}</span>
+                {% if badge.badge_description %}
+                    <div class="badge-item-desc">{{ badge.badge_description }}</div>
+                {% endif %}
+                {% if badge.next_tier_progress and not badge.is_max_tier %}
+                    <div class="next-tier-box">
+                        <p>
+                            <strong>Next: {{ badge.next_tier_progress.tier_name }}</strong>
+                            ({{ badge.next_tier_progress.completed_stages }}/{{ badge.next_tier_progress.required_stages }} stages)
+                        </p>
+                        <div class="progress-bar">
+                            <div class="progress-fill" style="width: {{ badge.next_tier_progress.progress_percentage }}%;"></div>
+                        </div>
+                    </div>
+                {% elif badge.is_max_tier %}
+                    <div class="next-tier-box">
+                        <p><strong>Max tier reached!</strong> You have fully mastered this badge.</p>
+                    </div>
+                {% endif %}
+            </div>
+        {% endfor %}
+    </div>
+
+    <div class="cta-container">
+        <a href="{{ badges_url }}" class="cta-button">View Your Badges</a>
+    </div>
+
+    <p class="flavor-text">
+        {% if badges|length == 1 %}
+            Another one for the showcase. Keep hunting!
+        {% else %}
+            {{ badges|length }} badges in one sync? Now that's impressive.
+        {% endif %}
+    </p>
+{% endblock %}
+
+{% block footer_note %}
+    You're receiving this because you have badge emails enabled.<br>
+    <a href="{{ preference_url }}" style="color: #999999; text-decoration: underline;">Manage your email preferences</a>.
+{% endblock %}

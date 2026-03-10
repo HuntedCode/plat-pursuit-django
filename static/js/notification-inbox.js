@@ -461,58 +461,66 @@ class NotificationInboxManager {
                 enhancedContent = '';
         }
 
-        this.detailContent.innerHTML = `
-            <div class="p-6 space-y-4">
-                <!-- Banner Image -->
-                ${bannerHtml}
+        // Admin announcements get a purpose-built layout
+        if (notification.notification_type === 'admin_announcement') {
+            this.detailContent.innerHTML = this.renderAnnouncementLayout(
+                notification, bannerHtml, detailHtml, enhancedContent,
+                actionButton, priorityClass, timeStr, absoluteTime
+            );
+        } else {
+            this.detailContent.innerHTML = `
+                <div class="p-6 space-y-4">
+                    <!-- Banner Image -->
+                    ${bannerHtml}
 
-                <!-- Header -->
-                <div class="flex items-start justify-between gap-4">
-                    <div class="flex items-start gap-3 flex-1">
-                        <div class="text-3xl">${notification.icon}</div>
-                        <div class="flex-1">
-                            <h2 class="text-xl font-bold">${notification.title}</h2>
-                            <div class="flex flex-wrap items-center gap-2 mt-1">
-                                <span class="badge ${priorityClass} badge-sm">${notification.priority}</span>
-                                <span class="text-xs text-base-content/60">${timeStr}</span>
-                                <span class="text-xs text-base-content/40" title="${absoluteTime}">${absoluteTime}</span>
+                    <!-- Header -->
+                    <div class="flex items-start justify-between gap-4">
+                        <div class="flex items-start gap-3 flex-1">
+                            <div class="text-3xl">${notification.icon}</div>
+                            <div class="flex-1">
+                                <h2 class="text-xl font-bold">${notification.title}</h2>
+                                <div class="flex flex-wrap items-center gap-2 mt-1">
+                                    <span class="badge ${priorityClass} badge-sm">${notification.priority}</span>
+                                    <span class="text-xs text-base-content/60">${timeStr}</span>
+                                    <span class="text-xs text-base-content/40" title="${absoluteTime}">${absoluteTime}</span>
+                                </div>
                             </div>
+                        </div>
+
+                        <!-- Delete Button -->
+                        <div class="flex gap-2">
+                            <button class="btn btn-sm btn-ghost btn-circle"
+                                    onclick="window.notificationInbox.deleteNotification(${notification.id})"
+                                    title="Delete">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                </svg>
+                            </button>
                         </div>
                     </div>
 
-                    <!-- Delete Button -->
-                    <div class="flex gap-2">
-                        <button class="btn btn-sm btn-ghost btn-circle"
-                                onclick="window.notificationInbox.deleteNotification(${notification.id})"
-                                title="Delete">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                            </svg>
-                        </button>
+                    <!-- Message -->
+                    <div class="prose prose-sm max-w-none">
+                        <p class="text-base whitespace-pre-wrap">${notification.message}</p>
+                    </div>
+
+                    <!-- Detail Content (new) -->
+                    ${detailHtml}
+
+                    <!-- Enhanced Type-Specific Content -->
+                    ${enhancedContent}
+
+                    <!-- Action Button -->
+                    ${actionButton ? `<div class="pt-2">${actionButton}</div>` : ''}
+
+                    <!-- Type Info Footer -->
+                    <div class="text-xs text-base-content/50 pt-4 border-t border-base-300">
+                        <p>Type: ${notification.notification_type.replace('_', ' ')}</p>
+                        ${notification.read_at ? `<p>Read: ${PlatPursuit.TimeFormatter.relative(notification.read_at)}</p>` : ''}
                     </div>
                 </div>
-
-                <!-- Message -->
-                <div class="prose prose-sm max-w-none">
-                    <p class="text-base whitespace-pre-wrap">${notification.message}</p>
-                </div>
-
-                <!-- Detail Content (new) -->
-                ${detailHtml}
-
-                <!-- Enhanced Type-Specific Content -->
-                ${enhancedContent}
-
-                <!-- Action Button -->
-                ${actionButton ? `<div class="pt-2">${actionButton}</div>` : ''}
-
-                <!-- Type Info Footer -->
-                <div class="text-xs text-base-content/50 pt-4 border-t border-base-300">
-                    <p>Type: ${notification.notification_type.replace('_', ' ')}</p>
-                    ${notification.read_at ? `<p>Read: ${PlatPursuit.TimeFormatter.relative(notification.read_at)}</p>` : ''}
-                </div>
-            </div>
-        `;
+            `;
+        }
     }
 
     renderMarkdown(markdownText) {
@@ -1303,42 +1311,102 @@ class NotificationInboxManager {
     }
 
     /**
-     * Render admin announcement notification detail.
-     * Admin announcements can have sections, action buttons, and banner images
-     * which are already handled by the base renderNotificationDetail method.
-     * This method handles any additional admin-specific metadata.
-     *
-     * @param {Object} metadata - Notification metadata
-     * @returns {string} HTML for admin announcement content
+     * Render the complete layout for admin announcement notifications.
+     * Purpose-built layout with gradient header, styled message card,
+     * and attribution footer for a polished, distinctive look.
      */
-    renderAdminAnnouncementDetail(metadata) {
-        // Admin announcements primarily use sections, banner images, and action buttons
-        // which are already rendered by the main detail method.
-        // This method can render any additional admin-specific content if present.
-        if (!metadata) {
-            return '';
-        }
+    renderAnnouncementLayout(notification, bannerHtml, detailHtml, enhancedContent, actionButton, priorityClass, timeStr, absoluteTime) {
+        const priority = (notification.priority || 'normal').toLowerCase().trim();
+        const isUrgent = priority === 'high' || priority === 'urgent';
 
-        // Check for admin-specific fields that might be in metadata
-        const source = metadata.source || null;
-        const category = metadata.category || null;
-
-        // Only show additional info if we have admin-specific metadata
-        if (!source && !category) {
-            return '';
-        }
+        // Priority-aware accent colors
+        const accentGradient = isUrgent
+            ? 'from-error/15 via-base-200 to-warning/15'
+            : 'from-primary/15 via-base-200 to-secondary/15';
+        const accentBorder = isUrgent ? 'border-error' : 'border-primary';
+        const accentText = isUrgent ? 'text-error' : 'text-primary';
 
         return `
-            <div class="bg-base-200 rounded-lg p-3 mt-4">
-                <div class="flex items-center gap-2 text-xs text-base-content/60">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    <span>Official Announcement</span>
-                    ${category ? `<span class="badge badge-ghost badge-xs">${this.escapeHtml(category)}</span>` : ''}
+            <div class="p-6 space-y-4">
+                <!-- Banner Image -->
+                ${bannerHtml}
+
+                <!-- Announcement Header -->
+                <div class="bg-gradient-to-r ${accentGradient} rounded-xl p-5 border ${accentBorder}/30 relative overflow-hidden">
+                    <!-- Subtle decorative pattern -->
+                    <div class="absolute top-0 right-0 opacity-5 text-[120px] leading-none pointer-events-none select-none" aria-hidden="true">
+                        &#128227;
+                    </div>
+
+                    <div class="flex items-start justify-between gap-4 relative">
+                        <div class="flex items-start gap-4 flex-1">
+                            <!-- Announcement icon in styled circle -->
+                            <div class="w-12 h-12 rounded-xl bg-base-100/80 flex items-center justify-center text-2xl flex-shrink-0 shadow-sm">
+                                ${this.escapeHtml(notification.icon || '📢')}
+                            </div>
+                            <div class="flex-1 min-w-0">
+                                <div class="flex items-center gap-2 mb-1">
+                                    <span class="badge ${accentText} badge-sm badge-outline font-semibold gap-1">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
+                                            <path fill-rule="evenodd" d="M18 3a1 1 0 00-1.447-.894L8.763 6H5a3 3 0 000 6h.28l1.771 5.316A1 1 0 008 18h1a1 1 0 001-1v-4.382l6.553 3.276A1 1 0 0018 15V3z" clip-rule="evenodd"/>
+                                        </svg>
+                                        Official Announcement
+                                    </span>
+                                    ${isUrgent ? `<span class="badge badge-error badge-sm">${priority}</span>` : ''}
+                                </div>
+                                <h2 class="text-xl font-bold leading-tight">${this.escapeHtml(notification.title)}</h2>
+                                <div class="flex items-center gap-2 mt-2 text-xs text-base-content/60">
+                                    <span>PlatPursuit Team</span>
+                                    <span class="text-base-content/30">&#183;</span>
+                                    <span title="${absoluteTime}">${timeStr}</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Delete Button -->
+                        <div class="flex-shrink-0">
+                            <button class="btn btn-sm btn-ghost btn-circle"
+                                    onclick="window.notificationInbox.deleteNotification(${notification.id})"
+                                    title="Delete">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Message Body -->
+                <div class="bg-base-200/50 rounded-xl p-5 border-l-4 ${accentBorder}/40">
+                    <p class="text-base leading-relaxed whitespace-pre-wrap text-base-content/90">${this.escapeHtml(notification.message)}</p>
+                </div>
+
+                <!-- Detail Content (structured sections or legacy markdown) -->
+                ${detailHtml}
+
+                <!-- Action Button -->
+                ${actionButton ? `<div class="flex justify-center pt-2">${actionButton}</div>` : ''}
+
+                <!-- Attribution Footer -->
+                <div class="flex items-center justify-between pt-4 border-t border-base-300">
+                    <div class="flex items-center gap-2 text-xs text-base-content/50">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                            <path fill-rule="evenodd" d="M18 3a1 1 0 00-1.447-.894L8.763 6H5a3 3 0 000 6h.28l1.771 5.316A1 1 0 008 18h1a1 1 0 001-1v-4.382l6.553 3.276A1 1 0 0018 15V3z" clip-rule="evenodd"/>
+                        </svg>
+                        <span>Official Announcement from PlatPursuit</span>
+                    </div>
+                    <span class="text-xs text-base-content/40" title="${absoluteTime}">${absoluteTime}</span>
                 </div>
             </div>
         `;
+    }
+
+    /**
+     * Render admin announcement enhanced content (unused with new layout,
+     * kept for backwards compatibility with the switch statement).
+     */
+    renderAdminAnnouncementDetail(metadata) {
+        return '';
     }
 
     /**

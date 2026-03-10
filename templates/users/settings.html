@@ -232,6 +232,18 @@
                         </div>
                     </div>
                 </div>
+                <!-- Email Preferences -->
+                <div class="divider divider-vertical m-0 mt-2 p-0"></div>
+                <h3 class="text-2xl text-base-content font-semibold italic mb-2">Email Preferences</h3>
+                <div class="flex flex-col border-4 border-base-300 shadow-lg shadow-neutral rounded-box p-4 w-7/8 mx-auto items-center gap-3">
+                    <p class="text-base-content/70 text-center">Control which emails you receive from PlatPursuit, including badge notifications, milestone alerts, weekly digests, and admin announcements.</p>
+                    <a href="{% url 'email_preferences_redirect' %}" class="btn btn-secondary gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                        </svg>
+                        Manage Email Preferences
+                    </a>
+                </div>
             {% else %}
                 <p class="mt-6">No PSN profile linked. <a href="{% url 'link_psn' %}" class="link link-primary">Link now</a>.</p>
             {% endif %}
