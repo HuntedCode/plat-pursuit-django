@@ -167,7 +167,8 @@ class ReviewService:
 
     @staticmethod
     @transaction.atomic
-    def delete_review(review, profile, is_admin=False, moderator=None, reason="", request=None):
+    def delete_review(review, profile, is_admin=False, moderator=None, reason="",
+                      request=None, internal_notes=""):
         """Soft delete a review.
 
         Args:
@@ -177,6 +178,7 @@ class ReviewService:
             moderator: CustomUser performing moderation (for ReviewModerationLog)
             reason: Reason for deletion (for audit trail)
             request: HttpRequest for IP capture
+            internal_notes: Private staff notes (not shown to user)
 
         Returns:
             tuple: (success bool, error_message or None)
@@ -187,7 +189,10 @@ class ReviewService:
         if review.is_deleted:
             return False, "Review is already deleted."
 
-        review.soft_delete(moderator=moderator, reason=reason, request=request)
+        review.soft_delete(
+            moderator=moderator, reason=reason, request=request,
+            internal_notes=internal_notes,
+        )
 
         ReviewService._invalidate_recommendation_cache(
             review.concept, review.concept_trophy_group,

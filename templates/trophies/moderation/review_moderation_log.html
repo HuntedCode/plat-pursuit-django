@@ -1,18 +1,18 @@
 {% extends 'base.html' %}
 {% load static humanize custom_filters %}
 
-{% block title %}Moderation Log{% endblock %}
+{% block title %}Review Moderation Log{% endblock %}
 
 {% block content %}
 <div class="container mx-auto p-4">
     <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-6">
-        <h1 class="text-3xl font-bold mb-4 md:mb-0">Moderation Action Log</h1>
+        <h1 class="text-3xl font-bold mb-4 md:mb-0">Review Moderation Log</h1>
         <div class="flex gap-2">
-            <a href="{% url 'comment_moderation' %}" class="btn btn-secondary btn-sm">
-                ← Back to Dashboard
+            <a href="{% url 'review_moderation' %}" class="btn btn-secondary btn-sm">
+                ← Back to Review Moderation
             </a>
-            <a href="{% url 'review_moderation_log' %}" class="btn btn-outline btn-sm">
-                Review Moderation Log
+            <a href="{% url 'moderation_log' %}" class="btn btn-outline btn-sm">
+                Comment Moderation Log
             </a>
         </div>
     </div>
@@ -37,7 +37,7 @@
     <div class="card bg-base-100 border-2 border-base-300 mb-6">
         <div class="card-body">
             <h3 class="card-title text-lg mb-4">Filters</h3>
-            <form method="get" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <form method="get" class="grid grid-cols-2 lg:grid-cols-3 gap-4">
                 <div class="form-control">
                     <label class="label"><span class="label-text">Moderator</span></label>
                     <select name="moderator" class="select select-bordered">
@@ -72,9 +72,9 @@
                     <input type="date" name="date_to" value="{{ date_to }}" class="input input-bordered">
                 </div>
 
-                <div class="form-control flex-row items-end gap-2 md:col-span-2">
+                <div class="form-control flex-row items-end gap-2 col-span-2">
                     <button type="submit" class="btn btn-primary flex-1">Apply Filters</button>
-                    <a href="{% url 'moderation_log' %}" class="btn btn-ghost">Clear</a>
+                    <a href="{% url 'review_moderation_log' %}" class="btn btn-ghost">Clear</a>
                 </div>
             </form>
         </div>
@@ -88,8 +88,8 @@
                     <th>Timestamp</th>
                     <th>Moderator</th>
                     <th>Action</th>
-                    <th>Comment Author</th>
-                    <th>Comment Preview</th>
+                    <th>Review Author</th>
+                    <th>Review Preview</th>
                     <th>Reason</th>
                     <th>Details</th>
                 </tr>
@@ -112,14 +112,14 @@
                             </div>
                         </td>
                         <td>
-                            {% if log.comment_author %}
-                                {{ log.comment_author.psn_username }}
+                            {% if log.review_author %}
+                                {{ log.review_author.psn_username }}
                             {% else %}
                                 <span class="text-base-content/60">Unknown</span>
                             {% endif %}
                         </td>
                         <td class="max-w-xs truncate text-sm">
-                            {{ log.comment_preview }}
+                            {{ log.review_preview }}
                         </td>
                         <td class="text-sm max-w-xs truncate">{{ log.reason|truncatewords:10 }}</td>
                         <td>
@@ -183,17 +183,15 @@
 </dialog>
 
 <script>
-// Store log data for modal (populated by Django)
 const logData = {
     {% for log in logs %}
         {{ log.id }}: {
             timestamp: "{{ log.timestamp|date:'Y-m-d H:i:s' }}",
             moderator: "{{ log.moderator|moderator_display_name|escapejs }}",
             action: "{{ log.get_action_type_display }}",
-            author: "{{ log.comment_author.psn_username|default:'Unknown' }}",
+            author: "{{ log.review_author.psn_username|default:'Unknown' }}",
             original_body: "{{ log.original_body|escapejs }}",
             concept: "{{ log.concept.unified_title|default:'Unknown' }}",
-            trophy_id: {{ log.trophy_id|default:'null' }},
             reason: "{{ log.reason|escapejs }}",
             internal_notes: "{{ log.internal_notes|default:''|escapejs }}"
         },
@@ -217,19 +215,18 @@ function showDetailsModal(logId) {
         </div>
 
         <div>
-            <h4 class="font-semibold mb-2">Comment Author:</h4>
+            <h4 class="font-semibold mb-2">Review Author:</h4>
             <p>${log.author}</p>
         </div>
 
         <div>
             <h4 class="font-semibold mb-2">Context:</h4>
             <p><strong>Game:</strong> ${log.concept}</p>
-            ${log.trophy_id ? `<p><strong>Trophy ID:</strong> ${log.trophy_id}</p>` : ''}
         </div>
 
         <div>
-            <h4 class="font-semibold mb-2">Original Comment:</h4>
-            <div class="bg-base-200 p-4 rounded">
+            <h4 class="font-semibold mb-2">Original Review:</h4>
+            <div class="bg-base-200 p-4 rounded whitespace-pre-line">
                 ${log.original_body}
             </div>
         </div>

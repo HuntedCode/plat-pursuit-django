@@ -16,8 +16,12 @@ from django.views.generic.edit import FormView
 
 from trophies.mixins import StaffRequiredMixin
 from trophies.services.psn_api_service import PsnApiService
-from ..models import CommentReport, GameFamily, GameFamilyProposal, ModerationLog, Trophy
+from ..models import (
+    CommentReport, GameFamily, GameFamilyProposal, ModerationLog,
+    ReviewModerationLog, ReviewReport, Trophy,
+)
 from ..forms import BadgeCreationForm
+from ..services.review_service import ReviewService
 from trophies.util_modules.cache import redis_client
 
 logger = logging.getLogger("psn_api")
@@ -363,6 +367,232 @@ class ModerationLogView(StaffRequiredMixin, ListView):
         # Stats (single query with conditional aggregation)
         now = timezone.now()
         stats = ModerationLog.objects.aggregate(
+            total_actions=Count('id'),
+            actions_today=Count('id', filter=Q(timestamp__gte=now.date())),
+            actions_this_week=Count('id', filter=Q(timestamp__gte=now - timedelta(days=7))),
+        )
+        context.update(stats)
+
+        return context
+
+
+class ReviewModerationView(StaffRequiredMixin, ListView):
+    """Staff-only review moderation dashboard."""
+    model = ReviewReport
+    template_name = 'trophies/moderation/review_moderation.html'
+    context_object_name = 'reports'
+    paginate_by = 20
+
+    def get_queryset(self):
+        queryset = ReviewReport.objects.select_related(
+            'review',
+            'review__profile',
+            'review__concept',
+            'review__concept_trophy_group',
+            'reporter',
+            'reviewed_by'
+        ).prefetch_related(
+            'review__reports'
+        )
+
+        status_filter = self.request.GET.get('status', 'pending')
+        if status_filter != 'all':
+            queryset = queryset.filter(status=status_filter)
+
+        reason_filter = self.request.GET.get('reason')
+        if reason_filter:
+            queryset = queryset.filter(reason=reason_filter)
+
+        search_query = self.request.GET.get('search')
+        if search_query:
+            queryset = queryset.filter(
+                Q(review__body__icontains=search_query) |
+                Q(reporter__psn_username__icontains=search_query) |
+                Q(details__icontains=search_query)
+            )
+
+        return queryset.order_by('-created_at')
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+
+        status_counts = {
+            row['status']: row['count']
+            for row in ReviewReport.objects.values('status').annotate(count=Count('id'))
+        }
+        context['pending_count'] = status_counts.get('pending', 0)
+        context['reviewed_count'] = status_counts.get('reviewed', 0)
+        context['dismissed_count'] = status_counts.get('dismissed', 0)
+        context['action_taken_count'] = status_counts.get('action_taken', 0)
+
+        context['current_status'] = self.request.GET.get('status', 'pending')
+        context['current_reason'] = self.request.GET.get('reason', '')
+        context['search_query'] = self.request.GET.get('search', '')
+        context['reason_choices'] = ReviewReport.REPORT_REASONS
+
+        context['recent_actions'] = ReviewModerationLog.objects.select_related(
+            'moderator',
+            'review_author'
+        ).order_by('-timestamp')[:10]
+
+        return context
+
+
+class ReviewModerationActionView(StaffRequiredMixin, View):
+    """Handle review moderation actions (delete, dismiss, review)."""
+
+    def post(self, request, report_id):
+        report = get_object_or_404(
+            ReviewReport.objects.select_related(
+                'review', 'review__profile', 'review__concept',
+                'review__concept_trophy_group',
+            ),
+            id=report_id
+        )
+
+        action = request.POST.get('action')
+        reason = request.POST.get('reason', '')
+        internal_notes = request.POST.get('internal_notes', '')
+        review = report.review
+
+        if action == 'delete':
+            if review.is_deleted:
+                messages.info(request, "Review was already deleted. Report marked as action taken.")
+            else:
+                ReviewService.delete_review(
+                    review, profile=None, is_admin=True,
+                    moderator=request.user, reason=reason,
+                    request=request, internal_notes=internal_notes,
+                )
+                messages.success(request, "Review deleted and logged.")
+
+            # Update this report
+            report.status = 'action_taken'
+            report.reviewed_by = request.user
+            report.reviewed_at = timezone.now()
+            report.admin_notes = internal_notes
+            report.save(update_fields=['status', 'reviewed_by', 'reviewed_at', 'admin_notes'])
+
+            # Auto-resolve sibling reports for the same review
+            ReviewReport.objects.filter(
+                review=review, status='pending'
+            ).exclude(id=report.id).update(
+                status='action_taken',
+                reviewed_by=request.user,
+                reviewed_at=timezone.now(),
+                admin_notes=f"Auto-resolved: review deleted via report #{report.id}",
+            )
+
+        elif action == 'dismiss':
+            ReviewModerationLog.objects.create(
+                moderator=request.user,
+                action_type='dismiss_report',
+                review=review,
+                review_id_snapshot=review.id,
+                review_author=review.profile,
+                original_body=review.body,
+                concept=review.concept,
+                related_report=report,
+                reason=reason,
+                internal_notes=internal_notes,
+            )
+
+            report.status = 'dismissed'
+            report.reviewed_by = request.user
+            report.reviewed_at = timezone.now()
+            report.admin_notes = internal_notes
+            report.save(update_fields=['status', 'reviewed_by', 'reviewed_at', 'admin_notes'])
+
+            messages.success(request, "Report dismissed and logged.")
+
+        elif action == 'review':
+            ReviewModerationLog.objects.create(
+                moderator=request.user,
+                action_type='report_reviewed',
+                review=review,
+                review_id_snapshot=review.id,
+                review_author=review.profile,
+                original_body=review.body,
+                concept=review.concept,
+                related_report=report,
+                reason=reason,
+                internal_notes=internal_notes,
+            )
+
+            report.status = 'reviewed'
+            report.reviewed_by = request.user
+            report.reviewed_at = timezone.now()
+            report.admin_notes = internal_notes
+            report.save(update_fields=['status', 'reviewed_by', 'reviewed_at', 'admin_notes'])
+
+            messages.info(request, "Report marked as reviewed.")
+
+        else:
+            messages.error(request, f"Unknown action: {action}")
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                return JsonResponse({'success': False, 'error': f'Unknown action: {action}'})
+            return redirect('review_moderation')
+
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return JsonResponse({'success': True, 'action': action})
+
+        return redirect('review_moderation')
+
+
+class ReviewModerationLogView(StaffRequiredMixin, ListView):
+    """View complete review moderation action history."""
+    model = ReviewModerationLog
+    template_name = 'trophies/moderation/review_moderation_log.html'
+    context_object_name = 'logs'
+    paginate_by = 50
+
+    def get_queryset(self):
+        queryset = ReviewModerationLog.objects.select_related(
+            'moderator',
+            'review_author',
+            'concept',
+            'related_report'
+        )
+
+        moderator_filter = self.request.GET.get('moderator')
+        if moderator_filter:
+            queryset = queryset.filter(moderator_id=moderator_filter)
+
+        action_filter = self.request.GET.get('action_type')
+        if action_filter:
+            queryset = queryset.filter(action_type=action_filter)
+
+        author_filter = self.request.GET.get('author')
+        if author_filter:
+            queryset = queryset.filter(review_author_id=author_filter)
+
+        date_from = self.request.GET.get('date_from')
+        date_to = self.request.GET.get('date_to')
+        if date_from:
+            queryset = queryset.filter(timestamp__gte=date_from)
+        if date_to:
+            queryset = queryset.filter(timestamp__lte=date_to)
+
+        return queryset.order_by('-timestamp')
+
+    def get_context_data(self, **kwargs):
+        from users.models import CustomUser
+
+        context = super().get_context_data(**kwargs)
+
+        context['action_type_choices'] = ReviewModerationLog.ACTION_TYPES
+        context['moderators'] = CustomUser.objects.filter(
+            is_staff=True
+        ).order_by('username')
+
+        context['current_moderator'] = self.request.GET.get('moderator', '')
+        context['current_action_type'] = self.request.GET.get('action_type', '')
+        context['current_author'] = self.request.GET.get('author', '')
+        context['date_from'] = self.request.GET.get('date_from', '')
+        context['date_to'] = self.request.GET.get('date_to', '')
+
+        now = timezone.now()
+        stats = ReviewModerationLog.objects.aggregate(
             total_actions=Count('id'),
             actions_today=Count('id', filter=Q(timestamp__gte=now.date())),
             actions_this_week=Count('id', filter=Q(timestamp__gte=now - timedelta(days=7))),

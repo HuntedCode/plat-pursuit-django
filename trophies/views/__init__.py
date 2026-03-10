@@ -10,7 +10,11 @@ from .profile_views import ProfilesListView, ProfileDetailView, LinkPSNView, Pro
 from .badge_views import BadgeListView, BadgeDetailView, BadgeLeaderboardsView, OverallBadgeLeaderboardsView, MilestoneListView
 from .checklist_views import ChecklistDetailView, ChecklistCreateView, ChecklistEditView, MyChecklistsView, MyShareablesView, BrowseGuidesView
 from .sync_views import ProfileSyncStatusView, TriggerSyncView, SearchSyncProfileView, AddSyncStatusView
-from .admin_views import TokenMonitoringView, BadgeCreationView, CommentModerationView, ModerationActionView, ModerationLogView, GameFamilyManagementView
+from .admin_views import (
+    TokenMonitoringView, BadgeCreationView, CommentModerationView, ModerationActionView,
+    ModerationLogView, ReviewModerationView, ReviewModerationActionView,
+    ReviewModerationLogView, GameFamilyManagementView,
+)
 from .misc_views import SearchView
 from .list_views import BrowseListsView, GameListDetailView, GameListEditView, GameListCreateView, MyListsView
 from .challenge_views import (
@@ -39,7 +43,7 @@ __all__ = [
     'ProfileSyncStatusView', 'TriggerSyncView', 'SearchSyncProfileView', 'AddSyncStatusView',
     # Admin views
     'TokenMonitoringView', 'BadgeCreationView', 'CommentModerationView', 'ModerationActionView', 'ModerationLogView',
-    'GameFamilyManagementView',
+    'ReviewModerationView', 'ReviewModerationActionView', 'ReviewModerationLogView', 'GameFamilyManagementView',
     # Misc views
     'SearchView',
     # List views

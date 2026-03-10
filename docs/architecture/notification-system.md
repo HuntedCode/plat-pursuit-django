@@ -148,8 +148,8 @@ Captures a snapshot of what was sent: notification_type, title, message, detail,
 | `subscription_updated` | Subscription change | Created externally | Plan change notification |
 | `discord_verified` | Profile post_save (is_discord_verified flip) | `notify_discord_linked` signal | Only on False->True transition |
 | `challenge_completed` | Challenge completion | Created externally | A-Z or Calendar challenge |
-| `review_reply` | Review reply received | Created externally | Community reviews system |
-| `review_milestone` | Review count milestone | Created externally | Community reviews system |
+| `review_reply` | Review reply received | `ReviewService.create_reply()` | Notifies review author when someone replies |
+| `review_milestone` | Helpful vote threshold hit | `ReviewService._check_helpful_milestones()` | Per-review: fires at 5/10/25/50 helpful votes |
 | `admin_announcement` | Staff admin panel | ScheduledNotificationService | Bulk targeted delivery |
 | `system_alert` | Staff admin panel | ScheduledNotificationService | Urgent system messages |
 | `payment_failed` | Stripe/PayPal webhook | Created externally | Subscription payment failure |

@@ -2,7 +2,7 @@
 
 A Steam-inspired community review system for PlatPursuit. Users can write thumbs-up/thumbs-down reviews with markdown text, vote reviews as helpful/funny, reply to reviews, and rate DLC packs independently. The system spans three pages: a discovery landing at `/reviews/`, per-game detail pages at `/reviews/<slug>/`, and a Rate My Games wizard at `/reviews/rate-my-games/`.
 
-**Status**: Phases 1-5 complete (models, services, management commands, API views, page views + templates). Phase 6 (admin moderation) is next. Currently staff-only gated via `StaffRequiredMixin` for testing.
+**Status**: All phases complete (models, services, management commands, API views, page views + templates, admin moderation). Currently staff-only gated via `StaffRequiredMixin` for testing; remove when ready to go public.
 
 ## Architecture Overview
 
@@ -35,10 +35,9 @@ The review feed uses **client-side rendering** from JSON API responses (not serv
 | `templates/trophies/rate_my_games.html` | Rate My Games wizard template |
 | `templates/trophies/partials/reviews/` | 8 partial templates (header, tabs, banner, ratings, form, your review, feed, trophy strip, user rating panel) |
 
-### Files To Create (Phase 6+)
-| File | Purpose |
-|------|---------|
-| `trophies/views/admin_views.py` | Review moderation views (add to existing) |
+| `trophies/views/admin_views.py` | `ReviewModerationView`, `ReviewModerationActionView`, `ReviewModerationLogView` |
+| `templates/trophies/moderation/review_moderation.html` | Review moderation dashboard |
+| `templates/trophies/moderation/review_moderation_log.html` | Review moderation action log |
 
 ## Data Model
 
@@ -71,6 +70,8 @@ The review feed uses **client-side rendering** from JSON API responses (not serv
 
 ### ReviewReport / ReviewModerationLog
 - Follow existing `CommentReport` / `ModerationLog` patterns
+- `ReviewModerationLog` includes `internal_notes` (private staff notes) and `ip_address` fields
+- When a review is deleted via moderation, all other pending reports for that review are auto-resolved to `action_taken`
 
 ### UserConceptRating Extension
 - Added nullable FK to `ConceptTrophyGroup` for DLC-specific ratings
@@ -176,6 +177,26 @@ All three page views are currently gated behind `StaffRequiredMixin` for testing
 - [Notification System](../architecture/notification-system.md): `review_reply` and `review_milestone` types
 - [Comment System](comment-system.md): ReviewService follows CommentService patterns (CRUD, voting, reporting, sanitization)
 - [Badge System](../architecture/badge-system.md): Recommendation stats cached at `review:recommend:{concept_id}:{group_id}` (30min TTL)
+
+## Admin Moderation (Phase 6)
+
+Three staff-only views mirror the comment moderation system:
+
+| Route | View | Purpose |
+|-------|------|---------|
+| `/staff/review-moderation/` | `ReviewModerationView` | Dashboard with pending reports, status tabs, search/filter |
+| `/staff/review-moderation/action/<report_id>/` | `ReviewModerationActionView` | POST handler for delete/dismiss/review actions |
+| `/staff/review-moderation/log/` | `ReviewModerationLogView` | Full audit log with moderator/action/date filters |
+
+### Moderation Actions
+- **Delete Review**: Calls `ReviewService.delete_review()` (soft delete + cache invalidation + milestone recheck). Auto-resolves all sibling pending reports for the same review.
+- **Dismiss Report**: Creates `ReviewModerationLog` entry, marks report as dismissed.
+- **Mark Reviewed**: Creates `ReviewModerationLog` entry, marks report as reviewed (no action on the review itself).
+
+All actions record `reason` and optional `internal_notes` (staff-only, not visible to users).
+
+### Cross-links
+Comment and review moderation pages cross-link to each other via header buttons.
 
 ## Gotchas and Pitfalls
 

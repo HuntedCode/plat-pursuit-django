@@ -2176,13 +2176,14 @@ class Review(models.Model):
         """Returns '[deleted]' if soft-deleted, else actual body."""
         return '[deleted]' if self.is_deleted else self.body
 
-    def soft_delete(self, moderator=None, reason="", request=None):
+    def soft_delete(self, moderator=None, reason="", request=None, internal_notes=""):
         """Soft delete preserving thread structure and logging to ReviewModerationLog.
 
         Args:
             moderator: CustomUser performing deletion (None = user self-delete)
             reason: Reason for deletion (for audit trail)
             request: HttpRequest object to capture IP address
+            internal_notes: Private staff notes (not shown to user)
         """
         original_body = self.body
         self.is_deleted = True
@@ -2207,6 +2208,7 @@ class Review(models.Model):
                 original_body=original_body,
                 concept=self.concept,
                 reason=reason,
+                internal_notes=internal_notes,
                 ip_address=ip_address,
             )
 
@@ -2358,6 +2360,10 @@ class ReviewModerationLog(models.Model):
         Concept, on_delete=models.SET_NULL, null=True
     )
     reason = models.TextField(blank=True, help_text="Moderator's reason for action")
+    internal_notes = models.TextField(
+        blank=True,
+        help_text="Private staff notes (not shown to user)"
+    )
     ip_address = models.GenericIPAddressField(
         null=True, blank=True,
         help_text="IP address of review author at time of action"
