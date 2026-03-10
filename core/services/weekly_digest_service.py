@@ -1,8 +1,9 @@
 """
-Weekly Digest Service: collects personalized data for the weekly digest email.
+Weekly Digest Service: collects data for the "This Week in PlatPursuit" newsletter.
 
-Follows the same static/classmethod pattern as MonthlyRecapService.
-No persistent model: uses EmailLog for deduplication.
+Community-focused email with site-wide stats, top platted games, review of the
+week, and condensed personal stats. Follows the same static/classmethod pattern
+as MonthlyRecapService. No persistent model: uses EmailLog for deduplication.
 """
 import re
 import logging
@@ -11,7 +12,6 @@ from datetime import datetime, timedelta
 
 from django.conf import settings
 from django.db.models import Count, Q
-from django.db.models.functions import TruncDate
 from django.utils import timezone
 
 from trophies.services.monthly_recap_service import MonthlyRecapService
@@ -21,11 +21,11 @@ logger = logging.getLogger(__name__)
 
 class WeeklyDigestService:
     """
-    Collects all data needed for a user's weekly digest email.
+    Collects all data needed for the "This Week in PlatPursuit" newsletter.
 
-    Data sources: EarnedTrophy, ProfileGame, Challenge (+ slot tables),
-    UserBadge, UserBadgeProgress, Review. Community spotlight is fetched
-    once per batch and shared across all recipients.
+    Community data (site-wide stats, top platted games, review of the week)
+    is fetched once per batch and shared across all recipients. Personal data
+    (trophy count, challenges, badges) is fetched per user.
     """
 
     @staticmethod
@@ -81,61 +81,6 @@ class WeeklyDigestService:
             'gold': counts['gold'] or 0,
             'platinum': counts['platinum'] or 0,
         }
-
-    @classmethod
-    def get_platinums_earned(cls, profile, week_start, week_end, user_tz=None):
-        """
-        Detailed data for platinums earned this week.
-
-        Returns: list of {game_name, game_image, earned_date} (max 10).
-        """
-        from trophies.models import EarnedTrophy
-
-        tz = user_tz or pytz.UTC
-
-        platinums = EarnedTrophy.objects.filter(
-            profile=profile,
-            earned=True,
-            trophy__trophy_type='platinum',
-            earned_date_time__gte=week_start,
-            earned_date_time__lt=week_end,
-        ).select_related('trophy', 'trophy__game').order_by('earned_date_time')[:10]
-
-        result = []
-        for earned in platinums:
-            game = earned.trophy.game
-            local_dt = earned.earned_date_time.astimezone(tz) if earned.earned_date_time else None
-            result.append({
-                'game_name': game.title_name,
-                'game_image': game.title_image or game.title_icon_url or '',
-                'earned_date': local_dt.strftime('%b %d') if local_dt else '',
-            })
-        return result
-
-    @classmethod
-    def get_games_started(cls, profile, week_start, week_end):
-        """Count of games first played this week."""
-        from trophies.models import ProfileGame
-
-        return ProfileGame.objects.filter(
-            profile=profile,
-            first_played_date_time__gte=week_start,
-            first_played_date_time__lt=week_end,
-        ).count()
-
-    @classmethod
-    def get_active_days(cls, profile, week_start, week_end):
-        """Count of distinct days with at least one trophy earned."""
-        from trophies.models import EarnedTrophy
-
-        return EarnedTrophy.objects.filter(
-            profile=profile,
-            earned=True,
-            earned_date_time__gte=week_start,
-            earned_date_time__lt=week_end,
-        ).annotate(
-            day=TruncDate('earned_date_time')
-        ).values('day').distinct().count()
 
     @classmethod
     def get_challenge_progress(cls, profile, week_start, week_end):
@@ -211,15 +156,10 @@ class WeeklyDigestService:
         badges_earned = []
         for ub in earned_this_week:
             badge = ub.badge
-            try:
-                image_url = badge.get_badge_layers().get('main', '')
-            except Exception:
-                image_url = ''
             tier_map = {1: 'Bronze', 2: 'Silver', 3: 'Gold', 4: 'Platinum'}
             badges_earned.append({
                 'name': badge.effective_display_series or badge.name,
                 'tier_name': tier_map.get(badge.tier, 'Bronze'),
-                'image_url': image_url,
             })
 
         # Closest badge to earning (tier 1, not yet earned, has progress)
@@ -242,16 +182,11 @@ class WeeklyDigestService:
             required = badge.required_stages if badge.required_stages > 0 else 1
             progress_pct = min(100, int((prog.completed_concepts / required) * 100))
             if progress_pct >= 1:
-                try:
-                    image_url = badge.get_badge_layers().get('main', '')
-                except Exception:
-                    image_url = ''
                 closest_badge = {
                     'name': badge.effective_display_series or badge.name,
                     'progress_pct': progress_pct,
                     'completed': prog.completed_concepts,
                     'required': required,
-                    'image_url': image_url,
                 }
                 break  # Only need the closest one
 
@@ -261,15 +196,85 @@ class WeeklyDigestService:
         }
 
     @classmethod
-    def get_community_spotlight(cls, week_start, week_end):
+    def get_community_data(cls, week_start, week_end):
         """
-        Community data for the digest. Called ONCE per batch, not per user.
+        Community data for the newsletter. Called ONCE per batch, not per user.
 
-        Returns: {top_review: {...} or None, site_stats: {...}}
+        Returns: {
+            top_review: {...} or None,
+            site_stats: {total_trophies, total_platinums, total_reviews,
+                         active_hunters, total_badges, new_signups},
+            top_platted_games: [{game_name, game_image, game_slug, plat_count}, ...],
+        }
         """
-        from trophies.models import EarnedTrophy, Review
+        from trophies.models import EarnedTrophy, Review, Profile
 
-        # Top review of the week by helpful count
+        # ── Site-wide trophy stats ──
+        trophy_stats = EarnedTrophy.objects.filter(
+            earned=True,
+            earned_date_time__gte=week_start,
+            earned_date_time__lt=week_end,
+        ).aggregate(
+            total_trophies=Count('id'),
+            total_platinums=Count('id', filter=Q(trophy__trophy_type='platinum')),
+        )
+
+        # ── Active hunters (distinct profiles with trophy activity) ──
+        active_hunters = EarnedTrophy.objects.filter(
+            earned=True,
+            earned_date_time__gte=week_start,
+            earned_date_time__lt=week_end,
+        ).values('profile_id').distinct().count()
+
+        # ── Total reviews this week ──
+        total_reviews = Review.objects.filter(
+            is_deleted=False,
+            created_at__gte=week_start,
+            created_at__lt=week_end,
+        ).count()
+
+        # ── New signups (linked profiles) ──
+        new_signups = Profile.objects.filter(
+            is_linked=True,
+            created_at__gte=week_start,
+            created_at__lt=week_end,
+        ).count()
+
+        site_stats = {
+            'total_trophies': trophy_stats['total_trophies'] or 0,
+            'total_platinums': trophy_stats['total_platinums'] or 0,
+            'total_reviews': total_reviews,
+            'active_hunters': active_hunters,
+            'new_signups': new_signups,
+        }
+
+        # ── Top 5 most-platted games this week ──
+        top_platted_qs = EarnedTrophy.objects.filter(
+            earned=True,
+            trophy__trophy_type='platinum',
+            earned_date_time__gte=week_start,
+            earned_date_time__lt=week_end,
+            trophy__game__concept__isnull=False,
+        ).values(
+            'trophy__game__concept_id',
+            'trophy__game__concept__unified_title',
+            'trophy__game__concept__concept_icon_url',
+            'trophy__game__concept__slug',
+        ).annotate(
+            plat_count=Count('id'),
+        ).order_by('-plat_count')[:5]
+
+        top_platted_games = [
+            {
+                'game_name': row['trophy__game__concept__unified_title'] or 'Unknown Game',
+                'game_image': row['trophy__game__concept__concept_icon_url'] or '',
+                'game_slug': row['trophy__game__concept__slug'] or '',
+                'plat_count': row['plat_count'],
+            }
+            for row in top_platted_qs
+        ]
+
+        # ── Top review of the week by helpful count ──
         top_review_obj = Review.objects.filter(
             is_deleted=False,
             created_at__gte=week_start,
@@ -303,72 +308,52 @@ class WeeklyDigestService:
                 'recommended': top_review_obj.recommended,
             }
 
-        # Site-wide stats for the week
-        trophy_stats = EarnedTrophy.objects.filter(
-            earned=True,
-            earned_date_time__gte=week_start,
-            earned_date_time__lt=week_end,
-        ).aggregate(
-            total_trophies=Count('id'),
-            total_platinums=Count('id', filter=Q(trophy__trophy_type='platinum')),
-        )
-
-        total_reviews = Review.objects.filter(
-            is_deleted=False,
-            created_at__gte=week_start,
-            created_at__lt=week_end,
-        ).count()
-
-        site_stats = {
-            'total_trophies': trophy_stats['total_trophies'] or 0,
-            'total_platinums': trophy_stats['total_platinums'] or 0,
-            'total_reviews': total_reviews,
-        }
-
         return {
             'top_review': top_review,
             'site_stats': site_stats,
+            'top_platted_games': top_platted_games,
         }
 
     @classmethod
     def build_digest_data(cls, profile, week_start, week_end):
         """
-        Collect all digest data for a single profile.
+        Collect personal digest data for a single profile.
 
-        Returns a dict with all personal stats for the week.
+        Returns a dict with trophy stats, challenges, and badge updates.
+        Intentionally lightweight: deep personal stats live in the monthly recap.
         """
-        user_tz = MonthlyRecapService._resolve_user_tz(profile)
-
         trophy_stats = cls.get_trophy_stats(profile, week_start, week_end)
-        platinums = cls.get_platinums_earned(profile, week_start, week_end, user_tz)
-        games_started = cls.get_games_started(profile, week_start, week_end)
-        active_days = cls.get_active_days(profile, week_start, week_end)
         challenges = cls.get_challenge_progress(profile, week_start, week_end)
         badge_updates = cls.get_badge_updates(profile, week_start, week_end)
 
         return {
             'trophy_stats': trophy_stats,
-            'platinums': platinums,
-            'games_started': games_started,
-            'active_days': active_days,
             'challenges': challenges,
             'badge_updates': badge_updates,
         }
 
     @staticmethod
-    def should_suppress(digest_data):
+    def should_suppress(digest_data, community_data):
         """
-        Determine if the digest should be suppressed (nothing to show).
+        Determine if the digest should be suppressed.
 
-        Suppresses when ALL are true:
-        - Zero trophies earned
-        - No active challenges
-        - No badges earned this week
-        - No closest badge to show
+        The newsletter is community-focused, so it has value even when the user
+        had a quiet week. Only suppress if the community itself had essentially
+        zero activity (e.g., site downtime).
         """
+        site_stats = community_data.get('site_stats', {})
+        community_has_content = (
+            site_stats.get('total_trophies', 0) > 0
+            or site_stats.get('total_reviews', 0) > 0
+            or len(community_data.get('top_platted_games', [])) > 0
+        )
+
+        if community_has_content:
+            return False  # Community content exists, always send
+
+        # Community had nothing; fall back to personal check
         trophy_stats = digest_data['trophy_stats']
         badge_updates = digest_data['badge_updates']
-
         return (
             trophy_stats['total'] == 0
             and len(digest_data['challenges']) == 0
@@ -384,7 +369,7 @@ class WeeklyDigestService:
         Args:
             profile: Profile instance (with user)
             digest_data: Output of build_digest_data()
-            community_data: Output of get_community_spotlight() (shared)
+            community_data: Output of get_community_data() (shared)
 
         Returns:
             dict with all template context variables.
@@ -404,7 +389,20 @@ class WeeklyDigestService:
 
         trophy_stats = digest_data['trophy_stats']
         badge_updates = digest_data['badge_updates']
+        site_stats = community_data.get('site_stats', {})
         top_review = community_data.get('top_review')
+
+        # Personal contribution percentage
+        community_total = site_stats.get('total_trophies', 0)
+        user_total = trophy_stats['total']
+
+        contribution_pct = None
+        if community_total > 0 and user_total > 0:
+            pct = round((user_total / community_total) * 100, 1)
+            if pct < 0.1:
+                contribution_pct = '<0.1'
+            else:
+                contribution_pct = str(pct)
 
         # Build preference URL
         try:
@@ -418,36 +416,37 @@ class WeeklyDigestService:
         if top_review and top_review.get('game_slug'):
             review_url = f"{settings.SITE_URL}/reviews/{top_review['game_slug']}/"
 
-        return {
-            'username': profile.display_psn_username or profile.psn_username,
-            'week_start_display': week_start_display,
-            'week_end_display': week_end_display,
-            # Trophy stats
-            'total_trophies': trophy_stats['total'],
-            'bronze_count': trophy_stats['bronze'],
-            'silver_count': trophy_stats['silver'],
-            'gold_count': trophy_stats['gold'],
-            'platinum_count': trophy_stats['platinum'],
-            'active_days': digest_data['active_days'],
-            'games_started': digest_data['games_started'],
-            # Platinums
-            'platinums_earned': digest_data['platinums'],
-            'has_platinums': len(digest_data['platinums']) > 0,
-            # Challenges
+        # Condensed personal section
+        your_week = {
+            'total_trophies': user_total,
+            'has_activity': user_total > 0,
+            'contribution_pct': contribution_pct,
+            'platinums_count': trophy_stats['platinum'],
             'challenges': digest_data['challenges'],
             'has_challenges': len(digest_data['challenges']) > 0,
-            # Badges
             'badges_earned': badge_updates['badges_earned'],
             'has_badges_earned': len(badge_updates['badges_earned']) > 0,
             'closest_badge': badge_updates['closest_badge'],
             'has_closest_badge': badge_updates['closest_badge'] is not None,
+        }
+
+        return {
+            # Identity
+            'username': profile.display_psn_username or profile.psn_username,
+            'week_start_display': week_start_display,
+            'week_end_display': week_end_display,
             # Community
+            'site_stats': site_stats,
+            'top_platted_games': community_data.get('top_platted_games', []),
+            'has_top_platted_games': len(community_data.get('top_platted_games', [])) > 0,
             'top_review': top_review,
             'has_top_review': top_review is not None,
             'review_url': review_url,
-            'site_stats': community_data.get('site_stats', {}),
+            # Personal
+            'your_week': your_week,
             # Links
             'profile_url': f"{settings.SITE_URL}/profiles/{profile.psn_username}/",
+            'reviews_url': f"{settings.SITE_URL}/reviews/",
             'site_url': settings.SITE_URL,
             'preference_url': preference_url,
         }

@@ -59,7 +59,7 @@ PlatPursuit has **58 custom management commands** spread across 4 Django apps: `
 | `populate_title_ids` | Populate TitleID table from external PlayStation Titles GitHub repository (PS4 + PS5 TSV files). | (none) | `python manage.py populate_title_ids` |
 | `match_game_families` | Find and group related Concepts into GameFamily records using name-based and trophy-based matching algorithms. | `--dry-run`, `--auto-only`, `--verbose`, `--diagnose <concept_id>`, `--top` (default: 10) | `python manage.py match_game_families --dry-run --verbose` |
 | `backfill_guide_view_counts` | Reconcile `Checklist.view_count` from actual PageView records after the `page_type` rename from `checklist` to `guide`. | `--dry-run` | `python manage.py backfill_guide_view_counts` |
-| `send_weekly_digest` | Send personalized weekly digest emails covering the previous week's trophy activity, challenge progress, badge updates, and community spotlight. | `--dry-run`, `--profile-id`, `--force`, `--batch-size` (default: 100) | `python manage.py send_weekly_digest --dry-run` |
+| `send_weekly_digest` | Send "This Week in PlatPursuit" community newsletter with site-wide stats, top platted games, review of the week, and condensed personal stats. Community data fetched once per batch. Only suppressed if the community had zero activity. | `--dry-run`, `--profile-id`, `--force`, `--batch-size` (default: 100) | `python manage.py send_weekly_digest --dry-run` |
 | `test_email_system` | Send test emails for any template to verify email delivery. Supports 17+ email template previews. | `recipient_email` (positional, required), `--recap-preview`, `--verification-preview`, `--password-reset-preview`, `--payment-failed-preview`, `--payment-failed-final-preview`, `--cancelled-preview`, `--welcome-preview`, `--payment-succeeded-preview`, `--payment-action-required-preview`, `--donation-receipt-preview`, `--badge-claim-preview`, `--artwork-complete-preview`, `--badge-earned-preview`, `--milestone-preview`, `--free-welcome-preview`, `--broadcast-preview`, `--weekly-digest-preview` | `python manage.py test_email_system your@email.com --recap-preview` |
 | `update_leaderboards` | Recompute and cache all badge leaderboards: per-series earners, per-series progress, total progress, total XP, and community series XP. | (none) | `python manage.py update_leaderboards` |
 | `lock_shovelware` | Lock or unlock a game's shovelware status. Propagates to all games sharing the same concept. | `np_communication_id` (positional, required), `--flag`, `--clear`, `--unlock` (mutually exclusive, required) | `python manage.py lock_shovelware NPWR12345_00 --flag` |
@@ -103,7 +103,7 @@ These commands run on automated schedules. See your hosting provider's cron conf
 | `cleanup_old_analytics` | Weekly or monthly | GDPR cleanup of old session/IP data |
 | `generate_monthly_recaps` | 3rd of month, 00:05 UTC | Generate and finalize previous month's recaps |
 | `send_monthly_recap_emails` | 3rd of month, 06:00 UTC | Send recap emails + in-app notifications |
-| `send_weekly_digest` | Monday 08:00 UTC | Send personalized weekly digest emails |
+| `send_weekly_digest` | Monday 08:00 UTC | Send "This Week in PlatPursuit" community newsletter |
 | `populate_title_ids` | Daily or weekly | Sync TitleID table from GitHub |
 | `match_game_families` | Daily | Find and group related Concepts |
 | `update_shovelware` | Daily or weekly | Rebuild shovelware detection flags |

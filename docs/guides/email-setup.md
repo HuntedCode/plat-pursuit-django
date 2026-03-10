@@ -72,7 +72,7 @@ Users can opt out of emails via token-based preference URLs. `EmailPreferenceSer
 | Type | Template | Trigger | Preference Gate |
 |------|----------|---------|-----------------|
 | `monthly_recap` | `emails/monthly_recap.html` | Cron: `send_monthly_recap_emails` | `monthly_recap` |
-| `weekly_digest` | `emails/weekly_digest.html` | Cron: `send_weekly_digest` (Monday 08:00 UTC) | `weekly_digest` |
+| `weekly_digest` | `emails/weekly_digest.html` | Cron: `send_weekly_digest` (Monday 08:00 UTC). Community-focused "This Week in PlatPursuit" newsletter. | `weekly_digest` |
 | `badge_earned` | `emails/badge_earned.html` | Sync: `DeferredNotificationService._flush_profile_badges()` | `badge_notifications` |
 | `milestone_achieved` | `emails/milestone_achieved.html` | Sync: `send_consolidated_milestone_email()` in signals.py | `milestone_notifications` |
 | `welcome` | `emails/welcome.html` | Verification: `VerificationService.link_profile_to_user()` | None (transactional) |

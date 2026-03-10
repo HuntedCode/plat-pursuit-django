@@ -129,11 +129,11 @@ PlatPursuit uses **Render Cron Jobs** to run scheduled management commands. Each
 
 - **Schedule**: Monday at 08:00 UTC
 - **Command**: `python manage.py send_weekly_digest`
-- **What it does**: Sends personalized weekly digest emails to all linked profiles summarizing their previous week's trophy activity. Covers: trophy stats (total, by type), platinum showcase, active challenge progress with weekly deltas, badge updates (earned + closest to earning), and a community spotlight (top review + site-wide stats). Community data is pre-fetched once per batch to avoid redundant queries.
+- **What it does**: Sends the "This Week in PlatPursuit" community newsletter to all linked profiles. Community-focused content: site-wide stats (trophies, platinums, active hunters, reviews, new signups), top 5 most-platted games, review of the week. Condensed personal section: trophy contribution with percentage, challenge progress with weekly deltas, badge updates. Community data is pre-fetched once per batch to avoid redundant queries.
 - **Dependencies**: None. Reads trophy, challenge, badge, and review data directly from the database.
 - **Idempotency**: Safe to re-run. Uses `EmailLog` deduplication with a 6-day window. Profiles that already received a digest within the past 6 days are skipped. Use `--force` to bypass the dedup check.
 - **Failure impact**: Users don't receive their weekly digest. No data loss. Can be retried on Tuesday by re-running the command.
-- **Smart suppression**: Profiles with zero trophy activity, no active challenges, no badges earned, and no closest badge are automatically skipped (no email sent). This prevents empty/useless digest emails.
+- **Smart suppression**: Only suppressed if the community itself had zero activity (e.g., site downtime). The newsletter is community-focused, so it has value even when an individual user had a quiet week.
 
 ### send_monthly_recap_emails
 

@@ -1,8 +1,8 @@
 """
-Management command to send weekly digest emails to users.
+Management command to send "This Week in PlatPursuit" community newsletter.
 
-Sends personalized weekly digest emails covering trophy stats, challenge progress,
-badge updates, and a community spotlight. Uses EmailLog for deduplication (no
+Community-focused weekly email with site-wide stats, top platted games, review of
+the week, and condensed personal stats. Uses EmailLog for deduplication (no
 dedicated model).
 
 Designed to run via Render cron every Monday at 08:00 UTC.
@@ -19,7 +19,7 @@ Requirements:
     - User must have an email address
     - User hasn't opted out of weekly_digest emails (EmailPreferenceService)
     - User hasn't already received a digest this week (EmailLog dedup, unless --force)
-    - User had some activity or has active challenges/badge progress (smart suppression)
+    - Community had some activity (only suppressed if site had zero activity)
 """
 import logging
 from datetime import timedelta
@@ -38,7 +38,7 @@ logger = logging.getLogger(__name__)
 
 
 class Command(BaseCommand):
-    help = 'Send weekly digest emails to all linked users'
+    help = 'Send "This Week in PlatPursuit" community newsletter to all linked users'
 
     def add_arguments(self, parser):
         parser.add_argument(
@@ -70,22 +70,24 @@ class Command(BaseCommand):
         batch_size = options.get('batch_size', 100)
 
         self.stdout.write("=" * 70)
-        self.stdout.write("Weekly Digest Email Sender")
+        self.stdout.write("This Week in PlatPursuit")
         self.stdout.write("=" * 70)
 
         if dry_run:
             self.stdout.write(self.style.WARNING("DRY RUN MODE: No emails will be sent"))
 
         # Pre-fetch community data once (same for all users)
-        self.stdout.write("\nFetching community spotlight data...")
+        self.stdout.write("\nFetching community data...")
         # Use a wide UTC window for community data (covers all timezones)
         utc_week_start, utc_week_end = WeeklyDigestService.get_week_date_range()
-        community_data = WeeklyDigestService.get_community_spotlight(
+        community_data = WeeklyDigestService.get_community_data(
             utc_week_start, utc_week_end,
         )
 
         top_review = community_data.get('top_review')
         site_stats = community_data.get('site_stats', {})
+        top_games = community_data.get('top_platted_games', [])
+
         if top_review:
             self.stdout.write(
                 f"  Top review: \"{top_review['game_name']}\" by {top_review['author_username']} "
@@ -96,8 +98,11 @@ class Command(BaseCommand):
         self.stdout.write(
             f"  Site stats: {site_stats.get('total_trophies', 0)} trophies, "
             f"{site_stats.get('total_platinums', 0)} platinums, "
-            f"{site_stats.get('total_reviews', 0)} reviews"
+            f"{site_stats.get('active_hunters', 0)} active hunters, "
+            f"{site_stats.get('total_reviews', 0)} reviews, "
+            f"{site_stats.get('new_signups', 0)} new hunters"
         )
+        self.stdout.write(f"  Top platted games: {len(top_games)}")
 
         # Build profile queryset
         profiles = Profile.objects.filter(
@@ -160,7 +165,7 @@ class Command(BaseCommand):
             week_start, week_end = WeeklyDigestService.get_week_date_range(user_tz)
             digest_data = WeeklyDigestService.build_digest_data(profile, week_start, week_end)
 
-            if WeeklyDigestService.should_suppress(digest_data):
+            if WeeklyDigestService.should_suppress(digest_data, community_data):
                 suppressed += 1
                 continue
 
@@ -213,7 +218,7 @@ class Command(BaseCommand):
 
                 # Preference check
                 if not EmailPreferenceService.should_send_email(user, 'weekly_digest'):
-                    subject = "Your Weekly Digest"
+                    subject = "This Week in PlatPursuit"
                     EmailService.log_suppressed('weekly_digest', user, subject, 'management_command')
                     opted_out += 1
                     continue
@@ -223,8 +228,8 @@ class Command(BaseCommand):
                 week_start, week_end = WeeklyDigestService.get_week_date_range(user_tz)
                 digest_data = WeeklyDigestService.build_digest_data(profile, week_start, week_end)
 
-                # Smart suppression
-                if WeeklyDigestService.should_suppress(digest_data):
+                # Smart suppression (only if community had zero activity)
+                if WeeklyDigestService.should_suppress(digest_data, community_data):
                     suppressed += 1
                     continue
 
@@ -234,7 +239,7 @@ class Command(BaseCommand):
                 )
 
                 subject = (
-                    f"Your Weekly Digest: "
+                    f"This Week in PlatPursuit: "
                     f"{context['week_start_display']} - {context['week_end_display']}"
                 )
 

@@ -1032,56 +1032,28 @@ class Command(BaseCommand):
             preference_url = f"{settings.SITE_URL}/users/email-preferences/"
 
         context = {
+            # Identity
             'username': 'TestUser',
             'week_start_display': 'Mar 3',
             'week_end_display': 'Mar 9',
-            # Trophy stats
-            'total_trophies': 27,
-            'bronze_count': 15,
-            'silver_count': 7,
-            'gold_count': 4,
-            'platinum_count': 1,
-            'active_days': 5,
-            'games_started': 2,
-            # Platinums
-            'has_platinums': True,
-            'platinums_earned': [
-                {'game_name': 'Astro Bot', 'game_image': '', 'earned_date': 'Mar 7'},
-            ],
-            # Challenges
-            'has_challenges': True,
-            'challenges': [
-                {
-                    'challenge_type': 'A-Z Platinum Challenge',
-                    'name': 'My A-Z Challenge',
-                    'completed_count': 14,
-                    'total_items': 26,
-                    'progress_percentage': 54,
-                    'weekly_delta': 2,
-                },
-                {
-                    'challenge_type': 'Genre Challenge',
-                    'name': 'Genre Gauntlet',
-                    'completed_count': 8,
-                    'total_items': 15,
-                    'progress_percentage': 53,
-                    'weekly_delta': 0,
-                },
-            ],
-            # Badges
-            'has_badges_earned': True,
-            'badges_earned': [
-                {'name': 'Souls Series', 'tier_name': 'Gold', 'image_url': ''},
-            ],
-            'has_closest_badge': True,
-            'closest_badge': {
-                'name': 'Final Fantasy',
-                'progress_pct': 67,
-                'completed': 2,
-                'required': 3,
-                'image_url': '',
+            # Community stats
+            'site_stats': {
+                'total_trophies': 48523,
+                'total_platinums': 387,
+                'active_hunters': 214,
+                'total_reviews': 42,
+                'new_signups': 18,
             },
-            # Community
+            # Top platted games
+            'has_top_platted_games': True,
+            'top_platted_games': [
+                {'game_name': 'Astro Bot', 'game_image': '', 'game_slug': 'astro-bot', 'plat_count': 24},
+                {'game_name': 'Elden Ring', 'game_image': '', 'game_slug': 'elden-ring', 'plat_count': 18},
+                {'game_name': 'Final Fantasy VII Rebirth', 'game_image': '', 'game_slug': 'ff7-rebirth', 'plat_count': 12},
+                {'game_name': 'Stellar Blade', 'game_image': '', 'game_slug': 'stellar-blade', 'plat_count': 9},
+                {'game_name': 'Hades II', 'game_image': '', 'game_slug': 'hades-ii', 'plat_count': 7},
+            ],
+            # Review of the week
             'has_top_review': True,
             'top_review': {
                 'author_username': 'TrophyHunter99',
@@ -1093,20 +1065,53 @@ class Command(BaseCommand):
                 'recommended': True,
             },
             'review_url': f'{settings.SITE_URL}/reviews/elden-ring/',
-            'site_stats': {
-                'total_trophies': 48523,
-                'total_platinums': 387,
-                'total_reviews': 42,
+            # Personal (condensed)
+            'your_week': {
+                'total_trophies': 27,
+                'has_activity': True,
+                'contribution_pct': '0.1',
+                'platinums_count': 1,
+                'challenges': [
+                    {
+                        'challenge_type': 'A-Z Platinum Challenge',
+                        'name': 'My A-Z Challenge',
+                        'completed_count': 14,
+                        'total_items': 26,
+                        'progress_percentage': 54,
+                        'weekly_delta': 2,
+                    },
+                    {
+                        'challenge_type': 'Genre Challenge',
+                        'name': 'Genre Gauntlet',
+                        'completed_count': 8,
+                        'total_items': 15,
+                        'progress_percentage': 53,
+                        'weekly_delta': 0,
+                    },
+                ],
+                'has_challenges': True,
+                'badges_earned': [
+                    {'name': 'Souls Series', 'tier_name': 'Gold'},
+                ],
+                'has_badges_earned': True,
+                'closest_badge': {
+                    'name': 'Final Fantasy',
+                    'progress_pct': 67,
+                    'completed': 2,
+                    'required': 3,
+                },
+                'has_closest_badge': True,
             },
             # Links
             'profile_url': f'{settings.SITE_URL}/profiles/TestUser/',
+            'reviews_url': f'{settings.SITE_URL}/reviews/',
             'site_url': settings.SITE_URL,
             'preference_url': preference_url,
         }
 
         try:
             sent_count = EmailService.send_html_email(
-                subject='[PREVIEW] Your Weekly Digest: Mar 3 - Mar 9',
+                subject='[PREVIEW] This Week in PlatPursuit: Mar 3 - Mar 9',
                 to_emails=[recipient_email],
                 template_name='emails/weekly_digest.html',
                 context=context,
