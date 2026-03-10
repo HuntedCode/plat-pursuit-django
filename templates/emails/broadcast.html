@@ -2,53 +2,106 @@
 
 {% block extra_styles %}
     <style>
-        .broadcast-body {
+        .announcement-card {
+            background-color: {{ accent_gradient_start }};
+            background: linear-gradient(135deg, {{ accent_gradient_start }} 0%, {{ accent_gradient_end }} 100%);
+            border-radius: 12px;
+            padding: 24px;
+            margin: 25px 0;
+            color: #ffffff;
+        }
+
+        .announcement-badge {
+            display: inline-block;
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            padding: 4px 10px;
+            border-radius: 4px;
+            background-color: rgba(255,255,255,0.2);
+            color: #ffffff;
+        }
+
+        .priority-badge {
+            display: inline-block;
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            padding: 3px 8px;
+            border-radius: 4px;
+            background-color: rgba(255,255,255,0.3);
+            color: #ffffff;
+            margin-left: 6px;
+        }
+
+        .announcement-title {
+            font-size: 22px;
+            font-weight: 700;
+            color: #ffffff;
+            margin: 10px 0 4px 0;
+        }
+
+        .announcement-meta {
+            font-size: 13px;
+            color: rgba(255,255,255,0.8);
+            margin: 0;
+        }
+
+        .message-body {
+            border-left: 4px solid {{ accent_color }};
+            background-color: #f8f9fa;
+            border-radius: 0 8px 8px 0;
+            padding: 20px 24px;
+            margin-bottom: 24px;
+            font-size: 15px;
+            line-height: 1.7;
+            color: #333333;
+        }
+
+        .broadcast-detail {
             font-size: 15px;
             color: #333333;
             line-height: 1.7;
         }
 
-        .broadcast-body h2 {
+        .broadcast-detail h2 {
             font-size: 20px;
             font-weight: 700;
             color: #333333;
             margin: 24px 0 12px 0;
         }
 
-        .broadcast-body h3 {
+        .broadcast-detail h3 {
             font-size: 17px;
             font-weight: 700;
             color: #333333;
             margin: 20px 0 10px 0;
         }
 
-        .broadcast-body p {
+        .broadcast-detail p {
             margin: 0 0 14px 0;
         }
 
-        .broadcast-body ul, .broadcast-body ol {
+        .broadcast-detail ul, .broadcast-detail ol {
             margin: 0 0 14px 0;
             padding-left: 24px;
         }
 
-        .broadcast-body li {
+        .broadcast-detail li {
             margin-bottom: 6px;
         }
 
-        .broadcast-body a {
+        .broadcast-detail a {
             color: #667eea;
             text-decoration: underline;
         }
 
-        .broadcast-body strong {
+        .broadcast-detail strong {
             color: #222222;
         }
 
-        .broadcast-body em {
-            font-style: italic;
-        }
-
-        .broadcast-body code {
+        .broadcast-detail code {
             background-color: #f0f0f0;
             padding: 2px 6px;
             border-radius: 4px;
@@ -56,7 +109,7 @@
             font-size: 13px;
         }
 
-        .broadcast-body blockquote {
+        .broadcast-detail blockquote {
             border-left: 4px solid #667eea;
             margin: 16px 0;
             padding: 12px 20px;
@@ -64,42 +117,85 @@
             color: #555555;
         }
 
-        .broadcast-body hr {
+        .broadcast-detail hr {
             border: none;
             border-top: 1px solid #e0e0e0;
             margin: 24px 0;
         }
 
-        .broadcast-body img {
-            max-width: 100%;
+        .banner-img {
+            width: 100%;
+            max-height: 300px;
+            object-fit: cover;
             border-radius: 8px;
-            margin: 12px 0;
+            margin-bottom: 24px;
+        }
+
+        .attribution {
+            padding-top: 20px;
+            border-top: 1px solid #e0e0e0;
+            margin-top: 24px;
+            font-size: 12px;
+            color: #999999;
+            text-align: center;
         }
 
         @media only screen and (max-width: 600px) {
-            .broadcast-body { font-size: 14px; }
+            .announcement-card { padding: 18px; }
+            .announcement-title { font-size: 19px; }
+            .message-body { padding: 16px; }
         }
     </style>
 {% endblock %}
 
-{% block title %}{{ email_subject }}{% endblock %}
+{% block title %}{{ subject }}{% endblock %}
 
 {% block header_content %}
-    <h1>{{ email_subject }}</h1>
+    <h1>Official Announcement</h1>
 {% endblock %}
 
 {% block content %}
     <p class="greeting">Hey {{ username }},</p>
 
-    <div class="broadcast-body">
-        {{ email_body_html|safe }}
+    {% if banner_image_url %}
+        <img src="{{ banner_image_url }}" alt="Announcement" class="banner-img">
+    {% endif %}
+
+    <div class="announcement-card">
+        <table role="presentation" cellpadding="0" cellspacing="0" width="100%">
+            <tr>
+                <td style="width:48px;vertical-align:top;font-size:32px;line-height:1;">{{ icon }}</td>
+                <td>
+                    <span class="announcement-badge">Official Announcement</span>
+                    {% if is_urgent %}<span class="priority-badge">{{ priority }}</span>{% endif %}
+                    <div class="announcement-title">{{ subject }}</div>
+                    <p class="announcement-meta">PlatPursuit Team</p>
+                </td>
+            </tr>
+        </table>
     </div>
+
+    <div class="message-body">
+        {{ message_html|safe }}
+    </div>
+
+    {% if has_sections %}
+        {{ sections_html|safe }}
+    {% elif detail_html %}
+        <div class="broadcast-detail">
+            {{ detail_html|safe }}
+        </div>
+    {% endif %}
 
     {% if cta_url and cta_text %}
         <div class="cta-container">
             <a href="{{ cta_url }}" class="cta-button">{{ cta_text }}</a>
         </div>
     {% endif %}
+
+    <div class="attribution">
+        Official Announcement from PlatPursuit
+    </div>
 {% endblock %}
 
 {% block footer_note %}

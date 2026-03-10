@@ -334,73 +334,18 @@
                             </label>
                         </div>
 
-                        <div id="email-fields" class="hidden space-y-4 mt-4">
-                            <div class="divider my-2">Email Content</div>
-
-                            <div class="form-control">
-                                <div class="flex items-center justify-between mb-2">
-                                    <span class="label-text font-semibold">Email Subject</span>
-                                    <span class="label-text-alt">Defaults to notification title if blank</span>
-                                </div>
-                                <input type="text" name="email_subject" id="email-subject-input" maxlength="255"
-                                       class="input input-bordered"
-                                       placeholder="Leave blank to use notification title">
-                            </div>
-
-                            <div class="form-control">
-                                <div class="flex items-center justify-between mb-2">
-                                    <span class="label-text font-semibold">Email Body (Markdown)</span>
-                                    <span class="label-text-alt" id="email-body-count">0</span>
-                                </div>
-                                <textarea name="email_body_markdown" id="email-body-input" rows="10"
-                                          class="textarea textarea-bordered font-mono text-sm w-full"
-                                          placeholder="Write the email body in Markdown. This will be rendered as HTML in the email.
-
-# Example heading
-Your content here with **bold**, *italic*, [links](https://...), and lists:
-- Item one
-- Item two"></textarea>
-                                <div class="mt-2 text-xs text-base-content/60">
-                                    <details>
-                                        <summary class="cursor-pointer hover:text-base-content">Markdown formatting guide</summary>
-                                        <div class="mt-2 space-y-1 pl-3 bg-base-200 p-3 rounded-lg">
-                                            <div><code># Heading</code>, <code>## Subheading</code></div>
-                                            <div><code>**bold**</code>, <code>*italic*</code></div>
-                                            <div><code>[link text](url)</code></div>
-                                            <div><code>- bullet item</code></div>
-                                            <div><code>> blockquote</code></div>
-                                        </div>
-                                    </details>
-                                </div>
-                            </div>
-
-                            <div class="grid grid-cols-2 gap-4">
-                                <div class="form-control">
-                                    <div class="flex items-center justify-between mb-2">
-                                        <span class="label-text font-semibold">CTA Button URL</span>
-                                        <span class="label-text-alt">Optional</span>
-                                    </div>
-                                    <input type="url" name="email_cta_url" id="email-cta-url-input"
-                                           class="input input-bordered input-sm"
-                                           placeholder="Defaults to Action URL">
-                                </div>
-                                <div class="form-control">
-                                    <div class="flex items-center justify-between mb-2">
-                                        <span class="label-text font-semibold">CTA Button Text</span>
-                                        <span class="label-text-alt">Optional</span>
-                                    </div>
-                                    <input type="text" name="email_cta_text" id="email-cta-text-input" maxlength="100"
-                                           class="input input-bordered input-sm"
-                                           placeholder="Defaults to Button Text">
-                                </div>
-                            </div>
-
+                        <div id="email-info" class="hidden mt-4">
                             <div class="alert alert-info text-xs">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 shrink-0" viewBox="0 0 20 20" fill="currentColor">
                                     <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/>
                                 </svg>
                                 <div>
-                                    <strong>Note:</strong> Emails are gated by the <code>admin_announcements</code> preference. Users who have opted out will receive the in-app notification but not the email.
+                                    <strong>What gets emailed:</strong> The notification title becomes the email subject.
+                                    The message, sections, banner image, and action button are rendered into
+                                    a styled email that mirrors the in-app notification.
+                                    <br><br>
+                                    <strong>Note:</strong> Emails are gated by the <code>admin_announcements</code> preference.
+                                    Users who have opted out will receive the in-app notification but not the email.
                                 </div>
                             </div>
                         </div>

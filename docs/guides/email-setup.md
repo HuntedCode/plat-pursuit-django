@@ -75,7 +75,7 @@ Users can opt out of emails via token-based preference URLs. `EmailPreferenceSer
 | `weekly_digest` | `emails/weekly_digest.html` | Cron: `send_weekly_digest` (Phase 2) | `weekly_digest` |
 | `badge_earned` | `emails/badge_earned.html` | Sync: `DeferredNotificationService._flush_profile_badges()` | `badge_notifications` |
 | `milestone_achieved` | `emails/milestone_achieved.html` | Sync: `send_consolidated_milestone_email()` in signals.py | `milestone_notifications` |
-| `welcome` | `emails/welcome.html` | Sync: first successful sync (`_job_sync_complete`) | None (transactional) |
+| `welcome` | `emails/welcome.html` | Verification: `VerificationService.link_profile_to_user()` | None (transactional) |
 | `admin_announcement` | `emails/broadcast.html` | Admin: Notification Center broadcast | `admin_announcements` |
 | `subscription_welcome` | `emails/subscription_welcome.html` | `activate_subscription()` (first time) | `subscription_notifications` |
 | `payment_succeeded` | `emails/payment_succeeded.html` | Stripe/PayPal renewal webhook | `subscription_notifications` |
@@ -107,22 +107,19 @@ Both are gated by their respective email preferences (`badge_notifications`, `mi
 
 ### Welcome Email
 
-Sent once after a user's first successful PSN sync. Triggered from `_job_sync_complete()` in `trophies/token_keeper.py`. Idempotent: checks `EmailLog.objects.filter(user=user, email_type='welcome').exists()` before sending. No preference gate (one-time transactional email).
+Sent once after a user verifies their PSN account. Triggered from `VerificationService.link_profile_to_user()` in `trophies/services/verification_service.py`. Idempotent: checks `EmailLog.objects.filter(user=user, email_type='welcome').exists()` before sending. No preference gate (one-time transactional email).
 
 ### Broadcast Center (Admin Email)
 
-The Notification Center at `/staff/notifications/` supports sending companion emails alongside in-app notifications:
+The Notification Center at `/staff/notifications/` supports sending companion emails alongside in-app notifications. The email automatically mirrors the in-app notification content: no separate email body is needed.
 
 1. Compose notification as normal (title, message, sections, audience, etc.)
-2. Toggle "Also send email" to reveal email-specific fields
-3. Optionally customize: email subject, markdown body, CTA button
-4. Send immediately or schedule for later
+2. Toggle "Also send email"
+3. Send immediately or schedule for later
 
-Email fields on `ScheduledNotification`:
-- `send_email` (bool): Whether to also send email
-- `email_subject`: Defaults to notification title if blank
-- `email_body_markdown`: Rendered to HTML via Python `markdown` library
-- `email_cta_url` / `email_cta_text`: Defaults to action_url/action_text if blank
+The email renders the same title, message, structured sections (or legacy detail), banner image, and action button in a styled email layout matching the in-app announcement design.
+
+Server-side rendering of structured sections and mini-markup (`*bold*`, `_italic_`, `` `code` ``, `[link](url)`, `- bullets`) is handled by `notifications/services/broadcast_email_renderer.py`.
 
 Emails are gated by the `admin_announcements` preference. `NotificationLog` tracks `emails_sent` and `emails_suppressed` counts.
 
@@ -203,8 +200,8 @@ For email to work correctly, the domain needs:
 - **SendGrid rate limits**: Bulk email commands use `--batch-size` (default 100) to avoid hitting SendGrid's API limits.
 - **Broadcast emails iterate individually**: Each recipient gets a personalized email (with their name and preference token). This uses `iterator(chunk_size=200)` to avoid loading all users into memory at once.
 - **Badge email consolidation**: One email per sync cycle, matching the in-app notification consolidation pattern. All badges earned in that sync are listed in a single email.
-- **Welcome email idempotency**: Checked via EmailLog, not a user field. If the EmailLog record is deleted, the email could re-send on next sync. This is by design (safe to re-send a welcome).
-- **Broadcast markdown rendering**: Uses Python `markdown` library with `extra`, `nl2br`, and `sane_lists` extensions. The rendered HTML is passed to the template as `email_body_html|safe`, so admin-authored content is trusted.
+- **Welcome email idempotency**: Checked via EmailLog, not a user field. If the EmailLog record is deleted, the email could re-send on next verification. This is by design (safe to re-send a welcome).
+- **Broadcast email mirroring**: The email automatically renders the same content as the in-app notification (title, message, sections, banner, CTA). No separate markdown body is needed. Legacy scheduled notifications with `email_body_markdown` populated use a fallback rendering path (`_send_broadcast_emails_legacy`).
 
 ## Related Docs
 

@@ -146,10 +146,6 @@ class ScheduledNotificationService:
             created_by=created_by,
             recipient_count=recipient_count,
             send_email=kwargs.get('send_email', False),
-            email_subject=kwargs.get('email_subject', ''),
-            email_body_markdown=kwargs.get('email_body_markdown', ''),
-            email_cta_url=kwargs.get('email_cta_url', ''),
-            email_cta_text=kwargs.get('email_cta_text', ''),
         )
 
         format_type = 'structured' if sections else 'markdown'
@@ -230,12 +226,14 @@ class ScheduledNotificationService:
             emails_sent, emails_suppressed = ScheduledNotificationService._send_broadcast_emails(
                 recipients=recipients,
                 title=title,
-                email_subject=kwargs.get('email_subject', ''),
-                email_body_markdown=kwargs.get('email_body_markdown', ''),
+                message=message,
+                icon=kwargs.get('icon', '\U0001F4E2'),
+                priority=kwargs.get('priority', 'normal'),
+                sections=kwargs.get('sections', []),
+                detail=kwargs.get('detail', ''),
+                banner_image=kwargs.get('banner_image'),
                 action_url=kwargs.get('action_url'),
                 action_text=kwargs.get('action_text', ''),
-                email_cta_url=kwargs.get('email_cta_url', ''),
-                email_cta_text=kwargs.get('email_cta_text', ''),
             )
 
         # Create log entry
@@ -336,16 +334,31 @@ class ScheduledNotificationService:
         emails_sent = 0
         emails_suppressed = 0
         if scheduled.send_email:
-            emails_sent, emails_suppressed = ScheduledNotificationService._send_broadcast_emails(
-                recipients=recipients,
-                title=scheduled.title,
-                email_subject=scheduled.email_subject,
-                email_body_markdown=scheduled.email_body_markdown,
-                action_url=scheduled.action_url,
-                action_text=scheduled.action_text,
-                email_cta_url=scheduled.email_cta_url,
-                email_cta_text=scheduled.email_cta_text,
-            )
+            if scheduled.email_body_markdown:
+                # Legacy path for in-flight scheduled notifications with separate email content
+                emails_sent, emails_suppressed = ScheduledNotificationService._send_broadcast_emails_legacy(
+                    recipients=recipients,
+                    title=scheduled.title,
+                    email_subject=scheduled.email_subject,
+                    email_body_markdown=scheduled.email_body_markdown,
+                    action_url=scheduled.action_url,
+                    action_text=scheduled.action_text,
+                    email_cta_url=scheduled.email_cta_url,
+                    email_cta_text=scheduled.email_cta_text,
+                )
+            else:
+                emails_sent, emails_suppressed = ScheduledNotificationService._send_broadcast_emails(
+                    recipients=recipients,
+                    title=scheduled.title,
+                    message=scheduled.message,
+                    icon=scheduled.icon,
+                    priority=scheduled.priority,
+                    sections=scheduled.sections,
+                    detail=scheduled.detail,
+                    banner_image=scheduled.banner_image,
+                    action_url=scheduled.action_url,
+                    action_text=scheduled.action_text,
+                )
 
         # Update scheduled notification
         scheduled.status = 'sent'
@@ -377,24 +390,107 @@ class ScheduledNotificationService:
 
     @staticmethod
     def _send_broadcast_emails(
+        recipients, title, message, icon, priority,
+        sections, detail, banner_image,
+        action_url, action_text,
+    ):
+        """
+        Send broadcast emails that mirror in-app notification content.
+
+        Renders the same title, message, sections, banner, and action button
+        into a styled email. No separate email body required.
+
+        Args:
+            recipients: QuerySet of CustomUser instances
+            title: Notification title (also used as email subject)
+            message: Notification message body
+            icon: Notification icon (emoji)
+            priority: Priority level (normal/high/urgent)
+            sections: List of section dicts (structured content)
+            detail: Legacy markdown detail (fallback when no sections)
+            banner_image: ImageField instance or None
+            action_url: CTA URL or None
+            action_text: CTA button text
+
+        Returns:
+            tuple: (emails_sent, emails_suppressed)
+        """
+        from django.conf import settings
+        from core.services.email_service import EmailService
+        from users.services.email_preference_service import EmailPreferenceService
+        from notifications.services.broadcast_email_renderer import build_broadcast_email_context
+
+        emails_sent = 0
+        emails_suppressed = 0
+
+        for user in recipients.select_related('profile').iterator(chunk_size=200):
+            if not user.email:
+                continue
+
+            if not EmailPreferenceService.should_send_email(user, 'admin_announcements'):
+                EmailService.log_suppressed(
+                    email_type='admin_announcement',
+                    user=user,
+                    subject=title,
+                    triggered_by='admin_manual',
+                )
+                emails_suppressed += 1
+                continue
+
+            try:
+                preference_token = EmailPreferenceService.generate_preference_token(user.id)
+                preference_url = f"{settings.SITE_URL}/users/email-preferences/?token={preference_token}"
+
+                username = (
+                    getattr(user, 'profile', None) and (
+                        user.profile.display_psn_username or user.profile.psn_username
+                    ) or user.email
+                )
+
+                context = build_broadcast_email_context(
+                    title=title,
+                    message=message,
+                    icon=icon,
+                    priority=priority,
+                    sections=sections,
+                    detail=detail,
+                    banner_image=banner_image,
+                    action_url=action_url,
+                    action_text=action_text,
+                    username=username,
+                    site_url=settings.SITE_URL,
+                    preference_url=preference_url,
+                )
+
+                sent = EmailService.send_html_email(
+                    subject=title,
+                    to_emails=[user.email],
+                    template_name='emails/broadcast.html',
+                    context=context,
+                    fail_silently=True,
+                    log_email_type='admin_announcement',
+                    log_user=user,
+                    log_triggered_by='admin_manual',
+                )
+
+                if sent:
+                    emails_sent += 1
+            except Exception:
+                logger.exception(f"Failed to send broadcast email to {user.email}")
+
+        logger.info(f"Broadcast email complete: {emails_sent} sent, {emails_suppressed} suppressed")
+        return emails_sent, emails_suppressed
+
+    @staticmethod
+    def _send_broadcast_emails_legacy(
         recipients, title, email_subject, email_body_markdown,
         action_url, action_text, email_cta_url, email_cta_text,
     ):
         """
-        Send broadcast emails to recipients who have admin_announcements enabled.
+        Legacy broadcast email sender for in-flight scheduled notifications
+        that were composed with separate email_body_markdown content.
 
-        Args:
-            recipients: QuerySet of CustomUser instances
-            title: Notification title (fallback for email subject)
-            email_subject: Explicit email subject (or blank for title fallback)
-            email_body_markdown: Markdown content for email body
-            action_url: In-app action URL (fallback for CTA)
-            action_text: In-app action text (fallback for CTA text)
-            email_cta_url: Explicit email CTA URL (or blank for action_url fallback)
-            email_cta_text: Explicit email CTA text (or blank for action_text fallback)
-
-        Returns:
-            tuple: (emails_sent, emails_suppressed)
+        This can be removed once all legacy scheduled notifications have been processed.
         """
         from django.conf import settings
         from core.services.email_service import EmailService
@@ -405,7 +501,6 @@ class ScheduledNotificationService:
         cta_url = email_cta_url or action_url or ''
         cta_text = email_cta_text or action_text or ''
 
-        # Render markdown to HTML (staff-authored content, trusted)
         email_body_html = ''
         if email_body_markdown:
             try:
@@ -414,9 +509,9 @@ class ScheduledNotificationService:
                     extensions=['extra', 'nl2br', 'sane_lists'],
                 )
             except Exception:
-                logger.exception("Failed to render broadcast email markdown, falling back to escaped text")
-                from django.utils.html import escape, linebreaks
-                email_body_html = linebreaks(escape(email_body_markdown))
+                logger.exception("Failed to render broadcast email markdown")
+                from django.utils.html import escape
+                email_body_html = escape(email_body_markdown).replace('\n', '<br>')
 
         emails_sent = 0
         emails_suppressed = 0
@@ -443,8 +538,18 @@ class ScheduledNotificationService:
                     'username': getattr(user, 'profile', None) and (
                         user.profile.display_psn_username or user.profile.psn_username
                     ) or user.email,
-                    'email_subject': subject,
-                    'email_body_html': email_body_html,
+                    'subject': subject,
+                    'message_html': email_body_html,
+                    'icon': '\U0001F4E2',
+                    'priority': 'normal',
+                    'is_urgent': False,
+                    'accent_color': '#667eea',
+                    'accent_gradient_start': '#667eea',
+                    'accent_gradient_end': '#764ba2',
+                    'has_sections': False,
+                    'sections_html': '',
+                    'detail_html': '',
+                    'banner_image_url': None,
                     'cta_url': cta_url,
                     'cta_text': cta_text,
                     'site_url': settings.SITE_URL,
@@ -467,7 +572,7 @@ class ScheduledNotificationService:
             except Exception:
                 logger.exception(f"Failed to send broadcast email to {user.email}")
 
-        logger.info(f"Broadcast email complete: {emails_sent} sent, {emails_suppressed} suppressed")
+        logger.info(f"Legacy broadcast email complete: {emails_sent} sent, {emails_suppressed} suppressed")
         return emails_sent, emails_suppressed
 
     @staticmethod

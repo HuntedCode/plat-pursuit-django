@@ -101,12 +101,8 @@ class AdminNotificationCenterView(StaffRequiredMixin, TemplateView):
         priority = request.POST.get('priority', 'normal')
         target_type = request.POST.get('target_type', 'all')
 
-        # Email fields
+        # Email toggle (email mirrors in-app content automatically)
         send_email = request.POST.get('send_email') == '1'
-        email_subject = request.POST.get('email_subject', '').strip()
-        email_body_markdown = request.POST.get('email_body_markdown', '').strip()
-        email_cta_url = request.POST.get('email_cta_url', '').strip()
-        email_cta_text = request.POST.get('email_cta_text', '').strip()
 
         # Build criteria based on target type
         criteria = {}
@@ -146,15 +142,6 @@ class AdminNotificationCenterView(StaffRequiredMixin, TemplateView):
 
         if len(detail) > 2500:
             messages.error(request, 'Detail must be 2500 characters or less.')
-            return redirect('admin_notification_center')
-
-        # Email field validation
-        if send_email and not email_body_markdown:
-            messages.error(request, 'Email body is required when "Also send email" is enabled.')
-            return redirect('admin_notification_center')
-
-        if len(email_body_markdown) > 50000:
-            messages.error(request, 'Email body is too long (max 50,000 characters).')
             return redirect('admin_notification_center')
 
         # Image validation and optimization
@@ -205,10 +192,6 @@ class AdminNotificationCenterView(StaffRequiredMixin, TemplateView):
                 action_text=action_text,
                 priority=priority,
                 send_email=send_email,
-                email_subject=email_subject,
-                email_body_markdown=email_body_markdown,
-                email_cta_url=email_cta_url,
-                email_cta_text=email_cta_text,
             )
 
             messages.success(
@@ -233,10 +216,6 @@ class AdminNotificationCenterView(StaffRequiredMixin, TemplateView):
                 action_text=action_text,
                 priority=priority,
                 send_email=send_email,
-                email_subject=email_subject,
-                email_body_markdown=email_body_markdown,
-                email_cta_url=email_cta_url,
-                email_cta_text=email_cta_text,
             )
 
             if count > 0:

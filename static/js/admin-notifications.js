@@ -37,12 +37,9 @@
             this.bannerPreviewImg = document.getElementById('banner-preview-img');
             this.clearBannerBtn = document.getElementById('clear-banner-btn');
 
-            // Email fields
+            // Email toggle
             this.emailToggle = document.getElementById('email-toggle');
-            this.emailFields = document.getElementById('email-fields');
-            this.emailSubjectInput = document.getElementById('email-subject-input');
-            this.emailBodyInput = document.getElementById('email-body-input');
-            this.emailBodyCount = document.getElementById('email-body-count');
+            this.emailInfo = document.getElementById('email-info');
 
             this.selectedUsers = [];
             this.searchTimeout = null;
@@ -138,14 +135,6 @@
                 });
             }
 
-            if (this.emailBodyInput) {
-                this.emailBodyInput.addEventListener('input', () => {
-                    if (this.emailBodyCount) {
-                        this.emailBodyCount.textContent = this.emailBodyInput.value.length;
-                    }
-                });
-            }
-
             // User search for individual targeting
             if (this.userSearchInput) {
                 this.userSearchInput.addEventListener('input', (e) => {
@@ -195,12 +184,8 @@
         }
 
         handleEmailToggle(isEnabled) {
-            if (this.emailFields) {
-                this.emailFields.classList.toggle('hidden', !isEnabled);
-            }
-            // Auto-fill email subject from title if empty
-            if (isEnabled && this.emailSubjectInput && !this.emailSubjectInput.value && this.titleInput) {
-                this.emailSubjectInput.placeholder = this.titleInput.value || 'Defaults to notification title';
+            if (this.emailInfo) {
+                this.emailInfo.classList.toggle('hidden', !isEnabled);
             }
         }
 

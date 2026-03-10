@@ -947,7 +947,7 @@ class Command(BaseCommand):
     def _send_broadcast_preview(self, recipient_email):
         """Send a preview of the admin broadcast email template."""
         from users.services.email_preference_service import EmailPreferenceService
-        import markdown as md
+        from notifications.services.broadcast_email_renderer import build_broadcast_email_context
 
         self.stdout.write("\nSending broadcast email preview...")
 
@@ -958,33 +958,40 @@ class Command(BaseCommand):
         except Exception:
             preference_url = f"{settings.SITE_URL}/users/email-preferences/"
 
-        sample_markdown = (
-            "## What's New This Week\n\n"
-            "We have been busy building some exciting features:\n\n"
-            "- **Genre Challenge** is now live! Test your range across 15 genres.\n"
-            "- The **Review Hub** has been overhauled with ratings, filters, and community highlights.\n"
-            "- Bug fixes and performance improvements across the board.\n\n"
-            "> \"No trophy can hide from us.\"\n\n"
-            "### Discord Events\n\n"
-            "Join us this Saturday for our monthly **Platinum Race** event! "
-            "Details in the #events channel.\n\n"
-            "Happy hunting!"
-        )
+        sample_sections = [
+            {
+                'id': '1', 'order': 1,
+                'icon': '\U0001F3AE', 'header': "What's New",
+                'content': (
+                    '- *Genre Challenge* is now live! Test your range across 15 genres.\n'
+                    '- The *Review Hub* has been overhauled with ratings, filters, and community highlights.\n'
+                    '- Bug fixes and performance improvements across the board.'
+                ),
+            },
+            {
+                'id': '2', 'order': 2,
+                'icon': '\U0001F3C6', 'header': 'Discord Events',
+                'content': (
+                    'Join us this Saturday for our monthly *Platinum Race* event! '
+                    'Details in the [#events channel](https://discord.gg/platpursuit).'
+                ),
+            },
+        ]
 
-        email_body_html = md.markdown(
-            sample_markdown,
-            extensions=['extra', 'nl2br', 'sane_lists'],
+        context = build_broadcast_email_context(
+            title='PlatPursuit Weekly Update',
+            message='We have been busy building some exciting features for the community.\nHere is a quick summary of what changed this week.',
+            icon='\U0001F4E2',
+            priority='normal',
+            sections=sample_sections,
+            detail='',
+            banner_image=None,
+            action_url=f'{settings.SITE_URL}/dashboard/',
+            action_text='Visit Your Dashboard',
+            username='TestUser',
+            site_url=settings.SITE_URL,
+            preference_url=preference_url,
         )
-
-        context = {
-            'username': 'TestUser',
-            'email_subject': 'PlatPursuit Weekly Update',
-            'email_body_html': email_body_html,
-            'cta_url': f'{settings.SITE_URL}/dashboard/',
-            'cta_text': 'Visit Your Dashboard',
-            'site_url': settings.SITE_URL,
-            'preference_url': preference_url,
-        }
 
         try:
             sent_count = EmailService.send_html_email(
