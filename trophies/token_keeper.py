@@ -1177,13 +1177,6 @@ class TokenKeeper:
             from trophies.services.timeline_service import invalidate_timeline_cache
             invalidate_timeline_cache(profile_id)
 
-            # Send welcome email on first successful sync (one-time, idempotent)
-            try:
-                from core.services.email_service import send_welcome_email_if_first_sync
-                send_welcome_email_if_first_sync(profile)
-            except Exception:
-                logger.exception(f"Failed to send welcome email for profile {profile_id}")
-
             logger.info(f"{profile.display_psn_username} account has finished syncing!")
         except Exception as e:
             # Deadlock/lock-timeout errors are transient (our fault, not the user's).

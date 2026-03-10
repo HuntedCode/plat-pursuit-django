@@ -246,9 +246,9 @@ class EmailService:
         return success_count, failure_count
 
 
-def send_welcome_email_if_first_sync(profile):
+def send_welcome_email(profile):
     """
-    Send a one-time welcome email after a user's first successful sync.
+    Send a one-time welcome email after a user verifies their PSN account.
 
     Idempotent: checks EmailLog to ensure we never send more than once.
     No preference gate (transactional one-time email).
@@ -267,11 +267,10 @@ def send_welcome_email_if_first_sync(profile):
     try:
         preference_token = EmailPreferenceService.generate_preference_token(user.id)
         preference_url = f"{settings.SITE_URL}/users/email-preferences/?token={preference_token}"
-        profile_slug = profile.slug or profile.psn_username
 
         context = {
             'username': profile.display_psn_username or profile.psn_username,
-            'profile_url': f"{settings.SITE_URL}/profile/{profile_slug}/",
+            'profile_url': f"{settings.SITE_URL}/profiles/{profile.psn_username}/",
             'discord_url': getattr(settings, 'DISCORD_INVITE_URL', ''),
             'site_url': settings.SITE_URL,
             'preference_url': preference_url,

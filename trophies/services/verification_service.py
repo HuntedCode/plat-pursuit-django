@@ -4,9 +4,12 @@ PSN profile verification service.
 This module handles the logic for verifying PSN profile ownership through
 verification codes placed in the user's PSN "About Me" section.
 """
+import logging
 import secrets
 from datetime import timedelta
 from django.utils import timezone
+
+logger = logging.getLogger('psn_api')
 
 
 class VerificationService:
@@ -121,6 +124,15 @@ class VerificationService:
             # Check for PSN linking milestones
             from trophies.services.milestone_service import check_all_milestones_for_user
             check_all_milestones_for_user(profile, criteria_type='psn_linked')
+
+            # Send one-time welcome email (idempotent, guards via EmailLog)
+            try:
+                from core.services.email_service import send_welcome_email
+                send_welcome_email(profile)
+            except Exception:
+                logger.exception(
+                    f"Failed to send welcome email for {profile.psn_username}"
+                )
 
     @staticmethod
     def unlink_profile_from_user(profile):
