@@ -304,6 +304,12 @@ class ReviewService:
             icon='👍',
             action_url=f"/reviews/{review.concept.slug}/",
             action_text='View Review',
+            metadata={
+                'concept_title': concept_title,
+                'concept_slug': review.concept.slug,
+                'concept_icon_url': review.concept.concept_icon_url or '',
+                'helpful_count': count,
+            },
         )
 
     # ------------------------------------------------------------------ #
@@ -373,6 +379,13 @@ class ReviewService:
                     icon='💬',
                     action_url=f"/reviews/{review.concept.slug}/",
                     action_text='View Reply',
+                    metadata={
+                        'concept_title': concept_title,
+                        'concept_slug': review.concept.slug,
+                        'concept_icon_url': review.concept.concept_icon_url or '',
+                        'replier_username': profile.display_psn_username or profile.psn_username,
+                        'reply_snippet': body[:100],
+                    },
                 )
 
             logger.info(f"Reply {reply.id} created on review {review.id} by {profile.psn_username}")

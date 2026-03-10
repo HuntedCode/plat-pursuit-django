@@ -432,6 +432,12 @@ class NotificationInboxManager {
             case 'challenge_completed':
                 enhancedContent = this.renderChallengeDetail(metadata);
                 break;
+            case 'review_reply':
+                enhancedContent = this.renderReviewReplyDetail(metadata);
+                break;
+            case 'review_milestone':
+                enhancedContent = this.renderReviewMilestoneDetail(metadata);
+                break;
             default:
                 enhancedContent = '';
         }
@@ -1175,6 +1181,104 @@ class NotificationInboxManager {
                 <div class="flex flex-wrap justify-center gap-1">
                     ${letterGrid}
                 </div>
+            </div>
+        `;
+    }
+
+    /**
+     * Render review reply notification detail.
+     * Shows game context, replier info, and a snippet of the reply.
+     *
+     * @param {Object} metadata - Notification metadata
+     * @returns {string} HTML for review reply content
+     */
+    renderReviewReplyDetail(metadata) {
+        if (!metadata) return '';
+
+        const conceptTitle = metadata.concept_title ? this.escapeHtml(metadata.concept_title) : 'a game';
+        const conceptSlug = metadata.concept_slug || null;
+        const conceptIcon = metadata.concept_icon_url || null;
+        const replierUsername = metadata.replier_username ? this.escapeHtml(metadata.replier_username) : 'Someone';
+        const replySnippet = metadata.reply_snippet ? this.escapeHtml(metadata.reply_snippet) : null;
+
+        return `
+            <div class="bg-base-300 rounded-lg p-4 space-y-3">
+                <div class="flex items-center gap-3">
+                    ${conceptIcon ? `
+                        <img src="${conceptIcon}"
+                             alt="${conceptTitle}"
+                             class="w-12 h-12 rounded-lg object-cover"
+                             loading="lazy"
+                             onerror="this.style.display='none'" />
+                    ` : ''}
+                    <div>
+                        <p class="font-semibold">${conceptTitle}</p>
+                        <p class="text-sm text-base-content/60">${replierUsername} replied to your review</p>
+                    </div>
+                </div>
+
+                ${replySnippet ? `
+                    <div class="bg-base-100 rounded-lg p-3 border-l-4 border-info">
+                        <p class="text-sm text-base-content/80 italic pr-1">"${replySnippet}${replySnippet.length >= 100 ? '...' : ''}"</p>
+                    </div>
+                ` : ''}
+
+                ${conceptSlug ? `
+                    <a href="/reviews/${conceptSlug}/" class="btn btn-sm btn-accent w-full">
+                        View in Review Hub
+                    </a>
+                ` : ''}
+            </div>
+        `;
+    }
+
+    /**
+     * Render review milestone notification detail.
+     * Celebrates the user's review reaching a helpful vote milestone.
+     *
+     * @param {Object} metadata - Notification metadata
+     * @returns {string} HTML for review milestone content
+     */
+    renderReviewMilestoneDetail(metadata) {
+        if (!metadata) return '';
+
+        const conceptTitle = metadata.concept_title ? this.escapeHtml(metadata.concept_title) : 'a game';
+        const conceptSlug = metadata.concept_slug || null;
+        const conceptIcon = metadata.concept_icon_url || null;
+        const helpfulCount = metadata.helpful_count || 0;
+
+        let celebrationMsg = 'Your insights are helping the community!';
+        if (helpfulCount >= 50) celebrationMsg = 'You are a legendary reviewer! The community salutes you.';
+        else if (helpfulCount >= 25) celebrationMsg = 'Your reviews are making a real impact. Keep it up!';
+        else if (helpfulCount >= 10) celebrationMsg = 'Double digits! Your reviews are resonating with hunters.';
+        else if (helpfulCount >= 5) celebrationMsg = 'Your insights are helping fellow trophy hunters!';
+
+        return `
+            <div class="bg-base-300 rounded-lg p-4 space-y-3">
+                ${this.renderCongratsHeader('Helpful Milestone!', celebrationMsg)}
+
+                <div class="flex items-center gap-3 justify-center">
+                    ${conceptIcon ? `
+                        <img src="${conceptIcon}"
+                             alt="${conceptTitle}"
+                             class="w-12 h-12 rounded-lg object-cover"
+                             loading="lazy"
+                             onerror="this.style.display='none'" />
+                    ` : ''}
+                    <p class="font-semibold">${conceptTitle}</p>
+                </div>
+
+                <div class="flex justify-center">
+                    <span class="badge badge-success badge-lg gap-2 font-bold">
+                        &#128077; ${helpfulCount} Helpful Vote${helpfulCount !== 1 ? 's' : ''}
+                    </span>
+                </div>
+
+                ${conceptSlug ? `
+                    <a href="/reviews/${conceptSlug}/" class="btn btn-sm btn-accent w-full">
+                        View Your Review
+                    </a>
+                ` : ''}
             </div>
         `;
     }

@@ -58,8 +58,8 @@
                 {% endif %}
             </div>
 
-            {# RIGHT COLUMN: Reviews (staff-only) #}
-            {% if user.is_staff and game.concept and game.concept.slug %}
+            {# RIGHT COLUMN: Reviews #}
+            {% if game.concept and game.concept.slug %}
                 <div class="hidden lg:block w-px bg-base-content/10 self-stretch"></div>
                 <div class="divider divider-vertical m-0 p-0 lg:hidden"></div>
 

@@ -7,12 +7,12 @@ RateMyGamesView: Wizard for quickly rating/reviewing platinumed games.
 """
 import logging
 
-from django.contrib.auth.mixins import LoginRequiredMixin  # noqa: F401 - restore when review hub goes public
+from django.contrib.auth.mixins import LoginRequiredMixin
 from django.http import Http404
 from django.urls import reverse
 from django.views.generic import DetailView, TemplateView
 
-from trophies.mixins import ProfileHotbarMixin, BackgroundContextMixin, StaffRequiredMixin
+from trophies.mixins import ProfileHotbarMixin, BackgroundContextMixin
 from trophies.models import (
     Concept, ConceptTrophyGroup, EarnedTrophy, Review, Trophy, UserConceptRating,
 )
@@ -25,7 +25,7 @@ from trophies.forms import UserConceptRatingForm
 logger = logging.getLogger('psn_api')
 
 
-class ReviewHubLandingView(StaffRequiredMixin, ProfileHotbarMixin, TemplateView):
+class ReviewHubLandingView(ProfileHotbarMixin, TemplateView):
     """Review Hub landing page with discovery content."""
 
     template_name = 'trophies/review_hub.html'
@@ -54,7 +54,7 @@ class ReviewHubLandingView(StaffRequiredMixin, ProfileHotbarMixin, TemplateView)
         return context
 
 
-class RateMyGamesView(StaffRequiredMixin, ProfileHotbarMixin, TemplateView):
+class RateMyGamesView(LoginRequiredMixin, ProfileHotbarMixin, TemplateView):
     """Wizard for quickly rating and reviewing platinumed games."""
 
     template_name = 'trophies/rate_my_games.html'
@@ -79,7 +79,7 @@ class RateMyGamesView(StaffRequiredMixin, ProfileHotbarMixin, TemplateView):
         return context
 
 
-class ReviewHubDetailView(StaffRequiredMixin, ProfileHotbarMixin, BackgroundContextMixin, DetailView):
+class ReviewHubDetailView(ProfileHotbarMixin, BackgroundContextMixin, DetailView):
     """Review Hub detail page for a game concept."""
 
     model = Concept
@@ -91,11 +91,14 @@ class ReviewHubDetailView(StaffRequiredMixin, ProfileHotbarMixin, BackgroundCont
     def get_object(self, queryset=None):
         concept = super().get_object(queryset)
 
+        # Evaluate once and cache for reuse in get_context_data
+        self._concept_games = list(concept.games.all())
+
         # Shovelware gate: 404 if all games in concept are shovelware
-        games = concept.games.all()
-        if games.exists() and not games.exclude(
-            shovelware_status__in=['auto_flagged', 'manually_flagged']
-        ).exists():
+        if self._concept_games and all(
+            g.shovelware_status in ('auto_flagged', 'manually_flagged')
+            for g in self._concept_games
+        ):
             raise Http404("Review Hub is not available for this game.")
 
         return concept
@@ -152,7 +155,7 @@ class ReviewHubDetailView(StaffRequiredMixin, ProfileHotbarMixin, BackgroundCont
             context['user_rating'] = None
             context['rating_form'] = None
             context['review_count'] = 0
-            context['concept_games'] = concept.games.all()[:5]
+            context['concept_games'] = self._concept_games[:5]
             context['concept_icon'] = self._get_concept_icon(concept)
             context['unique_platforms'] = self._get_unique_platforms(context['concept_games'])
             return context
@@ -239,7 +242,7 @@ class ReviewHubDetailView(StaffRequiredMixin, ProfileHotbarMixin, BackgroundCont
         )
 
         # Concept games for header
-        context['concept_games'] = concept.games.all()[:5]
+        context['concept_games'] = self._concept_games[:5]
         context['concept_icon'] = self._get_concept_icon(concept)
 
         context['unique_platforms'] = self._get_unique_platforms(context['concept_games'])
@@ -351,12 +354,10 @@ class ReviewHubDetailView(StaffRequiredMixin, ProfileHotbarMixin, BackgroundCont
             'platinum_date': plat_trophy,
         }
 
-    @staticmethod
-    def _get_concept_icon(concept):
+    def _get_concept_icon(self, concept):
         """Get the best icon URL for a concept."""
         if concept.concept_icon_url:
             return concept.concept_icon_url
-        first_game = concept.games.first()
-        if first_game:
-            return first_game.get_icon_url()
+        if self._concept_games:
+            return self._concept_games[0].get_icon_url()
         return None

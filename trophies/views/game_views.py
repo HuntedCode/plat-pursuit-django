@@ -568,41 +568,40 @@ class GameDetailView(ProfileHotbarMixin, DetailView):
         # Community averages
         context['community_averages'] = RatingService.get_cached_community_averages(game.concept)
 
-        # Review and recommendation data (staff-only, base game group)
-        if self.request.user.is_staff:
-            from trophies.models import ConceptTrophyGroup, Review
-            from trophies.services.review_service import ReviewService
+        # Review and recommendation data (base game group)
+        from trophies.models import ConceptTrophyGroup, Review
+        from trophies.services.review_service import ReviewService
 
-            base_ctg = ConceptTrophyGroup.objects.filter(
-                concept=game.concept, trophy_group_id='default'
-            ).first()
-            if base_ctg:
-                context['recommendation_stats'] = ReviewService.get_recommendation_stats(
-                    game.concept, base_ctg
-                )
-                context['review_count'] = Review.objects.filter(
+        base_ctg = ConceptTrophyGroup.objects.filter(
+            concept=game.concept, trophy_group_id='default'
+        ).only('id', 'trophy_group_id').first()
+        if base_ctg:
+            context['recommendation_stats'] = ReviewService.get_recommendation_stats(
+                game.concept, base_ctg
+            )
+            context['review_count'] = Review.objects.filter(
+                concept=game.concept,
+                concept_trophy_group=base_ctg,
+                is_deleted=False,
+            ).count()
+
+            # User review context
+            user = self.request.user
+            profile = getattr(user, 'profile', None)
+            if user.is_authenticated and profile and profile.is_linked:
+                context['user_review'] = Review.objects.filter(
                     concept=game.concept,
                     concept_trophy_group=base_ctg,
+                    profile=profile,
                     is_deleted=False,
-                ).count()
+                ).first()
 
-                # User review context
-                user = self.request.user
-                profile = getattr(user, 'profile', None)
-                if profile and profile.is_linked:
-                    context['user_review'] = Review.objects.filter(
-                        concept=game.concept,
-                        concept_trophy_group=base_ctg,
-                        profile=profile,
-                        is_deleted=False,
-                    ).first()
-
-                    from trophies.services.concept_trophy_group_service import ConceptTrophyGroupService
-                    can_review, can_review_reason = ConceptTrophyGroupService.can_review_group(
-                        profile, game.concept, base_ctg
-                    )
-                    context['can_review'] = can_review
-                    context['can_review_reason'] = can_review_reason
+                from trophies.services.concept_trophy_group_service import ConceptTrophyGroupService
+                can_review, can_review_reason = ConceptTrophyGroupService.can_review_group(
+                    profile, game.concept, base_ctg
+                )
+                context['can_review'] = can_review
+                context['can_review_reason'] = can_review_reason
 
         # Related badges
         series_slugs = Stage.objects.filter(concepts__games=game).values_list('series_slug', flat=True).distinct()
