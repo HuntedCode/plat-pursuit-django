@@ -1,12 +1,39 @@
 {% if ADSENSE_ENABLED %}
-<div class="my-6 flex justify-center overflow-hidden" style="max-height:150px;">
+<div class="flex justify-center overflow-hidden" style="display:none; max-height:150px;">
     <ins class="adsbygoogle"
-        style="display:block; min-height:90px; max-height:150px; max-width:728px; width:100%;"
+        style="display:block; max-height:150px; max-width:728px; width:100%;"
         data-ad-client="{{ ADSENSE_PUB_ID }}"
         data-ad-slot="{{ ad_slot }}"
         data-ad-format="horizontal"
         {% if ADSENSE_TEST_MODE %}data-adtest="on"{% endif %}
         data-full-width-responsive="true"></ins>
-    <script>(adsbygoogle = window.adsbygoogle || []).push({});</script>
+    <script>
+    (function() {
+        var wrapper = document.currentScript.parentElement;
+        var ins = wrapper.querySelector('.adsbygoogle');
+        var resolved = false;
+        var observer = new MutationObserver(function(mutations) {
+            if (resolved) return;
+            var status = ins.getAttribute('data-ad-status');
+            if (status === 'filled') {
+                resolved = true;
+                wrapper.style.display = '';
+                wrapper.classList.add('my-6');
+                observer.disconnect();
+            } else if (status === 'unfilled') {
+                resolved = true;
+                observer.disconnect();
+            }
+        });
+        observer.observe(ins, { attributes: true, attributeFilter: ['data-ad-status'] });
+        setTimeout(function() {
+            if (!resolved) {
+                resolved = true;
+                observer.disconnect();
+            }
+        }, 3000);
+        (adsbygoogle = window.adsbygoogle || []).push({});
+    })();
+    </script>
 </div>
 {% endif %}
