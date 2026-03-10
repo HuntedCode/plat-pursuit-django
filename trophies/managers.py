@@ -586,24 +586,21 @@ class CommentManager(models.Manager):
         """Proxy to queryset method."""
         return self.get_queryset().by_old()
 
-    def get_threaded_comments(self, concept, profile=None, sort='top', trophy_id=None, checklist_id=None):
+    def get_threaded_comments(self, concept, profile=None, sort='top', checklist_id=None):
         """
-        Get all comments for a concept, trophy, or checklist in threaded structure.
+        Get all comments for a checklist in threaded structure.
 
         Args:
             concept: Concept instance
             profile: Optional profile to check votes
             sort: 'top', 'new', or 'old'
-            trophy_id: Optional trophy_id for trophy-level comments (None = concept-level)
-            checklist_id: Optional checklist_id for checklist-level comments (None = concept-level)
+            checklist_id: Checklist ID to scope comments
 
         Returns:
             QuerySet: Comments optimized for display with nested replies
         """
         if checklist_id is not None:
             qs = self.for_checklist(concept, checklist_id).with_author_data()
-        elif trophy_id is not None:
-            qs = self.for_trophy(concept, trophy_id).with_author_data()
         else:
             qs = self.for_concept(concept).with_author_data()
 

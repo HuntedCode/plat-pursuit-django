@@ -25,7 +25,7 @@ Key relationships:
 - `concept` FK to `Concept` (nullable, SET_NULL)
 
 ### Concept
-The cross-stack unifier. All regional/platform variants of the same game share one Concept. Stores publisher info, release date, genres, media URLs, and a `slug` for URL routing. The `comment_count` field is denormalized. The `absorb(other)` method is critical: it migrates all related data (comments, ratings, checklists, featured guides, badge references, stages, challenge slots, etc.) from one Concept to another when a game is reassigned. Any new model with a relationship to Concept **must** update `absorb()`.
+The cross-stack unifier. All regional/platform variants of the same game share one Concept. Stores publisher info, release date, genres, media URLs, and a `slug` for URL routing. The `absorb(other)` method is critical: it migrates all related data (comments, ratings, checklists, featured guides, badge references, stages, challenge slots, etc.) from one Concept to another when a game is reassigned. Any new model with a relationship to Concept **must** update `absorb()`.
 
 Key relationships:
 - `family` FK to `GameFamily` (nullable)
@@ -575,7 +575,7 @@ Notification
 
 ### Key Design Patterns
 
-- **Denormalized counters**: Most entities store pre-computed counts (`earned_count`, `upvote_count`, `view_count`, `comment_count`) updated via signals or service methods, avoiding expensive COUNT queries at read time.
+- **Denormalized counters**: Most entities store pre-computed counts (`earned_count`, `upvote_count`, `view_count`) updated via signals or service methods, avoiding expensive COUNT queries at read time.
 - **Soft delete**: Comments, Reviews, Checklists, GameLists, and Challenges use `is_deleted` + `deleted_at` fields rather than hard deletion, preserving thread structure and audit trails.
 - **Concept as unifier**: Regional/platform stacks are separate Game rows, but all user-facing content (comments, ratings, reviews, checklists) is attached to the shared Concept.
 - **Stage-Badge linkage**: Stages connect to Badges via `series_slug` (a string match) rather than a direct FK, allowing flexible tier-based stage filtering via `required_tiers`.

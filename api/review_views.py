@@ -154,7 +154,6 @@ _MILESTONE_DESCRIPTIONS = {
     'trophy_count': '{n} trophies earned',
     'rating_count': '{n} games rated',
     'playtime_hours': '{n} hours played',
-    'comment_upvotes': '{n} comment upvotes received',
     'checklist_upvotes': '{n} checklist upvotes received',
     'badge_count': '{n} badge tiers earned',
     'unique_badge_count': '{n} unique badges earned',

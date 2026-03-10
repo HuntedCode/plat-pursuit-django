@@ -103,28 +103,6 @@ MILESTONE_DEFINITIONS = [
     {'name': 'Rating Legend',         'criteria_type': 'rating_count', 'criteria_details': {'target': 450}, 'description': 'Four hundred and fifty ratings. Few have rated so many.',            'title_name': 'Rating Legend'},
     {'name': 'The Final Verdict',     'criteria_type': 'rating_count', 'criteria_details': {'target': 500}, 'description': 'Five hundred ratings. The ultimate authority on quality.',             'title_name': 'The Authority'},
 
-    # ── comment_upvotes (20 tiers, max 1,000) ───────────────────────────
-    {'name': 'First Like',            'criteria_type': 'comment_upvotes', 'criteria_details': {'target': 1},    'description': 'Your first upvote. Someone appreciates you.',                    'title_name': 'Conversant'},
-    {'name': 'Noticed',               'criteria_type': 'comment_upvotes', 'criteria_details': {'target': 3},    'description': 'Three upvotes. People are taking notice.'},
-    {'name': 'Conversation Starter',  'criteria_type': 'comment_upvotes', 'criteria_details': {'target': 5},    'description': 'Five upvotes. Your comments are resonating.'},
-    {'name': 'Engaging',              'criteria_type': 'comment_upvotes', 'criteria_details': {'target': 10},   'description': 'Ten upvotes. You spark good discussions.'},
-    {'name': 'Voice of the Community','criteria_type': 'comment_upvotes', 'criteria_details': {'target': 25},   'description': 'Twenty-five upvotes. People listen when you speak.',               'title_name': 'Commenter'},
-    {'name': 'Well Said',             'criteria_type': 'comment_upvotes', 'criteria_details': {'target': 40},   'description': 'Forty upvotes. You have a way with words.'},
-    {'name': 'Insightful',            'criteria_type': 'comment_upvotes', 'criteria_details': {'target': 60},   'description': 'Sixty upvotes. Your insights cut deep.'},
-    {'name': 'Resonant',              'criteria_type': 'comment_upvotes', 'criteria_details': {'target': 80},   'description': 'Eighty upvotes. Your words resonate with many.'},
-    {'name': 'Popular Opinion',       'criteria_type': 'comment_upvotes', 'criteria_details': {'target': 100},  'description': 'One hundred upvotes. Your wisdom is widely appreciated.'},
-    {'name': 'Crowd Favorite',        'criteria_type': 'comment_upvotes', 'criteria_details': {'target': 135},  'description': 'One hundred and thirty-five upvotes. The crowd loves you.',       'title_name': 'Thought Leader'},
-    {'name': 'Thought Leader',        'criteria_type': 'comment_upvotes', 'criteria_details': {'target': 175},  'description': 'One hundred and seventy-five upvotes. You lead the conversation.'},
-    {'name': 'Community Pillar',      'criteria_type': 'comment_upvotes', 'criteria_details': {'target': 225},  'description': 'Two hundred and twenty-five upvotes. A true pillar.'},
-    {'name': 'Word Warrior',          'criteria_type': 'comment_upvotes', 'criteria_details': {'target': 300},  'description': 'Three hundred upvotes. Your words are your weapon.'},
-    {'name': 'Forum Legend',          'criteria_type': 'comment_upvotes', 'criteria_details': {'target': 400},  'description': 'Four hundred upvotes. Your legacy is written in comments.'},
-    {'name': 'Trophy Talk Legend',    'criteria_type': 'comment_upvotes', 'criteria_details': {'target': 500},  'description': 'Five hundred upvotes. Your words carry weight.',                  'title_name': 'Community Sage'},
-    {'name': 'Rising Icon',           'criteria_type': 'comment_upvotes', 'criteria_details': {'target': 600},  'description': 'Six hundred upvotes. An icon in the making.',                    'title_name': 'Rising Icon'},
-    {'name': 'Upvote Magnet',         'criteria_type': 'comment_upvotes', 'criteria_details': {'target': 700},  'description': 'Seven hundred upvotes. Everything you say turns to gold.',       'title_name': 'Upvote Magnet'},
-    {'name': 'Community Icon',        'criteria_type': 'comment_upvotes', 'criteria_details': {'target': 800},  'description': 'Eight hundred upvotes. An icon of the community.',               'title_name': 'Community Icon'},
-    {'name': 'Voice of Many',         'criteria_type': 'comment_upvotes', 'criteria_details': {'target': 900},  'description': 'Nine hundred upvotes. The voice of many.',                      'title_name': 'Voice of Many'},
-    {'name': 'Voice of a Thousand',   'criteria_type': 'comment_upvotes', 'criteria_details': {'target': 1000}, 'description': 'One thousand upvotes. Your voice echoes across the platform.',    'title_name': 'The Oracle'},
-
     # ── checklist_upvotes (20 tiers, max 1,000) ─────────────────────────
     {'name': 'First Thumbs Up',       'criteria_type': 'checklist_upvotes', 'criteria_details': {'target': 1},    'description': 'Your first checklist upvote. Someone found your work helpful.', 'title_name': 'Helper'},
     {'name': 'Noticed Work',          'criteria_type': 'checklist_upvotes', 'criteria_details': {'target': 3},    'description': 'Three upvotes. Your checklists are getting attention.'},

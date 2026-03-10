@@ -48,7 +48,6 @@ The most critical operation in the system is `Concept.absorb(other)`. When a con
 | `guide_slug` | CharField(50, nullable) | Link to external guide |
 | `guide_created_at` | DateTimeField (nullable) | Guide creation timestamp |
 | `slug` | SlugField(300), unique, nullable | URL-friendly slug for Community Hub pages. Auto-generated from `unified_title` on first save, with collision handling via counter suffix |
-| `comment_count` | PositiveIntegerField | Denormalized count of concept-level comments (excludes trophy-level and checklist-level). Recalculated in `absorb()` |
 
 **Indexes**: `concept_id`, `unified_title`, `publisher_name`, `release_date`, `slug`
 
@@ -155,8 +154,6 @@ This method migrates ALL related data from `other` (the orphaned concept) to `se
 
 14. **title_ids merge**: Appends any title IDs from `other.title_ids` that are not already in `self.title_ids`. Deduplicates during merge.
 
-15. **comment_count recalculation**: Recomputes `self.comment_count` by counting non-deleted concept-level comments (excluding trophy-level and checklist-level).
-
 ### Default Concept Creation (`Concept.create_default_concept`)
 
 1. Uses a Redis atomic counter (`pp_concept_counter`) for thread-safe unique ID generation
@@ -210,7 +207,7 @@ This method migrates ALL related data from `other` (the orphaned concept) to `se
 
 - **Slug collisions for Asian-character titles.** If `slugify()` produces an empty string (common for CJK titles), the fallback `"concept-{concept_id}"` is used. This means the URL is less human-readable but still functional and unique.
 
-- **`absorb()` calls `save()` multiple times.** The method saves `self` up to 3 times (for `family`, `title_ids`, and `comment_count`). Each is a targeted `save(update_fields=[...])` to avoid overwriting concurrent changes, but the method is not wrapped in an explicit transaction. The caller (`add_concept()`) also does not wrap the absorb-then-delete sequence in a transaction, relying on Django's ATOMIC_REQUESTS or the caller's context.
+- **`absorb()` calls `save()` multiple times.** The method saves `self` up to 2 times (for `family` and `title_ids`). Each is a targeted `save(update_fields=[...])` to avoid overwriting concurrent changes, but the method is not wrapped in an explicit transaction. The caller (`add_concept()`) also does not wrap the absorb-then-delete sequence in a transaction, relying on Django's ATOMIC_REQUESTS or the caller's context.
 
 ## Management Commands
 

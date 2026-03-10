@@ -94,27 +94,6 @@ def handle_trophy_count(profile, milestone, _cache=None):
     achieved = current >= target
     return {'achieved': achieved, 'progress': current}
 
-@register_handler('comment_upvotes')
-def handle_comment_upvotes(profile, milestone, _cache=None):
-    """Check progress for total comment upvotes received across all user comments"""
-    from django.db.models import Sum
-    from trophies.models import Comment
-
-    target = milestone.criteria_details.get('target', 0)
-    if _cache is not None and 'comment_upvotes' in _cache:
-        current = _cache['comment_upvotes']
-    else:
-        total_upvotes = Comment.objects.filter(
-            profile=profile,
-            is_deleted=False
-        ).aggregate(total=Sum('upvote_count'))['total']
-        current = total_upvotes if total_upvotes else 0
-        if _cache is not None:
-            _cache['comment_upvotes'] = current
-
-    achieved = current >= target
-    return {'achieved': achieved, 'progress': current}
-
 @register_handler('checklist_upvotes')
 def handle_checklist_upvotes(profile, milestone, _cache=None):
     """Check progress for total checklist upvotes received across all user checklists"""

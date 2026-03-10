@@ -276,7 +276,7 @@ def find_matches(dry_run=False, auto_only=False, verbose=False, stdout=None):
         .defer(
             'descriptions', 'media', 'genres', 'subgenres',
             'content_rating', 'bg_url', 'concept_icon_url',
-            'guide_slug', 'guide_created_at', 'comment_count',
+            'guide_slug', 'guide_created_at',
             'publisher_name', 'release_date', 'title_ids',
         )
     )
@@ -434,7 +434,7 @@ def diagnose_concept(concept_id, top_n=10, stdout=None):
         .defer(
             'descriptions', 'media', 'genres', 'subgenres',
             'content_rating', 'bg_url', 'concept_icon_url',
-            'guide_slug', 'guide_created_at', 'comment_count',
+            'guide_slug', 'guide_created_at',
             'publisher_name', 'release_date', 'title_ids',
         )
     )

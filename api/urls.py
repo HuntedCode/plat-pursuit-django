@@ -133,12 +133,8 @@ urlpatterns = [
     path('summary/', SummaryView.as_view(), name='summary'),
     path('trophy-case/', TrophyCaseView.as_view(), name='trophy-case'),
 
-    # Comment endpoints - Concept-based
-    path('comments/concept/<int:concept_id>/', CommentListView.as_view(), name='comment-list'),
-    path('comments/concept/<int:concept_id>/trophy/<int:trophy_id>/', CommentListView.as_view(), name='comment-list-trophy'),
+    # Comment endpoints - Checklist-based
     path('comments/concept/<int:concept_id>/checklist/<int:checklist_id>/', CommentListView.as_view(), name='comment-list-checklist'),
-    path('comments/concept/<int:concept_id>/create/', CommentCreateView.as_view(), name='comment-create'),
-    path('comments/concept/<int:concept_id>/trophy/<int:trophy_id>/create/', CommentCreateView.as_view(), name='comment-create-trophy'),
     path('comments/concept/<int:concept_id>/checklist/<int:checklist_id>/create/', CommentCreateView.as_view(), name='comment-create-checklist'),
     path('comments/<int:comment_id>/', CommentDetailView.as_view(), name='comment-detail'),
     path('comments/<int:comment_id>/vote/', CommentVoteView.as_view(), name='comment-vote'),

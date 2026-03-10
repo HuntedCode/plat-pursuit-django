@@ -42,7 +42,7 @@ MILESTONE_CATEGORIES = OrderedDict([
     ('community', {
         'name': 'Community',
         'icon': 'community',
-        'criteria_types': ['rating_count', 'comment_upvotes', 'checklist_upvotes', 'review_count', 'review_helpful_count'],
+        'criteria_types': ['rating_count', 'checklist_upvotes', 'review_count', 'review_helpful_count'],
     }),
     ('collection', {
         'name': 'Collection',
@@ -78,7 +78,6 @@ CRITERIA_TYPE_DISPLAY_NAMES = {
     'completion_count': '100% Completions',
     'playtime_hours': 'Playtime Hours',
     'rating_count': 'Game Ratings',
-    'comment_upvotes': 'Comment Upvotes',
     'checklist_upvotes': 'Checklist Upvotes',
     'badge_count': 'Badge Tiers Earned',
     'unique_badge_count': 'Unique Badges Earned',

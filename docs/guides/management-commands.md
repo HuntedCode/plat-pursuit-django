@@ -20,7 +20,6 @@ PlatPursuit has **57 custom management commands** spread across 4 Django apps: `
 | `populate_region_asian_titles` | Detect and flag Asian-language games without concepts, setting `is_regional` and assigning region codes. | (none) | `python manage.py populate_region_asian_titles` |
 | `populate_user_titles` | Backfill UserTitle records for existing badge and milestone awards. | `--dry-run`, `--badges-only`, `--milestones-only` | `python manage.py populate_user_titles --dry-run` |
 | `populate_banned_words` | Seed the BannedWord table with a default list of inappropriate words and spam indicators. | `--clear`, `--dry-run` | `python manage.py populate_banned_words --dry-run` |
-| `rebuild_comment_counts` | Recalculate `comment_count` on all Concept records, excluding checklist-level and trophy-level comments. | `--dry-run`, `--concept-id <id>` | `python manage.py rebuild_comment_counts --dry-run` |
 | `refresh_badge_series` | Re-evaluate a specific badge series for all eligible profiles and process consolidated badge notifications. | `--series` (required) | `python manage.py refresh_badge_series --series trophy-hunter` |
 | `lock_admin_concepts` | Lock `concept_lock` on games whose concept has an admin-duplicate suffix (`-1`, `-2`, etc.) or `PP_` stub prefix. | `--dry-run` | `python manage.py lock_admin_concepts --dry-run` |
 | `backfill_default_concepts` | Create stub `PP_` Concepts for games that don't have one. | `--dry-run`, `--batch-size` (default: 50) | `python manage.py backfill_default_concepts --dry-run` |
@@ -154,7 +153,6 @@ Commands that were run once (or a few times) for data migration. They remain in 
 | `recalculate_profile_counts` | Full profile trophy count recalculation |
 | `recalculate_gamification` | Full gamification XP recalculation |
 | `recalc_earn_rates` | Recalculate played_count, earned_count, earn_rate |
-| `rebuild_comment_counts` | Fix comment_count excluding checklist comments |
 | `populate_user_milestones` | Backfill milestones for existing users |
 | `update_badge_requirements` | Refresh badge requirements and most_recent_concept |
 
@@ -180,7 +178,7 @@ Commands for debugging and monitoring. These do not modify data (except where no
 
 The most common flag across the codebase. When provided, the command previews what changes would be made without writing to the database. Always run with `--dry-run` first when using a command for the first time or on production data.
 
-Commands that support `--dry-run`: `backfill_default_concepts`, `backfill_concept_slugs`, `backfill_stub_concept_icons`, `backfill_game_regions`, `backfill_guide_view_counts`, `backfill_subscription_periods`, `backfill_platted_subgenre_count`, `check_all_badges`, `check_subscription_milestones`, `clean_titles`, `cleanup_old_analytics`, `enforce_az_challenge_rules`, `generate_monthly_recaps`, `grant_milestone`, `lock_admin_concepts`, `mark_recaps_sent`, `match_game_families`, `populate_banned_words`, `populate_milestones`, `populate_user_titles`, `process_scheduled_notifications`, `rebuild_comment_counts`, `recalc_earn_rates`, `recalculate_gamification`, `send_monthly_recap_emails`, `sync_all_discord_roles`, `update_shovelware`.
+Commands that support `--dry-run`: `backfill_default_concepts`, `backfill_concept_slugs`, `backfill_stub_concept_icons`, `backfill_game_regions`, `backfill_guide_view_counts`, `backfill_subscription_periods`, `backfill_platted_subgenre_count`, `check_all_badges`, `check_subscription_milestones`, `clean_titles`, `cleanup_old_analytics`, `enforce_az_challenge_rules`, `generate_monthly_recaps`, `grant_milestone`, `lock_admin_concepts`, `mark_recaps_sent`, `match_game_families`, `populate_banned_words`, `populate_milestones`, `populate_user_titles`, `process_scheduled_notifications`, `recalc_earn_rates`, `recalculate_gamification`, `send_monthly_recap_emails`, `sync_all_discord_roles`, `update_shovelware`.
 
 ### `--username` / `--profile`
 

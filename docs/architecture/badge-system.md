@@ -233,8 +233,8 @@ Milestones use a **handler registry pattern**:
 
 5. Calendar month milestones use a parameterized handler: a single `_handle_calendar_month()` function is registered for all 12 `calendar_month_*` types. It shares a pre-fetched `_calendar_month_counts` cache across all months to avoid 12 separate COUNT queries.
 
-**Currently registered handlers** (22 types):
-`manual`, `plat_count`, `psn_linked`, `discord_linked`, `rating_count`, `playtime_hours`, `trophy_count`, `comment_upvotes`, `checklist_upvotes`, `badge_count`, `unique_badge_count`, `completion_count`, `stage_count`, `az_progress`, `genre_progress`, `subgenre_progress`, `calendar_month_jan` through `calendar_month_dec`, `calendar_months_total`, `calendar_complete`, `is_premium`, `subscription_months`.
+**Currently registered handlers** (21 types):
+`manual`, `plat_count`, `psn_linked`, `discord_linked`, `rating_count`, `playtime_hours`, `trophy_count`, `checklist_upvotes`, `badge_count`, `unique_badge_count`, `completion_count`, `stage_count`, `az_progress`, `genre_progress`, `subgenre_progress`, `calendar_month_jan` through `calendar_month_dec`, `calendar_months_total`, `calendar_complete`, `is_premium`, `subscription_months`.
 
 ### Leaderboard Calculation
 

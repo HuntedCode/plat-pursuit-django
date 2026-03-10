@@ -489,20 +489,6 @@ class GameDetailView(ProfileHotbarMixin, DetailView):
             logger.exception(f"Game trophies query failed for {game.np_communication_id}")
             full_trophies = []
 
-        # Get trophy comment counts if game has a concept
-        trophy_comment_counts = {}
-        if game.concept:
-            comment_counts = game.concept.comments.filter(
-                trophy_id__isnull=False
-            ).values('trophy_id').annotate(
-                count=Count('id')
-            )
-            trophy_comment_counts = {item['trophy_id']: item['count'] for item in comment_counts}
-
-        # Add comment counts to trophy data
-        for trophy in full_trophies:
-            trophy['comment_count'] = trophy_comment_counts.get(trophy['trophy_id'], 0)
-
         # Apply filtering and sorting
         if form.is_valid():
             earned_key = form.cleaned_data['earned']

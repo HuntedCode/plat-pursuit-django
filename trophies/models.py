@@ -690,7 +690,6 @@ class Concept(models.Model):
     guide_slug = models.CharField(max_length=50, blank=True, null=True)
     guide_created_at = models.DateTimeField(null=True, blank=True)
     slug = models.SlugField(max_length=300, unique=True, blank=True, null=True)
-    comment_count = models.PositiveIntegerField(default=0, help_text="Denormalized count of concept-level comments (excludes trophy and checklist comments)")
 
     class Meta:
         indexes = [
@@ -836,12 +835,6 @@ class Concept(models.Model):
                 self.title_ids.append(tid)
         if other.title_ids:
             self.save(update_fields=['title_ids'])
-
-        # Rebuild comment count
-        self.comment_count = self.comments.filter(
-            is_deleted=False, trophy_id__isnull=True, checklist_id__isnull=True
-        ).count()
-        self.save(update_fields=['comment_count'])
 
     @retry(stop=stop_after_attempt(3), wait=wait_fixed(0.5), retry=retry_if_exception_type(OperationalError))
     def add_title_id(self, title_id: str):
@@ -1597,7 +1590,6 @@ class Milestone(models.Model):
         ('rating_count', 'Games Rated'),
         ('playtime_hours', 'Total Playtime (Hours)'),
         ('trophy_count', 'Total Trophies Earned'),
-        ('comment_upvotes', 'Comment Upvotes Received'),
         ('checklist_upvotes', 'Checklist Upvotes Received'),
         ('badge_count', 'Badge Tiers Earned'),
         ('unique_badge_count', 'Unique Badges Earned'),

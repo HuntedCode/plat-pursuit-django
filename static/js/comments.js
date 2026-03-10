@@ -20,48 +20,27 @@ class CommentSystem {
         this.section.dataset.commentSystemInitialized = 'true';
 
         this.conceptId = this.section.dataset.conceptId;
-        this.trophyId = this.section.dataset.trophyId || null;
         this.checklistId = this.section.dataset.checklistId || null;
         this.currentSort = 'top';
 
         // Determine comment section type
-        this.isTrophySection = sectionId.startsWith('trophy-comment-section-');
         this.isChecklistSection = Boolean(this.checklistId);
 
-        // DOM elements (scoped to section type)
-        if (this.isTrophySection) {
-            // Trophy-level selectors (scoped within the section)
-            this.commentsList = this.section.querySelector('.trophy-comments-list');
-            this.commentsLoading = this.section.querySelector('.trophy-comments-loading');
-            this.commentsEmpty = this.section.querySelector('.trophy-comments-empty');
-            this.commentsError = this.section.querySelector('.trophy-comments-error');
-            this.sortSelect = this.section.querySelector('.trophy-comment-sort');
-            this.createForm = this.section.querySelector('.trophy-comment-create-form');
-            this.commentBody = this.section.querySelector('.trophy-comment-body');
-            this.charCount = this.section.querySelector('.trophy-char-count');
-            this.discussionToggle = this.section.querySelector('.trophy-discussion-toggle');
-            this.discussionContent = this.section.querySelector('.trophy-discussion-content');
-            this.discussionSortContainer = this.section.querySelector('.trophy-discussion-sort-container');
-            this.discussionToggleIcon = this.section.querySelector('.trophy-toggle-icon');
-            this.commentCountBadge = document.getElementById(`trophy-comment-count-badge-${this.trophyId}`);
-            this.commentCount = document.getElementById(`trophy-comment-count-${this.trophyId}`);
-        } else {
-            // Game-level and checklist-level selectors (original IDs)
-            this.commentsList = document.getElementById('comments-list');
-            this.commentsLoading = document.getElementById('comments-loading');
-            this.commentsEmpty = document.getElementById('comments-empty');
-            this.commentsError = document.getElementById('comments-error');
-            this.sortSelect = document.getElementById('comment-sort');
-            this.createForm = document.getElementById('comment-create-form');
-            this.commentBody = document.getElementById('comment-body');
-            this.charCount = document.getElementById('char-count');
-            this.discussionToggle = document.getElementById('discussion-toggle');
-            this.discussionContent = document.getElementById('discussion-content');
-            this.discussionSortContainer = document.getElementById('discussion-sort-container');
-            this.discussionToggleIcon = document.getElementById('discussion-toggle-icon');
-            this.commentCountBadge = null;
-            this.commentCount = document.getElementById('comment-count');
-        }
+        // DOM elements (checklist-level selectors)
+        this.commentsList = document.getElementById('comments-list');
+        this.commentsLoading = document.getElementById('comments-loading');
+        this.commentsEmpty = document.getElementById('comments-empty');
+        this.commentsError = document.getElementById('comments-error');
+        this.sortSelect = document.getElementById('comment-sort');
+        this.createForm = document.getElementById('comment-create-form');
+        this.commentBody = document.getElementById('comment-body');
+        this.charCount = document.getElementById('char-count');
+        this.discussionToggle = document.getElementById('discussion-toggle');
+        this.discussionContent = document.getElementById('discussion-content');
+        this.discussionSortContainer = document.getElementById('discussion-sort-container');
+        this.discussionToggleIcon = document.getElementById('discussion-toggle-icon');
+        this.commentCountBadge = null;
+        this.commentCount = document.getElementById('comment-count');
 
         // Pagination state
         this.currentOffset = 0;
@@ -80,20 +59,13 @@ class CommentSystem {
     }
 
     setupEventListeners() {
-        // Discussion section toggle (game-level and checklist sections)
-        if (this.discussionToggle && !this.isTrophySection) {
+        // Discussion section toggle
+        if (this.discussionToggle) {
             this.discussionToggle.addEventListener('click', (e) => {
                 e.preventDefault();
                 e.stopPropagation();
                 this.toggleDiscussionSection();
             });
-        } else if (!this.discussionToggle && !this.isTrophySection) {
-            console.error('Discussion toggle button not found');
-        }
-
-        // For trophy sections, load comments immediately since there's no toggle
-        if (this.isTrophySection) {
-            this.loadComments(false);
         }
 
         // Sort change
@@ -117,12 +89,7 @@ class CommentSystem {
             this.createForm.addEventListener('submit', (e) => {
                 e.preventDefault();
 
-                // Check guidelines before allowing comment
-                if (this.isTrophySection) {
-                    checkTrophyGuidelinesBeforeComment(() => this.createComment());
-                } else {
-                    checkGuidelinesBeforeComment(() => this.createComment());
-                }
+                checkGuidelinesBeforeComment(() => this.createComment());
             });
         }
 
@@ -179,13 +146,7 @@ class CommentSystem {
      * Build API URL for comments
      */
     getApiUrl() {
-        let url = `/api/v1/comments/concept/${this.conceptId}/`;
-        if (this.checklistId) {
-            url = `/api/v1/comments/concept/${this.conceptId}/checklist/${this.checklistId}/`;
-        } else if (this.trophyId) {
-            url = `/api/v1/comments/concept/${this.conceptId}/trophy/${this.trophyId}/`;
-        }
-        return url;
+        return `/api/v1/comments/concept/${this.conceptId}/checklist/${this.checklistId}/`;
     }
 
     /**
@@ -325,14 +286,7 @@ class CommentSystem {
             formData.append('parent_id', parentId);
         }
 
-        // Get submit button (scoped to section type)
-        let submitBtn;
-        if (this.isTrophySection) {
-            submitBtn = this.section.querySelector('.trophy-comment-submit-btn');
-        } else {
-            submitBtn = document.getElementById('comment-submit-btn');
-        }
-
+        const submitBtn = document.getElementById('comment-submit-btn');
         if (!submitBtn) return;
 
         submitBtn.disabled = true;
@@ -520,12 +474,7 @@ class CommentSystem {
         form.querySelector('form').addEventListener('submit', async (e) => {
             e.preventDefault();
 
-            // Check guidelines before allowing reply
-            if (this.isTrophySection) {
-                checkTrophyGuidelinesBeforeComment(() => this.submitReply(commentId, textarea.value, submitBtn, form));
-            } else {
-                checkGuidelinesBeforeComment(() => this.submitReply(commentId, textarea.value, submitBtn, form));
-            }
+            checkGuidelinesBeforeComment(() => this.submitReply(commentId, textarea.value, submitBtn, form));
         });
 
         // Focus textarea
@@ -882,10 +831,7 @@ class CommentSystem {
         this.hideStates();
         this.commentsError.classList.remove('hidden');
 
-        // Update error message (scoped to section type)
-        const errorMessageEl = this.isTrophySection
-            ? this.section.querySelector('.trophy-comments-error-message')
-            : document.getElementById('comments-error-message');
+        const errorMessageEl = document.getElementById('comments-error-message');
 
         if (errorMessageEl) {
             errorMessageEl.textContent = message;
@@ -965,15 +911,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // Trophy comment agreement modal checkbox
-    const trophyAgreeCheckbox = document.getElementById('trophy-agree-to-guidelines');
-    const trophyConfirmBtn = document.getElementById('trophy-confirm-guidelines-btn');
-
-    if (trophyAgreeCheckbox && trophyConfirmBtn) {
-        trophyAgreeCheckbox.addEventListener('change', function() {
-            trophyConfirmBtn.disabled = !this.checked;
-        });
-    }
 });
 
 // Check if user needs to agree to guidelines before commenting
@@ -986,16 +923,6 @@ function checkGuidelinesBeforeComment(callback) {
         pendingCommentSubmission = callback;
         // Show the agreement modal
         document.getElementById('guidelines-agreement-modal').showModal();
-    }
-}
-
-// Same for trophy comments
-function checkTrophyGuidelinesBeforeComment(callback) {
-    if (hasAgreedToGuidelines) {
-        callback();
-    } else {
-        pendingCommentSubmission = callback;
-        document.getElementById('trophy-guidelines-agreement-modal').showModal();
     }
 }
 
@@ -1029,92 +956,7 @@ async function confirmGuidelines() {
     }
 }
 
-// Handle trophy guidelines agreement confirmation
-async function confirmTrophyGuidelines() {
-    const checkbox = document.getElementById('trophy-agree-to-guidelines');
-    if (!checkbox.checked) {
-        return;
-    }
-
-    try {
-        const data = await PlatPursuit.API.post('/api/v1/guidelines/agree/', {});
-
-        if (data.success) {
-            hasAgreedToGuidelines = true;
-            document.getElementById('trophy-guidelines-agreement-modal').close();
-            checkbox.checked = false;
-
-            if (pendingCommentSubmission) {
-                pendingCommentSubmission();
-                pendingCommentSubmission = null;
-            }
-        } else {
-            alert(data.error || 'Failed to record agreement. Please try again.');
-        }
-    } catch (error) {
-        console.error('Error agreeing to guidelines:', error);
-        alert('An error occurred. Please try again.');
-    }
-}
-
-/**
- * Trophy Comment Manager
- * Handles trophy-level comment sections on game detail page
- * Instantiates CommentSystem for each trophy on demand
- */
-class TrophyCommentManager {
-    constructor() {
-        this.activeCommentSystems = new Map(); // trophy_id -> CommentSystem instance
-        this.setupToggleListeners();
-    }
-
-    setupToggleListeners() {
-        // Event delegation for trophy comment toggle buttons
-        document.addEventListener('click', (e) => {
-            const toggleBtn = e.target.closest('.trophy-comment-toggle');
-            if (!toggleBtn) return;
-
-            e.preventDefault();
-            const trophyId = toggleBtn.dataset.trophyId;
-            this.toggleTrophyComments(trophyId);
-        });
-    }
-
-    toggleTrophyComments(trophyId) {
-        const section = document.getElementById(`trophy-comment-section-${trophyId}`);
-        const toggleBtn = document.querySelector(`.trophy-comment-toggle[data-trophy-id="${trophyId}"]`);
-        const chevron = toggleBtn.querySelector('.trophy-toggle-chevron');
-
-        if (!section) return;
-
-        const isHidden = section.classList.contains('hidden');
-
-        if (isHidden) {
-            // Expand
-            section.classList.remove('hidden');
-            toggleBtn.setAttribute('aria-expanded', 'true');
-            chevron.style.transform = 'rotate(0deg)';
-
-            // Initialize CommentSystem for this trophy if not already done
-            if (!this.activeCommentSystems.has(trophyId)) {
-                const commentSystem = new CommentSystem(`trophy-comment-section-${trophyId}`);
-                this.activeCommentSystems.set(trophyId, commentSystem);
-            }
-        } else {
-            // Collapse
-            section.classList.add('hidden');
-            toggleBtn.setAttribute('aria-expanded', 'false');
-            chevron.style.transform = 'rotate(-90deg)';
-        }
-    }
-}
-
 // Initialize comment system when DOM is ready
 document.addEventListener('DOMContentLoaded', () => {
     new CommentSystem();
-
-    // Initialize trophy comment manager if trophy comment toggles exist
-    if (document.querySelector('.trophy-comment-toggle')) {
-        new TrophyCommentManager();
-    }
 });

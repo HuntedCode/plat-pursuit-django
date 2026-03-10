@@ -92,7 +92,7 @@ The `Concept.absorb(other)` method in `trophies/models.py` migrates ALL related 
 **IMPORTANT: When adding any new model with a ForeignKey, M2M, or other relationship to `Concept`, you MUST update `Concept.absorb()` to handle that relationship.** Failing to do so will cause data loss when concepts are reassigned during sync.
 
 Currently handled by `absorb()`:
-- Comments (concept-level, trophy-level, checklist-level) + votes + reports
+- Comments (all types, including historical concept/trophy-level) + votes + reports
 - UserConceptRating (skip duplicates by profile + concept_trophy_group)
 - ConceptTrophyGroups (merge by trophy_group_id, orphans cascade-delete)
 - Reviews (skip duplicates by profile + concept_trophy_group)
@@ -105,7 +105,6 @@ Currently handled by `absorb()`:
 - Genre challenge slots + bonus slots
 - GameFamily (inherit if target has none)
 - Concept.title_ids (merged/deduplicated)
-- Concept.comment_count (recalculated)
 
 ## Image Styling Conventions
 

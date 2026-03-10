@@ -330,14 +330,12 @@ class TrophyCaseView(APIView):
 
 
 class CommentListView(APIView):
-    """Get comments for a Concept, Trophy, or Checklist within a Concept."""
+    """Get comments for a Checklist within a Concept."""
     authentication_classes = [SessionAuthentication, TokenAuthentication]
     permission_classes = []  # Allow unauthenticated users to view comments
 
-    def get(self, request, concept_id, trophy_id=None, checklist_id=None):
+    def get(self, request, concept_id, checklist_id=None):
         """
-        GET /api/v1/comments/concept/<concept_id>/
-        GET /api/v1/comments/concept/<concept_id>/trophy/<trophy_id>/
         GET /api/v1/comments/concept/<concept_id>/checklist/<checklist_id>/
         Query params:
             - sort (top/new/old)
@@ -376,14 +374,13 @@ class CommentListView(APIView):
                 concept,
                 profile,
                 sort,
-                trophy_id,
-                checklist_id
+                checklist_id=checklist_id
             )
 
             # Check if this is a request for more replies of a specific comment
             if parent_id:
                 return self._handle_reply_pagination(
-                    parent_id, comments, profile, request.user, sort, trophy_id, checklist_id
+                    parent_id, comments, profile, request.user, sort, checklist_id=checklist_id
                 )
 
             # Only return top-level comments (replies are nested)
@@ -419,7 +416,6 @@ class CommentListView(APIView):
                         'has_more': has_more,
                         'next_offset': offset + limit,
                         'sort': sort,
-                        'trophy_id': trophy_id,
                         'checklist_id': checklist_id
                     })
                 except Exception as html_error:
@@ -434,8 +430,6 @@ class CommentListView(APIView):
                     comment_ids = [c.id for c in paginated_comments]
                     # Also need reply IDs, fetch all non-root comments in scope
                     scope_filter = {'concept_id': concept.id, 'is_deleted': False}
-                    if trophy_id:
-                        scope_filter['trophy_id'] = trophy_id
                     if checklist_id:
                         scope_filter['checklist_id'] = checklist_id
                     from trophies.models import Comment as CommentModel
@@ -459,7 +453,6 @@ class CommentListView(APIView):
                     'has_more': has_more,
                     'next_offset': offset + limit,
                     'sort': sort,
-                    'trophy_id': trophy_id,
                     'checklist_id': checklist_id
                 })
 
@@ -514,9 +507,9 @@ class CommentListView(APIView):
                 not comment.is_deleted
             )
 
-    def _add_author_context(self, context, comment_profile, concept, trophy_id, checklist_id=None):
-        """Add author context indicators (progress, platinum, trophy earned, checklist author)."""
-        from trophies.models import ProfileGame, EarnedTrophy, Checklist
+    def _add_author_context(self, context, comment_profile, concept, checklist_id=None):
+        """Add author context indicators (progress, platinum, checklist author)."""
+        from trophies.models import ProfileGame, Checklist
 
         # Get game progress and platinum status for all comment types
         pg = ProfileGame.objects.filter(
@@ -539,20 +532,9 @@ class CommentListView(APIView):
             except Checklist.DoesNotExist:
                 context['is_checklist_author'] = False
 
-        # Trophy-level: show if earned
-        if trophy_id is not None:
-            et = EarnedTrophy.objects.filter(
-                profile=comment_profile,
-                trophy__game__concept=concept,
-                trophy__trophy_id=trophy_id,
-                earned=True
-            ).first()
-            context['author_has_trophy'] = bool(et)
-
     def _build_comment_context(self, comment, viewing_profile, user, reply_offset=0, reply_limit=3):
         """Build context dict for rendering a comment template with reply pagination."""
         concept = comment.concept
-        trophy_id = comment.trophy_id
         checklist_id = comment.checklist_id
 
         # Build base context
@@ -562,7 +544,7 @@ class CommentListView(APIView):
         self._add_permissions(context, comment, viewing_profile, user)
 
         # Add author context
-        self._add_author_context(context, comment.profile, concept, trophy_id, checklist_id)
+        self._add_author_context(context, comment.profile, concept, checklist_id)
 
         # Build flattened replies (all descendants at one level)
         all_descendants = self._get_all_descendants(comment)
@@ -580,7 +562,7 @@ class CommentListView(APIView):
             self._add_permissions(reply_context, reply, viewing_profile, user)
 
             # Add author context for reply
-            self._add_author_context(reply_context, reply.profile, concept, trophy_id, checklist_id)
+            self._add_author_context(reply_context, reply.profile, concept, checklist_id)
 
             context['replies'].append(reply_context)
 
@@ -628,7 +610,7 @@ class CommentListView(APIView):
 
         return descendants
 
-    def _handle_reply_pagination(self, parent_id, comments, profile, user, sort, trophy_id, checklist_id=None):
+    def _handle_reply_pagination(self, parent_id, comments, profile, user, sort, checklist_id=None):
         """Handle loading more replies for a specific comment."""
         from django.template.loader import render_to_string
 
@@ -656,7 +638,7 @@ class CommentListView(APIView):
             for reply in paginated_replies:
                 reply_context = self._get_comment_base_context(reply, depth=1, parent_id=reply.parent_id)
                 self._add_permissions(reply_context, reply, profile, user)
-                self._add_author_context(reply_context, reply.profile, parent_comment.concept, trophy_id)
+                self._add_author_context(reply_context, reply.profile, parent_comment.concept)
 
                 html = render_to_string('partials/comment.html', {'comment': reply_context})
                 replies_html.append(html)
@@ -676,15 +658,13 @@ class CommentListView(APIView):
 
 
 class CommentCreateView(APIView):
-    """Create a new comment or reply on a Concept, Trophy, or Checklist."""
+    """Create a new comment or reply on a Checklist within a Concept."""
     authentication_classes = [SessionAuthentication, TokenAuthentication]
     permission_classes = [IsAuthenticated]
 
     @method_decorator(ratelimit(key='user', rate='10/m', method='POST', block=True))
-    def post(self, request, concept_id, trophy_id=None, checklist_id=None):
+    def post(self, request, concept_id, checklist_id=None):
         """
-        POST /api/v1/comments/concept/<concept_id>/create/
-        POST /api/v1/comments/concept/<concept_id>/trophy/<trophy_id>/create/
         POST /api/v1/comments/concept/<concept_id>/checklist/<checklist_id>/create/
         Body: { body, parent_id (optional), image (optional) }
         """
@@ -716,10 +696,10 @@ class CommentCreateView(APIView):
             if parent_id:
                 try:
                     parent = Comment.objects.get(id=parent_id)
-                    # Verify parent is for the same concept, trophy_id, and checklist_id
-                    if parent.concept != concept or parent.trophy_id != trophy_id or parent.checklist_id != checklist_id:
+                    # Verify parent is for the same concept and checklist
+                    if parent.concept != concept or parent.checklist_id != checklist_id:
                         return Response(
-                            {'error': 'Parent comment does not belong to this concept/trophy/checklist.'},
+                            {'error': 'Parent comment does not belong to this concept/checklist.'},
                             status=status.HTTP_400_BAD_REQUEST
                         )
                 except Comment.DoesNotExist:
@@ -731,7 +711,6 @@ class CommentCreateView(APIView):
                 concept=concept,
                 body=body,
                 parent=parent,
-                trophy_id=trophy_id,
                 checklist_id=checklist_id
             )
 

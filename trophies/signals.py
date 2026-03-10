@@ -2,7 +2,7 @@ import logging
 from django.db.models.signals import post_save, post_delete, m2m_changed
 from django.dispatch import receiver
 from django.db.models import F
-from trophies.models import UserBadge, UserBadgeProgress, Comment, Stage
+from trophies.models import UserBadge, UserBadgeProgress, Stage
 
 logger = logging.getLogger(__name__)
 
@@ -19,19 +19,6 @@ def decrement_badge_earned_count_on_delete(sender, instance, **kwargs):
         earned_count=F('earned_count') - 1
     )
 
-
-@receiver(post_save, sender=Comment, dispatch_uid="update_comment_count_on_save")
-def update_comment_count_on_save(sender, instance, created, **kwargs):
-    """Update denormalized comment_count on Concept when comment is created.
-
-    Only counts concept-level comments (trophy_id and checklist_id are both null).
-    Trophy-level and checklist-level comments are counted separately.
-    """
-    if created and not instance.is_deleted and instance.trophy_id is None and instance.checklist_id is None:
-        concept = instance.concept
-        if concept:
-            concept.comment_count = F('comment_count') + 1
-            concept.save(update_fields=['comment_count'])
 
 
 # --- Gamification Signal Handlers ---

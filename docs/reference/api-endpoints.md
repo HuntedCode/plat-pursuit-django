@@ -28,15 +28,11 @@ All API endpoints live under `/api/v1/` and are defined in `api/urls.py`. The we
 | GET | `/api/v1/summary/` | Login | Profile summary data |
 | POST | `/api/v1/trophy-case/` | Login | Update trophy case selections |
 
-### Comments
+### Comments (Checklist Only)
 
 | Method | Path | Auth | Purpose |
 |--------|------|------|---------|
-| GET | `/api/v1/comments/concept/<id>/` | No | List concept-level comments |
-| GET | `/api/v1/comments/concept/<id>/trophy/<id>/` | No | List trophy-level comments |
-| GET | `/api/v1/comments/concept/<id>/checklist/<id>/` | No | List checklist-level comments |
-| POST | `/api/v1/comments/concept/<id>/create/` | Login | Create concept comment |
-| POST | `/api/v1/comments/concept/<id>/trophy/<id>/create/` | Login | Create trophy comment |
+| GET | `/api/v1/comments/concept/<id>/checklist/<id>/` | No | List checklist comments |
 | POST | `/api/v1/comments/concept/<id>/checklist/<id>/create/` | Login | Create checklist comment |
 | GET/PUT/DELETE | `/api/v1/comments/<id>/` | Login | Comment detail/edit/delete |
 | POST | `/api/v1/comments/<id>/vote/` | Login | Toggle upvote |
