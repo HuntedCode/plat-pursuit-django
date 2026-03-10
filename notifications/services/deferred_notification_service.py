@@ -369,7 +369,7 @@ class DeferredNotificationService:
             context = {
                 'username': profile.display_psn_username or profile.psn_username,
                 'badges': email_badges,
-                'badges_url': f"{settings.SITE_URL}/profile/{profile_slug}/badges/",
+                'badges_url': f"{settings.SITE_URL}/profiles/{profile.psn_username}/?tab=badges",
                 'site_url': settings.SITE_URL,
                 'preference_url': preference_url,
             }

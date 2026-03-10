@@ -635,7 +635,7 @@ def send_consolidated_milestone_email(user_milestones):
     try:
         preference_token = EmailPreferenceService.generate_preference_token(user.id)
         preference_url = f"{settings.SITE_URL}/users/email-preferences/?token={preference_token}"
-        profile_slug = profile.slug or profile.psn_username
+        psn_username = profile.psn_username
 
         # Build context for each milestone
         milestone_contexts = []
@@ -644,8 +644,8 @@ def send_consolidated_milestone_email(user_milestones):
             category_slug = ctx.get('milestone_category', 'overview')
             criteria_type = ctx.get('criteria_type', '')
             ctx['milestones_url'] = (
-                f"{settings.SITE_URL}/profile/{profile_slug}/milestones/"
-                f"?category={category_slug}#{criteria_type}"
+                f"{settings.SITE_URL}/profiles/{psn_username}/"
+                f"?tab=milestones&category={category_slug}#{criteria_type}"
             )
             milestone_contexts.append(ctx)
 
@@ -656,7 +656,7 @@ def send_consolidated_milestone_email(user_milestones):
             'is_single': milestone_count == 1,
             'site_url': settings.SITE_URL,
             'preference_url': preference_url,
-            'profile_milestones_url': f"{settings.SITE_URL}/profile/{profile_slug}/milestones/",
+            'profile_milestones_url': f"{settings.SITE_URL}/profiles/{psn_username}/?tab=milestones",
         }
 
         EmailService.send_html_email(

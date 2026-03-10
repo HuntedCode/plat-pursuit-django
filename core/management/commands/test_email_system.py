@@ -783,25 +783,35 @@ class Command(BaseCommand):
             'username': 'TestUser',
             'badges': [
                 {
-                    'series_name': 'Souls Series',
-                    'tier_name': 'Gold',
-                    'tier_emoji': '\U0001f947',
-                    'progress_current': 3,
-                    'progress_total': 4,
-                    'next_tier': 'Platinum',
-                    'badge_url': f'{settings.SITE_URL}/badges/souls-series/',
+                    'badge_name': 'Souls Series',
+                    'badge_series': 'Souls Series',
+                    'badge_tier': 3,
+                    'badge_tier_name': 'Gold',
+                    'badge_description': 'Conquer the lands of Dark Souls, Bloodborne, and Elden Ring.',
+                    'is_max_tier': False,
+                    'next_tier_progress': {
+                        'tier_name': 'Platinum',
+                        'completed_stages': 3,
+                        'required_stages': 4,
+                        'progress_percentage': 75,
+                    },
                 },
                 {
-                    'series_name': 'Final Fantasy',
-                    'tier_name': 'Silver',
-                    'tier_emoji': '\U0001f948',
-                    'progress_current': 2,
-                    'progress_total': 3,
-                    'next_tier': 'Gold',
-                    'badge_url': f'{settings.SITE_URL}/badges/final-fantasy/',
+                    'badge_name': 'Final Fantasy',
+                    'badge_series': 'Final Fantasy',
+                    'badge_tier': 2,
+                    'badge_tier_name': 'Silver',
+                    'badge_description': 'Journey through the worlds of Final Fantasy.',
+                    'is_max_tier': False,
+                    'next_tier_progress': {
+                        'tier_name': 'Gold',
+                        'completed_stages': 2,
+                        'required_stages': 3,
+                        'progress_percentage': 67,
+                    },
                 },
             ],
-            'badges_url': f'{settings.SITE_URL}/profile/TestUser/badges/',
+            'badges_url': f'{settings.SITE_URL}/profiles/TestUser/?tab=badges',
             'site_url': settings.SITE_URL,
             'preference_url': preference_url,
         }
@@ -835,7 +845,7 @@ class Command(BaseCommand):
         except Exception:
             preference_url = f"{settings.SITE_URL}/users/email-preferences/"
 
-        milestones_url = f'{settings.SITE_URL}/profile/TestUser/milestones/'
+        milestones_url = f'{settings.SITE_URL}/profiles/TestUser/?tab=milestones'
 
         # Sample milestone contexts (consolidated format)
         sample_milestones = [
