@@ -1,8 +1,9 @@
 {% extends 'base.html' %}
-{% load custom_filters humanize static %}
+{% load custom_filters humanize static seo_tags %}
 {% block title %}{{ game.title_name }}{% endblock %}
 {% block og_image %}{% if game.image_url %}{{ game.image_url }}{% else %}{{ request.scheme }}://{{ request.get_host }}{{ logo_path }}{% endif %}{% endblock %}
 {% block twitter_image %}{% if game.image_url %}{{ game.image_url }}{% else %}{{ request.scheme }}://{{ request.get_host }}{{ logo_path }}{% endif %}{% endblock %}
+{% block extra_head %}{% jsonld_game game game.concept request %}{% endblock %}
 
 {% block content %}
     <div id="game-detail-container"
@@ -111,7 +112,7 @@
                                     <a href="#trophy-group-{{ group_id }}"
                                        class="btn btn-sm btn-ghost border border-base-300 flex-shrink-0 gap-1.5 hover:border-primary hover:shadow-sm"
                                        onclick="event.preventDefault(); document.getElementById('trophy-group-{{ group_id }}').scrollIntoView({behavior:'smooth', block:'start'})">
-                                        <img src="{{ group.trophy_group_icon_url }}" class="w-5 h-5 rounded object-cover" alt="" />
+                                        <img src="{{ group.trophy_group_icon_url }}" class="w-5 h-5 rounded object-cover" alt="{{ group.trophy_group_name }}" />
                                         <span class="text-xs whitespace-nowrap">{{ group.trophy_group_name }}</span>
                                         <span class="badge badge-xs badge-ghost">{{ trophies|length }}</span>
                                     </a>

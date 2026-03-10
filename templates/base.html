@@ -1,4 +1,4 @@
-{% load static %}
+{% load static seo_tags %}
 {% static 'images/logo.png' as logo_path %}
 <!doctype html>
 <html lang="en" data-theme="plat-pursuit-dark">
@@ -12,14 +12,14 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>{% block title %}{{ title|default:"Platinum Pursuit" }}{% endblock %} - Platinum Pursuit</title>
-    <meta name="description" content="{% block meta_description %}Platinum Pursuit - No trophy can hide from us. Track your trophies, earn game badges, and connect with fellow hunters.{% endblock %}">
-    <meta name="robots" content="index, follow">
+    <meta name="description" content="{% block meta_description %}{{ seo_description|default:'Platinum Pursuit: No trophy can hide from us. Track your trophies, earn game badges, and connect with fellow hunters.' }}{% endblock %}">
+    <meta name="robots" content="{% block robots %}index, follow{% endblock %}">
     <link rel="canonical" href="{% block canonical_url %}{{ request.build_absolute_uri }}{% endblock %}">
 
     <!-- Open Graph -->
-    <meta property="og:title" content="{% block og_title %}{{ title|default:'Platinum Pursuit' }} - Platinum Pursuit{% endblock %}">
-    <meta property="og:description" content="{% block og_description %}Track your PlayStation trophies, earn game badges, and connect with fellow trophy hunters.{% endblock %}">
-    <meta property="og:type" content="website">
+    <meta property="og:title" content="{% block og_title %}{% firstof seo_title title 'Platinum Pursuit' %}{% endblock %}">
+    <meta property="og:description" content="{% block og_description %}{{ seo_description|default:'Track your PlayStation trophies, earn game badges, and connect with fellow trophy hunters.' }}{% endblock %}">
+    <meta property="og:type" content="{% block og_type %}website{% endblock %}">
     <meta property="og:url" content="{{ request.build_absolute_uri }}">
     <meta property="og:image" content="{% block og_image %}{{ request.scheme }}://{{ request.get_host }}{{ logo_path }}{% endblock %}">
     <meta property="og:site_name" content="Platinum Pursuit">
@@ -27,15 +27,20 @@
     <!-- Twitter Card -->
     <meta name="twitter:card" content="{% block twitter_card_type %}summary{% endblock %}">
     <meta name="twitter:site" content="@platpursuit">
-    <meta name="twitter:title" content="{% block twitter_title %}{{ title|default:'Platinum Pursuit' }} - Platinum Pursuit{% endblock %}">
-    <meta name="twitter:description" content="{% block twitter_description %}Track your PlayStation trophies, earn game badges, and connect with fellow trophy hunters.{% endblock %}">
+    <meta name="twitter:title" content="{% block twitter_title %}{% firstof seo_title title 'Platinum Pursuit' %}{% endblock %}">
+    <meta name="twitter:description" content="{% block twitter_description %}{{ seo_description|default:'Track your PlayStation trophies, earn game badges, and connect with fellow trophy hunters.' }}{% endblock %}">
     <meta name="twitter:image" content="{% block twitter_image %}{{ request.scheme }}://{{ request.get_host }}{{ logo_path }}{% endblock %}">
 
-    <link rel="icon" type="image/x-icon" href="{% static 'images/logo.png' %}" />
+    <link rel="icon" type="image/png" sizes="32x32" href="{% static 'images/favicon-32x32.png' %}">
+    <link rel="icon" type="image/png" sizes="16x16" href="{% static 'images/favicon-16x16.png' %}">
+    <link rel="apple-touch-icon" sizes="180x180" href="{% static 'images/apple-touch-icon.png' %}">
     <link rel="stylesheet" href="{% static 'css/output.css' %}" />
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    {% if ADSENSE_ENABLED %}<link rel="preconnect" href="https://pagead2.googlesyndication.com" crossorigin>{% endif %}
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&family=Poppins:wght@400;600;700&display=swap" rel="stylesheet">
+    {% jsonld_organization %}
+    {% if breadcrumb %}{% jsonld_breadcrumbs breadcrumb request %}{% endif %}
     {% block extra_head %}{% endblock %}
   </head>
   <body class="bg-base-100 text-base-content{% if ADSENSE_ENABLED %} has-mobile-ad{% endif %}" {% if user.is_authenticated %}data-authenticated="true"{% endif %} {% if image_urls.bg_url %}style="background-image: url('{{ image_urls.bg_url }}'); background-size: cover; background-position: center; background-attachment: fixed;"{% elif user_theme_style %}style="{{ user_theme_style }}"{% endif %}>

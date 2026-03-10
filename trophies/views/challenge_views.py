@@ -165,6 +165,10 @@ class ChallengeHubView(ProfileHotbarMixin, TemplateView):
                 {'text': 'Home', 'url': reverse_lazy('home')},
                 {'text': 'Challenges'},
             ]
+            context['seo_description'] = (
+                "Community trophy challenges on Platinum Pursuit. "
+                "A-Z Challenges, Platinum Calendars, and Genre Challenges."
+            )
             track_page_view('challenges_browse', 'hub', self.request)
 
         return context
@@ -462,6 +466,11 @@ class AZChallengeDetailView(ProfileHotbarMixin, DetailView):
                     })
             context['spinner_slots_json'] = json.dumps(spinner_data)
 
+        context['seo_description'] = (
+            f"{challenge.name}: A-Z Platinum Challenge by {challenge.profile.display_psn_username}. "
+            f"{challenge.completed_count}/{challenge.total_items} letters completed."
+        )
+
         # Increment view count atomically
         Challenge.objects.filter(pk=challenge.pk).update(view_count=F('view_count') + 1)
 
@@ -641,6 +650,11 @@ class CalendarChallengeDetailView(ProfileHotbarMixin, DetailView):
         # Provide theme grid data for share card color picker (owner only)
         if context['is_owner']:
             context['available_themes'] = get_available_themes_for_grid(include_game_art=False)
+
+        context['seo_description'] = (
+            f"{challenge.name}: Platinum Calendar by {challenge.profile.display_psn_username}. "
+            f"{challenge.completed_count} platinums earned across 12 months."
+        )
 
         # Increment view count atomically to avoid race conditions
         Challenge.objects.filter(pk=challenge.pk).update(view_count=F('view_count') + 1)
@@ -966,6 +980,11 @@ class GenreChallengeDetailView(ProfileHotbarMixin, DetailView):
                         'progress': progress.get('percentage', 0),
                     })
             context['spinner_slots_json'] = json.dumps(spinner_data)
+
+        context['seo_description'] = (
+            f"{challenge.name}: Genre Challenge by {challenge.profile.display_psn_username}. "
+            f"{challenge.completed_count}/{challenge.total_items} genres completed."
+        )
 
         # Increment view count atomically
         Challenge.objects.filter(pk=challenge.pk).update(view_count=F('view_count') + 1)

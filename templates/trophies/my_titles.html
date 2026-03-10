@@ -1,7 +1,8 @@
 {% extends 'base.html' %}
 {% load static custom_filters %}
 
-{% block title %}My Titles - Platinum Pursuit{% endblock %}
+{% block title %}My Titles{% endblock %}
+{% block robots %}noindex, nofollow{% endblock %}
 
 {% block content %}
     {% include 'partials/breadcrumb.html' with items=breadcrumb %}
@@ -130,7 +131,7 @@
                             </div>
                         {% elif source.type == 'milestone' %}
                             {% if source.image %}
-                                <img src="{{ source.image }}" alt="" class="w-12 h-12 shrink-0 object-contain" loading="lazy" />
+                                <img src="{{ source.image }}" alt="{{ source.name }}" class="w-12 h-12 shrink-0 object-contain" loading="lazy" />
                             {% else %}
                                 <div class="w-12 h-12 shrink-0 flex items-center justify-center bg-base-200 rounded-full">
                                     <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5C7 4 9 7 9 7"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5C17 4 15 7 15 7"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>
@@ -189,7 +190,7 @@
                         </div>
                     {% elif source.type == 'milestone' %}
                         {% if source.image %}
-                            <img src="{{ source.image }}" alt="" class="w-7 h-7 shrink-0 object-contain" loading="lazy" />
+                            <img src="{{ source.image }}" alt="{{ source.name }}" class="w-7 h-7 shrink-0 object-contain" loading="lazy" />
                         {% else %}
                             <div class="w-7 h-7 shrink-0 flex items-center justify-center bg-base-200 rounded-full">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5C7 4 9 7 9 7"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5C17 4 15 7 15 7"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>
@@ -262,7 +263,7 @@
                     {% for source in entry.sources %}
                     <div class="flex items-center gap-3 mt-1">
                         {% if source.image %}
-                            <img src="{{ source.image }}" alt="" class="w-12 h-12 shrink-0 object-contain" loading="lazy" />
+                            <img src="{{ source.image }}" alt="{{ source.name }}" class="w-12 h-12 shrink-0 object-contain" loading="lazy" />
                         {% else %}
                             <div class="w-12 h-12 shrink-0 flex items-center justify-center bg-base-200 rounded-full">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 text-accent" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 0L14.59 8.41L23 12L14.59 15.59L12 24L9.41 15.59L1 12L9.41 8.41Z"/></svg>
@@ -314,7 +315,7 @@
                  {% if not entry.is_displayed %}title="Click to equip"{% endif %}>
                 {% with source=entry.sources.0 %}
                     {% if source.image %}
-                        <img src="{{ source.image }}" alt="" class="w-7 h-7 shrink-0 object-contain" loading="lazy" />
+                        <img src="{{ source.image }}" alt="{{ source.name }}" class="w-7 h-7 shrink-0 object-contain" loading="lazy" />
                     {% else %}
                         <div class="w-7 h-7 shrink-0 flex items-center justify-center bg-base-200 rounded-full">
                             <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-accent" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 0L14.59 8.41L23 12L14.59 15.59L12 24L9.41 15.59L1 12L9.41 8.41Z"/></svg>
@@ -380,7 +381,7 @@
                             </div>
                         {% elif source.type == 'milestone' %}
                             {% if source.image %}
-                                <img src="{{ source.image }}" alt="" class="w-12 h-12 shrink-0 object-contain grayscale hover:grayscale-0 transition-all duration-300" loading="lazy" />
+                                <img src="{{ source.image }}" alt="{{ source.name }}" class="w-12 h-12 shrink-0 object-contain grayscale hover:grayscale-0 transition-all duration-300" loading="lazy" />
                             {% else %}
                                 <div class="w-12 h-12 shrink-0 flex items-center justify-center bg-base-300 rounded-full">
                                     <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 text-base-content/30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5C7 4 9 7 9 7"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5C17 4 15 7 15 7"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>
@@ -428,7 +429,7 @@
                         </div>
                     {% elif source.type == 'milestone' %}
                         {% if source.image %}
-                            <img src="{{ source.image }}" alt="" class="w-7 h-7 shrink-0 object-contain grayscale" loading="lazy" />
+                            <img src="{{ source.image }}" alt="{{ source.name }}" class="w-7 h-7 shrink-0 object-contain grayscale" loading="lazy" />
                         {% else %}
                             <div class="w-7 h-7 shrink-0 flex items-center justify-center bg-base-300 rounded-full">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-base-content/30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5C7 4 9 7 9 7"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5C17 4 15 7 15 7"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>

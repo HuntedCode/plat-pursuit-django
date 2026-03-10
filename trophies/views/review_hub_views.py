@@ -51,6 +51,10 @@ class ReviewHubLandingView(ProfileHotbarMixin, TemplateView):
             context['unrated_count'] = ReviewHubService.get_unrated_platinum_count(profile)
             context['unreviewed_count'] = ReviewHubService.get_unreviewed_platinum_count(profile)
 
+        context['seo_description'] = (
+            "Community reviews and ratings for PlayStation games on Platinum Pursuit."
+        )
+
         return context
 
 
@@ -246,6 +250,11 @@ class ReviewHubDetailView(ProfileHotbarMixin, BackgroundContextMixin, DetailView
         context['concept_icon'] = self._get_concept_icon(concept)
 
         context['unique_platforms'] = self._get_unique_platforms(context['concept_games'])
+
+        context['seo_description'] = (
+            f"Community reviews and ratings for {concept.unified_title}. "
+            f"See what trophy hunters think on Platinum Pursuit."
+        )
 
         return context
 

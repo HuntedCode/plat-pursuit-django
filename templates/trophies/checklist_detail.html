@@ -4,6 +4,7 @@
 {% block og_image %}{% if og_image_url %}{{ og_image_url }}{% else %}{{ request.scheme }}://{{ request.get_host }}{{ logo_path }}{% endif %}{% endblock %}
 {% block twitter_image %}{% if og_image_url %}{{ og_image_url }}{% else %}{{ request.scheme }}://{{ request.get_host }}{{ logo_path }}{% endif %}{% endblock %}
 {% block twitter_card_type %}{% if checklist.thumbnail %}summary_large_image{% else %}summary{% endif %}{% endblock %}
+{% block og_type %}article{% endblock %}
 
 {% block content %}
 <div id="checklist-detail-container"

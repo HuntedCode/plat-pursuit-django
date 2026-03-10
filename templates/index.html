@@ -1,5 +1,8 @@
 {% extends 'base.html' %}
+{% load seo_tags %}
 {% block title %}Dashboard{% endblock %}
+{% block meta_description %}Platinum Pursuit: track PlayStation trophies, earn game badges, complete challenges, and connect with fellow trophy hunters.{% endblock %}
+{% block extra_head %}{% jsonld_website request %}{% endblock %}
 {% block content %}
     {% include 'partials/breadcrumb.html' with items=breadcrumb %}
 

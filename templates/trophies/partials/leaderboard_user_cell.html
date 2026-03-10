@@ -5,7 +5,7 @@
     <div class="avatar">
         <div class="w-6 lg:w-8 rounded-full ring-2 {% if entry.is_premium %}ring-warning{% else %}ring-primary{% endif %}">
             {% with entry.avatar_url as avatar %}
-                <img src="{% if avatar %}{{ avatar }}{% else %}{% static 'default-avatar.png' %}{% endif %}" alt="" loading="lazy" decoding="async" />
+                <img src="{% if avatar %}{{ avatar }}{% else %}{% static 'default-avatar.png' %}{% endif %}" alt="User avatar" loading="lazy" decoding="async" />
             {% endwith %}
         </div>
     </div>

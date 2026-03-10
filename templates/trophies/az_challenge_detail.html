@@ -1,7 +1,7 @@
 {% extends 'base.html' %}
 {% load static custom_filters %}
 
-{% block title %}{{ challenge.name }} - A-Z Challenge - Platinum Pursuit{% endblock %}
+{% block title %}{{ challenge.name }} - A-Z Challenge{% endblock %}
 {% block og_image %}{% if challenge.profile.avatar_url %}{{ challenge.profile.avatar_url }}{% else %}{{ request.scheme }}://{{ request.get_host }}{{ logo_path }}{% endif %}{% endblock %}
 {% block twitter_image %}{% if challenge.profile.avatar_url %}{{ challenge.profile.avatar_url }}{% else %}{{ request.scheme }}://{{ request.get_host }}{{ logo_path }}{% endif %}{% endblock %}
 
@@ -16,7 +16,7 @@
                     <div class="flex items-center gap-2 mb-1">
                         <a href="{% url 'profile_detail' challenge.profile.psn_username %}" class="flex items-center gap-2 hover:text-primary transition-colors">
                             {% if challenge.profile.avatar_url %}
-                                <img src="{{ challenge.profile.avatar_url }}" alt="" class="w-6 h-6 rounded-full" />
+                                <img src="{{ challenge.profile.avatar_url }}" alt="{{ challenge.profile.display_psn_username }}" class="w-6 h-6 rounded-full" />
                             {% endif %}
                             <span class="text-sm font-medium">{{ challenge.profile.psn_username }}</span>
                         </a>

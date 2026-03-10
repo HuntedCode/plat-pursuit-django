@@ -1,7 +1,7 @@
 {% extends 'base.html' %}
 {% load static humanize %}
 
-{% block title %}Badge Reveal Spinner - PlatPursuit{% endblock %}
+{% block title %}Badge Reveal Spinner{% endblock %}
 
 {% block content %}
 <div class="container mx-auto p-4 max-w-6xl">
@@ -83,7 +83,7 @@
                     <p class="text-xs text-base-content/50 uppercase tracking-wider mb-2">Last Pick</p>
                     <div class="flex items-center gap-3">
                         <div class="w-12 h-12 rounded-lg overflow-hidden border border-base-300">
-                            <img id="last-spin-icon" src="" alt="" class="w-full h-full object-cover" />
+                            <img id="last-spin-icon" src="" alt="Badge icon" class="w-full h-full object-cover" />
                         </div>
                         <div class="text-left">
                             <p class="font-bold" id="last-spin-name"></p>
@@ -132,7 +132,7 @@
                                         <div class="flex items-center gap-2">
                                             <div class="w-8 h-8 rounded overflow-hidden border border-base-300 shrink-0">
                                                 {% if badge.icon %}
-                                                <img src="{{ badge.icon }}" alt="" class="w-full h-full object-cover" loading="lazy" />
+                                                <img src="{{ badge.icon }}" alt="{{ badge.name }}" class="w-full h-full object-cover" loading="lazy" />
                                                 {% else %}
                                                 <div class="w-full h-full bg-base-300 flex items-center justify-center text-xs text-base-content/30">?</div>
                                                 {% endif %}

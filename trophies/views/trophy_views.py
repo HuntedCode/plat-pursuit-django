@@ -122,6 +122,11 @@ class TrophiesListView(ProfileHotbarMixin, ListView):
         context['show_only_platinum'] = self.request.GET.get('show_only_platinum', '')
         context['filter_shovelware'] = self.request.GET.get('filter_shovelware', '')
 
+        context['seo_description'] = (
+            "Search PlayStation trophies on Platinum Pursuit. "
+            "Filter by type, rarity, and game to find what you're looking for."
+        )
+
         track_page_view('trophies_list', 'list', self.request)
         return context
 

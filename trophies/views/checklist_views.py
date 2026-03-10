@@ -207,6 +207,11 @@ class ChecklistDetailView(ProfileHotbarMixin, DetailView):
         ).count()
         context['comment_count'] = comment_count
 
+        context['seo_description'] = (
+            f"{checklist.title}: A trophy guide for {checklist.concept.unified_title} "
+            f"by {checklist.profile.display_psn_username}."
+        )
+
         if checklist.status == 'published':
             track_page_view('guide', checklist.id, self.request)
         context['view_count'] = checklist.view_count if checklist.status == 'published' else None
@@ -585,6 +590,10 @@ class BrowseGuidesView(ProfileHotbarMixin, ListView):
             {'text': 'Home', 'url': reverse_lazy('home')},
             {'text': 'Browse All Guides'},
         ]
+
+        context['seo_description'] = (
+            "Browse community-created trophy guides and checklists on Platinum Pursuit."
+        )
 
         track_page_view('guides_browse', 'content', self.request)
         return context

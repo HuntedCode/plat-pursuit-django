@@ -1,6 +1,7 @@
 {% extends 'base.html' %}
 {% load static custom_filters %}
-{% block title %}Edit {{ game_list.name }} - Platinum Pursuit{% endblock %}
+{% block title %}Edit {{ game_list.name }}{% endblock %}
+{% block robots %}noindex, nofollow{% endblock %}
 
 {% block content %}
 {# Section 1: Header #}

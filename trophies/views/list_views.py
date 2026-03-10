@@ -89,6 +89,10 @@ class BrowseListsView(ProfileHotbarMixin, ListView):
             {'text': 'Browse Lists'},
         ]
 
+        context['seo_description'] = (
+            "Browse curated PlayStation game lists from the Platinum Pursuit community."
+        )
+
         track_page_view('game_lists_browse', 'content', self.request)
         return context
 
@@ -165,6 +169,11 @@ class GameListDetailView(ProfileHotbarMixin, DetailView):
             {'text': 'Lists', 'url': reverse_lazy('lists_browse')},
             {'text': game_list.name},
         ]
+
+        context['seo_description'] = (
+            f"{game_list.name}: A curated game list by {game_list.profile.display_psn_username} "
+            f"with {game_list.game_count} games."
+        )
 
         track_page_view('game_list', game_list.id, self.request)
         return context

@@ -27,7 +27,7 @@
                 <div class="grid grid-cols-2 lg:grid-cols-3 gap-1 max-h-64 lg:max-h-[28rem] overflow-y-auto pr-1">
                     {% for trophy in trophy_list %}
                         <div class="flex items-center gap-2 p-1.5 rounded {% if trophy.earned %}bg-success/10 border-l-2 border-success{% endif %} hover:bg-base-200/50 transition-colors">
-                            <img src="{{ trophy.trophy_icon_url }}" alt="" class="w-8 h-8 object-cover rounded shrink-0" loading="lazy" decoding="async" />
+                            <img src="{{ trophy.trophy_icon_url }}" alt="{{ trophy.trophy_name }}" class="w-8 h-8 object-cover rounded shrink-0" loading="lazy" decoding="async" />
                             <div class="flex-1 min-w-0">
                                 <p class="text-xs font-semibold line-clamp-1 pr-1">{{ trophy.trophy_name }}</p>
                                 <p class="text-xs text-base-content/50 line-clamp-1 italic pr-1">{{ trophy.trophy_detail }}</p>

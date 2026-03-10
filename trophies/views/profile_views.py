@@ -96,6 +96,10 @@ class ProfilesListView(ProfileHotbarMixin, ListView):
 
         context['form'] = ProfileSearchForm(self.request.GET)
 
+        context['seo_description'] = (
+            "Browse PlayStation trophy hunter profiles and leaderboards on Platinum Pursuit."
+        )
+
         track_page_view('profiles_list', 'list', self.request)
         return context
 
@@ -534,6 +538,12 @@ class ProfileDetailView(ProfileHotbarMixin, DetailView):
         # Add premium background if applicable
         if profile.user_is_premium and profile.selected_background:
             context['image_urls'] = {'bg_url': profile.selected_background.bg_url}
+
+        context['seo_description'] = (
+            f"{profile.display_psn_username}'s PlayStation trophy profile. "
+            f"Level {profile.trophy_level}, {profile.total_trophies} trophies, "
+            f"{profile.total_games} games."
+        )
 
         track_page_view('profile', profile.id, self.request)
         context['view_count'] = profile.view_count

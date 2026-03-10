@@ -128,6 +128,11 @@ class GamesListView(ProfileHotbarMixin, ListView):
         context['show_only_platinum'] = self.request.GET.get('show_only_platinum', '')
         context['filter_shovelware'] = self.request.GET.get('filter_shovelware', '')
 
+        context['seo_description'] = (
+            "Browse PlayStation games on Platinum Pursuit. "
+            "Search by name, filter by platform, and track your trophy progress."
+        )
+
         track_page_view('games_list', 'list', self.request)
         return context
 
@@ -763,6 +768,13 @@ class GameDetailView(ProfileHotbarMixin, DetailView):
 
         # Build breadcrumbs
         context['breadcrumb'] = self._build_breadcrumbs(game, target_profile)
+
+        context['seo_description'] = (
+            f"{game.title_name} on {game.platforms_display}. "
+            f"{game.get_total_defined_trophies()} trophies including "
+            f"{game.defined_trophies.get('platinum', 0)} platinum. "
+            f"Track your progress on Platinum Pursuit."
+        )
 
         track_page_view('game', game.id, self.request)
         context['view_count'] = game.view_count

@@ -290,6 +290,11 @@ class BadgeListView(ProfileHotbarMixin, ListView):
         ]
         context['form'] = BadgeSearchForm(self.request.GET)
 
+        context['seo_description'] = (
+            "Explore all badge series on Platinum Pursuit. "
+            "Track your progress across game collections and earn every tier."
+        )
+
         track_page_view('badges_list', 'list', self.request)
         return context
 
@@ -706,6 +711,11 @@ class BadgeDetailView(ProfileHotbarMixin, DetailView):
             {'text': 'Badges', 'url': reverse_lazy('badges_list')},
             {'text': context['badge'].effective_display_series},
         ]
+
+        context['seo_description'] = (
+            f"{context['badge'].effective_display_series} badge series on Platinum Pursuit. "
+            f"Track your progress across stages and compete on leaderboards."
+        )
 
         track_page_view('badge', series_slug, self.request)
         tier1_badge = series_badges.filter(tier=1).first()

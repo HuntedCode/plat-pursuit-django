@@ -5,7 +5,7 @@
            role="tab"
            aria-selected="{% if group.trophy_group_id == active_group_id %}true{% else %}false{% endif %}">
             {% if group.icon_url %}
-                <img src="{{ group.icon_url }}" alt="" class="w-5 h-5 rounded object-cover" loading="lazy" />
+                <img src="{{ group.icon_url }}" alt="{{ group.display_name }}" class="w-5 h-5 rounded object-cover" loading="lazy" />
             {% endif %}
             {{ group.display_name }}
             {% if group.trophy_group_id != 'default' %}
