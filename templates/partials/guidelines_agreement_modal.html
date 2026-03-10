@@ -1,0 +1,70 @@
+{# Guidelines Agreement Modal (shared across comments, reviews, and rate-my-games) #}
+{# Requires: each page's JS must define a global confirmGuidelines() function #}
+{# and wire up the checkbox enable/disable for confirm-guidelines-btn. #}
+<dialog id="guidelines-agreement-modal" class="modal">
+    <div class="modal-box max-w-2xl">
+        <h3 class="font-bold text-2xl mb-4">Welcome to the Community!</h3>
+        <p class="mb-4">Before you post, please review and agree to our community guidelines:</p>
+
+        <div class="bg-base-200 p-4 rounded-lg mb-4 max-h-96 overflow-y-auto">
+            <div class="space-y-3">
+                <div class="border-l-4 border-primary pl-3">
+                    <h4 class="font-semibold">Be Respectful</h4>
+                    <p class="text-sm text-base-content/70">Treat all members with respect. No harassment, hate speech, personal attacks, or discriminatory language of any kind.</p>
+                </div>
+
+                <div class="border-l-4 border-primary pl-3">
+                    <h4 class="font-semibold">Keep It Family-Friendly</h4>
+                    <p class="text-sm text-base-content/70">Avoid NSFW content, explicit language, and mature themes. We want a welcoming environment for all ages.</p>
+                </div>
+
+                <div class="border-l-4 border-primary pl-3">
+                    <h4 class="font-semibold">Stay On Topic</h4>
+                    <p class="text-sm text-base-content/70">Keep discussions relevant to PlayStation gaming, trophies, and the game being discussed.</p>
+                </div>
+
+                <div class="border-l-4 border-primary pl-3">
+                    <h4 class="font-semibold">No Spam or Self-Promotion</h4>
+                    <p class="text-sm text-base-content/70">Don't post repetitive content, advertisements, or excessive self-promotion.</p>
+                </div>
+
+                <div class="border-l-4 border-primary pl-3">
+                    <h4 class="font-semibold">Use Spoiler Tags</h4>
+                    <p class="text-sm text-base-content/70">Use spoiler tags ||like this|| when discussing plot points, endings, or major revelations.</p>
+                </div>
+
+                <div class="border-l-4 border-primary pl-3">
+                    <h4 class="font-semibold">Be Helpful and Constructive</h4>
+                    <p class="text-sm text-base-content/70">Share tips and advice that helps the community. Keep criticism respectful.</p>
+                </div>
+
+                <div class="border-l-4 border-primary pl-3">
+                    <h4 class="font-semibold">Follow Platform Rules</h4>
+                    <p class="text-sm text-base-content/70">Adhere to laws and PlayStation's Terms of Service. Don't share exploits or hacks.</p>
+                </div>
+
+                <div class="border-l-4 border-primary pl-3">
+                    <h4 class="font-semibold">Report, Don't Retaliate</h4>
+                    <p class="text-sm text-base-content/70">Report rule-breaking content to moderators instead of retaliating.</p>
+                </div>
+
+                <div class="border-l-4 border-primary pl-3">
+                    <h4 class="font-semibold">Protect Privacy</h4>
+                    <p class="text-sm text-base-content/70">Don't share personal information about yourself or others.</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="form-control mb-4">
+            <label class="label cursor-pointer justify-start gap-3">
+                <input type="checkbox" id="agree-to-guidelines" class="checkbox checkbox-primary">
+                <span class="label-text">I have read and agree to follow the community guidelines</span>
+            </label>
+        </div>
+
+        <div class="modal-action">
+            <button class="btn btn-ghost" onclick="document.getElementById('guidelines-agreement-modal').close(); document.getElementById('agree-to-guidelines').checked = false;">Cancel</button>
+            <button class="btn btn-primary" id="confirm-guidelines-btn" disabled onclick="confirmGuidelines()">Agree and Continue</button>
+        </div>
+    </div>
+</dialog>

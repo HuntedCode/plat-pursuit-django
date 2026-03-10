@@ -55,6 +55,10 @@ class ReviewService:
         if not can:
             return None, reason
 
+        # Guidelines agreement check
+        if not profile.guidelines_agreed:
+            return None, "You must agree to the community guidelines before posting a review."
+
         # Validate body length (raw text, stripped whitespace)
         stripped = body.strip() if body else ''
         if len(stripped) < ReviewService.MIN_BODY_LENGTH:

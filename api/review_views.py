@@ -534,6 +534,22 @@ class WizardQueueView(APIView):
                         'overall_rating': float(r['overall_rating']),
                     }
 
+            # Pre-fetch existing reviews for games that have been reviewed
+            existing_reviews = {}
+            reviewed_in_page = [cid for cid in paginated_ids if cid in reviewed_concept_ids]
+            if reviewed_in_page:
+                for r in Review.objects.filter(
+                    profile=profile,
+                    concept_id__in=reviewed_in_page,
+                    is_deleted=False,
+                    concept_trophy_group__trophy_group_id='default',
+                ).values('concept_id', 'id', 'body', 'recommended'):
+                    existing_reviews[r['concept_id']] = {
+                        'id': r['id'],
+                        'body': r['body'],
+                        'recommended': r['recommended'],
+                    }
+
             # Pre-fetch user's gameplay stats for these concepts
             from trophies.models import ProfileGame
             from django.db.models import Sum, Max
@@ -588,6 +604,8 @@ class WizardQueueView(APIView):
                 }
                 if cid in existing_ratings:
                     item['existing_rating'] = existing_ratings[cid]
+                if cid in existing_reviews:
+                    item['existing_review'] = existing_reviews[cid]
                 if cid in game_stats:
                     item['stats'] = game_stats[cid]
                 if cid in plat_dates:
@@ -705,6 +723,21 @@ class WizardQueueView(APIView):
                     'overall_rating': float(r['overall_rating']),
                 }
 
+        # Pre-fetch existing DLC reviews
+        dlc_existing_reviews = {}
+        reviewed_dlc_ids = [gid for gid in dlc_ctg_ids if gid in dlc_reviewed]
+        if reviewed_dlc_ids:
+            for r in Review.objects.filter(
+                profile=profile,
+                is_deleted=False,
+                concept_trophy_group_id__in=reviewed_dlc_ids,
+            ).values('concept_trophy_group_id', 'id', 'body', 'recommended'):
+                dlc_existing_reviews[r['concept_trophy_group_id']] = {
+                    'id': r['id'],
+                    'body': r['body'],
+                    'recommended': r['recommended'],
+                }
+
         # Build groups dict keyed by concept_id preserving order
         from collections import OrderedDict
         groups_dict = OrderedDict()
@@ -741,6 +774,8 @@ class WizardQueueView(APIView):
             }
             if g.id in dlc_existing_ratings:
                 item['existing_rating'] = dlc_existing_ratings[g.id]
+            if g.id in dlc_existing_reviews:
+                item['existing_review'] = dlc_existing_reviews[g.id]
 
             groups_dict[cid]['items'].append(item)
             total_items += 1

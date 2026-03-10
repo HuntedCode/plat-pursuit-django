@@ -83,7 +83,14 @@
                 </div>
             </div>
 
-            <button type="submit" id="review-submit-btn" class="btn btn-primary btn-sm w-full mt-3" disabled>
+            <div class="text-xs text-base-content/50 mt-3 flex items-start gap-1.5">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                </svg>
+                <span>By submitting, you agree to our <a href="#" class="link link-hover text-primary" onclick="document.getElementById('guidelines-modal').showModal(); return false;">community guidelines</a></span>
+            </div>
+
+            <button type="submit" id="review-submit-btn" class="btn btn-primary btn-sm w-full mt-2" disabled>
                 Submit Review
             </button>
         </form>

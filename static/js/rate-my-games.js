@@ -24,8 +24,29 @@ PlatPursuit.RateMyGames = {
     dlcFlatQueue: [],
     hasMore: false,
 
+    guidelinesAgreed: false,
+    _pendingAction: null,
+    isEditingReview: false,
+
     init(config) {
         this.config = config;
+
+        // Read guidelines status from container data attribute
+        const container = document.getElementById('wizard-container');
+        this.guidelinesAgreed = container?.dataset.guidelinesAgreed === 'true';
+
+        // Wire up guidelines modal checkbox to enable/disable confirm button
+        const agreeCheckbox = document.getElementById('agree-to-guidelines');
+        const confirmBtn = document.getElementById('confirm-guidelines-btn');
+        if (agreeCheckbox && confirmBtn) {
+            agreeCheckbox.addEventListener('change', function() {
+                confirmBtn.disabled = !this.checked;
+            });
+        }
+
+        // Expose confirmGuidelines globally for the modal onclick
+        window.confirmGuidelines = () => this.confirmGuidelines();
+
         this.initFilterButtons();
         this.initQueueTabs();
         this.initRecommendButtons();
@@ -33,8 +54,41 @@ PlatPursuit.RateMyGames = {
         this.initMarkdownHelp();
         this.initRatingValidation();
         this.initActionButtons();
+        this.initEditReviewButton();
         this.initTrophyToggle();
         this.loadQueue();
+    },
+
+    checkGuidelines(callback) {
+        if (this.guidelinesAgreed) {
+            callback();
+        } else {
+            this._pendingAction = callback;
+            document.getElementById('guidelines-agreement-modal')?.showModal();
+        }
+    },
+
+    async confirmGuidelines() {
+        const checkbox = document.getElementById('agree-to-guidelines');
+        if (!checkbox?.checked || this._confirmingGuidelines) return;
+        this._confirmingGuidelines = true;
+
+        try {
+            await PlatPursuit.API.post('/api/v1/guidelines/agree/', {});
+            this.guidelinesAgreed = true;
+            document.getElementById('guidelines-agreement-modal')?.close();
+            checkbox.checked = false;
+
+            if (this._pendingAction) {
+                this._pendingAction();
+                this._pendingAction = null;
+            }
+        } catch (error) {
+            console.error('Error agreeing to guidelines:', error);
+            PlatPursuit.ToastManager.error('An error occurred. Please try again.');
+        } finally {
+            this._confirmingGuidelines = false;
+        }
     },
 
     // ------------------------------------------------------------------ //
@@ -290,12 +344,42 @@ PlatPursuit.RateMyGames = {
             ratingHeading.innerHTML = `${starSvg} ${game.has_rating ? 'Update Your Rating' : `Rate ${rateTarget}`}`;
         }
 
-        // Update review section heading
+        // Toggle between existing review display and form
+        this.isEditingReview = false;
+        const reviewFormContent = document.getElementById('wizard-review-form-content');
+        const existingReviewEl = document.getElementById('wizard-existing-review');
         const reviewHeading = document.querySelector('#wizard-review-section h3');
-        if (reviewHeading) {
-            const pencilSvg = reviewHeading.querySelector('svg').outerHTML;
-            const reviewTarget = game.is_dlc ? 'This DLC' : 'This Game';
-            reviewHeading.innerHTML = `${pencilSvg} Review ${reviewTarget}`;
+
+        if (game.has_review && game.existing_review) {
+            // Show existing review display
+            if (reviewFormContent) {
+                reviewFormContent.classList.add('hidden');
+                reviewFormContent.classList.remove('flex');
+            }
+            if (existingReviewEl) {
+                existingReviewEl.classList.remove('hidden');
+                existingReviewEl.classList.add('flex');
+            }
+            this.populateExistingReview(game);
+            if (reviewHeading) {
+                const pencilSvg = reviewHeading.querySelector('svg').outerHTML;
+                reviewHeading.innerHTML = `${pencilSvg} Your Review`;
+            }
+        } else {
+            // Show empty form for new review
+            if (reviewFormContent) {
+                reviewFormContent.classList.remove('hidden');
+                reviewFormContent.classList.add('flex');
+            }
+            if (existingReviewEl) {
+                existingReviewEl.classList.add('hidden');
+                existingReviewEl.classList.remove('flex');
+            }
+            if (reviewHeading) {
+                const pencilSvg = reviewHeading.querySelector('svg').outerHTML;
+                const reviewTarget = game.is_dlc ? 'This DLC' : 'This Game';
+                reviewHeading.innerHTML = `${pencilSvg} Review ${reviewTarget}`;
+            }
         }
 
         // Always show both sections (rating + review) for consistency
@@ -503,6 +587,7 @@ PlatPursuit.RateMyGames = {
 
     resetReviewForm() {
         this.recommended = null;
+        this.isEditingReview = false;
         const body = document.getElementById('wizard-review-body');
         if (body) body.value = '';
         this.updateWordProgress(0);
@@ -512,11 +597,127 @@ PlatPursuit.RateMyGames = {
         const charEl = document.getElementById('wizard-char-count');
         if (charEl) charEl.textContent = '0 / 8000';
 
+        // Hide cancel edit button
+        const cancelBtn = document.getElementById('wizard-cancel-edit-btn');
+        if (cancelBtn) cancelBtn.classList.add('hidden');
+
         // Collapse markdown help
         const panel = document.getElementById('wizard-markdown-help-panel');
         const chevron = document.getElementById('wizard-markdown-chevron');
         if (panel) panel.classList.add('hidden');
         if (chevron) chevron.classList.remove('rotate-180');
+    },
+
+    populateExistingReview(game) {
+        const review = game.existing_review;
+        if (!review) return;
+
+        const esc = PlatPursuit.HTMLUtils.escape;
+
+        // Recommend badge
+        const badge = document.getElementById('wizard-existing-recommend-badge');
+        if (badge) {
+            const thumbUp = '<svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M2 21h4V9H2v12zm22-11c0-1.1-.9-2-2-2h-6.31l.95-4.57.03-.32c0-.41-.17-.79-.44-1.06L15.17 1 7.59 8.59C7.22 8.95 7 9.45 7 10v10c0 1.1.9 2 2 2h9c.83 0 1.54-.5 1.84-1.22l3.02-7.05c.09-.23.14-.47.14-.73v-2z"/></svg>';
+            const thumbDown = '<svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M15 3H6c-.83 0-1.54.5-1.84 1.22l-3.02 7.05c-.09.23-.14.47-.14.73v2c0 1.1.9 2 2 2h6.31l-.95 4.57-.03.32c0 .41.17.79.44 1.06L9.83 23l7.58-7.59c.36-.36.59-.86.59-1.41V5c0-1.1-.9-2-2-2zm4 0v12h4V3h-4z"/></svg>';
+            if (review.recommended) {
+                badge.className = 'badge badge-lg gap-1.5 font-semibold badge-success';
+                badge.innerHTML = `${thumbUp} Recommended`;
+            } else {
+                badge.className = 'badge badge-lg gap-1.5 font-semibold badge-error';
+                badge.innerHTML = `${thumbDown} Not Recommended`;
+            }
+        }
+
+        // Review body text
+        const bodyEl = document.getElementById('wizard-existing-review-body');
+        if (bodyEl) bodyEl.textContent = review.body || '';
+
+        // Hub link
+        const hubLink = document.getElementById('wizard-review-hub-link');
+        if (hubLink) hubLink.href = `/reviews/${esc(game.slug || '')}/`;
+    },
+
+    initEditReviewButton() {
+        const editBtn = document.getElementById('wizard-edit-review-btn');
+        if (editBtn) editBtn.addEventListener('click', () => this.editExistingReview());
+    },
+
+    editExistingReview() {
+        const game = this.queue[this.currentIndex];
+        if (!game?.existing_review) return;
+
+        this.isEditingReview = true;
+        const review = game.existing_review;
+
+        // Switch to form view
+        const reviewFormContent = document.getElementById('wizard-review-form-content');
+        const existingReviewEl = document.getElementById('wizard-existing-review');
+        if (reviewFormContent) {
+            reviewFormContent.classList.remove('hidden');
+            reviewFormContent.classList.add('flex');
+        }
+        if (existingReviewEl) {
+            existingReviewEl.classList.add('hidden');
+            existingReviewEl.classList.remove('flex');
+        }
+
+        // Pre-fill the form
+        const body = document.getElementById('wizard-review-body');
+        if (body) {
+            body.value = review.body || '';
+            body.dispatchEvent(new Event('input'));
+        }
+        this.recommended = review.recommended;
+        this.updateRecommendButtons();
+        this.updateChecklist();
+
+        // Update heading
+        const reviewHeading = document.querySelector('#wizard-review-section h3');
+        if (reviewHeading) {
+            const pencilSvg = reviewHeading.querySelector('svg').outerHTML;
+            reviewHeading.innerHTML = `${pencilSvg} Edit Your Review`;
+        }
+
+        // Show cancel button
+        const cancelBtn = document.getElementById('wizard-cancel-edit-btn');
+        if (cancelBtn) cancelBtn.classList.remove('hidden');
+
+        // Update submit buttons for edit mode
+        this.updateSubmitButton();
+    },
+
+    cancelEditReview() {
+        const game = this.queue[this.currentIndex];
+        if (!game?.existing_review) return;
+
+        this.isEditingReview = false;
+
+        // Hide cancel button
+        const cancelBtn = document.getElementById('wizard-cancel-edit-btn');
+        if (cancelBtn) cancelBtn.classList.add('hidden');
+
+        this.resetReviewForm();
+
+        // Switch back to display view
+        const reviewFormContent = document.getElementById('wizard-review-form-content');
+        const existingReviewEl = document.getElementById('wizard-existing-review');
+        if (reviewFormContent) {
+            reviewFormContent.classList.add('hidden');
+            reviewFormContent.classList.remove('flex');
+        }
+        if (existingReviewEl) {
+            existingReviewEl.classList.remove('hidden');
+            existingReviewEl.classList.add('flex');
+        }
+
+        // Restore heading
+        const reviewHeading = document.querySelector('#wizard-review-section h3');
+        if (reviewHeading) {
+            const pencilSvg = reviewHeading.querySelector('svg').outerHTML;
+            reviewHeading.innerHTML = `${pencilSvg} Your Review`;
+        }
+
+        this.updateSubmitButton();
     },
 
     initRecommendButtons() {
@@ -699,7 +900,8 @@ PlatPursuit.RateMyGames = {
         const body = document.getElementById('wizard-review-body');
         const bodyText = body ? body.value.trim() : '';
         const hasValidReview = this.recommended !== null && bodyText.length >= 50;
-        const canReview = !game.has_review;
+        // Can create new review, or is editing existing
+        const canReview = !game.has_review || this.isEditingReview;
 
         const form = document.getElementById('wizard-rating-form');
         const hours = parseInt(form?.querySelector('[name="hours_to_platinum"]')?.value) || 0;
@@ -707,24 +909,32 @@ PlatPursuit.RateMyGames = {
 
         const checkSvg = '<svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>';
         const rateLabel = game.has_rating ? 'Update Rating' : 'Submit Rating';
+        const reviewVerb = this.isEditingReview ? 'Update' : 'Submit';
 
         // Rating button: label changes when review is ready
         if (hasValidReview && canReview) {
-            ratingBtn.innerHTML = `${checkSvg} ${rateLabel} & Review`;
+            ratingBtn.innerHTML = `${checkSvg} ${rateLabel} & ${reviewVerb} Review`;
             ratingBtn.disabled = !hoursValid;
         } else if (bodyText.length > 0 && canReview) {
             // Review started but not valid yet: show combined label, disable
-            ratingBtn.innerHTML = `${checkSvg} ${rateLabel} & Review`;
+            ratingBtn.innerHTML = `${checkSvg} ${rateLabel} & ${reviewVerb} Review`;
             ratingBtn.disabled = true;
         } else {
             ratingBtn.innerHTML = `${checkSvg} ${rateLabel}`;
             ratingBtn.disabled = !hoursValid;
         }
 
-        // Review-only button: visible when game has no review
+        // Review-only button: visible when editing or when game has no review
         if (reviewBtn) {
-            reviewBtn.classList.toggle('hidden', !canReview);
-            reviewBtn.disabled = !hasValidReview;
+            if (this.isEditingReview) {
+                reviewBtn.classList.remove('hidden');
+                reviewBtn.disabled = !hasValidReview;
+                reviewBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg> Update Review`;
+            } else {
+                reviewBtn.classList.toggle('hidden', !canReview);
+                reviewBtn.disabled = !hasValidReview;
+                reviewBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg> Submit Review Only`;
+            }
         }
     },
 
@@ -746,86 +956,152 @@ PlatPursuit.RateMyGames = {
         this.advance();
     },
 
-    async submit() {
+    submit() {
         const game = this.queue[this.currentIndex];
         if (!game) return;
 
-        const submitBtn = document.getElementById('wizard-submit-btn');
-        if (submitBtn) submitBtn.disabled = true;
+        const bodyEl = document.getElementById('wizard-review-body');
+        const bodyText = bodyEl ? bodyEl.value.trim() : '';
+        const hasValidReview = this.recommended !== null && bodyText.length >= 50;
 
-        let didRate = false;
-        let didReview = false;
+        // Determine if this submission includes a new review (not edit: edits don't need guidelines)
+        const willCreateReview = !game.has_review && hasValidReview && !this.isEditingReview;
 
-        try {
-            // Always submit rating (create or update)
-            const payload = this.getRatingPayload();
-            if (payload) {
-                await PlatPursuit.API.post(
-                    `/api/v1/reviews/${game.concept_id}/group/${game.trophy_group_id}/rate/`,
-                    payload,
-                );
-                didRate = true;
-            }
+        const doSubmit = async () => {
+            const submitBtn = document.getElementById('wizard-submit-btn');
+            if (submitBtn) submitBtn.disabled = true;
 
-            // Submit review if form has valid content and not already reviewed
-            if (!game.has_review && this.recommended !== null) {
-                const body = document.getElementById('wizard-review-body');
-                const bodyText = body ? body.value.trim() : '';
-                if (bodyText.length >= 50) {
+            let didRate = false;
+            let didReview = false;
+
+            try {
+                // Always submit rating (create or update)
+                const payload = this.getRatingPayload();
+                if (payload) {
+                    await PlatPursuit.API.post(
+                        `/api/v1/reviews/${game.concept_id}/group/${game.trophy_group_id}/rate/`,
+                        payload,
+                    );
+                    didRate = true;
+                }
+
+                // Handle review: create new or update existing
+                if (this.isEditingReview && game.existing_review && hasValidReview) {
+                    // Update existing review via PUT
+                    await PlatPursuit.API.put(
+                        `/api/v1/reviews/${game.existing_review.id}/`,
+                        { body: bodyText, recommended: this.recommended },
+                    );
+                    game.existing_review.body = bodyText;
+                    game.existing_review.recommended = this.recommended;
+                    didReview = true;
+                } else if (!game.has_review && this.recommended !== null && bodyText.length >= 50) {
+                    // Create new review
                     await PlatPursuit.API.post(
                         `/api/v1/reviews/${game.concept_id}/group/${game.trophy_group_id}/create/`,
                         { body: bodyText, recommended: this.recommended },
                     );
                     didReview = true;
                 }
+
+                // Build appropriate toast message
+                const rateWord = game.has_rating ? 'updated' : 'rated';
+                const reviewWord = this.isEditingReview ? 'review updated' : 'reviewed';
+                let msg = game.unified_title;
+                if (didRate && didReview) msg += ` ${rateWord} & ${reviewWord}!`;
+                else if (didReview) msg += ` ${reviewWord}!`;
+                else if (didRate) msg += ` ${rateWord}!`;
+                else msg += ' done!';
+
+                PlatPursuit.ToastManager.success(msg);
+                this.advance();
+
+            } catch (error) {
+                const errData = await error.response?.json().catch(() => null);
+                PlatPursuit.ToastManager.error(errData?.error || 'Failed to submit. Please try again.');
+                if (submitBtn) submitBtn.disabled = false;
             }
+        };
 
-            // Build appropriate toast message
-            const rateWord = game.has_rating ? 'updated' : 'rated';
-            let msg = game.unified_title;
-            if (didRate && didReview) msg += ` ${rateWord} & reviewed!`;
-            else if (didReview) msg += ' reviewed!';
-            else if (didRate) msg += ` ${rateWord}!`;
-            else msg += ' done!';
-
-            PlatPursuit.ToastManager.success(msg);
-            this.advance();
-
-        } catch (error) {
-            const errData = await error.response?.json().catch(() => null);
-            PlatPursuit.ToastManager.error(errData?.error || 'Failed to submit. Please try again.');
-            if (submitBtn) submitBtn.disabled = false;
+        if (willCreateReview) {
+            this.checkGuidelines(doSubmit);
+        } else {
+            doSubmit();
         }
     },
 
-    async submitReviewOnly() {
+    submitReviewOnly() {
         const game = this.queue[this.currentIndex];
-        if (!game || game.has_review) return;
+        if (!game) return;
 
-        const reviewBtn = document.getElementById('wizard-submit-review-btn');
-        if (reviewBtn) reviewBtn.disabled = true;
-
-        const body = document.getElementById('wizard-review-body');
-        const bodyText = body ? body.value.trim() : '';
+        const bodyEl = document.getElementById('wizard-review-body');
+        const bodyText = bodyEl ? bodyEl.value.trim() : '';
 
         if (this.recommended === null || bodyText.length < 50) {
             PlatPursuit.ToastManager.error('Please complete the review form before submitting.');
-            if (reviewBtn) reviewBtn.disabled = false;
             return;
         }
 
-        try {
-            await PlatPursuit.API.post(
-                `/api/v1/reviews/${game.concept_id}/group/${game.trophy_group_id}/create/`,
-                { body: bodyText, recommended: this.recommended },
-            );
+        const doReviewSubmit = async () => {
+            const reviewBtn = document.getElementById('wizard-submit-review-btn');
+            if (reviewBtn) reviewBtn.disabled = true;
 
-            PlatPursuit.ToastManager.success(`${game.unified_title} reviewed!`);
-            this.advance();
-        } catch (error) {
-            const errData = await error.response?.json().catch(() => null);
-            PlatPursuit.ToastManager.error(errData?.error || 'Failed to submit review. Please try again.');
-            if (reviewBtn) reviewBtn.disabled = false;
+            try {
+                if (this.isEditingReview && game.existing_review) {
+                    // Update existing review via PUT
+                    await PlatPursuit.API.put(
+                        `/api/v1/reviews/${game.existing_review.id}/`,
+                        { body: bodyText, recommended: this.recommended },
+                    );
+                    // Update local data and switch back to display
+                    game.existing_review.body = bodyText;
+                    game.existing_review.recommended = this.recommended;
+                    this.isEditingReview = false;
+                    this.populateExistingReview(game);
+
+                    // Hide cancel button
+                    const cancelBtn = document.getElementById('wizard-cancel-edit-btn');
+                    if (cancelBtn) cancelBtn.classList.add('hidden');
+
+                    // Switch to display view
+                    const reviewFormContent = document.getElementById('wizard-review-form-content');
+                    const existingReviewEl = document.getElementById('wizard-existing-review');
+                    if (reviewFormContent) {
+                        reviewFormContent.classList.add('hidden');
+                        reviewFormContent.classList.remove('flex');
+                    }
+                    if (existingReviewEl) {
+                        existingReviewEl.classList.remove('hidden');
+                        existingReviewEl.classList.add('flex');
+                    }
+                    const reviewHeading = document.querySelector('#wizard-review-section h3');
+                    if (reviewHeading) {
+                        const pencilSvg = reviewHeading.querySelector('svg').outerHTML;
+                        reviewHeading.innerHTML = `${pencilSvg} Your Review`;
+                    }
+                    this.updateSubmitButton();
+                    PlatPursuit.ToastManager.success(`${game.unified_title} review updated!`);
+                } else {
+                    // Create new review
+                    await PlatPursuit.API.post(
+                        `/api/v1/reviews/${game.concept_id}/group/${game.trophy_group_id}/create/`,
+                        { body: bodyText, recommended: this.recommended },
+                    );
+                    PlatPursuit.ToastManager.success(`${game.unified_title} reviewed!`);
+                    this.advance();
+                }
+            } catch (error) {
+                const errData = await error.response?.json().catch(() => null);
+                PlatPursuit.ToastManager.error(errData?.error || 'Failed to submit review. Please try again.');
+                if (reviewBtn) reviewBtn.disabled = false;
+            }
+        };
+
+        // Only gate new reviews with guidelines check, not edits
+        if (!this.isEditingReview) {
+            this.checkGuidelines(doReviewSubmit);
+        } else {
+            doReviewSubmit();
         }
     },
 

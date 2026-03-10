@@ -15,6 +15,8 @@ PlatPursuit.ReviewHub = {
     isLoading: false,
     hasMore: true,
     loadedReplyIds: new Set(),
+    guidelinesAgreed: false,
+    _pendingAction: null,
 
     init(config) {
         this.config = config;
@@ -22,6 +24,22 @@ PlatPursuit.ReviewHub = {
         this.hasMore = true;
         this.sort = 'helpful';
         this.loadedReplyIds = new Set();
+
+        // Read guidelines status from container data attribute
+        const container = document.getElementById('review-hub-container');
+        this.guidelinesAgreed = container?.dataset.guidelinesAgreed === 'true';
+
+        // Wire up guidelines modal checkbox to enable/disable confirm button
+        const agreeCheckbox = document.getElementById('agree-to-guidelines');
+        const confirmBtn = document.getElementById('confirm-guidelines-btn');
+        if (agreeCheckbox && confirmBtn) {
+            agreeCheckbox.addEventListener('change', function() {
+                confirmBtn.disabled = !this.checked;
+            });
+        }
+
+        // Expose confirmGuidelines globally for the modal onclick
+        window.confirmGuidelines = () => this.confirmGuidelines();
 
         this.initReviewFeed();
         this.initSortButtons();
@@ -31,6 +49,45 @@ PlatPursuit.ReviewHub = {
         this.initUserRatingToggle();
         this.initRatingsToggle();
         this.initTrophyListToggle();
+    },
+
+    // ------------------------------------------------------------------ //
+    //  Community Guidelines
+    // ------------------------------------------------------------------ //
+
+    checkGuidelines(callback) {
+        if (this.guidelinesAgreed) {
+            callback();
+        } else {
+            this._pendingAction = callback;
+            document.getElementById('guidelines-agreement-modal')?.showModal();
+        }
+    },
+
+    async confirmGuidelines() {
+        const checkbox = document.getElementById('agree-to-guidelines');
+        if (!checkbox?.checked || this._confirmingGuidelines) return;
+        this._confirmingGuidelines = true;
+
+        try {
+            await PlatPursuit.API.post('/api/v1/guidelines/agree/', {});
+            this.guidelinesAgreed = true;
+            document.getElementById('guidelines-agreement-modal')?.close();
+            checkbox.checked = false;
+
+            if (this._pendingAction) {
+                this._pendingAction();
+                this._pendingAction = null;
+            } else {
+                // No pending action: user agreed from the banner, reload to show the review form
+                window.location.reload();
+            }
+        } catch (error) {
+            console.error('Error agreeing to guidelines:', error);
+            PlatPursuit.ToastManager.error('An error occurred. Please try again.');
+        } finally {
+            this._confirmingGuidelines = false;
+        }
     },
 
     // ------------------------------------------------------------------ //
@@ -126,7 +183,7 @@ PlatPursuit.ReviewHub = {
 
         const reportBtn = (!review.is_own && this.config.isAuthenticated) ? `
             <button class="btn btn-xs btn-ghost text-base-content/40 hover:text-warning" onclick="PlatPursuit.ReviewHub.reportReview(${review.id})" aria-label="Report">
-                <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 21v-16l5 3 4-4 4 4 5-3v16l-5-3-4 4-4-4-5 3z"/></svg>
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 21v-4m0 0V5a2 2 0 012-2h6.5l1 1H21l-3 6 3 6h-8.5l-1-1H5a2 2 0 00-2 2zm9-13.5V9"/></svg>
             </button>` : '';
 
         return `
@@ -333,36 +390,38 @@ PlatPursuit.ReviewHub = {
         </div>`;
     },
 
-    async submitReply(reviewId) {
+    submitReply(reviewId) {
         const input = document.querySelector(`.reply-input[data-review-id="${reviewId}"]`);
         if (!input || !input.value.trim()) return;
 
-        try {
-            const data = await PlatPursuit.API.post(`/api/v1/reviews/${reviewId}/replies/`, {
-                body: input.value.trim(),
-            });
+        this.checkGuidelines(async () => {
+            try {
+                const data = await PlatPursuit.API.post(`/api/v1/reviews/${reviewId}/replies/`, {
+                    body: input.value.trim(),
+                });
 
-            // Insert new reply before the reply form
-            const container = document.querySelector(`.replies-container[data-review-id="${reviewId}"]`);
-            const formDiv = container?.querySelector('.flex.mt-3');
-            if (container && formDiv) {
-                formDiv.insertAdjacentHTML('beforebegin', this.buildReplyElement(data.reply || data));
+                // Insert new reply before the reply form
+                const container = document.querySelector(`.replies-container[data-review-id="${reviewId}"]`);
+                const formDiv = container?.querySelector('.flex.mt-3');
+                if (container && formDiv) {
+                    formDiv.insertAdjacentHTML('beforebegin', this.buildReplyElement(data.reply || data));
+                }
+
+                input.value = '';
+
+                // Update reply count in the card
+                const card = document.querySelector(`[data-review-id="${reviewId}"]`);
+                const countEl = card?.querySelector('.reply-count');
+                if (countEl) {
+                    countEl.textContent = parseInt(countEl.textContent) + 1;
+                }
+
+                PlatPursuit.ToastManager.success('Reply posted!');
+            } catch (error) {
+                const errData = await error.response?.json().catch(() => null);
+                PlatPursuit.ToastManager.error(errData?.error || 'Failed to post reply.');
             }
-
-            input.value = '';
-
-            // Update reply count in the card
-            const card = document.querySelector(`[data-review-id="${reviewId}"]`);
-            const countEl = card?.querySelector('.reply-count');
-            if (countEl) {
-                countEl.textContent = parseInt(countEl.textContent) + 1;
-            }
-
-            PlatPursuit.ToastManager.success('Reply posted!');
-        } catch (error) {
-            const errData = await error.response?.json().catch(() => null);
-            PlatPursuit.ToastManager.error(errData?.error || 'Failed to post reply.');
-        }
+        });
     },
 
     async editReply(replyId) {
@@ -515,7 +574,7 @@ PlatPursuit.ReviewHub = {
         }
 
         // Submit
-        form.addEventListener('submit', async (e) => {
+        form.addEventListener('submit', (e) => {
             e.preventDefault();
             const body = textarea?.value?.trim();
             if (!body || body.length < 50) {
@@ -527,20 +586,22 @@ PlatPursuit.ReviewHub = {
                 return;
             }
 
-            if (submitBtn) submitBtn.disabled = true;
+            this.checkGuidelines(async () => {
+                if (submitBtn) submitBtn.disabled = true;
 
-            try {
-                await PlatPursuit.API.post(
-                    `/api/v1/reviews/${this.config.conceptId}/group/${this.config.activeGroup}/create/`,
-                    { body, recommended }
-                );
-                PlatPursuit.ToastManager.success('Review submitted! Refreshing...');
-                setTimeout(() => window.location.reload(), 1000);
-            } catch (error) {
-                const errData = await error.response?.json().catch(() => null);
-                PlatPursuit.ToastManager.error(errData?.error || 'Failed to submit review.');
-                updateSubmitState();
-            }
+                try {
+                    await PlatPursuit.API.post(
+                        `/api/v1/reviews/${this.config.conceptId}/group/${this.config.activeGroup}/create/`,
+                        { body, recommended }
+                    );
+                    PlatPursuit.ToastManager.success('Review submitted! Refreshing...');
+                    setTimeout(() => window.location.reload(), 1000);
+                } catch (error) {
+                    const errData = await error.response?.json().catch(() => null);
+                    PlatPursuit.ToastManager.error(errData?.error || 'Failed to submit review.');
+                    updateSubmitState();
+                }
+            });
         });
     },
 

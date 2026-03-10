@@ -5,6 +5,7 @@
 {% block robots %}noindex, nofollow{% endblock %}
 
 {% block content %}
+<div id="wizard-container" data-guidelines-agreed="{{ guidelines_agreed|yesno:'true,false' }}">
 {# ─── Header ─────────────────────────────────────────────────────────── #}
 <section class="section-container w-full">
     {% include 'partials/breadcrumb.html' with items=breadcrumb %}
@@ -193,82 +194,114 @@
                             Review This Game
                         </h3>
 
-                        {# Recommend toggle #}
-                        <div class="flex items-center gap-3 mb-3">
-                            <span class="text-sm font-bold text-base-content">Do you recommend this game?</span>
-                            <div class="flex gap-2">
-                                <button type="button" class="btn btn-sm btn-ghost border border-base-300 wizard-recommend-btn" data-value="true">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M2 21h4V9H2v12zm22-11c0-1.1-.9-2-2-2h-6.31l.95-4.57.03-.32c0-.41-.17-.79-.44-1.06L15.17 1 7.59 8.59C7.22 8.95 7 9.45 7 10v10c0 1.1.9 2 2 2h9c.83 0 1.54-.5 1.84-1.22l3.02-7.05c.09-.23.14-.47.14-.73v-2z"/></svg>
-                                    Yes
+                        {# Existing review display (shown when game already has a review) #}
+                        <div id="wizard-existing-review" class="hidden flex-1 flex flex-col">
+                            <div class="flex items-center gap-2 mb-3">
+                                <div id="wizard-existing-recommend-badge" class="badge badge-lg gap-1.5 font-semibold"></div>
+                            </div>
+                            <div id="wizard-existing-review-body" class="bg-base-200/50 border border-base-300 rounded-box p-3 md:p-4 text-sm text-base-content/80 whitespace-pre-wrap flex-1 overflow-y-auto max-h-[200px] md:max-h-[260px] lg:max-h-[300px]"></div>
+                            <div class="flex items-center gap-2 mt-3">
+                                <button type="button" id="wizard-edit-review-btn" class="btn btn-sm btn-secondary btn-outline gap-1.5">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+                                    Edit Review
                                 </button>
-                                <button type="button" class="btn btn-sm btn-ghost border border-base-300 wizard-recommend-btn" data-value="false">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M15 3H6c-.83 0-1.54.5-1.84 1.22l-3.02 7.05c-.09.23-.14.47-.14.73v2c0 1.1.9 2 2 2h6.31l-.95 4.57-.03.32c0 .41.17.79.44 1.06L9.83 23l7.58-7.59c.36-.36.59-.86.59-1.41V5c0-1.1-.9-2-2-2zm4 0v12h4V3h-4z"/></svg>
-                                    No
-                                </button>
+                                <a id="wizard-review-hub-link" href="#" class="btn btn-sm btn-ghost gap-1.5 text-primary">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+                                    View in Review Hub
+                                </a>
                             </div>
                         </div>
 
-                        {# Review body #}
-                        <div class="form-control flex-1 flex flex-col">
-                            <textarea id="wizard-review-body" class="textarea textarea-bordered w-full flex-1 min-h-[140px] md:min-h-[160px] lg:min-h-[200px] text-sm" maxlength="8000" placeholder="Share your experience with this game. What did you enjoy? What was challenging? Would you recommend it to other trophy hunters?"></textarea>
-                            <div class="flex justify-between mt-1">
-                                <button type="button" id="wizard-markdown-help-toggle" class="text-xs text-primary hover:underline cursor-pointer inline-flex items-center gap-1">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-                                    Formatting guide
-                                    <svg id="wizard-markdown-chevron" xmlns="http://www.w3.org/2000/svg" class="w-3 h-3 transition-transform duration-200" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
-                                </button>
-                                <span id="wizard-char-count" class="text-xs text-base-content/50">0 / 8000</span>
-                            </div>
-                            {# Expandable markdown guide #}
-                            <div id="wizard-markdown-help-panel" class="hidden mt-2 rounded-box bg-base-200/50 border border-base-300 p-3 text-xs">
-                                <div class="grid grid-cols-2 gap-x-4 gap-y-1.5">
-                                    <div class="text-base-content/60 font-mono">**bold**</div>
-                                    <div class="text-base-content/80"><strong>bold</strong></div>
-                                    <div class="text-base-content/60 font-mono">*italic*</div>
-                                    <div class="text-base-content/80"><em>italic</em></div>
-                                    <div class="text-base-content/60 font-mono">__underline__</div>
-                                    <div class="text-base-content/80"><u>underline</u></div>
-                                    <div class="text-base-content/60 font-mono">~~strike~~</div>
-                                    <div class="text-base-content/80"><s>strike</s></div>
-                                    <div class="text-base-content/60 font-mono">[text](url)</div>
-                                    <div class="text-base-content/80"><span class="text-primary">link</span></div>
-                                    <div class="text-base-content/60 font-mono">`code`</div>
-                                    <div class="text-base-content/80"><code class="bg-base-300 px-1 rounded">code</code></div>
-                                    <div class="text-base-content/60 font-mono">> quote</div>
-                                    <div class="text-base-content/80 border-l-2 border-base-content/30 pl-2 italic pr-1">quote</div>
-                                    <div class="text-base-content/60 font-mono">- list item</div>
-                                    <div class="text-base-content/80">&bull; list item</div>
+                        {# Review form (shown for new reviews or when editing) #}
+                        <div id="wizard-review-form-content" class="flex-1 flex flex-col">
+                            {# Cancel edit button (hidden by default, shown during edit mode) #}
+                            <button type="button" id="wizard-cancel-edit-btn" class="btn btn-xs btn-ghost self-end gap-1 mb-2 hidden" onclick="PlatPursuit.RateMyGames.cancelEditReview()">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+                                Cancel Edit
+                            </button>
+                            {# Recommend toggle #}
+                            <div class="flex items-center gap-3 mb-3">
+                                <span class="text-sm font-bold text-base-content">Do you recommend this game?</span>
+                                <div class="flex gap-2">
+                                    <button type="button" class="btn btn-sm btn-ghost border border-base-300 wizard-recommend-btn" data-value="true">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M2 21h4V9H2v12zm22-11c0-1.1-.9-2-2-2h-6.31l.95-4.57.03-.32c0-.41-.17-.79-.44-1.06L15.17 1 7.59 8.59C7.22 8.95 7 9.45 7 10v10c0 1.1.9 2 2 2h9c.83 0 1.54-.5 1.84-1.22l3.02-7.05c.09-.23.14-.47.14-.73v-2z"/></svg>
+                                        Yes
+                                    </button>
+                                    <button type="button" class="btn btn-sm btn-ghost border border-base-300 wizard-recommend-btn" data-value="false">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M15 3H6c-.83 0-1.54.5-1.84 1.22l-3.02 7.05c-.09.23-.14.47-.14.73v2c0 1.1.9 2 2 2h6.31l-.95 4.57-.03.32c0 .41.17.79.44 1.06L9.83 23l7.58-7.59c.36-.36.59-.86.59-1.41V5c0-1.1-.9-2-2-2zm4 0v12h4V3h-4z"/></svg>
+                                        No
+                                    </button>
                                 </div>
                             </div>
-                        </div>
 
-                        {# Trophy cup word progress bar #}
-                        <div class="mt-3">
-                            <div class="flex items-center gap-2">
-                                <div id="wizard-progress-icon" class="shrink-0 transition-all duration-300" style="color: var(--color-base-content); opacity: 0.25;">
-                                    {% include 'partials/icons/trophy_cup.html' with color='currentColor' size='w-5 h-5' %}
+                            {# Review body #}
+                            <div class="form-control flex-1 flex flex-col">
+                                <textarea id="wizard-review-body" class="textarea textarea-bordered w-full flex-1 min-h-[140px] md:min-h-[160px] lg:min-h-[200px] text-sm" maxlength="8000" placeholder="Share your experience with this game. What did you enjoy? What was challenging? Would you recommend it to other trophy hunters?"></textarea>
+                                <div class="flex justify-between mt-1">
+                                    <button type="button" id="wizard-markdown-help-toggle" class="text-xs text-primary hover:underline cursor-pointer inline-flex items-center gap-1">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                                        Formatting guide
+                                        <svg id="wizard-markdown-chevron" xmlns="http://www.w3.org/2000/svg" class="w-3 h-3 transition-transform duration-200" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+                                    </button>
+                                    <span id="wizard-char-count" class="text-xs text-base-content/50">0 / 8000</span>
                                 </div>
-                                <div class="flex-1 bg-base-300 rounded-full h-2 overflow-hidden">
-                                    <div id="wizard-word-bar" class="h-full rounded-full transition-all duration-300 ease-out bg-error" style="width: 0%"></div>
+                                {# Expandable markdown guide #}
+                                <div id="wizard-markdown-help-panel" class="hidden mt-2 rounded-box bg-base-200/50 border border-base-300 p-3 text-xs">
+                                    <div class="grid grid-cols-2 gap-x-4 gap-y-1.5">
+                                        <div class="text-base-content/60 font-mono">**bold**</div>
+                                        <div class="text-base-content/80"><strong>bold</strong></div>
+                                        <div class="text-base-content/60 font-mono">*italic*</div>
+                                        <div class="text-base-content/80"><em>italic</em></div>
+                                        <div class="text-base-content/60 font-mono">__underline__</div>
+                                        <div class="text-base-content/80"><u>underline</u></div>
+                                        <div class="text-base-content/60 font-mono">~~strike~~</div>
+                                        <div class="text-base-content/80"><s>strike</s></div>
+                                        <div class="text-base-content/60 font-mono">[text](url)</div>
+                                        <div class="text-base-content/80"><span class="text-primary">link</span></div>
+                                        <div class="text-base-content/60 font-mono">`code`</div>
+                                        <div class="text-base-content/80"><code class="bg-base-300 px-1 rounded">code</code></div>
+                                        <div class="text-base-content/60 font-mono">> quote</div>
+                                        <div class="text-base-content/80 border-l-2 border-base-content/30 pl-2 italic pr-1">quote</div>
+                                        <div class="text-base-content/60 font-mono">- list item</div>
+                                        <div class="text-base-content/80">&bull; list item</div>
+                                    </div>
                                 </div>
                             </div>
-                            <p id="wizard-word-text" class="text-xs text-base-content/50 mt-1 italic pr-1">Write at least 10 words to get started...</p>
-                        </div>
 
-                        {# Submission requirements checklist #}
-                        <div class="flex flex-wrap gap-x-4 gap-y-1 mt-3 text-xs text-base-content/50">
-                            <div class="flex items-center gap-1.5" id="wizard-req-recommend">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-error wizard-req-icon-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-                                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-success wizard-req-icon-check hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                                <span>Select recommend / not recommend</span>
+                            {# Trophy cup word progress bar #}
+                            <div class="mt-3">
+                                <div class="flex items-center gap-2">
+                                    <div id="wizard-progress-icon" class="shrink-0 transition-all duration-300" style="color: var(--color-base-content); opacity: 0.25;">
+                                        {% include 'partials/icons/trophy_cup.html' with color='currentColor' size='w-5 h-5' %}
+                                    </div>
+                                    <div class="flex-1 bg-base-300 rounded-full h-2 overflow-hidden">
+                                        <div id="wizard-word-bar" class="h-full rounded-full transition-all duration-300 ease-out bg-error" style="width: 0%"></div>
+                                    </div>
+                                </div>
+                                <p id="wizard-word-text" class="text-xs text-base-content/50 mt-1 italic pr-1">Write at least 10 words to get started...</p>
                             </div>
-                            <div class="flex items-center gap-1.5" id="wizard-req-length">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-error wizard-req-icon-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-                                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-success wizard-req-icon-check hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                                <span>Write at least 50 characters</span>
+
+                            {# Submission requirements checklist #}
+                            <div class="flex flex-wrap gap-x-4 gap-y-1 mt-3 text-xs text-base-content/50">
+                                <div class="flex items-center gap-1.5" id="wizard-req-recommend">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-error wizard-req-icon-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-success wizard-req-icon-check hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                                    <span>Select recommend / not recommend</span>
+                                </div>
+                                <div class="flex items-center gap-1.5" id="wizard-req-length">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-error wizard-req-icon-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-success wizard-req-icon-check hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                                    <span>Write at least 50 characters</span>
+                                </div>
                             </div>
+                            <div class="text-xs text-base-content/50 mt-2 flex items-start gap-1.5">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                                </svg>
+                                <span>By submitting a review, you agree to our <a href="#" class="link link-hover text-primary" onclick="document.getElementById('guidelines-modal').showModal(); return false;">community guidelines</a></span>
+                            </div>
+                            <p class="text-xs text-base-content/40 mt-2 italic pr-1">Optional: leave blank to submit only a rating.</p>
                         </div>
-                        <p class="text-xs text-base-content/40 mt-2 italic pr-1">Optional: leave blank to submit only a rating.</p>
                     </div>
                 </div>
             </div>
@@ -306,6 +339,10 @@
     </div>
 </div>
 </section>
+</div>{# /wizard-container #}
+
+{% include 'partials/guidelines_info_modal.html' %}
+{% include 'partials/guidelines_agreement_modal.html' %}
 {% endblock %}
 
 {% block js_scripts %}

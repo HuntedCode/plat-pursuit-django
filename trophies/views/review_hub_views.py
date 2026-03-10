@@ -76,9 +76,11 @@ class RateMyGamesView(LoginRequiredMixin, ProfileHotbarMixin, TemplateView):
         if profile:
             context['unrated_count'] = ReviewHubService.get_unrated_platinum_count(profile)
             context['unreviewed_count'] = ReviewHubService.get_unreviewed_platinum_count(profile)
+            context['guidelines_agreed'] = profile.guidelines_agreed
         else:
             context['unrated_count'] = 0
             context['unreviewed_count'] = 0
+            context['guidelines_agreed'] = False
 
         return context
 
@@ -231,6 +233,9 @@ class ReviewHubDetailView(ProfileHotbarMixin, BackgroundContextMixin, DetailView
             context['user_game_stats'] = self._get_user_game_stats(
                 profile, concept
             )
+
+            # Community guidelines agreement status
+            context['guidelines_agreed'] = profile.guidelines_agreed
         else:
             context['user_review'] = None
             context['can_review'] = False
@@ -239,6 +244,7 @@ class ReviewHubDetailView(ProfileHotbarMixin, BackgroundContextMixin, DetailView
             context['can_rate_reason'] = None
             context['user_rating'] = None
             context['rating_form'] = None
+            context['guidelines_agreed'] = False
 
         # Condensed trophy list for sidebar
         context['trophy_list'] = self._get_trophy_list(
