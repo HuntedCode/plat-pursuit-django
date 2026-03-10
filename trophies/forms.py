@@ -133,7 +133,7 @@ class UserConceptRatingForm(forms.ModelForm):
         widgets = {
             'difficulty': forms.NumberInput(attrs={'type': 'range', 'min': 1, 'max': 10, 'class': 'range range-primary'}),
             'grindiness': forms.NumberInput(attrs={'type': 'range', 'min': 1, 'max': 10, 'class': 'range range-success'}),
-            'hours_to_platinum': forms.NumberInput(attrs={'type': 'number', 'min': 0, 'class': 'input'}),
+            'hours_to_platinum': forms.NumberInput(attrs={'type': 'number', 'min': 1, 'class': 'input'}),
             'fun_ranking': forms.NumberInput(attrs={'type': 'range', 'min': 1, 'max': 10, 'class': 'range range-secondary'}),
             'overall_rating': forms.NumberInput(attrs={'type': 'range', 'min': 0.5, 'max': 5.0, 'step': 0.5, 'class': 'range range-accent'}),
         }
@@ -144,6 +144,13 @@ class UserConceptRatingForm(forms.ModelForm):
             'fun_ranking': 'Platinum "Fun" Ranking',
             'overall_rating': 'Overall Game Rating',
         }
+
+    def clean_hours_to_platinum(self):
+        value = self.cleaned_data.get('hours_to_platinum')
+        if not value or value <= 0:
+            raise forms.ValidationError('Hours to platinum must be greater than zero.')
+        return value
+
 
 class BadgeSearchForm(forms.Form):
     series_slug = forms.CharField(required=False, label='Search by Series')

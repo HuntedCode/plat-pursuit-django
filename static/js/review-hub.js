@@ -863,6 +863,16 @@ PlatPursuit.ReviewHub = {
         const form = document.getElementById('rating-form');
         if (!form) return;
 
+        // Live hours validation: disable submit until hours > 0
+        const hoursInput = form.querySelector('[name="hours_to_platinum"]');
+        const submitBtn = form.querySelector('button[type="submit"]');
+        if (hoursInput && submitBtn) {
+            const updateBtn = () => {
+                submitBtn.disabled = !(parseInt(hoursInput.value) > 0);
+            };
+            hoursInput.addEventListener('input', updateBtn);
+        }
+
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
 
@@ -870,10 +880,17 @@ PlatPursuit.ReviewHub = {
             if (submitBtn) submitBtn.disabled = true;
 
             const formData = new FormData(form);
+            const hours = parseInt(formData.get('hours_to_platinum')) || 0;
+            if (hours <= 0) {
+                PlatPursuit.ToastManager.error('Please enter hours to platinum.');
+                if (submitBtn) submitBtn.disabled = false;
+                return;
+            }
+
             const payload = {
                 difficulty: parseInt(formData.get('difficulty')),
                 grindiness: parseInt(formData.get('grindiness')),
-                hours_to_platinum: parseInt(formData.get('hours_to_platinum')) || 0,
+                hours_to_platinum: hours,
                 fun_ranking: parseInt(formData.get('fun_ranking')),
                 overall_rating: parseFloat(formData.get('overall_rating')),
             };

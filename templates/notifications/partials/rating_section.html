@@ -144,7 +144,7 @@
                     name="hours_to_platinum"
                     id="id_hours_to_platinum"
                     value="{% if existing_rating %}{{ existing_rating.hours_to_platinum }}{% else %}{% endif %}"
-                    min="0"
+                    min="1"
                     class="input input-bordered input-secondary w-full"
                     placeholder="e.g., 20"
                     required />
@@ -187,7 +187,7 @@
                 </div>
             </div>
 
-            <button type="submit" class="btn btn-primary w-full">
+            <button type="submit" class="btn btn-primary w-full"{% if not has_existing_rating %} disabled{% endif %}>
                 {% if has_existing_rating %}Update Rating{% else %}Submit Rating{% endif %}
             </button>
         </form>

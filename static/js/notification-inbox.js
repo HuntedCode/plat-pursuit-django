@@ -311,6 +311,16 @@ class NotificationInboxManager {
         const form = document.getElementById('notification-rating-form');
         if (!form) return;
 
+        // Live hours validation: disable submit until hours > 0
+        const hoursInput = form.querySelector('[name="hours_to_platinum"]');
+        const submitBtn = form.querySelector('button[type="submit"]');
+        if (hoursInput && submitBtn) {
+            const updateBtn = () => {
+                submitBtn.disabled = !(parseInt(hoursInput.value) > 0);
+            };
+            hoursInput.addEventListener('input', updateBtn);
+        }
+
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
             await this.submitRating(notificationId, new FormData(form));
@@ -339,6 +349,15 @@ class NotificationInboxManager {
                     data[key] = value;
                 }
             });
+
+            if (!data.hours_to_platinum || data.hours_to_platinum <= 0) {
+                PlatPursuit.ToastManager.error('Please enter hours to platinum.');
+                if (submitBtn) {
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = originalText;
+                }
+                return;
+            }
 
             const response = await PlatPursuit.API.post(`/api/v1/notifications/${notificationId}/rating/`, data);
 

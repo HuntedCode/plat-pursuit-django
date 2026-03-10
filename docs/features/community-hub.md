@@ -161,6 +161,10 @@ The review feed uses **client-side rendering** from JSON API responses (not serv
 
 **RateMyGamesView** extends `LoginRequiredMixin` + `ProfileHotbarMixin` + `TemplateView`. Side-by-side wizard for quickly rating and reviewing platinumed games. Left panel shows game queue (base games and 100%-completed DLC), right panel shows rating form + review form with progress bar. Fetches game queue via `WizardQueueView` API.
 
+**Split submit buttons**: Two distinct submit actions: "Submit Rating" (or "Submit Rating & Review" when review is ready) submits the rating and optionally the review. "Submit Review Only" submits just the review without touching the rating. The review-only button is hidden when the game already has a review.
+
+**Hours-to-platinum validation**: All rating submissions (wizard, Review Hub detail page, notification inbox) require `hours_to_platinum > 0`. Enforced both client-side (disabled button / toast error) and server-side (`UserConceptRatingForm.clean_hours_to_platinum()`).
+
 **DLC filtering**: Only DLC groups where the user has 100% trophy completion appear in the wizard queue. This is enforced server-side in `_get_dlc_queue()` via bulk Trophy/EarnedTrophy aggregate queries.
 
 ### Key Design Decisions
@@ -233,6 +237,7 @@ The game detail page shows a single unified "Community" card (`community_section
 - **ZoomAwareObserver**: Infinite scroll sentinels use `ZoomAwareObserver` (not raw `IntersectionObserver`) to work correctly when the page is scaled via `ZoomScaler` on sub-768px screens.
 - **Admin moderation remains staff-only**: `ReviewModerationView`, `ReviewModerationActionView`, and `ReviewModerationLogView` use `StaffRequiredMixin`. All other Review Hub pages are public.
 - **Rating form removed from game detail**: The `GameDetailView.post()` method and `UserConceptRatingForm` usage were removed. Ratings are submitted exclusively via the Review Hub's rating panel.
+- **Hours-to-platinum must be > 0**: Enforced by `UserConceptRatingForm.clean_hours_to_platinum()` on the backend and client-side validation in all 3 JS files (rate-my-games.js, review-hub.js, notification-inbox.js). The wizard disables the rating button until hours is set; the other two forms show a toast error.
 
 ## Management Commands
 
