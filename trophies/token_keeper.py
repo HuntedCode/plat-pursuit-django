@@ -172,7 +172,6 @@ class TokenKeeper:
     def _init(self):
         from dotenv import load_dotenv
         load_dotenv()
-        self.tokens = os.getenv("PSN_TOKENS", "").split(",")
         self.health_interval = 60
         self.refresh_threshold = 300
         self.token_wait_interval = 120
@@ -181,7 +180,7 @@ class TokenKeeper:
         self.max_jobs_per_profile = int(os.getenv("MAX_JOBS_PER_PROFILE", 3))
         self.stats_interval = 5
         self.machine_id = os.getenv("MACHINE_ID", "default")
-        token_groups_str = os.getenv('TOKEN_GROUPS', os.getenv('PSN_TOKENS', ''))
+        token_groups_str = os.getenv('TOKEN_GROUPS', '')
         proxy_ips_str = os.getenv('PROXY_IPS', '')
         self.token_groups = [group.split(',') for group in token_groups_str.split('|') if group]
         self.proxy_ips = [proxy if proxy else None for proxy in proxy_ips_str.split("|") if proxy_ips_str]
