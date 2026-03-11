@@ -11,7 +11,8 @@ PlatPursuit.ReviewHubLanding = {
     config: null,
     observer: null,
     offset: 0,
-    limit: 10,
+    limit: 5,
+    maxResults: 50,
     sort: 'newest',
     isLoading: false,
     hasMore: true,
@@ -172,7 +173,7 @@ PlatPursuit.ReviewHubLanding = {
 
             const wasFirstLoad = this.offset === 0;
             this.offset += reviews.length;
-            this.hasMore = data.has_more || false;
+            this.hasMore = (data.has_more || false) && this.offset < this.maxResults;
 
             if (wasFirstLoad && reviews.length === 0 && emptyState) {
                 emptyState.classList.remove('hidden');
