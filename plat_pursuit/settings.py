@@ -124,6 +124,7 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     "django.contrib.humanize",
     'django.contrib.sites',
+    'django.contrib.sitemaps',
     "users",
     "core",
     "trophies.apps.TrophiesConfig",
