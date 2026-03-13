@@ -95,6 +95,17 @@ class NotificationSystem {
 
                 // Trigger celebration
                 await PlatPursuit.CelebrationManager.celebratePlatinum(gameName, data.notifications.length);
+
+                // Mark platinum notifications as read so they don't re-trigger next session
+                for (const notification of data.notifications) {
+                    try {
+                        await PlatPursuit.API.post(`/api/v1/notifications/${notification.id}/read/`, {});
+                    } catch (e) {
+                        console.error('Failed to mark platinum notification as read:', e);
+                    }
+                }
+                // Update unread count badge to reflect the newly read notifications
+                this.loadUnreadCount();
             } else {
                 // No platinum notifications, clear the flag so we check again next session
                 sessionStorage.removeItem('platinum_celebrated');
