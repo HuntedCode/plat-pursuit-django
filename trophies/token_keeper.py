@@ -305,6 +305,32 @@ class TokenKeeper:
 
         logger.info("TokenKeeper restarted successfully after database lock recovery")
 
+    def _wait_for_db(self, max_wait=120):
+        """Block until the database is accepting connections, up to max_wait seconds.
+
+        Used after transient DB connection errors to prevent workers from
+        burning through the entire job queue while the database is down.
+        If the DB does not recover within max_wait, records an error to
+        feed into the restart threshold system.
+        Returns True if DB recovered, False if max_wait exceeded.
+        """
+        start = time.time()
+        wait = 2
+        while not self._shutdown_requested and (time.time() - start) < max_wait:
+            try:
+                connection.close()
+                connection.ensure_connection()
+                logger.info("Database connection restored.")
+                return True
+            except OperationalError:
+                logger.warning(f"DB still unavailable, retrying in {wait}s...")
+                time.sleep(wait)
+                wait = min(wait * 2, 30)
+        if not self._shutdown_requested:
+            logger.error(f"DB did not recover within {max_wait}s")
+            self._record_db_lock_error()
+        return False
+
     def _start_health_monitor(self):
         """Start background thread for proactive health checks."""
         self._health_thread = threading.Thread(target=self._health_loop, daemon=True, name="tk-health")
@@ -447,6 +473,8 @@ class TokenKeeper:
             queue_name = None
             job_start = None
             job_type = None
+            args = None
+            requeued = False
             try:
                 queue_b, job_json = redis_client.brpop(['orchestrator_jobs', 'high_priority_jobs', 'medium_priority_jobs', 'low_priority_jobs', 'bulk_priority_jobs'])
                 queue_name = queue_b.decode()[:-5] # remove '_jobs'
@@ -486,22 +514,38 @@ class TokenKeeper:
                 logger.info(f"Job: {job_type} - Profile: {profile_id} completed successfully in {job_duration:.1f}s")
             except OperationalError as db_err:
                 err_msg = str(db_err).lower()
-                if "deadlock detected" in err_msg or "lock timeout" in err_msg:
-                    error_type = "Deadlock" if "deadlock" in err_msg else "Lock timeout"
+                is_lock_error = "deadlock detected" in err_msg or "lock timeout" in err_msg
+                is_connection_error = any(phrase in err_msg for phrase in [
+                    "connection failed", "the connection is closed",
+                    "not yet accepting connections", "could not connect",
+                    "server closed the connection", "connection refused",
+                    "connection timed out", "database is locked",
+                ])
+
+                if is_lock_error or is_connection_error:
+                    if is_lock_error:
+                        error_type = "Deadlock" if "deadlock" in err_msg else "Lock timeout"
+                        delay = 2
+                    else:
+                        error_type = "DB connection error"
+                        delay = 5
+
                     logger.warning(
                         f"{error_type} in {job_type} for profile {profile_id}, "
-                        f"re-queuing after 2s delay: {db_err}"
+                        f"re-queuing after {delay}s delay: {db_err}"
                     )
                     self._record_db_lock_error()
-                    time.sleep(2)
-                    if job_type and args is not None and profile_id:
+                    time.sleep(delay)
+                    if job_type and args is not None and profile_id and queue_name:
                         PSNManager.assign_job(
                             job_type, args=args, profile_id=profile_id,
-                            priority_override=queue_name
+                            priority_override=queue_name, skip_counter=True
                         )
-                elif "database is locked" in err_msg:
-                    logger.error(f"Database error in job worker: {db_err}")
-                    self._record_db_lock_error()
+                        requeued = True
+
+                    # Block until DB is back before popping more jobs
+                    if is_connection_error:
+                        self._wait_for_db()
                 else:
                     logger.error(f"Database error in job worker: {db_err}")
                 self._check_stuck_instances()
@@ -510,7 +554,7 @@ class TokenKeeper:
                 # Reset any instances stuck in busy state for too long
                 self._check_stuck_instances()
             finally:
-                if profile_id and queue_name not in ('high_priority', 'orchestrator'):
+                if profile_id and queue_name not in ('high_priority', 'orchestrator') and not requeued:
                     self._complete_job(profile_id, queue_name)
                 # Close stale DB connections to prevent pool exhaustion
                 connection.close()

@@ -18,10 +18,15 @@ class PSNManager:
     COUNTED_QUEUES = ("low_priority", "medium_priority", "bulk_priority")
 
     @classmethod
-    def assign_job(cls, job_type: str, args: list, profile_id: int, priority_override: str=None):
-        """Assign job to queue, respecting priorities."""
+    def assign_job(cls, job_type: str, args: list, profile_id: int, priority_override: str=None, skip_counter: bool=False):
+        """Assign job to queue, respecting priorities.
+
+        Args:
+            skip_counter: If True, don't increment the per-profile job counter.
+                Used when re-queuing a failed job that was already counted.
+        """
         queue_name = priority_override or cls._get_queue_for_job(job_type)
-        if queue_name in cls.COUNTED_QUEUES:
+        if queue_name in cls.COUNTED_QUEUES and not skip_counter:
             redis_client.incr(f"profile_jobs:{profile_id}:{queue_name}")
             redis_client.sadd("active_profiles", profile_id)
 
