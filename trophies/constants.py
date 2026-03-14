@@ -94,6 +94,7 @@ BADGE_TYPE_COLLECTION = 'collection'
 BADGE_TYPE_MEGAMIX = 'megamix'
 BADGE_TYPE_DEVELOPER = 'developer'
 BADGE_TYPE_MISC = 'misc'
+BADGE_TYPE_USER = 'user'
 
 BADGE_TYPES = [
     BADGE_TYPE_SERIES,
@@ -101,7 +102,14 @@ BADGE_TYPES = [
     BADGE_TYPE_MEGAMIX,
     BADGE_TYPE_DEVELOPER,
     BADGE_TYPE_MISC,
+    BADGE_TYPE_USER,
 ]
+
+# Badge types that use concept-based stage completion (all stages must be complete)
+CONCEPT_BASED_BADGE_TYPES = [BADGE_TYPE_SERIES, BADGE_TYPE_COLLECTION, BADGE_TYPE_DEVELOPER, BADGE_TYPE_USER]
+
+# All badge types that have stage-based evaluation (concept-based + megamix)
+EVALUATABLE_BADGE_TYPES = CONCEPT_BASED_BADGE_TYPES + [BADGE_TYPE_MEGAMIX]
 
 # Milestone Criteria Types
 MILESTONE_CRITERIA_PLAT_COUNT = 'plat_count'

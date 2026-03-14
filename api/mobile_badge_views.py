@@ -9,6 +9,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from trophies.constants import EVALUATABLE_BADGE_TYPES
 from trophies.models import Badge, Stage, UserBadge, UserBadgeProgress
 from trophies.services.xp_service import get_tier_xp
 from trophies.util_modules.constants import BADGE_TIER_XP
@@ -165,7 +166,7 @@ class MobileBadgeListView(APIView):
             progress_badge = next_badge or display_badge
             progress = progress_dict.get(progress_badge.id) if profile else None
             required_stages = progress_badge.required_stages
-            if progress and progress_badge.badge_type in ('series', 'collection', 'megamix', 'developer'):
+            if progress and progress_badge.badge_type in EVALUATABLE_BADGE_TYPES:
                 completed_concepts = progress.completed_concepts
                 progress_pct = (completed_concepts / required_stages * 100) if required_stages else 0
             else:

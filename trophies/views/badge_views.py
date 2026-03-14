@@ -3,6 +3,7 @@ from collections import defaultdict
 
 from core.services.tracking import track_page_view
 from datetime import timedelta
+from trophies.constants import EVALUATABLE_BADGE_TYPES
 from trophies.util_modules.constants import (
     BADGE_TIER_XP, BRONZE_STAGE_XP, SILVER_STAGE_XP,
     GOLD_STAGE_XP, PLAT_STAGE_XP,
@@ -56,6 +57,9 @@ class BadgeListView(ProfileHotbarMixin, ListView):
             series_slug = slugify(form.cleaned_data.get('series_slug'))
             if series_slug:
                 qs = qs.filter(series_slug__icontains=series_slug)
+            badge_type = form.cleaned_data.get('badge_type')
+            if badge_type:
+                qs = qs.filter(badge_type=badge_type)
         return qs
 
     def _calculate_all_series_stats(self, series_slugs):
@@ -158,7 +162,7 @@ class BadgeListView(ProfileHotbarMixin, ListView):
                 # Calculate progress
                 progress = progress_dict.get(progress_badge.id) if progress_badge else None
                 required_stages = progress_badge.required_stages
-                if progress and progress_badge.badge_type in ['series', 'collection', 'megamix', 'developer']:
+                if progress and progress_badge.badge_type in EVALUATABLE_BADGE_TYPES:
                     completed_concepts = progress.completed_concepts
                     progress_percentage = (completed_concepts / required_stages) * 100 if required_stages > 0 else 0
                 else:
@@ -199,12 +203,11 @@ class BadgeListView(ProfileHotbarMixin, ListView):
         context = super().get_context_data(**kwargs)
         badges = context['object_list']
 
-        # Group badges by series. Badges without an effective_user_title are
-        # treated as unpublished/WIP and hidden from the public listing.
+        # Group badges by series. Visibility is controlled by the is_live flag
+        # (already filtered via .live() in the queryset).
         grouped_badges = defaultdict(list)
         for badge in badges:
-            if badge.effective_user_title:
-                grouped_badges[badge.series_slug].append(badge)
+            grouped_badges[badge.series_slug].append(badge)
 
         # Build display data (unified for auth/unauth users)
         user = self.request.user
@@ -315,7 +318,7 @@ class BadgeDetailView(ProfileHotbarMixin, DetailView):
 
     def get_object(self, queryset=None):
         series_slug = self.kwargs[self.slug_url_kwarg]
-        return Badge.objects.by_series(series_slug).select_related('funded_by', 'base_badge__funded_by', 'title', 'base_badge__title')
+        return Badge.objects.by_series(series_slug).select_related('funded_by', 'base_badge__funded_by', 'submitted_by', 'base_badge__submitted_by', 'title', 'base_badge__title')
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -914,11 +917,10 @@ class OverallBadgeLeaderboardsView(ProfileHotbarMixin, TemplateView):
                 series_slug__isnull=True
             ).exclude(series_slug='').order_by(Lower('display_series'))
 
-            titled_badges = [b for b in series_badges if b.effective_user_title]
-            progress_keys = [f"lb_progress_{b.series_slug}" for b in titled_badges]
+            progress_keys = [f"lb_progress_{b.series_slug}" for b in series_badges]
             progress_data = cache.get_many(progress_keys) if progress_keys else {}
             directory = []
-            for badge in titled_badges:
+            for badge in series_badges:
                 badge.progress_count = len(progress_data.get(f"lb_progress_{badge.series_slug}", []))
                 directory.append(badge)
             context['series_directory'] = directory

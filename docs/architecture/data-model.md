@@ -87,7 +87,7 @@ Key relationships:
 Badges are PP's custom achievement system. Players earn badge tiers by completing sets of games (stages) defined by staff.
 
 ### Badge
-A badge tier (Bronze/Silver/Gold/Platinum) within a series. Grouped by `series_slug`. Higher tiers inherit properties from `base_badge` (the tier-1 badge in the same series). Types include: series, collection, megamix, developer, misc. Misc badges use a `requirements` JSON field instead of stages. Key display fields: `name`, `display_title`, `display_series`, `badge_image`. The `is_live` flag controls public visibility.
+A badge tier (Bronze/Silver/Gold/Platinum) within a series. Grouped by `series_slug`. Higher tiers inherit properties from `base_badge` (the tier-1 badge in the same series). Types include: series, collection, megamix, developer, user, misc. Misc badges use a `requirements` JSON field instead of stages. Key display fields: `name`, `display_title`, `display_series`, `badge_image`. The `is_live` flag controls public visibility.
 
 Key relationships:
 - `base_badge` FK to self (nullable, for tier inheritance)

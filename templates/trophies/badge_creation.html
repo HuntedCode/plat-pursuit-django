@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load static %}
 
 {% block title %}Badge Creation{% endblock %}
 {% block content %}
@@ -6,7 +7,7 @@
     <div class="card bg-base-100 shadow-xl">
         <div class="card-body">
             <h2 class="card-title text-2xl mb-4">Create Badge Group</h2>
-            
+
             {% if messages %}
                 {% for message in messages %}
                     <div class="alert {% if message.tags == 'error' %}alert-error{% else %}alert-success{% endif %} mb-4">
@@ -28,6 +29,26 @@
                 <div class="form-control">
                     <label class="label" for="{{ form.badge_type.id_for_label }}">Badge Type</label>
                     {{ form.badge_type }}
+                </div>
+                <div id="submitted-by-field" class="form-control hidden">
+                    <label class="label">Submitted By</label>
+                    <div class="relative">
+                        <input type="text" id="submitted-by-search" class="input w-full" placeholder="Search by PSN username..." autocomplete="off" />
+                        <input type="hidden" name="submitted_by" id="id_submitted_by" value="" />
+                        <div id="submitted-by-dropdown" class="absolute z-50 w-full bg-base-100 border border-base-300 rounded-box shadow-lg mt-1 max-h-48 overflow-y-auto hidden"></div>
+                    </div>
+                    <div id="submitted-by-selected" class="mt-2 hidden">
+                        <div class="flex items-center gap-2 bg-base-200 rounded-box px-3 py-2 border border-base-300">
+                            <img id="selected-avatar" src="" alt="" class="w-6 h-6 rounded-full object-cover" />
+                            <span id="selected-username" class="font-semibold text-sm"></span>
+                            <button type="button" id="clear-submitted-by" class="btn btn-ghost btn-xs ml-auto">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+                            </button>
+                        </div>
+                    </div>
+                    <label class="label">
+                        <span class="label-text-alt text-base-content/50 italic">The user who submitted this badge concept.</span>
+                    </label>
                 </div>
                 <button class="btn btn-primary" type="submit">Create Badges</button>
             </form>
@@ -54,6 +75,94 @@
         if (nameInput && seriesSlugInput) {
             nameInput.addEventListener('input', function() {
                 seriesSlugInput.value = slugify(nameInput.value);
+            });
+        }
+
+        const badgeTypeSelect = document.getElementById('id_badge_type');
+        const submittedByField = document.getElementById('submitted-by-field');
+        if (badgeTypeSelect && submittedByField) {
+            function toggleSubmittedBy() {
+                if (badgeTypeSelect.value === 'user') {
+                    submittedByField.classList.remove('hidden');
+                } else {
+                    submittedByField.classList.add('hidden');
+                }
+            }
+            badgeTypeSelect.addEventListener('change', toggleSubmittedBy);
+            toggleSubmittedBy();
+        }
+
+        // Submitted By user search
+        const searchInput = document.getElementById('submitted-by-search');
+        const hiddenInput = document.getElementById('id_submitted_by');
+        const dropdown = document.getElementById('submitted-by-dropdown');
+        const selectedDisplay = document.getElementById('submitted-by-selected');
+        const selectedAvatar = document.getElementById('selected-avatar');
+        const selectedUsername = document.getElementById('selected-username');
+        const clearBtn = document.getElementById('clear-submitted-by');
+
+        if (searchInput && dropdown) {
+            const doSearch = PlatPursuit.debounce(async function(query) {
+                if (query.length < 2) {
+                    dropdown.classList.add('hidden');
+                    return;
+                }
+                try {
+                    const data = await PlatPursuit.API.get(
+                        `/api/v1/admin/notifications/user-search/?q=${encodeURIComponent(query)}`
+                    );
+                    if (data.users.length === 0) {
+                        dropdown.innerHTML = '<div class="p-3 text-sm text-base-content/50 italic">No users found.</div>';
+                        dropdown.classList.remove('hidden');
+                        return;
+                    }
+                    dropdown.innerHTML = data.users.map(function(user) {
+                        return '<div class="flex items-center gap-2 p-2 hover:bg-base-200 cursor-pointer" data-username="' +
+                            PlatPursuit.HTMLUtils.escape(user.psn_username) + '" data-avatar="' +
+                            PlatPursuit.HTMLUtils.escape(user.avatar_url) + '">' +
+                            '<img src="' + PlatPursuit.HTMLUtils.escape(user.avatar_url) +
+                            '" class="w-6 h-6 rounded-full object-cover" alt="" />' +
+                            '<span class="font-medium text-sm">' +
+                            PlatPursuit.HTMLUtils.escape(user.psn_username) + '</span></div>';
+                    }).join('');
+
+                    dropdown.querySelectorAll('[data-username]').forEach(function(item) {
+                        item.addEventListener('click', function() {
+                            selectUser(item.dataset.username, item.dataset.avatar);
+                        });
+                    });
+                    dropdown.classList.remove('hidden');
+                } catch (error) {
+                    console.error('User search failed:', error);
+                }
+            }, 300);
+
+            searchInput.addEventListener('input', function() {
+                doSearch(searchInput.value.trim());
+            });
+
+            function selectUser(username, avatarUrl) {
+                hiddenInput.value = username;
+                selectedUsername.textContent = username;
+                selectedAvatar.src = avatarUrl;
+                selectedDisplay.classList.remove('hidden');
+                searchInput.classList.add('hidden');
+                dropdown.classList.add('hidden');
+            }
+
+            clearBtn.addEventListener('click', function() {
+                hiddenInput.value = '';
+                selectedDisplay.classList.add('hidden');
+                searchInput.classList.remove('hidden');
+                searchInput.value = '';
+                searchInput.focus();
+            });
+
+            // Close dropdown on outside click
+            document.addEventListener('click', function(e) {
+                if (!searchInput.contains(e.target) && !dropdown.contains(e.target)) {
+                    dropdown.classList.add('hidden');
+                }
             });
         }
     });

@@ -15,7 +15,9 @@
                     </figure>
                     <div class="flex flex-col items-center lg:items-start gap-1 flex-1 min-w-0">
                         <h1 class="text-xl lg:text-2xl font-bold italic pr-1 line-clamp-1">{{ badge.effective_display_series }}</h1>
-                        <p class="text-sm legendary-title italic pr-1">{{ badge.effective_user_title }}</p>
+                        {% if badge.effective_user_title %}
+                            <p class="text-sm legendary-title italic pr-1">{{ badge.effective_user_title }}</p>
+                        {% endif %}
                         <p class="text-sm text-base-content/60 italic pr-1">Who reigns supreme?</p>
                     </div>
                     <a href="{% url 'badge_detail' badge.series_slug %}" class="btn btn-ghost btn-sm gap-1 shrink-0">

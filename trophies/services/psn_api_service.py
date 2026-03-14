@@ -623,33 +623,45 @@ class PsnApiService:
             title = 'Mega Master'
         elif badge_type_name == 'Developer':
             title = 'Studio Champion'
+        elif badge_type_name == 'User':
+            title = 'Community Champion'
         else:
             title = 'Series Master'
 
         if badge_type_name == 'Developer':
             description = f"Earn plats from {name} games!"
+        elif badge_type_name == 'User':
+            description = f"A community-curated badge for the {name} series!"
         else:
             description = f"Earn plats in the {name} {badge_type_name}!"
 
-        base_badge = Badge.objects.create(
-            name=name + ' Bronze',
-            series_slug=form_data['series_slug'] or '',
-            description=description,
-            display_title=f"{name} {title}",
-            display_series=f"{name} {badge_type_name}",
-            tier=1,
-            badge_type = form_data['badge_type'],
-            view_count=0,
-        )
+        submitted_by = form_data.get('submitted_by')
+        create_kwargs = {
+            'name': name + ' Bronze',
+            'series_slug': form_data['series_slug'] or '',
+            'description': description,
+            'display_title': f"{name} {title}",
+            'display_series': f"{name} {badge_type_name}",
+            'tier': 1,
+            'badge_type': form_data['badge_type'],
+            'view_count': 0,
+        }
+        if submitted_by:
+            create_kwargs['submitted_by'] = submitted_by
+
+        base_badge = Badge.objects.create(**create_kwargs)
         base_badge.save()
         base_badge.update_most_recent_concept()
 
         for i, tier in enumerate(['Silver', 'Gold', 'Platinum']):
-            badge = Badge.objects.create(
-                name = name + f" {tier}",
-                series_slug=form_data['series_slug'] or '',
-                base_badge=base_badge,
-                tier=i + 2,
-                badge_type = form_data['badge_type'],
-                view_count=0,
-            )
+            tier_kwargs = {
+                'name': name + f" {tier}",
+                'series_slug': form_data['series_slug'] or '',
+                'base_badge': base_badge,
+                'tier': i + 2,
+                'badge_type': form_data['badge_type'],
+                'view_count': 0,
+            }
+            if submitted_by:
+                tier_kwargs['submitted_by'] = submitted_by
+            badge = Badge.objects.create(**tier_kwargs)

@@ -122,6 +122,16 @@ class BadgeCreationView(StaffRequiredMixin, FormView):
     def form_valid(self, form):
         try:
             badge_data = form.get_badge_data()
+            # Resolve submitted_by PSN username to Profile if provided
+            submitted_by_username = badge_data.pop('submitted_by_username', '')
+            if submitted_by_username:
+                from trophies.models import Profile
+                try:
+                    profile = Profile.objects.get(psn_username__iexact=submitted_by_username)
+                    badge_data['submitted_by'] = profile
+                except Profile.DoesNotExist:
+                    messages.error(self.request, f'Profile "{submitted_by_username}" not found.')
+                    return self.form_invalid(form)
             PsnApiService.create_badge_group_from_form(badge_data)
             messages.success(self.request, 'Badge group created successfully!')
         except Exception as e:

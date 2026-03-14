@@ -642,8 +642,8 @@ class StageInline(admin.TabularInline):
 
 @admin.register(Badge)
 class BadgeAdmin(admin.ModelAdmin):
-    list_display = ['name', 'is_live', 'tier', 'badge_type', 'series_slug', 'title', 'display_series', 'required_stages', 'requires_all', 'min_required', 'earned_count', 'most_recent_concept', 'funded_by']
-    list_select_related = ('most_recent_concept', 'title', 'funded_by')
+    list_display = ['name', 'is_live', 'tier', 'badge_type', 'series_slug', 'title', 'display_series', 'required_stages', 'requires_all', 'min_required', 'earned_count', 'most_recent_concept', 'funded_by', 'submitted_by']
+    list_select_related = ('most_recent_concept', 'title', 'funded_by', 'submitted_by')
     list_filter = ['is_live', 'tier', 'badge_type']
     list_editable = ['is_live']
     search_fields = ['name', 'series_slug']
@@ -652,7 +652,7 @@ class BadgeAdmin(admin.ModelAdmin):
         'name', 'is_live', 'series_slug', 'description', 'badge_image', 'base_badge',
         'tier', 'badge_type', 'title', 'display_title', 'display_series',
         'discord_role_id', 'requires_all', 'min_required', 'requirements',
-        'most_recent_concept', 'funded_by',
+        'most_recent_concept', 'funded_by', 'submitted_by',
         'earned_count', 'view_count', 'required_stages', 'required_value',
         'created_at',
     ]

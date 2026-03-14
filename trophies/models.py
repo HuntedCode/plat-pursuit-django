@@ -1183,6 +1183,7 @@ class Badge(models.Model):
         ('collection', 'Collection'),
         ('megamix', 'Megamix'),
         ('developer', 'Developer'),
+        ('user', 'User'),
         ('misc', 'Miscellaneous'),
     ]
 
@@ -1202,6 +1203,7 @@ class Badge(models.Model):
     requirements = models.JSONField(default=dict, blank=True, help_text="For misc badges")
     most_recent_concept = models.ForeignKey(Concept, on_delete=models.SET_NULL, null=True, blank=True, related_name='most_recent_for_badges', help_text='Concept with the latest release_date')
     funded_by = models.ForeignKey('Profile', on_delete=models.SET_NULL, null=True, blank=True, related_name='funded_badges', help_text='Profile of the donor who funded this badge artwork.')
+    submitted_by = models.ForeignKey('Profile', on_delete=models.SET_NULL, null=True, blank=True, related_name='submitted_badges', help_text='Profile who submitted this badge concept.')
     created_at = models.DateTimeField(auto_now_add=True)
     earned_count = models.PositiveIntegerField(default=0, help_text="Count of users who have earned this badge tier")
     view_count = models.PositiveIntegerField(default=0, help_text="Denormalized total page view count (only tracked on tier=1 badge rows).")
@@ -1262,6 +1264,14 @@ class Badge(models.Model):
             return self.base_badge.funded_by
         return None
 
+    @property
+    def effective_submitted_by(self):
+        if self.submitted_by:
+            return self.submitted_by
+        elif self.base_badge and self.base_badge.submitted_by:
+            return self.base_badge.submitted_by
+        return None
+
     def get_badge_layers(self):
         """Return dict of layer URLs for backdrop, main and foreground."""
 
@@ -1293,7 +1303,8 @@ class Badge(models.Model):
 
     def update_required(self):
         from trophies.models import Stage
-        if self.badge_type in ['series', 'collection', 'megamix', 'developer']:
+        from trophies.constants import EVALUATABLE_BADGE_TYPES
+        if self.badge_type in EVALUATABLE_BADGE_TYPES:
             stages = Stage.objects.filter(series_slug=self.series_slug)
             required_count = 0
             for stage in stages:
@@ -1326,7 +1337,8 @@ class Badge(models.Model):
         is_plat_check = False
         is_progress_check = False
 
-        if badge_type in ['series', 'collection', 'developer']:
+        from trophies.constants import CONCEPT_BASED_BADGE_TYPES
+        if badge_type in CONCEPT_BASED_BADGE_TYPES:
             is_plat_check = self.tier in [1, 3]
             is_progress_check = self.tier in [2, 4]
         elif badge_type == 'megamix':

@@ -165,6 +165,18 @@ class BadgeSearchForm(forms.Form):
         required=False,
         label='Sort By'
     )
+    badge_type = forms.ChoiceField(
+        choices=[
+            ('', 'All Types'),
+            ('series', 'Series'),
+            ('collection', 'Collection'),
+            ('developer', 'Developer'),
+            ('user', 'User'),
+            ('megamix', 'Megamix'),
+        ],
+        required=False,
+        label='Badge Type'
+    )
 
 class GuideSearchForm(forms.Form):
     query = forms.CharField(required=False, label='Search by title')
@@ -264,7 +276,8 @@ class ProfileSettingsForm(forms.ModelForm):
 class BadgeCreationForm(forms.Form):
     name = forms.CharField(max_length=255, required=True, label="Name", widget=forms.TextInput(attrs={'class': 'input w-full'}))
     series_slug = forms.SlugField(max_length=100, required=False, label="Series Slug", widget=forms.TextInput(attrs={'class': 'input w-full'}))
-    badge_type = forms.ChoiceField(choices=[('series', 'Series'), ('collection', 'Collection'), ('megamix', 'Megamix'), ('developer', 'Developer')], required=True, label="Badge Type", widget=forms.Select(attrs={'class': 'select w-full'}))
+    badge_type = forms.ChoiceField(choices=[('series', 'Series'), ('collection', 'Collection'), ('megamix', 'Megamix'), ('developer', 'Developer'), ('user', 'User')], required=True, label="Badge Type", widget=forms.Select(attrs={'class': 'select w-full'}))
+    submitted_by = forms.CharField(max_length=100, required=False, label="Submitted By (PSN Username)", widget=forms.TextInput(attrs={'class': 'input w-full', 'placeholder': 'PSN username of submitter'}))
 
     def get_badge_data(self):
         if self.is_valid():
@@ -272,5 +285,6 @@ class BadgeCreationForm(forms.Form):
                 'name': self.cleaned_data['name'],
                 'series_slug': self.cleaned_data['series_slug'],
                 'badge_type': self.cleaned_data['badge_type'],
+                'submitted_by_username': self.cleaned_data.get('submitted_by', ''),
             }
         return {}
