@@ -628,14 +628,15 @@ class PsnApiService:
         else:
             title = 'Series Master'
 
+        submitted_by = form_data.get('submitted_by')
+
         if badge_type_name == 'Developer':
             description = f"Earn plats from {name} games!"
         elif badge_type_name == 'User':
-            description = f"A community-curated badge for the {name} series!"
+            submitter_name = submitted_by.psn_username if submitted_by else 'the community'
+            description = f"A community-curated badge submitted by: {submitter_name}"
         else:
             description = f"Earn plats in the {name} {badge_type_name}!"
-
-        submitted_by = form_data.get('submitted_by')
         create_kwargs = {
             'name': name + ' Bronze',
             'series_slug': form_data['series_slug'] or '',
