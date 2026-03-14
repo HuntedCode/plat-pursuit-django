@@ -305,6 +305,9 @@ class DonationService:
                 if badge.badge_image:
                     raise ValueError("This badge series already has custom artwork.")
 
+                if badge.badge_type == 'user':
+                    raise ValueError("User-submitted badges are not eligible for artwork claims.")
+
                 if hasattr(badge, 'artwork_claim'):
                     raise ValueError("This badge series has already been claimed by another donor.")
 

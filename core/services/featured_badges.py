@@ -17,6 +17,7 @@ def get_featured_badges(limit=6):
         )
         .exclude(series_slug='')
         .exclude(series_slug__isnull=True)
+        .exclude(badge_type='user')
         .select_related('base_badge')
     )
 

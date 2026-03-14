@@ -50,6 +50,7 @@ class BadgeListView(ProfileHotbarMixin, ListView):
         qs = super().get_queryset().live().select_related(
             'base_badge', 'most_recent_concept', 'title',
             'base_badge__most_recent_concept', 'base_badge__title',
+            'submitted_by', 'base_badge__submitted_by',
         )
         form = BadgeSearchForm(self.request.GET)
 

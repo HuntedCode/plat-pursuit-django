@@ -162,7 +162,7 @@ class FundraiserView(TemplateView):
                 Q(badge_image__isnull=True) | Q(badge_image=''),
             ).exclude(
                 series_slug__isnull=True,
-            ).exclude(series_slug='').count()
+            ).exclude(series_slug='').exclude(badge_type='user').count()
 
             claimed_count = len(all_claims)
             completed_count = len(completed_claims)
@@ -185,6 +185,7 @@ class FundraiserView(TemplateView):
                 .filter(Q(badge_image__isnull=True) | Q(badge_image=''))
                 .exclude(series_slug__isnull=True)
                 .exclude(series_slug='')
+                .exclude(badge_type='user')
                 .exclude(id__in=claimed_badge_ids)
                 .select_related('base_badge')
                 .order_by(Lower('name'))

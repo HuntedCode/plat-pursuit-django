@@ -8,6 +8,7 @@ def get_latest_badges(limit=10):
         Badge.objects.live().filter(tier=1)
         .exclude(series_slug='')
         .exclude(series_slug__isnull=True)
+        .exclude(badge_type='user')
         .select_related('base_badge')
         .order_by('-created_at')[:limit]
     )

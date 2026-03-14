@@ -1276,8 +1276,21 @@ class Badge(models.Model):
         """Return dict of layer URLs for backdrop, main and foreground."""
 
         has_custom = bool(self.badge_image or (self.base_badge and self.base_badge.badge_image))
-        main_url = self.badge_image.url if self.badge_image else self.base_badge.badge_image.url if self.base_badge and self.base_badge.badge_image else 'images/badges/default.png'
+        main_url = self.badge_image.url if self.badge_image else self.base_badge.badge_image.url if self.base_badge and self.base_badge.badge_image else None
         backdrop_url = f"images/badges/backdrops/{self.tier}_backdrop.png"
+
+        # For user-type badges without a custom image, use the submitter's avatar
+        is_avatar = False
+        if not main_url and self.badge_type == 'user':
+            submitter = self.effective_submitted_by
+            if submitter and submitter.avatar_url:
+                main_url = submitter.avatar_url
+                has_custom = True
+                is_avatar = True
+
+        if not main_url:
+            main_url = 'images/badges/default.png'
+
         if has_custom:
             foreground_url = f"images/badges/foregrounds/{self.tier}_foreground.png"
             return {
@@ -1285,11 +1298,13 @@ class Badge(models.Model):
                 'main': main_url,
                 'foreground': foreground_url,
                 'has_custom_image': True,
+                'is_avatar': is_avatar,
             }
         return {
             'backdrop': backdrop_url,
             'main': main_url,
             'has_custom_image': False,
+            'is_avatar': False,
         }
 
     def update_most_recent_concept(self):

@@ -22,6 +22,9 @@
                     <div class="flex flex-col items-start justify-center min-w-0">
                         <h3 class="text-sm lg:text-lg font-bold line-clamp-1 italic pr-1">{{ badge.effective_display_title }} - {% if item.is_earned %}<span class="text-{{ badge.tier|badge_color }}">{{ badge.tier|badge_tier }}</span>{% else %}Unearned{% endif %}</h3>
                         <h2 class="text-base legendary-title text-start italic">{{ badge.badge_type|capfirst }}</h2>
+                        {% if badge.effective_submitted_by %}
+                            <p class="text-xs text-accent text-start italic pr-1">Submitted by: {{ badge.effective_submitted_by.psn_username }}</p>
+                        {% endif %}
                         <h6 class="text-xs text-base-content/70 text-start italic line-clamp-1 pr-1">{{ badge.effective_description }}</h6>
                         <div class="flex flex-row flex-wrap items-center gap-2 text-xs text-base-content/70 font-semibold italic pr-1">
                             <span class="flex flex-row items-center gap-1">
