@@ -364,8 +364,6 @@ class DeferredNotificationService:
         try:
             preference_token = EmailPreferenceService.generate_preference_token(user.id)
             preference_url = f"{settings.SITE_URL}/users/email-preferences/?token={preference_token}"
-            profile_slug = profile.slug or profile.psn_username
-
             context = {
                 'username': profile.display_psn_username or profile.psn_username,
                 'badges': email_badges,
