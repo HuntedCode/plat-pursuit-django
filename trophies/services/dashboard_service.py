@@ -198,14 +198,19 @@ def provide_challenge_hub(profile, size='large'):
 
 
 def provide_badge_progress(profile, settings=None):
-    """In-progress and unstarted badges sorted by completion percentage."""
-    from trophies.models import UserBadgeProgress
+    """In-progress badges sorted by completion percentage.
+
+    Only shows the next earnable tier per series: Bronze if unearned,
+    Silver only if Bronze is earned, Gold only if Silver is earned, etc.
+    """
+    from trophies.models import UserBadgeProgress, UserBadge
 
     settings = settings or {}
     limit = settings.get('limit', 4)
 
-    # Badges with at least some progress, not yet fully earned
-    progress_qs = (
+    # Fetch more than needed so we can filter by prerequisite tier in Python
+    fetch_limit = limit * 3
+    progress_list = list(
         UserBadgeProgress.objects
         .filter(profile=profile, completed_concepts__gt=0)
         .select_related('badge', 'badge__base_badge')
@@ -217,12 +222,33 @@ def provide_badge_progress(profile, settings=None):
             )
         )
         .exclude(pct__gte=100)
-        .order_by('-pct')[:limit]
+        .order_by('-pct')[:fetch_limit]
     )
 
+    # Pre-fetch earned badge IDs for prerequisite checking (single query)
+    earned_badge_ids = set(
+        UserBadge.objects.filter(profile=profile).values_list('badge_id', flat=True)
+    )
+
+    # Build lookup of badges by (series_slug, tier) for prerequisite resolution
+    from trophies.models import Badge
+    series_slugs = {bp.badge.series_slug for bp in progress_list}
+    badges_by_key = {}
+    if series_slugs:
+        for b in Badge.objects.filter(series_slug__in=series_slugs, is_live=True).only('id', 'series_slug', 'tier'):
+            badges_by_key[(b.series_slug, b.tier)] = b.id
+
     badges_in_progress = []
-    for bp in progress_qs:
+    for bp in progress_list:
         badge = bp.badge
+
+        # Only show if prerequisite tier is met:
+        # Tier 1 (Bronze) has no prerequisite. Higher tiers require previous tier earned.
+        if badge.tier > 1:
+            prev_badge_id = badges_by_key.get((badge.series_slug, badge.tier - 1))
+            if not prev_badge_id or prev_badge_id not in earned_badge_ids:
+                continue
+
         badges_in_progress.append({
             'layers': badge.get_badge_layers(),
             'series_name': badge.effective_display_series or badge.name,
@@ -234,30 +260,8 @@ def provide_badge_progress(profile, settings=None):
             'series_slug': badge.series_slug,
         })
 
-    # Unstarted badges (if enabled): progress record exists but zero concepts completed
-    show_unstarted = settings.get('show_unstarted', True)
-    badges_unstarted = []
-    if show_unstarted:
-        unstarted_limit = max(2, limit - len(badges_in_progress))
-        unstarted_qs = (
-            UserBadgeProgress.objects
-            .filter(profile=profile, completed_concepts=0)
-            .select_related('badge', 'badge__base_badge')
-            .filter(badge__required_stages__gt=0, badge__is_live=True)
-            .order_by('badge__required_stages')[:unstarted_limit]
-        )
-        for bp in unstarted_qs:
-            badge = bp.badge
-            badges_unstarted.append({
-                'layers': badge.get_badge_layers(),
-                'series_name': badge.effective_display_series or badge.name,
-                'completed': 0,
-                'required': badge.required_stages,
-                'pct': 0,
-                'tier': badge.tier,
-                'tier_name': badge.get_tier_display(),
-                'series_slug': badge.series_slug,
-            })
+        if len(badges_in_progress) >= limit:
+            break
 
     # Overall stats from ProfileGamification (reverse OneToOne, may not exist)
     from trophies.models import ProfileGamification
@@ -268,7 +272,6 @@ def provide_badge_progress(profile, settings=None):
 
     return {
         'badges_in_progress': badges_in_progress,
-        'badges_unstarted': badges_unstarted,
         'total_earned': gamification.total_badges_earned if gamification else 0,
         'unique_earned': gamification.unique_badges_earned if gamification else 0,
     }
@@ -340,11 +343,10 @@ DASHBOARD_MODULES = [
         'requires_premium': False,
         'load_strategy': 'lazy',
         'default_order': 4,
-        'default_settings': {'limit': 4, 'show_unstarted': True},
+        'default_settings': {'limit': 4},
         'configurable_settings': [
             {'key': 'limit', 'label': 'Items to show', 'type': 'select', 'default': 4,
              'options': [{'value': 2, 'label': '2'}, {'value': 4, 'label': '4'}, {'value': 6, 'label': '6'}]},
-            {'key': 'show_unstarted', 'label': 'Show unstarted', 'type': 'toggle', 'default': True},
         ],
         'cache_ttl': 600,
         'default_size': 'medium',

@@ -180,6 +180,10 @@ def check_profile_badges(profile, profilegame_ids, skip_notis: bool = False):
                     f"Error checking badge {badge.id} for profile {profile.psn_username}"
                 )
 
+    # Invalidate dashboard cache so badge progress module reflects changes
+    from trophies.services.dashboard_service import invalidate_dashboard_cache
+    invalidate_dashboard_cache(profile.id)
+
     duration = time.time() - start_time
     logger.info(
         f"Checked {checked_count} unique badges for profile "
