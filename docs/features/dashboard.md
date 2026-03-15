@@ -10,7 +10,33 @@ Two load strategies exist: **server-rendered** modules have their provider calle
 
 The responsive grid uses 3 tiers: 2 columns at tablet (768px+), 4 at desktop (`lg:`), 6 at wide (`2xl:`). Module sizes (small/medium/large) map to grid column spans at each tier. Premium users can drag-reorder modules, resize them, and hide unlimited modules. Free users can hide up to 3.
 
-**Current state**: Framework complete with 3 placeholder test modules. No real data modules built yet.
+## Current Modules
+
+| Slug | Name | Category | Strategy | Default Size | Premium |
+|------|------|----------|----------|-------------|---------|
+| `trophy_snapshot` | Trophy Snapshot | at_a_glance | Server | Medium | No |
+| `recent_platinums` | Recent Platinums | at_a_glance | Lazy (5m cache) | Medium | No |
+| `challenge_hub` | Challenge Hub | progress | Lazy (5m cache) | Large | No |
+| `badge_progress` | Badge Progress | badges | Lazy (10m cache) | Medium | No |
+
+### Trophy Snapshot
+Profile stats at a glance: platinums, golds, silvers, bronzes, total trophies, games, completions, average progress, and trophy level. Zero additional queries (all denormalized on Profile). Adapts layout by size: small shows 3 key stats, medium/large shows full grid, large adds a completion progress bar.
+
+### Recent Platinums
+Last N platinum trophies earned (3/6/10 depending on size) with game icon, title, relative date, and PSN rarity badge. Links to game detail page. Empty state encourages the user to earn their first platinum.
+
+### Challenge Hub
+Overview of all 3 challenge types with 3 states per type:
+- **Active**: Progress bar, slot counts, link to detail/edit page
+- **Completed**: Success badge with completion date, link to view
+- **No challenge**: CTA card with flavor text and "Start Challenge" link
+
+At large size, challenges display in a 3-column grid. At medium, they stack vertically.
+
+### Badge Progress
+Badges closest to next tier, sorted by completion percentage. Shows badge icon (layered rendering via `partials/badge.html`), series name, progress bar, and concept counts. Links to badge detail page. Empty state links to badge list. Large size includes total badge stats footer.
+
+**Provider note**: Filters to `is_live=True` badges with `required_stages > 0` to avoid division by zero. Excludes fully earned badges (pct >= 100). Size parameter controls item limit (2/4/6).
 
 ## File Map
 
@@ -24,8 +50,10 @@ The responsive grid uses 3 tiers: 2 columns at tablet (768px+), 4 at desktop (`l
 | `static/js/utils.js` | `DragReorderManager` (shared utility, `useXY: true` for 2D grids) |
 | `templates/trophies/dashboard.html` | Main page template with grid container |
 | `templates/trophies/partials/dashboard/customize_panel.html` | Customize modal (toggle/reorder/resize) |
-| `templates/trophies/partials/dashboard/placeholder_server.html` | Test: server-rendered module |
-| `templates/trophies/partials/dashboard/placeholder_lazy.html` | Test: lazy-loaded module |
+| `templates/trophies/partials/dashboard/trophy_snapshot.html` | Trophy Snapshot module |
+| `templates/trophies/partials/dashboard/recent_platinums.html` | Recent Platinums module |
+| `templates/trophies/partials/dashboard/challenge_hub.html` | Challenge Hub module |
+| `templates/trophies/partials/dashboard/badge_progress.html` | Badge Progress module |
 | `tailwind.config.js` | Safelist for dynamic grid classes |
 
 ## Data Model
@@ -59,7 +87,7 @@ Auto-created via `get_or_create()` on first dashboard visit. NOT a Concept relat
 }
 ```
 
-**Categories**: `at_a_glance`, `progress`, `highlights`, `community`, `historical`, `quick_links`
+**Categories**: `at_a_glance`, `progress`, `badges`, `community`, `highlights`, `premium`
 
 **Validation**: `_validate_registry()` runs at import time and asserts no duplicate slugs, valid sizes, valid load strategies, and callable providers.
 
@@ -87,10 +115,26 @@ Auto-created via `get_or_create()` on first dashboard visit. NOT a Concept relat
 
 ### Lazy Module Caching
 
-1. Cache key: `dashboard:mod:{slug}:{profile_id}`
+1. Cache key: `dashboard:mod:{slug}:{profile_id}:{size}` (size-aware)
 2. Each module specifies `cache_ttl` (0 = no caching)
-3. `invalidate_dashboard_cache(profile_id)` flushes all keys for a profile
-4. Flush via: `python manage.py redis_admin --flush-dashboard <profile_id>`
+3. Different sizes are cached independently (different item counts)
+4. `invalidate_dashboard_cache(profile_id)` flushes all keys for all sizes
+5. Flush via: `python manage.py redis_admin --flush-dashboard <profile_id>`
+
+### Size-Aware Providers
+
+Providers can optionally accept a `size` parameter to adjust their output (e.g., item count limits). The framework uses `inspect.signature()` to detect if a provider supports the `size` parameter and passes it accordingly. Providers without a `size` parameter continue to work unchanged.
+
+```python
+# Size-aware provider (receives effective size)
+def provide_recent_platinums(profile, size='medium'):
+    limit = SIZE_LIMITS.get(size, 6)
+    ...
+
+# Simple provider (no size parameter needed)
+def provide_trophy_snapshot(profile):
+    ...
+```
 
 ## API Endpoints
 
@@ -99,8 +143,19 @@ Auto-created via `get_or_create()` on first dashboard visit. NOT a Concept relat
 | GET | `/api/v1/dashboard/module/<slug>/?size=<size>` | Staff | Rendered HTML for lazy module |
 | POST | `/api/v1/dashboard/config/` | Staff | Update hidden/settings/order |
 | POST | `/api/v1/dashboard/reorder/` | Staff (Premium) | Save drag-drop order |
+| POST | `/api/v1/dashboard/preview-toggle/` | Staff | Toggle premium/free preview mode |
 
 **Config update** accepts partial payloads. `hidden_modules` works for all users (free capped at 3). `module_settings` and `module_order` are premium-only. Settings are **merged** with existing, not replaced.
+
+## Staff Premium Preview Toggle
+
+Staff testers can switch between "view as premium" and "view as free" using the toggle button in the dashboard header. This uses a session variable (`dashboard_preview_premium`) that overrides the real `profile.user_is_premium` across all dashboard views and API endpoints.
+
+- **Toggle button**: In the dashboard header, shows "Premium" (gold/warning) or "Free" (ghost) with the current effective state
+- **"Preview" badge**: Appears when the override is active (i.e., viewing as the opposite of your real status)
+- **Session-based**: Persists across page reloads, clears on logout
+- **Full coverage**: The `get_effective_premium(request)` helper is used by the main view and all 3 API endpoints, so lazy-loaded modules, config saves, and reorder all respect the override
+- **No DB changes**: The override is purely in the session; the actual `user_is_premium` field is untouched
 
 ## Responsive Grid System
 
@@ -117,37 +172,44 @@ At tablet (below `lg:`), ALL modules are full-width regardless of size setting. 
 ## Integration Points
 
 - [Token Keeper](../architecture/token-keeper.md): Sync completion could invalidate dashboard cache
-- [Badge System](../architecture/badge-system.md): Badge progress modules will query `UserBadgeProgress`
-- [Gamification](../architecture/gamification.md): XP display module will use `ProfileGamification`
+- [Badge System](../architecture/badge-system.md): Badge Progress module queries `UserBadgeProgress`
+- [Challenge System](../features/challenges.md): Challenge Hub module queries `Challenge` and slot models
 - `DragReorderManager` in `utils.js`: Shared drag utility with `useXY: true` for 2D grid awareness
 
 ## Gotchas and Pitfalls
 
 - **SIZE_GRID_CLASSES values are arrays in JS**: Always use spread (`...SIZE_GRID_CLASSES[size]`) at `classList.add()` call sites.
-- **Customize panel must stay flat**: Category `<h4>` headers and `.customize-module-row` must be direct children of `#customize-module-list`. Wrapping them in divs breaks `DragReorderManager` placeholder insertion.
+- **Customize panel must stay flat**: Category `<h4>` headers and `.customize-module-row` must be direct children of `#customize-module-list`. SortableJS needs draggable items as direct children.
 - **Module settings are merged, not replaced**: The config update API merges new settings with existing ones. An empty dict `{}` resets all settings.
-- **Two DragReorderManager instances**: Main grid uses `useXY: true` (2D). Customize modal uses default Y-only. Both share the same debounced order save.
+- **Two DragReorderManager instances**: Main grid and customize modal both use `DragReorderManager` (powered by SortableJS). Both share the same debounced order save.
+- **SortableJS loaded globally**: `static/js/vendor/Sortable.min.js` is loaded in `base.html` before `utils.js`. `DragReorderManager` gracefully degrades if Sortable is not available.
 - **Provider callable, not string**: Module descriptors pass actual function references, not dotted paths. This means providers must be importable at registry load time.
 - **Staff-gated during dev**: Switch `StaffRequiredMixin` to `LoginRequiredMixin` and `StaffRequiredAPIMixin` to `LoginRequiredAPIMixin` for production launch.
-- **Placeholder modules**: 3 test modules exist (`placeholder_server`, `placeholder_lazy`, `placeholder_premium`). Remove from `DASHBOARD_MODULES` once real modules are built.
 - **Tailwind safelist**: Any new grid classes applied via JS must be added to the safelist in `tailwind.config.js`.
+- **Badge progress division by zero**: Provider filters to `required_stages > 0` to avoid division by zero in percentage calculation. Megamix badges use `min_required` via `required_stages` (already denormalized).
+- **Cache keys are size-aware**: Cache key format is `dashboard:mod:{slug}:{profile_id}:{size}`. Invalidation flushes all size variants.
+- **Challenge Hub CTA links**: Uses Django `{% url %}` tags for challenge create/detail URLs. These must match the names in `plat_pursuit/urls.py`.
+- **Premium checks must use `get_effective_premium(request)`**: Never read `profile.user_is_premium` directly in dashboard views or API endpoints. Always use the helper so the staff preview toggle works correctly.
+- **Preview toggle is dev-only**: Remove or gate the toggle UI when switching from `StaffRequiredMixin` to `LoginRequiredMixin` for production launch.
 
 ## How to Add a New Module
 
-1. **Write the provider**: `def my_provider(profile) -> dict` in `dashboard_service.py`
+1. **Write the provider**: `def my_provider(profile, size='medium') -> dict` in `dashboard_service.py`. Accept `size` if the output varies by size.
 2. **Register in DASHBOARD_MODULES**: Add descriptor dict with slug, template, provider, sizes, etc.
-3. **Create the template**: Use `{{ data.* }}` for provider data, `{{ effective_size }}` for layout adaptation
+3. **Create the template**: Use `{{ data.* }}` for provider data, `{{ effective_size }}` for layout adaptation. Follow existing module templates for consistent card styling.
 4. **Optional JS init**: `dashboard.registerModuleInit('slug', (containerEl) => { ... })` for post-load behavior
-5. **Choose server vs lazy**: Server for trivial queries, lazy for anything with DB hits (use `cache_ttl`)
+5. **Choose server vs lazy**: Server for zero-query data (Profile fields), lazy for anything with DB hits (use `cache_ttl`)
 
 ## Cache Keys
 
 | Key Pattern | TTL | Purpose |
 |-------------|-----|---------|
-| `dashboard:mod:{slug}:{profile_id}` | Per-module `cache_ttl` | Lazy module rendered HTML cache |
+| `dashboard:mod:{slug}:{profile_id}:{size}` | Per-module `cache_ttl` | Lazy module data cache (per size) |
 
 ## Related Docs
 
 - [Data Model](../architecture/data-model.md): DashboardConfig model details
 - [JS Utilities](../reference/js-utilities.md): DragReorderManager shared utility
 - [Template Architecture](../reference/template-architecture.md): Partial template patterns
+- [Challenges](../features/challenges.md): Challenge model and slot systems
+- [Badge System](../architecture/badge-system.md): Badge, UserBadgeProgress, layered rendering

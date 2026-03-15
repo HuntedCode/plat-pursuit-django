@@ -9,14 +9,28 @@ Adding a new module:
     2. Add a descriptor dict to DASHBOARD_MODULES referencing the provider callable
     3. Create the partial template in templates/trophies/partials/dashboard/
 """
+import inspect
 import logging
 from django.core.cache import cache
-from django.utils import timezone
+from django.db.models import F, FloatField, ExpressionWrapper
 
 logger = logging.getLogger(__name__)
 
 # Maximum number of modules free users can hide
 MAX_FREE_HIDDEN = 3
+
+
+def get_effective_premium(request):
+    """
+    Return effective premium status, accounting for staff preview override.
+
+    Staff users can toggle a session variable to simulate premium/free views.
+    Falls back to real profile.user_is_premium when no override is set.
+    """
+    preview = request.session.get('dashboard_preview_premium')
+    if preview is not None:
+        return preview
+    return request.user.profile.user_is_premium
 
 # Default cache TTL for lazy-loaded modules (seconds)
 DEFAULT_CACHE_TTL = 600  # 10 minutes
@@ -32,35 +46,162 @@ SIZE_GRID_CLASSES = {
     'large':  'col-span-2 lg:col-span-4 2xl:col-span-6',   # full everywhere
 }
 
+# Item limits per module size
+SIZE_LIMITS = {
+    'small': 3,
+    'medium': 6,
+    'large': 10,
+}
+
 
 # ---------------------------------------------------------------------------
-# Placeholder Providers (Framework Validation)
+# Data Providers
 # ---------------------------------------------------------------------------
 
-def get_placeholder_server_data(profile):
-    """Test provider for server-rendered module. Zero queries."""
+def provide_trophy_snapshot(profile):
+    """Trophy collection summary. Zero additional queries (all on Profile)."""
+    total_earned = profile.total_trophies - profile.total_unearned
     return {
-        'message': 'Server module loaded successfully.',
-        'timestamp': timezone.now().isoformat(),
-        'profile_name': profile.display_psn_username or profile.psn_username,
+        'total_plats': profile.total_plats,
+        'total_golds': profile.total_golds,
+        'total_silvers': profile.total_silvers,
+        'total_bronzes': profile.total_bronzes,
+        'total_trophies': profile.total_trophies,
+        'total_earned': total_earned,
+        'total_unearned': profile.total_unearned,
+        'total_games': profile.total_games,
+        'total_completes': profile.total_completes,
+        'total_hiddens': profile.total_hiddens,
+        'avg_progress': profile.avg_progress,
+        'trophy_level': profile.trophy_level,
+        'tier': profile.tier,
+        'is_plus': profile.is_plus,
+        'earn_rate': round(total_earned / profile.total_trophies * 100, 1) if profile.total_trophies else 0,
     }
 
 
-def get_placeholder_lazy_data(profile):
-    """Test provider for lazy-loaded module. Zero queries."""
-    return {
-        'message': 'Lazy module loaded via AJAX.',
-        'timestamp': timezone.now().isoformat(),
-        'profile_name': profile.display_psn_username or profile.psn_username,
-    }
+def provide_recent_platinums(profile, size='medium'):
+    """Last N platinum trophies earned with game info and rarity."""
+    from trophies.models import EarnedTrophy
+
+    limit = SIZE_LIMITS.get(size, 6)
+    plats = (
+        EarnedTrophy.objects
+        .filter(profile=profile, trophy__trophy_type='platinum', earned=True)
+        .select_related('trophy__game__concept')
+        .order_by('-earned_date_time')[:limit]
+    )
+
+    platinums = []
+    for et in plats:
+        concept = getattr(et.trophy.game, 'concept', None) if et.trophy.game else None
+        platinums.append({
+            'game_name': concept.unified_title if concept else et.trophy.game.title_name if et.trophy.game else 'Unknown',
+            'icon_url': concept.concept_icon_url if concept else (et.trophy.game.title_image if et.trophy.game else ''),
+            'earned_date': et.earned_date_time,
+            'earn_rate': et.trophy.trophy_earn_rate,
+            'slug': concept.slug if concept else None,
+        })
+
+    return {'platinums': platinums}
 
 
-def get_placeholder_premium_data(profile):
-    """Test provider for premium-gated module. Zero queries."""
+def provide_challenge_hub(profile, size='large'):
+    """Overview of all 3 challenge types: active progress, completed, or CTA."""
+    from trophies.models import Challenge
+    from trophies.services.challenge_service import get_calendar_stats
+
+    challenges = Challenge.objects.filter(profile=profile, is_deleted=False)
+
+    result = {}
+    for ctype in ('az', 'calendar', 'genre'):
+        # Priority: active first, then most recently completed
+        challenge = (
+            challenges.filter(challenge_type=ctype, is_complete=False).first()
+            or challenges.filter(challenge_type=ctype, is_complete=True).order_by('-completed_at').first()
+        )
+
+        if not challenge:
+            result[ctype] = None
+            continue
+
+        data = {
+            'challenge_id': challenge.id,
+            'is_complete': challenge.is_complete,
+            'completed_at': challenge.completed_at,
+        }
+
+        if ctype == 'az':
+            data['filled'] = challenge.filled_count
+            data['completed'] = challenge.completed_count
+            data['total'] = 26
+            data['pct'] = round(challenge.completed_count / 26 * 100) if 26 else 0
+        elif ctype == 'calendar':
+            stats = get_calendar_stats(challenge)
+            filled = stats.get('total_filled', 0)
+            data['filled'] = filled
+            data['total'] = 365
+            data['streak'] = stats.get('longest_streak', 0)
+            data['pct'] = round(filled / 365 * 100)
+        elif ctype == 'genre':
+            data['filled'] = challenge.filled_count
+            data['completed'] = challenge.completed_count
+            total = challenge.total_items or challenge.genre_slots.count()
+            data['total'] = total
+            data['bonus_count'] = challenge.bonus_count
+            data['pct'] = round(challenge.completed_count / total * 100) if total else 0
+
+        result[ctype] = data
+
+    return result
+
+
+def provide_badge_progress(profile, size='medium'):
+    """In-progress badges sorted by completion percentage."""
+    from trophies.models import UserBadgeProgress
+
+    limit = {'small': 2, 'medium': 4, 'large': 6}.get(size, 4)
+
+    progress_qs = (
+        UserBadgeProgress.objects
+        .filter(profile=profile, completed_concepts__gt=0)
+        .select_related('badge', 'badge__base_badge')
+        .filter(badge__required_stages__gt=0, badge__is_live=True)
+        .annotate(
+            pct=ExpressionWrapper(
+                F('completed_concepts') * 100.0 / F('badge__required_stages'),
+                output_field=FloatField()
+            )
+        )
+        .exclude(pct__gte=100)
+        .order_by('-pct')[:limit]
+    )
+
+    badges_in_progress = []
+    for bp in progress_qs:
+        badge = bp.badge
+        badges_in_progress.append({
+            'layers': badge.get_badge_layers(),
+            'series_name': badge.effective_display_series or badge.name,
+            'completed': bp.completed_concepts,
+            'required': badge.required_stages,
+            'pct': round(bp.pct, 1),
+            'tier': badge.tier,
+            'tier_name': badge.get_tier_display(),
+            'series_slug': badge.series_slug,
+        })
+
+    # Overall stats from ProfileGamification (reverse OneToOne, may not exist)
+    from trophies.models import ProfileGamification
+    try:
+        gamification = profile.gamification
+    except ProfileGamification.DoesNotExist:
+        gamification = None
+
     return {
-        'message': 'Premium module loaded successfully.',
-        'timestamp': timezone.now().isoformat(),
-        'profile_name': profile.display_psn_username or profile.psn_username,
+        'badges_in_progress': badges_in_progress,
+        'total_earned': gamification.total_badges_earned if gamification else 0,
+        'unique_earned': gamification.unique_badges_earned if gamification else 0,
     }
 
 
@@ -70,49 +211,64 @@ def get_placeholder_premium_data(profile):
 
 DASHBOARD_MODULES = [
     {
-        'slug': 'placeholder_server',
-        'name': 'Server Module (Test)',
-        'description': 'Framework test: validates server-side rendering pipeline.',
+        'slug': 'trophy_snapshot',
+        'name': 'Trophy Snapshot',
+        'description': 'Your trophy collection at a glance: platinums, golds, completion rate, and more.',
         'category': 'at_a_glance',
-        'template': 'trophies/partials/dashboard/placeholder_server.html',
-        'provider': get_placeholder_server_data,
+        'template': 'trophies/partials/dashboard/trophy_snapshot.html',
+        'provider': provide_trophy_snapshot,
         'requires_premium': False,
         'load_strategy': 'server',
         'default_order': 1,
         'default_settings': {},
         'cache_ttl': 0,
-        'default_size': 'small',
-        'allowed_sizes': ['small', 'medium', 'large'],
-    },
-    {
-        'slug': 'placeholder_lazy',
-        'name': 'Lazy Module (Test)',
-        'description': 'Framework test: validates AJAX lazy-loading pipeline.',
-        'category': 'at_a_glance',
-        'template': 'trophies/partials/dashboard/placeholder_lazy.html',
-        'provider': get_placeholder_lazy_data,
-        'requires_premium': False,
-        'load_strategy': 'lazy',
-        'default_order': 2,
-        'default_settings': {},
-        'cache_ttl': 60,
         'default_size': 'medium',
         'allowed_sizes': ['small', 'medium', 'large'],
     },
     {
-        'slug': 'placeholder_premium',
-        'name': 'Premium Module (Test)',
-        'description': 'Framework test: validates premium gating.',
+        'slug': 'recent_platinums',
+        'name': 'Recent Platinums',
+        'description': 'Your latest platinum conquests with rarity and earn dates.',
         'category': 'at_a_glance',
-        'template': 'trophies/partials/dashboard/placeholder_lazy.html',
-        'provider': get_placeholder_premium_data,
-        'requires_premium': True,
+        'template': 'trophies/partials/dashboard/recent_platinums.html',
+        'provider': provide_recent_platinums,
+        'requires_premium': False,
+        'load_strategy': 'lazy',
+        'default_order': 2,
+        'default_settings': {},
+        'cache_ttl': 300,
+        'default_size': 'medium',
+        'allowed_sizes': ['small', 'medium', 'large'],
+    },
+    {
+        'slug': 'challenge_hub',
+        'name': 'Challenge Hub',
+        'description': 'Track your A-Z, Calendar, and Genre challenge progress all in one place.',
+        'category': 'progress',
+        'template': 'trophies/partials/dashboard/challenge_hub.html',
+        'provider': provide_challenge_hub,
+        'requires_premium': False,
         'load_strategy': 'lazy',
         'default_order': 3,
         'default_settings': {},
-        'cache_ttl': 60,
+        'cache_ttl': 300,
         'default_size': 'large',
         'allowed_sizes': ['medium', 'large'],
+    },
+    {
+        'slug': 'badge_progress',
+        'name': 'Badge Progress',
+        'description': 'Badges you are closest to earning. Keep pushing, hunter!',
+        'category': 'badges',
+        'template': 'trophies/partials/dashboard/badge_progress.html',
+        'provider': provide_badge_progress,
+        'requires_premium': False,
+        'load_strategy': 'lazy',
+        'default_order': 4,
+        'default_settings': {},
+        'cache_ttl': 600,
+        'default_size': 'medium',
+        'allowed_sizes': ['small', 'medium', 'large'],
     },
 ]
 
@@ -136,6 +292,10 @@ def _validate_registry():
             f"Invalid load_strategy '{mod.get('load_strategy')}' for module {slug}"
         assert callable(mod.get('provider')), \
             f"Provider for module {slug} is not callable"
+
+        # Pre-compute whether provider accepts a size parameter
+        sig = inspect.signature(mod['provider'])
+        mod['_accepts_size'] = 'size' in sig.parameters
 
 _validate_registry()
 
@@ -281,11 +441,11 @@ def get_all_modules_for_customize(config, is_premium):
 
 CATEGORY_DISPLAY_NAMES = {
     'at_a_glance': 'At a Glance',
-    'progress': 'Progress & Goals',
-    'highlights': 'Highlights & Achievements',
+    'progress': 'Progress & Challenges',
+    'badges': 'Badges & Achievements',
     'community': 'Community',
-    'historical': 'Historical',
-    'quick_links': 'Quick Links',
+    'highlights': 'Highlights & History',
+    'premium': 'Premium',
 }
 
 
@@ -317,18 +477,21 @@ def get_server_module_data(profile, modules):
     return data
 
 
-def get_lazy_module_data(profile, slug):
+def get_lazy_module_data(profile, slug, size=None):
     """
     Fetch context for a single lazy-loaded module.
 
     Checks Django cache first; falls back to provider on miss.
+    Size is passed to providers that accept it (for item count limits).
+    Cache keys include size so different sizes are cached independently.
     Returns the context dict or None if the module doesn't exist.
     """
     mod = get_module_by_slug(slug)
     if not mod:
         return None
 
-    cache_key = _module_cache_key(slug, profile.id)
+    effective_size = size or mod.get('default_size', 'medium')
+    cache_key = _module_cache_key(slug, profile.id, effective_size)
     ttl = mod.get('cache_ttl', DEFAULT_CACHE_TTL)
 
     if ttl > 0:
@@ -338,14 +501,20 @@ def get_lazy_module_data(profile, slug):
 
     provider_fn = mod['provider']
     try:
-        data = provider_fn(profile)
+        if mod.get('_accepts_size'):
+            data = provider_fn(profile, size=effective_size)
+        else:
+            data = provider_fn(profile)
     except Exception:
         logger.exception("Dashboard provider for %s failed for profile %s",
                          slug, profile.id)
         return {'error': True}
 
     if ttl > 0:
-        cache.set(cache_key, data, ttl)
+        try:
+            cache.set(cache_key, data, ttl)
+        except Exception:
+            logger.debug("Could not cache dashboard module %s (non-serializable data)", slug)
 
     return data
 
@@ -354,15 +523,19 @@ def get_lazy_module_data(profile, slug):
 # Cache Helpers
 # ---------------------------------------------------------------------------
 
-def _module_cache_key(slug, profile_id):
+def _module_cache_key(slug, profile_id, size=None):
+    if size:
+        return f"dashboard:mod:{slug}:{profile_id}:{size}"
     return f"dashboard:mod:{slug}:{profile_id}"
 
 
 def invalidate_dashboard_cache(profile_id):
-    """Delete all dashboard module cache keys for a profile."""
+    """Delete all dashboard module cache keys for a profile (all sizes)."""
     keys_to_delete = []
     for mod in DASHBOARD_MODULES:
         if mod.get('cache_ttl', DEFAULT_CACHE_TTL) > 0:
-            keys_to_delete.append(_module_cache_key(mod['slug'], profile_id))
+            slug = mod['slug']
+            for size in mod.get('allowed_sizes', list(VALID_SIZES)):
+                keys_to_delete.append(_module_cache_key(slug, profile_id, size))
     if keys_to_delete:
         cache.delete_many(keys_to_delete)

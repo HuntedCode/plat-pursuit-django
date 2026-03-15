@@ -603,6 +603,25 @@
   @apply opacity-50 shadow-xl ring-2 ring-primary;
 }
 
+/* SortableJS drag states */
+.sortable-ghost {
+  @apply opacity-40 rounded-box;
+  border: 2px dashed oklch(var(--p));
+  background: oklch(var(--p) / 0.05);
+}
+.sortable-chosen {
+  @apply z-50;
+  box-shadow: 0 8px 25px -5px rgba(0, 0, 0, 0.3);
+  transform: scale(1.02);
+}
+.sortable-drag {
+  opacity: 1 !important;
+}
+.sortable-fallback {
+  opacity: 0.9 !important;
+  box-shadow: 0 12px 40px -10px rgba(0, 0, 0, 0.4);
+}
+
 /* Section Cards - Collapsed/Expanded States */
 .checklist-section .card {
   @apply transition-all duration-200;

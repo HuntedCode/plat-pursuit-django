@@ -6,8 +6,9 @@
 {% block meta_description %}Your personal trophy hunting command center. Track trophies, badges, challenges, and more at a glance.{% endblock %}
 
 {% block content %}
+<div class="mt-2 mb-12">
 {# ─── Dashboard Header ────────────────────────────────────────────────── #}
-<section class="shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 w-full p-0 lg:p-4">
+<section class="shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 max-w-4xl mx-auto p-0 lg:p-4">
     {% include 'partials/breadcrumb.html' with items=breadcrumb %}
 
     <div class="card bg-base-100 border-4 border-base-300 shadow-md shadow-neutral">
@@ -26,27 +27,50 @@
                         <p class="text-base-content/60 text-sm italic pr-1">Your trophy hunting command center.</p>
                     </div>
                 </div>
-                <button id="customize-btn" class="btn btn-ghost btn-sm border border-base-300 gap-1">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <circle cx="12" cy="12" r="3"></circle>
-                        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
-                    </svg>
-                    <span class="hidden lg:inline">Customize</span>
-                </button>
+                <div class="flex items-center gap-2">
+                    {# Staff premium preview toggle #}
+                    <div class="flex items-center gap-1.5">
+                        <button id="preview-toggle-btn"
+                                class="btn btn-xs {% if is_premium %}btn-warning{% else %}btn-ghost border-base-300{% endif %} gap-1"
+                                title="Toggle premium/free preview">
+                            {% if is_premium %}
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
+                                    <path d="M5 16L3 5l5.5 5L12 4l3.5 6L21 5l-2 11H5z"/>
+                                </svg>
+                                <span class="hidden lg:inline">Premium</span>
+                            {% else %}
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <circle cx="12" cy="12" r="10"></circle>
+                                    <path d="M12 6v6l4 2"></path>
+                                </svg>
+                                <span class="hidden lg:inline">Free</span>
+                            {% endif %}
+                        </button>
+                        {% if preview_mode %}
+                            <span class="badge badge-xs badge-outline badge-warning">Preview</span>
+                        {% endif %}
+                    </div>
+
+                    <button id="customize-btn" class="btn btn-ghost btn-sm border border-base-300 gap-1">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="12" cy="12" r="3"></circle>
+                            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                        </svg>
+                        <span class="hidden lg:inline">Customize</span>
+                    </button>
+                </div>
             </div>
         </div>
     </div>
 </section>
 
 {# ─── Module Container ─────────────────────────────────────────────────── #}
-<div id="dashboard-modules" class="grid grid-cols-2 lg:grid-cols-4 2xl:grid-cols-6 grid-flow-dense gap-4 lg:gap-6 mt-6">
+<div id="dashboard-modules" class="flex flex-col gap-4 lg:gap-6 mt-6 max-w-4xl mx-auto">
     {% for module in modules %}
         <div data-module-slug="{{ module.slug }}"
-             data-module-size="{{ module.effective_size }}"
              data-item-id="{{ module.slug }}"
              id="module-{{ module.slug }}"
-             class="dashboard-module {{ module.grid_class }} relative"
-             {% if is_premium %}draggable="true"{% endif %}>
+             class="dashboard-module relative">
             {% if is_premium %}
                 {# Drag handle for premium reordering: floats over module content #}
                 <div class="module-drag-handle hidden absolute top-2 left-2 z-10 cursor-grab opacity-40 hover:opacity-100 transition-opacity bg-base-100/80 rounded p-1" aria-label="Drag to reorder">
@@ -75,13 +99,7 @@
                                 <div class="space-y-3">
                                     <div class="h-4 bg-base-300 rounded w-full"></div>
                                     <div class="h-4 bg-base-300 rounded w-2/3"></div>
-                                    {% if module.effective_size == 'large' %}
-                                        <div class="h-32 bg-base-300 rounded w-full"></div>
-                                    {% elif module.effective_size == 'medium' %}
-                                        <div class="h-20 bg-base-300 rounded w-full"></div>
-                                    {% else %}
-                                        <div class="h-12 bg-base-300 rounded w-full"></div>
-                                    {% endif %}
+                                    <div class="h-20 bg-base-300 rounded w-full"></div>
                                 </div>
                             </div>
                         </div>
@@ -115,6 +133,7 @@
         <button>close</button>
     </form>
 </dialog>
+</div>
 {% endblock %}
 
 {% block js_scripts %}
@@ -136,17 +155,18 @@ document.addEventListener('DOMContentLoaded', () => {
             { slug: '{{ module.slug }}', elementId: 'module-{{ module.slug }}' },
             {% endif %}{% endfor %}
         ],
-        moduleSizes: {
-            {% for module in modules %}
-            '{{ module.slug }}': {
-                effectiveSize: '{{ module.effective_size }}',
-                allowedSizes: {{ module.allowed_sizes|tojson }},
-                defaultSize: '{{ module.default_size }}',
-            },
-            {% endfor %}
-        },
     });
     dashboard.init();
+
+    // Staff preview toggle: switch between premium and free views
+    document.getElementById('preview-toggle-btn')?.addEventListener('click', async () => {
+        try {
+            await PlatPursuit.API.request('/api/v1/dashboard/preview-toggle/', { method: 'POST', body: {} });
+            window.location.reload();
+        } catch (e) {
+            PlatPursuit.ToastManager.error('Failed to toggle preview mode.');
+        }
+    });
 });
 </script>
 {% endblock %}

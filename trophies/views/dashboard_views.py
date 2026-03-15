@@ -12,6 +12,7 @@ from trophies.services.dashboard_service import (
     get_ordered_modules,
     get_all_modules_for_customize,
     get_server_module_data,
+    get_effective_premium,
     MAX_FREE_HIDDEN,
 )
 
@@ -28,7 +29,7 @@ class DashboardView(StaffRequiredMixin, ProfileHotbarMixin, TemplateView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         profile = self.request.user.profile
-        is_premium = profile.user_is_premium
+        is_premium = get_effective_premium(self.request)
 
         config, _ = DashboardConfig.objects.get_or_create(profile=profile)
 
@@ -50,6 +51,8 @@ class DashboardView(StaffRequiredMixin, ProfileHotbarMixin, TemplateView):
             'module_categories': categories,
             'max_free_hidden': MAX_FREE_HIDDEN,
             'hidden_count': len(config.hidden_modules) if config.hidden_modules else 0,
+            'preview_mode': self.request.session.get('dashboard_preview_premium') is not None,
+            'real_is_premium': profile.user_is_premium,
             'breadcrumb': [
                 {'text': 'Home', 'url': reverse_lazy('home')},
                 {'text': 'My Dashboard'},

@@ -69,7 +69,7 @@ from .game_family_views import (
 )
 from .subscription_admin_views import SubscriptionAdminActionView, SubscriptionAdminUserDetailView
 from .fundraiser_views import CreateDonationView, ClaimBadgeView, UpdateClaimStatusView
-from .dashboard_views import DashboardModuleDataView, DashboardConfigUpdateView, DashboardModuleReorderView
+from .dashboard_views import DashboardModuleDataView, DashboardConfigUpdateView, DashboardModuleReorderView, DashboardPreviewToggleView
 from .title_views import EquipTitleAPIView
 from .user_settings_views import UpdateTimezoneAPIView
 from .game_player_views import GamePlayersAPIView
@@ -305,6 +305,7 @@ urlpatterns = [
     path('dashboard/module/<str:slug>/', DashboardModuleDataView.as_view(), name='dashboard-module-data'),
     path('dashboard/config/', DashboardConfigUpdateView.as_view(), name='dashboard-config-update'),
     path('dashboard/reorder/', DashboardModuleReorderView.as_view(), name='dashboard-reorder'),
+    path('dashboard/preview-toggle/', DashboardPreviewToggleView.as_view(), name='dashboard-preview-toggle'),
 
     # Title endpoints
     path('equip-title/', EquipTitleAPIView.as_view(), name='equip-title'),

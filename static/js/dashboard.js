@@ -2,24 +2,12 @@
  * Dashboard Module Manager
  *
  * Handles lazy-loading of dashboard modules, drag-and-drop reordering
- * (premium), module toggle (show/hide), module resize (premium),
- * and the customize panel.
+ * (premium), module toggle (show/hide), and the customize panel.
+ *
+ * Layout: single-column, capped width. Drag reorder = vertical priority.
  */
 (function () {
     'use strict';
-
-    // Size-to-CSS grid class mapping (mirrors Python SIZE_GRID_CLASSES)
-    // grid-cols-2 (tablet) / lg:grid-cols-4 (desktop) / 2xl:grid-cols-6 (1536px+)
-    const SIZE_GRID_CLASSES = {
-        small:  ['col-span-2', 'lg:col-span-2', '2xl:col-span-2'],
-        medium: ['col-span-2', 'lg:col-span-2', '2xl:col-span-3'],
-        large:  ['col-span-2', 'lg:col-span-4', '2xl:col-span-6'],
-    };
-
-    const ALL_SIZE_CLASSES = [
-        'col-span-2', 'lg:col-span-2', 'lg:col-span-4',
-        '2xl:col-span-2', '2xl:col-span-3', '2xl:col-span-6',
-    ];
 
     class DashboardManager {
         /**
@@ -32,7 +20,6 @@
          * @param {string[]} config.hiddenModules - Currently hidden module slugs
          * @param {Object} config.moduleSettings  - Per-module settings from DB
          * @param {Array<{slug: string, elementId: string}>} config.lazyModules - Modules to lazy-load
-         * @param {Object} config.moduleSizes     - Size metadata per module
          */
         constructor(config) {
             this.container = document.getElementById('dashboard-modules');
@@ -45,7 +32,6 @@
             this.hiddenModules = new Set(config.hiddenModules || []);
             this.lazyModules = config.lazyModules || [];
             this.moduleSettings = config.moduleSettings || {};
-            this.moduleSizes = config.moduleSizes || {};
 
             this.dragManager = null;
             this.customizeDragManager = null;
@@ -53,7 +39,6 @@
 
             // Debounced persistence: batches rapid changes into a single API call
             this._debouncedSaveConfig = PlatPursuit.debounce(() => this._saveConfigNow(), 500);
-            this._debouncedSaveSettings = PlatPursuit.debounce(() => this._saveSettingsNow(), 500);
             this._debouncedSaveOrder = PlatPursuit.debounce(() => this._saveOrderNow(), 500);
             this._pendingOrder = null;
         }
@@ -80,13 +65,9 @@
             const el = document.getElementById(mod.elementId);
             if (!el) return;
 
-            // Pass effective size as query param to avoid a DB lookup on the server
-            const sizeInfo = this.moduleSizes[mod.slug];
-            const sizeParam = sizeInfo ? `?size=${sizeInfo.effectiveSize}` : '';
-
             try {
                 const data = await PlatPursuit.API.get(
-                    this.moduleDataUrl + mod.slug + '/' + sizeParam
+                    this.moduleDataUrl + mod.slug + '/'
                 );
                 // Replace the skeleton with the rendered HTML
                 const skeleton = el.querySelector('.dashboard-module-skeleton');
@@ -158,17 +139,8 @@
                 });
             });
 
-            // Bind size selector buttons (premium only)
+            // Init drag reorder in customize modal (premium only)
             if (this.isPremium) {
-                document.querySelectorAll('.module-size-btn').forEach(btn => {
-                    btn.addEventListener('click', (e) => {
-                        const slug = e.currentTarget.dataset.slug;
-                        const size = e.currentTarget.dataset.size;
-                        this.resizeModule(slug, size);
-                    });
-                });
-
-                // Init drag reorder in customize modal
                 this._initCustomizeDragReorder();
             }
 
@@ -215,62 +187,6 @@
         }
 
         // -----------------------------------------------------------------
-        // Module Resize (Premium)
-        // -----------------------------------------------------------------
-
-        resizeModule(slug, newSize) {
-            const sizeInfo = this.moduleSizes[slug];
-            if (!sizeInfo) return;
-
-            // Validate against allowed sizes
-            if (!sizeInfo.allowedSizes.includes(newSize)) {
-                PlatPursuit.ToastManager.warning('That size is not available for this module.');
-                return;
-            }
-
-            // Skip if already this size
-            if (sizeInfo.effectiveSize === newSize) return;
-
-            const moduleEl = document.getElementById('module-' + slug);
-            if (!moduleEl) return;
-
-            // Swap CSS grid classes
-            ALL_SIZE_CLASSES.forEach(cls => moduleEl.classList.remove(cls));
-            moduleEl.classList.add(...SIZE_GRID_CLASSES[newSize]);
-
-            // Update data attribute
-            moduleEl.dataset.moduleSize = newSize;
-
-            // Update internal state
-            sizeInfo.effectiveSize = newSize;
-            if (!this.moduleSettings[slug]) {
-                this.moduleSettings[slug] = {};
-            }
-            this.moduleSettings[slug].size = newSize;
-
-            // Sync the customize panel button group
-            this._updateSizeSelector(slug, newSize);
-
-            // Save to server (debounced: batches rapid resizes)
-            this._debouncedSaveSettings();
-        }
-
-        _updateSizeSelector(slug, activeSize) {
-            const container = document.querySelector(`[data-customize-slug="${slug}"]`);
-            if (!container) return;
-
-            container.querySelectorAll('.module-size-btn').forEach(btn => {
-                if (btn.dataset.size === activeSize) {
-                    btn.classList.add('btn-primary');
-                    btn.classList.remove('btn-ghost', 'border-base-300');
-                } else {
-                    btn.classList.remove('btn-primary');
-                    btn.classList.add('btn-ghost', 'border-base-300');
-                }
-            });
-        }
-
-        // -----------------------------------------------------------------
         // Reset to Default
         // -----------------------------------------------------------------
 
@@ -297,22 +213,6 @@
                     });
                 }
 
-                // Reset all module sizes to their defaults
-                Object.keys(this.moduleSizes).forEach(slug => {
-                    const sizeInfo = this.moduleSizes[slug];
-                    const defaultSize = sizeInfo.defaultSize;
-                    sizeInfo.effectiveSize = defaultSize;
-
-                    const moduleEl = document.getElementById('module-' + slug);
-                    if (moduleEl) {
-                        ALL_SIZE_CLASSES.forEach(cls => moduleEl.classList.remove(cls));
-                        moduleEl.classList.add(...SIZE_GRID_CLASSES[defaultSize]);
-                        moduleEl.dataset.moduleSize = defaultSize;
-                    }
-
-                    this._updateSizeSelector(slug, defaultSize);
-                });
-
                 // Clear all module settings
                 this.moduleSettings = {};
 
@@ -327,6 +227,9 @@
                 await PlatPursuit.API.post(this.configUrl, payload);
 
                 PlatPursuit.ToastManager.success('Dashboard reset to default.');
+
+                // Reload to get default module order
+                window.location.reload();
             } catch (err) {
                 PlatPursuit.ToastManager.error('Failed to reset dashboard.');
             } finally {
@@ -351,16 +254,6 @@
             }
         }
 
-        async _saveSettingsNow() {
-            try {
-                await PlatPursuit.API.post(this.configUrl, {
-                    module_settings: this.moduleSettings,
-                });
-            } catch (err) {
-                PlatPursuit.ToastManager.error('Failed to save module settings.');
-            }
-        }
-
         _updateHiddenCount() {
             // Update the counter in the customize panel header
             const counter = document.querySelector('#customize-modal .text-warning');
@@ -380,19 +273,9 @@
                 container: this.container,
                 itemSelector: '.dashboard-module',
                 handleSelector: '.module-drag-handle',
-                useXY: true,
-                placeholderClass: 'border-2 border-dashed border-primary rounded-box h-16 bg-primary/5',
                 onReorder: (_itemId, _newPosition, allItemIds) => {
                     this._pendingOrder = allItemIds;
                     this._debouncedSaveOrder();
-                },
-                onPlaceholderCreate: (placeholder, draggedEl) => {
-                    // Copy grid size classes so placeholder occupies the correct grid space
-                    ALL_SIZE_CLASSES.forEach(cls => {
-                        if (draggedEl.classList.contains(cls)) {
-                            placeholder.classList.add(cls);
-                        }
-                    });
                 },
             });
 
@@ -406,25 +289,24 @@
             const customizeList = document.getElementById('customize-module-list');
             if (!customizeList || !PlatPursuit.DragReorderManager) return;
 
+            // Hide category headers during drag for a clean flat-list reorder UX
+            const headers = customizeList.querySelectorAll('h4');
+
             this.customizeDragManager = new PlatPursuit.DragReorderManager({
                 container: customizeList,
                 itemSelector: '.customize-module-row',
                 handleSelector: '.customize-drag-handle',
-                placeholderClass: 'border-2 border-dashed border-primary rounded-lg h-12 bg-primary/10',
                 onReorder: (_itemId, _newPosition, allItemIds) => {
                     this._reorderMainPageModules(allItemIds);
                     this._pendingOrder = allItemIds;
                     this._debouncedSaveOrder();
                 },
-            });
-
-            // Hide category headers during drag for a clean flat-list reorder UX
-            const headers = customizeList.querySelectorAll('h4');
-            customizeList.addEventListener('dragstart', () => {
-                headers.forEach(h => h.classList.add('opacity-0', 'h-0', 'overflow-hidden', '!mt-0', '!mb-0'));
-            });
-            customizeList.addEventListener('dragend', () => {
-                headers.forEach(h => h.classList.remove('opacity-0', 'h-0', 'overflow-hidden', '!mt-0', '!mb-0'));
+                onStart: () => {
+                    headers.forEach(h => h.classList.add('opacity-0', 'h-0', 'overflow-hidden', '!mt-0', '!mb-0'));
+                },
+                onEnd: () => {
+                    headers.forEach(h => h.classList.remove('opacity-0', 'h-0', 'overflow-hidden', '!mt-0', '!mb-0'));
+                },
             });
         }
 

@@ -561,7 +561,8 @@ function debounce(fn, delay = 300) {
 
 /**
  * Drag Reorder Manager
- * Reusable drag-and-drop reordering with position caching for performance
+ * Wraps SortableJS for smooth, touch-friendly drag-and-drop reordering.
+ * Drop-in replacement: same constructor API, same onReorder callback signature.
  */
 class DragReorderManager {
     /**
@@ -571,213 +572,87 @@ class DragReorderManager {
      * @param {string} config.itemSelector - CSS selector for draggable items
      * @param {Function} config.onReorder - Callback when drop completes: (itemId, newPosition, allItemIds)
      * @param {string} [config.handleSelector] - Optional selector for drag handle (defaults to item itself)
-     * @param {string} [config.placeholderClass] - Custom placeholder CSS class
-     * @param {boolean} [config.useXY] - Enable 2D positioning for multi-column grids (default: false, Y-only)
+     * @param {string} [config.placeholderClass] - Custom ghost CSS class (mapped to SortableJS ghostClass)
+     * @param {Function} [config.onPlaceholderCreate] - Called on drag start with (ghostEl, draggedEl)
+     * @param {boolean} [config.useXY] - Ignored (kept for backward compatibility; SortableJS handles 2D natively)
+     * @param {Function} [config.onStart] - Optional callback when drag starts
+     * @param {Function} [config.onEnd] - Optional callback when drag ends
      */
     constructor(config) {
         this.container = config.container;
         this.itemSelector = config.itemSelector;
         this.onReorder = config.onReorder;
         this.handleSelector = config.handleSelector || null;
-        this.placeholderClass = config.placeholderClass || 'border-2 border-dashed border-primary rounded-box h-16 bg-primary/5';
         this.onPlaceholderCreate = config.onPlaceholderCreate || null;
-        this.useXY = config.useXY || false;
+        this._onStartCallback = config.onStart || null;
+        this._onEndCallback = config.onEnd || null;
+        this.sortable = null;
 
-        this.draggedEl = null;
-        this.placeholder = null;
-        this.rafScheduled = false;
-        this.lastClientY = 0;
-        this.lastClientX = 0;
-        this._cachedPositions = [];
-        this._mouseDownTarget = null; // Track where mousedown occurred
-
-        this._bindEvents();
+        this._initSortable();
     }
 
-    _bindEvents() {
-        // Track mousedown to know where drag started
-        this.container.addEventListener('mousedown', (e) => {
-            this._mouseDownTarget = e.target;
-        });
-        this.container.addEventListener('dragstart', (e) => this._onDragStart(e));
-        this.container.addEventListener('dragover', (e) => this._onDragOver(e));
-        this.container.addEventListener('dragend', () => this._onDragEnd());
-        this.container.addEventListener('drop', (e) => this._onDrop(e));
-    }
-
-    _onDragStart(e) {
-        // If handle selector is provided, only allow drag from handle
-        // Check the mousedown target, not the drag target (which is always the draggable element)
-        if (this.handleSelector && this._mouseDownTarget) {
-            const handle = this._mouseDownTarget.closest(this.handleSelector);
-            if (!handle) {
-                e.preventDefault();
-                return;
-            }
+    _initSortable() {
+        if (typeof Sortable === 'undefined') {
+            console.warn('DragReorderManager: SortableJS not loaded, drag reordering disabled.');
+            return;
         }
 
-        const item = e.target.closest(this.itemSelector);
-        if (!item) return;
+        const sortableConfig = {
+            draggable: this.itemSelector,
+            animation: 200,
+            easing: 'cubic-bezier(0.25, 1, 0.5, 1)',
+            ghostClass: 'sortable-ghost',
+            chosenClass: 'sortable-chosen',
+            dragClass: 'sortable-drag',
+            forceFallback: true,
+            fallbackClass: 'sortable-fallback',
+            fallbackOnBody: true,
+            fallbackTolerance: 3,
+            // Prevent flicker: require cursor to cross 65% of an item before swapping.
+            // This stops the rapid back-and-forth when hovering between two items
+            // in a CSS Grid layout (grid reflow moves items under the cursor).
+            swapThreshold: 0.65,
+            invertSwap: true,
 
-        this.draggedEl = item;
-        item.classList.add('opacity-50', 'border-primary');
-        e.dataTransfer.effectAllowed = 'move';
-        e.dataTransfer.setData('text/plain', item.dataset.itemId || '');
-
-        // Create placeholder
-        this.placeholder = document.createElement('div');
-        this.placeholder.className = this.placeholderClass;
-        if (this.onPlaceholderCreate) {
-            this.onPlaceholderCreate(this.placeholder, item);
-        }
-
-        // Cache positions at drag start
-        this._cacheItemPositions();
-    }
-
-    _onDragOver(e) {
-        e.preventDefault();
-        if (!this.draggedEl || !this.placeholder) return;
-        e.dataTransfer.dropEffect = 'move';
-
-        this.lastClientY = e.clientY;
-        this.lastClientX = e.clientX;
-
-        // Throttle to one update per animation frame
-        if (this.rafScheduled) return;
-        this.rafScheduled = true;
-
-        requestAnimationFrame(() => {
-            this.rafScheduled = false;
-            if (!this.draggedEl || !this.placeholder) return;
-
-            const afterEl = this.useXY
-                ? this._getDragAfterElement2D(this.lastClientY, this.lastClientX)
-                : this._getDragAfterElement(this.lastClientY);
-
-            // Short-circuit: skip if placeholder is already in the right spot
-            if (afterEl) {
-                if (this.placeholder.nextElementSibling !== afterEl) {
-                    this.container.insertBefore(this.placeholder, afterEl);
-                    this._cacheItemPositions();
+            onStart: (evt) => {
+                if (this.onPlaceholderCreate) {
+                    // SortableJS creates the ghost automatically; let callers customize it
+                    // The ghost is a clone placed in the DOM where the item was
+                    requestAnimationFrame(() => {
+                        const ghost = this.container.querySelector('.sortable-ghost');
+                        if (ghost) this.onPlaceholderCreate(ghost, evt.item);
+                    });
                 }
-            } else {
-                if (this.container.lastElementChild !== this.placeholder) {
-                    this.container.appendChild(this.placeholder);
-                    this._cacheItemPositions();
+                if (this._onStartCallback) this._onStartCallback(evt);
+            },
+
+            onEnd: (evt) => {
+                if (this._onEndCallback) this._onEndCallback(evt);
+
+                if (evt.oldIndex === evt.newIndex) return;
+
+                const items = [...this.container.querySelectorAll(this.itemSelector)];
+                const itemId = evt.item.dataset.itemId;
+                const allItemIds = items.map(item => item.dataset.itemId);
+
+                if (this.onReorder) {
+                    this.onReorder(itemId, evt.newIndex, allItemIds);
                 }
-            }
-        });
-    }
+            },
+        };
 
-    _onDragEnd() {
-        if (this.draggedEl) {
-            this.draggedEl.classList.remove('opacity-50', 'border-primary');
-        }
-        if (this.placeholder && this.placeholder.parentNode) {
-            this.placeholder.remove();
-        }
-        this.draggedEl = null;
-        this.placeholder = null;
-        this._cachedPositions = [];
-    }
-
-    _onDrop(e) {
-        e.preventDefault();
-        if (!this.draggedEl || !this.placeholder) return;
-
-        // Insert dragged element where placeholder is
-        this.placeholder.replaceWith(this.draggedEl);
-        this.draggedEl.classList.remove('opacity-50', 'border-primary');
-
-        // Collect all item IDs in new order
-        const items = [...this.container.querySelectorAll(this.itemSelector)];
-        const newPosition = items.indexOf(this.draggedEl);
-        const itemId = this.draggedEl.dataset.itemId;
-        const allItemIds = items.map(item => item.dataset.itemId);
-
-        // Call reorder callback
-        if (this.onReorder) {
-            this.onReorder(itemId, newPosition, allItemIds);
+        if (this.handleSelector) {
+            sortableConfig.handle = this.handleSelector;
         }
 
-        this.draggedEl = null;
-        this.placeholder = null;
-        this._cachedPositions = [];
+        this.sortable = Sortable.create(this.container, sortableConfig);
     }
 
-    _cacheItemPositions() {
-        const items = [...this.container.querySelectorAll(`${this.itemSelector}:not(.opacity-50)`)];
-        this._cachedPositions = items.map(item => {
-            const box = item.getBoundingClientRect();
-            const pos = { element: item, top: box.top, height: box.height };
-            if (this.useXY) {
-                pos.left = box.left;
-                pos.width = box.width;
-            }
-            return pos;
-        });
-    }
-
-    _getDragAfterElement(y) {
-        const result = this._cachedPositions.reduce((closest, item) => {
-            const offset = y - item.top - item.height / 2;
-            if (offset < 0 && offset > closest.offset) {
-                return { offset, element: item.element };
-            }
-            return closest;
-        }, { offset: Number.NEGATIVE_INFINITY });
-        return result.element || null;
-    }
-
-    /**
-     * 2D-aware positioning for multi-column grids.
-     * Items in the same row are disambiguated by X; different rows by Y.
-     */
-    _getDragAfterElement2D(y, x) {
-        let bestElement = null;
-        let bestDistance = Infinity;
-
-        for (const item of this._cachedPositions) {
-            const centerY = item.top + item.height / 2;
-            const centerX = item.left + item.width / 2;
-
-            // Skip items the cursor is past (below and to the right of)
-            // An item is "after" the cursor if: it's in a later row,
-            // or in the same row but to the right
-            const sameRow = Math.abs(y - centerY) < item.height / 2;
-
-            if (sameRow) {
-                // Same row: only consider items to the right of cursor
-                if (x < centerX) {
-                    const dist = centerX - x;
-                    if (dist < bestDistance) {
-                        bestDistance = dist;
-                        bestElement = item.element;
-                    }
-                }
-            } else if (y < centerY) {
-                // Cursor is above this item's row: this item is a candidate
-                const dist = centerY - y;
-                if (dist < bestDistance) {
-                    bestDistance = dist;
-                    bestElement = item.element;
-                }
-            }
-        }
-
-        return bestElement;
-    }
-
-    /**
-     * Cleanup event listeners
-     */
     destroy() {
-        // Event listeners are on the container which persists, so no cleanup needed
-        // But we can clear references
-        this.draggedEl = null;
-        this.placeholder = null;
-        this._cachedPositions = [];
+        if (this.sortable) {
+            this.sortable.destroy();
+            this.sortable = null;
+        }
     }
 }
 

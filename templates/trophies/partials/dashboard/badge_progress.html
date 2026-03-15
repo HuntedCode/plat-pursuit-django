@@ -1,0 +1,69 @@
+{% load static custom_filters %}
+{# Dashboard module: Badge Progress — badges closest to earning. #}
+<div class="card bg-base-200/80 border-2 border-base-300 shadow-lg shadow-neutral">
+    <div class="card-body p-5 lg:p-7">
+        {# Header #}
+        <div class="flex items-center justify-between mb-3">
+            <h2 class="card-title text-base lg:text-lg font-bold flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-warning" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="8" r="7"></circle>
+                    <polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"></polyline>
+                </svg>
+                Badge Progress
+            </h2>
+            {% if data.total_earned %}
+                <a href="{% url 'badges_list' %}" class="badge badge-ghost badge-sm hover:badge-primary transition-colors">
+                    {{ data.total_earned }} earned
+                </a>
+            {% endif %}
+        </div>
+
+        {% if data.badges_in_progress %}
+            {# 2-column grid: each column ~370px at 768px, fits badge icon + progress bar #}
+            <div class="grid grid-cols-2 gap-3">
+                {% for bp in data.badges_in_progress %}
+                    <a href="{% url 'badge_detail' bp.series_slug %}" class="flex items-center gap-3 p-2 rounded-lg bg-base-300/30 hover:bg-base-300/60 transition-colors group">
+                        {# Badge icon #}
+                        <figure class="w-10 h-10 lg:w-12 lg:h-12 shrink-0">
+                            {% include 'partials/badge.html' with layers=bp.layers %}
+                        </figure>
+
+                        {# Progress info #}
+                        <div class="flex-1 min-w-0">
+                            <div class="flex items-center justify-between gap-2 mb-1">
+                                <span class="font-semibold text-sm line-clamp-1 pr-1 group-hover:text-primary transition-colors">{{ bp.series_name }}</span>
+                                <span class="text-xs text-base-content/50 shrink-0">{{ bp.completed }}/{{ bp.required }}</span>
+                            </div>
+                            <div class="w-full bg-base-300 rounded-full h-1.5">
+                                <div class="bg-{{ bp.tier|badge_color }} rounded-full h-1.5 transition-all duration-500" style="width: {{ bp.pct }}%"></div>
+                            </div>
+                            <div class="flex items-center justify-between mt-1">
+                                <span class="text-xs text-{{ bp.tier|badge_color }} font-medium">{{ bp.tier_name }}</span>
+                                <span class="text-xs text-base-content/40 font-bold">{{ bp.pct }}%</span>
+                            </div>
+                        </div>
+                    </a>
+                {% endfor %}
+            </div>
+
+            {% if data.total_earned %}
+                {# Stats footer: always shown #}
+                <div class="flex items-center justify-between mt-3 pt-3 border-t border-base-300/50 text-xs text-base-content/50">
+                    <span>{{ data.total_earned }} badges earned ({{ data.unique_earned }} unique series)</span>
+                    <a href="{% url 'badges_list' %}" class="link link-primary font-medium">View All</a>
+                </div>
+            {% endif %}
+        {% else %}
+            {# Empty state #}
+            <div class="text-center py-6">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-10 h-10 text-warning/30 mx-auto mb-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="8" r="7"></circle>
+                    <polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"></polyline>
+                </svg>
+                <p class="text-sm text-base-content/50">No badge progress yet.</p>
+                <p class="text-xs text-base-content/40 mt-1">Start earning platinums to unlock badge progress!</p>
+                <a href="{% url 'badges_list' %}" class="btn btn-warning btn-xs mt-3">Explore Badges</a>
+            </div>
+        {% endif %}
+    </div>
+</div>

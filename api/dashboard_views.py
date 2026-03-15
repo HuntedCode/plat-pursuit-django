@@ -15,6 +15,7 @@ from trophies.services.dashboard_service import (
     get_module_by_slug,
     get_lazy_module_data,
     get_valid_slugs,
+    get_effective_premium,
     validate_module_size,
     VALID_SIZES,
     MAX_FREE_HIDDEN,
@@ -33,7 +34,7 @@ class DashboardModuleDataView(StaffRequiredAPIMixin, View):
 
     def get(self, request, slug):
         profile = request.user.profile
-        is_premium = profile.user_is_premium
+        is_premium = get_effective_premium(request)
 
         mod = get_module_by_slug(slug)
         if not mod:
@@ -45,14 +46,14 @@ class DashboardModuleDataView(StaffRequiredAPIMixin, View):
         if mod['load_strategy'] != 'lazy':
             return JsonResponse({'error': 'Module is not lazy-loaded.'}, status=400)
 
-        data = get_lazy_module_data(profile, slug)
-        if data is None:
-            return JsonResponse({'error': 'Failed to load module data.'}, status=500)
-
         # Resolve effective size: prefer client-provided query param to avoid DB hit
         allowed = mod.get('allowed_sizes', list(VALID_SIZES))
         size_param = request.GET.get('size')
         effective_size = size_param if size_param in allowed else mod.get('default_size', 'medium')
+
+        data = get_lazy_module_data(profile, slug, size=effective_size)
+        if data is None:
+            return JsonResponse({'error': 'Failed to load module data.'}, status=500)
 
         try:
             html = render_to_string(mod['template'], {
@@ -81,7 +82,7 @@ class DashboardConfigUpdateView(StaffRequiredAPIMixin, View):
 
     def post(self, request):
         profile = request.user.profile
-        is_premium = profile.user_is_premium
+        is_premium = get_effective_premium(request)
 
         try:
             body = json.loads(request.body)
@@ -171,7 +172,7 @@ class DashboardModuleReorderView(StaffRequiredAPIMixin, View):
     def post(self, request):
         profile = request.user.profile
 
-        if not profile.user_is_premium:
+        if not get_effective_premium(request):
             return JsonResponse({'error': 'Reordering requires premium.'}, status=403)
 
         try:
@@ -194,4 +195,26 @@ class DashboardModuleReorderView(StaffRequiredAPIMixin, View):
         return JsonResponse({
             'status': 'ok',
             'module_order': config.module_order,
+        })
+
+
+class DashboardPreviewToggleView(StaffRequiredAPIMixin, View):
+    """
+    POST /api/v1/dashboard/preview-toggle/
+
+    Toggle premium preview mode for staff testing.
+    Sets a session variable that overrides is_premium on the dashboard.
+    """
+
+    def post(self, request):
+        current = request.session.get('dashboard_preview_premium')
+        if current is None:
+            # First toggle: opposite of real status
+            request.session['dashboard_preview_premium'] = not request.user.profile.user_is_premium
+        else:
+            # Subsequent toggles: flip
+            request.session['dashboard_preview_premium'] = not current
+        return JsonResponse({
+            'status': 'ok',
+            'preview_premium': request.session['dashboard_preview_premium'],
         })

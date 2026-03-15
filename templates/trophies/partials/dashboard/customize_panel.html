@@ -29,8 +29,7 @@
                 <div class="customize-module-row flex items-center justify-between gap-3 p-3 rounded-lg bg-base-200 border border-base-300
                             {% if mod.is_locked %}opacity-50{% endif %}"
                      data-customize-slug="{{ mod.slug }}"
-                     data-item-id="{{ mod.slug }}"
-                     {% if is_premium %}draggable="true"{% endif %}>
+                     data-item-id="{{ mod.slug }}">
                     <div class="flex items-center gap-3 flex-1 min-w-0">
                         {% if is_premium %}
                             {# Drag handle for premium reorder in customize panel #}
@@ -56,22 +55,6 @@
                         </div>
                     </div>
                     <div class="flex items-center gap-3">
-                        {# Size selector (premium only, non-locked, desktop only) #}
-                        {% if is_premium and not mod.is_locked %}
-                            <div class="join hidden lg:inline-flex">
-                                {% for size_option in mod.allowed_sizes %}
-                                    <button type="button"
-                                            class="join-item btn btn-xs module-size-btn
-                                                   {% if size_option == mod.effective_size %}btn-primary{% else %}btn-ghost border-base-300{% endif %}"
-                                            data-slug="{{ mod.slug }}"
-                                            data-size="{{ size_option }}"
-                                            title="{{ size_option|title }}">
-                                        {% if size_option == 'small' %}S{% elif size_option == 'medium' %}M{% else %}L{% endif %}
-                                    </button>
-                                {% endfor %}
-                            </div>
-                        {% endif %}
-
                         {% if mod.is_locked %}
                             {# Locked: premium module for free user #}
                             <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-base-content/30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
