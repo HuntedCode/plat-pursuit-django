@@ -15,7 +15,13 @@ const ToastManager = {
      * @param {number} duration - How long to show toast in ms (default: 5000)
      */
     show(message, type = 'info', duration = 5000) {
-        const container = document.getElementById('toast-container');
+        // If a dialog is open, use its toast container (dialogs use the browser
+        // top layer which renders above all z-indices).
+        // Note: querySelector returns the first open dialog. If multiple dialogs
+        // are stacked, toasts go to the first one with a container.
+        const openDialog = document.querySelector('dialog[open]');
+        const modalContainer = openDialog?.querySelector('.modal-toast-container');
+        const container = modalContainer || document.getElementById('toast-container');
         if (!container) {
             return;
         }

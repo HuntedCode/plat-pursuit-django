@@ -163,6 +163,11 @@ Staff can switch between "view as premium" and "view as free" via a header butto
 - **Custom tab slug generation**: Uses `Date.now() + random(4)` to prevent collision.
 - **Customize panel structural changes**: `_customizeDirty` flag triggers page reload on modal close.
 - **Tab sections in customize panel**: Settings panel div must have `data-settings-slug` attribute and closing `>`.
+- **Toast visibility in modals**: `ToastManager` detects open `<dialog>` elements and redirects toasts to `.modal-toast-container` inside them. Without this, browser top layer renders the dialog above all z-indices, hiding toasts.
+- **Drag reorder in customize panel**: Each `.tab-section-content` gets its own SortableJS instance (not the outer list). Module rows must be direct children of their section container.
+- **Reset requires confirmation**: `_resetToDefault()` shows a `confirm()` dialog before clearing all customizations.
+- **Header shows equipped title**: `profile.displayed_title` (queries `UserTitle` with `is_displayed=True`). Returns `None` if no title equipped.
+- **Dropdown uses short tab names**: `all_tab_options` uses `short_name` (e.g., "Progress") not full `name` (e.g., "Progress & Challenges").
 - **Staff-gated during dev**: Switch mixins to `LoginRequiredMixin` for production. Remove preview toggle UI.
 
 ## How to Add a New Module

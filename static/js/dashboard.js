@@ -525,13 +525,14 @@
                         if (moduleRow && targetSection) {
                             targetSection.appendChild(moduleRow);
                             select.dataset.currentTab = targetTab;
-                            // Remove "no modules" empty text from target if present
                             const emptyMsg = targetSection.querySelector('p.italic');
                             if (emptyMsg && emptyMsg.textContent.includes('No modules')) emptyMsg.remove();
+                            PlatPursuit.ToastManager.success('Module moved.');
+                        } else {
+                            PlatPursuit.ToastManager.info('Module moved. Close to apply.');
                         }
 
                         this._customizeDirty = true;
-                        PlatPursuit.ToastManager.success('Module moved.');
                     } catch (err) {
                         PlatPursuit.ToastManager.error('Failed to move module.');
                         select.value = currentTab;
@@ -637,6 +638,8 @@
         // -----------------------------------------------------------------
 
         async _resetToDefault() {
+            if (!confirm('Reset your dashboard to default? This will remove all custom tabs, module moves, hidden modules, and settings.')) return;
+
             const resetBtn = document.getElementById('customize-reset-btn');
             if (resetBtn) {
                 resetBtn.disabled = true;
@@ -754,25 +757,24 @@
         }
 
         _initCustomizeDragReorder() {
-            const customizeList = document.getElementById('customize-module-list');
-            if (!customizeList || !PlatPursuit.DragReorderManager) return;
+            if (!PlatPursuit.DragReorderManager) return;
+            if (this._customizeDragInitialized) return;
+            this._customizeDragInitialized = true;
 
-            const headers = customizeList.querySelectorAll('h4');
-
-            this.customizeDragManager = new PlatPursuit.DragReorderManager({
-                container: customizeList,
-                itemSelector: '.customize-module-row',
-                handleSelector: '.customize-drag-handle',
-                onReorder: (_itemId, _newPosition, allItemIds) => {
-                    this._pendingOrder = allItemIds;
-                    this._debouncedSaveOrder();
-                },
-                onStart: () => {
-                    headers.forEach(h => h.classList.add('opacity-0', 'h-0', 'overflow-hidden', '!mt-0', '!mb-0'));
-                },
-                onEnd: () => {
-                    headers.forEach(h => h.classList.remove('opacity-0', 'h-0', 'overflow-hidden', '!mt-0', '!mb-0'));
-                },
+            // Initialize drag reorder on each tab section's content container
+            document.querySelectorAll('.tab-section-content').forEach(container => {
+                new PlatPursuit.DragReorderManager({
+                    container: container,
+                    itemSelector: '.customize-module-row',
+                    handleSelector: '.customize-drag-handle',
+                    onReorder: () => {
+                        const allIds = [...document.querySelectorAll('.customize-module-row')]
+                            .map(el => el.dataset.itemId);
+                        this._pendingOrder = allIds;
+                        this._debouncedSaveOrder();
+                        this._customizeDirty = true;
+                    },
+                });
             });
         }
 

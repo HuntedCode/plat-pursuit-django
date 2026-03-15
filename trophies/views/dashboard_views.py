@@ -47,7 +47,7 @@ class DashboardView(StaffRequiredMixin, ProfileHotbarMixin, TemplateView):
 
         # Tab-grouped modules for the customize panel
         customize_tabs = get_tabs_for_customize(config, is_premium)
-        all_tab_options = [{'slug': t['slug'], 'name': t['name']} for t in customize_tabs]
+        all_tab_options = [{'slug': t['slug'], 'name': t.get('short_name') or t['name']} for t in customize_tabs]
 
         # Split tabs into system (default) and custom for separate tab bars
         custom_tabs = [t for t in tabs if t.get('is_custom')]
