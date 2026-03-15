@@ -3239,6 +3239,9 @@ class Challenge(models.Model):
         self.is_deleted = True
         self.deleted_at = timezone.now()
         self.save(update_fields=['is_deleted', 'deleted_at'])
+        # Invalidate dashboard cache so challenge hub reflects the deletion
+        from trophies.services.dashboard_service import invalidate_dashboard_cache
+        invalidate_dashboard_cache(self.profile_id)
 
     @property
     def progress_percentage(self):

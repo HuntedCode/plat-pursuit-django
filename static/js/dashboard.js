@@ -39,8 +39,10 @@
 
             // Debounced persistence: batches rapid changes into a single API call
             this._debouncedSaveConfig = PlatPursuit.debounce(() => this._saveConfigNow(), 500);
+            this._debouncedSaveSettings = PlatPursuit.debounce(() => this._saveSettingsNow(), 500);
             this._debouncedSaveOrder = PlatPursuit.debounce(() => this._saveOrderNow(), 500);
             this._pendingOrder = null;
+            this._settingsDirty = false;
         }
 
         init() {
@@ -139,9 +141,17 @@
                 });
             });
 
-            // Init drag reorder in customize modal (premium only)
+            // Init drag reorder and settings controls (premium only)
             if (this.isPremium) {
                 this._initCustomizeDragReorder();
+                this._bindSettingsControls();
+            } else {
+                // Free user: show toast when clicking locked settings gear
+                document.querySelectorAll('.premium-settings-teaser').forEach(btn => {
+                    btn.addEventListener('click', () => {
+                        PlatPursuit.ToastManager.info('Module settings are a premium feature. Upgrade to customize your dashboard.');
+                    });
+                });
             }
 
             // Reset to default
@@ -150,6 +160,68 @@
                     this._resetToDefault();
                 });
             }
+        }
+
+        // -----------------------------------------------------------------
+        // Module Settings (Premium)
+        // -----------------------------------------------------------------
+
+        _bindSettingsControls() {
+            // Gear icon toggles the settings panel
+            document.querySelectorAll('.module-settings-toggle').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const slug = btn.dataset.slug;
+                    const panel = document.querySelector(`[data-settings-slug="${slug}"]`);
+                    if (panel) {
+                        panel.classList.toggle('hidden');
+                    }
+                });
+            });
+
+            // Select buttons (e.g., item count: 3/6/10)
+            document.querySelectorAll('.module-setting-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const slug = btn.dataset.slug;
+                    const key = btn.dataset.settingKey;
+                    let value = btn.dataset.settingValue;
+
+                    // Coerce numeric values
+                    if (!isNaN(value) && value !== '') value = Number(value);
+
+                    this._updateSetting(slug, key, value);
+
+                    // Update button group visual state
+                    const container = btn.closest('.join');
+                    if (container) {
+                        container.querySelectorAll('.module-setting-btn').forEach(b => {
+                            if (b.dataset.settingKey === key) {
+                                b.classList.remove('btn-primary');
+                                b.classList.add('btn-ghost', 'border-base-300');
+                            }
+                        });
+                        btn.classList.add('btn-primary');
+                        btn.classList.remove('btn-ghost', 'border-base-300');
+                    }
+                });
+            });
+
+            // Toggle switches (e.g., show_unstarted)
+            document.querySelectorAll('.module-setting-toggle').forEach(toggle => {
+                toggle.addEventListener('change', () => {
+                    const slug = toggle.dataset.slug;
+                    const key = toggle.dataset.settingKey;
+                    this._updateSetting(slug, key, toggle.checked);
+                });
+            });
+        }
+
+        _updateSetting(slug, key, value) {
+            if (!this.moduleSettings[slug]) {
+                this.moduleSettings[slug] = {};
+            }
+            this.moduleSettings[slug][key] = value;
+            this._settingsDirty = true;
+            this._debouncedSaveSettings();
         }
 
         _handleToggle(slug, visible, toggleEl) {
@@ -168,7 +240,7 @@
                 this.hiddenModules.add(slug);
             }
 
-            // Update DOM: show/hide the module
+            // Update DOM: show/hide the module if it exists in the page
             const moduleEl = document.getElementById('module-' + slug);
             if (moduleEl) {
                 if (visible) {
@@ -182,8 +254,14 @@
             this._updateHiddenCount();
             this._updateEmptyState();
 
-            // Save to server (debounced: batches rapid toggles)
-            this._debouncedSaveConfig();
+            if (visible && !moduleEl) {
+                // Module wasn't rendered server-side (was hidden at page load).
+                // Save immediately and reload to get its HTML.
+                this._saveConfigNow().then(() => window.location.reload());
+            } else {
+                // Module is in the DOM: save debounced for instant visual feedback
+                this._debouncedSaveConfig();
+            }
         }
 
         // -----------------------------------------------------------------
@@ -251,6 +329,27 @@
                 });
             } catch (err) {
                 PlatPursuit.ToastManager.error('Failed to save dashboard config.');
+            }
+        }
+
+        async _saveSettingsNow() {
+            if (!this._settingsDirty) return;
+            this._settingsDirty = false;
+
+            try {
+                await PlatPursuit.API.post(this.configUrl, {
+                    module_settings: this.moduleSettings,
+                });
+
+                // Refresh affected lazy modules so changes are visible immediately
+                for (const slug of Object.keys(this.moduleSettings)) {
+                    const mod = this.lazyModules.find(m => m.slug === slug);
+                    if (mod) {
+                        this._loadModule(mod);
+                    }
+                }
+            } catch (err) {
+                PlatPursuit.ToastManager.error('Failed to save module settings.');
             }
         }
 

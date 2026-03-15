@@ -1,4 +1,5 @@
-{# Customize panel: modal content for toggling/reordering dashboard modules. #}
+{% load custom_filters %}
+{# Customize panel: modal content for toggling/reordering/configuring dashboard modules. #}
 <div class="modal-box max-w-2xl bg-base-100 border-4 border-base-300">
     {# Close button #}
     <form method="dialog">
@@ -26,49 +27,110 @@
                 {{ cat_data.name }}
             </h4>
             {% for mod in cat_data.modules %}
-                <div class="customize-module-row flex items-center justify-between gap-3 p-3 rounded-lg bg-base-200 border border-base-300
+                <div class="customize-module-row rounded-lg bg-base-200 border border-base-300
                             {% if mod.is_locked %}opacity-50{% endif %}"
                      data-customize-slug="{{ mod.slug }}"
                      data-item-id="{{ mod.slug }}">
-                    <div class="flex items-center gap-3 flex-1 min-w-0">
-                        {% if is_premium %}
-                            {# Drag handle for premium reorder in customize panel #}
-                            <div class="customize-drag-handle cursor-grab opacity-40 hover:opacity-100 transition-opacity">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                    <line x1="8" y1="6" x2="21" y2="6"></line>
-                                    <line x1="8" y1="12" x2="21" y2="12"></line>
-                                    <line x1="8" y1="18" x2="21" y2="18"></line>
-                                    <line x1="3" y1="6" x2="3.01" y2="6"></line>
-                                    <line x1="3" y1="12" x2="3.01" y2="12"></line>
-                                    <line x1="3" y1="18" x2="3.01" y2="18"></line>
-                                </svg>
+                    {# Main row: drag handle, name, toggle #}
+                    <div class="flex items-center justify-between gap-3 p-3">
+                        <div class="flex items-center gap-3 flex-1 min-w-0">
+                            {% if is_premium %}
+                                {# Drag handle for premium reorder in customize panel #}
+                                <div class="customize-drag-handle cursor-grab opacity-40 hover:opacity-100 transition-opacity">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <line x1="8" y1="6" x2="21" y2="6"></line>
+                                        <line x1="8" y1="12" x2="21" y2="12"></line>
+                                        <line x1="8" y1="18" x2="21" y2="18"></line>
+                                        <line x1="3" y1="6" x2="3.01" y2="6"></line>
+                                        <line x1="3" y1="12" x2="3.01" y2="12"></line>
+                                        <line x1="3" y1="18" x2="3.01" y2="18"></line>
+                                    </svg>
+                                </div>
+                            {% endif %}
+                            <div class="min-w-0 flex-1">
+                                <div class="font-semibold text-sm flex items-center gap-2">
+                                    {{ mod.name }}
+                                    {% if mod.requires_premium %}
+                                        <span class="badge badge-warning badge-xs">Premium</span>
+                                    {% endif %}
+                                </div>
+                                <p class="text-xs text-base-content/50 truncate">{{ mod.description }}</p>
                             </div>
-                        {% endif %}
-                        <div class="min-w-0 flex-1">
-                            <div class="font-semibold text-sm flex items-center gap-2">
-                                {{ mod.name }}
-                                {% if mod.requires_premium %}
-                                    <span class="badge badge-warning badge-xs">Premium</span>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            {# Settings gear: functional for premium, teaser for free #}
+                            {% if mod.configurable_settings and not mod.is_locked %}
+                                {% if is_premium %}
+                                    <button type="button"
+                                            class="btn btn-ghost btn-xs btn-circle module-settings-toggle"
+                                            data-slug="{{ mod.slug }}"
+                                            title="Settings">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                            <circle cx="12" cy="12" r="3"></circle>
+                                            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                                        </svg>
+                                    </button>
+                                {% else %}
+                                    <button type="button"
+                                            class="btn btn-ghost btn-xs btn-circle opacity-30 premium-settings-teaser"
+                                            title="Upgrade to premium to customize this module">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                            <circle cx="12" cy="12" r="3"></circle>
+                                            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                                        </svg>
+                                    </button>
                                 {% endif %}
-                            </div>
-                            <p class="text-xs text-base-content/50 truncate">{{ mod.description }}</p>
+                            {% endif %}
+
+                            {% if mod.is_locked %}
+                                {# Locked: premium module for free user #}
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-base-content/30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                                    <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                                </svg>
+                            {% else %}
+                                <input type="checkbox"
+                                       class="toggle toggle-primary toggle-sm module-toggle"
+                                       data-slug="{{ mod.slug }}"
+                                       {% if not mod.is_hidden %}checked{% endif %}
+                                       aria-label="Toggle {{ mod.name }}" />
+                            {% endif %}
                         </div>
                     </div>
-                    <div class="flex items-center gap-3">
-                        {% if mod.is_locked %}
-                            {# Locked: premium module for free user #}
-                            <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-base-content/30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
-                                <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
-                            </svg>
-                        {% else %}
-                            <input type="checkbox"
-                                   class="toggle toggle-primary toggle-sm module-toggle"
-                                   data-slug="{{ mod.slug }}"
-                                   {% if not mod.is_hidden %}checked{% endif %}
-                                   aria-label="Toggle {{ mod.name }}" />
-                        {% endif %}
-                    </div>
+
+                    {# Collapsible settings panel (premium only) #}
+                    {% if is_premium and not mod.is_locked and mod.configurable_settings %}
+                        <div class="module-settings-panel hidden px-3 pb-3 pt-0 border-t border-base-300/50 mt-0"
+                             data-settings-slug="{{ mod.slug }}">
+                            <div class="flex flex-wrap items-center gap-x-4 gap-y-2 pt-2">
+                                {% for setting in mod.configurable_settings %}
+                                    <div class="flex items-center gap-2">
+                                        <span class="text-xs text-base-content/50">{{ setting.label }}:</span>
+                                        {% if setting.type == 'select' %}
+                                            <div class="join">
+                                                {% for opt in setting.options %}
+                                                    <button type="button"
+                                                            class="join-item btn btn-xs module-setting-btn
+                                                                   {% if mod.effective_settings|get_item:setting.key == opt.value %}btn-primary{% else %}btn-ghost border-base-300{% endif %}"
+                                                            data-slug="{{ mod.slug }}"
+                                                            data-setting-key="{{ setting.key }}"
+                                                            data-setting-value="{{ opt.value }}">
+                                                        {{ opt.label }}
+                                                    </button>
+                                                {% endfor %}
+                                            </div>
+                                        {% elif setting.type == 'toggle' %}
+                                            <input type="checkbox"
+                                                   class="toggle toggle-primary toggle-xs module-setting-toggle"
+                                                   data-slug="{{ mod.slug }}"
+                                                   data-setting-key="{{ setting.key }}"
+                                                   {% if mod.effective_settings|get_item:setting.key %}checked{% endif %} />
+                                        {% endif %}
+                                    </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    {% endif %}
                 </div>
             {% endfor %}
         {% endfor %}

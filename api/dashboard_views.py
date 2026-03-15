@@ -46,12 +46,16 @@ class DashboardModuleDataView(StaffRequiredAPIMixin, View):
         if mod['load_strategy'] != 'lazy':
             return JsonResponse({'error': 'Module is not lazy-loaded.'}, status=400)
 
-        # Resolve effective size: prefer client-provided query param to avoid DB hit
+        # Resolve effective size
         allowed = mod.get('allowed_sizes', list(VALID_SIZES))
         size_param = request.GET.get('size')
         effective_size = size_param if size_param in allowed else mod.get('default_size', 'medium')
 
-        data = get_lazy_module_data(profile, slug, size=effective_size)
+        # Load user's module settings (premium only; free users get defaults)
+        config, _ = DashboardConfig.objects.get_or_create(profile=profile)
+        module_settings = (config.module_settings or {}) if is_premium else {}
+
+        data = get_lazy_module_data(profile, slug, size=effective_size, module_settings=module_settings)
         if data is None:
             return JsonResponse({'error': 'Failed to load module data.'}, status=500)
 

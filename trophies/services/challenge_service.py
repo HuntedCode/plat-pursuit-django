@@ -52,6 +52,9 @@ def create_az_challenge(profile, name='My A-Z Challenge'):
         for i in range(65, 91)  # A-Z
     ]
     AZChallengeSlot.objects.bulk_create(slots)
+
+    from trophies.services.dashboard_service import invalidate_dashboard_cache
+    invalidate_dashboard_cache(profile.id)
     return challenge
 
 
@@ -324,6 +327,8 @@ def create_calendar_challenge(profile, name='My Platinum Calendar'):
     # Backfill from existing platinum history
     backfill_calendar_from_history(challenge)
 
+    from trophies.services.dashboard_service import invalidate_dashboard_cache
+    invalidate_dashboard_cache(profile.id)
     return challenge
 
 
@@ -696,6 +701,9 @@ def create_genre_challenge(profile, name='My Genre Challenge'):
         for genre in GENRE_CHALLENGE_GENRES
     ]
     GenreChallengeSlot.objects.bulk_create(slots)
+
+    from trophies.services.dashboard_service import invalidate_dashboard_cache
+    invalidate_dashboard_cache(profile.id)
     return challenge
 
 

@@ -80,11 +80,12 @@ def provide_trophy_snapshot(profile):
     }
 
 
-def provide_recent_platinums(profile, size='medium'):
+def provide_recent_platinums(profile, settings=None):
     """Last N platinum trophies earned with game info and rarity."""
     from trophies.models import EarnedTrophy
 
-    limit = SIZE_LIMITS.get(size, 6)
+    settings = settings or {}
+    limit = settings.get('limit', 6)
     plats = (
         EarnedTrophy.objects
         .filter(profile=profile, trophy__trophy_type='platinum', earned=True)
@@ -94,24 +95,32 @@ def provide_recent_platinums(profile, size='medium'):
 
     platinums = []
     for et in plats:
-        concept = getattr(et.trophy.game, 'concept', None) if et.trophy.game else None
+        game = et.trophy.game
+        concept = getattr(game, 'concept', None) if game else None
         platinums.append({
-            'game_name': concept.unified_title if concept else et.trophy.game.title_name if et.trophy.game else 'Unknown',
-            'icon_url': concept.concept_icon_url if concept else (et.trophy.game.title_image if et.trophy.game else ''),
+            'game_name': concept.unified_title if concept else game.title_name if game else 'Unknown',
+            'icon_url': concept.concept_icon_url if concept else (game.title_image if game else ''),
             'earned_date': et.earned_date_time,
             'earn_rate': et.trophy.trophy_earn_rate,
-            'slug': concept.slug if concept else None,
+            'np_communication_id': game.np_communication_id if game else None,
         })
 
     return {'platinums': platinums}
 
 
 def provide_challenge_hub(profile, size='large'):
-    """Overview of all 3 challenge types: active progress, completed, or CTA."""
+    """Overview of all 3 challenge types with mini visual previews."""
     from trophies.models import Challenge
-    from trophies.services.challenge_service import get_calendar_stats
+    from trophies.services.challenge_service import get_calendar_stats, get_calendar_month_data
+    from django.utils import timezone
+    import pytz
 
     challenges = Challenge.objects.filter(profile=profile, is_deleted=False)
+
+    # Get user's timezone for calendar today highlight
+    tz_name = profile.user.user_timezone if profile.user else 'UTC'
+    user_tz = pytz.timezone(tz_name or 'UTC')
+    now_local = timezone.now().astimezone(user_tz)
 
     result = {}
     for ctype in ('az', 'calendar', 'genre'):
@@ -127,6 +136,7 @@ def provide_challenge_hub(profile, size='large'):
 
         data = {
             'challenge_id': challenge.id,
+            'challenge_name': challenge.name,
             'is_complete': challenge.is_complete,
             'completed_at': challenge.completed_at,
         }
@@ -136,32 +146,65 @@ def provide_challenge_hub(profile, size='large'):
             data['completed'] = challenge.completed_count
             data['total'] = 26
             data['pct'] = round(challenge.completed_count / 26 * 100) if 26 else 0
+            # Letter strip data
+            slots = challenge.az_slots.all().order_by('letter')
+            data['slots'] = [
+                {'letter': s.letter, 'filled': s.game_id is not None, 'completed': s.is_completed}
+                for s in slots
+            ]
         elif ctype == 'calendar':
-            stats = get_calendar_stats(challenge)
+            month_data = get_calendar_month_data(challenge)
+            stats = get_calendar_stats(challenge, month_data=month_data)
             filled = stats.get('total_filled', 0)
             data['filled'] = filled
             data['total'] = 365
             data['streak'] = stats.get('longest_streak', 0)
             data['pct'] = round(filled / 365 * 100)
+            # Current month mini-calendar with today highlight
+            current_month_num = now_local.month
+            current_month = month_data[current_month_num - 1]
+            data['current_month'] = {
+                'name': current_month['month_name'],
+                'weekday_offset': current_month['weekday_offset'],
+                'today': now_local.day,
+                'days': [{'day': d['day'], 'is_filled': d['is_filled']} for d in current_month['days']],
+            }
         elif ctype == 'genre':
+            from trophies.services.challenge_service import get_subgenre_status
             data['filled'] = challenge.filled_count
             data['completed'] = challenge.completed_count
             total = challenge.total_items or challenge.genre_slots.count()
             data['total'] = total
             data['bonus_count'] = challenge.bonus_count
             data['pct'] = round(challenge.completed_count / total * 100) if total else 0
+            # Genre tag data
+            slots = challenge.genre_slots.all().order_by('genre')
+            data['slots'] = [
+                {'genre': s.genre_display or s.genre, 'filled': s.concept_id is not None, 'completed': s.is_completed}
+                for s in slots
+            ]
+            # Subgenre tags with status
+            subgenre_status = get_subgenre_status(challenge)
+            data['subgenres'] = sorted([
+                {'name': key.replace('_', ' ').title(), 'status': status}
+                for key, status in subgenre_status.items()
+            ], key=lambda s: (s['status'] != 'platted', s['name']))
+            data['subgenre_total'] = len(subgenre_status)
+            data['platted_subgenre_count'] = sum(1 for v in subgenre_status.values() if v == 'platted')
 
         result[ctype] = data
 
     return result
 
 
-def provide_badge_progress(profile, size='medium'):
-    """In-progress badges sorted by completion percentage."""
+def provide_badge_progress(profile, settings=None):
+    """In-progress and unstarted badges sorted by completion percentage."""
     from trophies.models import UserBadgeProgress
 
-    limit = {'small': 2, 'medium': 4, 'large': 6}.get(size, 4)
+    settings = settings or {}
+    limit = settings.get('limit', 4)
 
+    # Badges with at least some progress, not yet fully earned
     progress_qs = (
         UserBadgeProgress.objects
         .filter(profile=profile, completed_concepts__gt=0)
@@ -191,6 +234,31 @@ def provide_badge_progress(profile, size='medium'):
             'series_slug': badge.series_slug,
         })
 
+    # Unstarted badges (if enabled): progress record exists but zero concepts completed
+    show_unstarted = settings.get('show_unstarted', True)
+    badges_unstarted = []
+    if show_unstarted:
+        unstarted_limit = max(2, limit - len(badges_in_progress))
+        unstarted_qs = (
+            UserBadgeProgress.objects
+            .filter(profile=profile, completed_concepts=0)
+            .select_related('badge', 'badge__base_badge')
+            .filter(badge__required_stages__gt=0, badge__is_live=True)
+            .order_by('badge__required_stages')[:unstarted_limit]
+        )
+        for bp in unstarted_qs:
+            badge = bp.badge
+            badges_unstarted.append({
+                'layers': badge.get_badge_layers(),
+                'series_name': badge.effective_display_series or badge.name,
+                'completed': 0,
+                'required': badge.required_stages,
+                'pct': 0,
+                'tier': badge.tier,
+                'tier_name': badge.get_tier_display(),
+                'series_slug': badge.series_slug,
+            })
+
     # Overall stats from ProfileGamification (reverse OneToOne, may not exist)
     from trophies.models import ProfileGamification
     try:
@@ -200,6 +268,7 @@ def provide_badge_progress(profile, size='medium'):
 
     return {
         'badges_in_progress': badges_in_progress,
+        'badges_unstarted': badges_unstarted,
         'total_earned': gamification.total_badges_earned if gamification else 0,
         'unique_earned': gamification.unique_badges_earned if gamification else 0,
     }
@@ -221,6 +290,7 @@ DASHBOARD_MODULES = [
         'load_strategy': 'server',
         'default_order': 1,
         'default_settings': {},
+        'configurable_settings': [],
         'cache_ttl': 0,
         'default_size': 'medium',
         'allowed_sizes': ['small', 'medium', 'large'],
@@ -235,7 +305,11 @@ DASHBOARD_MODULES = [
         'requires_premium': False,
         'load_strategy': 'lazy',
         'default_order': 2,
-        'default_settings': {},
+        'default_settings': {'limit': 6},
+        'configurable_settings': [
+            {'key': 'limit', 'label': 'Items to show', 'type': 'select', 'default': 6,
+             'options': [{'value': 3, 'label': '3'}, {'value': 6, 'label': '6'}, {'value': 10, 'label': '10'}]},
+        ],
         'cache_ttl': 300,
         'default_size': 'medium',
         'allowed_sizes': ['small', 'medium', 'large'],
@@ -251,6 +325,7 @@ DASHBOARD_MODULES = [
         'load_strategy': 'lazy',
         'default_order': 3,
         'default_settings': {},
+        'configurable_settings': [],
         'cache_ttl': 300,
         'default_size': 'large',
         'allowed_sizes': ['medium', 'large'],
@@ -265,7 +340,12 @@ DASHBOARD_MODULES = [
         'requires_premium': False,
         'load_strategy': 'lazy',
         'default_order': 4,
-        'default_settings': {},
+        'default_settings': {'limit': 4, 'show_unstarted': True},
+        'configurable_settings': [
+            {'key': 'limit', 'label': 'Items to show', 'type': 'select', 'default': 4,
+             'options': [{'value': 2, 'label': '2'}, {'value': 4, 'label': '4'}, {'value': 6, 'label': '6'}]},
+            {'key': 'show_unstarted', 'label': 'Show unstarted', 'type': 'toggle', 'default': True},
+        ],
         'cache_ttl': 600,
         'default_size': 'medium',
         'allowed_sizes': ['small', 'medium', 'large'],
@@ -293,9 +373,10 @@ def _validate_registry():
         assert callable(mod.get('provider')), \
             f"Provider for module {slug} is not callable"
 
-        # Pre-compute whether provider accepts a size parameter
+        # Pre-compute whether provider accepts size/settings parameters
         sig = inspect.signature(mod['provider'])
         mod['_accepts_size'] = 'size' in sig.parameters
+        mod['_accepts_settings'] = 'settings' in sig.parameters
 
 _validate_registry()
 
@@ -341,6 +422,39 @@ def get_effective_size(module_descriptor, module_settings):
 def get_size_grid_class(size):
     """Return the CSS grid class string for a given size."""
     return SIZE_GRID_CLASSES.get(size, SIZE_GRID_CLASSES['medium'])
+
+
+def get_effective_settings(module_descriptor, module_settings):
+    """
+    Return effective settings for a module, merging user overrides with defaults.
+
+    Each setting in configurable_settings has a 'default' value. User overrides
+    from module_settings[slug] take precedence when present and valid.
+    """
+    slug = module_descriptor['slug']
+    defaults = module_descriptor.get('default_settings', {})
+    user_settings = module_settings.get(slug, {}) if module_settings else {}
+
+    # Start with defaults, overlay user overrides
+    effective = {**defaults}
+    configurable = module_descriptor.get('configurable_settings', [])
+
+    for setting in configurable:
+        key = setting['key']
+        if key in user_settings:
+            user_val = user_settings[key]
+            # Validate select options
+            if setting['type'] == 'select':
+                valid_values = [opt['value'] for opt in setting.get('options', [])]
+                if user_val in valid_values:
+                    effective[key] = user_val
+            elif setting['type'] == 'toggle':
+                if isinstance(user_val, bool):
+                    effective[key] = user_val
+        elif key not in effective:
+            effective[key] = setting['default']
+
+    return effective
 
 
 def validate_module_size(slug, size):
@@ -413,7 +527,8 @@ def get_all_modules_for_customize(config, is_premium):
     """
     Return all modules (including hidden) grouped by category for the customize panel.
 
-    Each module dict gets extra 'is_hidden', 'is_locked', and 'effective_size' keys.
+    Each module dict gets extra 'is_hidden', 'is_locked', 'effective_size',
+    and 'effective_settings' keys.
     """
     hidden = set(config.hidden_modules) if config.hidden_modules else set()
     module_settings = config.module_settings or {}
@@ -422,11 +537,13 @@ def get_all_modules_for_customize(config, is_premium):
     for mod in DASHBOARD_MODULES:
         is_locked = mod['requires_premium'] and not is_premium
         size = get_effective_size(mod, module_settings)
+        settings = get_effective_settings(mod, module_settings)
         entry = {
             **mod,
             'is_hidden': mod['slug'] in hidden,
             'is_locked': is_locked,
             'effective_size': size,
+            'effective_settings': settings,
         }
         cat = mod['category']
         if cat not in categories:
@@ -477,13 +594,13 @@ def get_server_module_data(profile, modules):
     return data
 
 
-def get_lazy_module_data(profile, slug, size=None):
+def get_lazy_module_data(profile, slug, size=None, module_settings=None):
     """
     Fetch context for a single lazy-loaded module.
 
     Checks Django cache first; falls back to provider on miss.
-    Size is passed to providers that accept it (for item count limits).
-    Cache keys include size so different sizes are cached independently.
+    Settings and size are passed to providers that accept them.
+    Cache keys include a settings hash so different configs are cached independently.
     Returns the context dict or None if the module doesn't exist.
     """
     mod = get_module_by_slug(slug)
@@ -491,7 +608,12 @@ def get_lazy_module_data(profile, slug, size=None):
         return None
 
     effective_size = size or mod.get('default_size', 'medium')
-    cache_key = _module_cache_key(slug, profile.id, effective_size)
+    effective = get_effective_settings(mod, module_settings or {})
+
+    # Build cache key that includes settings so different configs cache separately
+    import hashlib
+    settings_hash = hashlib.md5(str(sorted(effective.items())).encode()).hexdigest()[:8]
+    cache_key = _module_cache_key(slug, profile.id, settings_hash)
     ttl = mod.get('cache_ttl', DEFAULT_CACHE_TTL)
 
     if ttl > 0:
@@ -501,7 +623,9 @@ def get_lazy_module_data(profile, slug, size=None):
 
     provider_fn = mod['provider']
     try:
-        if mod.get('_accepts_size'):
+        if mod.get('_accepts_settings'):
+            data = provider_fn(profile, settings=effective)
+        elif mod.get('_accepts_size'):
             data = provider_fn(profile, size=effective_size)
         else:
             data = provider_fn(profile)

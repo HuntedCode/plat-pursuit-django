@@ -1,5 +1,5 @@
 {% load custom_filters %}
-{# Dashboard module: Challenge Hub — A-Z, Calendar, Genre progress overview. #}
+{# Dashboard module: Challenge Hub — A-Z, Calendar, Genre with mini previews. #}
 <div class="card bg-base-200/80 border-2 border-base-300 shadow-lg shadow-neutral">
     <div class="card-body p-5 lg:p-7">
         {# Header #}
@@ -18,35 +18,49 @@
 
             {# ─── A-Z Challenge ─────────────────────────────── #}
             {% with challenge_data=data.az %}
-                <div class="rounded-lg border border-base-300/60 bg-base-300/20 p-3">
+                <div class="rounded-lg border border-base-300/60 bg-base-300/20 p-3 flex flex-col">
                     {% if challenge_data %}
                         {% if challenge_data.is_complete %}
-                            {# Completed state #}
                             <div class="flex items-center gap-2 mb-2">
                                 <span class="text-sm font-bold text-success">A-Z Challenge</span>
                                 <span class="badge badge-success badge-xs">Complete!</span>
                             </div>
-                            <p class="text-xs text-base-content/50">
+                            {% if challenge_data.slots %}
+                                <div class="flex flex-wrap gap-1 mb-2 justify-center">
+                                    {% for slot in challenge_data.slots %}
+                                        <span class="w-7 h-7 lg:w-8 lg:h-8 rounded-md text-xs lg:text-sm font-bold flex items-center justify-center bg-success/20 text-success">{{ slot.letter }}</span>
+                                    {% endfor %}
+                                </div>
+                            {% endif %}
+                            <p class="text-xs text-base-content/50 mt-auto">
                                 Completed {{ challenge_data.completed_at|iso_naturaltime }}.
                                 <a href="{% url 'az_challenge_detail' challenge_data.challenge_id %}" class="link link-primary">View</a>
                             </p>
                         {% else %}
-                            {# Active state #}
                             <div class="flex items-center justify-between mb-2">
                                 <span class="text-sm font-bold">A-Z Challenge</span>
                                 <span class="text-xs text-base-content/50">{{ challenge_data.completed }}/{{ challenge_data.total }}</span>
                             </div>
-                            <div class="w-full bg-base-300 rounded-full h-2 mb-2">
-                                <div class="bg-accent rounded-full h-2 transition-all duration-500" style="width: {{ challenge_data.pct }}%"></div>
-                            </div>
-                            <div class="flex items-center justify-between text-xs text-base-content/50">
-                                <span>{{ challenge_data.filled }} slots filled</span>
-                                <a href="{% url 'az_challenge_detail' challenge_data.challenge_id %}" class="link link-accent font-medium">View</a>
+                            {# Letter grid: larger tiles filling more rows #}
+                            {% if challenge_data.slots %}
+                                <div class="flex flex-wrap gap-1 mb-2 justify-center">
+                                    {% for slot in challenge_data.slots %}
+                                        <span class="w-7 h-7 lg:w-8 lg:h-8 rounded-md text-xs lg:text-sm font-bold flex items-center justify-center {% if slot.completed %}bg-success/20 text-success{% elif slot.filled %}bg-accent/20 text-accent{% else %}bg-base-300/50 text-base-content/30{% endif %}">{{ slot.letter }}</span>
+                                    {% endfor %}
+                                </div>
+                            {% endif %}
+                            <div class="mt-auto">
+                                <div class="w-full bg-base-300 rounded-full h-1.5 mb-2">
+                                    <div class="bg-accent rounded-full h-1.5 transition-all duration-500" style="width: {{ challenge_data.pct }}%"></div>
+                                </div>
+                                <div class="flex items-center justify-between text-xs text-base-content/50">
+                                    <span>{{ challenge_data.filled }} filled</span>
+                                    <a href="{% url 'az_challenge_detail' challenge_data.challenge_id %}" class="link link-accent font-medium">View</a>
+                                </div>
                             </div>
                         {% endif %}
                     {% else %}
-                        {# CTA state #}
-                        <div class="text-center py-2">
+                        <div class="text-center py-2 flex-1 flex flex-col items-center justify-center">
                             <span class="text-sm font-bold text-base-content/60">A-Z Challenge</span>
                             <p class="text-xs text-base-content/40 mt-1">Platinum a game for every letter of the alphabet.</p>
                             <a href="{% url 'az_challenge_create' %}" class="btn btn-accent btn-xs mt-2">Start Challenge</a>
@@ -57,39 +71,59 @@
 
             {# ─── Calendar Challenge ────────────────────────── #}
             {% with challenge_data=data.calendar %}
-                <div class="rounded-lg border border-base-300/60 bg-base-300/20 p-3">
+                <div class="rounded-lg border border-base-300/60 bg-base-300/20 p-3 flex flex-col">
                     {% if challenge_data %}
                         {% if challenge_data.is_complete %}
-                            {# Completed state #}
                             <div class="flex items-center gap-2 mb-2">
                                 <span class="text-sm font-bold text-success">Platinum Calendar</span>
                                 <span class="badge badge-success badge-xs">Complete!</span>
                             </div>
-                            <p class="text-xs text-base-content/50">
+                            <p class="text-xs text-base-content/50 mt-auto">
                                 Completed {{ challenge_data.completed_at|iso_naturaltime }}.
                                 <a href="{% url 'calendar_challenge_detail' challenge_data.challenge_id %}" class="link link-primary">View</a>
                             </p>
                         {% else %}
-                            {# Active state #}
                             <div class="flex items-center justify-between mb-2">
                                 <span class="text-sm font-bold">Platinum Calendar</span>
                                 <span class="text-xs text-base-content/50">{{ challenge_data.filled }}/{{ challenge_data.total }}</span>
                             </div>
-                            <div class="w-full bg-base-300 rounded-full h-2 mb-2">
-                                <div class="bg-info rounded-full h-2 transition-all duration-500" style="width: {{ challenge_data.pct }}%"></div>
-                            </div>
-                            <div class="flex items-center justify-between text-xs text-base-content/50">
-                                {% if challenge_data.streak %}
-                                    <span>{{ challenge_data.streak }} day streak</span>
-                                {% else %}
-                                    <span>{{ challenge_data.filled }} days filled</span>
-                                {% endif %}
-                                <a href="{% url 'calendar_challenge_detail' challenge_data.challenge_id %}" class="link link-info font-medium">View</a>
+                            {# Current month mini-calendar with today highlight #}
+                            {% if challenge_data.current_month %}
+                                <div class="mb-2">
+                                    <div class="text-xs text-base-content/40 font-medium mb-1">{{ challenge_data.current_month.name }}</div>
+                                    <div class="grid grid-cols-7 gap-px mb-px">
+                                        {% for day_label in "SMTWTFS" %}
+                                            <div class="text-center text-base-content/30" style="font-size: 0.55rem;">{{ day_label }}</div>
+                                        {% endfor %}
+                                    </div>
+                                    <div class="grid grid-cols-7 gap-px">
+                                        {% for i in "x"|ljust:challenge_data.current_month.weekday_offset %}
+                                            <div></div>
+                                        {% endfor %}
+                                        {% for day in challenge_data.current_month.days %}
+                                            <div class="w-full aspect-square rounded-sm flex items-center justify-center {% if day.is_filled %}bg-info/30{% else %}bg-base-300/40{% endif %} {% if day.day == challenge_data.current_month.today %}ring-1 ring-primary{% endif %}" style="font-size: 0.5rem;">
+                                                <span class="{% if day.day == challenge_data.current_month.today %}text-primary font-black{% elif day.is_filled %}text-info font-bold{% else %}text-base-content/20{% endif %}">{{ day.day }}</span>
+                                            </div>
+                                        {% endfor %}
+                                    </div>
+                                </div>
+                            {% endif %}
+                            <div class="mt-auto">
+                                <div class="w-full bg-base-300 rounded-full h-1.5 mb-2">
+                                    <div class="bg-info rounded-full h-1.5 transition-all duration-500" style="width: {{ challenge_data.pct }}%"></div>
+                                </div>
+                                <div class="flex items-center justify-between text-xs text-base-content/50">
+                                    {% if challenge_data.streak %}
+                                        <span>{{ challenge_data.streak }} day streak</span>
+                                    {% else %}
+                                        <span>{{ challenge_data.filled }} days</span>
+                                    {% endif %}
+                                    <a href="{% url 'calendar_challenge_detail' challenge_data.challenge_id %}" class="link link-info font-medium">View</a>
+                                </div>
                             </div>
                         {% endif %}
                     {% else %}
-                        {# CTA state #}
-                        <div class="text-center py-2">
+                        <div class="text-center py-2 flex-1 flex flex-col items-center justify-center">
                             <span class="text-sm font-bold text-base-content/60">Platinum Calendar</span>
                             <p class="text-xs text-base-content/40 mt-1">Earn a platinum every day and fill your calendar.</p>
                             <a href="{% url 'calendar_challenge_create' %}" class="btn btn-info btn-xs mt-2">Start Challenge</a>
@@ -100,35 +134,61 @@
 
             {# ─── Genre Challenge ───────────────────────────── #}
             {% with challenge_data=data.genre %}
-                <div class="rounded-lg border border-base-300/60 bg-base-300/20 p-3">
+                <div class="rounded-lg border border-base-300/60 bg-base-300/20 p-3 flex flex-col">
                     {% if challenge_data %}
                         {% if challenge_data.is_complete %}
-                            {# Completed state #}
                             <div class="flex items-center gap-2 mb-2">
                                 <span class="text-sm font-bold text-success">Genre Challenge</span>
                                 <span class="badge badge-success badge-xs">Complete!</span>
                             </div>
-                            <p class="text-xs text-base-content/50">
+                            <p class="text-xs text-base-content/50 mt-auto">
                                 Completed {{ challenge_data.completed_at|iso_naturaltime }}.
                                 <a href="{% url 'genre_challenge_detail' challenge_data.challenge_id %}" class="link link-primary">View</a>
                             </p>
                         {% else %}
-                            {# Active state #}
                             <div class="flex items-center justify-between mb-2">
                                 <span class="text-sm font-bold">Genre Challenge</span>
                                 <span class="text-xs text-base-content/50">{{ challenge_data.completed }}/{{ challenge_data.total }}</span>
                             </div>
-                            <div class="w-full bg-base-300 rounded-full h-2 mb-2">
-                                <div class="bg-secondary rounded-full h-2 transition-all duration-500" style="width: {{ challenge_data.pct }}%"></div>
-                            </div>
-                            <div class="flex items-center justify-between text-xs text-base-content/50">
-                                <span>{{ challenge_data.filled }} assigned{% if challenge_data.bonus_count %} + {{ challenge_data.bonus_count }} bonus{% endif %}</span>
-                                <a href="{% url 'genre_challenge_detail' challenge_data.challenge_id %}" class="link link-secondary font-medium">View</a>
+                            {# Genre tags #}
+                            {% if challenge_data.slots %}
+                                <div class="flex flex-wrap gap-1 mb-2">
+                                    {% for slot in challenge_data.slots %}
+                                        <span class="badge badge-xs {% if slot.completed %}badge-success{% elif slot.filled %}badge-primary{% else %}badge-ghost{% endif %}">{{ slot.genre }}</span>
+                                    {% endfor %}
+                                </div>
+                            {% endif %}
+                            {# Subgenre tags: distinct color from genre tags #}
+                            {% if challenge_data.subgenres %}
+                                <div class="mt-1 mb-2">
+                                    <div class="text-xs text-base-content/40 font-medium mb-1">
+                                        Subgenres: {{ challenge_data.platted_subgenre_count }}/{{ challenge_data.subgenre_total }}
+                                        {% if challenge_data.bonus_count %} | {{ challenge_data.bonus_count }} bonus{% endif %}
+                                    </div>
+                                    <div class="flex flex-wrap gap-1">
+                                        {% for sg in challenge_data.subgenres %}
+                                            <span class="badge badge-xs {% if sg.status == 'platted' %}badge-warning{% else %}badge-info badge-outline{% endif %}">{{ sg.name }}</span>
+                                        {% endfor %}
+                                    </div>
+                                </div>
+                            {% else %}
+                                <div class="text-xs text-base-content/40 mb-2">
+                                    0 subgenres collected
+                                    {% if challenge_data.bonus_count %} | {{ challenge_data.bonus_count }} bonus{% endif %}
+                                </div>
+                            {% endif %}
+                            <div class="mt-auto">
+                                <div class="w-full bg-base-300 rounded-full h-1.5 mb-2">
+                                    <div class="bg-secondary rounded-full h-1.5 transition-all duration-500" style="width: {{ challenge_data.pct }}%"></div>
+                                </div>
+                                <div class="flex items-center justify-between text-xs text-base-content/50">
+                                    <span>{{ challenge_data.filled }} assigned</span>
+                                    <a href="{% url 'genre_challenge_detail' challenge_data.challenge_id %}" class="link link-secondary font-medium">View</a>
+                                </div>
                             </div>
                         {% endif %}
                     {% else %}
-                        {# CTA state #}
-                        <div class="text-center py-2">
+                        <div class="text-center py-2 flex-1 flex flex-col items-center justify-center">
                             <span class="text-sm font-bold text-base-content/60">Genre Challenge</span>
                             <p class="text-xs text-base-content/40 mt-1">Platinum games across every genre. Become a true completionist.</p>
                             <a href="{% url 'genre_challenge_create' %}" class="btn btn-secondary btn-xs mt-2">Start Challenge</a>

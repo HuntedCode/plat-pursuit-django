@@ -1,5 +1,5 @@
 {% load static custom_filters %}
-{# Dashboard module: Badge Progress — badges closest to earning. #}
+{# Dashboard module: Badge Progress — in-progress and unstarted badges. #}
 <div class="card bg-base-200/80 border-2 border-base-300 shadow-lg shadow-neutral">
     <div class="card-body p-5 lg:p-7">
         {# Header #}
@@ -18,36 +18,63 @@
             {% endif %}
         </div>
 
-        {% if data.badges_in_progress %}
-            {# 2-column grid: each column ~370px at 768px, fits badge icon + progress bar #}
-            <div class="grid grid-cols-2 gap-3">
-                {% for bp in data.badges_in_progress %}
-                    <a href="{% url 'badge_detail' bp.series_slug %}" class="flex items-center gap-3 p-2 rounded-lg bg-base-300/30 hover:bg-base-300/60 transition-colors group">
-                        {# Badge icon #}
-                        <figure class="w-10 h-10 lg:w-12 lg:h-12 shrink-0">
-                            {% include 'partials/badge.html' with layers=bp.layers %}
-                        </figure>
+        {% if data.badges_in_progress or data.badges_unstarted %}
+            {# In-progress badges (have at least 1 concept completed) #}
+            {% if data.badges_in_progress %}
+                <div class="grid grid-cols-2 gap-3">
+                    {% for bp in data.badges_in_progress %}
+                        <a href="{% url 'badge_detail' bp.series_slug %}" class="flex items-center gap-3 p-2 rounded-lg bg-base-300/30 hover:bg-base-300/60 transition-colors group">
+                            <figure class="w-10 h-10 lg:w-12 lg:h-12 shrink-0">
+                                {% include 'partials/badge.html' with layers=bp.layers %}
+                            </figure>
+                            <div class="flex-1 min-w-0">
+                                <div class="flex items-center justify-between gap-2 mb-1">
+                                    <span class="font-semibold text-sm line-clamp-1 pr-1 group-hover:text-primary transition-colors">{{ bp.series_name }}</span>
+                                    <span class="text-xs text-base-content/50 shrink-0">{{ bp.completed }}/{{ bp.required }}</span>
+                                </div>
+                                <div class="w-full bg-base-300 rounded-full h-1.5">
+                                    <div class="bg-{{ bp.tier|badge_color }} rounded-full h-1.5 transition-all duration-500" style="width: {{ bp.pct }}%"></div>
+                                </div>
+                                <div class="flex items-center justify-between mt-1">
+                                    <span class="text-xs text-{{ bp.tier|badge_color }} font-medium">{{ bp.tier_name }}</span>
+                                    <span class="text-xs text-base-content/40 font-bold">{{ bp.pct }}%</span>
+                                </div>
+                            </div>
+                        </a>
+                    {% endfor %}
+                </div>
+            {% endif %}
 
-                        {# Progress info #}
-                        <div class="flex-1 min-w-0">
-                            <div class="flex items-center justify-between gap-2 mb-1">
-                                <span class="font-semibold text-sm line-clamp-1 pr-1 group-hover:text-primary transition-colors">{{ bp.series_name }}</span>
-                                <span class="text-xs text-base-content/50 shrink-0">{{ bp.completed }}/{{ bp.required }}</span>
-                            </div>
-                            <div class="w-full bg-base-300 rounded-full h-1.5">
-                                <div class="bg-{{ bp.tier|badge_color }} rounded-full h-1.5 transition-all duration-500" style="width: {{ bp.pct }}%"></div>
-                            </div>
-                            <div class="flex items-center justify-between mt-1">
-                                <span class="text-xs text-{{ bp.tier|badge_color }} font-medium">{{ bp.tier_name }}</span>
-                                <span class="text-xs text-base-content/40 font-bold">{{ bp.pct }}%</span>
-                            </div>
-                        </div>
-                    </a>
-                {% endfor %}
-            </div>
+            {# Unstarted badges (progress record exists but 0 concepts done) #}
+            {% if data.badges_unstarted %}
+                <div class="{% if data.badges_in_progress %}mt-3 pt-3 border-t border-base-300/50{% endif %}">
+                    <p class="text-xs text-base-content/40 font-medium uppercase tracking-wider mb-2">Not Started Yet</p>
+                    <div class="grid grid-cols-2 gap-3">
+                        {% for bp in data.badges_unstarted %}
+                            <a href="{% url 'badge_detail' bp.series_slug %}" class="flex items-center gap-3 p-2 rounded-lg bg-base-300/20 hover:bg-base-300/40 transition-colors group opacity-70 hover:opacity-100">
+                                <figure class="w-10 h-10 lg:w-12 lg:h-12 shrink-0 grayscale group-hover:grayscale-0 transition-all">
+                                    {% include 'partials/badge.html' with layers=bp.layers %}
+                                </figure>
+                                <div class="flex-1 min-w-0">
+                                    <div class="flex items-center justify-between gap-2 mb-1">
+                                        <span class="font-semibold text-sm line-clamp-1 pr-1 group-hover:text-primary transition-colors">{{ bp.series_name }}</span>
+                                        <span class="text-xs text-base-content/40 shrink-0">0/{{ bp.required }}</span>
+                                    </div>
+                                    <div class="w-full bg-base-300 rounded-full h-1.5">
+                                        <div class="bg-base-content/20 rounded-full h-1.5" style="width: 0%"></div>
+                                    </div>
+                                    <div class="flex items-center justify-between mt-1">
+                                        <span class="text-xs text-base-content/30 font-medium">{{ bp.tier_name }}</span>
+                                        <span class="text-xs text-base-content/30">0%</span>
+                                    </div>
+                                </div>
+                            </a>
+                        {% endfor %}
+                    </div>
+                </div>
+            {% endif %}
 
             {% if data.total_earned %}
-                {# Stats footer: always shown #}
                 <div class="flex items-center justify-between mt-3 pt-3 border-t border-base-300/50 text-xs text-base-content/50">
                     <span>{{ data.total_earned }} badges earned ({{ data.unique_earned }} unique series)</span>
                     <a href="{% url 'badges_list' %}" class="link link-primary font-medium">View All</a>

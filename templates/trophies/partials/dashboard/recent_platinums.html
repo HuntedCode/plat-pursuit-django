@@ -20,8 +20,8 @@
             <div class="grid grid-cols-2 gap-2 lg:gap-3">
                 {% for plat in data.platinums %}
                     <div class="flex items-center gap-3 p-2 rounded-lg bg-base-300/30 hover:bg-base-300/60 transition-colors group relative">
-                        {% if plat.slug %}
-                            <a href="/games/{{ plat.slug }}/" class="absolute inset-0 z-10" aria-label="{{ plat.game_name }}"></a>
+                        {% if plat.np_communication_id %}
+                            <a href="/games/{{ plat.np_communication_id }}/" class="absolute inset-0 z-10" aria-label="{{ plat.game_name }}"></a>
                         {% endif %}
 
                         {# Game icon #}
