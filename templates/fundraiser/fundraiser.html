@@ -276,7 +276,7 @@
                     </p>
                 </div>
 
-                <div id="donation-form" class="space-y-5" data-slug="{{ fundraiser.slug }}" data-min="{{ fundraiser.minimum_donation }}" data-pick-divisor="{{ badge_pick_divisor }}">
+                <div id="donation-form" class="space-y-5" data-slug="{{ fundraiser.slug }}" data-min="{{ fundraiser.minimum_donation }}" data-pick-divisor="{{ badge_pick_divisor }}" data-prior-remainder="{{ prior_remainder|default:"0" }}">
                     {# Amount Selection #}
                     <div class="bg-base-200/60 rounded-xl p-4 space-y-4">
                         <label class="text-sm font-semibold">Donation Amount (USD)</label>

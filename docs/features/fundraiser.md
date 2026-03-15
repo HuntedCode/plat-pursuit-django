@@ -46,7 +46,7 @@ Badge claiming uses `select_for_update()` on the Badge row to prevent race condi
 - FK to `Fundraiser`, `User`, `Profile` (denormalized for donor wall)
 - `amount` (Decimal), `provider` (stripe/paypal), `provider_transaction_id` (unique)
 - `status` (pending/completed/failed/refunded)
-- `badge_picks_earned`, `badge_picks_used`: For badge_artwork campaigns
+- `badge_picks_earned` (cumulative: incremental picks from `floor(cumulative_total / 10) - prior_picks_earned`), `badge_picks_used`: For badge_artwork campaigns
 - `is_anonymous`, `message`: Donor wall customization
 - `metadata` (JSONField): Extensible payment data
 - Property: `badge_picks_remaining` = `max(0, earned - used)`
@@ -70,7 +70,7 @@ Badge claiming uses `select_for_update()` on the Badge row to prevent race condi
 6. Provider sends webhook to `stripe_webhook` or `paypal_webhook`
 7. Webhook calls `DonationService.complete_donation()`:
    - Updates status to completed, sets `completed_at`
-   - Calculates `badge_picks_earned = floor(amount / BADGE_PICK_DIVISOR)`
+   - Calculates `badge_picks_earned` cumulatively: `floor(cumulative_total / BADGE_PICK_DIVISOR) - prior_picks_earned` (remainder dollars carry over across donations)
    - Grants "Badge Artwork Patron" milestone + Discord role (first donation)
    - Sends receipt email, in-app notification, Discord webhook
 8. User redirected to `DonationSuccessView` (also attempts completion as backup)
@@ -121,6 +121,8 @@ Badge claiming uses `select_for_update()` on the Badge row to prevent race condi
 - **Badge picks are Tier 1 only**: Users can only claim badges at their base tier (Tier 1). Validated in `claim_badge()`.
 - **Anonymous donations**: `is_anonymous` hides identity on donor wall but admin dashboard always shows full donor info.
 - **Banner dismiss**: Uses localStorage key `fundraiser_banner_dismissed_{slug}` with configurable dismiss duration.
+- **Cumulative pick calculation**: `badge_picks_earned` is computed cumulatively across all of a user's completed donations to a fundraiser, not per-donation. Remainder dollars carry over (e.g., $25 + $5 = $30 = 3 picks, not 2 + 0). The calculation uses `select_for_update()` to prevent race conditions when two donations complete simultaneously. If a donation is refunded after its remainder contributed to a subsequent donation's picks, the pick counts may become inconsistent (manual correction needed).
+- **Data correction**: Use `python manage.py fix_badge_picks` to retroactively recalculate picks for users with multiple donations. Always run with `--dry-run` first (default), then `--apply`.
 
 ## Related Docs
 

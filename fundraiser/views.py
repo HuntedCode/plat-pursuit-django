@@ -211,6 +211,9 @@ class FundraiserView(TemplateView):
                 context['donation_ids_with_picks'] = json.dumps([
                     d.id for d in user_donations if d.badge_picks_remaining > 0
                 ])
+                # Dollars not yet converted to a pick (remainder carries over across donations)
+                if fundraiser.campaign_type == 'badge_artwork':
+                    context['prior_remainder'] = context['total_donated'] % Fundraiser.BADGE_PICK_DIVISOR
                 context['user_profile'] = profile
                 context['has_contributions'] = len(user_donations) > 0
 

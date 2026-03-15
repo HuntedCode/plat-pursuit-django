@@ -15,9 +15,11 @@ import requests
 import stripe
 import uuid
 
+from decimal import Decimal
+
 from django.conf import settings
 from django.db import IntegrityError, transaction
-from django.db.models import F
+from django.db.models import F, Sum
 from django.utils import timezone
 
 from core.services.email_service import EmailService
@@ -249,10 +251,37 @@ class DonationService:
         donation.completed_at = timezone.now()
 
         # Campaign-type-specific rewards
-        if donation.fundraiser.campaign_type == 'badge_artwork':
-            donation.badge_picks_earned = math.floor(donation.amount / Fundraiser.BADGE_PICK_DIVISOR)
+        if donation.fundraiser.campaign_type == 'badge_artwork' and donation.user:
+            # Cumulative calculation: sum all prior completed donations for this
+            # user + fundraiser to determine the incremental picks this donation
+            # earns. This ensures remainder dollars carry over across donations.
+            # Example: $25 (2 picks) + $5 = $30 cumulative -> 3 total -> 1 new pick.
+            with transaction.atomic():
+                prior_donations = (
+                    Donation.objects
+                    .select_for_update()
+                    .filter(
+                        fundraiser=donation.fundraiser,
+                        user=donation.user,
+                        status='completed',
+                    )
+                    .exclude(pk=donation.pk)
+                )
 
-        donation.save(update_fields=['status', 'completed_at', 'badge_picks_earned'])
+                prior_total_amount = prior_donations.aggregate(
+                    total=Sum('amount')
+                )['total'] or Decimal('0')
+                prior_picks_earned = prior_donations.aggregate(
+                    total=Sum('badge_picks_earned')
+                )['total'] or 0
+
+                cumulative_amount = prior_total_amount + donation.amount
+                total_picks_deserved = math.floor(cumulative_amount / Fundraiser.BADGE_PICK_DIVISOR)
+                donation.badge_picks_earned = max(0, total_picks_deserved - prior_picks_earned)
+
+                donation.save(update_fields=['status', 'completed_at', 'badge_picks_earned'])
+        else:
+            donation.save(update_fields=['status', 'completed_at', 'badge_picks_earned'])
 
         logger.info(
             f"Donation {donation.id} completed: ${donation.amount} by user {donation.user_id} "

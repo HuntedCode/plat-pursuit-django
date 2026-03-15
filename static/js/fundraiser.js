@@ -116,16 +116,25 @@ const FundraiserPage = {
 
         const form = document.getElementById('donation-form');
         const divisor = parseInt(form?.dataset.pickDivisor, 10) || 10;
+        // Prior remainder: dollars from previous donations not yet converted to a pick
+        const priorRemainder = parseFloat(form?.dataset.priorRemainder) || 0;
         const amount = this._state.selectedAmount;
-        if (!amount || amount < divisor) {
-            hint.innerHTML = amount
-                ? `<span class="text-xs text-base-content/50">Donate $${divisor} or more to earn badge artwork picks!</span>`
+        const effectiveAmount = (amount || 0) + priorRemainder;
+        const picks = Math.floor(effectiveAmount / divisor);
+        const neededForNext = divisor - priorRemainder;
+        const carryNote = priorRemainder > 0
+            ? ` ($${priorRemainder} carried over from prior donations)`
+            : '';
+
+        if (!amount || picks < 1) {
+            const threshold = priorRemainder > 0 ? neededForNext : divisor;
+            hint.innerHTML = amount || priorRemainder > 0
+                ? `<span class="text-xs text-base-content/50">Donate $${threshold} or more to earn a badge artwork pick!${carryNote}</span>`
                 : '';
             return;
         }
 
-        const picks = Math.floor(amount / divisor);
-        hint.innerHTML = `<span class="badge badge-primary badge-sm font-semibold">This earns ${picks} badge artwork pick${picks !== 1 ? 's' : ''}!</span>`;
+        hint.innerHTML = `<span class="badge badge-primary badge-sm font-semibold">This earns ${picks} badge artwork pick${picks !== 1 ? 's' : ''}!${carryNote}</span>`;
     },
 
     // ── Provider Toggle ──────────────────────────────────────────────────

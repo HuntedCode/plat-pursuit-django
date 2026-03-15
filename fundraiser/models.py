@@ -119,7 +119,7 @@ class Donation(models.Model):
     status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='pending')
     badge_picks_earned = models.PositiveIntegerField(
         default=0,
-        help_text='floor(amount / 10), calculated at completion for badge_artwork campaigns.',
+        help_text='Incremental picks from cumulative donations: floor(cumulative_total / 10) minus prior picks earned.',
     )
     badge_picks_used = models.PositiveIntegerField(default=0)
     is_anonymous = models.BooleanField(
