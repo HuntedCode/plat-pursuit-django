@@ -74,7 +74,12 @@ class ShareableImageHTMLView(APIView):
         game_image_url = metadata.get('game_image', '')
         concept_bg_url = metadata.get('concept_bg_url', '')
 
-        response_data = {'html': html}
+        response_data = {
+            'html': html,
+            'has_rating': metadata.get('user_rating') is not None,
+            'concept_id': metadata.get('concept_id'),
+            'playtime': context.get('playtime', ''),
+        }
 
         # Include same-origin URLs for background images
         if game_image_url:

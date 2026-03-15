@@ -5,11 +5,16 @@
  * Depends on: ShareImageManager (share-image.js), PlatPursuit.API
  */
 class ShareableManager extends ShareImageManager {
-    constructor(earnedTrophyId, gameName, gameImage, conceptBgUrl) {
+    constructor(earnedTrophyId, gameName, gameImage, conceptBgUrl, conceptId) {
         // Parent constructor expects notificationId, but we override getPngEndpoint/fetchCardHTML
         super(null, { game_name: gameName, game_image: gameImage, concept_bg_url: conceptBgUrl });
         this.earnedTrophyId = earnedTrophyId;
         this.gameName = gameName;
+
+        // Pre-set concept ID from data attribute (API response will also set it)
+        if (conceptId) {
+            this.ratingData.conceptId = parseInt(conceptId);
+        }
     }
 
     /**
@@ -21,6 +26,16 @@ class ShareableManager extends ShareImageManager {
         );
 
         if (response && response.html) {
+            // Capture rating metadata from API response
+            if (response.has_rating !== undefined) {
+                this.ratingData.hasRating = response.has_rating;
+            }
+            if (response.concept_id) {
+                this.ratingData.conceptId = response.concept_id;
+            }
+            if (response.playtime) {
+                this.ratingData.playtime = response.playtime;
+            }
             return response.html;
         }
         throw new Error('Failed to fetch card HTML');
@@ -34,45 +49,10 @@ class ShareableManager extends ShareImageManager {
     }
 
     /**
-     * Override to track earned trophy ID instead of notification ID
+     * Override tracking ID to use earned trophy ID
      */
-    async generateAndDownload(format) {
-        const btn = document.getElementById('generate-image-btn');
-        const bothBtn = document.getElementById('generate-both-btn');
-        const errorEl = document.getElementById('share-error');
-
-        try {
-            errorEl?.classList.add('hidden');
-            btn.classList.add('loading');
-            btn.disabled = true;
-            bothBtn.disabled = true;
-
-            const formats = format === 'both' ? ['landscape', 'portrait'] : [format];
-
-            for (const fmt of formats) {
-                await this.generateSingleImage(fmt);
-            }
-
-            // Track download (using earnedTrophyId)
-            try {
-                await PlatPursuit.API.post('/api/v1/tracking/site-event/', {
-                    event_type: 'share_card_download',
-                    object_id: String(this.earnedTrophyId)
-                });
-            } catch (trackError) {
-                console.warn('Failed to track download:', trackError);
-            }
-
-            PlatPursuit.ToastManager.success('Image downloaded successfully!');
-        } catch (error) {
-            console.error('Image generation failed:', error);
-            this.showError(error.message || 'Failed to generate image. Please try again.');
-            PlatPursuit.ToastManager.error('Failed to generate image');
-        } finally {
-            btn.classList.remove('loading');
-            btn.disabled = false;
-            bothBtn.disabled = false;
-        }
+    getTrackingId() {
+        return this.earnedTrophyId;
     }
 }
 
@@ -85,6 +65,7 @@ function openShareModal(cardElement) {
     const gameName = cardElement.dataset.gameName;
     const gameImage = cardElement.dataset.gameImage;
     const conceptBgUrl = cardElement.dataset.conceptBgUrl || '';
+    const conceptId = cardElement.dataset.conceptId || '';
 
     if (!earnedTrophyId || !gameName) {
         console.error('Missing earned trophy data');
@@ -114,7 +95,7 @@ function openShareModal(cardElement) {
     modal.showModal();
 
     // Create manager and render share section
-    const manager = new ShareableManager(earnedTrophyId, gameName, gameImage, conceptBgUrl);
+    const manager = new ShareableManager(earnedTrophyId, gameName, gameImage, conceptBgUrl, conceptId);
 
     // Render the share section UI
     modalContent.innerHTML = manager.renderShareSection();

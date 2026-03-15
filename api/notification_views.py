@@ -577,7 +577,12 @@ class NotificationShareImageHTMLView(APIView):
         html = render_to_string('notifications/partials/share_image_card.html', context)
 
         metadata = notification.metadata or {}
-        response_data = {'html': html}
+        response_data = {
+            'html': html,
+            'has_rating': context.get('user_rating') is not None,
+            'concept_id': metadata.get('concept_id'),
+            'playtime': context.get('playtime', ''),
+        }
 
         # Include same-origin URLs for background images
         if context.get('game_image'):

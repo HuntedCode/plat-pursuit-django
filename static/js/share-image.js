@@ -9,12 +9,23 @@
  * (set by the gradient_themes_json template tag) for single source of truth.
  */
 class ShareImageManager {
+    // Track which earned trophy / notification IDs have already shown the rating prompt
+    // this session. Prevents prompt spam if user opens/closes share modal multiple times.
+    // Resets on page navigation (class-level, not persisted).
+    static _promptedIds = new Set();
+
     constructor(notificationId, metadata) {
         this.notificationId = notificationId;
         this.metadata = metadata || {};
         this.currentFormat = 'landscape';
         this.currentBackground = 'default';
         this.generatedImages = {};
+
+        // Rating metadata (populated from HTML API response during preview)
+        this.ratingData = { hasRating: false, conceptId: null };
+
+        // Guard against concurrent download requests
+        this.isDownloading = false;
 
         // Image dimensions
         this.dimensions = {
@@ -404,15 +415,221 @@ class ShareImageManager {
         );
 
         if (response && response.html) {
+            // Capture rating metadata from API response
+            if (response.has_rating !== undefined) {
+                this.ratingData.hasRating = response.has_rating;
+            }
+            if (response.concept_id) {
+                this.ratingData.conceptId = response.concept_id;
+            }
+            if (response.playtime) {
+                this.ratingData.playtime = response.playtime;
+            }
             return response.html;
         }
         throw new Error('Failed to fetch card HTML');
     }
 
     /**
-     * Generate image via server-side Playwright rendering and download
+     * Public download entry point. Checks for rating prompt before proceeding.
      */
     async generateAndDownload(format) {
+        if (this.isDownloading) return;
+
+        const promptId = this.getTrackingId();
+        const shouldPrompt = !this.ratingData.hasRating
+            && this.ratingData.conceptId
+            && !ShareImageManager._promptedIds.has(promptId);
+
+        if (shouldPrompt) {
+            ShareImageManager._promptedIds.add(promptId);
+            this._showRatingPrompt(format);
+            return;
+        }
+
+        await this._doGenerateAndDownload(format);
+    }
+
+    /**
+     * Returns the ID used for download tracking. Overridden by subclasses.
+     */
+    getTrackingId() {
+        return this.notificationId || 'unknown';
+    }
+
+    /**
+     * Show the rate-before-download modal and wire up its actions.
+     */
+    _showRatingPrompt(format) {
+        const modal = document.getElementById('rate-before-download-modal');
+        if (!modal) {
+            console.warn('rate-before-download-modal not found in DOM. Rating prompt disabled.');
+            this._doGenerateAndDownload(format);
+            return;
+        }
+
+        // Populate game title
+        const titleEl = document.getElementById('rbd-game-title');
+        if (titleEl) {
+            titleEl.textContent = this.metadata.game_name || 'Rate This Platinum';
+        }
+
+        // Reset form values
+        const form = document.getElementById('rbd-rating-form');
+        if (form) {
+            form.reset();
+            // Update live value displays to match defaults
+            this._updateRbdValueDisplays();
+        }
+
+        // Show playtime hint if available
+        const playtimeHint = document.getElementById('rbd-playtime-hint');
+        if (playtimeHint) {
+            if (this.ratingData.playtime) {
+                playtimeHint.textContent = `Your tracked playtime: ${this.ratingData.playtime}`;
+                playtimeHint.classList.remove('hidden');
+            } else {
+                playtimeHint.classList.add('hidden');
+            }
+        }
+
+        // Wire up slider live value displays
+        const sliders = modal.querySelectorAll('input[type="range"]');
+        sliders.forEach(slider => {
+            // Remove any prior listeners by cloning
+            const fresh = slider.cloneNode(true);
+            slider.parentNode.replaceChild(fresh, slider);
+            fresh.addEventListener('input', () => this._updateRbdValueDisplays());
+        });
+
+        // Wire up hours input to enable/disable submit button
+        const hoursInput = form?.querySelector('[name="hours_to_platinum"]');
+        if (hoursInput) {
+            const freshHours = hoursInput.cloneNode(true);
+            hoursInput.parentNode.replaceChild(freshHours, hoursInput);
+            freshHours.addEventListener('input', () => {
+                const btn = document.getElementById('rbd-submit-btn');
+                if (btn) btn.disabled = !(parseInt(freshHours.value) >= 1);
+            });
+        }
+
+        // Wire up submit button (clone to remove prior listeners)
+        const submitBtn = document.getElementById('rbd-submit-btn');
+        if (submitBtn) {
+            const freshSubmit = submitBtn.cloneNode(true);
+            submitBtn.parentNode.replaceChild(freshSubmit, submitBtn);
+            freshSubmit.addEventListener('click', () => this._submitRatingAndDownload(format));
+        }
+
+        // Wire up skip button (clone to remove prior listeners)
+        const skipBtn = document.getElementById('rbd-skip-btn');
+        if (skipBtn) {
+            const freshSkip = skipBtn.cloneNode(true);
+            skipBtn.parentNode.replaceChild(freshSkip, skipBtn);
+            freshSkip.addEventListener('click', () => {
+                modal.close();
+                this._doGenerateAndDownload(format);
+            });
+        }
+
+        modal.showModal();
+    }
+
+    /**
+     * Update the live value displays next to each slider in the rating modal.
+     */
+    _updateRbdValueDisplays() {
+        const form = document.getElementById('rbd-rating-form');
+        if (!form) return;
+
+        const mappings = {
+            'overall_rating': 'rbd-overall-value',
+            'difficulty': 'rbd-difficulty-value',
+            'grindiness': 'rbd-grindiness-value',
+            'fun_ranking': 'rbd-fun-value',
+        };
+
+        for (const [inputName, displayId] of Object.entries(mappings)) {
+            const input = form.querySelector(`[name="${inputName}"]`);
+            const display = document.getElementById(displayId);
+            if (input && display) {
+                display.textContent = inputName === 'overall_rating'
+                    ? parseFloat(input.value).toFixed(1)
+                    : input.value;
+            }
+        }
+    }
+
+    /**
+     * Submit rating from the prompt modal, refresh preview, then download.
+     */
+    async _submitRatingAndDownload(format) {
+        const modal = document.getElementById('rate-before-download-modal');
+        const submitBtn = document.getElementById('rbd-submit-btn');
+        const form = document.getElementById('rbd-rating-form');
+
+        if (!form) return;
+
+        const formData = new FormData(form);
+        const hours = formData.get('hours_to_platinum');
+
+        if (!hours || parseInt(hours) < 1) {
+            PlatPursuit.ToastManager.error('Please enter hours to platinum (minimum 1)');
+            return;
+        }
+
+        const payload = {
+            difficulty: parseInt(formData.get('difficulty')),
+            grindiness: parseInt(formData.get('grindiness')),
+            fun_ranking: parseInt(formData.get('fun_ranking')),
+            hours_to_platinum: parseInt(hours),
+            overall_rating: parseFloat(formData.get('overall_rating')),
+        };
+
+        try {
+            if (submitBtn) {
+                submitBtn.classList.add('loading');
+                submitBtn.disabled = true;
+            }
+
+            await PlatPursuit.API.post(
+                `/api/v1/reviews/${this.ratingData.conceptId}/group/default/rate/`,
+                payload
+            );
+
+            // Mark as rated so future downloads skip the prompt
+            this.ratingData.hasRating = true;
+
+            PlatPursuit.ToastManager.success('Rating submitted! Refreshing your card...');
+            modal?.close();
+
+            // Refresh preview so the card shows the new rating pills
+            await this.renderPreview();
+
+            // Proceed with download
+            await this._doGenerateAndDownload(format);
+        } catch (error) {
+            console.error('Rating submission failed:', error);
+            let errData = null;
+            try { errData = await error.response?.json?.(); } catch { /* ignore parse errors */ }
+            const msg = errData?.error || 'Failed to submit rating. You can skip and download without it.';
+            PlatPursuit.ToastManager.error(msg);
+        } finally {
+            if (submitBtn) {
+                submitBtn.classList.remove('loading');
+                submitBtn.disabled = false;
+            }
+        }
+    }
+
+    /**
+     * Generate image via server-side Playwright rendering and download.
+     * This is the actual download logic (called after rating check).
+     */
+    async _doGenerateAndDownload(format) {
+        if (this.isDownloading) return;
+        this.isDownloading = true;
+
         const btn = document.getElementById('generate-image-btn');
         const bothBtn = document.getElementById('generate-both-btn');
         const errorEl = document.getElementById('share-error');
@@ -433,7 +650,7 @@ class ShareImageManager {
             try {
                 await PlatPursuit.API.post('/api/v1/tracking/site-event/', {
                     event_type: 'share_card_download',
-                    object_id: String(this.notificationId || 'unknown')
+                    object_id: String(this.getTrackingId())
                 });
             } catch (trackError) {
                 console.warn('Failed to track download:', trackError);
@@ -445,6 +662,7 @@ class ShareImageManager {
             this.showError(error.message || 'Failed to generate image. Please try again.');
             PlatPursuit.ToastManager.error('Failed to generate image');
         } finally {
+            this.isDownloading = false;
             btn.classList.remove('loading');
             btn.disabled = false;
             bothBtn.disabled = false;

@@ -68,6 +68,7 @@
                  data-game-name="{{ et.trophy.game.title_name }}"
                  data-game-image="{{ et.trophy.game.title_image|default:et.trophy.game.title_icon_url }}"
                  data-concept-bg-url="{{ et.trophy.game.concept.bg_url|default:'' }}"
+                 data-concept-id="{{ et.trophy.game.concept.id|default:'' }}"
                  data-search-name="{{ et.trophy.game.title_name|lower }}"
                  data-is-shovelware="{{ et.is_shovelware|yesno:'true,false' }}"
                  onclick="openShareModal(this)">

@@ -30,6 +30,7 @@ The legacy Pillow-based renderer (`ShareImageService`) still exists for the orig
 | `api/az_challenge_share_views.py` | AZChallengeShareHTMLView, AZChallengeSharePNGView |
 | `api/calendar_challenge_share_views.py` | CalendarChallengeShareHTMLView, CalendarChallengeSharePNGView |
 | `api/genre_challenge_share_views.py` | GenreChallengeShareHTMLView, GenreChallengeSharePNGView |
+| `templates/partials/rate_before_download_modal.html` | Rating prompt modal shown before downloading if user hasn't rated |
 | `trophies/themes.py` | GRADIENT_THEMES dictionary: background CSS for each selectable theme |
 | `trophies/views/checklist_views.py` (MyShareablesView) | My Shareables hub page view |
 | `notifications/models.py` (PlatinumShareImage) | S3-stored share images for notification-based generation |
@@ -137,6 +138,36 @@ Not a Django model. Local filesystem directory at `{BASE_DIR}/share_temp_images/
 - **Font system**: Share cards use the same Poppins and Inter fonts from `static/fonts/`. The Playwright renderer embeds them as base64 to avoid file system access issues.
 - **My Shareables page**: Centralized hub at `/my-shareables/` that lists all platinum trophies, challenges, and recaps with share card generation for each.
 
+## Rate Before Download
+
+When a user clicks "Download Image" on a platinum share card, the system checks whether they have rated the game. If they haven't (and haven't been prompted already this session), a modal appears prompting them to rate before downloading. This leverages the natural motivation of wanting a complete-looking share card: rated cards show personalized stats pills, while unrated cards show a "No Rating Yet!" badge.
+
+### Flow
+
+1. `ShareImageManager.generateAndDownload()` checks `this.ratingData.hasRating` (populated from the HTML API response during preview rendering)
+2. If unrated and not yet prompted: opens the `#rate-before-download-modal` dialog
+3. User can "Rate and Download" (submits rating via `/api/v1/reviews/<concept_id>/group/default/rate/`, refreshes preview, then downloads) or "Skip, just download"
+4. If already rated or already prompted: download proceeds immediately
+5. Prompted IDs are tracked in `ShareImageManager._promptedIds` (class-level `Set`) to avoid nagging
+
+### Key Files
+
+| File | Purpose |
+|------|---------|
+| `templates/partials/rate_before_download_modal.html` | Rating prompt modal with all 5 rating fields |
+| `static/js/share-image.js` | Interception logic in base `ShareImageManager` class |
+| `static/js/shareable-manager.js` | Passes `conceptId` from data attributes to manager |
+| `api/shareable_views.py` | Returns `has_rating` and `concept_id` in HTML API response |
+| `api/notification_views.py` | Same metadata in notification HTML API response |
+
+### Data Flow
+
+Rating metadata flows through two paths:
+- **Data attributes**: `data-concept-id` on share card elements provides `conceptId` at construction time
+- **API response**: `has_rating` and `concept_id` returned alongside the HTML preview during `fetchCardHTML()`, which fires on modal open
+
+This means the JS knows the rating status before the user clicks download, with no extra API call.
+
 ## Gotchas and Pitfalls
 
 - **Playwright thread isolation**: Playwright starts an asyncio event loop, which conflicts with Django's `SynchronousOnlyOperation` guard. All Playwright interaction must happen in the dedicated thread. The `_executor` ThreadPoolExecutor with `max_workers=1` serializes renders and keeps the event loop isolated.
@@ -146,6 +177,7 @@ Not a Django model. Local filesystem directory at `{BASE_DIR}/share_temp_images/
 - **Portrait vs. landscape game art positioning**: Portrait cards use `background-position: center top` so wide game art images show their upper portion (where logos and characters typically appear). Landscape cards use `center`.
 - **Legacy Pillow renderer limitations**: `_wrap_text()` is a naive implementation that truncates at 40 characters. The Pillow renderer also creates gradients pixel by pixel, which is slow for large images. New card types should always use the Playwright pipeline.
 - **Font loading is cached per process**: `_cached_font_faces` is a module-level global. Changing fonts requires a process restart (Gunicorn reload).
+- **Rate prompt is session-scoped**: `ShareImageManager._promptedIds` is a class-level `Set` that resets on page navigation. This is intentional: users should not be nagged across sessions, but a fresh page load gives one prompt opportunity per card.
 
 ## Related Docs
 
