@@ -8,55 +8,58 @@
 {% block content %}
 <div class="mt-6 mb-12">
 {# ─── Dashboard Header ────────────────────────────────────────────────── #}
-<section class="shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 max-w-4xl mx-auto p-0 lg:p-4">
+<section class="max-w-4xl mx-auto">
     {% include 'partials/breadcrumb.html' with items=breadcrumb %}
 
-    <div class="card bg-base-100 border-4 border-base-300 shadow-md shadow-neutral">
+    <div class="card bg-base-100 border-4 border-base-300 shadow-lg shadow-neutral">
         <div class="card-body p-4 lg:p-6">
-            <div class="flex flex-row items-center justify-between gap-4">
-                <div class="flex items-center gap-3">
-                    <div class="avatar">
-                        <div class="w-12 h-12 lg:w-16 lg:h-16 rounded-full ring-2 ring-primary">
-                            <img src="{{ profile.avatar_url }}"
-                                 alt="{{ profile.display_psn_username|default:profile.psn_username }}"
-                                 class="object-cover" loading="eager" />
-                        </div>
-                    </div>
-                    <div>
-                        <h1 class="text-2xl lg:text-3xl font-bold">My Dashboard</h1>
-                        <p class="text-base-content/60 text-sm italic pr-1">Your trophy hunting command center.</p>
+            <div class="flex items-center gap-3 lg:gap-4">
+                {# Avatar with premium shimmer #}
+                <div class="avatar">
+                    <div class="w-14 h-14 lg:w-18 lg:h-18 rounded-full ring-2 ring-primary {% if is_premium %}border-2 shimmer{% endif %}">
+                        <img src="{{ profile.avatar_url }}"
+                             alt="{{ profile.display_psn_username|default:profile.psn_username }}"
+                             class="object-cover" loading="eager" />
                     </div>
                 </div>
-                <div class="flex items-center gap-2">
-                    {# Staff premium preview toggle #}
-                    <div class="flex items-center gap-1.5">
-                        <button id="preview-toggle-btn"
-                                class="btn btn-xs {% if is_premium %}btn-warning{% else %}btn-ghost border-base-300{% endif %} gap-1"
-                                title="Toggle premium/free preview">
-                            {% if is_premium %}
-                                <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
-                                    <path d="M5 16L3 5l5.5 5L12 4l3.5 6L21 5l-2 11H5z"/>
-                                </svg>
-                                <span class="hidden lg:inline">Premium</span>
-                            {% else %}
-                                <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                    <circle cx="12" cy="12" r="10"></circle>
-                                    <path d="M12 6v6l4 2"></path>
-                                </svg>
-                                <span class="hidden lg:inline">Free</span>
-                            {% endif %}
-                        </button>
-                        {% if preview_mode %}
-                            <span class="badge badge-xs badge-outline badge-warning">Preview</span>
+                <div class="flex-1">
+                    <div class="flex items-center gap-2 flex-wrap">
+                        <h1 class="text-2xl lg:text-3xl font-bold">My Dashboard</h1>
+                        {% if profile.flag %}
+                            <span class="text-lg lg:text-xl" title="{{ profile.country }}">{{ profile.flag }}</span>
                         {% endif %}
                     </div>
-
-                    <button id="customize-btn" class="btn btn-ghost btn-sm border border-base-300 gap-1">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <div class="flex items-center gap-2 flex-wrap mt-0.5">
+                        <span class="text-sm lg:text-base text-base-content/60">{{ profile.display_psn_username|default:profile.psn_username }}</span>
+                        {% if displayed_title %}
+                            <span class="text-xs lg:text-sm text-accent italic pr-1">{{ displayed_title }}</span>
+                        {% endif %}
+                    </div>
+                </div>
+                {# Inline action buttons #}
+                <div class="flex items-center gap-1.5 shrink-0">
+                    <button id="preview-toggle-btn"
+                            class="btn btn-xs {% if is_premium %}btn-warning{% else %}btn-ghost border-base-300{% endif %} gap-1"
+                            title="Toggle premium/free preview">
+                        {% if is_premium %}
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M5 16L3 5l5.5 5L12 4l3.5 6L21 5l-2 11H5z"/>
+                            </svg>
+                        {% else %}
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <circle cx="12" cy="12" r="10"></circle>
+                                <path d="M12 6v6l4 2"></path>
+                            </svg>
+                        {% endif %}
+                    </button>
+                    {% if preview_mode %}
+                        <span class="badge badge-xs badge-outline badge-warning">Preview</span>
+                    {% endif %}
+                    <button id="customize-btn" class="btn btn-ghost btn-xs btn-circle border border-base-300" title="Customize">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <circle cx="12" cy="12" r="3"></circle>
                             <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
                         </svg>
-                        <span class="hidden lg:inline">Customize</span>
                     </button>
                 </div>
             </div>

@@ -64,6 +64,7 @@ class DashboardView(StaffRequiredMixin, ProfileHotbarMixin, TemplateView):
             'valid_tab_icons': sorted(VALID_TAB_ICONS),
             'max_free_hidden': MAX_FREE_HIDDEN,
             'hidden_count': len(config.hidden_modules) if config.hidden_modules else 0,
+            'displayed_title': profile.displayed_title,
             'preview_mode': self.request.session.get('dashboard_preview_premium') is not None,
             'real_is_premium': profile.user_is_premium,
             'breadcrumb': [
