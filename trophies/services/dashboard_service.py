@@ -525,21 +525,64 @@ def get_ordered_modules(config, is_premium):
     return enriched
 
 
-def get_all_modules_for_customize(config, is_premium):
+def get_tabs_for_customize(config, is_premium):
     """
-    Return all modules (including hidden) grouped by category for the customize panel.
+    Return all modules grouped by their effective tab assignment for the customize panel.
 
-    Each module dict gets extra 'is_hidden', 'is_locked', 'effective_size',
-    and 'effective_settings' keys.
+    Unlike get_dashboard_tabs() which filters hidden modules, this includes ALL modules
+    (with is_hidden flag) so users can toggle them back on. Returns an ordered list of
+    tab dicts matching the tab bar order.
     """
+    tab_config = config.tab_config or {}
     hidden = set(config.hidden_modules) if config.hidden_modules else set()
     module_settings = config.module_settings or {}
-    categories = {}
 
+    # Build module-to-tab mapping (same logic as get_dashboard_tabs)
+    module_tab_map = {mod['slug']: mod['category'] for mod in DASHBOARD_MODULES}
+    if is_premium:
+        overrides = tab_config.get('module_tab_overrides', {})
+        if isinstance(overrides, dict):
+            for slug, tab_slug in overrides.items():
+                if slug in module_tab_map:
+                    module_tab_map[slug] = tab_slug
+
+    # Build tab structures
+    tab_order = tab_config.get('tab_order', DEFAULT_TAB_ORDER) if is_premium else DEFAULT_TAB_ORDER
+    tabs = {}
+    for cat_slug in DEFAULT_TAB_ORDER:
+        tabs[cat_slug] = {
+            'slug': cat_slug,
+            'name': CATEGORY_DISPLAY_NAMES.get(cat_slug, cat_slug.replace('_', ' ').title()),
+            'short_name': CATEGORY_SHORT_NAMES.get(cat_slug),
+            'icon': TAB_ICONS.get(cat_slug, 'star'),
+            'is_custom': False,
+            'modules': [],
+        }
+
+    # Add custom tabs
+    if is_premium:
+        custom_tabs = tab_config.get('custom_tabs', {})
+        if isinstance(custom_tabs, dict):
+            for tab_slug, tab_data in custom_tabs.items():
+                if tab_slug in DEFAULT_TAB_ORDER:
+                    continue
+                if not isinstance(tab_data, dict):
+                    logger.warning("Skipping malformed custom tab %s (expected dict, got %s)", tab_slug, type(tab_data).__name__)
+                    continue
+                tabs[tab_slug] = {
+                    'slug': tab_slug,
+                    'name': str(tab_data.get('name', 'Custom Tab'))[:20],
+                    'short_name': str(tab_data.get('name', 'Custom Tab'))[:20],
+                    'icon': tab_data.get('icon', 'star') if tab_data.get('icon') in VALID_TAB_ICONS else 'star',
+                    'is_custom': True,
+                    'modules': [],
+                }
+
+    # Assign ALL modules to tabs (including hidden, for toggle-back)
     for mod in DASHBOARD_MODULES:
         is_locked = mod['requires_premium'] and not is_premium
         size = get_effective_size(mod, module_settings)
-        settings = get_effective_settings(mod, module_settings)
+        settings = get_effective_settings(mod, module_settings if is_premium else {})
         entry = {
             **mod,
             'is_hidden': mod['slug'] in hidden,
@@ -547,15 +590,38 @@ def get_all_modules_for_customize(config, is_premium):
             'effective_size': size,
             'effective_settings': settings,
         }
-        cat = mod['category']
-        if cat not in categories:
-            categories[cat] = {
-                'name': _category_display_name(cat),
-                'modules': [],
-            }
-        categories[cat]['modules'].append(entry)
 
-    return categories
+        target_tab = module_tab_map.get(mod['slug'], mod['category'])
+        if target_tab not in tabs:
+            target_tab = mod['category']
+        tabs[target_tab]['modules'].append(entry)
+
+    # Order modules within each tab
+    if is_premium and config.module_order:
+        order_lookup = {slug: i for i, slug in enumerate(config.module_order)}
+        for tab in tabs.values():
+            tab['modules'].sort(key=lambda m: order_lookup.get(m['slug'], m['default_order']))
+    else:
+        for tab in tabs.values():
+            tab['modules'].sort(key=lambda m: m['default_order'])
+
+    # Build ordered list
+    ordered = []
+    seen = set()
+    for tab_slug in tab_order:
+        if tab_slug in tabs and tab_slug not in seen:
+            seen.add(tab_slug)
+            ordered.append(tabs[tab_slug])
+    for tab_slug in DEFAULT_TAB_ORDER:
+        if tab_slug not in seen:
+            seen.add(tab_slug)
+            ordered.append(tabs[tab_slug])
+    # Append any custom tabs not in tab_order
+    for tab_slug, tab_data in tabs.items():
+        if tab_slug not in seen:
+            ordered.append(tab_data)
+
+    return ordered
 
 
 CATEGORY_DISPLAY_NAMES = {
@@ -567,9 +633,157 @@ CATEGORY_DISPLAY_NAMES = {
     'premium': 'Premium',
 }
 
+# Short names for tab bar (fits without scrolling)
+CATEGORY_SHORT_NAMES = {
+    'at_a_glance': 'At a Glance',
+    'progress': 'Progress',
+    'badges': 'Badges',
+    'community': 'Community',
+    'highlights': 'Highlights',
+    'premium': 'Premium',
+}
+
+# Default tab order and icons (SVG path data for inline rendering)
+DEFAULT_TAB_ORDER = ['premium', 'at_a_glance', 'progress', 'badges', 'community', 'highlights']
+
+TAB_ICONS = {
+    'at_a_glance': 'trophy_cup',
+    'progress': 'chart',
+    'badges': 'medal',
+    'community': 'users',
+    'highlights': 'star',
+    'premium': 'crown',
+}
+
+VALID_TAB_ICONS = {'trophy_cup', 'target', 'chart', 'medal', 'users', 'star', 'crown', 'heart'}
+
 
 def _category_display_name(key):
     return CATEGORY_DISPLAY_NAMES.get(key, key.replace('_', ' ').title())
+
+
+def get_dashboard_tabs(config, is_premium):
+    """
+    Build the tab structure for the dashboard.
+
+    Returns an ordered list of tab dicts, each containing its modules.
+    Default tabs come from CATEGORY_DISPLAY_NAMES. Premium users can have
+    custom tabs and module overrides stored in config.tab_config.
+    """
+    tab_config = config.tab_config or {}
+    active_tab = tab_config.get('active_tab', 'at_a_glance')
+    hidden = set(config.hidden_modules) if config.hidden_modules else set()
+    module_settings = config.module_settings or {}
+
+    # Build module-to-tab mapping
+    # Start with defaults from module descriptors
+    module_tab_map = {mod['slug']: mod['category'] for mod in DASHBOARD_MODULES}
+
+    # Build default tabs
+    tab_order = tab_config.get('tab_order', DEFAULT_TAB_ORDER) if is_premium else DEFAULT_TAB_ORDER
+    tabs = {}
+    for cat_slug in DEFAULT_TAB_ORDER:
+        tabs[cat_slug] = {
+            'slug': cat_slug,
+            'name': CATEGORY_DISPLAY_NAMES.get(cat_slug, cat_slug.replace('_', ' ').title()),
+            'short_name': CATEGORY_SHORT_NAMES.get(cat_slug),
+            'icon': TAB_ICONS.get(cat_slug, 'star'),
+            'is_custom': False,
+            'modules': [],
+        }
+
+    # Add custom tabs (premium only, validated)
+    if is_premium:
+        custom_tabs = tab_config.get('custom_tabs', {})
+        if isinstance(custom_tabs, dict):
+            for tab_slug, tab_data in custom_tabs.items():
+                # Prevent collision with default tab slugs
+                if tab_slug in DEFAULT_TAB_ORDER:
+                    continue
+                if not isinstance(tab_data, dict):
+                    continue
+                tabs[tab_slug] = {
+                    'slug': tab_slug,
+                    'name': str(tab_data.get('name', 'Custom Tab'))[:50],
+                    'icon': tab_data.get('icon', 'star') if tab_data.get('icon') in VALID_TAB_ICONS else 'star',
+                    'is_custom': True,
+                    'modules': [],
+                }
+
+    # Apply premium tab overrides (validated: target tab must exist)
+    if is_premium:
+        overrides = tab_config.get('module_tab_overrides', {})
+        if isinstance(overrides, dict):
+            for slug, tab_slug in overrides.items():
+                if slug in module_tab_map and tab_slug in tabs:
+                    module_tab_map[slug] = tab_slug
+
+    # Assign modules to tabs
+    for mod in DASHBOARD_MODULES:
+        # Skip premium modules for free users
+        if mod['requires_premium'] and not is_premium:
+            continue
+
+        slug = mod['slug']
+        # Skip hidden modules
+        if slug in hidden:
+            continue
+
+        target_tab = module_tab_map.get(slug, mod['category'])
+        if target_tab not in tabs:
+            target_tab = mod['category']  # Fallback to default category
+
+        # Enrich module
+        size = get_effective_size(mod, module_settings)
+        settings = get_effective_settings(mod, module_settings if is_premium else {})
+        enriched = {
+            **mod,
+            'effective_size': size,
+            'grid_class': get_size_grid_class(size),
+            'effective_settings': settings,
+        }
+
+        tabs[target_tab]['modules'].append(enriched)
+
+    # Apply custom module ordering within each tab
+    if is_premium and config.module_order:
+        order_lookup = {slug: i for i, slug in enumerate(config.module_order)}
+        for tab in tabs.values():
+            tab['modules'].sort(key=lambda m: order_lookup.get(m['slug'], m['default_order']))
+    else:
+        for tab in tabs.values():
+            tab['modules'].sort(key=lambda m: m['default_order'])
+
+    # Build ordered tab list
+    ordered_tabs = []
+    seen = set()
+    for tab_slug in tab_order:
+        if tab_slug in tabs and tab_slug not in seen:
+            seen.add(tab_slug)
+            ordered_tabs.append(tabs[tab_slug])
+
+    # Append any tabs not in tab_order (new default tabs or custom tabs)
+    for tab_slug in DEFAULT_TAB_ORDER:
+        if tab_slug not in seen:
+            seen.add(tab_slug)
+            ordered_tabs.append(tabs[tab_slug])
+    for tab_slug in tabs:
+        if tab_slug not in seen:
+            seen.add(tab_slug)
+            ordered_tabs.append(tabs[tab_slug])
+
+    # Set active tab
+    active_found = False
+    for tab in ordered_tabs:
+        tab['is_active'] = (tab['slug'] == active_tab)
+        if tab['is_active']:
+            active_found = True
+
+    # Fallback: if active tab not found, activate the first one
+    if not active_found and ordered_tabs:
+        ordered_tabs[0]['is_active'] = True
+
+    return ordered_tabs
 
 
 # ---------------------------------------------------------------------------

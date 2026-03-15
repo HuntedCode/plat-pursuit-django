@@ -3415,6 +3415,10 @@ class DashboardConfig(models.Model):
     module_order = models.JSONField(default=list, blank=True)
     hidden_modules = models.JSONField(default=list, blank=True)
     module_settings = models.JSONField(default=dict, blank=True)
+    tab_config = models.JSONField(
+        default=dict, blank=True,
+        help_text='Tab layout: {active_tab, tab_order, custom_tabs, module_tab_overrides}'
+    )
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:

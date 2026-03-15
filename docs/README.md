@@ -28,6 +28,7 @@ Long-form vision documents for systems not yet fully implemented.
 
 | Doc | Description |
 |-----|-------------|
+| [Dashboard Module Catalog](design/dashboard-module-catalog.md) | 28-module roadmap with priority tiers, data sources, and implementation status |
 | [Gamification Vision](design/gamification-vision.md) | Full RPG system design: stats, jobs, quests, currency, star chart, avatar frames |
 
 ## Features

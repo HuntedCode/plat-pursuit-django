@@ -9,20 +9,21 @@ from django.views.generic import TemplateView
 from trophies.mixins import ProfileHotbarMixin, StaffRequiredMixin
 from trophies.models import DashboardConfig
 from trophies.services.dashboard_service import (
-    get_ordered_modules,
-    get_all_modules_for_customize,
+    get_dashboard_tabs,
+    get_tabs_for_customize,
     get_server_module_data,
     get_effective_premium,
+    VALID_TAB_ICONS,
     MAX_FREE_HIDDEN,
 )
 
 
 class DashboardView(StaffRequiredMixin, ProfileHotbarMixin, TemplateView):
     """
-    Personal trophy hunting dashboard.
+    Personal trophy hunting dashboard with tabbed navigation.
 
-    Server-renders cheap modules immediately and provides module config
-    so the JS manager can lazy-load expensive modules via AJAX.
+    Modules are organized into category tabs. Only the active tab's
+    lazy modules load on page init. Other tabs load when first activated.
     """
     template_name = 'trophies/dashboard.html'
 
@@ -33,22 +34,34 @@ class DashboardView(StaffRequiredMixin, ProfileHotbarMixin, TemplateView):
 
         config, _ = DashboardConfig.objects.get_or_create(profile=profile)
 
-        # Ordered, visibility-filtered module list for rendering
-        modules = get_ordered_modules(config, is_premium)
+        # Build tabbed module structure
+        tabs = get_dashboard_tabs(config, is_premium)
 
-        # Batch-fetch context for server-rendered modules (zero or minimal queries)
-        server_data = get_server_module_data(profile, modules)
+        # Collect all modules across tabs for server-rendering
+        all_modules = []
+        for tab in tabs:
+            all_modules.extend(tab['modules'])
 
-        # Category-grouped modules for the customize panel
-        categories = get_all_modules_for_customize(config, is_premium)
+        # Batch-fetch context for server-rendered modules
+        server_data = get_server_module_data(profile, all_modules)
+
+        # Tab-grouped modules for the customize panel
+        customize_tabs = get_tabs_for_customize(config, is_premium)
+        all_tab_options = [{'slug': t['slug'], 'name': t['name']} for t in customize_tabs]
+
+        # Split tabs into system (default) and custom for separate tab bars
+        custom_tabs = [t for t in tabs if t.get('is_custom')]
 
         context.update({
             'profile': profile,
             'dashboard_config': config,
-            'modules': modules,
+            'tabs': tabs,
+            'custom_tabs': custom_tabs,
             'server_module_data': server_data,
             'is_premium': is_premium,
-            'module_categories': categories,
+            'customize_tabs': customize_tabs,
+            'all_tab_options': all_tab_options,
+            'valid_tab_icons': sorted(VALID_TAB_ICONS),
             'max_free_hidden': MAX_FREE_HIDDEN,
             'hidden_count': len(config.hidden_modules) if config.hidden_modules else 0,
             'preview_mode': self.request.session.get('dashboard_preview_premium') is not None,

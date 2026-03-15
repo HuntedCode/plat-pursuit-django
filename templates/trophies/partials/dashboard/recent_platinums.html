@@ -1,5 +1,5 @@
 {% load custom_filters %}
-{# Dashboard module: Recent Platinums — latest platinum trophies with rarity. #}
+{# Dashboard module: Recent Platinums. Latest platinum trophies with rarity. #}
 <div class="card bg-base-200/80 border-2 border-base-300 shadow-lg shadow-neutral">
     <div class="card-body p-5 lg:p-7">
         {# Header #}
@@ -21,7 +21,7 @@
                 {% for plat in data.platinums %}
                     <div class="flex items-center gap-3 p-2 rounded-lg bg-base-300/30 hover:bg-base-300/60 transition-colors group relative">
                         {% if plat.np_communication_id %}
-                            <a href="/games/{{ plat.np_communication_id }}/" class="absolute inset-0 z-10" aria-label="{{ plat.game_name }}"></a>
+                            <a href="/games/{{ plat.np_communication_id }}/" class="absolute inset-0 z-10" aria-label="{{ plat.game_name }}" title="{{ plat.game_name }}"></a>
                         {% endif %}
 
                         {# Game icon #}

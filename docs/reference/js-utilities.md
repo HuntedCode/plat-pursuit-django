@@ -158,7 +158,7 @@ When `ZoomScaler` is active (sub-768px), `overflow: hidden` on `#zoom-container`
 
 ### PlatPursuit.DragReorderManager
 
-Drag-and-drop reordering with position caching for performance.
+Smooth, touch-friendly drag-and-drop reordering powered by SortableJS.
 
 ```js
 const dragger = new PlatPursuit.DragReorderManager({
@@ -166,12 +166,17 @@ const dragger = new PlatPursuit.DragReorderManager({
     itemSelector: '.sortable-item',
     onReorder: (itemId, newPosition, allItemIds) => { ... },
     handleSelector: '.drag-handle',     // Optional: restrict drag to handle
-    placeholderClass: 'border-dashed',  // Optional: custom placeholder CSS
-    useXY: true,                        // Optional: 2D-aware for multi-column grids
+    onStart: (evt) => { ... },          // Optional: callback on drag start
+    onEnd: (evt) => { ... },            // Optional: callback on drag end
 });
+dragger.destroy();                      // Cleanup when done
 ```
 
-Uses HTML5 drag API with `requestAnimationFrame` throttling. Caches item positions on drag start for smooth performance. The `useXY` option enables 2D-aware positioning for CSS grid layouts (used by dashboard).
+Wraps SortableJS with `forceFallback: true` for consistent cross-browser behavior (including touch devices). Provides 200ms ease animations, swap threshold to prevent flickering in grid layouts, and auto-scroll near container edges. The `onReorder` callback signature matches the legacy API for backward compatibility.
+
+**CSS classes** (defined in `input.css`): `.sortable-ghost` (dashed placeholder), `.sortable-chosen` (shadow + scale lift), `.sortable-drag`, `.sortable-fallback`.
+
+**Requires**: `static/js/vendor/Sortable.min.js` loaded before `utils.js` (added in `base.html`). Degrades gracefully if SortableJS is not available.
 
 ### PlatPursuit.LeaderboardUtils
 
@@ -203,5 +208,5 @@ To add a new utility: define it above the export block, then add a `window.PlatP
 ## Related Docs
 
 - [Template Architecture](template-architecture.md): Where utils.js is included and how the zoom wrapper works
-- [Dashboard](../features/dashboard.md): Uses DragReorderManager with `useXY: true`
+- [Dashboard](../features/dashboard.md): Uses DragReorderManager for module reordering
 - [Checklist System](../features/checklist-system.md): Uses API, InfiniteScroller, UnsavedChangesManager

@@ -1,5 +1,5 @@
 {% load custom_filters %}
-{# Dashboard module: Challenge Hub — A-Z, Calendar, Genre with mini previews. #}
+{# Dashboard module: Challenge Hub. A-Z, Calendar, Genre with mini previews. #}
 <div class="card bg-base-200/80 border-2 border-base-300 shadow-lg shadow-neutral">
     <div class="card-body p-5 lg:p-7">
         {# Header #}
@@ -97,7 +97,7 @@
                                         {% endfor %}
                                     </div>
                                     <div class="grid grid-cols-7 gap-px">
-                                        {% for i in "x"|ljust:challenge_data.current_month.weekday_offset %}
+                                        {% for i in ""|ljust:challenge_data.current_month.weekday_offset %}
                                             <div></div>
                                         {% endfor %}
                                         {% for day in challenge_data.current_month.days %}

@@ -6,7 +6,7 @@
 {% block meta_description %}Your personal trophy hunting command center. Track trophies, badges, challenges, and more at a glance.{% endblock %}
 
 {% block content %}
-<div class="mt-2 mb-12">
+<div class="mt-6 mb-12">
 {# ─── Dashboard Header ────────────────────────────────────────────────── #}
 <section class="shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 max-w-4xl mx-auto p-0 lg:p-4">
     {% include 'partials/breadcrumb.html' with items=breadcrumb %}
@@ -64,67 +64,121 @@
     </div>
 </section>
 
-{# ─── Module Container ─────────────────────────────────────────────────── #}
-<div id="dashboard-modules" class="flex flex-col gap-4 lg:gap-6 mt-6 max-w-4xl mx-auto">
-    {% for module in modules %}
-        <div data-module-slug="{{ module.slug }}"
-             data-item-id="{{ module.slug }}"
-             id="module-{{ module.slug }}"
-             class="dashboard-module relative">
-            {% if is_premium %}
-                {# Drag handle for premium reordering: floats over module content #}
-                <div class="module-drag-handle hidden absolute top-2 left-2 z-10 cursor-grab opacity-40 hover:opacity-100 transition-opacity bg-base-100/80 rounded p-1" aria-label="Drag to reorder">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <line x1="8" y1="6" x2="21" y2="6"></line>
-                        <line x1="8" y1="12" x2="21" y2="12"></line>
-                        <line x1="8" y1="18" x2="21" y2="18"></line>
-                        <line x1="3" y1="6" x2="3.01" y2="6"></line>
-                        <line x1="3" y1="12" x2="3.01" y2="12"></line>
-                        <line x1="3" y1="18" x2="3.01" y2="18"></line>
-                    </svg>
-                </div>
-            {% endif %}
-
-            {% if module.load_strategy == 'server' %}
-                {% with mod_data=server_module_data|get_item:module.slug %}
-                    {% include module.template with data=mod_data effective_size=module.effective_size %}
-                {% endwith %}
-            {% else %}
-                {# Skeleton placeholder for lazy-loaded modules #}
-                <div class="dashboard-module-skeleton">
-                    <div class="card bg-base-200/80 border-2 border-base-300 shadow-lg shadow-neutral">
-                        <div class="card-body p-4 lg:p-6">
-                            <div class="animate-pulse">
-                                <div class="h-5 bg-base-300 rounded w-1/3 mb-4"></div>
-                                <div class="space-y-3">
-                                    <div class="h-4 bg-base-300 rounded w-full"></div>
-                                    <div class="h-4 bg-base-300 rounded w-2/3"></div>
-                                    <div class="h-20 bg-base-300 rounded w-full"></div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            {% endif %}
-        </div>
+{# ─── System Tab Bar (default categories, immutable) ──────────────────── #}
+<div id="dashboard-tabs" class="max-w-4xl mx-auto mt-4 flex gap-1 p-1 bg-base-200/60 rounded-box border-2 border-base-300" role="tablist">
+    {% for tab in tabs %}
+        {% if not tab.is_custom %}
+        <button role="tab"
+                id="tab-btn-{{ tab.slug }}"
+                class="tab-btn flex-1 flex items-center justify-center gap-1.5 px-2 lg:px-3 py-2.5 rounded-lg text-xs lg:text-sm font-medium transition-all duration-200
+                       {% if tab.is_active %}bg-primary text-primary-content shadow-sm{% else %}text-base-content/60 hover:text-base-content hover:bg-base-300/50{% endif %}"
+                data-tab-slug="{{ tab.slug }}"
+                title="{{ tab.name }}"
+                aria-selected="{{ tab.is_active|yesno:'true,false' }}"
+                aria-controls="tab-panel-{{ tab.slug }}">
+            {% include 'trophies/partials/dashboard/tab_icon.html' with icon=tab.icon size='w-4 h-4' %}
+            <span class="hidden lg:inline">{{ tab.short_name|default:tab.name }}</span>
+        </button>
+        {% endif %}
     {% endfor %}
 </div>
 
-{# ─── Empty State (shown when all modules hidden) ──────────────────────── #}
-<div id="dashboard-empty" class="{% if modules %}hidden{% endif %} text-center py-16 mt-6">
-    <div class="card bg-base-200/80 border-2 border-base-300 shadow-lg shadow-neutral max-w-lg mx-auto">
-        <div class="card-body items-center text-center p-8">
-            <svg xmlns="http://www.w3.org/2000/svg" class="w-16 h-16 text-base-content/30 mb-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-                <rect x="3" y="3" width="7" height="7"></rect>
-                <rect x="14" y="3" width="7" height="7"></rect>
-                <rect x="14" y="14" width="7" height="7"></rect>
-                <rect x="3" y="14" width="7" height="7"></rect>
-            </svg>
-            <h2 class="text-xl font-bold text-base-content/60">All modules hidden</h2>
-            <p class="text-base-content/40 mt-2">Click "Customize" to bring some back.</p>
-        </div>
-    </div>
+{# ─── Custom Tab Bar (premium user-created tabs, rendered below system bar) #}
+{% if custom_tabs %}
+<div id="dashboard-custom-tabs" class="max-w-4xl mx-auto mt-1 flex gap-1 p-1 bg-base-300/30 rounded-lg border border-base-300/50" role="tablist">
+    {% for tab in custom_tabs %}
+        <button role="tab"
+                id="tab-btn-{{ tab.slug }}"
+                class="tab-btn flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all duration-200
+                       {% if tab.is_active %}bg-accent text-accent-content shadow-sm{% else %}text-base-content/50 hover:text-base-content hover:bg-base-300/50{% endif %}"
+                data-tab-slug="{{ tab.slug }}"
+                title="{{ tab.name }}"
+                aria-selected="{{ tab.is_active|yesno:'true,false' }}"
+                aria-controls="tab-panel-{{ tab.slug }}">
+            {% include 'trophies/partials/dashboard/tab_icon.html' with icon=tab.icon size='w-3.5 h-3.5' %}
+            <span>{{ tab.name }}</span>
+        </button>
+    {% endfor %}
 </div>
+{% endif %}
+
+{# ─── Tab Panels ──────────────────────────────────────────────────────── #}
+{% for tab in tabs %}
+    <div id="tab-panel-{{ tab.slug }}"
+         role="tabpanel"
+         aria-labelledby="tab-btn-{{ tab.slug }}"
+         aria-live="polite"
+         class="dashboard-tab-panel {% if not tab.is_active %}hidden{% endif %} flex flex-col gap-4 lg:gap-6 mt-4 max-w-4xl mx-auto"
+         data-tab-slug="{{ tab.slug }}"
+         data-tab-loaded="{{ tab.is_active|yesno:'true,false' }}">
+
+        {% if tab.modules %}
+            {% for module in tab.modules %}
+                <div data-module-slug="{{ module.slug }}"
+                     data-item-id="{{ module.slug }}"
+                     id="module-{{ module.slug }}"
+                     class="dashboard-module relative">
+                    {% if is_premium %}
+                        <div class="module-drag-handle hidden absolute top-2 left-2 z-10 cursor-grab opacity-40 hover:opacity-100 transition-opacity bg-base-100/80 rounded p-1" aria-label="Drag to reorder">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <line x1="8" y1="6" x2="21" y2="6"></line>
+                                <line x1="8" y1="12" x2="21" y2="12"></line>
+                                <line x1="8" y1="18" x2="21" y2="18"></line>
+                                <line x1="3" y1="6" x2="3.01" y2="6"></line>
+                                <line x1="3" y1="12" x2="3.01" y2="12"></line>
+                                <line x1="3" y1="18" x2="3.01" y2="18"></line>
+                            </svg>
+                        </div>
+                    {% endif %}
+
+                    {% if module.load_strategy == 'server' %}
+                        {% with mod_data=server_module_data|get_item:module.slug %}
+                            {% include module.template with data=mod_data effective_size=module.effective_size %}
+                        {% endwith %}
+                    {% else %}
+                        <div class="dashboard-module-skeleton">
+                            <div class="card bg-base-200/80 border-2 border-base-300 shadow-lg shadow-neutral">
+                                <div class="card-body p-4 lg:p-6">
+                                    <div class="animate-pulse">
+                                        <div class="h-5 bg-base-300 rounded w-1/3 mb-4"></div>
+                                        <div class="space-y-3">
+                                            <div class="h-4 bg-base-300 rounded w-full"></div>
+                                            <div class="h-4 bg-base-300 rounded w-2/3"></div>
+                                            <div class="h-20 bg-base-300 rounded w-full"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    {% endif %}
+                </div>
+            {% endfor %}
+        {% else %}
+            {# Empty state for this tab #}
+            <div class="text-center py-12">
+                <div class="card bg-base-200/80 border-2 border-base-300 shadow-lg shadow-neutral max-w-md mx-auto">
+                    <div class="card-body items-center text-center p-8">
+                        {% include 'trophies/partials/dashboard/tab_icon.html' with icon=tab.icon size='w-12 h-12 text-base-content/20 mb-3' %}
+                        <h3 class="text-lg font-bold text-base-content/50">{{ tab.name }}</h3>
+                        <p class="text-base-content/40 text-sm mt-1">
+                            {% if tab.slug == 'premium' and not is_premium %}
+                                Unlock premium modules for advanced analytics, custom themes, and more.
+                            {% else %}
+                                New modules coming soon. Stay tuned, hunter!
+                            {% endif %}
+                        </p>
+                        {% if tab.slug == 'premium' and not is_premium %}
+                            <a href="/users/subscribe/" class="btn btn-warning btn-sm mt-3 gap-1">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M5 16L3 5l5.5 5L12 4l3.5 6L21 5l-2 11H5z"/><rect x="5" y="18" width="14" height="3" rx="1"/></svg>
+                                Upgrade to Premium
+                            </a>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        {% endif %}
+    </div>
+{% endfor %}
 
 {# ─── Customize Modal ──────────────────────────────────────────────────── #}
 <dialog id="customize-modal" class="modal">
@@ -150,11 +204,20 @@ document.addEventListener('DOMContentLoaded', () => {
         maxFreeHidden: {{ max_free_hidden }},
         hiddenModules: {{ dashboard_config.hidden_modules|tojson }},
         moduleSettings: {{ dashboard_config.module_settings|tojson }},
-        lazyModules: [
-            {% for module in modules %}{% if module.load_strategy == 'lazy' %}
-            { slug: '{{ module.slug }}', elementId: 'module-{{ module.slug }}' },
-            {% endif %}{% endfor %}
-        ],
+        tabConfig: {{ dashboard_config.tab_config|tojson }},
+        tabs: {
+            {% for tab in tabs %}
+            '{{ tab.slug }}': {
+                name: '{{ tab.name }}',
+                isActive: {{ tab.is_active|yesno:"true,false" }},
+                lazyModules: [
+                    {% for module in tab.modules %}{% if module.load_strategy == 'lazy' %}
+                    { slug: '{{ module.slug }}', elementId: 'module-{{ module.slug }}' },
+                    {% endif %}{% endfor %}
+                ],
+            },
+            {% endfor %}
+        },
     });
     dashboard.init();
 

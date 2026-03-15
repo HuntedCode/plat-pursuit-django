@@ -155,6 +155,55 @@ class DashboardConfigUpdateView(StaffRequiredAPIMixin, View):
                 config.module_order = [s for s in order if s in valid_slugs]
                 fields_to_update.append('module_order')
 
+        # Update tab_config
+        if 'tab_config' in body:
+            tab_data = body['tab_config']
+            if isinstance(tab_data, dict):
+                from trophies.services.dashboard_service import DEFAULT_TAB_ORDER
+                existing_tabs = config.tab_config or {}
+
+                # active_tab: all users can save their last active tab
+                if 'active_tab' in tab_data and isinstance(tab_data['active_tab'], str):
+                    active = tab_data['active_tab']
+                    # Validate against known tabs (defaults + any custom tabs)
+                    known_tabs = set(DEFAULT_TAB_ORDER)
+                    known_tabs.update((existing_tabs.get('custom_tabs') or {}).keys())
+                    if active in known_tabs:
+                        existing_tabs['active_tab'] = active
+
+                # Premium-only tab customizations
+                if is_premium:
+                    if 'tab_order' in tab_data and isinstance(tab_data['tab_order'], list):
+                        existing_tabs['tab_order'] = tab_data['tab_order']
+                    if 'custom_tabs' in tab_data and isinstance(tab_data['custom_tabs'], dict):
+                        from trophies.services.dashboard_service import VALID_TAB_ICONS
+                        import re
+                        sanitized = {}
+                        for k, v in tab_data['custom_tabs'].items():
+                            if k in DEFAULT_TAB_ORDER or not isinstance(v, dict):
+                                continue
+                            # Validate slug format
+                            if not re.match(r'^[a-z0-9_]+$', k) or len(k) > 50:
+                                continue
+                            # Validate tab name
+                            name = str(v.get('name', '')).strip()
+                            if not name or len(name) > 20:
+                                continue
+                            # Validate icon
+                            icon = v.get('icon', 'star')
+                            if icon not in VALID_TAB_ICONS:
+                                icon = 'star'
+                            sanitized[k] = {'name': name, 'icon': icon}
+                        # Max 6 custom tabs
+                        if len(sanitized) > 6:
+                            sanitized = dict(list(sanitized.items())[:6])
+                        existing_tabs['custom_tabs'] = sanitized
+                    if 'module_tab_overrides' in tab_data and isinstance(tab_data['module_tab_overrides'], dict):
+                        existing_tabs['module_tab_overrides'] = tab_data['module_tab_overrides']
+
+                config.tab_config = existing_tabs
+                fields_to_update.append('tab_config')
+
         config.save(update_fields=fields_to_update)
 
         return JsonResponse({
