@@ -101,6 +101,9 @@
 
 {# Color Grid Modal - for background selection in platinum notifications #}
 {% include 'partials/color_grid_modal.html' with available_themes=available_themes %}
+
+{# Rate Before Download Modal - prompts unrated users to rate before downloading share card #}
+{% include 'partials/rate_before_download_modal.html' %}
 {% endblock %}
 
 {% block js_scripts %}
