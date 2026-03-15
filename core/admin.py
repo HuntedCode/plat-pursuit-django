@@ -59,7 +59,7 @@ class AnalyticsSessionAdmin(admin.ModelAdmin):
     list_per_page = 100
     actions = [_export_sessions_csv]
     readonly_fields = ('session_id', 'user_id', 'ip_address', 'created_at',
-                       'last_activity', 'ended_at', 'page_count', 'page_sequence',
+                       'last_activity', 'ended_at', 'page_count',
                        'referrer', 'user_agent')
 
     def has_add_permission(self, request):

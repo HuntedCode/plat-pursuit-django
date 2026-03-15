@@ -23,10 +23,8 @@ class AnalyticsSession(models.Model):
     last_activity = models.DateTimeField(auto_now=True, db_index=True)
     ended_at = models.DateTimeField(null=True, blank=True, help_text="Session end time (optional)")
 
-    # Engagement metrics (for future analytics)
+    # Engagement metrics
     page_count = models.PositiveIntegerField(default=0, help_text="Number of pages viewed in this session")
-    page_sequence = models.JSONField(default=list, blank=True,
-                                       help_text="Sequence of pages visited: [{'page_type': ..., 'object_id': ..., 'timestamp': ...}]")
 
     # Traffic source (for future analysis)
     referrer = models.URLField(max_length=500, blank=True, null=True, help_text="HTTP Referer header")

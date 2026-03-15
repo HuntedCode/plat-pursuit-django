@@ -52,7 +52,7 @@ Workers consume from all 5 queues via priority-ordered `brpop`.
 | `sync_complete_in_progress:{profile_id}` | String (NX lock) | 1800s (30m) | Prevents duplicate concurrent `_job_sync_complete` runs |
 | `sync_complete_semaphore` | String (int) | None | Global counter of currently running sync_complete operations |
 | `sync_complete_holder:{profile_id}` | String | 1800s (30m) | Per-holder lease for semaphore crash safety |
-| `sync:sync_complete_max_concurrent` | String (int) | None | Configurable max concurrent sync_completes (default: 3) |
+| `sync:sync_complete_max_concurrent` | String (int) | None | Configurable max concurrent sync_completes (default: 12) |
 
 **Files**: `trophies/psn_manager.py`, `trophies/token_keeper.py`, `trophies/views/sync_views.py`
 

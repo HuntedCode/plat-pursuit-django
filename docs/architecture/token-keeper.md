@@ -320,7 +320,7 @@ A Redis-based semaphore limits how many `sync_complete` operations can run concu
 **Redis keys:**
 - `sync_complete_semaphore` (string/int, no TTL): Global counter of currently running sync_completes
 - `sync_complete_holder:{profile_id}` (string, 1800s TTL): Per-holder lease for crash safety
-- `sync:sync_complete_max_concurrent` (string/int, no TTL): Configurable max (env: `SYNC_COMPLETE_MAX_CONCURRENT`, default: 3)
+- `sync:sync_complete_max_concurrent` (string/int, no TTL): Configurable max (env: `SYNC_COMPLETE_MAX_CONCURRENT`, default: 12)
 
 **Behavior when full**: The job stores its data back to `pending_sync_complete:{profile_id}`, waits 3 seconds, then re-queues to the orchestrator queue. The worker thread is briefly occupied during the wait, which is intentional to apply back-pressure.
 

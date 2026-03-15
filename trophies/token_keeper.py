@@ -222,7 +222,7 @@ class TokenKeeper:
                 stats = self.stats
                 max_concurrent = int(
                     redis_client.get("sync:sync_complete_max_concurrent")
-                    or os.getenv("SYNC_COMPLETE_MAX_CONCURRENT", 3)
+                    or os.getenv("SYNC_COMPLETE_MAX_CONCURRENT", 12)
                 )
                 stats_with_id = {
                     "machine_id": self.machine_id,
@@ -911,7 +911,7 @@ class TokenKeeper:
         """
         max_concurrent = int(
             redis_client.get("sync:sync_complete_max_concurrent")
-            or os.getenv("SYNC_COMPLETE_MAX_CONCURRENT", 3)
+            or os.getenv("SYNC_COMPLETE_MAX_CONCURRENT", 12)
         )
 
         holder_key = f"sync_complete_holder:{profile_id}"

@@ -73,7 +73,7 @@ class Command(BaseCommand):
         group.add_argument(
             '--set-sync-complete-max',
             type=int,
-            help='Set the max concurrent sync_complete operations (default: 3).'
+            help='Set the max concurrent sync_complete operations (default: 12).'
         )
 
     def handle(self, *args, **options):
