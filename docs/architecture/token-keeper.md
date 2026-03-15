@@ -307,9 +307,26 @@ This defensive approach ensures no game is left without a concept, which would b
 
 `_get_instance_for_job()` uses a Redis SET NX lock (`instance_lock:{machine_id}:{group_id}:{inst_id}`) with a 5-minute expiry as a safety net. After acquiring the Redis lock, it double-checks `inst.is_busy` in memory. If the in-memory flag was already set by another thread, the Redis lock is released immediately. This two-layer locking prevents both cross-machine and cross-thread conflicts.
 
-### DB Connection Cleanup
+### DB Connection Management
 
-Every job worker iteration closes the Django DB connection in the `finally` block (`connection.close()`). This prevents connection pool exhaustion from long-lived worker threads holding stale connections.
+Worker threads rely on Django's `CONN_MAX_AGE=600` for connection lifecycle management. Django automatically closes and reopens connections older than 600 seconds via `ensure_connection()`. With N worker threads, this means N persistent DB connections recycled every 10 minutes.
+
+**History**: Previously, every job worker iteration called `connection.close()` in the `finally` block to prevent pool exhaustion. This was removed because it forced a new TCP+TLS handshake per job, causing significant CPU overhead on the database at scale (24 workers = dozens of TLS handshakes/second).
+
+### sync_complete Concurrency Semaphore
+
+A Redis-based semaphore limits how many `sync_complete` operations can run concurrently across all TokenKeeper instances. Each sync_complete runs multiple heavy aggregate queries (COUNT/SUM/MAX with GROUP BY) that can saturate database CPU when too many run simultaneously.
+
+**Redis keys:**
+- `sync_complete_semaphore` (string/int, no TTL): Global counter of currently running sync_completes
+- `sync_complete_holder:{profile_id}` (string, 1800s TTL): Per-holder lease for crash safety
+- `sync:sync_complete_max_concurrent` (string/int, no TTL): Configurable max (env: `SYNC_COMPLETE_MAX_CONCURRENT`, default: 3)
+
+**Behavior when full**: The job stores its data back to `pending_sync_complete:{profile_id}`, waits 3 seconds, then re-queues to the orchestrator queue. The worker thread is briefly occupied during the wait, which is intentional to apply back-pressure.
+
+**Crash safety**: Each holder sets a TTL-guarded key. The health loop runs `_reconcile_sync_complete_semaphore()` every 60 seconds, counting actual holder keys via SCAN and correcting the counter if it drifts (e.g., after a worker crash where the holder key expired but the counter was never decremented).
+
+**Tuning**: Use `python manage.py redis_admin --set-sync-complete-max N` to adjust at runtime without restarting TokenKeeper. Use `--get-sync-complete-max` to see current setting and active count.
 
 ### API Audit Log IP Lookup
 

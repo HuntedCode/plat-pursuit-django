@@ -220,7 +220,18 @@ class TokenKeeper:
             time.sleep(self.stats_interval)
             try:
                 stats = self.stats
-                stats_with_id = {"machine_id": self.machine_id, "instances": stats}
+                max_concurrent = int(
+                    redis_client.get("sync:sync_complete_max_concurrent")
+                    or os.getenv("SYNC_COMPLETE_MAX_CONCURRENT", 3)
+                )
+                stats_with_id = {
+                    "machine_id": self.machine_id,
+                    "instances": stats,
+                    "sync_complete_semaphore": {
+                        "current": int(redis_client.get("sync_complete_semaphore") or 0),
+                        "max": max_concurrent,
+                    },
+                }
                 redis_client.publish(f"token_keeper_stats:{self.machine_id}", json.dumps(stats_with_id))
                 redis_client.set(f"token_keeper_latest_stats:{self.machine_id}", json.dumps(stats_with_id), ex=60)
             except Exception as e:
@@ -361,6 +372,8 @@ class TokenKeeper:
             # Check for stuck syncing profiles on every health loop iteration
             self._check_stuck_syncing_profiles()
             self._check_high_sync_volume()
+            # Reconcile sync_complete semaphore to handle crashed workers
+            self._reconcile_sync_complete_semaphore()
             for group_id, group in self.group_instances.items():
                 for instance_id, inst in group['instances'].items():
                     self._check_and_refresh(inst)
@@ -556,8 +569,11 @@ class TokenKeeper:
             finally:
                 if profile_id and queue_name not in ('high_priority', 'orchestrator') and not requeued:
                     self._complete_job(profile_id, queue_name)
-                # Close stale DB connections to prevent pool exhaustion
-                connection.close()
+                # Django's CONN_MAX_AGE (600s) handles stale connection recycling
+                # automatically. Avoid closing here: each close() forces a new
+                # TCP+TLS handshake on the next query, which is expensive at
+                # scale (24 workers = dozens of TLS handshakes/sec on the DB).
+                pass
 
     @retry(stop=stop_after_attempt(5), wait=wait_fixed(0.2))
     def _complete_job(self, profile_id, queue_name):
@@ -882,9 +898,105 @@ class TokenKeeper:
         time.sleep(60)
         instance.last_health = time.time()
         
+    # --- sync_complete concurrency semaphore ---
+
+    def _acquire_sync_complete_slot(self, profile_id: int) -> bool:
+        """Try to acquire a global sync_complete semaphore slot.
+
+        Limits how many sync_complete operations can run concurrently across
+        all TokenKeeper instances. Uses INCR/DECR with per-holder TTL keys
+        for crash safety.
+
+        Returns True if acquired, False if the semaphore is full.
+        """
+        max_concurrent = int(
+            redis_client.get("sync:sync_complete_max_concurrent")
+            or os.getenv("SYNC_COMPLETE_MAX_CONCURRENT", 3)
+        )
+
+        holder_key = f"sync_complete_holder:{profile_id}"
+
+        # Already holding a slot (re-entrant call, defensive)
+        if redis_client.exists(holder_key):
+            return True
+
+        # Atomically increment and check
+        current = redis_client.incr("sync_complete_semaphore")
+
+        if current <= max_concurrent:
+            # Successfully acquired: set holder lease with TTL for crash safety
+            redis_client.set(holder_key, "1", ex=1800)
+            return True
+        else:
+            # Over limit: decrement back and reject
+            redis_client.decr("sync_complete_semaphore")
+            return False
+
+    def _release_sync_complete_slot(self, profile_id: int):
+        """Release the global sync_complete semaphore slot."""
+        holder_key = f"sync_complete_holder:{profile_id}"
+        if redis_client.exists(holder_key):
+            redis_client.delete(holder_key)
+            redis_client.decr("sync_complete_semaphore")
+            # Floor the counter at 0 to prevent drift from edge cases
+            current = int(redis_client.get("sync_complete_semaphore") or 0)
+            if current < 0:
+                redis_client.set("sync_complete_semaphore", 0)
+
+    def _reconcile_sync_complete_semaphore(self):
+        """Reconcile the semaphore counter against actual holder keys.
+
+        If a worker crashes while holding a semaphore slot, the holder key
+        expires (30 min TTL) but the counter won't be decremented.
+        This check fixes the drift. Called from the health loop every 60s.
+        """
+        try:
+            actual_holders = 0
+            cursor = 0
+            while True:
+                cursor, keys = redis_client.scan(
+                    cursor=cursor, match="sync_complete_holder:*", count=100
+                )
+                actual_holders += len(keys)
+                if cursor == 0:
+                    break
+
+            current_counter = int(redis_client.get("sync_complete_semaphore") or 0)
+
+            if current_counter != actual_holders:
+                logger.warning(
+                    f"Sync complete semaphore drift detected: "
+                    f"counter={current_counter}, actual_holders={actual_holders}. Correcting."
+                )
+                redis_client.set("sync_complete_semaphore", actual_holders)
+        except Exception as e:
+            logger.error(f"Error reconciling sync_complete semaphore: {e}")
+
     # Job Requests
 
     def _job_sync_complete(self, profile_id: int, touched_profilegame_ids: list[int], queue_name: str):
+        # Global concurrency limiter: prevent too many sync_completes from
+        # running simultaneously across all TokenKeeper instances.
+        if not self._acquire_sync_complete_slot(profile_id):
+            logger.info(
+                f"sync_complete for profile {profile_id} throttled "
+                f"(global semaphore full), re-queuing with delay"
+            )
+            pending_key = f"pending_sync_complete:{profile_id}"
+            pending_data = json.dumps({
+                'touched_profilegame_ids': touched_profilegame_ids,
+                'queue_name': queue_name
+            })
+            redis_client.set(pending_key, pending_data, ex=21600)
+            time.sleep(3)
+            PSNManager.assign_job(
+                'sync_complete',
+                args=[touched_profilegame_ids, queue_name],
+                profile_id=profile_id,
+                priority_override='orchestrator'
+            )
+            return
+
         sync_complete_key = f"sync_complete_in_progress:{profile_id}"
 
         # Atomic guard: only one sync_complete runs at a time per profile.
@@ -897,6 +1009,7 @@ class TokenKeeper:
                 'queue_name': queue_name
             })
             redis_client.set(pending_key, pending_data, ex=21600)
+            self._release_sync_complete_slot(profile_id)
             return
 
         try:
@@ -904,6 +1017,7 @@ class TokenKeeper:
         except Profile.DoesNotExist:
             logger.error(f"Profile {profile_id} does not exist.")
             redis_client.delete(sync_complete_key)
+            self._release_sync_complete_slot(profile_id)
             return
         job_type = 'sync_complete'
 
@@ -939,46 +1053,73 @@ class TokenKeeper:
                 mismatch_count = 0
                 pgame_drift_count = 0
                 games_checked = 0
+
+                # --- Pre-fetch data to avoid N+1 queries in the health check loop ---
+                from django.db.models import Count as _Count, Q as _Q
+
+                # 1. Map np_communication_id -> Game for all known games
+                _game_by_np = {
+                    g.np_communication_id: g
+                    for g in Game.objects.filter(played_by__profile=profile)
+                }
+
+                # 2. Earned trophy counts per game (only total needed for comparison)
+                _earned_by_game = dict(
+                    EarnedTrophy.objects.filter(profile=profile, earned=True)
+                    .values('trophy__game_id')
+                    .annotate(total=_Count('id'))
+                    .values_list('trophy__game_id', 'total')
+                )
+
+                # 3. ProfileGames keyed by game_id
+                _pgame_by_game = {pg.game_id: pg for pg in current_tracked_games}
+
+                # 4. Game IDs missing TrophyGroup records
+                _games_missing_groups = set(
+                    Game.objects.filter(played_by__profile=profile)
+                    .annotate(group_count=_Count('trophy_groups'))
+                    .filter(group_count=0)
+                    .values_list('id', flat=True)
+                )
+
                 while is_full:
                     titles = self._execute_api_call(self._get_instance_for_job(job_type), profile, 'trophy_titles', limit=limit, offset=offset, page_size=page_size)
                     for title in titles:
-                        try:
-                            game, tracked = PsnApiService.get_tracked_trophies_for_game(profile, title.np_communication_id)
-                        except Game.DoesNotExist:
-                            game, _, _ = PsnApiService.create_or_update_game(title)
-                            tracked = {'total': 0}  # Initialize tracked if game was just created
-                            # Health check only queues sync_trophies, which has no concept
-                            # assignment pathway. Assign a default concept so the game
-                            # is never left without one.
-                            if game.concept is None:
-                                try:
-                                    default_concept = Concept.create_default_concept(game)
-                                    game.add_concept(default_concept)
-                                    logger.info(f"Health check: created default concept for {game.title_name}")
-                                except Exception:
-                                    logger.exception(f"Health check: failed to create default concept for {game.title_name}")
+                        game = _game_by_np.get(title.np_communication_id)
+                        if game is None:
+                            # Game not in our DB yet
+                            try:
+                                game = Game.objects.get(np_communication_id=title.np_communication_id)
+                                _game_by_np[title.np_communication_id] = game
+                            except Game.DoesNotExist:
+                                game, _, _ = PsnApiService.create_or_update_game(title)
+                                _game_by_np[title.np_communication_id] = game
+                                _earned_by_game[game.id] = 0
+                                if game.concept is None:
+                                    try:
+                                        default_concept = Concept.create_default_concept(game)
+                                        game.add_concept(default_concept)
+                                        logger.info(f"Health check: created default concept for {game.title_name}")
+                                    except Exception:
+                                        logger.exception(f"Health check: failed to create default concept for {game.title_name}")
 
-                        pgame = None
-                        try:
-                            pgame = ProfileGame.objects.get(profile=profile, game=game)
+                        tracked_total = _earned_by_game.get(game.id, 0)
+
+                        pgame = _pgame_by_game.get(game.id)
+                        if pgame and pgame in current_tracked_games:
                             current_tracked_games.remove(pgame)
-                        except ProfileGame.DoesNotExist:
-                            pass
-                        except ValueError:
-                            # pgame already removed from current_tracked_games
-                            pass
 
                         title_total = title.earned_trophies.bronze + title.earned_trophies.silver + title.earned_trophies.gold + title.earned_trophies.platinum
-                        if tracked['total'] != title_total:
+                        if tracked_total != title_total:
                             has_mismatch = True
                             mismatch_count += 1
                             trophy_titles_to_be_updated.append({'title': title, 'game': game})
-                        elif pgame and tracked['total'] != pgame.earned_trophies_count and pgame.id not in touched_profilegame_ids:
+                        elif pgame and tracked_total != pgame.earned_trophies_count and pgame.id not in touched_profilegame_ids:
                             pgame_drift_count += 1
                             touched_profilegame_ids.append(pgame.id)
 
-                        # Check if game is missing TrophyGroup records
-                        if not TrophyGroup.objects.filter(game=game).exists():
+                        # Check if game is missing TrophyGroup records (pre-fetched)
+                        if game.id in _games_missing_groups:
                             games_needing_groups.append(game)
 
                         games_checked += 1
@@ -1252,6 +1393,7 @@ class TokenKeeper:
             # Always clear the sync_complete in-progress flag, even on error
             redis_client.delete(sync_complete_key)
             redis_client.delete(f"sync_started_at:{profile_id}")
+            self._release_sync_complete_slot(profile_id)
 
     def _job_handle_privacy_error(self, profile_id: int):
         try:

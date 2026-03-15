@@ -65,6 +65,16 @@ class Command(BaseCommand):
             action='store_true',
             help='Move sync_trophies jobs from low_priority to bulk_priority for profiles exceeding the bulk threshold.'
         )
+        group.add_argument(
+            '--get-sync-complete-max',
+            action='store_true',
+            help='Get the current max concurrent sync_complete operations.'
+        )
+        group.add_argument(
+            '--set-sync-complete-max',
+            type=int,
+            help='Set the max concurrent sync_complete operations (default: 3).'
+        )
 
     def handle(self, *args, **options):
         if not settings.DEBUG:
@@ -92,6 +102,10 @@ class Command(BaseCommand):
             self._handle_set_bulk_threshold(options['set_bulk_threshold'])
         elif options['move_whale_jobs']:
             self._handle_move_whale_jobs()
+        elif options['get_sync_complete_max']:
+            self._handle_get_sync_complete_max()
+        elif options['set_sync_complete_max'] is not None:
+            self._handle_set_sync_complete_max(options['set_sync_complete_max'])
 
     def _confirm_action(self, action_desc):
         confirm = input(f"Are you sure you want to {action_desc}? (y/n):").strip().lower()
@@ -218,8 +232,8 @@ class Command(BaseCommand):
             for queue in queues:
                 deleted_count += redis_client.delete(queue)
 
-            # Clear profile_jobs:* (all queues), sync locks, orchestrator pending flags, and dedup sets
-            for pattern in ['profile_jobs:*', 'deferred_jobs:*', 'pending_sync_complete:*', 'sync_started_at:*', 'sync_trophies_lock:*', 'shovelware_concept_lock:*', 'sync_orchestrator_pending:*', 'sync_queued_games:*', 'sync_complete_in_progress:*']:
+            # Clear profile_jobs:* (all queues), sync locks, orchestrator pending flags, dedup sets, and semaphore holders
+            for pattern in ['profile_jobs:*', 'deferred_jobs:*', 'pending_sync_complete:*', 'sync_started_at:*', 'sync_trophies_lock:*', 'shovelware_concept_lock:*', 'sync_orchestrator_pending:*', 'sync_queued_games:*', 'sync_complete_in_progress:*', 'sync_complete_holder:*']:
                 matching_keys = redis_client.keys(pattern)
                 if matching_keys:
                     deleted_count += redis_client.delete(*matching_keys)
@@ -229,6 +243,9 @@ class Command(BaseCommand):
 
             # Clear high sync volume banner flag
             deleted_count += redis_client.delete('site:high_sync_volume')
+
+            # Clear sync_complete semaphore counter
+            deleted_count += redis_client.delete('sync_complete_semaphore')
 
             logger.info(f"Flushed {deleted_count} TokenKeeper-related keys/queues.")
             self.stdout.write(self.style.SUCCESS(f"Flushed {deleted_count} TokenKeeper queues and profiles."))
@@ -393,4 +410,29 @@ class Command(BaseCommand):
             self.stdout.write(self.style.SUCCESS(f"Done! Moved {total_moved} total jobs to bulk_priority."))
         except Exception as e:
             logger.exception(f"Error during whale job migration: {e}")
+            self.stdout.write(self.style.ERROR(f"Error: {e}"))
+
+    def _handle_get_sync_complete_max(self):
+        try:
+            value = redis_client.get('sync:sync_complete_max_concurrent')
+            current = int(redis_client.get('sync_complete_semaphore') or 0)
+            if value is None:
+                self.stdout.write(f"Max concurrent sync_completes: not set (default: 3)")
+            else:
+                self.stdout.write(f"Max concurrent sync_completes: {int(value)}")
+            self.stdout.write(f"Currently running: {current}")
+        except Exception as e:
+            logger.exception(f"Error reading sync_complete max: {e}")
+            self.stdout.write(self.style.ERROR(f"Error: {e}"))
+
+    def _handle_set_sync_complete_max(self, value: int):
+        if value < 1:
+            self.stdout.write(self.style.ERROR("Max concurrent must be at least 1."))
+            return
+        try:
+            redis_client.set('sync:sync_complete_max_concurrent', str(value))
+            logger.info(f"Max concurrent sync_completes set to {value}.")
+            self.stdout.write(self.style.SUCCESS(f"Max concurrent sync_completes set to {value}."))
+        except Exception as e:
+            logger.exception(f"Error setting sync_complete max: {e}")
             self.stdout.write(self.style.ERROR(f"Error: {e}"))
