@@ -247,18 +247,9 @@ Milestones use a **handler registry pattern**:
 
 ### Leaderboard Calculation
 
-Leaderboards are computed by management command (`update_leaderboards`) and cached in Redis. They are NOT computed on-the-fly.
+Leaderboards are maintained in Redis sorted sets with incremental signal-driven updates. A reconciliation cron rebuilds from source data periodically. See [Leaderboard System](leaderboard-system.md) for full architecture, computation details, Redis keys, and gotchas.
 
-**Four leaderboard types per badge series:**
-1. **Earners** (`lb_earners_{slug}`): Users ranked by highest tier earned, then earliest earn date. One entry per user (highest tier only), computed via SQL window function (`RowNumber` partitioned by profile).
-2. **Progress** (`lb_progress_{slug}`): Users ranked by trophy counts within series games (plats > golds > silvers > bronzes > earliest date).
-3. **Community XP** (`lb_community_xp_{slug}`): Aggregate XP for a series across all users, extracted from ProfileGamification's JSONField via RawSQL.
-
-**Two global leaderboards:**
-4. **Total Progress** (`lb_total_progress`): Same as series progress but across ALL badge-related games.
-5. **Total XP** (`lb_total_xp`): Users ranked by `ProfileGamification.total_badge_xp`.
-
-Cache TTL is 7 hours (25,200 seconds). Companion keys `{key}_refresh_time` store ISO timestamps of last computation.
+**Five leaderboard types:** three per-series (earners, progress, community XP) and two global (total progress, total XP). User rank lookups use `ZREVRANK` for O(log n) lookups. Pagination uses `ZREVRANGE` to fetch only the requested page.
 
 ## Integration Points
 

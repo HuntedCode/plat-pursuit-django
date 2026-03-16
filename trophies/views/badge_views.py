@@ -26,6 +26,13 @@ from ..models import (
     UserTitle, ProfileGamification,
 )
 from ..forms import BadgeSearchForm
+from trophies.services.redis_leaderboard_service import (
+    RedisPaginator, RedisPage,
+    get_xp_page, get_xp_rank, get_xp_count,
+    get_earners_page, get_earners_rank, get_earners_count,
+    get_progress_page, get_progress_rank, get_progress_count,
+    get_community_xp,
+)
 from trophies.milestone_constants import (
     MILESTONE_CATEGORIES, CRITERIA_TYPE_DISPLAY_NAMES,
     CALENDAR_MONTH_TYPES, ONE_OFF_TYPES,
@@ -467,23 +474,19 @@ class BadgeDetailView(ProfileHotbarMixin, DetailView):
         user_games_played = 0
         user_platinums = 0
         series_slug = self.kwargs['series_slug']
-        lb_earners = cache.get(f"lb_earners_{series_slug}", [])
-        lb_progress = cache.get(f"lb_progress_{series_slug}", [])
         if target_profile:
             try:
                 xp_data = target_profile.gamification.series_badge_xp
                 user_series_xp = (xp_data or {}).get(series_slug, 0)
             except Exception:
                 pass
-            user_psn = target_profile.display_psn_username
-            for idx, entry in enumerate(lb_earners):
-                if entry['psn_username'] == user_psn:
-                    user_lb_rank = idx + 1
-                    break
-            for idx, entry in enumerate(lb_progress):
-                if entry['psn_username'] == user_psn:
-                    user_lb_progress_rank = idx + 1
-                    break
+
+            earners_rank = get_earners_rank(series_slug, target_profile.id)
+            if earners_rank:
+                user_lb_rank = earners_rank
+            progress_rank = get_progress_rank(series_slug, target_profile.id)
+            if progress_rank:
+                user_lb_progress_rank = progress_rank
 
             # User playtime stats from already-fetched profile_games
             total_duration = timedelta()
@@ -587,8 +590,8 @@ class BadgeDetailView(ProfileHotbarMixin, DetailView):
             for tier, count in max_tier_counts.items()
         }
 
-        # Community total XP for this series (cached by update_leaderboards cron)
-        community_total_xp = cache.get(f"lb_community_xp_{series_slug}", 0)
+        # Community total XP for this series
+        community_total_xp = get_community_xp(series_slug)
 
         # Total series XP available (sum across all tiers, no new queries)
         # Uses actual stage counts from structured_data instead of badge.required_stages,
@@ -747,7 +750,7 @@ class BadgeLeaderboardsView(ProfileHotbarMixin, DetailView):
     1. Earners - Users who have earned the highest tier
     2. Progress - Users making progress on the badge series
 
-    Leaderboards are cached and refreshed periodically. Shows user's rank if authenticated.
+    Leaderboard data is served from Redis sorted sets with near-real-time updates.
     """
     model = Badge
     template_name = 'trophies/badge_leaderboards.html'
@@ -767,53 +770,49 @@ class BadgeLeaderboardsView(ProfileHotbarMixin, DetailView):
         badge = self.object
         series_slug = badge.series_slug
         user = self.request.user
+        paginate_by = 50
 
-        earners_key = f"lb_earners_{series_slug}"
-        progress_key = f"lb_progress_{series_slug}"
+        earners_page_num = max(1, int(self.request.GET.get('lb_earners_page', 1) or 1))
+        progress_page_num = max(1, int(self.request.GET.get('lb_progress_page', 1) or 1))
 
-        lb_earners = cache.get(earners_key, [])
-        lb_earners_paginate_by = 50
-        lb_progress = cache.get(progress_key, [])
-        lb_progress_paginate_by = 50
+        # Earners leaderboard
+        earners_total = get_earners_count(series_slug)
+        earners_entries = get_earners_page(series_slug, earners_page_num, paginate_by)
+        earners_paginator = RedisPaginator(earners_total, paginate_by)
+        earners_page_num = min(earners_page_num, earners_paginator.num_pages)
+        context['lb_earners_page_obj'] = RedisPage(earners_entries, earners_page_num, earners_paginator)
+        context['lb_earners_paginator'] = earners_paginator
 
-        context['lb_earners_refresh_time'] = cache.get(f"{earners_key}_refresh_time")
-        context['lb_progress_refresh_time'] = cache.get(f"{progress_key}_refresh_time")
+        # Progress leaderboard
+        progress_total = get_progress_count(series_slug)
+        progress_entries = get_progress_page(series_slug, progress_page_num, paginate_by)
+        progress_paginator = RedisPaginator(progress_total, paginate_by)
+        progress_page_num = min(progress_page_num, progress_paginator.num_pages)
+        context['lb_progress_page_obj'] = RedisPage(progress_entries, progress_page_num, progress_paginator)
+        context['lb_progress_paginator'] = progress_paginator
 
         if user.is_authenticated and hasattr(user, 'profile'):
-            # Find user profile
-            user_psn = user.profile.display_psn_username
-            for idx, entry in enumerate(lb_earners):
-                if entry['psn_username'] == user_psn:
-                    context['lb_earners_user_page'] = (idx // lb_earners_paginate_by) + 1
-                    context['lb_earners_user_rank'] = idx + 1
-                    break
-            for idx, entry in enumerate(lb_progress):
-                if entry['psn_username'] == user_psn:
-                    context['lb_progress_user_page'] = (idx // lb_progress_paginate_by) + 1
-                    context['lb_progress_user_rank'] = idx + 1
-                    break
+            profile = user.profile
+            earners_rank = get_earners_rank(series_slug, profile.id)
+            if earners_rank:
+                context['lb_earners_user_rank'] = earners_rank
+                context['lb_earners_user_page'] = (earners_rank - 1) // paginate_by + 1
+            progress_rank = get_progress_rank(series_slug, profile.id)
+            if progress_rank:
+                context['lb_progress_user_rank'] = progress_rank
+                context['lb_progress_user_page'] = (progress_rank - 1) // paginate_by + 1
 
             # User stats for this series
             highest_user_badge = UserBadge.objects.filter(
-                profile=user.profile, badge__series_slug=series_slug
+                profile=profile, badge__series_slug=series_slug
             ).select_related('badge').order_by('-badge__tier').first()
             context['user_highest_tier'] = highest_user_badge.badge.tier if highest_user_badge else 0
 
             try:
-                gamification = user.profile.gamification
+                gamification = profile.gamification
                 context['user_series_xp'] = gamification.series_badge_xp.get(series_slug, 0)
             except ProfileGamification.DoesNotExist:
                 context['user_series_xp'] = 0
-
-        lb_earners_paginator = Paginator(lb_earners, lb_earners_paginate_by)
-        lb_earners_page = self.request.GET.get('lb_earners_page', 1)
-        context['lb_earners_page_obj'] = lb_earners_paginator.get_page(lb_earners_page)
-        context['lb_earners_paginator'] = lb_earners_paginator
-
-        lb_progress_paginator = Paginator(lb_progress, lb_progress_paginate_by)
-        lb_progress_page = self.request.GET.get('lb_progress_page', 1)
-        context['lb_progress_page_obj'] = lb_progress_paginator.get_page(lb_progress_page)
-        context['lb_progress_paginator'] = lb_progress_paginator
 
         context['badge'] = badge
         if badge.most_recent_concept:
@@ -844,57 +843,53 @@ class OverallBadgeLeaderboardsView(ProfileHotbarMixin, TemplateView):
     1. Total XP - Users with the most badge experience points
     2. Total Progress - Users with the most badge completion percentage
 
-    Leaderboards are cached and refreshed periodically. Shows user's rank if authenticated.
+    Data is served from Redis sorted sets with near-real-time updates.
     """
     template_name = 'trophies/overall_badge_leaderboards.html'
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         user = self.request.user
+        paginate_by = 50
 
-        xp_key = "lb_total_xp"
-        progress_key = "lb_total_progress"
+        xp_page_num = max(1, int(self.request.GET.get('lb_total_xp_page', 1) or 1))
+        progress_page_num = max(1, int(self.request.GET.get('lb_total_progress_page', 1) or 1))
 
-        lb_total_xp = cache.get(xp_key, [])
-        lb_total_xp_paginate_by = 50
-        lb_total_progress = cache.get(progress_key, [])
-        lb_total_progress_paginate_by = 50
+        # XP leaderboard
+        xp_total = get_xp_count()
+        xp_entries = get_xp_page(xp_page_num, paginate_by)
+        xp_paginator = RedisPaginator(xp_total, paginate_by)
+        xp_page_num = min(xp_page_num, xp_paginator.num_pages)
+        context['lb_total_xp_page_obj'] = RedisPage(xp_entries, xp_page_num, xp_paginator)
+        context['lb_total_xp_paginator'] = xp_paginator
 
-        context['lb_total_xp_refresh_time'] = cache.get(f"{xp_key}_refresh_time")
-        context['lb_total_progress_refresh_time'] = cache.get(f"{progress_key}_refresh_time")
+        # Progress leaderboard (global)
+        progress_total = get_progress_count(slug=None)
+        progress_entries = get_progress_page(slug=None, page=progress_page_num, page_size=paginate_by)
+        progress_paginator = RedisPaginator(progress_total, paginate_by)
+        progress_page_num = min(progress_page_num, progress_paginator.num_pages)
+        context['lb_total_progress_page_obj'] = RedisPage(progress_entries, progress_page_num, progress_paginator)
+        context['lb_total_progress_paginator'] = progress_paginator
 
         if user.is_authenticated and hasattr(user, 'profile'):
-            # Find user profile
-            user_psn = user.profile.display_psn_username
-            for idx, entry in enumerate(lb_total_xp):
-                if entry['psn_username'] == user_psn:
-                    context['lb_total_xp_user_page'] = (idx // lb_total_xp_paginate_by) + 1
-                    context['lb_total_xp_user_rank'] = idx + 1
-                    break
-            for idx, entry in enumerate(lb_total_progress):
-                if entry['psn_username'] == user_psn:
-                    context['lb_total_progress_user_page'] = (idx // lb_total_progress_paginate_by) + 1
-                    context['lb_total_progress_user_rank'] = idx + 1
-                    break
+            profile = user.profile
+            xp_rank = get_xp_rank(profile.id)
+            if xp_rank:
+                context['lb_total_xp_user_rank'] = xp_rank
+                context['lb_total_xp_user_page'] = (xp_rank - 1) // paginate_by + 1
 
-            # User stats for overall leaderboards
+            progress_rank = get_progress_rank(slug=None, profile_id=profile.id)
+            if progress_rank:
+                context['lb_total_progress_user_rank'] = progress_rank
+                context['lb_total_progress_user_page'] = (progress_rank - 1) // paginate_by + 1
+
             try:
-                gamification = user.profile.gamification
+                gamification = profile.gamification
                 context['user_total_xp'] = gamification.total_badge_xp
                 context['user_total_badges'] = gamification.total_badges_earned
             except ProfileGamification.DoesNotExist:
                 context['user_total_xp'] = 0
                 context['user_total_badges'] = 0
-
-        lb_total_xp_paginator = Paginator(lb_total_xp, lb_total_xp_paginate_by)
-        lb_total_xp_page = self.request.GET.get('lb_total_xp_page', 1)
-        context['lb_total_xp_page_obj'] = lb_total_xp_paginator.get_page(lb_total_xp_page)
-        context['lb_total_xp_paginator'] = lb_total_xp_paginator
-
-        lb_total_progress_paginator = Paginator(lb_total_progress, lb_total_progress_paginate_by)
-        lb_total_progress_page = self.request.GET.get('lb_total_progress_page', 1)
-        context['lb_total_progress_page_obj'] = lb_total_progress_paginator.get_page(lb_total_progress_page)
-        context['lb_total_progress_paginator'] = lb_total_progress_paginator
 
         context['breadcrumb'] = [
             {'text': 'Home', 'url': reverse_lazy('home')},
@@ -918,11 +913,9 @@ class OverallBadgeLeaderboardsView(ProfileHotbarMixin, TemplateView):
                 series_slug__isnull=True
             ).exclude(series_slug='').order_by(Lower('display_series'))
 
-            progress_keys = [f"lb_progress_{b.series_slug}" for b in series_badges]
-            progress_data = cache.get_many(progress_keys) if progress_keys else {}
             directory = []
             for badge in series_badges:
-                badge.progress_count = len(progress_data.get(f"lb_progress_{badge.series_slug}", []))
+                badge.progress_count = get_progress_count(badge.series_slug)
                 directory.append(badge)
             context['series_directory'] = directory
 

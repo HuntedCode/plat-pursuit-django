@@ -172,6 +172,15 @@ def update_profile_gamification(profile) -> 'ProfileGamification':
 
     total_xp, series_xp, total_badges, unique_badges = calculate_total_xp(profile)
 
+    # Read old series XP before overwriting (for community XP delta calculation)
+    old_series_xp = {}
+    try:
+        existing = ProfileGamification.objects.filter(profile=profile).values_list('series_badge_xp', flat=True).first()
+        if existing:
+            old_series_xp = existing
+    except Exception:
+        pass
+
     gamification, created = ProfileGamification.objects.update_or_create(
         profile=profile,
         defaults={
@@ -192,6 +201,25 @@ def update_profile_gamification(profile) -> 'ProfileGamification':
             f"Updated gamification for {profile.psn_username}: "
             f"total_xp={total_xp}, badges={total_badges}"
         )
+
+    # Update XP sorted set leaderboard and community XP (only for linked profiles)
+    if profile.is_linked:
+        pipeline = getattr(_bulk_update_context, 'pipeline', None)
+        try:
+            from trophies.services.redis_leaderboard_service import update_xp_entry, update_community_xp_deltas
+            update_xp_entry(profile, total_xp, total_badges, pipeline=pipeline)
+
+            # Compute per-series XP deltas and update community totals
+            all_slugs = set(list(old_series_xp.keys()) + list(series_xp.keys()))
+            deltas = {}
+            for slug in all_slugs:
+                delta = series_xp.get(slug, 0) - old_series_xp.get(slug, 0)
+                if delta != 0:
+                    deltas[slug] = delta
+            if deltas:
+                update_community_xp_deltas(deltas, pipeline=pipeline)
+        except Exception as e:
+            logger.error(f"Failed to update leaderboards for {profile.psn_username}: {e}")
 
     return gamification
 
@@ -307,8 +335,11 @@ def bulk_gamification_update():
                 handle_badge(profile, badge)
         # Single gamification update happens after context exits
     """
+    from trophies.util_modules.cache import redis_client as _redis_client
+
     _bulk_update_context.active = True
     _bulk_update_context.profiles = set()
+    _bulk_update_context.pipeline = _redis_client.pipeline()
 
     try:
         yield
@@ -318,12 +349,29 @@ def bulk_gamification_update():
         # Update all affected profiles once
         profiles_to_update = _bulk_update_context.profiles
         _bulk_update_context.profiles = set()
+        pipeline = _bulk_update_context.pipeline
+        _bulk_update_context.pipeline = None
 
         for profile in profiles_to_update:
             try:
                 update_profile_gamification(profile)
             except Exception as e:
                 logger.error(f"Failed to update gamification for {profile.psn_username}: {e}")
+
+        # Execute batched Redis leaderboard writes
+        try:
+            if pipeline:
+                pipeline.execute()
+        except Exception as e:
+            logger.error(f"Failed to execute leaderboard pipeline: {e}")
+
+        # Update progress leaderboards for affected profiles (after gamification is current)
+        for profile in profiles_to_update:
+            try:
+                from trophies.services.redis_leaderboard_service import update_progress_leaderboards_for_profile
+                update_progress_leaderboards_for_profile(profile)
+            except Exception as e:
+                logger.error(f"Failed to update progress leaderboards for {profile.psn_username}: {e}")
 
 
 def is_bulk_update_active() -> bool:

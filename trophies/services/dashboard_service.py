@@ -523,9 +523,11 @@ def provide_badge_stats(profile, settings=None):
 
 
 def provide_badge_xp_leaderboard(profile, settings=None):
-    """Badge XP stats and leaderboard position."""
+    """Badge XP stats and leaderboard position from Redis sorted sets."""
     from trophies.models import ProfileGamification
-    from trophies.services.leaderboard_service import compute_badge_xp_leaderboard
+    from trophies.services.redis_leaderboard_service import (
+        get_xp_rank, get_xp_count, get_xp_top, get_xp_neighborhood,
+    )
 
     try:
         gamification = profile.gamification
@@ -536,18 +538,12 @@ def provide_badge_xp_leaderboard(profile, settings=None):
     if total_xp == 0:
         return {'has_stats': False}
 
-    leaderboard = compute_badge_xp_leaderboard()
-    total_participants = len(leaderboard)
-
-    # Find user's rank
-    user_rank = None
-    user_entry = None
     display_username = profile.display_psn_username
-    for entry in leaderboard:
-        if entry['psn_username'] == display_username:
-            user_rank = entry['rank']
-            user_entry = entry
-            break
+    user_rank = get_xp_rank(profile.id)
+    total_participants = get_xp_count()
+
+    TOP_N = 5
+    NEIGHBORHOOD = 2
 
     def _format_entry(e):
         return {
@@ -562,33 +558,23 @@ def provide_badge_xp_leaderboard(profile, settings=None):
             'is_self': e['psn_username'] == display_username,
         }
 
-    # Build display entries: top 3 + neighborhood around user
-    TOP_N = 5
-    NEIGHBORHOOD = 2  # show 2 above and 2 below the user
-
-    entries = []
     user_in_top = user_rank is not None and user_rank <= TOP_N
     show_gap = False
+    entries = []
 
     if user_in_top:
-        # User is in the top N: just show the top N
-        for e in leaderboard[:TOP_N]:
+        for e in get_xp_top(TOP_N):
             entries.append(_format_entry(e))
     elif user_rank is not None:
-        # Show top 3 + gap + neighborhood (2 above + user + 2 below)
-        for e in leaderboard[:3]:
+        for e in get_xp_top(3):
             entries.append(_format_entry(e))
-
-        user_idx = user_rank - 1  # 0-indexed
-        neighborhood_start = max(3, user_idx - NEIGHBORHOOD)
-        neighborhood_end = min(total_participants, user_idx + NEIGHBORHOOD + 1)
-
-        show_gap = neighborhood_start > 3
-        for e in leaderboard[neighborhood_start:neighborhood_end]:
-            entries.append(_format_entry(e))
+        neighborhood_entries = get_xp_neighborhood(profile.id, above=NEIGHBORHOOD, below=NEIGHBORHOOD)
+        show_gap = neighborhood_entries and neighborhood_entries[0]['rank'] > 4
+        for e in neighborhood_entries:
+            if e['rank'] > 3:
+                entries.append(_format_entry(e))
     else:
-        # User not on leaderboard at all: show top 5
-        for e in leaderboard[:TOP_N]:
+        for e in get_xp_top(TOP_N):
             entries.append(_format_entry(e))
 
     return {

@@ -15,7 +15,8 @@ Cross-cutting engine systems. Read these to understand how the core platform wor
 | Doc | Description |
 |-----|-------------|
 | [Token Keeper & Sync Pipeline](architecture/token-keeper.md) | PSN sync engine, job queues, workers, rate limiting, PSN API |
-| [Badge System](architecture/badge-system.md) | Badge evaluation, XP, stages, series, leaderboards, milestones |
+| [Badge System](architecture/badge-system.md) | Badge evaluation, XP, stages, series, milestones |
+| [Leaderboard System](architecture/leaderboard-system.md) | Precomputed rankings, caching, rank lookups, dashboard integration |
 | [Notification System](architecture/notification-system.md) | 8 services, signals, deferred queue, Discord webhooks, share images |
 | [Payment & Webhooks](architecture/payment-webhooks.md) | Stripe + PayPal, subscriptions, donations, webhook routing |
 | [Concept Model](architecture/concept-model.md) | Concept sync, absorb(), default concepts, concept lock |

@@ -56,9 +56,9 @@ def update_gamification_on_progress(sender, instance, created, **kwargs):
 @receiver(post_save, sender=UserBadge, dispatch_uid="update_gamification_on_badge_earned")
 def update_gamification_on_badge_earned(sender, instance, created, **kwargs):
     """
-    Update ProfileGamification when a badge is earned.
+    Update ProfileGamification and earners leaderboard when a badge is earned.
 
-    Adds the 3000 XP badge completion bonus.
+    Adds the 3000 XP badge completion bonus and updates sorted set leaderboard.
     Only triggers on new badge creation, not updates.
     """
     if not created:
@@ -84,13 +84,16 @@ def update_gamification_on_badge_earned(sender, instance, created, **kwargs):
     except Exception as e:
         logger.exception(f"Failed to update gamification after badge earned: {e}")
 
+    # Update earners leaderboard sorted set
+    _update_earner_leaderboard_on_badge_change(instance.profile, instance.badge.series_slug)
+
 
 @receiver(post_delete, sender=UserBadge, dispatch_uid="update_gamification_on_badge_revoked")
 def update_gamification_on_badge_revoked(sender, instance, **kwargs):
     """
-    Update ProfileGamification when a badge is revoked.
+    Update ProfileGamification and earners leaderboard when a badge is revoked.
 
-    Removes the 3000 XP badge completion bonus.
+    Removes the 3000 XP badge completion bonus and updates sorted set leaderboard.
     """
     from trophies.services.xp_service import (
         update_profile_gamification,
@@ -114,6 +117,37 @@ def update_gamification_on_badge_revoked(sender, instance, **kwargs):
             f"Failed to update gamification after badge revoked: {e}",
             exc_info=True
         )
+
+    # Update earners leaderboard sorted set
+    _update_earner_leaderboard_on_badge_change(instance.profile, instance.badge.series_slug)
+
+
+def _update_earner_leaderboard_on_badge_change(profile, series_slug):
+    """
+    Update the earners sorted set leaderboard after a badge is earned or revoked.
+
+    Finds the user's highest remaining tier in the series and updates their
+    sorted set entry accordingly, or removes them if no badges remain.
+    """
+    if not profile.is_linked:
+        return
+
+    try:
+        from trophies.services.redis_leaderboard_service import (
+            update_earner_entry, remove_earner_entry,
+        )
+
+        # Find the user's current highest tier badge in this series
+        highest = UserBadge.objects.filter(
+            profile=profile, badge__series_slug=series_slug
+        ).select_related('badge').order_by('-badge__tier', 'earned_at').first()
+
+        if highest:
+            update_earner_entry(series_slug, profile, highest.badge.tier, highest.earned_at)
+        else:
+            remove_earner_entry(series_slug, profile.id)
+    except Exception as e:
+        logger.error(f"Failed to update earner leaderboard for {profile.psn_username}: {e}")
 
 
 # --- Stage Icon Auto-Population ---

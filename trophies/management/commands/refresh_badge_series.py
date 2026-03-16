@@ -47,3 +47,14 @@ class Command(BaseCommand):
                 self.stdout.write(self.style.ERROR(f"Failed to process notifications for profile {profile_id}: {e}"))
 
         self.stdout.write(self.style.SUCCESS(f"Processed {processed_count} badge-profile pairs for series '{series_slug}'."))
+
+        # Rebuild leaderboards for this series (backfills historical progress data)
+        try:
+            from trophies.services.redis_leaderboard_service import rebuild_series_leaderboards
+            earners_count, progress_count = rebuild_series_leaderboards(series_slug)
+            self.stdout.write(
+                f"Rebuilt leaderboards for {series_slug}: "
+                f"{earners_count} earners, {progress_count} progress"
+            )
+        except Exception as e:
+            self.stdout.write(self.style.ERROR(f"Failed rebuilding leaderboards for {series_slug}: {e}"))

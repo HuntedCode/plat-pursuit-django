@@ -114,6 +114,25 @@ Workers consume from all 5 queues via priority-ordered `brpop`.
 
 **Files**: `trophies/token_keeper.py`, `plat_pursuit/context_processors.py`, `trophies/management/commands/redis_admin.py`
 
+### Leaderboard Sorted Sets
+
+Incrementally updated via signals, fully rebuilt by `update_leaderboards` cron every 6 hours.
+
+| Key Pattern | Type | Purpose |
+|-------------|------|---------|
+| `lb:xp:scores` | Sorted Set | XP leaderboard; member=profile_id, score=xp*10^4+badges |
+| `lb:xp:data` | Hash | XP display data; field=profile_id, value=JSON |
+| `lb:earners:{slug}:scores` | Sorted Set | Per-series earners; score=tier*10^12+(10^12-timestamp) |
+| `lb:earners:{slug}:data` | Hash | Earners display data |
+| `lb:progress:{slug}:scores` | Sorted Set | Per-series progress; score=plats*10^9+golds*10^6+silvers*10^3+bronzes |
+| `lb:progress:{slug}:data` | Hash | Progress display data |
+| `lb:progress:global:scores` | Sorted Set | Global progress leaderboard |
+| `lb:progress:global:data` | Hash | Global progress display data |
+| `lb:community_xp:{slug}` | String (int) | Community XP total per series, INCRBY delta from gamification updates |
+| `lb:meta:last_rebuild` | Hash | Rebuild timestamps per leaderboard key |
+
+**Files**: `trophies/services/redis_leaderboard_service.py`, `trophies/services/xp_service.py`, `trophies/signals.py`
+
 ---
 
 ## Django Cache Keys
@@ -157,22 +176,6 @@ All homepage keys use 2x TTL as safety margin (cron refreshes before expiry). Da
 | `review:recommend:{concept_id}:{group_id}` | 1800s | Recommendation stats `{recommended, not_recommended, total, percent}` |
 
 **Files**: `trophies/services/rating_service.py`, `trophies/services/review_service.py`
-
-### Badge Leaderboards (Cron-Managed)
-
-| Key Pattern | TTL | Purpose |
-|-------------|-----|---------|
-| `lb_earners_{series_slug}` | Set by cron | Top badge earners for a series |
-| `lb_earners_{series_slug}_refresh_time` | Same | ISO timestamp of last refresh |
-| `lb_progress_{series_slug}` | Set by cron | Top in-progress hunters for a series |
-| `lb_progress_{series_slug}_refresh_time` | Same | ISO timestamp of last refresh |
-| `lb_community_xp_{series_slug}` | Set by cron | Total XP earned by community for a series |
-| `lb_total_xp` | Set by cron | Overall XP leaderboard |
-| `lb_total_xp_refresh_time` | Same | ISO timestamp of last refresh |
-| `lb_total_progress` | Set by cron | Overall progress leaderboard |
-| `lb_total_progress_refresh_time` | Same | ISO timestamp of last refresh |
-
-**Files**: `trophies/views/badge_views.py`, `core/management/commands/update_leaderboards.py`
 
 ### Comments and Checklists
 
