@@ -14,8 +14,8 @@ The dashboard serves as the index page for all logged-in users. Modules are orga
 
 | Status | Count |
 |--------|-------|
-| Complete (Tier 1) | 4 |
-| Planned (Tier 2-4) | 22 |
+| Complete (Tier 1-2) | 8 |
+| Planned (Tier 3-4) | 18 |
 | Premium Exclusive | 9 |
 | Future (Gamification) | 3 |
 | **Total** | **38** |
@@ -28,15 +28,18 @@ The dashboard serves as the index page for all logged-in users. Modules are orga
 |---|--------|----------|--------|------------|
 | 1 | Trophy Snapshot | Server | **Done** | Profile (denormalized, 0 queries) |
 | 2 | Recent Platinums | Lazy (5m) | **Done** | EarnedTrophy + Trophy + Game + Concept |
-| 3 | Recent Activity | Lazy | Planned | EarnedTrophy, UserBadge, Review, Challenge |
+| 3 | Recent Activity | Lazy (5m) | **Done** | EarnedTrophy + UserBadge, grouped by game+day |
 | 4 | Sync Status | Server | Planned | Profile (sync fields) |
 | 5 | Unread Notifications | Lazy | Planned | Notification model |
-| 29 | Quick Settings | Server | Planned | Profile + CustomUser (settings fields) |
+| 29 | Quick Settings | Server | **Done** | Profile + CustomUser (settings fields) |
 
-### Quick Settings (#29)
-- Inline toggle switches for `hide_hiddens`, `hide_zeros`, timezone selector, 24hr clock toggle
+### Quick Settings (#29) - DONE
+- Inline toggle switches for `hide_hiddens`, `hide_zeros`, `use_24hr_clock`
+- Timezone display with browser-detect button
+- Default region dropdown (Any, NA, EU, JP, AS, KR, CN)
 - Server-rendered (reads Profile + User fields, zero extra queries)
-- Saves via existing settings API endpoints
+- Auto-saves via `POST /api/v1/user/quick-settings/` with toast confirmation
+- Timezone changes un-finalize the current month's recap
 - All users (not premium-gated)
 - Default tab: `at_a_glance`
 
@@ -60,7 +63,7 @@ Badges are a flagship feature with dedicated real estate.
 | # | Module | Strategy | Status | Data Source |
 |---|--------|----------|--------|------------|
 | 12 | Badge Progress | Lazy (10m) | **Done** | UserBadgeProgress, prerequisite filtering |
-| 13 | Recent Badges | Lazy | Planned | UserBadge (earned_at desc) |
+| 13 | Recent Badges | Lazy (10m) | **Done** | UserBadge (earned_at desc) |
 | 14 | Badge Showcase | Lazy | Planned | UserBadge grouped by tier |
 | 15 | Badge XP & Leaderboard | Lazy | Planned | ProfileGamification + leaderboard_service |
 
@@ -79,7 +82,7 @@ Badges are a flagship feature with dedicated real estate.
 | # | Module | Strategy | Status | Data Source |
 |---|--------|----------|--------|------------|
 | 21 | Trophy Timeline | Lazy | Planned | timeline_service (expensive, high cache) |
-| 22 | Monthly Recap Preview | Lazy | Planned | MonthlyRecap + current month aggregation |
+| 22 | Monthly Recap Preview | Lazy (30m) | **Done** | MonthlyRecap (most recent finalized) |
 | 23 | Rarity Showcase | Lazy | Planned | EarnedTrophy + Trophy.rarity |
 
 ## Category: Utility
@@ -205,7 +208,7 @@ For visualization modules, two approaches:
 | 12 | Badge Progress | THE selling point. "Almost there" drives engagement. |
 | 2 | Recent Platinums | Latest conquests front and center. |
 
-### Tier 2: Engagement (Next)
+### Tier 2: Engagement (COMPLETE)
 
 | # | Module | Why |
 |---|--------|-----|

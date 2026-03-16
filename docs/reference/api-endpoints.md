@@ -204,6 +204,8 @@ All API endpoints live under `/api/v1/` and are defined in `api/urls.py`. The we
 | GET | `/api/v1/dashboard/module/<slug>/` | Staff | Lazy module HTML |
 | POST | `/api/v1/dashboard/config/` | Staff | Update module config |
 | POST | `/api/v1/dashboard/reorder/` | Staff | Save module order |
+| POST | `/api/v1/dashboard/preview-toggle/` | Staff | Toggle premium/free preview |
+| POST | `/api/v1/user/quick-settings/` | Staff | Quick Settings auto-save (toggles, timezone, region) |
 
 ### Subscription Admin (Staff Only)
 

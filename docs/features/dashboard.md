@@ -43,8 +43,12 @@ Premium users can create custom tabs with a name (max 20 chars) and icon (from 8
 | `recent_platinums` | Recent Platinums | at_a_glance | Lazy | 5m | No |
 | `challenge_hub` | Challenge Hub | progress | Lazy | 5m | No |
 | `badge_progress` | Badge Progress | badges | Lazy | 10m | No |
+| `recent_badges` | Recent Badges | badges | Lazy | 10m | No |
+| `recent_activity` | Recent Activity | at_a_glance | Lazy | 5m | No |
+| `monthly_recap_preview` | Monthly Recap Preview | highlights | Lazy | 30m | No |
+| `quick_settings` | Quick Settings | at_a_glance | Server | None | No |
 
-See [Module Catalog](../design/dashboard-module-catalog.md) for all 28 planned modules.
+See [Module Catalog](../design/dashboard-module-catalog.md) for the full module roadmap.
 
 ## Per-Module Settings Framework
 
@@ -68,10 +72,8 @@ Each tab is a collapsible section listing its modules. Each module row shows:
 - Drag handle (premium)
 - Module name + premium badge
 - Settings gear (premium, or locked teaser for free)
-- "Move to" dropdown (premium, excludes Premium tab)
+- "Move to" dropdown (premium, all tabs including Premium)
 - Toggle switch (all users, free capped at 3 hidden)
-
-Premium tab modules cannot be moved in or out.
 
 ### 3. Footer
 - Reset to Default: clears all customizations (hidden, settings, order, custom tabs, module moves)
@@ -86,6 +88,7 @@ Premium tab modules cannot be moved in or out.
 | `trophies/services/dashboard_service.py` | Module registry, providers, tab functions, settings framework, caching |
 | `trophies/views/dashboard_views.py` | `DashboardView` with tab context |
 | `api/dashboard_views.py` | 4 API endpoints: module data, config, reorder, preview toggle |
+| `api/user_settings_views.py` | `UpdateQuickSettingsAPIView` for dashboard Quick Settings auto-save |
 | `trophies/models.py` | `DashboardConfig` model with `tab_config` field |
 | `static/js/dashboard.js` | `DashboardManager`: tabs, lazy loading, customize, tab management, settings, drag |
 | `static/js/vendor/Sortable.min.js` | SortableJS library |
@@ -127,6 +130,7 @@ Premium tab modules cannot be moved in or out.
 | POST | `/api/v1/dashboard/config/` | Staff | Update hidden/settings/order/tab_config |
 | POST | `/api/v1/dashboard/reorder/` | Staff (Premium) | Save drag-drop order |
 | POST | `/api/v1/dashboard/preview-toggle/` | Staff | Toggle premium/free preview |
+| POST | `/api/v1/user/quick-settings/` | Staff | Quick Settings auto-save (toggles, timezone, region) |
 
 ### Config Update Behavior
 - `hidden_modules`: All users (free capped at 3)
@@ -168,6 +172,10 @@ Staff can switch between "view as premium" and "view as free" via a header butto
 - **Reset requires confirmation**: `_resetToDefault()` shows a `confirm()` dialog before clearing all customizations.
 - **Header shows equipped title**: `profile.displayed_title` (queries `UserTitle` with `is_displayed=True`). Returns `None` if no title equipped.
 - **Dropdown uses short tab names**: `all_tab_options` uses `short_name` (e.g., "Progress") not full `name` (e.g., "Progress & Challenges").
+- **Recent Activity groups by game+day**: Trophies for the same game on the same day are grouped into a single event showing type counts (gold/silver/bronze). Platinums are always standalone events. Badges are never grouped. Grouping is timezone-aware using the user's configured timezone.
+- **Monthly Recap shows finalized recaps only**: The provider fetches the most recent finalized recap, never the current in-progress month. This avoids spoiling the full recap experience.
+- **Quick Settings auto-save**: Each toggle/select change POSTs to `/api/v1/user/quick-settings/`. Timezone changes also un-finalize the current month's recap (handled server-side). Whitelisted settings prevent arbitrary field injection.
+- **Quick Settings region selector**: Includes "Any" (empty string) plus 6 region codes (NA, EU, JP, AS, KR, CN). Stored as `default_region` on Profile.
 - **Staff-gated during dev**: Switch mixins to `LoginRequiredMixin` for production. Remove preview toggle UI.
 
 ## How to Add a New Module
