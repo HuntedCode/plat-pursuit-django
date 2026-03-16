@@ -79,6 +79,7 @@ class ShareableImageHTMLView(APIView):
             'has_rating': metadata.get('user_rating') is not None,
             'concept_id': metadata.get('concept_id'),
             'playtime': context.get('playtime', ''),
+            'is_shovelware': metadata.get('is_shovelware', False),
         }
 
         # Include same-origin URLs for background images

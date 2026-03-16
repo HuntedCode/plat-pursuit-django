@@ -582,6 +582,7 @@ class NotificationShareImageHTMLView(APIView):
             'has_rating': context.get('user_rating') is not None,
             'concept_id': metadata.get('concept_id'),
             'playtime': context.get('playtime', ''),
+            'is_shovelware': self._is_concept_shovelware(metadata),
         }
 
         # Include same-origin URLs for background images
@@ -686,6 +687,27 @@ class NotificationShareImageHTMLView(APIView):
         except Exception as e:
             logger.warning(f"[SHARE-HTML] Failed to fetch live user rating: {e}")
             return metadata.get('user_rating')  # Fall back to metadata if lookup fails
+
+    @staticmethod
+    def _is_concept_shovelware(metadata):
+        """
+        Live check: are ALL games in this concept flagged as shovelware?
+        Mirrors the gate in _get_concept_and_group() from review_views.py.
+        """
+        concept_id = metadata.get('concept_id')
+        if not concept_id:
+            return False
+
+        try:
+            from trophies.models import Game
+            games = Game.objects.filter(concept_id=concept_id)
+            if not games.exists():
+                return False
+            return not games.exclude(
+                shovelware_status__in=['auto_flagged', 'manually_flagged'],
+            ).exists()
+        except Exception:
+            return False
 
     @staticmethod
     def _get_live_badge_data(profile, metadata):

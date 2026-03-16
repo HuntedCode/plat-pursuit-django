@@ -22,7 +22,7 @@ class ShareImageManager {
         this.generatedImages = {};
 
         // Rating metadata (populated from HTML API response during preview)
-        this.ratingData = { hasRating: false, conceptId: null };
+        this.ratingData = { hasRating: false, conceptId: null, isShovelware: false };
 
         // Guard against concurrent download requests
         this.isDownloading = false;
@@ -425,6 +425,9 @@ class ShareImageManager {
             if (response.playtime) {
                 this.ratingData.playtime = response.playtime;
             }
+            if (response.is_shovelware !== undefined) {
+                this.ratingData.isShovelware = response.is_shovelware;
+            }
             return response.html;
         }
         throw new Error('Failed to fetch card HTML');
@@ -439,6 +442,7 @@ class ShareImageManager {
         const promptId = this.getTrackingId();
         const shouldPrompt = !this.ratingData.hasRating
             && this.ratingData.conceptId
+            && !this.ratingData.isShovelware
             && !ShareImageManager._promptedIds.has(promptId);
 
         if (shouldPrompt) {
