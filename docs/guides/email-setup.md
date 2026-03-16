@@ -74,7 +74,6 @@ Users can opt out of emails via token-based preference URLs. `EmailPreferenceSer
 | `monthly_recap` | `emails/monthly_recap.html` | Cron: `send_monthly_recap_emails` | `monthly_recap` |
 | `weekly_digest` | `emails/weekly_digest.html` | Cron: `send_weekly_digest` (Monday 08:00 UTC). Community-focused "This Week in PlatPursuit" newsletter. | `weekly_digest` |
 | `badge_earned` | `emails/badge_earned.html` | Sync: `DeferredNotificationService._flush_profile_badges()` | `badge_notifications` |
-| `milestone_achieved` | `emails/milestone_achieved.html` | Sync: `send_consolidated_milestone_email()` in signals.py | `milestone_notifications` |
 | `welcome` | `emails/welcome.html` | Verification: `VerificationService.link_profile_to_user()` | None (transactional) |
 | `admin_announcement` | `emails/broadcast.html` | Admin: Notification Center broadcast | `admin_announcements` |
 | `subscription_welcome` | `emails/subscription_welcome.html` | `activate_subscription()` (first time) | `subscription_notifications` |
@@ -95,15 +94,11 @@ All email templates extend `templates/emails/base_email.html` which provides:
 - Footer with unsubscribe link
 - Consistent gradient styling
 
-### Achievement Emails (Badge & Milestone)
+### Badge Earned Email
 
-Badge and milestone emails are sent automatically during the PSN sync cycle:
+Badge emails are sent automatically during the PSN sync cycle. The `badge_earned` email consolidates all badges earned in a single sync into one email. Triggered from `DeferredNotificationService._flush_profile_badges()` after in-app badge notifications are created. Lists each badge with series name, tier, progress bar, and next tier info. Gated by the `badge_notifications` email preference. Suppressed sends are logged to EmailLog.
 
-**Badge Earned Email** (`badge_earned`): Consolidates all badges earned in a single sync into one email. Triggered from `DeferredNotificationService._flush_profile_badges()` after in-app badge notifications are created. Lists each badge with series name, tier, progress bar, and next tier info.
-
-**Milestone Achieved Email** (`milestone_achieved`): Consolidates all milestones earned in a single sync into one email. Triggered from `send_consolidated_milestone_email()` in `notifications/signals.py`, called by `token_keeper.py` after all milestone checks complete. For non-sync paths (reviews, ratings, etc.), `check_all_milestones_for_user()` sends the email immediately via the `send_email=True` default. Shows milestone name, description, title reward (if any), tier info, and next milestone progress. Handles both single and multiple milestones in one email.
-
-Both are gated by their respective email preferences (`badge_notifications`, `milestone_notifications`). Suppressed sends are logged to EmailLog.
+Milestone achievements generate in-app notifications only (no email).
 
 ### Welcome Email
 

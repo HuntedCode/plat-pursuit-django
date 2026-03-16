@@ -63,13 +63,6 @@ class EmailPreferencesForm(forms.Form):
         widget=forms.CheckboxInput(attrs={'class': 'checkbox'})
     )
 
-    milestone_notifications = forms.BooleanField(
-        required=False,
-        label='Milestone Emails',
-        help_text='Get notified about trophy milestones and achievements',
-        widget=forms.CheckboxInput(attrs={'class': 'checkbox'})
-    )
-
     subscription_notifications = forms.BooleanField(
         required=False,
         label='Subscription & Billing Emails',
@@ -110,7 +103,6 @@ class EmailPreferencesForm(forms.Form):
             # If global unsubscribe is checked, uncheck everything else
             cleaned_data['monthly_recap'] = False
             cleaned_data['badge_notifications'] = False
-            cleaned_data['milestone_notifications'] = False
             cleaned_data['subscription_notifications'] = False
             cleaned_data['admin_announcements'] = False
             cleaned_data['weekly_digest'] = False

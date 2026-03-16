@@ -175,7 +175,6 @@ All preferences default to `True` for new users:
 |-----|----------|
 | `monthly_recap` | Monthly recap emails |
 | `badge_notifications` | Badge-related emails |
-| `milestone_notifications` | Milestone achievement emails |
 | `subscription_notifications` | All subscription lifecycle emails |
 | `admin_announcements` | Staff announcements |
 | `global_unsubscribe` | Master kill switch (defaults to False) |

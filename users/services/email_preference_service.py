@@ -18,7 +18,6 @@ logger = logging.getLogger(__name__)
 DEFAULT_EMAIL_PREFERENCES = {
     "monthly_recap": True,
     "badge_notifications": True,
-    "milestone_notifications": True,
     "subscription_notifications": True,
     "admin_announcements": True,
     "weekly_digest": True,

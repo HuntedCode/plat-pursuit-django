@@ -263,7 +263,7 @@ Cache TTL is 7 hours (25,200 seconds). Companion keys `{key}_refresh_time` store
 ## Integration Points
 
 ### Sync Pipeline (token_keeper.py)
-`_job_sync_complete()` calls `check_profile_badges()` after all trophy data is processed, then calls `check_all_milestones_for_user(send_email=False)` excluding challenge-specific types (those are checked by their own services). Notified milestones from all checks (main + AZ + calendar + genre) are collected and sent as one consolidated email via `send_consolidated_milestone_email()`. Deferred badge notifications are consolidated afterward via `DeferredNotificationService`.
+`_job_sync_complete()` calls `check_profile_badges()` after all trophy data is processed, then calls `check_all_milestones_for_user()` excluding challenge-specific types (those are checked by their own services). Milestone achievements generate in-app notifications only. Deferred badge notifications are consolidated afterward via `DeferredNotificationService`.
 
 ### Discord Bot
 - **Role assignment**: `notify_bot_role_earned()` calls POST to `BOT_API_URL/assign-role`.

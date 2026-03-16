@@ -99,8 +99,7 @@ def check_and_award_milestone(profile, milestone, _cache=None):
 
 
 def check_all_milestones_for_user(profile, criteria_type=None, criteria_types=None,
-                                  exclude_types=None, notify_webapp=True,
-                                  send_email=True):
+                                  exclude_types=None, notify_webapp=True):
     """
     Batch check all relevant milestones for a profile.
 
@@ -123,17 +122,12 @@ def check_all_milestones_for_user(profile, criteria_type=None, criteria_types=No
         exclude_types: Optional set of criteria_types to skip (e.g., calendar
                        types when they're checked separately)
         notify_webapp: If True, send in-app notification for highest tier earned.
-        send_email: If True (default), send a consolidated milestone email
-                    immediately. Set to False when the caller will handle email
-                    externally (e.g., token_keeper collects milestones from
-                    multiple calls before sending one email).
 
     Returns:
         tuple: (all_awarded, notified_user_milestones) where:
             - all_awarded: List of newly awarded Milestone instances
             - notified_user_milestones: List of UserMilestone instances that
               received in-app notifications (highest tier per criteria type).
-              Used by callers to send a consolidated email when send_email=False.
     """
     from trophies.models import Milestone
     from notifications.signals import create_milestone_notification
@@ -193,15 +187,5 @@ def check_all_milestones_for_user(profile, criteria_type=None, criteria_types=No
                         create_milestone_notification(um)
                         notified_user_milestones.append(um)
                 all_awarded.extend(new_awards)
-
-    # Send consolidated milestone email unless caller handles it externally
-    if send_email and notified_user_milestones:
-        try:
-            from notifications.signals import send_consolidated_milestone_email
-            send_consolidated_milestone_email(notified_user_milestones)
-        except Exception:
-            logger.exception(
-                f"Failed to send milestone email for {profile.psn_username}"
-            )
 
     return all_awarded, notified_user_milestones

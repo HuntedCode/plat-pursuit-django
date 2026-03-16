@@ -576,7 +576,6 @@ class EmailPreferencesView(View):
             preferences = {
                 'monthly_recap': form.cleaned_data.get('monthly_recap', False),
                 'badge_notifications': form.cleaned_data.get('badge_notifications', False),
-                'milestone_notifications': form.cleaned_data.get('milestone_notifications', False),
                 'subscription_notifications': form.cleaned_data.get('subscription_notifications', False),
                 'admin_announcements': form.cleaned_data.get('admin_announcements', False),
                 'weekly_digest': form.cleaned_data.get('weekly_digest', False),

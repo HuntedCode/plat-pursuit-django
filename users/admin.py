@@ -68,16 +68,17 @@ class CustomUserAdmin(UserAdmin):
         enabled = sum([
             prefs.get('monthly_recap', True),
             prefs.get('badge_notifications', True),
-            prefs.get('milestone_notifications', True),
+            prefs.get('subscription_notifications', True),
             prefs.get('admin_announcements', True),
+            prefs.get('weekly_digest', True),
         ])
 
-        if enabled == 4:
+        if enabled == 5:
             return "✅ All Enabled"
         elif enabled == 0:
             return "⊘ None Enabled"
         else:
-            return f"◐ {enabled}/4 Enabled"
+            return f"◐ {enabled}/5 Enabled"
 
     email_prefs_summary.short_description = "Email Preferences"
 

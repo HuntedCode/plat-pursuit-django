@@ -21,7 +21,6 @@ Usage:
     python manage.py test_email_system your.email@example.com --badge-claim-preview
     python manage.py test_email_system your.email@example.com --artwork-complete-preview
     python manage.py test_email_system your.email@example.com --badge-earned-preview
-    python manage.py test_email_system your.email@example.com --milestone-preview
     python manage.py test_email_system your.email@example.com --free-welcome-preview
     python manage.py test_email_system your.email@example.com --broadcast-preview
     python manage.py test_email_system your.email@example.com --weekly-digest-preview
@@ -106,11 +105,6 @@ class Command(BaseCommand):
             help='Send a preview of the badge earned achievement email'
         )
         parser.add_argument(
-            '--milestone-preview',
-            action='store_true',
-            help='Send a preview of the milestone achieved email'
-        )
-        parser.add_argument(
             '--free-welcome-preview',
             action='store_true',
             help='Send a preview of the free user welcome email (post first sync)'
@@ -141,7 +135,6 @@ class Command(BaseCommand):
         badge_claim_preview = options.get('badge_claim_preview', False)
         artwork_complete_preview = options.get('artwork_complete_preview', False)
         badge_earned_preview = options.get('badge_earned_preview', False)
-        milestone_preview = options.get('milestone_preview', False)
         free_welcome_preview = options.get('free_welcome_preview', False)
         broadcast_preview = options.get('broadcast_preview', False)
         weekly_digest_preview = options.get('weekly_digest_preview', False)
@@ -179,8 +172,6 @@ class Command(BaseCommand):
             self._send_artwork_complete_preview(recipient_email)
         elif badge_earned_preview:
             self._send_badge_earned_preview(recipient_email)
-        elif milestone_preview:
-            self._send_milestone_preview(recipient_email)
         elif free_welcome_preview:
             self._send_free_welcome_preview(recipient_email)
         elif broadcast_preview:
@@ -835,81 +826,6 @@ class Command(BaseCommand):
             )
             if sent_count > 0:
                 self.stdout.write(self.style.SUCCESS('Badge earned preview sent successfully!'))
-            else:
-                self.stdout.write(self.style.ERROR('Email was not sent'))
-        except Exception as e:
-            self.stdout.write(self.style.ERROR(f'Failed: {e}'))
-            raise CommandError(f'Email sending failed: {e}')
-
-    def _send_milestone_preview(self, recipient_email):
-        """Send a preview of the milestone achieved email."""
-        from users.services.email_preference_service import EmailPreferenceService
-
-        self.stdout.write("\nSending milestone achieved email preview...")
-
-        sample_user_id = 1
-        try:
-            preference_token = EmailPreferenceService.generate_preference_token(sample_user_id)
-            preference_url = f"{settings.SITE_URL}/users/email-preferences/?token={preference_token}"
-        except Exception:
-            preference_url = f"{settings.SITE_URL}/users/email-preferences/"
-
-        milestones_url = f'{settings.SITE_URL}/profiles/TestUser/?tab=milestones'
-
-        # Sample milestone contexts (consolidated format)
-        sample_milestones = [
-            {
-                'milestone_name': '50 Platinum Trophies',
-                'milestone_description': 'Earn 50 Platinum trophies across any games.',
-                'title_name': 'Veteran Hunter',
-                'tier_text': 'Tier 3 of 5',
-                'is_one_off': False,
-                'is_max_tier': False,
-                'next_milestone': {
-                    'name': '100 Platinum Trophies',
-                    'progress_value': 50,
-                    'required_value': 100,
-                    'progress_percentage': 50,
-                },
-                'milestones_url': milestones_url,
-            },
-            {
-                'milestone_name': '1,000 Trophies Earned',
-                'milestone_description': 'Collect 1,000 trophies of any type.',
-                'title_name': '',
-                'tier_text': 'Tier 2 of 4',
-                'is_one_off': False,
-                'is_max_tier': False,
-                'next_milestone': {
-                    'name': '2,500 Trophies Earned',
-                    'progress_value': 1000,
-                    'required_value': 2500,
-                    'progress_percentage': 40,
-                },
-                'milestones_url': milestones_url,
-            },
-        ]
-
-        context = {
-            'username': 'TestUser',
-            'milestones': sample_milestones,
-            'milestone_count': len(sample_milestones),
-            'is_single': len(sample_milestones) == 1,
-            'profile_milestones_url': milestones_url,
-            'site_url': settings.SITE_URL,
-            'preference_url': preference_url,
-        }
-
-        try:
-            sent_count = EmailService.send_html_email(
-                subject='[PREVIEW] You achieved 2 milestones!',
-                to_emails=[recipient_email],
-                template_name='emails/milestone_achieved.html',
-                context=context,
-                fail_silently=False,
-            )
-            if sent_count > 0:
-                self.stdout.write(self.style.SUCCESS('Milestone preview sent successfully!'))
             else:
                 self.stdout.write(self.style.ERROR('Email was not sent'))
         except Exception as e:
