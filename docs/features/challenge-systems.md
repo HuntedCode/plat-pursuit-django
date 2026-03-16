@@ -276,30 +276,37 @@ Owner-only. Same 26-slot grid with swap/clear actions. Completed slots are locke
    - **Auto-backfills** from existing platinum history immediately.
 4. Redirects directly to the detail page (no wizard needed).
 
-#### Auto-Backfill (`backfill_calendar_from_history`)
+#### Reconciliation Engine (`_reconcile_calendar_days`)
 
-Runs at creation time:
+Both creation/backfill and sync-driven progress use a shared reconciliation helper. This function performs a **bidirectional** reconciliation: filling new days AND unfilling phantom days.
 
 1. Resolves user timezone via `profile.user.user_timezone` (falls back to UTC).
 2. Fetches all earned platinum trophies with dates, excluding shovelware and hidden trophies, ordered oldest first.
 3. Converts each earn timestamp to the user's local timezone.
 4. For each (month, day) pair (skipping Feb 29):
-   - Fills the calendar day with the **earliest** platinum for that date.
-   - Counts total platinums for the `plat_count` field.
-5. `bulk_update` all changed day rows.
-6. Recalculates challenge counts. If already 365/365, marks complete immediately.
-7. Checks calendar milestones.
+   - **Has qualifying platinums + not filled:** Fills the day with the **earliest** platinum.
+   - **Has qualifying platinums + already filled:** Updates `platinum_earned_at`/`game_id` if the earliest platinum changed.
+   - **No qualifying platinums + filled:** **Unfills** the phantom day (clears `is_filled`, `filled_at`, `platinum_earned_at`, `game_id`).
+   - Always reconciles `plat_count`.
+5. Returns fill/unfill counts and changed rows for the caller to `bulk_update`.
+
+#### Auto-Backfill (`backfill_calendar_from_history`)
+
+Runs at creation time and on timezone changes:
+
+1. Calls `_reconcile_calendar_days()` for full bidirectional reconciliation.
+2. `bulk_update` all changed day rows.
+3. Recalculates challenge counts. If already 365/365, marks complete immediately.
+4. If unfills reverted a completed calendar, clears `is_complete`.
+5. Checks calendar milestones.
 
 #### Sync-Driven Progress (`check_calendar_challenge_progress`)
 
 1. For each active calendar challenge:
-   - **Early-exit optimization:** queries whether any new platinums exist since `challenge.updated_at`. If not, skips the expensive full scan entirely. This avoids re-processing on every sync when no new plats were earned.
-   - Fetches all platinums (no shovelware, not hidden), converts to user timezone.
-   - For unfilled days: maps earliest matching platinum.
-   - For all days: updates `plat_count` (total platinums per calendar day across all years).
+   - Calls `_reconcile_calendar_days()` for full bidirectional reconciliation.
    - `bulk_update` changed rows.
-   - If new days were filled: recalculate counts in-memory (avoids 2 extra COUNT queries), check for completion.
-   - If only `plat_count` changed (no new fills): advances `updated_at` watermark so the early-exit check works correctly on the next sync.
+   - If days were filled or unfilled: recalculate counts from the DB, check for completion.
+   - If only `plat_count` changed (no fill/unfill changes): advances `updated_at` watermark.
 2. Triggers calendar milestones via `_check_calendar_milestones(profile)`.
 
 #### Detail Page
@@ -525,10 +532,10 @@ The calendar challenge uses 365 days with no Feb 29, even in leap years. `CALEND
 The `_get_calendar_year()` function returns `timezone.now().year`. This means the visual grid layout (which day of the week each month starts on) changes on January 1st. The data does not change, only the visual alignment.
 
 ### Timezone Sensitivity
-Calendar day matching converts platinum `earned_date_time` to the user's timezone (`profile.user.user_timezone`). A platinum earned at 11:30 PM EST on Dec 31 would fill Jan 1 for a UTC user. If a user changes their timezone after creating a calendar, existing fills are not retroactively recalculated (only new syncs use the new timezone).
+Calendar day matching converts platinum `earned_date_time` to the user's timezone (`profile.user.user_timezone`). A platinum earned at 11:30 PM EST on Dec 31 would fill Jan 1 for a UTC user. When a user changes their timezone, both `UpdateTimezoneAPIView` and `UpdateQuickSettingsAPIView` trigger `backfill_calendar_from_history()` which runs a full bidirectional reconciliation: old phantom days are unfilled and platinums are re-mapped to their correct (month, day) under the new timezone.
 
-### Early-Exit Watermark
-`check_calendar_challenge_progress` uses `challenge.updated_at` as a watermark to skip re-scanning when no new platinums exist. If only `plat_count` values changed (no new days filled), it still advances the watermark by saving `updated_at`. Without this, subsequent syncs would repeat the full scan unnecessarily.
+### Calendar Day Unfill Behavior
+Calendar days CAN be unfilled when the qualifying platinum set changes. This happens when games are flagged as shovelware, games are hidden by the user, or timezone changes shift a platinum to a different (month, day). The reconciliation engine (`_reconcile_calendar_days`) handles this on every sync and on timezone changes. If unfilling reverts a completed (365/365) calendar, `is_complete` is cleared. Use `python manage.py recalculate_calendars` to force a full reconciliation across all calendars.
 
 ### Game vs. Concept Level
 A-Z and Calendar challenges use `Game` (individual PSN title). Genre challenges use `Concept` (cross-platform grouping). This means:

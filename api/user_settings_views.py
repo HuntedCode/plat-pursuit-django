@@ -45,10 +45,11 @@ class UpdateTimezoneAPIView(APIView):
         request.user.save(update_fields=['user_timezone'])
 
         recaps_reset = 0
+        calendars_recalculated = 0
         if old_timezone != timezone_value:
             profile = getattr(request.user, 'profile', None)
             if profile:
-                from trophies.models import MonthlyRecap
+                from trophies.models import MonthlyRecap, Challenge
                 recaps_reset = MonthlyRecap.objects.filter(
                     profile=profile,
                     is_finalized=True,
@@ -59,10 +60,24 @@ class UpdateTimezoneAPIView(APIView):
                         recaps_reset, profile.id, old_timezone, timezone_value,
                     )
 
+                # Recalculate calendar challenges for new timezone
+                from trophies.services.challenge_service import backfill_calendar_from_history
+                for cal in Challenge.objects.filter(
+                    profile=profile, challenge_type='calendar', is_deleted=False,
+                ):
+                    backfill_calendar_from_history(cal)
+                    calendars_recalculated += 1
+                if calendars_recalculated:
+                    logger.info(
+                        "Recalculated %d calendar(s) for profile %s after timezone change: %s -> %s",
+                        calendars_recalculated, profile.id, old_timezone, timezone_value,
+                    )
+
         return Response({
             'success': True,
             'timezone': timezone_value,
             'recaps_reset': recaps_reset,
+            'calendars_recalculated': calendars_recalculated,
         })
 
 
@@ -112,12 +127,18 @@ class UpdateQuickSettingsAPIView(APIView):
             old_tz = request.user.user_timezone or 'UTC'
             request.user.user_timezone = value
             request.user.save(update_fields=['user_timezone'])
-            # Un-finalize recaps if timezone changed
+            # Un-finalize recaps and recalculate calendars if timezone changed
             if old_tz != value:
                 profile = getattr(request.user, 'profile', None)
                 if profile:
-                    from trophies.models import MonthlyRecap
+                    from trophies.models import MonthlyRecap, Challenge
                     MonthlyRecap.objects.filter(profile=profile, is_finalized=True).update(is_finalized=False)
+
+                    from trophies.services.challenge_service import backfill_calendar_from_history
+                    for cal in Challenge.objects.filter(
+                        profile=profile, challenge_type='calendar', is_deleted=False,
+                    ):
+                        backfill_calendar_from_history(cal)
 
         # Region setting
         elif setting == 'default_region':

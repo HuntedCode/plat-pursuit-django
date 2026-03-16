@@ -332,16 +332,23 @@ def create_calendar_challenge(profile, name='My Platinum Calendar'):
     return challenge
 
 
-def backfill_calendar_from_history(challenge):
+def _reconcile_calendar_days(challenge, user_tz=None):
     """
-    Scan all of the user's earned platinums and fill matching calendar days.
-    Uses the EARLIEST platinum for each calendar day. Respects user timezone.
-    Excludes shovelware games.
+    Full reconciliation of calendar day state against current platinum data.
+
+    Fills days that now have qualifying platinums.
+    Unfills days that no longer have qualifying platinums (e.g. after
+    shovelware flagging, game hiding, or timezone changes).
+    Updates plat_count, game_id, and platinum_earned_at on all days.
+
+    Returns:
+        tuple: (newly_filled_count, newly_unfilled_count, to_update_list)
     """
-    user_tz = _get_user_tz(challenge.profile)
+    if user_tz is None:
+        user_tz = _get_user_tz(challenge.profile)
     now = timezone.now()
 
-    # Fetch all platinum earned trophies with dates, oldest first (no shovelware, not hidden)
+    # Fetch all qualifying platinums, oldest first
     platinums = EarnedTrophy.objects.filter(
         profile=challenge.profile,
         trophy__trophy_type='platinum',
@@ -352,53 +359,80 @@ def backfill_calendar_from_history(challenge):
         trophy__game__shovelware_status__in=['auto_flagged', 'manually_flagged'],
     ).select_related('trophy__game').order_by('earned_date_time')
 
-    # Group by (month, day) in user's timezone: take the first per day,
-    # and count total platinums per day for plat_count
-    day_map = {}  # (month, day) -> EarnedTrophy (first/earliest)
+    # Group by (month, day) in user's timezone
+    day_map = {}       # (month, day) -> EarnedTrophy (earliest)
     plat_counter = Counter()  # (month, day) -> total count
     for et in platinums:
         local_dt = et.earned_date_time.astimezone(user_tz)
         key = (local_dt.month, local_dt.day)
-        # Skip leap day
         if key == (2, 29):
             continue
         plat_counter[key] += 1
         if key not in day_map:
             day_map[key] = et
 
-    if not day_map:
-        return
-
-    # Fetch all days (not just unfilled) to set plat_count on all of them
+    # Fetch ALL 365 calendar day rows
     all_days = {
         (d.month, d.day): d
         for d in challenge.calendar_days.all()
     }
 
     to_update = []
-    for key in set(day_map.keys()) | set(plat_counter.keys()):
-        day_obj = all_days.get(key)
-        if not day_obj:
-            continue
+    newly_filled = 0
+    newly_unfilled = 0
+
+    for key, day_obj in all_days.items():
         changed = False
-
-        # Fill unfilled days
         et = day_map.get(key)
-        if et and not day_obj.is_filled:
-            day_obj.is_filled = True
-            day_obj.filled_at = now
-            day_obj.platinum_earned_at = et.earned_date_time
-            day_obj.game_id = et.trophy.game_id
-            changed = True
-
-        # Set plat_count
         count = plat_counter.get(key, 0)
+
+        if count > 0:
+            # Day has qualifying platinums
+            if not day_obj.is_filled:
+                # FILL: new day
+                day_obj.is_filled = True
+                day_obj.filled_at = now
+                day_obj.platinum_earned_at = et.earned_date_time
+                day_obj.game_id = et.trophy.game_id
+                changed = True
+                newly_filled += 1
+            else:
+                # Already filled: ensure earliest platinum is still correct
+                if day_obj.platinum_earned_at != et.earned_date_time:
+                    day_obj.platinum_earned_at = et.earned_date_time
+                    day_obj.game_id = et.trophy.game_id
+                    changed = True
+        else:
+            # No qualifying platinums for this day
+            if day_obj.is_filled:
+                # UNFILL: phantom day
+                day_obj.is_filled = False
+                day_obj.filled_at = None
+                day_obj.platinum_earned_at = None
+                day_obj.game_id = None
+                changed = True
+                newly_unfilled += 1
+
+        # Always reconcile plat_count
         if day_obj.plat_count != count:
             day_obj.plat_count = count
             changed = True
 
         if changed:
             to_update.append(day_obj)
+
+    return newly_filled, newly_unfilled, to_update
+
+
+def backfill_calendar_from_history(challenge):
+    """
+    Full reconciliation of a calendar challenge against the user's platinum history.
+    Fills matching days, unfills phantom days, and corrects plat_count values.
+    Respects user timezone. Excludes shovelware and hidden games.
+    """
+    now = timezone.now()
+
+    newly_filled, newly_unfilled, to_update = _reconcile_calendar_days(challenge)
 
     if to_update:
         CalendarChallengeDay.objects.bulk_update(
@@ -415,6 +449,11 @@ def backfill_calendar_from_history(challenge):
         challenge.completed_at = now
         challenge.save(update_fields=['is_complete', 'completed_at', 'updated_at'])
         _create_completion_notification(challenge)
+    elif challenge.is_complete and challenge.completed_count < challenge.total_items:
+        # Unfills reverted a completed calendar
+        challenge.is_complete = False
+        challenge.completed_at = None
+        challenge.save(update_fields=['is_complete', 'completed_at', 'updated_at'])
 
     # Check calendar milestone progress (backfill path)
     _check_calendar_milestones(challenge.profile)
@@ -422,8 +461,11 @@ def backfill_calendar_from_history(challenge):
 
 def check_calendar_challenge_progress(profile):
     """
-    Check active Calendar challenges for newly filled days.
+    Reconcile active Calendar challenges against current platinum data.
     Called during sync in _job_sync_complete(). Excludes shovelware games.
+
+    Fills new days, unfills phantom days (shovelware/hidden/timezone drift),
+    and corrects plat_count values on every sync.
 
     Returns list of notified UserMilestone instances for consolidated email.
     """
@@ -432,78 +474,14 @@ def check_calendar_challenge_progress(profile):
         is_deleted=False, is_complete=False,
     )
 
+    any_day_changes = False
     for challenge in challenges:
         user_tz = _get_user_tz(profile)
         now = timezone.now()
 
-        # Early-exit: skip expensive full platinum scan if no new platinums since last check
-        has_new_plats = EarnedTrophy.objects.filter(
-            profile=profile,
-            trophy__trophy_type='platinum',
-            earned=True,
-            earned_date_time__isnull=False,
-            earned_date_time__gt=challenge.updated_at,
-            user_hidden=False,
-        ).exclude(
-            trophy__game__shovelware_status__in=['auto_flagged', 'manually_flagged'],
-        ).exists()
-
-        if not has_new_plats:
-            continue
-
-        # Fetch all platinum earned dates for this user (no shovelware, not hidden)
-        platinums = EarnedTrophy.objects.filter(
-            profile=profile,
-            trophy__trophy_type='platinum',
-            earned=True,
-            earned_date_time__isnull=False,
-            user_hidden=False,
-        ).exclude(
-            trophy__game__shovelware_status__in=['auto_flagged', 'manually_flagged'],
-        ).select_related('trophy__game').order_by('earned_date_time')
-
-        # Build map for unfilled days + count ALL platinums per day for plat_count
-        all_days = {
-            (d.month, d.day): d
-            for d in challenge.calendar_days.all()
-        }
-        unfilled_keys = {k for k, d in all_days.items() if not d.is_filled}
-
-        day_map = {}  # (month, day) -> first EarnedTrophy (for unfilled days only)
-        plat_counter = Counter()  # (month, day) -> total count
-        for et in platinums:
-            local_dt = et.earned_date_time.astimezone(user_tz)
-            key = (local_dt.month, local_dt.day)
-            if key == (2, 29):
-                continue
-            plat_counter[key] += 1
-            if key in unfilled_keys and key not in day_map:
-                day_map[key] = et
-
-        # Update plat_count on all days + fill newly matched days
-        to_update = []
-        newly_filled = False
-        for key, day_obj in all_days.items():
-            changed = False
-
-            # Fill unfilled days
-            et = day_map.get(key)
-            if et and not day_obj.is_filled:
-                day_obj.is_filled = True
-                day_obj.filled_at = now
-                day_obj.platinum_earned_at = et.earned_date_time
-                day_obj.game_id = et.trophy.game_id
-                changed = True
-                newly_filled = True
-
-            # Update plat_count if changed
-            count = plat_counter.get(key, 0)
-            if day_obj.plat_count != count:
-                day_obj.plat_count = count
-                changed = True
-
-            if changed:
-                to_update.append(day_obj)
+        newly_filled, newly_unfilled, to_update = _reconcile_calendar_days(
+            challenge, user_tz,
+        )
 
         if to_update:
             CalendarChallengeDay.objects.bulk_update(
@@ -511,11 +489,9 @@ def check_calendar_challenge_progress(profile):
                 ['is_filled', 'filled_at', 'platinum_earned_at', 'game_id', 'plat_count'],
             )
 
-        if newly_filled:
-            # Compute counts in-memory from all_days dict (avoids 2 COUNT queries)
-            filled = sum(1 for d in all_days.values() if d.is_filled)
-            challenge.filled_count = filled
-            challenge.completed_count = filled
+        if newly_filled or newly_unfilled:
+            any_day_changes = True
+            recalculate_challenge_counts(challenge)
 
             if challenge.completed_count >= challenge.total_items:
                 challenge.is_complete = True
@@ -529,13 +505,13 @@ def check_calendar_challenge_progress(profile):
                 challenge.save(update_fields=[
                     'completed_count', 'filled_count', 'updated_at',
                 ])
-
-            # Check calendar milestone progress (sync path, email deferred to token_keeper)
-            return _check_calendar_milestones(profile)
         elif to_update:
-            # plat_counts changed but no new days filled; advance the watermark
-            # so the early-exit check doesn't re-scan the same platinums next sync
+            # Only plat_counts changed; advance the watermark
             challenge.save(update_fields=['updated_at'])
+
+    # Check calendar milestones once after all challenges are processed
+    if any_day_changes:
+        return _check_calendar_milestones(profile)
     return []
 
 
