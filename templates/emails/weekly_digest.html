@@ -1,4 +1,5 @@
 {% extends "emails/base_email.html" %}
+{% load humanize %}
 
 {% block extra_styles %}
     <style>
@@ -289,7 +290,7 @@
     <p class="greeting">Hey {{ username }}!</p>
     {% if your_week.has_activity %}
     <p class="intro">
-        This week, you contributed <strong>{{ your_week.total_trophies }}
+        This week, you contributed <strong>{{ your_week.total_trophies|intcomma }}
         troph{{ your_week.total_trophies|pluralize:"y,ies" }}</strong> to the community{% if your_week.contribution_pct %}
         (that's <strong>{{ your_week.contribution_pct }}%</strong> of all trophies earned!){% endif %}.
         Here's what the community has been up to.
@@ -307,23 +308,23 @@
         <table class="stats-grid" role="presentation" cellpadding="0" cellspacing="0" align="center">
             <tr>
                 <td class="stat-cell">
-                    <span class="stat-number">{{ site_stats.total_trophies|default:"0" }}</span>
+                    <span class="stat-number">{{ site_stats.total_trophies|default:"0"|intcomma }}</span>
                     <span class="stat-label">Trophies</span>
                 </td>
                 <td class="stat-cell">
-                    <span class="stat-number">{{ site_stats.total_platinums|default:"0" }}</span>
+                    <span class="stat-number">{{ site_stats.total_platinums|default:"0"|intcomma }}</span>
                     <span class="stat-label">Platinums</span>
                 </td>
                 <td class="stat-cell">
-                    <span class="stat-number">{{ site_stats.active_hunters|default:"0" }}</span>
+                    <span class="stat-number">{{ site_stats.active_hunters|default:"0"|intcomma }}</span>
                     <span class="stat-label">Active Hunters</span>
                 </td>
                 <td class="stat-cell">
-                    <span class="stat-number">{{ site_stats.total_reviews|default:"0" }}</span>
+                    <span class="stat-number">{{ site_stats.total_reviews|default:"0"|intcomma }}</span>
                     <span class="stat-label">New Reviews</span>
                 </td>
                 <td class="stat-cell">
-                    <span class="stat-number">{{ site_stats.new_signups|default:"0" }}</span>
+                    <span class="stat-number">{{ site_stats.new_signups|default:"0"|intcomma }}</span>
                     <span class="stat-label">New Hunters</span>
                 </td>
             </tr>
@@ -343,7 +344,7 @@
                     {% endif %}
                 </td>
                 <td class="plat-name">{{ game.game_name }}</td>
-                <td class="plat-count">{{ game.plat_count }} platinum{{ game.plat_count|pluralize }}</td>
+                <td class="plat-count">{{ game.plat_count|intcomma }} platinum{{ game.plat_count|pluralize }}</td>
             </tr>
             {% endfor %}
         </table>
@@ -363,7 +364,7 @@
             <div class="review-author">reviewed by {{ top_review.author_username }}</div>
             <div class="review-snippet">"{{ top_review.body_snippet }}..."</div>
             <div class="review-helpful">
-                {{ top_review.helpful_count }} found this helpful
+                {{ top_review.helpful_count|intcomma }} found this helpful
                 {% if review_url %}
                 &middot; <a href="{{ review_url }}" style="color:#667eea; text-decoration:underline;">Read full review</a>
                 {% endif %}
@@ -380,8 +381,8 @@
 
         {% if your_week.has_activity %}
         <p class="your-week-summary">
-            You earned <strong>{{ your_week.total_trophies }}</strong> troph{{ your_week.total_trophies|pluralize:"y,ies" }}{% if your_week.platinums_count > 0 %},
-            including <strong>{{ your_week.platinums_count }}</strong> platinum{{ your_week.platinums_count|pluralize }}{% endif %} this week.
+            You earned <strong>{{ your_week.total_trophies|intcomma }}</strong> troph{{ your_week.total_trophies|pluralize:"y,ies" }}{% if your_week.platinums_count > 0 %},
+            including <strong>{{ your_week.platinums_count|intcomma }}</strong> platinum{{ your_week.platinums_count|pluralize }}{% endif %} this week.
         </p>
         {% else %}
         <p class="your-week-summary">
@@ -401,9 +402,9 @@
                 <div class="progress-bar-fill" style="width: {{ challenge.progress_percentage }}%;"></div>
             </div>
             <div class="challenge-stats">
-                {{ challenge.completed_count }}/{{ challenge.total_items }} completed
+                {{ challenge.completed_count|intcomma }}/{{ challenge.total_items|intcomma }} completed
                 {% if challenge.weekly_delta > 0 %}
-                <span class="weekly-delta">+{{ challenge.weekly_delta }} this week</span>
+                <span class="weekly-delta">+{{ challenge.weekly_delta|intcomma }} this week</span>
                 {% endif %}
             </div>
         </div>
@@ -430,7 +431,7 @@
             <div class="progress-bar-bg">
                 <div class="progress-bar-fill" style="width: {{ your_week.closest_badge.progress_pct }}%;"></div>
             </div>
-            <span class="badge-progress-text">{{ your_week.closest_badge.completed }}/{{ your_week.closest_badge.required }} games ({{ your_week.closest_badge.progress_pct }}%)</span>
+            <span class="badge-progress-text">{{ your_week.closest_badge.completed|intcomma }}/{{ your_week.closest_badge.required|intcomma }} games ({{ your_week.closest_badge.progress_pct }}%)</span>
         </div>
         {% endif %}
         {% endif %}

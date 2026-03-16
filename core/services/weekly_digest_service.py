@@ -255,6 +255,8 @@ class WeeklyDigestService:
             earned_date_time__gte=week_start,
             earned_date_time__lt=week_end,
             trophy__game__concept__isnull=False,
+        ).exclude(
+            trophy__game__shovelware_status__in=['auto_flagged', 'manually_flagged'],
         ).values(
             'trophy__game__concept_id',
             'trophy__game__concept__unified_title',
