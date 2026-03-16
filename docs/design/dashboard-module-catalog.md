@@ -7,6 +7,7 @@ The dashboard serves as the index page for all logged-in users. Modules are orga
 - **Badges are the selling point:** Maximum badge presence across modules.
 - **Smart CTAs:** Modules show actionable prompts when the user hasn't started (never blank cards).
 - **Premium as upgrade path:** Settings, reorder, and premium-exclusive modules drive conversions.
+- **Visualizations sell premium:** Rich data visualizations are the primary premium differentiator.
 - **Gamification deferred:** Hold off on gamification modules until the system goes live.
 
 ## Module Status
@@ -14,10 +15,10 @@ The dashboard serves as the index page for all logged-in users. Modules are orga
 | Status | Count |
 |--------|-------|
 | Complete (Tier 1) | 4 |
-| Planned (Tier 2-4) | 21 |
-| Premium Exclusive | 3 |
+| Planned (Tier 2-4) | 22 |
+| Premium Exclusive | 9 |
 | Future (Gamification) | 3 |
-| **Total** | **31** |
+| **Total** | **38** |
 
 ---
 
@@ -30,6 +31,14 @@ The dashboard serves as the index page for all logged-in users. Modules are orga
 | 3 | Recent Activity | Lazy | Planned | EarnedTrophy, UserBadge, Review, Challenge |
 | 4 | Sync Status | Server | Planned | Profile (sync fields) |
 | 5 | Unread Notifications | Lazy | Planned | Notification model |
+| 29 | Quick Settings | Server | Planned | Profile + CustomUser (settings fields) |
+
+### Quick Settings (#29)
+- Inline toggle switches for `hide_hiddens`, `hide_zeros`, timezone selector, 24hr clock toggle
+- Server-rendered (reads Profile + User fields, zero extra queries)
+- Saves via existing settings API endpoints
+- All users (not premium-gated)
+- Default tab: `at_a_glance`
 
 ## Category: Progress & Challenges
 
@@ -82,13 +91,98 @@ Badges are a flagship feature with dedicated real estate.
 
 ## Category: Premium Exclusive
 
-The premium dashboard should feel indispensable.
+The premium dashboard should feel indispensable. Visualization modules are the primary conversion drivers.
 
 | # | Module | Strategy | Status | Data Source |
 |---|--------|----------|--------|------------|
 | 26 | Advanced Stats | Lazy | Planned | Aggregated EarnedTrophy (expensive) |
 | 27 | Profile Theme Preview | Server | Planned | Profile (selected_background, selected_theme) |
 | 28 | Trophy Roadmap | Lazy | Future | Requires standalone Roadmap feature first |
+| 30 | Platinum Heatmap | Lazy | Planned | EarnedTrophy (platinum earns by date) |
+| 31 | Rarity Radar | Lazy | Planned | EarnedTrophy + Trophy.trophy_earn_rate |
+| 32 | Personal Records | Lazy | Planned | Aggregated EarnedTrophy (records/milestones) |
+| 33 | Year in Review | Lazy | Planned | EarnedTrophy + ProfileGame (year comparison) |
+| 34 | Trophy Type Breakdown | Lazy | Planned | EarnedTrophy (type counts by month) |
+
+### Visualization Module Details
+
+#### Platinum Heatmap (#30)
+- GitHub-style contribution grid for platinum earns
+- Each cell = one day, color intensity = platinums earned that day
+- Shows streaks, dry spells, and seasonal patterns
+- Covers current year (365 cells) with month labels
+- Data: `EarnedTrophy.objects.filter(trophy__trophy_type='platinum', earned=True)` grouped by `earned_date_time` date
+- Rendering: Pure CSS/SVG grid (no chart library needed). Each cell is a small colored div.
+- Cache: High TTL (30m+), invalidate on sync
+- Premium: **Yes**
+
+#### Rarity Radar (#31)
+- Spider/radar chart showing the user's collection by rarity tier
+- Axes: Ultra Rare (<5%), Very Rare (5-10%), Rare (10-20%), Uncommon (20-50%), Common (>50%)
+- Shows what kind of hunter you are: "rarity chaser" vs "casual completionist"
+- Data: `EarnedTrophy` joined with `Trophy.trophy_earn_rate`, bucketed by rarity threshold
+- Rendering: Chart.js radar chart or pure SVG
+- Cache: High TTL (30m+), invalidate on sync
+- Premium: **Yes**
+
+#### Personal Records (#32)
+- Visual cards showing the user's personal trophy hunting records
+- Records: Fastest platinum (fewest days from first trophy to plat), Most platinums in a month, Longest daily streak, Rarest platinum earned, Most trophies in a single day
+- Each record shows the value, the game/date, and a small icon
+- Data: Aggregated from `EarnedTrophy` with date math
+- Rendering: Card grid, no chart library needed
+- Cache: High TTL (1hr), invalidate on sync
+- Premium: **Yes**
+
+#### Year in Review (#33)
+- Line chart comparing this year vs last year
+- Metrics: Cumulative platinums, total trophies, games completed
+- Shows growth trajectory and pacing
+- Data: `EarnedTrophy` grouped by month for current and previous year
+- Rendering: Chart.js line chart or pure SVG sparkline
+- Cache: High TTL (1hr), invalidate on sync
+- Premium: **Yes**
+
+#### Trophy Type Breakdown Over Time (#34)
+- Stacked area chart showing bronze/silver/gold/platinum earns by month
+- Reveals trends: "Am I earning more platinums over time?" "Am I becoming more of a completionist?"
+- Data: `EarnedTrophy` grouped by `trophy__trophy_type` and month
+- Rendering: Chart.js stacked area chart
+- Cache: High TTL (1hr), invalidate on sync
+- Premium: **Yes**
+
+### Free Visualization Modules
+
+These could be offered to all users as simpler, non-chart visualizations:
+
+#### Trophy Earn Rate Timeline (part of Trophy Snapshot or standalone)
+- Simple sparkline showing trophies earned per week over the last 3 months
+- Rendering: Pure CSS/SVG sparkline (no chart library)
+- Could be integrated into the existing Trophy Snapshot module rather than a standalone module
+
+#### Genre Breakdown (part of Advanced Stats or standalone)
+- Donut/pie chart of platinums by genre
+- "You're 40% Action, 25% RPG, 20% Adventure..."
+- Data: `EarnedTrophy` joined with `Concept.genres`
+- Could be free as a simpler version, with detailed drilldowns premium-only
+
+#### Completion Distribution (part of Advanced Stats or standalone)
+- Histogram of games by completion percentage (0-25%, 25-50%, 50-75%, 75-100%)
+- Shows backlog shape at a glance
+- Data: `ProfileGame.progress` bucketed
+- Simple enough to be free
+
+### Chart Library Considerations
+
+For visualization modules, two approaches:
+
+1. **Chart.js** (~60KB gzipped, Canvas-based): Best for radar charts, line charts, stacked area charts. Zero dependencies. Load only on pages/tabs that need it (lazy script load).
+
+2. **Pure CSS/SVG**: Best for heatmaps, sparklines, simple grids. No library overhead. Better for server-rendered modules.
+
+**Recommendation:** Use pure CSS/SVG for simpler visualizations (heatmap, sparklines, card-based records). Use Chart.js only for complex charts (radar, line, stacked area). Load Chart.js lazily only when a premium visualization tab is activated.
+
+---
 
 ## Future: Pending Gamification Launch
 
@@ -116,9 +210,9 @@ The premium dashboard should feel indispensable.
 | # | Module | Why |
 |---|--------|-----|
 | 13 | Recent Badges | Celebration feed reinforces the badge loop. |
-| 8 | Calendar Challenge | Visual calendar drives daily engagement. |
 | 3 | Recent Activity | Live feed makes dashboard feel alive. |
 | 22 | Monthly Recap Preview | Builds anticipation, shows momentum. |
+| 29 | Quick Settings | Quality-of-life, makes dashboard the true home base. |
 
 ### Tier 3: Depth
 
@@ -127,6 +221,7 @@ The premium dashboard should feel indispensable.
 | 14 | Badge Showcase | "Look what I've earned." |
 | 15 | Badge XP & Leaderboard | Competition drives engagement. |
 | 7 | A-Z Challenge Progress | Focused view for participants. |
+| 8 | Calendar Challenge Progress | Full 12-month view with navigation. |
 | 9 | Genre Challenge Progress | Focused view for participants. |
 | 10 | Milestone Tracker | Progress is motivating. |
 | 11 | Completion Milestones | "Almost there" games are actionable. |
@@ -147,11 +242,18 @@ The premium dashboard should feel indispensable.
 | 24 | Quick Links | Utility. |
 | 25 | Featured Content | Staff-curated. |
 
-### Premium Tier
+### Premium Visualization Tier
+
+These are the crown jewels that make premium feel indispensable.
 
 | # | Module | Why |
 |---|--------|-----|
-| 26 | Advanced Stats | Power user analytics. |
+| 30 | Platinum Heatmap | GitHub-style grid. Visual, addictive, shareable. |
+| 31 | Rarity Radar | Spider chart reveals your hunter identity. |
+| 32 | Personal Records | Gamifies your history. "Can I beat my record?" |
+| 33 | Year in Review | Growth trajectory. Motivational. |
+| 34 | Trophy Type Breakdown | Trends over time. "Am I improving?" |
+| 26 | Advanced Stats | Deep analytics for power users. |
 | 27 | Profile Theme Preview | Premium identity. |
 | 28 | Trophy Roadmap | Crown jewel (needs feature first). |
 
@@ -161,18 +263,21 @@ The premium dashboard should feel indispensable.
 
 | Slug | Display Name | Modules |
 |------|-------------|---------|
-| `at_a_glance` | At a Glance | Trophy Snapshot, Recent Platinums, Recent Activity, Sync Status, Notifications |
+| `premium` | Premium | Advanced Stats, Theme Preview, Trophy Roadmap, Platinum Heatmap, Rarity Radar, Personal Records, Year in Review, Trophy Type Breakdown |
+| `at_a_glance` | At a Glance | Trophy Snapshot, Recent Platinums, Recent Activity, Sync Status, Notifications, Quick Settings |
 | `progress` | Progress & Challenges | Challenge Hub, A-Z, Calendar, Genre, Milestones, Completion Milestones |
 | `badges` | Badges & Achievements | Badge Progress, Recent Badges, Badge Showcase, Badge XP & Leaderboard |
 | `community` | Community | My Reviews, Community Spotlight, Rate My Games, My Checklists, My Game Lists |
 | `highlights` | Highlights & History | Trophy Timeline, Monthly Recap Preview, Rarity Showcase |
-| `premium` | Premium | Advanced Stats, Theme Preview, Trophy Roadmap |
 
 Utility modules (Quick Links, Featured Content) fold into At a Glance or Highlights.
 
 ## Gotchas and Pitfalls
 
-- **Module catalog lives here, not in the plan file.** The plan file (`squishy-munching-octopus.md`) gets overwritten during planning sessions. This doc is the authoritative catalog.
+- **Module catalog lives here, not in the plan file.** The plan file gets overwritten during planning sessions. This doc is the authoritative catalog.
 - **New modules must follow the established pattern:** provider in `dashboard_service.py`, template in `partials/dashboard/`, register in `DASHBOARD_MODULES`, add `configurable_settings` if applicable.
 - **Cache invalidation:** Any new module that reads data affected by user actions must have invalidation hooks at the mutation points. See `docs/features/dashboard.md` for the current invalidation map.
 - **Performance first:** All lazy modules must have `cache_ttl > 0`. Use `invalidate_dashboard_cache()` at data mutation points rather than disabling caching.
+- **Chart.js lazy loading:** Only load Chart.js when a visualization module's tab is first activated. Do not include it in the global JS bundle.
+- **Visualization cache TTLs:** Premium visualization modules query large datasets. Use high cache TTLs (30m-1hr) and invalidate on sync completion.
+- **Free vs premium visualizations:** Simple CSS/SVG visualizations (sparklines, grids) can be free. Complex Chart.js visualizations (radar, line, stacked area) are premium.

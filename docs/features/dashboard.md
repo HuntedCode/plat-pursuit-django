@@ -159,7 +159,7 @@ Staff can switch between "view as premium" and "view as free" via a header butto
 - **Settings only active for premium**: Free users get defaults. Saved settings preserved across downgrades.
 - **Calendar weekday offset**: Uses `""|ljust:offset` (not `"x"|ljust:offset`) to avoid off-by-one.
 - **Badge prerequisite filtering**: Provider fetches 3x limit, pre-fetches earned badge IDs, filters in Python.
-- **Premium tab is immutable**: Modules cannot be moved in or out of the Premium tab.
+- **Premium modules are visually tagged**: Premium modules show a "Premium" badge on their name. Premium users can move them to any tab freely.
 - **Custom tab slug generation**: Uses `Date.now() + random(4)` to prevent collision.
 - **Customize panel structural changes**: `_customizeDirty` flag triggers page reload on modal close.
 - **Tab sections in customize panel**: Settings panel div must have `data-settings-slug` attribute and closing `>`.

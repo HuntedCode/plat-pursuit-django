@@ -146,16 +146,14 @@
                                         {% endif %}
                                     {% endif %}
 
-                                    {# Move to tab dropdown (premium only, not for premium tab modules) #}
-                                    {% if is_premium and not mod.is_locked and tab.slug != 'premium' %}
+                                    {# Move to tab dropdown (premium only) #}
+                                    {% if is_premium and not mod.is_locked %}
                                         <select class="select select-xs select-bordered module-move-select w-24 lg:w-28"
                                                 data-module-slug="{{ mod.slug }}"
                                                 data-current-tab="{{ tab.slug }}"
                                                 title="Move to tab">
                                             {% for opt in all_tab_options %}
-                                                {% if opt.slug != 'premium' %}
-                                                    <option value="{{ opt.slug }}" {% if opt.slug == tab.slug %}selected{% endif %}>{{ opt.name }}</option>
-                                                {% endif %}
+                                                <option value="{{ opt.slug }}" {% if opt.slug == tab.slug %}selected{% endif %}>{{ opt.name }}</option>
                                             {% endfor %}
                                         </select>
                                     {% endif %}
