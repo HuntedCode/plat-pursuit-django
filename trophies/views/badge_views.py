@@ -661,8 +661,8 @@ class BadgeDetailView(ProfileHotbarMixin, DetailView):
             'user_series_xp': user_series_xp,
             'user_lb_rank': user_lb_rank,
             'user_lb_progress_rank': user_lb_progress_rank,
-            'total_earners_count': len(lb_earners),
-            'total_progressers_count': len(lb_progress),
+            'total_earners_count': get_earners_count(series_slug),
+            'total_progressers_count': get_progress_count(series_slug),
             'user_total_playtime': user_total_playtime,
             'user_stages_played': user_stages_played,
             'user_stages_platinumed': user_stages_platinumed,
@@ -822,8 +822,9 @@ class BadgeLeaderboardsView(ProfileHotbarMixin, DetailView):
         context['breadcrumb'] = [
             {'text': 'Home', 'url': reverse_lazy('home')},
             {'text': 'Badges', 'url': reverse_lazy('badges_list')},
+            {'text': 'Leaderboards', 'url': reverse_lazy('overall_badge_leaderboards')},
             {'text': context['badge'].effective_display_series, 'url': reverse_lazy('badge_detail', kwargs={'series_slug': badge.series_slug})},
-            {'text': 'Leaderboards'},
+            {'text': 'Series Leaderboards'},
         ]
 
         active_tab = self.request.GET.get('tab', 'earners')
