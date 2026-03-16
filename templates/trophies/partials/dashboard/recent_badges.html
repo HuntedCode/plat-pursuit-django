@@ -12,7 +12,7 @@
                 Recent Badges
             </h2>
             {% if data.badges %}
-                <a href="{% url 'badges_list' %}" class="text-xs text-base-content/40 hover:text-primary transition-colors">View All</a>
+                <a href="{% url 'badges_list' %}" class="text-xs text-base-content/40 hover:text-primary transition-colors" aria-label="View all badges">View All</a>
             {% endif %}
         </div>
 

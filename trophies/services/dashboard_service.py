@@ -11,6 +11,7 @@ Adding a new module:
 """
 import inspect
 import logging
+from collections import defaultdict
 from django.core.cache import cache
 from django.db.models import F, FloatField, ExpressionWrapper
 
@@ -315,7 +316,6 @@ def provide_recent_activity(profile, settings=None):
     are always shown as standalone events. Badges are never grouped.
     """
     from trophies.models import EarnedTrophy, UserBadge
-    from collections import defaultdict
     import pytz
 
     settings = settings or {}
