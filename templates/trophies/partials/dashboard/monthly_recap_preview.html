@@ -1,0 +1,67 @@
+{% load custom_filters %}
+{# Dashboard module: Monthly Recap Preview. Teaser stats for current month. #}
+<div class="card bg-base-200/80 border-2 border-base-300 shadow-lg shadow-neutral">
+    <div class="card-body p-5 lg:p-7">
+        {# Header #}
+        <div class="flex items-center justify-between mb-3">
+            <h2 class="card-title text-base lg:text-lg font-bold flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-secondary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                    <line x1="16" y1="2" x2="16" y2="6"></line>
+                    <line x1="8" y1="2" x2="8" y2="6"></line>
+                    <line x1="3" y1="10" x2="21" y2="10"></line>
+                </svg>
+                Monthly Recap
+            </h2>
+            {% if data.has_recap %}
+                <a href="/recap/" class="text-xs text-base-content/40 hover:text-primary transition-colors">View Full Recap</a>
+            {% endif %}
+        </div>
+
+        {% if data.has_recap %}
+            <div class="text-center">
+                <p class="text-sm text-base-content/60 mb-3">Your {{ data.month_name }} recap</p>
+
+                {# Stat highlights: 4 stats #}
+                <div class="grid grid-cols-4 gap-2 lg:gap-3">
+                    <div class="bg-base-300/50 rounded-lg p-2 lg:p-3">
+                        <div class="text-lg lg:text-2xl font-black text-primary">{{ data.platinums }}</div>
+                        <div class="text-xs text-base-content/50 font-medium">Platinums</div>
+                    </div>
+                    <div class="bg-base-300/50 rounded-lg p-2 lg:p-3">
+                        <div class="text-lg lg:text-2xl font-black text-base-content">{{ data.total_trophies }}</div>
+                        <div class="text-xs text-base-content/50 font-medium">Trophies</div>
+                    </div>
+                    <div class="bg-base-300/50 rounded-lg p-2 lg:p-3">
+                        <div class="text-lg lg:text-2xl font-black text-success">{{ data.games_completed }}</div>
+                        <div class="text-xs text-base-content/50 font-medium">Completed</div>
+                    </div>
+                    <div class="bg-base-300/50 rounded-lg p-2 lg:p-3">
+                        <div class="text-lg lg:text-2xl font-black text-info">{{ data.games_started|default:"0" }}</div>
+                        <div class="text-xs text-base-content/50 font-medium">Started</div>
+                    </div>
+                </div>
+
+                {# Enticing CTA #}
+                <p class="text-xs text-base-content/40 mt-3 italic pr-1">Rarest trophies, streaks, quizzes, and more inside...</p>
+                <a href="{% url 'recap_view' data.year data.month %}" class="btn btn-secondary btn-sm mt-2 gap-1.5">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                    </svg>
+                    Relive {{ data.month_name }}
+                </a>
+            </div>
+        {% else %}
+            <div class="text-center py-6">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-10 h-10 text-secondary/30 mx-auto mb-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                    <line x1="16" y1="2" x2="16" y2="6"></line>
+                    <line x1="8" y1="2" x2="8" y2="6"></line>
+                    <line x1="3" y1="10" x2="21" y2="10"></line>
+                </svg>
+                <p class="text-sm text-base-content/50">No recap data yet.</p>
+                <p class="text-xs text-base-content/40 mt-1">Start earning trophies to build your monthly recap!</p>
+            </div>
+        {% endif %}
+    </div>
+</div>

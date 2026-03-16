@@ -71,7 +71,7 @@ from .subscription_admin_views import SubscriptionAdminActionView, SubscriptionA
 from .fundraiser_views import CreateDonationView, ClaimBadgeView, UpdateClaimStatusView
 from .dashboard_views import DashboardModuleDataView, DashboardConfigUpdateView, DashboardModuleReorderView, DashboardPreviewToggleView
 from .title_views import EquipTitleAPIView
-from .user_settings_views import UpdateTimezoneAPIView
+from .user_settings_views import UpdateTimezoneAPIView, UpdateQuickSettingsAPIView
 from .game_player_views import GamePlayersAPIView
 from .mobile_profile_views import MobileProfileView, MobileMyProfileView
 from .mobile_psn_views import MobilePSNGenerateCodeView, MobilePSNVerifyView, MobilePSNStatusView
@@ -312,6 +312,7 @@ urlpatterns = [
 
     # User settings endpoints
     path('user/timezone/', UpdateTimezoneAPIView.as_view(), name='user-timezone-update'),
+    path('user/quick-settings/', UpdateQuickSettingsAPIView.as_view(), name='user-quick-settings'),
 
     # Review Hub endpoints
     path('reviews/recent/', RecentReviewsView.as_view(), name='review-recent'),

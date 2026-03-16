@@ -277,6 +277,176 @@ def provide_badge_progress(profile, settings=None):
     }
 
 
+def provide_recent_badges(profile, settings=None):
+    """Recently earned badges, newest first, with community earn count."""
+    from trophies.models import UserBadge
+
+    settings = settings or {}
+    limit = settings.get('limit', 6)
+
+    recent = (
+        UserBadge.objects
+        .filter(profile=profile)
+        .select_related('badge', 'badge__base_badge')
+        .order_by('-earned_at')[:limit]
+    )
+
+    badges = []
+    for ub in recent:
+        badge = ub.badge
+        badges.append({
+            'layers': badge.get_badge_layers(),
+            'series_name': badge.effective_display_series or badge.name,
+            'tier': badge.tier,
+            'tier_name': badge.get_tier_display(),
+            'series_slug': badge.series_slug,
+            'earned_at': ub.earned_at,
+            'is_displayed': ub.is_displayed,
+            'earned_count': badge.earned_count,
+        })
+
+    return {'badges': badges}
+
+
+def provide_recent_activity(profile, settings=None):
+    """Trophy-focused activity feed with grouping by game + day.
+
+    Trophies are grouped by game + local date (timezone-aware). Platinums
+    are always shown as standalone events. Badges are never grouped.
+    """
+    from trophies.models import EarnedTrophy, UserBadge
+    from collections import defaultdict
+    import pytz
+
+    settings = settings or {}
+    limit = settings.get('limit', 8)
+
+    # Get user timezone for date grouping
+    tz_name = profile.user.user_timezone if profile.user else 'UTC'
+    user_tz = pytz.timezone(tz_name or 'UTC')
+
+    # Fetch more than needed since grouping reduces count
+    fetch_limit = limit * 4
+    trophy_qs = (
+        EarnedTrophy.objects
+        .filter(profile=profile, earned=True, earned_date_time__isnull=False)
+        .select_related('trophy__game__concept')
+        .order_by('-earned_date_time')[:fetch_limit]
+    )
+
+    badge_qs = (
+        UserBadge.objects
+        .filter(profile=profile)
+        .select_related('badge', 'badge__base_badge')
+        .order_by('-earned_at')[:limit]
+    )
+
+    events = []
+
+    # Group trophies by (game, local_date), but platinums are always standalone
+    groups = defaultdict(list)
+    for et in trophy_qs:
+        game = et.trophy.game
+        concept = getattr(game, 'concept', None) if game else None
+        local_dt = et.earned_date_time.astimezone(user_tz)
+        local_date = local_dt.date()
+        np_id = game.np_communication_id if game else None
+
+        if et.trophy.trophy_type == 'platinum':
+            # Platinums are always standalone
+            events.append({
+                'type': 'platinum',
+                'name': concept.unified_title if concept else game.title_name if game else 'Unknown',
+                'icon_url': concept.concept_icon_url if concept else (game.title_image if game else ''),
+                'np_communication_id': np_id,
+                'date': et.earned_date_time,
+                'earn_rate': et.trophy.trophy_earn_rate,
+            })
+        else:
+            groups[(np_id, local_date)].append(et)
+
+    # Build grouped trophy events
+    for (np_id, local_date), trophy_list in groups.items():
+        first = trophy_list[0]
+        game = first.trophy.game
+        concept = getattr(game, 'concept', None) if game else None
+        # Count by type for the badge display
+        type_counts = defaultdict(int)
+        for et in trophy_list:
+            type_counts[et.trophy.trophy_type] += 1
+
+        events.append({
+            'type': 'trophy_group',
+            'count': len(trophy_list),
+            'game_name': concept.unified_title if concept else game.title_name if game else 'Unknown',
+            'icon_url': concept.concept_icon_url if concept else (game.title_image if game else ''),
+            'np_communication_id': np_id,
+            'type_counts': dict(type_counts),
+            'date': max(et.earned_date_time for et in trophy_list),
+        })
+
+    # Badge events (never grouped)
+    for ub in badge_qs:
+        badge = ub.badge
+        events.append({
+            'type': 'badge',
+            'name': badge.effective_display_series or badge.name,
+            'tier_name': badge.get_tier_display(),
+            'tier': badge.tier,
+            'series_slug': badge.series_slug,
+            'layers': badge.get_badge_layers(),
+            'date': ub.earned_at,
+        })
+
+    events.sort(key=lambda e: e['date'], reverse=True)
+    return {'events': events[:limit]}
+
+
+def provide_monthly_recap_preview(profile):
+    """Teaser stats for the most recent finalized monthly recap.
+
+    Always pulls from the last completed month, not the current one.
+    Handles the gap where the previous month's recap hasn't been generated yet.
+    """
+    from trophies.models import MonthlyRecap
+
+    recap = (
+        MonthlyRecap.objects
+        .filter(profile=profile, is_finalized=True)
+        .order_by('-year', '-month')
+        .first()
+    )
+
+    if not recap:
+        return {'has_recap': False}
+
+    import calendar
+    month_name = f'{calendar.month_name[recap.month]} {recap.year}'
+
+    return {
+        'has_recap': True,
+        'month_name': month_name,
+        'year': recap.year,
+        'month': recap.month,
+        'platinums': recap.platinums_earned,
+        'total_trophies': recap.total_trophies_earned,
+        'games_completed': recap.games_completed,
+        'games_started': recap.games_started or 0,
+    }
+
+
+def provide_quick_settings(profile):
+    """User settings for inline dashboard controls. Zero extra queries."""
+    user = profile.user
+    return {
+        'hide_hiddens': profile.hide_hiddens,
+        'hide_zeros': profile.hide_zeros,
+        'user_timezone': user.user_timezone if user else 'UTC',
+        'default_region': user.default_region if user else '',
+        'use_24hr_clock': user.use_24hr_clock if user else False,
+    }
+
+
 # ---------------------------------------------------------------------------
 # Module Registry
 # ---------------------------------------------------------------------------
@@ -349,6 +519,76 @@ DASHBOARD_MODULES = [
              'options': [{'value': 2, 'label': '2'}, {'value': 4, 'label': '4'}, {'value': 6, 'label': '6'}]},
         ],
         'cache_ttl': 600,
+        'default_size': 'medium',
+        'allowed_sizes': ['small', 'medium', 'large'],
+    },
+    {
+        'slug': 'recent_badges',
+        'name': 'Recent Badges',
+        'description': 'Your latest badge conquests. Celebrate every tier!',
+        'category': 'badges',
+        'template': 'trophies/partials/dashboard/recent_badges.html',
+        'provider': provide_recent_badges,
+        'requires_premium': False,
+        'load_strategy': 'lazy',
+        'default_order': 5,
+        'default_settings': {'limit': 6},
+        'configurable_settings': [
+            {'key': 'limit', 'label': 'Items to show', 'type': 'select', 'default': 6,
+             'options': [{'value': 3, 'label': '3'}, {'value': 6, 'label': '6'}, {'value': 9, 'label': '9'}]},
+        ],
+        'cache_ttl': 600,
+        'default_size': 'medium',
+        'allowed_sizes': ['small', 'medium', 'large'],
+    },
+    {
+        'slug': 'recent_activity',
+        'name': 'Recent Activity',
+        'description': 'Your latest trophy earns and badge awards in one feed.',
+        'category': 'at_a_glance',
+        'template': 'trophies/partials/dashboard/recent_activity.html',
+        'provider': provide_recent_activity,
+        'requires_premium': False,
+        'load_strategy': 'lazy',
+        'default_order': 6,
+        'default_settings': {'limit': 8},
+        'configurable_settings': [
+            {'key': 'limit', 'label': 'Items to show', 'type': 'select', 'default': 8,
+             'options': [{'value': 5, 'label': '5'}, {'value': 8, 'label': '8'}, {'value': 12, 'label': '12'}]},
+        ],
+        'cache_ttl': 300,
+        'default_size': 'medium',
+        'allowed_sizes': ['small', 'medium', 'large'],
+    },
+    {
+        'slug': 'monthly_recap_preview',
+        'name': 'Monthly Recap',
+        'description': 'A sneak peek at your current month. How are you doing?',
+        'category': 'highlights',
+        'template': 'trophies/partials/dashboard/monthly_recap_preview.html',
+        'provider': provide_monthly_recap_preview,
+        'requires_premium': False,
+        'load_strategy': 'lazy',
+        'default_order': 7,
+        'default_settings': {},
+        'configurable_settings': [],
+        'cache_ttl': 1800,
+        'default_size': 'medium',
+        'allowed_sizes': ['small', 'medium', 'large'],
+    },
+    {
+        'slug': 'quick_settings',
+        'name': 'Quick Settings',
+        'description': 'Adjust your profile settings without leaving the dashboard.',
+        'category': 'at_a_glance',
+        'template': 'trophies/partials/dashboard/quick_settings.html',
+        'provider': provide_quick_settings,
+        'requires_premium': False,
+        'load_strategy': 'server',
+        'default_order': 8,
+        'default_settings': {},
+        'configurable_settings': [],
+        'cache_ttl': 0,
         'default_size': 'medium',
         'allowed_sizes': ['small', 'medium', 'large'],
     },

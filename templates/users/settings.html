@@ -27,7 +27,13 @@
                     <input type="hidden" name="action" value="update_user">
                     <div class="form-control">
                         <label class="label" for="{{ user_form.user_timezone.id_for_label }}">Timezone</label>
-                        {{ user_form.user_timezone }}
+                        <div class="flex items-center gap-2">
+                            <div class="flex-1">{{ user_form.user_timezone }}</div>
+                            <button type="button" class="btn btn-ghost btn-sm gap-1" id="detect-timezone-btn" title="Detect timezone from browser">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+                                Detect
+                            </button>
+                        </div>
                         {% if user_form.user_timezone.errors %}
                             <div class="alert alert-error mt-1">{{ user_form.user_timezone.errors }}</div>
                         {% endif %}
@@ -433,5 +439,29 @@ document.addEventListener('DOMContentLoaded', function() {
 </script>
 <script>
     PlatPursuit.ZoomScaler.init();
+
+    // Detect timezone from browser
+    document.getElementById('detect-timezone-btn')?.addEventListener('click', function() {
+        try {
+            const detected = Intl.DateTimeFormat().resolvedOptions().timeZone;
+            if (!detected) {
+                PlatPursuit.ToastManager.error('Could not detect timezone from browser.');
+                return;
+            }
+            const select = document.getElementById('id_user_timezone');
+            if (select) {
+                const option = [...select.options].find(o => o.value === detected);
+                if (option) {
+                    select.value = detected;
+                    select.dispatchEvent(new Event('change', { bubbles: true }));
+                    PlatPursuit.ToastManager.success('Timezone detected: ' + detected + '. Save to apply.');
+                } else {
+                    PlatPursuit.ToastManager.warning('Detected timezone (' + detected + ') not found in the list.');
+                }
+            }
+        } catch (e) {
+            PlatPursuit.ToastManager.error('Could not detect timezone.');
+        }
+    });
 </script>
 {% endblock %}

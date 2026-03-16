@@ -69,6 +69,9 @@
                     this._initDragForTab(this.activeTab);
                 }
             }
+
+            // Quick Settings module: bind auto-save controls (server-rendered, already in DOM)
+            this._initQuickSettings();
         }
 
         // -----------------------------------------------------------------
@@ -214,6 +217,64 @@
 
         registerModuleInit(slug, fn) {
             this._moduleInits[slug] = fn;
+        }
+
+        // -----------------------------------------------------------------
+        // Quick Settings (auto-save toggles, timezone detect, region select)
+        // -----------------------------------------------------------------
+
+        _initQuickSettings() {
+            const saveQuickSetting = async (setting, value, revertFn) => {
+                try {
+                    await PlatPursuit.API.post('/api/v1/user/quick-settings/', { setting, value });
+                    PlatPursuit.ToastManager.success('Setting saved.');
+                } catch (err) {
+                    PlatPursuit.ToastManager.error('Failed to save setting.');
+                    if (revertFn) revertFn();
+                }
+            };
+
+            // Boolean toggles
+            document.querySelectorAll('.quick-setting-toggle').forEach(toggle => {
+                toggle.addEventListener('change', () => {
+                    saveQuickSetting(toggle.dataset.setting, toggle.checked, () => {
+                        toggle.checked = !toggle.checked;
+                    });
+                });
+            });
+
+            // Select dropdowns (region)
+            document.querySelectorAll('.quick-setting-select').forEach(select => {
+                const original = select.value;
+                select.addEventListener('change', () => {
+                    saveQuickSetting(select.dataset.setting, select.value, () => {
+                        select.value = original;
+                    });
+                });
+            });
+
+            // Detect timezone from browser
+            document.querySelectorAll('.quick-setting-detect-tz').forEach(btn => {
+                btn.addEventListener('click', async () => {
+                    try {
+                        const detected = Intl.DateTimeFormat().resolvedOptions().timeZone;
+                        if (!detected) {
+                            PlatPursuit.ToastManager.error('Could not detect timezone from browser.');
+                            return;
+                        }
+                        await PlatPursuit.API.post('/api/v1/user/quick-settings/', {
+                            setting: 'user_timezone',
+                            value: detected,
+                        });
+                        // Update the displayed timezone text
+                        const label = btn.closest('.flex')?.querySelector('.truncate');
+                        if (label) label.textContent = detected;
+                        PlatPursuit.ToastManager.success(`Timezone set to ${detected}.`);
+                    } catch (err) {
+                        PlatPursuit.ToastManager.error('Failed to save timezone.');
+                    }
+                });
+            });
         }
 
         // -----------------------------------------------------------------

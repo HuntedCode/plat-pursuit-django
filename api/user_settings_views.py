@@ -64,3 +64,70 @@ class UpdateTimezoneAPIView(APIView):
             'timezone': timezone_value,
             'recaps_reset': recaps_reset,
         })
+
+
+class UpdateQuickSettingsAPIView(APIView):
+    """
+    POST /api/v1/user/quick-settings/
+    Body: {"setting": "hide_hiddens", "value": true}
+      or: {"setting": "user_timezone", "value": "America/New_York"}
+      or: {"setting": "default_region", "value": "NA"}
+
+    Updates a single profile or user setting.
+    Used by the dashboard Quick Settings module for auto-save.
+    """
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [SessionAuthentication]
+
+    PROFILE_BOOL_SETTINGS = {'hide_hiddens', 'hide_zeros'}
+    USER_BOOL_SETTINGS = {'use_24hr_clock'}
+
+    def post(self, request):
+        setting = request.data.get('setting', '').strip()
+        value = request.data.get('value')
+
+        if not setting:
+            return Response({'error': 'Setting name is required.'}, status=http_status.HTTP_400_BAD_REQUEST)
+
+        # Boolean toggle settings
+        if setting in self.PROFILE_BOOL_SETTINGS:
+            if not isinstance(value, bool):
+                return Response({'error': 'Value must be a boolean.'}, status=http_status.HTTP_400_BAD_REQUEST)
+            profile = getattr(request.user, 'profile', None)
+            if not profile:
+                return Response({'error': 'Profile not found.'}, status=http_status.HTTP_404_NOT_FOUND)
+            setattr(profile, setting, value)
+            profile.save(update_fields=[setting])
+
+        elif setting in self.USER_BOOL_SETTINGS:
+            if not isinstance(value, bool):
+                return Response({'error': 'Value must be a boolean.'}, status=http_status.HTTP_400_BAD_REQUEST)
+            setattr(request.user, setting, value)
+            request.user.save(update_fields=[setting])
+
+        # Timezone setting (reuse validation from UpdateTimezoneAPIView)
+        elif setting == 'user_timezone':
+            if not isinstance(value, str) or value not in pytz.common_timezones_set:
+                return Response({'error': 'Invalid timezone.'}, status=http_status.HTTP_400_BAD_REQUEST)
+            old_tz = request.user.user_timezone or 'UTC'
+            request.user.user_timezone = value
+            request.user.save(update_fields=['user_timezone'])
+            # Un-finalize recaps if timezone changed
+            if old_tz != value:
+                profile = getattr(request.user, 'profile', None)
+                if profile:
+                    from trophies.models import MonthlyRecap
+                    MonthlyRecap.objects.filter(profile=profile, is_finalized=True).update(is_finalized=False)
+
+        # Region setting
+        elif setting == 'default_region':
+            from trophies.util_modules.constants import REGIONS
+            if value is not None and value not in REGIONS and value != '':
+                return Response({'error': 'Invalid region.'}, status=http_status.HTTP_400_BAD_REQUEST)
+            request.user.default_region = value if value else None
+            request.user.save(update_fields=['default_region'])
+
+        else:
+            return Response({'error': f'Unknown setting: {setting}'}, status=http_status.HTTP_400_BAD_REQUEST)
+
+        return Response({'success': True, 'setting': setting, 'value': value})
