@@ -1044,6 +1044,7 @@ class TokenKeeper:
             if summary_total != total_tracked:
                 trophy_titles_to_be_updated = []
                 current_tracked_games = list(ProfileGame.objects.filter(profile=profile))
+                games_to_unhide = []
                 games_needing_groups = []
                 page_size = 400
                 limit = page_size
@@ -1108,6 +1109,8 @@ class TokenKeeper:
                         pgame = _pgame_by_game.get(game.id)
                         if pgame and pgame in current_tracked_games:
                             current_tracked_games.remove(pgame)
+                            if pgame.user_hidden:
+                                games_to_unhide.append(pgame.game_id)
 
                         title_total = title.earned_trophies.bronze + title.earned_trophies.silver + title.earned_trophies.gold + title.earned_trophies.platinum
                         if tracked_total != title_total:
@@ -1130,6 +1133,22 @@ class TokenKeeper:
                     offset += page_size
 
                 logger.info(f"Health check complete for profile {profile_id}: {games_checked} games checked, {mismatch_count} mismatches, {pgame_drift_count} ProfileGame drifts")
+
+                # Unhide games that returned in PSN response but were previously hidden
+                if games_to_unhide:
+                    with transaction.atomic():
+                        EarnedTrophy.objects.filter(
+                            profile=profile,
+                            trophy__game_id__in=games_to_unhide
+                        ).update(user_hidden=False)
+                        ProfileGame.objects.filter(
+                            profile=profile,
+                            game_id__in=games_to_unhide
+                        ).update(user_hidden=False)
+                    logger.info(
+                        f"Health check for profile {profile_id}: unhid {len(games_to_unhide)} "
+                        f"game(s) that returned in PSN response"
+                    )
 
                 if len(current_tracked_games) > 0:
                     # Use bulk update instead of individual saves to reduce DB locks

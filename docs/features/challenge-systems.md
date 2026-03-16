@@ -537,6 +537,9 @@ Calendar day matching converts platinum `earned_date_time` to the user's timezon
 ### Calendar Day Unfill Behavior
 Calendar days CAN be unfilled when the qualifying platinum set changes. This happens when games are flagged as shovelware, games are hidden by the user, or timezone changes shift a platinum to a different (month, day). The reconciliation engine (`_reconcile_calendar_days`) handles this on every sync and on timezone changes. If unfilling reverts a completed (365/365) calendar, `is_complete` is cleared. Use `python manage.py recalculate_calendars` to force a full reconciliation across all calendars. Use `python manage.py audit_calendar --username <name>` to diagnose why specific platinums are missing from a user's calendar (shows every filter check per platinum and cross-references with actual calendar day state).
 
+### user_hidden Flag Lifecycle
+The `user_hidden` flag on EarnedTrophy and ProfileGame is set to `True` by the health check when a game is absent from the PSN API response (user hid/deleted it on PSN). When the game returns in a subsequent PSN response, the health check batch-resets `user_hidden=False` on both models. The sync update paths (`create_or_update_earned_trophy_from_trophy_data` and `create_or_update_profile_game`) also reset the flag as a safety net. The calendar challenge filters on `user_hidden=False`, so stale `user_hidden=True` flags will cause platinums to be excluded from the calendar.
+
 ### Game vs. Concept Level
 A-Z and Calendar challenges use `Game` (individual PSN title). Genre challenges use `Concept` (cross-platform grouping). This means:
 - A-Z: the user picks a specific game version; completion checks `ProfileGame.has_plat` for that exact game.

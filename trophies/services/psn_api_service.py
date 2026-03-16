@@ -336,6 +336,7 @@ class PsnApiService:
                 "platinum": trophy_title.earned_trophies.platinum
             }
             profile_game.last_updated_datetime = trophy_title.last_updated_datetime
+            profile_game.user_hidden = False  # PSN returned this game, so it's not hidden
             profile_game.save()
 
         if created:
@@ -431,6 +432,7 @@ class PsnApiService:
             earned_trophy.progress_rate = trophy_data.progress_rate
             earned_trophy.progressed_date_time = trophy_data.progressed_date_time
             earned_trophy.earned_date_time = trophy_data.earned_date_time
+            earned_trophy.user_hidden = False  # PSN returned this trophy, so it's not hidden
             earned_trophy.save()
 
         if notify:

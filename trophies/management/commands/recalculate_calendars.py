@@ -9,12 +9,13 @@ Usage:
     python manage.py recalculate_calendars                     # Fix all calendars
     python manage.py recalculate_calendars --username Jlowe    # Single user
     python manage.py recalculate_calendars --include-complete  # Include 365/365 calendars
+    python manage.py recalculate_calendars --reset-hidden      # Reset stale user_hidden flags first
 """
 import calendar as cal_module
 
 from django.core.management.base import BaseCommand
 
-from trophies.models import Challenge, CalendarChallengeDay
+from trophies.models import Challenge, CalendarChallengeDay, EarnedTrophy, ProfileGame
 from trophies.services.challenge_service import (
     _reconcile_calendar_days,
     recalculate_challenge_counts,
@@ -41,14 +42,46 @@ class Command(BaseCommand):
             action='store_true',
             help='Also process completed (365/365) calendars',
         )
+        parser.add_argument(
+            '--reset-hidden',
+            action='store_true',
+            help='Reset stale user_hidden flags before reconciliation (safe: next health check re-hides actually hidden games)',
+        )
 
     def handle(self, *args, **options):
         dry_run = options['dry_run']
         username = options['username']
         include_complete = options['include_complete']
+        reset_hidden = options['reset_hidden']
 
         if dry_run:
             self.stdout.write(self.style.WARNING('DRY RUN MODE: no changes will be made'))
+
+        # Reset stale user_hidden flags before reconciliation
+        if reset_hidden:
+            profile_filter = {}
+            if username:
+                profile_filter['profile__psn_username__iexact'] = username
+
+            hidden_et = EarnedTrophy.objects.filter(user_hidden=True, **profile_filter)
+            hidden_pg = ProfileGame.objects.filter(user_hidden=True, **profile_filter)
+            et_count = hidden_et.count()
+            pg_count = hidden_pg.count()
+
+            if et_count or pg_count:
+                if dry_run:
+                    self.stdout.write(self.style.WARNING(
+                        f'Would reset user_hidden on {et_count} EarnedTrophy and {pg_count} ProfileGame rows'
+                    ))
+                else:
+                    hidden_et.update(user_hidden=False)
+                    hidden_pg.update(user_hidden=False)
+                    self.stdout.write(self.style.SUCCESS(
+                        f'Reset user_hidden on {et_count} EarnedTrophy and {pg_count} ProfileGame rows'
+                    ))
+            else:
+                self.stdout.write('No stale user_hidden flags found.')
+            self.stdout.write('')
 
         qs = Challenge.objects.filter(
             challenge_type='calendar', is_deleted=False,
