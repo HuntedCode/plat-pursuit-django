@@ -47,7 +47,7 @@
         {% if active_tab == 'earners' %}
             {% include 'trophies/partials/leaderboard_earners_table.html' %}
         {% else %}
-            {% include 'trophies/partials/leaderboard_progress_table.html' with progress_heading='Series Badge Progress' progress_page_obj=lb_progress_page_obj progress_paginator=lb_progress_paginator progress_page_param='lb_progress_page' progress_user_page=lb_progress_user_page progress_user_rank=lb_progress_user_rank progress_rank_prefix='2' progress_refresh_time=lb_progress_refresh_time %}
+            {% include 'trophies/partials/leaderboard_progress_table.html' with progress_heading='Series Badge Progress' progress_page_obj=lb_progress_page_obj progress_paginator=lb_progress_paginator progress_page_param='lb_progress_page' progress_user_page=lb_progress_user_page progress_user_rank=lb_progress_user_rank progress_rank_prefix='2' %}
         {% endif %}
     </section>
 {% endblock %}

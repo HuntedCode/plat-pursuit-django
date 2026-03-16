@@ -45,7 +45,7 @@
         {% if active_tab == 'xp' %}
             {% include 'trophies/partials/leaderboard_total_xp_table.html' %}
         {% elif active_tab == 'progress' %}
-            {% include 'trophies/partials/leaderboard_progress_table.html' with progress_heading='Badge Progress Leaderboard' progress_page_obj=lb_total_progress_page_obj progress_paginator=lb_total_progress_paginator progress_page_param='lb_total_progress_page' progress_user_page=lb_total_progress_user_page progress_user_rank=lb_total_progress_user_rank progress_rank_prefix='2' progress_refresh_time=lb_total_progress_refresh_time progress_empty_text='No badge trophy progress recorded.' progress_empty_subtext='Time to start collecting.' %}
+            {% include 'trophies/partials/leaderboard_progress_table.html' with progress_heading='Badge Progress Leaderboard' progress_page_obj=lb_total_progress_page_obj progress_paginator=lb_total_progress_paginator progress_page_param='lb_total_progress_page' progress_user_page=lb_total_progress_user_page progress_user_rank=lb_total_progress_user_rank progress_rank_prefix='2' progress_empty_text='No badge trophy progress recorded.' progress_empty_subtext='Time to start collecting.' %}
         {% else %}
             {% include 'trophies/partials/leaderboard_series_directory.html' %}
         {% endif %}
