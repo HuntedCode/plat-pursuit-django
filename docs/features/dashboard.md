@@ -47,6 +47,11 @@ Premium users can create custom tabs with a name (max 20 chars) and icon (from 8
 | `recent_activity` | Recent Activity | at_a_glance | Lazy | 5m | No |
 | `monthly_recap_preview` | Monthly Recap Preview | highlights | Lazy | 30m | No |
 | `quick_settings` | Quick Settings | at_a_glance | Server | None | No |
+| `badge_stats` | Badge Stats | badges | Lazy | 10m | No |
+| `badge_xp_leaderboard` | Badge XP & Leaderboard | badges | Lazy | 10m | No |
+| `az_challenge` | A-Z Challenge | progress | Lazy | 5m | No |
+| `genre_challenge` | Genre Challenge | progress | Lazy | 5m | No |
+| `calendar_challenge` | Platinum Calendar | progress | Lazy | 5m | No |
 
 See [Module Catalog](../design/dashboard-module-catalog.md) for the full module roadmap.
 
@@ -176,6 +181,11 @@ Staff can switch between "view as premium" and "view as free" via a header butto
 - **Monthly Recap shows finalized recaps only**: The provider fetches the most recent finalized recap, never the current in-progress month. This avoids spoiling the full recap experience.
 - **Quick Settings auto-save**: Each toggle/select change POSTs to `/api/v1/user/quick-settings/`. Timezone changes also un-finalize the current month's recap (handled server-side). Whitelisted settings prevent arbitrary field injection.
 - **Quick Settings region selector**: Includes "Any" (empty string) plus 6 region codes (NA, EU, JP, AS, KR, CN). Stored as `default_region` on Profile.
+- **Challenge module `_find_challenge` helper**: Shared private function used by `provide_challenge_hub` and the 3 standalone challenge providers. Finds active challenge first, falls back to most recently completed.
+- **Badge Stats collection rate**: Counts unique `series_slug` with `tier=1` and `is_live=True` for the denominator. Uses Tier 1 count to avoid inflating with multi-tier series.
+- **Badge XP leaderboard neighborhood**: When user is outside top 5, shows top 3 + gap + 2 above/user/2 below. Edge case: if user rank overlaps with top 3 window, `neighborhood_start = max(3, idx - 2)` prevents duplicate entries.
+- **Challenge "most recent plat"**: Uses `slot.completed_at` timestamp (not alphabetical order) to find the true most recently completed slot.
+- **Calendar 3-month pagination**: All 12 months are rendered in HTML, JS shows/hides 3 at a time. `_initCalendarPagination` registered via `registerModuleInit('calendar_challenge', ...)`. Defaults to the page containing the current month.
 - **Staff-gated during dev**: Switch mixins to `LoginRequiredMixin` for production. Remove preview toggle UI.
 
 ## How to Add a New Module

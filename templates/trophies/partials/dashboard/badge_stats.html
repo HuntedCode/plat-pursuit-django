@@ -1,0 +1,94 @@
+{% load static custom_filters %}
+{# Dashboard module: Badge Stats. Collection analytics with tier breakdown. #}
+<div class="card bg-base-200/80 border-2 border-base-300 shadow-lg shadow-neutral">
+    <div class="card-body p-5 lg:p-7">
+        {# Header #}
+        <div class="flex items-center justify-between mb-3">
+            <h2 class="card-title text-base lg:text-lg font-bold flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-warning" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="8" r="7"></circle>
+                    <polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"></polyline>
+                </svg>
+                Badge Stats
+            </h2>
+            {% if data.has_stats %}
+                <a href="{% url 'badges_list' %}" class="text-xs text-base-content/40 hover:text-primary transition-colors" aria-label="View all badges">View All</a>
+            {% endif %}
+        </div>
+
+        {% if data.has_stats %}
+            {# Tier breakdown #}
+            <div class="grid grid-cols-4 gap-2 mb-4">
+                <div class="bg-amber-700/10 border border-amber-700/20 rounded-lg p-2 text-center">
+                    <div class="text-lg font-black text-amber-700">{{ data.tier_counts.bronze }}</div>
+                    <div class="text-xs text-base-content/50 font-medium">Bronze</div>
+                </div>
+                <div class="bg-base-content/5 border border-base-content/10 rounded-lg p-2 text-center">
+                    <div class="text-lg font-black text-base-content/60">{{ data.tier_counts.silver }}</div>
+                    <div class="text-xs text-base-content/50 font-medium">Silver</div>
+                </div>
+                <div class="bg-warning/10 border border-warning/20 rounded-lg p-2 text-center">
+                    <div class="text-lg font-black text-warning">{{ data.tier_counts.gold }}</div>
+                    <div class="text-xs text-base-content/50 font-medium">Gold</div>
+                </div>
+                <div class="bg-primary/10 border border-primary/20 rounded-lg p-2 text-center">
+                    <div class="text-lg font-black text-primary">{{ data.tier_counts.platinum }}</div>
+                    <div class="text-xs text-base-content/50 font-medium">Platinum</div>
+                </div>
+            </div>
+
+            {# Collection progress #}
+            <div class="mb-4">
+                <div class="flex items-center justify-between text-xs text-base-content/50 mb-1">
+                    <span>Collection: {{ data.unique_series }}/{{ data.total_live_series }} series</span>
+                    <span class="font-bold">{{ data.collection_pct }}%</span>
+                </div>
+                <div class="w-full bg-base-300 rounded-full h-1.5">
+                    <div class="bg-warning rounded-full h-1.5 transition-all duration-500" style="width: {{ data.collection_pct }}%"></div>
+                </div>
+            </div>
+
+            {# Highlights: rarest + oldest #}
+            <div class="space-y-2">
+                {% if data.rarest_badge %}
+                    <a href="{% url 'badge_detail' data.rarest_badge.series_slug %}" class="flex items-center gap-3 p-2 rounded-lg bg-base-300/30 hover:bg-base-300/60 transition-colors group">
+                        <figure class="w-9 h-9 lg:w-10 lg:h-10 shrink-0">
+                            {% include 'partials/badge.html' with layers=data.rarest_badge.layers %}
+                        </figure>
+                        <div class="flex-1 min-w-0">
+                            <div class="text-xs text-base-content/50 font-medium">Rarest Badge</div>
+                            <div class="text-sm font-semibold line-clamp-1 pr-1 group-hover:text-primary transition-colors">{{ data.rarest_badge.name }}</div>
+                        </div>
+                        <div class="text-right shrink-0">
+                            <span class="badge badge-xs badge-{{ data.rarest_badge.tier|badge_color }}">{{ data.rarest_badge.tier_name }}</span>
+                            <div class="text-xs text-base-content/30 mt-0.5">{{ data.rarest_badge.earned_count }} hunters</div>
+                        </div>
+                    </a>
+                {% endif %}
+
+                {% if data.oldest_badge %}
+                    <a href="{% url 'badge_detail' data.oldest_badge.series_slug %}" class="flex items-center gap-3 p-2 rounded-lg bg-base-300/30 hover:bg-base-300/60 transition-colors group">
+                        <figure class="w-9 h-9 lg:w-10 lg:h-10 shrink-0">
+                            {% include 'partials/badge.html' with layers=data.oldest_badge.layers %}
+                        </figure>
+                        <div class="flex-1 min-w-0">
+                            <div class="text-xs text-base-content/50 font-medium">First Badge Earned</div>
+                            <div class="text-sm font-semibold line-clamp-1 pr-1 group-hover:text-primary transition-colors">{{ data.oldest_badge.name }}</div>
+                        </div>
+                        <div class="text-xs text-base-content/40 shrink-0" data-time-format="relative" data-time="{{ data.oldest_badge.earned_at|date:'c' }}">{{ data.oldest_badge.earned_at|iso_naturaltime }}</div>
+                    </a>
+                {% endif %}
+            </div>
+        {% else %}
+            <div class="text-center py-6">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-10 h-10 text-warning/30 mx-auto mb-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="8" r="7"></circle>
+                    <polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"></polyline>
+                </svg>
+                <p class="text-sm text-base-content/50">No badges earned yet.</p>
+                <p class="text-xs text-base-content/40 mt-1">Start hunting platinums to build your badge collection!</p>
+                <a href="{% url 'badges_list' %}" class="btn btn-warning btn-xs mt-3">Explore Badges</a>
+            </div>
+        {% endif %}
+    </div>
+</div>

@@ -72,6 +72,9 @@
 
             // Quick Settings module: bind auto-save controls (server-rendered, already in DOM)
             this._initQuickSettings();
+
+            // Calendar Challenge module: paginated month navigation
+            this.registerModuleInit('calendar_challenge', (el) => this._initCalendarPagination(el));
         }
 
         // -----------------------------------------------------------------
@@ -275,6 +278,42 @@
                     }
                 });
             });
+        }
+
+        _initCalendarPagination(el) {
+            const grid = el.querySelector('[data-calendar-grid]');
+            const prevBtn = el.querySelector('[data-calendar-prev]');
+            const nextBtn = el.querySelector('[data-calendar-next]');
+            const label = el.querySelector('[data-calendar-label]');
+            if (!grid || !prevBtn || !nextBtn) return;
+
+            const months = Array.from(grid.querySelectorAll('[data-calendar-month]'));
+            if (months.length === 0) return;
+
+            const PAGE_SIZE = 3;
+            const TOTAL_PAGES = Math.ceil(months.length / PAGE_SIZE);
+
+            // Start on the page containing the current month
+            const todayMonth = parseInt(el.querySelector('[data-calendar-month].ring-1')?.dataset.calendarMonth || '1', 10);
+            let currentPage = Math.min(Math.floor((todayMonth - 1) / PAGE_SIZE), TOTAL_PAGES - 1);
+
+            const render = () => {
+                const start = currentPage * PAGE_SIZE;
+                const end = start + PAGE_SIZE;
+                months.forEach((m, i) => {
+                    m.style.display = (i >= start && i < end) ? '' : 'none';
+                });
+                prevBtn.disabled = currentPage === 0;
+                nextBtn.disabled = currentPage >= TOTAL_PAGES - 1;
+                // Update label
+                const firstName = months[start]?.querySelector('.text-xs.font-semibold')?.textContent?.trim() || '';
+                const lastName = months[Math.min(end - 1, months.length - 1)]?.querySelector('.text-xs.font-semibold')?.textContent?.trim() || '';
+                if (label) label.textContent = firstName === lastName ? firstName : `${firstName} - ${lastName}`;
+            };
+
+            prevBtn.addEventListener('click', () => { if (currentPage > 0) { currentPage--; render(); } });
+            nextBtn.addEventListener('click', () => { if (currentPage < TOTAL_PAGES - 1) { currentPage++; render(); } });
+            render();
         }
 
         // -----------------------------------------------------------------

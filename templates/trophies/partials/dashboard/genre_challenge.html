@@ -1,0 +1,137 @@
+{% load custom_filters %}
+{# Dashboard module: Genre Challenge. Genre slots, subgenre tags, and bonus progress. #}
+<div class="card bg-base-200/80 border-2 border-base-300 shadow-lg shadow-neutral">
+    <div class="card-body p-5 lg:p-7">
+        {# Header #}
+        <div class="flex items-center justify-between mb-3">
+            <h2 class="card-title text-base lg:text-lg font-bold flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-secondary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"></path>
+                    <line x1="7" y1="7" x2="7.01" y2="7"></line>
+                </svg>
+                Genre Challenge
+            </h2>
+            {% if data.has_challenge %}
+                <span class="text-xs text-base-content/50">{{ data.completed_count }}/{{ data.total }}</span>
+            {% endif %}
+        </div>
+
+        {% if data.has_challenge %}
+            {% if data.is_complete %}
+                {# Completed state #}
+                <div class="text-center mb-3">
+                    <span class="badge badge-success badge-sm gap-1">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                        Challenge Complete!
+                    </span>
+                </div>
+                <div class="flex flex-wrap gap-1 mb-3">
+                    {% for slot in data.slots %}
+                        <span class="badge badge-xs badge-success">{{ slot.genre }}</span>
+                    {% endfor %}
+                </div>
+                <p class="text-xs text-base-content/50 text-center">
+                    Completed {{ data.completed_at|iso_naturaltime }}.
+                    <a href="{% url 'genre_challenge_detail' data.challenge_id %}" class="link link-primary">View Challenge</a>
+                </p>
+            {% else %}
+                {# Progress bar #}
+                <div class="w-full bg-base-300 rounded-full h-1.5 mb-3">
+                    <div class="bg-secondary rounded-full h-1.5 transition-all duration-500" style="width: {{ data.pct }}%"></div>
+                </div>
+
+                {# Genre slots grid #}
+                <div class="grid grid-cols-2 lg:grid-cols-3 gap-2 mb-3">
+                    {% for slot in data.slots %}
+                        <div class="flex items-center gap-2 p-2 rounded-lg
+                            {% if slot.state == 'completed' %}bg-success/10 border border-success/30
+                            {% elif slot.state == 'assigned' %}bg-secondary/10 border border-secondary/30
+                            {% else %}bg-base-300/20 border border-base-300/40{% endif %}">
+                            {% if slot.icon_url %}
+                                <div class="w-8 h-8 rounded-lg overflow-hidden shrink-0 ring-1 {% if slot.state == 'completed' %}ring-success{% else %}ring-secondary{% endif %}">
+                                    <img src="{{ slot.icon_url }}" alt="{{ slot.concept_title }}" class="w-full h-full object-cover" loading="lazy" />
+                                </div>
+                            {% else %}
+                                <div class="w-8 h-8 rounded-lg shrink-0 bg-base-300/50 flex items-center justify-center">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-base-content/20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="6" width="20" height="12" rx="2"></rect></svg>
+                                </div>
+                            {% endif %}
+                            <div class="flex-1 min-w-0">
+                                <div class="text-xs font-medium line-clamp-1 pr-1">{{ slot.genre }}</div>
+                                {% if slot.concept_title %}
+                                    <div class="text-xs text-base-content/40 line-clamp-1 pr-1">{{ slot.concept_title }}</div>
+                                {% endif %}
+                            </div>
+                            {% if slot.state == 'completed' %}
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-success shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                            {% endif %}
+                        </div>
+                    {% endfor %}
+                </div>
+
+                {# Subgenre section #}
+                {% if data.subgenres or data.bonus_count %}
+                    <div class="border-t border-base-300/50 pt-3 mt-1">
+                        <div class="text-xs text-base-content/40 font-medium mb-1.5">
+                            Subgenres: {{ data.platted_subgenre_count }}/{{ data.subgenre_total }}
+                            {% if data.bonus_count %} | {{ data.bonus_count }} bonus{% endif %}
+                        </div>
+                        {% if data.subgenres %}
+                            <div class="flex flex-wrap gap-1">
+                                {% for sg in data.subgenres %}
+                                    <span class="badge badge-xs {% if sg.status == 'platted' %}badge-warning{% else %}badge-info badge-outline{% endif %}">{{ sg.name }}</span>
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+                    </div>
+                {% endif %}
+
+                {# Most recent platinum #}
+                {% if data.most_recent_plat %}
+                    <div class="flex items-center gap-2 p-2 rounded-lg bg-success/10 border border-success/20 mt-3">
+                        {% if data.most_recent_plat.icon_url %}
+                            <img src="{{ data.most_recent_plat.icon_url }}" alt="{{ data.most_recent_plat.concept_title }}" class="w-6 h-6 rounded object-cover shrink-0" loading="lazy" />
+                        {% endif %}
+                        <div class="text-xs text-base-content/60 flex-1 min-w-0 line-clamp-1 pr-1">
+                            Last plat: <span class="font-bold text-success">{{ data.most_recent_plat.genre }}</span>
+                            {% if data.most_recent_plat.concept_title %}{{ data.most_recent_plat.concept_title }}{% endif %}
+                        </div>
+                        <span class="text-xs text-base-content/30 shrink-0" data-time-format="relative" data-time="{{ data.most_recent_plat.completed_at|date:'c' }}">{{ data.most_recent_plat.completed_at|iso_naturaltime }}</span>
+                    </div>
+                {% endif %}
+
+                {# Next target #}
+                {% if data.next_target %}
+                    <div class="flex items-center gap-2 p-2 rounded-lg bg-secondary/10 border border-secondary/20 mt-3">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-secondary shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 16 16 12 12 8"></polyline><line x1="8" y1="12" x2="16" y2="12"></line></svg>
+                        <span class="text-xs text-base-content/60">
+                            Next up: <span class="font-bold text-secondary">{{ data.next_target.genre }}</span>
+                            {% if data.next_target.concept_title %} ({{ data.next_target.concept_title }}){% endif %}
+                        </span>
+                    </div>
+                {% endif %}
+
+                {# Footer #}
+                <div class="flex items-center justify-between text-xs text-base-content/50 mt-3">
+                    <span>{{ data.filled_count }} assigned, {{ data.completed_count }} platted</span>
+                    <div class="flex items-center gap-2">
+                        <a href="{% url 'genre_challenge_detail' data.challenge_id %}" class="link link-secondary font-medium">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 inline-block mr-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>Pick Next Game
+                        </a>
+                    </div>
+                </div>
+            {% endif %}
+        {% else %}
+            {# Empty state #}
+            <div class="text-center py-6">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-10 h-10 text-secondary/30 mx-auto mb-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"></path>
+                    <line x1="7" y1="7" x2="7.01" y2="7"></line>
+                </svg>
+                <p class="text-sm text-base-content/50">No Genre Challenge yet.</p>
+                <p class="text-xs text-base-content/40 mt-1">Platinum games across every genre. Become a true completionist!</p>
+                <a href="{% url 'genre_challenge_create' %}" class="btn btn-secondary btn-xs mt-3">Start Challenge</a>
+            </div>
+        {% endif %}
+    </div>
+</div>

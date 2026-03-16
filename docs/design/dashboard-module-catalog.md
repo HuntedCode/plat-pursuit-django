@@ -14,8 +14,8 @@ The dashboard serves as the index page for all logged-in users. Modules are orga
 
 | Status | Count |
 |--------|-------|
-| Complete (Tier 1-2) | 8 |
-| Planned (Tier 3-4) | 18 |
+| Complete (Tier 1-3A) | 13 |
+| Planned (Tier 3B-4) | 13 |
 | Premium Exclusive | 9 |
 | Future (Gamification) | 3 |
 | **Total** | **38** |
@@ -50,9 +50,9 @@ All challenge modules show smart CTAs when no active challenge exists.
 | # | Module | Strategy | Status | Data Source |
 |---|--------|----------|--------|------------|
 | 6 | Challenge Hub | Lazy (5m) | **Done** | Challenge + slot models, mini previews |
-| 7 | A-Z Challenge Progress | Lazy | Planned | AZChallengeSlot (focused view) |
-| 8 | Calendar Challenge Progress | Lazy | Planned | CalendarChallengeDay (full 12-month) |
-| 9 | Genre Challenge Progress | Lazy | Planned | GenreChallengeSlot + bonus slots |
+| 7 | A-Z Challenge Progress | Lazy (5m) | **Done** | AZChallengeSlot + icons, last plat, next target, Pick Next Game CTA |
+| 8 | Calendar Challenge Progress | Lazy (5m) | **Done** | CalendarChallengeDay, 3-month paginated view with JS arrows |
+| 9 | Genre Challenge Progress | Lazy (5m) | **Done** | GenreChallengeSlot + subgenres + last plat, next target, Pick Next Game CTA |
 | 10 | Milestone Tracker | Lazy | Planned | UserMilestoneProgress, Milestone |
 | 11 | Completion Milestones | Lazy | Planned | ProfileGame (100% + 90%+ games) |
 
@@ -64,8 +64,8 @@ Badges are a flagship feature with dedicated real estate.
 |---|--------|----------|--------|------------|
 | 12 | Badge Progress | Lazy (10m) | **Done** | UserBadgeProgress, prerequisite filtering |
 | 13 | Recent Badges | Lazy (10m) | **Done** | UserBadge (earned_at desc) |
-| 14 | Badge Showcase | Lazy | Planned | UserBadge grouped by tier |
-| 15 | Badge XP & Leaderboard | Lazy | Planned | ProfileGamification + leaderboard_service |
+| 14 | Badge Stats | Lazy (10m) | **Done** | UserBadge tier breakdown, rarest badge, collection rate |
+| 15 | Badge XP & Leaderboard | Lazy (10m) | **Done** | ProfileGamification + leaderboard neighborhood (2 above/below) |
 
 ## Category: Community
 
@@ -217,15 +217,20 @@ For visualization modules, two approaches:
 | 22 | Monthly Recap Preview | Builds anticipation, shows momentum. |
 | 29 | Quick Settings | Quality-of-life, makes dashboard the true home base. |
 
-### Tier 3: Depth
+### Tier 3A: Depth (COMPLETE)
 
 | # | Module | Why |
 |---|--------|-----|
-| 14 | Badge Showcase | "Look what I've earned." |
+| 14 | Badge Stats | Collection analytics: tier breakdown, rarest badge, completion rate. |
 | 15 | Badge XP & Leaderboard | Competition drives engagement. |
 | 7 | A-Z Challenge Progress | Focused view for participants. |
 | 8 | Calendar Challenge Progress | Full 12-month view with navigation. |
 | 9 | Genre Challenge Progress | Focused view for participants. |
+
+### Tier 3B: Depth (Next)
+
+| # | Module | Why |
+|---|--------|-----|
 | 10 | Milestone Tracker | Progress is motivating. |
 | 11 | Completion Milestones | "Almost there" games are actionable. |
 | 16 | My Reviews | Community hub connection. |
