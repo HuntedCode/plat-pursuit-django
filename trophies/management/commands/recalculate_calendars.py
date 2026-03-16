@@ -15,7 +15,7 @@ import calendar as cal_module
 
 from django.core.management.base import BaseCommand
 
-from trophies.models import Challenge, CalendarChallengeDay, EarnedTrophy, ProfileGame
+from trophies.models import Challenge, CalendarChallengeDay, EarnedTrophy, Profile, ProfileGame
 from trophies.services.challenge_service import (
     _reconcile_calendar_days,
     recalculate_challenge_counts,
@@ -68,16 +68,29 @@ class Command(BaseCommand):
             et_count = hidden_et.count()
             pg_count = hidden_pg.count()
 
-            if et_count or pg_count:
+            # Also reset Profile.total_hiddens so the health check detects mismatches
+            profile_qs = Profile.objects.filter(total_hiddens__gt=0)
+            if username:
+                profile_qs = profile_qs.filter(psn_username__iexact=username)
+            profile_count = profile_qs.count()
+
+            if et_count or pg_count or profile_count:
                 if dry_run:
                     self.stdout.write(self.style.WARNING(
                         f'Would reset user_hidden on {et_count} EarnedTrophy and {pg_count} ProfileGame rows'
                     ))
+                    self.stdout.write(self.style.WARNING(
+                        f'Would reset total_hiddens on {profile_count} Profile rows'
+                    ))
                 else:
                     hidden_et.update(user_hidden=False)
                     hidden_pg.update(user_hidden=False)
+                    profile_qs.update(total_hiddens=0)
                     self.stdout.write(self.style.SUCCESS(
                         f'Reset user_hidden on {et_count} EarnedTrophy and {pg_count} ProfileGame rows'
+                    ))
+                    self.stdout.write(self.style.SUCCESS(
+                        f'Reset total_hiddens on {profile_count} Profile rows'
                     ))
             else:
                 self.stdout.write('No stale user_hidden flags found.')
