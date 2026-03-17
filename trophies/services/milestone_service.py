@@ -188,4 +188,8 @@ def check_all_milestones_for_user(profile, criteria_type=None, criteria_types=No
                         notified_user_milestones.append(um)
                 all_awarded.extend(new_awards)
 
+    # Invalidate dashboard cache so milestone tracker reflects new progress
+    from trophies.services.dashboard_service import invalidate_dashboard_cache
+    invalidate_dashboard_cache(profile.id)
+
     return all_awarded, notified_user_milestones

@@ -14,8 +14,8 @@ The dashboard serves as the index page for all logged-in users. Modules are orga
 
 | Status | Count |
 |--------|-------|
-| Complete (Tier 1-3A) | 13 |
-| Planned (Tier 3B-4) | 13 |
+| Complete (Tier 1-3B) | 17 |
+| Planned (Tier 4) | 9 |
 | Premium Exclusive | 9 |
 | Future (Gamification) | 3 |
 | **Total** | **38** |
@@ -53,8 +53,8 @@ All challenge modules show smart CTAs when no active challenge exists.
 | 7 | A-Z Challenge Progress | Lazy (5m) | **Done** | AZChallengeSlot + icons, last plat, next target, Pick Next Game CTA |
 | 8 | Calendar Challenge Progress | Lazy (5m) | **Done** | CalendarChallengeDay, 3-month paginated view with JS arrows |
 | 9 | Genre Challenge Progress | Lazy (5m) | **Done** | GenreChallengeSlot + subgenres + last plat, next target, Pick Next Game CTA |
-| 10 | Milestone Tracker | Lazy | Planned | UserMilestoneProgress, Milestone |
-| 11 | Completion Milestones | Lazy | Planned | ProfileGame (100% + 90%+ games) |
+| 10 | Milestone Tracker | Lazy (10m) | **Done** | UserMilestoneProgress, Python-side pct sort |
+| 11 | Almost There | Lazy (10m) | **Done** | ProfileGame (90%+ configurable threshold) |
 
 ## Category: Badges & Achievements
 
@@ -71,10 +71,10 @@ Badges are a flagship feature with dedicated real estate.
 
 | # | Module | Strategy | Status | Data Source |
 |---|--------|----------|--------|------------|
-| 16 | My Reviews | Lazy | Planned | Review model |
+| 16 | My Reviews | Lazy (10m) | **Done** | Review aggregate stats + recent list |
 | 17 | Community Spotlight | Lazy | Planned | ReviewHubService (shared cache) |
 | 18 | Rate My Games | Lazy | Planned | ProfileGame LEFT JOIN UserConceptRating |
-| 19 | My Checklists | Lazy | Planned | Checklist + UserChecklistProgress |
+| 19 | My Checklists | Lazy (10m) | **Done** | Checklist (published) + UserChecklistProgress (tracking) |
 | 20 | My Game Lists | Lazy | Planned | GameList + GameListItem |
 
 ## Category: Highlights & History
@@ -227,7 +227,7 @@ For visualization modules, two approaches:
 | 8 | Calendar Challenge Progress | Full 12-month view with navigation. |
 | 9 | Genre Challenge Progress | Focused view for participants. |
 
-### Tier 3B: Depth (Next)
+### Tier 3B: Depth (COMPLETE)
 
 | # | Module | Why |
 |---|--------|-----|

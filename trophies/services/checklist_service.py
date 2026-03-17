@@ -577,6 +577,8 @@ class ChecklistService:
         checklist.save(update_fields=['status', 'published_at', 'updated_at'])
 
         ChecklistService._invalidate_cache(checklist.concept)
+        from trophies.services.dashboard_service import invalidate_dashboard_cache
+        invalidate_dashboard_cache(profile.id)
         logger.info(f"Checklist {checklist.id} published by {profile.psn_username}")
         return True, None
 
@@ -647,6 +649,8 @@ class ChecklistService:
 
         checklist.soft_delete()
         ChecklistService._invalidate_cache(checklist.concept)
+        from trophies.services.dashboard_service import invalidate_dashboard_cache
+        invalidate_dashboard_cache(checklist.profile_id)
 
         action = "admin deleted" if is_admin else "deleted"
         logger.info(f"Checklist {checklist.id} {action} by {profile.psn_username}")

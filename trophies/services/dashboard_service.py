@@ -796,6 +796,258 @@ def provide_calendar_challenge(profile):
     }
 
 
+def provide_completion_milestones(profile, settings=None):
+    """Games at 90%+ completion that aren't 100% yet. The finish line is in sight."""
+    from trophies.models import ProfileGame
+
+    settings = settings or {}
+    limit = settings.get('limit', 6)
+    threshold = settings.get('threshold', 90)
+
+    qs = (
+        ProfileGame.objects.filter(
+            profile=profile,
+            progress__gte=threshold,
+            progress__lt=100,
+            user_hidden=False,
+        )
+        .select_related('game', 'game__concept')
+        .order_by('-progress')
+    )
+
+    if profile.hide_hiddens:
+        qs = qs.exclude(hidden_flag=True)
+
+    games = []
+    for pg in qs[:limit]:
+        game = pg.game
+        concept = getattr(game, 'concept', None)
+        remaining = pg.unearned_trophies_count
+        games.append({
+            'game_name': concept.unified_title if concept else game.title_name,
+            'icon_url': concept.concept_icon_url if concept else game.title_image,
+            'np_communication_id': game.np_communication_id,
+            'progress': pg.progress,
+            'remaining_trophies': remaining,
+            'earned_count': pg.earned_trophies_count,
+            'total_count': pg.earned_trophies_count + remaining,
+        })
+
+    return {'games': games, 'threshold': threshold}
+
+
+def provide_milestone_tracker(profile, settings=None):
+    """In-progress milestones sorted by completion %, plus recently earned."""
+    from trophies.models import UserMilestoneProgress, UserMilestone
+
+    settings = settings or {}
+    limit = settings.get('limit', 6)
+
+    # Earned milestone IDs
+    earned_ids = set(
+        UserMilestone.objects.filter(profile=profile)
+        .values_list('milestone_id', flat=True)
+    )
+
+    # Recently earned (last 3)
+    recent_earned_qs = (
+        UserMilestone.objects.filter(profile=profile)
+        .select_related('milestone')
+        .order_by('-earned_at')[:3]
+    )
+    earned_list = []
+    for um in recent_earned_qs:
+        m = um.milestone
+        earned_list.append({
+            'name': m.name,
+            'description': m.description,
+            'image_url': m.image.url if m.image else '',
+            'earned_at': um.earned_at,
+        })
+
+    # In-progress milestones: fetch all with progress, sort by pct in Python
+    progress_qs = (
+        UserMilestoneProgress.objects.filter(
+            profile=profile, progress_value__gt=0
+        )
+        .select_related('milestone')
+        .exclude(milestone__id__in=earned_ids)
+    )
+
+    in_progress = []
+    for p in progress_qs:
+        m = p.milestone
+        if m.required_value <= 0:
+            continue
+        pct = round(p.progress_value / m.required_value * 100, 1)
+        if pct >= 100:
+            continue
+        in_progress.append({
+            'name': m.name,
+            'description': m.description,
+            'image_url': m.image.url if m.image else '',
+            'progress_value': p.progress_value,
+            'required_value': m.required_value,
+            'pct': min(pct, 99.9),
+        })
+
+    in_progress.sort(key=lambda x: x['pct'], reverse=True)
+    in_progress = in_progress[:limit]
+
+    return {
+        'in_progress': in_progress,
+        'recently_earned': earned_list,
+        'total_earned': len(earned_ids),
+    }
+
+
+def provide_my_reviews(profile, settings=None):
+    """Review engagement: recent votes on your reviews and overall stats."""
+    from trophies.models import Review, ReviewVote
+    from django.db.models import Count, Sum
+    from django.utils import timezone
+    import datetime
+
+    settings = settings or {}
+    limit = settings.get('limit', 6)
+
+    # Summary stats
+    stats = Review.objects.filter(
+        profile=profile, is_deleted=False
+    ).aggregate(
+        total=Count('id'),
+        total_helpful=Sum('helpful_count'),
+        total_funny=Sum('funny_count'),
+        total_replies=Sum('reply_count'),
+    )
+
+    total = stats['total'] or 0
+    if total == 0:
+        return {
+            'has_reviews': False,
+            'total_reviews': 0,
+            'total_helpful': 0,
+            'total_funny': 0,
+            'total_replies': 0,
+            'recent_engagement': [],
+            'new_votes_count': 0,
+        }
+
+    # Recent engagement: votes on the user's reviews in the last 7 days
+    week_ago = timezone.now() - datetime.timedelta(days=7)
+    recent_votes = (
+        ReviewVote.objects.filter(
+            review__profile=profile,
+            review__is_deleted=False,
+            created_at__gte=week_ago,
+        )
+        .exclude(profile=profile)  # exclude self-votes
+        .select_related('review__concept_trophy_group__concept')
+        .order_by('-created_at')[:limit]
+    )
+
+    engagement = []
+    for vote in recent_votes:
+        review = vote.review
+        ctg = review.concept_trophy_group
+        concept = ctg.concept if ctg else None
+        engagement.append({
+            'game_name': concept.unified_title if concept else 'Unknown',
+            'icon_url': concept.concept_icon_url if concept else '',
+            'vote_type': vote.vote_type,
+            'voted_at': vote.created_at,
+            'concept_slug': concept.slug if concept else '',
+        })
+
+    # Total new votes this week
+    new_votes_count = (
+        ReviewVote.objects.filter(
+            review__profile=profile,
+            review__is_deleted=False,
+            created_at__gte=week_ago,
+        )
+        .exclude(profile=profile)
+        .count()
+    )
+
+    return {
+        'has_reviews': True,
+        'total_reviews': total,
+        'total_helpful': stats['total_helpful'] or 0,
+        'total_funny': stats['total_funny'] or 0,
+        'total_replies': stats['total_replies'] or 0,
+        'recent_engagement': engagement,
+        'new_votes_count': new_votes_count,
+    }
+
+
+def provide_my_checklists(profile, settings=None):
+    """Guide engagement: new trackers on your guides + your tracking progress."""
+    from trophies.models import UserChecklistProgress, Checklist
+    from trophies.services.checklist_service import ChecklistService
+    from django.utils import timezone
+    import datetime
+
+    settings = settings or {}
+    limit = settings.get('limit', 4)
+
+    # Published guides with engagement data
+    published_qs = ChecklistService.get_user_published(profile)[:limit]
+    week_ago = timezone.now() - datetime.timedelta(days=7)
+
+    guides = []
+    total_new_trackers = 0
+    for cl in published_qs:
+        concept = cl.concept
+        # Count new trackers this week (exclude the author)
+        new_trackers = (
+            UserChecklistProgress.objects.filter(
+                checklist=cl,
+                created_at__gte=week_ago,
+            )
+            .exclude(profile=profile)
+            .count()
+        )
+        total_new_trackers += new_trackers
+        guides.append({
+            'id': cl.id,
+            'title': cl.title,
+            'game_name': concept.unified_title if concept else 'Unknown',
+            'icon_url': concept.concept_icon_url if concept else '',
+            'upvote_count': cl.upvote_count,
+            'tracker_count': cl.progress_save_count,
+            'new_trackers': new_trackers,
+        })
+
+    # Tracking progress (checklists the user is following)
+    tracking_qs = ChecklistService.get_user_checklists_in_progress(profile, limit=limit)
+    tracking_list = []
+    for ucp in tracking_qs:
+        cl = ucp.checklist
+        concept = cl.concept if cl else None
+        author = cl.profile if cl else None
+        tracking_list.append({
+            'id': cl.id if cl else 0,
+            'title': cl.title if cl else 'Unknown',
+            'game_name': concept.unified_title if concept else 'Unknown',
+            'icon_url': concept.concept_icon_url if concept else '',
+            'items_completed': ucp.items_completed,
+            'total_items': ucp.total_items,
+            'progress_pct': round(ucp.progress_percentage, 1),
+            'author_name': author.display_psn_username if author else 'Unknown',
+        })
+
+    total_created = ChecklistService.get_user_published(profile).count()
+
+    return {
+        'has_guides': bool(guides) or bool(tracking_list),
+        'guides': guides,
+        'tracking': tracking_list,
+        'total_created': total_created,
+        'total_new_trackers': total_new_trackers,
+    }
+
+
 # ---------------------------------------------------------------------------
 # Module Registry
 # ---------------------------------------------------------------------------
@@ -1020,6 +1272,84 @@ DASHBOARD_MODULES = [
         'cache_ttl': 300,
         'default_size': 'large',
         'allowed_sizes': ['medium', 'large'],
+    },
+    {
+        'slug': 'completion_milestones',
+        'name': 'Almost There',
+        'description': 'Games you are closest to 100%. The finish line is in sight!',
+        'category': 'progress',
+        'template': 'trophies/partials/dashboard/completion_milestones.html',
+        'provider': provide_completion_milestones,
+        'requires_premium': False,
+        'load_strategy': 'lazy',
+        'default_order': 14,
+        'default_settings': {'limit': 6, 'threshold': 90},
+        'configurable_settings': [
+            {'key': 'limit', 'label': 'Items to show', 'type': 'select', 'default': 6,
+             'options': [{'value': 3, 'label': '3'}, {'value': 6, 'label': '6'}, {'value': 10, 'label': '10'}]},
+            {'key': 'threshold', 'label': 'Min. progress', 'type': 'select', 'default': 90,
+             'options': [{'value': 80, 'label': '80%'}, {'value': 90, 'label': '90%'}, {'value': 95, 'label': '95%'}]},
+        ],
+        'cache_ttl': 600,
+        'default_size': 'medium',
+        'allowed_sizes': ['small', 'medium', 'large'],
+    },
+    {
+        'slug': 'milestone_tracker',
+        'name': 'Milestone Tracker',
+        'description': 'Track your next milestones. See what you are closest to earning.',
+        'category': 'progress',
+        'template': 'trophies/partials/dashboard/milestone_tracker.html',
+        'provider': provide_milestone_tracker,
+        'requires_premium': False,
+        'load_strategy': 'lazy',
+        'default_order': 15,
+        'default_settings': {'limit': 6},
+        'configurable_settings': [
+            {'key': 'limit', 'label': 'Items to show', 'type': 'select', 'default': 6,
+             'options': [{'value': 3, 'label': '3'}, {'value': 6, 'label': '6'}, {'value': 9, 'label': '9'}]},
+        ],
+        'cache_ttl': 600,
+        'default_size': 'medium',
+        'allowed_sizes': ['small', 'medium', 'large'],
+    },
+    {
+        'slug': 'my_reviews',
+        'name': 'My Reviews',
+        'description': 'Your reviews at a glance. Helpful votes, replies, and recent posts.',
+        'category': 'community',
+        'template': 'trophies/partials/dashboard/my_reviews.html',
+        'provider': provide_my_reviews,
+        'requires_premium': False,
+        'load_strategy': 'lazy',
+        'default_order': 16,
+        'default_settings': {'limit': 6},
+        'configurable_settings': [
+            {'key': 'limit', 'label': 'Reviews to show', 'type': 'select', 'default': 6,
+             'options': [{'value': 3, 'label': '3'}, {'value': 6, 'label': '6'}, {'value': 9, 'label': '9'}]},
+        ],
+        'cache_ttl': 600,
+        'default_size': 'medium',
+        'allowed_sizes': ['small', 'medium', 'large'],
+    },
+    {
+        'slug': 'my_checklists',
+        'name': 'My Checklists',
+        'description': 'Your created guides and checklists you are tracking.',
+        'category': 'community',
+        'template': 'trophies/partials/dashboard/my_checklists.html',
+        'provider': provide_my_checklists,
+        'requires_premium': False,
+        'load_strategy': 'lazy',
+        'default_order': 17,
+        'default_settings': {'limit': 4},
+        'configurable_settings': [
+            {'key': 'limit', 'label': 'Items per section', 'type': 'select', 'default': 4,
+             'options': [{'value': 2, 'label': '2'}, {'value': 4, 'label': '4'}, {'value': 6, 'label': '6'}]},
+        ],
+        'cache_ttl': 600,
+        'default_size': 'medium',
+        'allowed_sizes': ['small', 'medium', 'large'],
     },
 ]
 

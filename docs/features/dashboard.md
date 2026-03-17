@@ -52,6 +52,10 @@ Premium users can create custom tabs with a name (max 20 chars) and icon (from 8
 | `az_challenge` | A-Z Challenge | progress | Lazy | 5m | No |
 | `genre_challenge` | Genre Challenge | progress | Lazy | 5m | No |
 | `calendar_challenge` | Platinum Calendar | progress | Lazy | 5m | No |
+| `completion_milestones` | Almost There | progress | Lazy | 10m | No |
+| `milestone_tracker` | Milestone Tracker | progress | Lazy | 10m | No |
+| `my_reviews` | My Reviews | community | Lazy | 10m | No |
+| `my_checklists` | My Checklists | community | Lazy | 10m | No |
 
 See [Module Catalog](../design/dashboard-module-catalog.md) for the full module roadmap.
 
@@ -186,6 +190,13 @@ Staff can switch between "view as premium" and "view as free" via a header butto
 - **Badge XP leaderboard neighborhood**: When user is outside top 5, shows top 3 + gap + 2 above/user/2 below. Edge case: if user rank overlaps with top 3 window, `neighborhood_start = max(3, idx - 2)` prevents duplicate entries.
 - **Challenge "most recent plat"**: Uses `slot.completed_at` timestamp (not alphabetical order) to find the true most recently completed slot.
 - **Calendar 3-month pagination**: All 12 months are rendered in HTML, JS shows/hides 3 at a time. `_initCalendarPagination` registered via `registerModuleInit('calendar_challenge', ...)`. Defaults to the page containing the current month.
+- **Milestone Tracker Python-side sort**: Completion pct requires dividing `progress_value / milestone.required_value` which crosses an FK boundary. Computed in Python since users have <50 progress records.
+- **Milestone image.url extraction**: `milestone.image` is an ImageField. Must extract `.url` string in the provider, not pass the FieldFile object (not serializable for cache).
+- **Almost There hidden game filtering**: Always excludes `user_hidden=True`. Additionally excludes `hidden_flag=True` only if `profile.hide_hiddens` is enabled.
+- **Almost There configurable threshold**: Default 90%, options 80/90/95. Stored in `module_settings` and included in cache key hash.
+- **My Reviews aggregate fallback**: Django `Sum()` returns `None` for empty querysets. Provider handles with `or 0` on all aggregate values.
+- **My Checklists dual sections**: "My Guides" (published checklists by user) and "Tracking" (checklists with UserChecklistProgress). Both sections use the same configurable limit.
+- **Cache invalidation coverage**: Milestone tracker invalidated via `check_all_milestones_for_user` hook. Reviews invalidated via same (milestone check called in create/delete). Checklists invalidated via direct hooks in publish/delete. Almost There covered by existing sync pipeline.
 - **Staff-gated during dev**: Switch mixins to `LoginRequiredMixin` for production. Remove preview toggle UI.
 
 ## How to Add a New Module

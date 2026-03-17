@@ -1,0 +1,61 @@
+{% load custom_filters %}
+{# Dashboard module: Almost There. Games closest to 100% completion. #}
+<div class="card bg-base-200/80 border-2 border-base-300 shadow-lg shadow-neutral">
+    <div class="card-body p-5 lg:p-7">
+        {# Header #}
+        <div class="flex items-center justify-between mb-3">
+            <h2 class="card-title text-base lg:text-lg font-bold flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-success" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <circle cx="12" cy="12" r="6"></circle>
+                    <circle cx="12" cy="12" r="2"></circle>
+                </svg>
+                Almost There
+            </h2>
+            {% if data.games %}
+                <span class="badge badge-ghost badge-sm">{{ data.threshold }}%+</span>
+            {% endif %}
+        </div>
+
+        {% if data.games %}
+            <div class="grid grid-cols-2 gap-2 lg:gap-3">
+                {% for game in data.games %}
+                    <a href="{% url 'game_detail' game.np_communication_id %}" class="flex items-center gap-3 p-2 rounded-lg bg-base-300/30 hover:bg-base-300/60 transition-colors group relative">
+                        {# Game icon #}
+                        <div class="w-10 h-10 lg:w-12 lg:h-12 rounded-lg overflow-hidden shrink-0 ring-1 ring-base-300">
+                            {% if game.icon_url %}
+                                <img src="{{ game.icon_url }}" alt="{{ game.game_name }}" class="w-full h-full object-cover" loading="lazy" />
+                            {% else %}
+                                <div class="w-full h-full bg-base-300 flex items-center justify-center">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-base-content/30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="6" width="20" height="12" rx="2"></rect></svg>
+                                </div>
+                            {% endif %}
+                        </div>
+
+                        {# Game info #}
+                        <div class="flex-1 min-w-0">
+                            <div class="flex items-center justify-between gap-2 mb-1">
+                                <span class="font-semibold text-sm line-clamp-1 pr-1 group-hover:text-primary transition-colors">{{ game.game_name }}</span>
+                                <span class="badge badge-xs {% if game.progress >= 95 %}badge-success{% else %}badge-warning{% endif %} shrink-0">{{ game.progress }}%</span>
+                            </div>
+                            <div class="w-full bg-base-300 rounded-full h-1.5">
+                                <div class="{% if game.progress >= 95 %}bg-success{% else %}bg-warning{% endif %} rounded-full h-1.5 transition-all duration-500" style="width: {{ game.progress }}%"></div>
+                            </div>
+                            <div class="text-xs text-base-content/40 mt-1">{{ game.remaining_trophies }} {% if game.remaining_trophies == 1 %}trophy{% else %}trophies{% endif %} to go</div>
+                        </div>
+                    </a>
+                {% endfor %}
+            </div>
+        {% else %}
+            <div class="text-center py-6">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-10 h-10 text-success/30 mx-auto mb-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <circle cx="12" cy="12" r="6"></circle>
+                    <circle cx="12" cy="12" r="2"></circle>
+                </svg>
+                <p class="text-sm text-base-content/50">All caught up!</p>
+                <p class="text-xs text-base-content/40 mt-1">No games near {{ data.threshold }}% completion. Keep hunting!</p>
+            </div>
+        {% endif %}
+    </div>
+</div>

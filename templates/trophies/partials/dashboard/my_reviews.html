@@ -1,0 +1,95 @@
+{% load custom_filters %}
+{# Dashboard module: My Reviews. Engagement stats + recent votes on your reviews. #}
+<div class="card bg-base-200/80 border-2 border-base-300 shadow-lg shadow-neutral">
+    <div class="card-body p-5 lg:p-7">
+        {# Header #}
+        <div class="flex items-center justify-between mb-3">
+            <h2 class="card-title text-base lg:text-lg font-bold flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-info" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                </svg>
+                My Reviews
+            </h2>
+            {% if data.has_reviews %}
+                <a href="{% url 'reviews_landing' %}" class="badge badge-ghost badge-sm hover:badge-primary transition-colors" aria-label="View all reviews">
+                    {{ data.total_reviews }} written
+                </a>
+            {% endif %}
+        </div>
+
+        {% if data.has_reviews %}
+            {# Stats bar #}
+            <div class="grid grid-cols-3 gap-2 mb-3">
+                <div class="bg-base-300/50 rounded-lg p-2 text-center">
+                    <div class="text-sm lg:text-base font-black text-info">{{ data.total_helpful }}</div>
+                    <div class="text-xs text-base-content/50">Helpful</div>
+                </div>
+                <div class="bg-base-300/50 rounded-lg p-2 text-center">
+                    <div class="text-sm lg:text-base font-black text-base-content">{{ data.total_funny }}</div>
+                    <div class="text-xs text-base-content/50">Funny</div>
+                </div>
+                <div class="bg-base-300/50 rounded-lg p-2 text-center">
+                    <div class="text-sm lg:text-base font-black text-base-content">{{ data.total_replies }}</div>
+                    <div class="text-xs text-base-content/50">Replies</div>
+                </div>
+            </div>
+
+            {# Recent engagement: votes on your reviews this week #}
+            {% if data.recent_engagement %}
+                <div class="text-xs font-bold text-base-content/50 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                    This Week
+                    {% if data.new_votes_count %}
+                        <span class="badge badge-info badge-xs">{{ data.new_votes_count }} new</span>
+                    {% endif %}
+                </div>
+                <div class="space-y-2">
+                    {% for vote in data.recent_engagement %}
+                        <a href="{% url 'review_hub' vote.concept_slug %}" class="flex items-center gap-3 p-2 rounded-lg bg-base-300/30 hover:bg-base-300/60 transition-colors group">
+                            <div class="w-8 h-8 lg:w-10 lg:h-10 rounded-lg overflow-hidden shrink-0 ring-1 ring-base-300">
+                                {% if vote.icon_url %}
+                                    <img src="{{ vote.icon_url }}" alt="{{ vote.game_name }}" class="w-full h-full object-cover" loading="lazy" />
+                                {% else %}
+                                    <div class="w-full h-full bg-base-300 flex items-center justify-center">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-base-content/30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="6" width="20" height="12" rx="2"></rect></svg>
+                                    </div>
+                                {% endif %}
+                            </div>
+                            <div class="flex-1 min-w-0">
+                                <div class="text-sm line-clamp-1 pr-1 group-hover:text-primary transition-colors">
+                                    {% if vote.vote_type == 'helpful' %}
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-success inline-block mr-0.5" viewBox="0 0 24 24" fill="currentColor" title="Helpful vote"><path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3H14z M2 13h2v9H2z"></path></svg>
+                                    {% else %}
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-warning inline-block mr-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" title="Funny vote"><circle cx="12" cy="12" r="10"></circle><path d="M8 14s1.5 2 4 2 4-2 4-2"></path><line x1="9" y1="9" x2="9.01" y2="9"></line><line x1="15" y1="9" x2="15.01" y2="9"></line></svg>
+                                    {% endif %}
+                                    Your <span class="font-semibold">{{ vote.game_name }}</span> review
+                                </div>
+                                <div class="text-xs text-base-content/40">got a {{ vote.vote_type }} vote</div>
+                            </div>
+                            <span class="text-xs text-base-content/30 shrink-0" data-time-format="relative" data-time="{{ vote.voted_at|date:'c' }}">{{ vote.voted_at|iso_naturaltime }}</span>
+                        </a>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <div class="text-center py-3">
+                    <p class="text-xs text-base-content/40">No new votes this week. Keep writing quality reviews!</p>
+                </div>
+            {% endif %}
+
+            {# Footer #}
+            <div class="flex items-center justify-end mt-3 pt-3 border-t border-base-300/50 text-xs text-base-content/50">
+                <a href="{% url 'reviews_landing' %}" class="link link-info font-medium">View All Reviews</a>
+            </div>
+        {% else %}
+            <div class="text-center py-6">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-10 h-10 text-info/30 mx-auto mb-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                </svg>
+                <p class="text-sm text-base-content/50">No reviews yet.</p>
+                <p class="text-xs text-base-content/40 mt-1">Share your thoughts on games you have played!</p>
+                <a href="{% url 'reviews_landing' %}" class="btn btn-info btn-xs mt-3">Write a Review</a>
+            </div>
+        {% endif %}
+    </div>
+</div>

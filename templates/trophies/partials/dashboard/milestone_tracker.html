@@ -1,0 +1,94 @@
+{% load custom_filters %}
+{# Dashboard module: Milestone Tracker. In-progress milestones + recently earned. #}
+<div class="card bg-base-200/80 border-2 border-base-300 shadow-lg shadow-neutral">
+    <div class="card-body p-5 lg:p-7">
+        {# Header #}
+        <div class="flex items-center justify-between mb-3">
+            <h2 class="card-title text-base lg:text-lg font-bold flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+                </svg>
+                Milestone Tracker
+            </h2>
+            {% if data.total_earned %}
+                <a href="{% url 'milestones_list' %}" class="badge badge-ghost badge-sm hover:badge-primary transition-colors" aria-label="View all milestones">
+                    {{ data.total_earned }} earned
+                </a>
+            {% endif %}
+        </div>
+
+        {% if data.in_progress %}
+            {# In-progress milestones #}
+            <div class="grid grid-cols-2 gap-3">
+                {% for m in data.in_progress %}
+                    <div class="flex items-center gap-3 p-2 rounded-lg bg-base-300/30">
+                        {# Milestone image #}
+                        <div class="w-10 h-10 lg:w-12 lg:h-12 shrink-0">
+                            {% if m.image_url %}
+                                <img src="{{ m.image_url }}" alt="{{ m.name }}" class="w-full h-full object-contain" loading="lazy" />
+                            {% else %}
+                                <div class="w-full h-full rounded-lg bg-base-300/50 flex items-center justify-center">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-primary/30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+                                </div>
+                            {% endif %}
+                        </div>
+
+                        {# Progress info #}
+                        <div class="flex-1 min-w-0">
+                            <div class="flex items-center justify-between gap-2 mb-0.5">
+                                <span class="font-semibold text-sm line-clamp-1 pr-1">{{ m.name }}</span>
+                                <span class="text-xs text-base-content/50 shrink-0">{{ m.progress_value }}/{{ m.required_value }}</span>
+                            </div>
+                            {% if m.description %}
+                                <div class="text-xs text-base-content/40 line-clamp-1 pr-1 mb-1">{{ m.description }}</div>
+                            {% endif %}
+                            <div class="w-full bg-base-300 rounded-full h-1.5">
+                                <div class="bg-primary rounded-full h-1.5 transition-all duration-500" style="width: {{ m.pct }}%"></div>
+                            </div>
+                            <div class="text-xs text-base-content/40 mt-1 font-bold">{{ m.pct }}%</div>
+                        </div>
+                    </div>
+                {% endfor %}
+            </div>
+
+            {# Recently earned section #}
+            {% if data.recently_earned %}
+                <div class="border-t border-base-300/50 pt-3 mt-3">
+                    <div class="text-xs font-bold text-base-content/50 uppercase tracking-wider mb-2">Recently Earned</div>
+                    <div class="space-y-1.5">
+                        {% for m in data.recently_earned %}
+                            <div class="flex items-center gap-2.5 p-1.5 rounded-lg">
+                                {% if m.image_url %}
+                                    <img src="{{ m.image_url }}" alt="{{ m.name }}" class="w-7 h-7 object-contain shrink-0" loading="lazy" />
+                                {% else %}
+                                    <div class="w-7 h-7 shrink-0 flex items-center justify-center">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-success" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+                                    </div>
+                                {% endif %}
+                                <span class="text-sm line-clamp-1 pr-1 flex-1 min-w-0">{{ m.name }}</span>
+                                <div class="flex items-center gap-1.5 shrink-0">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-success" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                                    <span class="text-xs text-base-content/40" data-time-format="relative" data-time="{{ m.earned_at|date:'c' }}">{{ m.earned_at|iso_naturaltime }}</span>
+                                </div>
+                            </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            {% endif %}
+
+            {# Footer #}
+            <div class="flex items-center justify-end mt-3 pt-3 border-t border-base-300/50 text-xs text-base-content/50">
+                <a href="{% url 'milestones_list' %}" class="link link-primary font-medium">View All Milestones</a>
+            </div>
+        {% else %}
+            <div class="text-center py-6">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-10 h-10 text-primary/30 mx-auto mb-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                    <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+                </svg>
+                <p class="text-sm text-base-content/50">No milestone progress yet.</p>
+                <p class="text-xs text-base-content/40 mt-1">Hunt trophies, earn badges, and complete challenges to unlock milestones!</p>
+                <a href="{% url 'milestones_list' %}" class="btn btn-primary btn-xs mt-3">View Milestones</a>
+            </div>
+        {% endif %}
+    </div>
+</div>
