@@ -604,7 +604,7 @@ def update_progress_leaderboards_for_profile(profile):
     # Find all series this profile might have progress in
     series_slugs = list(
         Stage.objects.filter(
-            concepts__game__played_by_profiles=profile
+            concepts__games__played_by__profile=profile
         ).values_list('series_slug', flat=True).distinct()
     )
 
