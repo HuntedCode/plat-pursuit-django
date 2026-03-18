@@ -48,6 +48,7 @@ Self-contained feature documentation. Read the relevant doc when working on that
 | [Game Family](features/game-family.md) | Cross-generation game matching and unification |
 | [Monthly Recap](features/monthly-recap.md) | Recap generation, slides, email, share cards |
 | [Navigation & Site Organization](features/navigation.md) | Navbar, footer, cross-links, profile tabs |
+| [Profile Cards](features/profile-cards.md) | Shareable profile cards, forum signatures, badge showcase |
 | [Share Images](features/share-images.md) | Playwright renderer, caching, card types |
 | [Subscription Lifecycle](features/subscription-lifecycle.md) | Activation, cancellation, renewal, admin dashboard |
 

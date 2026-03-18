@@ -1,0 +1,85 @@
+{# Dashboard module: Profile Card Preview. Scaled-down landscape card with theme picker and download. #}
+{# JS init is in dashboard.js via registerModuleInit (inline scripts don't run in lazy-loaded HTML). #}
+<div class="card bg-base-200/80 border-2 border-base-300 shadow-lg shadow-neutral"
+     data-card-theme="{{ data.theme }}"
+     data-is-premium="{{ data.is_premium|yesno:'true,false' }}">
+    <div class="card-body p-5 lg:p-7">
+        {# Header #}
+        <div class="flex items-center justify-between mb-3">
+            <h2 class="card-title text-base lg:text-lg font-bold flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                    <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                    <polyline points="21 15 16 10 5 21"></polyline>
+                </svg>
+                Profile Card
+            </h2>
+            <a href="{{ data.shareables_url }}" class="text-xs text-base-content/40 hover:text-primary transition-colors">Customize</a>
+        </div>
+
+        {# Preview Container: fixed aspect ratio wrapper with scaled card HTML #}
+        <div class="profile-card-module-preview relative w-full rounded-lg overflow-hidden border border-base-content/10 bg-base-300/50 cursor-pointer"
+             style="aspect-ratio: 1200/630;"
+             title="Click to enlarge">
+            {# Loading spinner, replaced by card HTML #}
+            <div class="profile-card-module-loading absolute inset-0 flex items-center justify-center">
+                <span class="loading loading-spinner loading-md text-primary"></span>
+            </div>
+            {# Scaled card content injected here by JS #}
+            <div class="profile-card-module-content absolute inset-0 origin-top-left" style="display: none;"></div>
+        </div>
+
+        {# Theme Picker #}
+        <div class="mt-3">
+            <div class="flex items-center gap-2 mb-2">
+                <span class="text-xs font-semibold text-base-content/60">Theme</span>
+                {% if not data.is_premium %}
+                    <span class="badge badge-xs badge-warning gap-0.5">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-2.5 h-2.5" viewBox="0 0 24 24" fill="currentColor"><path d="M5 16L3 5l5.5 5L12 4l3.5 6L21 5l-2 11H5z"/></svg>
+                        Premium
+                    </span>
+                {% endif %}
+            </div>
+            <div class="theme-swatch-grid grid grid-cols-6 lg:grid-cols-8 gap-1.5">
+                {% for theme in data.themes %}
+                <button class="theme-swatch aspect-square rounded-lg border-2 transition-all duration-200 hover:scale-105 cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-base-200 {% if theme.key == data.theme %}border-primary ring-2 ring-primary{% else %}border-base-content/20 hover:border-base-content/50{% endif %}{% if not data.is_premium and theme.key != 'default' %} opacity-40 cursor-not-allowed{% endif %}"
+                        data-theme-key="{{ theme.key }}"
+                        title="{{ theme.name }}"
+                        style="background: {{ theme.css }};">
+                </button>
+                {% endfor %}
+            </div>
+        </div>
+
+        {# Actions #}
+        <div class="flex items-center justify-between mt-3">
+            <p class="text-xs text-base-content/40 italic pr-1">Share your stats on Discord, Twitter, and more.</p>
+            <button class="profile-card-module-download btn btn-sm btn-primary gap-1.5"
+                    title="Download as PNG">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                    <polyline points="7 10 12 15 17 10"></polyline>
+                    <line x1="12" y1="15" x2="12" y2="3"></line>
+                </svg>
+                Download
+            </button>
+        </div>
+    </div>
+</div>
+
+{# Full-Size Preview Modal #}
+<dialog class="profile-card-module-modal modal backdrop-blur-sm">
+    <div class="modal-box max-w-none w-auto p-4 bg-base-200 border-2 border-base-300" style="max-height: none; overflow: visible;">
+        <form method="dialog">
+            <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2 z-10">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+            </button>
+        </form>
+        <div class="profile-card-module-modal-content flex justify-center"></div>
+    </div>
+    <form method="dialog" class="modal-backdrop">
+        <button>close</button>
+    </form>
+</dialog>

@@ -1,0 +1,151 @@
+{% load humanize %}{% comment %}
+Forum Signature SVG Template (728x120)
+Self-contained SVG with embedded CSS animations. Design language matches
+the landscape profile card: glows, italic labels, breakdown bar, ranks.
+
+All data must be pre-processed (avatar as base64, no external resources).
+Variables: same as profile_sig_card.html plus avatar_base64, logo_base64, completion_pct
+{% endcomment %}<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="728" height="120" viewBox="0 0 728 120">
+<defs>
+    <style>
+        /* No external font imports: SVG must be self-contained. */
+        .sig-username { font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; font-size: 22px; font-weight: 700; fill: #f5f7fc; }
+        .sig-title { font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; font-size: 11px; font-style: italic; fill: #9580ff; }
+        .sig-meta { font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; font-size: 11px; fill: rgba(245, 247, 252, 0.6); }
+        .sig-meta-bold { font-weight: 600; fill: rgba(245, 247, 252, 0.8); }
+        .sig-meta-accent { font-weight: 600; fill: #ffaa5c; }
+        .sig-meta-green { font-weight: 600; fill: #67f8c8; }
+        .sig-meta-sep { fill: rgba(245, 247, 252, 0.2); }
+        .sig-stat-value { font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; font-weight: 700; }
+        .sig-stat-label { font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; font-size: 10px; fill: rgba(245, 247, 252, 0.5); text-transform: uppercase; font-weight: bold; font-style: italic; letter-spacing: 0.05em; }
+        .sig-plat { fill: #67d1f8; }
+        .sig-xp { fill: #ffaa5c; }
+        .sig-brand { font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; font-size: 9px; font-weight: 600; font-style: italic; fill: #67d1f8; }
+
+        /* Subtle glow pulse on platinum count */
+        .plat-glow { animation: platPulse 3s ease-in-out infinite; }
+        @keyframes platPulse {
+            0%, 100% { filter: drop-shadow(0 0 0px rgba(103, 209, 248, 0)); }
+            50% { filter: drop-shadow(0 0 4px rgba(103, 209, 248, 0.4)); }
+        }
+    </style>
+    <clipPath id="avatar-clip"><circle cx="58" cy="60" r="37"/></clipPath>
+    <linearGradient id="bg-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" style="stop-color:#2a2e34"/>
+        <stop offset="50%" style="stop-color:#32363d"/>
+        <stop offset="100%" style="stop-color:#2a2e34"/>
+    </linearGradient>
+    {# Avatar glow filter #}
+    <filter id="avatar-glow" x="-30%" y="-30%" width="160%" height="160%">
+        <feGaussianBlur in="SourceGraphic" stdDeviation="4" result="blur"/>
+        <feColorMatrix in="blur" type="matrix" values="0 0 0 0 0.4  0 0 0 0 0.82  0 0 0 0 0.97  0 0 0 0.4 0" result="glow"/>
+        <feMerge><feMergeNode in="glow"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    {% if is_plus %}
+    <filter id="avatar-glow-plus" x="-30%" y="-30%" width="160%" height="160%">
+        <feGaussianBlur in="SourceGraphic" stdDeviation="4" result="blur"/>
+        <feColorMatrix in="blur" type="matrix" values="0 0 0 0 1  0 0 0 0 0.84  0 0 0 0 0  0 0 0 0.4 0" result="glow"/>
+        <feMerge><feMergeNode in="glow"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    {% endif %}
+    <filter id="text-shadow" x="-5%" y="-5%" width="110%" height="130%">
+        <feDropShadow dx="0" dy="1" stdDeviation="1.5" flood-color="#000" flood-opacity="0.5"/>
+    </filter>
+</defs>
+
+{# Background #}
+<rect width="728" height="120" rx="6" fill="url(#bg-grad)"/>
+<rect x="1" y="1" width="726" height="118" rx="5" fill="none" stroke="#67d1f8" stroke-width="2"/>
+
+{# Left section: Avatar (116px wide) #}
+<rect x="2" y="2" width="114" height="116" rx="4" fill="rgba(26, 27, 31, 0.4)"/>
+<line x1="118" y1="2" x2="118" y2="118" stroke="#1a1b1f" stroke-width="2"/>
+
+{# Avatar image #}
+{% if avatar_base64 %}
+<image href="{{ avatar_base64 }}" x="21" y="23" width="74" height="74" clip-path="url(#avatar-clip)" preserveAspectRatio="xMidYMid slice"/>
+{% else %}
+<circle cx="58" cy="60" r="37" fill="#32363d"/>
+<g transform="translate(38, 40) scale(0.078)">
+    <path d="M102.49,0c0,27.414,0,104.166,0,137.062c0,112.391,99.33,156.25,153.51,156.25c54.18,0,153.51-43.859,153.51-156.25c0-32.896,0-109.648,0-137.062H102.49z M256.289,50.551l-68.164,29.768v98.474l-0.049,19.53c-0.526-0.112-47.274-10.112-47.274-78.391c0-28.17,0-69.6,0-69.6h60.385L256.289,50.551z" fill="#67d1f8"/>
+    <polygon points="315.473,400.717 291.681,367.482 279.791,318.506 256,322.004 232.209,318.506 220.314,367.482 205.347,388.394 196.527,400.476 196.699,400.476 196.527,400.717" fill="#67d1f8"/>
+    <polygon points="366.93,432.24 366.93,432 145.07,432 145.07,511.598 145.07,511.76 145.07,511.76 145.07,512 366.93,512 366.93,432.402 366.93,432.24" fill="#67d1f8"/>
+</g>
+{% endif %}
+<circle cx="58" cy="60" r="38.5" fill="none" stroke="{% if is_plus %}#ffd700{% else %}#67d1f8{% endif %}" stroke-width="3" filter="url(#avatar-glow{% if is_plus %}-plus{% endif %})"/>
+
+{# PS Plus badge #}
+{% if is_plus %}
+<circle cx="81" cy="83" r="11" fill="#ffd700" stroke="#2a2e34" stroke-width="2"/>
+<text x="81" y="87" text-anchor="middle" font-family="system-ui, sans-serif" font-size="11" font-weight="bold" fill="#1a1b1f">+</text>
+{% endif %}
+
+{# Center section: Username, Title, Meta #}
+{# Username #}
+<text x="132" y="{% if displayed_title %}36{% else %}42{% endif %}" class="sig-username" filter="url(#text-shadow)">{{ psn_username }}{% if flag %} <tspan style="font-size: 14px;">{{ flag }}</tspan>{% endif %}</text>
+
+{# Title #}
+{% if displayed_title %}
+<text x="132" y="52" class="sig-title">"{{ displayed_title }}"</text>
+{% endif %}
+
+{# Meta: Level | Ranks | Earn Rate #}
+<text x="132" y="{% if displayed_title %}70{% else %}64{% endif %}" class="sig-meta">
+    <tspan class="sig-meta-bold">Lv.{{ trophy_level }}</tspan>{% if xp_rank %}
+    <tspan class="sig-meta-sep" dx="4">|</tspan>
+    <tspan class="sig-meta-accent" dx="4">#{{ xp_rank|intcomma }}</tspan>{% endif %}{% if country_xp_rank and flag %}
+    <tspan class="sig-meta-sep" dx="4">|</tspan>
+    <tspan style="font-size: 11px;">{{ flag }}</tspan>
+    <tspan class="sig-meta-green" dx="1">#{{ country_xp_rank|intcomma }}</tspan>{% endif %}
+    <tspan class="sig-meta-sep" dx="4">|</tspan>
+    <tspan class="sig-meta-green" dx="4">{{ earn_rate }}%</tspan>
+    <tspan style="font-style: italic; fill: rgba(245, 247, 252, 0.35);" dx="2">earn</tspan>
+</text>
+
+{# Right section divider #}
+<line x1="518" y1="2" x2="518" y2="118" stroke="#1a1b1f" stroke-width="2"/>
+<rect x="518" y="2" width="208" height="116" rx="4" fill="rgba(26, 27, 31, 0.25)"/>
+
+{# Platinum / Trophy count #}
+<g class="plat-glow">
+    {# Trophy cup icon (scaled) #}
+    <g transform="translate(530, 14) scale(0.028)">
+        <path d="M102.49,0c0,27.414,0,104.166,0,137.062c0,112.391,99.33,156.25,153.51,156.25c54.18,0,153.51-43.859,153.51-156.25c0-32.896,0-109.648,0-137.062H102.49z M256.289,50.551l-68.164,29.768v98.474l-0.049,19.53c-0.526-0.112-47.274-10.112-47.274-78.391c0-28.17,0-69.6,0-69.6h60.385L256.289,50.551z" fill="#67d1f8"/>
+        <polygon points="315.473,400.717 291.681,367.482 279.791,318.506 256,322.004 232.209,318.506 220.314,367.482 205.347,388.394 196.527,400.476 196.699,400.476 196.527,400.717" fill="#67d1f8"/>
+        <polygon points="366.93,432.24 366.93,432 145.07,432 145.07,511.598 145.07,511.76 145.07,511.76 145.07,512 366.93,512 366.93,432.402 366.93,432.24" fill="#67d1f8"/>
+    </g>
+</g>
+{% if total_plats > 0 %}
+<text x="548" y="28" class="sig-stat-value sig-plat" style="font-size: 18px;">{{ total_plats|intcomma }}</text>
+<text x="{{ total_plats|intcomma|length|add:0 }}0" y="28" class="sig-stat-label" dx="552">Platinums</text>
+{% else %}
+<text x="548" y="28" class="sig-stat-value" style="font-size: 18px; fill: #f5f7fc;">{{ total_earned|intcomma }}</text>
+<text x="610" y="28" class="sig-stat-label">Trophies</text>
+{% endif %}
+
+{# XP with star #}
+<path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" fill="#ffaa5c" transform="translate(528, 36) scale(0.58)"/>
+<text x="548" y="48" class="sig-stat-value sig-xp" style="font-size: 15px;">{{ total_badge_xp|intcomma }}</text>
+<text x="620" y="48" class="sig-stat-label">XP</text>
+
+{# Mini trophy breakdown bar #}
+{% if total_earned > 0 %}
+<rect x="530" y="58" width="184" height="6" rx="3" fill="rgba(245, 247, 252, 0.08)"/>
+{% if pct_plats > 0 %}<rect x="530" y="58" width="{{ pct_plats|floatformat:1 }}%" height="6" rx="3" fill="#67d1f8" style="width: calc(184px * {{ pct_plats }} / 100);"/>{% endif %}
+{# Use stacked rects with x offsets calculated from percentages #}
+<g>
+    {% if pct_plats > 0 %}<rect x="530" y="58" height="6" fill="#67d1f8" rx="{% if pct_golds == 0 and pct_silvers == 0 and pct_bronzes == 0 %}3{% else %}0{% endif %}" style="width: {{ pct_plats }}%;"/>{% endif %}
+</g>
+{% endif %}
+
+{# Branding divider + logo #}
+<line x1="530" y1="72" x2="714" y2="72" stroke="rgba(245, 247, 252, 0.08)" stroke-width="1"/>
+{% if logo_base64 %}
+<image href="{{ logo_base64 }}" x="530" y="80" width="14" height="14"/>
+{% endif %}
+<text x="550" y="91" class="sig-brand">platpursuit.com</text>
+
+{# Compact stats line #}
+<text x="530" y="108" style="font-family: system-ui, -apple-system, sans-serif; font-size: 10px; fill: rgba(245, 247, 252, 0.3);">{{ total_earned|intcomma }} earned | {{ total_games|intcomma }} games | {{ total_completes|intcomma }} at 100%</text>
+
+</svg>

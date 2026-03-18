@@ -68,15 +68,14 @@ Badges are a flagship feature with dedicated real estate.
 | 15 | Badge XP & Leaderboard | Lazy (10m) | **Done** | ProfileGamification + leaderboard neighborhood (2 above/below) |
 | 15b | Country XP Leaderboard | Lazy (10m) | **Done** | Per-country Redis sorted sets + leaderboard neighborhood |
 
-## Category: Community
+## Category: Share & Export
 
 | # | Module | Strategy | Status | Data Source |
 |---|--------|----------|--------|------------|
-| 16 | My Reviews | Lazy (10m) | **Done** | Review aggregate stats + recent list |
-| 17 | Community Spotlight | Lazy | **Cut** | Dashboard should focus on individual user, not community |
-| 18 | Rate My Games | Lazy (30m) | **Done** | CTA card: unrated platinum count + preview strip |
-| 19 | My Checklists | Lazy | **Cut** | May revisit later |
-| 20 | My Game Lists | Lazy | **Cut** | May revisit later |
+| 16 | Badge Showcase | Lazy (10m) | **Done** | UserBadge selection, featured badge for profile card |
+| 17 | Profile Card | Lazy (none) | **Done** | Client-side HTML preview via `/api/v1/profile-card/html/`, PNG download |
+
+Moved to Highlights: My Reviews (#16 old), Rate My Games (#18 old). Cut: Community Spotlight, My Checklists, My Game Lists.
 
 ## Category: Highlights & History
 
@@ -275,9 +274,9 @@ These are the crown jewels that make premium feel indispensable.
 | `premium` | Premium | Advanced Stats, Theme Preview, Trophy Roadmap, Platinum Heatmap, Rarity Radar, Personal Records, Year in Review, Trophy Type Breakdown |
 | `at_a_glance` | At a Glance | Trophy Snapshot, Recent Platinums, Recent Activity, Sync Status, Notifications, Quick Settings |
 | `progress` | Progress & Challenges | Challenge Hub, A-Z, Calendar, Genre, Milestones, Completion Milestones |
-| `badges` | Badges & Achievements | Badge Progress, Recent Badges, Badge Showcase, Badge XP & Leaderboard, Country XP Leaderboard |
-| `community` | Community | My Reviews, Community Spotlight, Rate My Games, My Checklists, My Game Lists |
-| `highlights` | Highlights & History | Trophy Timeline, Monthly Recap Preview, Rarity Showcase |
+| `badges` | Badges & Achievements | Badge Progress, Recent Badges, Badge Stats, Badge XP & Leaderboard, Country XP Leaderboard |
+| `share` | Share & Export | Badge Showcase, Profile Card |
+| `highlights` | Highlights & History | Trophy Timeline, Monthly Recap Preview, Rarity Showcase, My Reviews, Rate My Games |
 
 Utility modules (Quick Links, Featured Content) fold into At a Glance or Highlights.
 

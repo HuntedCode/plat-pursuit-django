@@ -93,6 +93,7 @@ from .review_views import (
 from .profile_card_views import (
     ProfileCardHTMLView, ProfileCardPNGView,
     ProfileCardSettingsView, ProfileCardRegenerateTokenView,
+    SetDisplayedBadgeView,
 )
 
 app_name = 'api'
@@ -328,6 +329,9 @@ urlpatterns = [
     path('profile-card/png/', ProfileCardPNGView.as_view(), name='profile-card-png'),
     path('profile-card/settings/', ProfileCardSettingsView.as_view(), name='profile-card-settings'),
     path('profile-card/regenerate-token/', ProfileCardRegenerateTokenView.as_view(), name='profile-card-regenerate-token'),
+
+    # Badge display selection
+    path('badges/displayed/', SetDisplayedBadgeView.as_view(), name='set-displayed-badge'),
 
     # Review Hub endpoints
     path('reviews/recent/', RecentReviewsView.as_view(), name='review-recent'),

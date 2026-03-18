@@ -198,7 +198,9 @@
 {% endblock %}
 
 {% block js_scripts %}
+<script>window.GRADIENT_THEMES = {% gradient_themes_json %};</script>
 <script src="{% static 'js/dashboard.js' %}"></script>
+<script src="{% static 'js/profile-card-share.js' %}"></script>
 <script>
 document.addEventListener('DOMContentLoaded', () => {
     PlatPursuit.ZoomScaler.init();

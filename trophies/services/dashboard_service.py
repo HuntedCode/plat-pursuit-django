@@ -1247,8 +1247,14 @@ def provide_badge_showcase(profile, settings=None):
         try:
             layers = badge.get_badge_layers()
             image_url = layers.get('main', '')
+            has_custom = layers.get('has_custom_image', False)
         except Exception:
             image_url = ''
+            has_custom = False
+
+        # Only show badges with custom artwork
+        if not has_custom:
+            continue
 
         entry = {
             'id': badge.id,
@@ -1277,18 +1283,31 @@ def provide_badge_showcase(profile, settings=None):
 
 def provide_profile_card_preview(profile, settings=None):
     """
-    Profile card preview: provides theme and shareables URL for the
-    client-side preview module. The actual card HTML is fetched via
-    the existing /api/v1/profile-card/html/ endpoint on the client.
+    Profile card preview: provides theme, premium status, and available themes
+    for the client-side preview module with inline theme picker.
+    The actual card HTML is fetched via /api/v1/profile-card/html/ on the client.
     """
     from trophies.models import ProfileCardSettings
+    from trophies.themes import get_available_themes_for_grid
     from django.urls import reverse
 
     card_settings, _ = ProfileCardSettings.objects.get_or_create(profile=profile)
+    is_premium = profile.user_is_premium
+
+    # Build compact theme list: key, name, accent_color
+    themes = []
+    for key, data in get_available_themes_for_grid(include_game_art=False):
+        themes.append({
+            'key': key,
+            'name': data['name'],
+            'css': data['background_css'],
+        })
 
     return {
         'theme': card_settings.card_theme or 'default',
-        'shareables_url': reverse('my_shareables'),
+        'is_premium': is_premium,
+        'themes': themes,
+        'shareables_url': reverse('my_shareables') + '?tab=profile_card',
     }
 
 
@@ -2196,12 +2215,12 @@ def _module_cache_key(slug, profile_id, size=None):
 
 
 def invalidate_dashboard_cache(profile_id):
-    """Delete all dashboard module cache keys for a profile (all sizes)."""
-    keys_to_delete = []
+    """Delete all dashboard module cache keys for a profile."""
+    # Cache keys use settings hashes as suffixes, so enumerate exact keys
+    # from stored patterns would be fragile. Use prefix-pattern delete instead.
     for mod in DASHBOARD_MODULES:
         if mod.get('cache_ttl', DEFAULT_CACHE_TTL) > 0:
-            slug = mod['slug']
-            for size in mod.get('allowed_sizes', list(VALID_SIZES)):
-                keys_to_delete.append(_module_cache_key(slug, profile_id, size))
-    if keys_to_delete:
-        cache.delete_many(keys_to_delete)
+            pattern = f"dashboard:mod:{mod['slug']}:{profile_id}:*"
+            cache.delete_pattern(pattern)
+            # Also delete the bare key (no suffix)
+            cache.delete(_module_cache_key(mod['slug'], profile_id))

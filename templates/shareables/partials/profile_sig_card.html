@@ -1,0 +1,98 @@
+{% load static humanize %}
+{% comment %}
+Forum Signature Share Image Card Template (728x120)
+Compact horizontal banner for forum embeds, Discord bios, etc.
+Rendered by Playwright for PNG output. Uses inline styles for compatibility.
+
+Layout: Avatar (116px) | Center: name, title, meta, breakdown bar (flex) | Right: plat, XP, branding (180px)
+{% endcomment %}
+
+<div class="share-image-content" style="width: 728px; height: 120px; background: linear-gradient(135deg, #2a2e34 0%, #32363d 50%, #2a2e34 100%); font-family: 'Inter', 'Poppins', system-ui, -apple-system, sans-serif; box-sizing: border-box; overflow: hidden;">
+    <div style="width: 728px; height: 120px; border: 2px solid #67d1f8; border-radius: 6px; box-sizing: border-box; display: flex; overflow: hidden;">
+
+        {# Left: Avatar #}
+        <div style="width: 116px; height: 116px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; background: rgba(26, 27, 31, 0.4); border-right: 2px solid #1a1b1f;">
+            <div style="position: relative; width: 80px; height: 80px;">
+                {% if avatar_url %}
+                <img src="{{ avatar_url }}" style="width: 80px; height: 80px; border-radius: 50%; object-fit: cover; border: 3px solid {% if is_plus %}#ffd700{% else %}#67d1f8{% endif %}; box-sizing: border-box; box-shadow: 0 0 12px {% if is_plus %}rgba(255, 215, 0, 0.3){% else %}rgba(103, 209, 248, 0.3){% endif %};" />
+                {% else %}
+                <div style="width: 80px; height: 80px; border-radius: 50%; border: 3px solid #67d1f8; box-sizing: border-box; background: linear-gradient(135deg, #32363d, #2a2e34); display: flex; align-items: center; justify-content: center; box-shadow: 0 0 12px rgba(103, 209, 248, 0.3);">
+                    <svg style="height: 40px; width: 40px;" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="#67d1f8"><path d="M102.49,0c0,27.414,0,104.166,0,137.062c0,112.391,99.33,156.25,153.51,156.25c54.18,0,153.51-43.859,153.51-156.25c0-32.896,0-109.648,0-137.062H102.49z M256.289,50.551l-68.164,29.768v98.474l-0.049,19.53c-0.526-0.112-47.274-10.112-47.274-78.391c0-28.17,0-69.6,0-69.6h60.385L256.289,50.551z"/><polygon points="315.473,400.717 291.681,367.482 279.791,318.506 256,322.004 232.209,318.506 220.314,367.482 205.347,388.394 196.527,400.476 196.699,400.476 196.527,400.717"/><polygon points="366.93,432.24 366.93,432 145.07,432 145.07,511.598 145.07,511.76 145.07,511.76 145.07,512 366.93,512 366.93,432.402 366.93,432.24"/><path d="M511.638,96.668c-0.033-1.268-0.068-2.336-0.068-3.174V45.1h-73.889v38.736h35.152v9.658c0,1.127,0.037,2.557,0.086,4.258c0.389,13.976,1.303,46.707-21.545,70.203c-5.121,5.266-11.221,9.787-18.219,13.613c-3.883,17.635-10.109,33.564-18.104,47.814c26.561-6.406,48.026-17.898,64.096-34.422C513.402,159.734,512.121,113.918,511.638,96.668z"/><path d="M60.625,167.955c-22.848-23.496-21.934-56.227-21.541-70.203c0.047-1.701,0.082-3.131,0.082-4.258v-9.658h34.842h0.07l0,0h0.24V45.1H0.43v48.394c0,0.838-0.032,1.906-0.068,3.174c-0.482,17.25-1.76,63.066,32.494,98.293c16.068,16.524,37.531,28.014,64.092,34.422c-7.996-14.25-14.22-30.182-18.103-47.816C71.846,177.74,65.746,173.221,60.625,167.955z"/></svg>
+                </div>
+                {% endif %}
+                {% if is_plus %}
+                <div style="position: absolute; bottom: -2px; right: -2px; width: 22px; height: 22px; background: #ffd700; border-radius: 50%; border: 2px solid #2a2e34; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: bold; color: #1a1b1f; box-shadow: 0 0 6px rgba(255, 215, 0, 0.4);">+</div>
+                {% endif %}
+            </div>
+        </div>
+
+        {# Center: Username, Title, Meta, Breakdown Bar #}
+        <div style="flex: 1; padding: 10px 16px 8px; display: flex; flex-direction: column; justify-content: center; min-width: 0;">
+            {# Username + country badge #}
+            <div style="display: flex; align-items: baseline; gap: 6px; margin-bottom: 1px;">
+                <span style="font-size: 22px; font-weight: 700; color: #f5f7fc; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);">{{ psn_username }}</span>
+                {% if country_code %}
+                <span style="font-size: 9px; font-weight: 700; color: rgba(245, 247, 252, 0.7); background: rgba(245, 247, 252, 0.1); padding: 1px 5px; border-radius: 3px; letter-spacing: 0.05em;">{{ country_code }}</span>
+                {% endif %}
+            </div>
+
+            {# Title #}
+            {% if displayed_title %}
+            <div style="font-size: 11px; font-style: italic; color: #9580ff; margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-right: 4px;">"{{ displayed_title }}"</div>
+            {% endif %}
+
+            {# Meta row: Level, Ranks, Earn Rate #}
+            <div style="display: flex; align-items: center; gap: 8px; font-size: 11px; color: rgba(245, 247, 252, 0.6); white-space: nowrap; margin-bottom: 5px;">
+                <span style="font-weight: 600; color: rgba(245, 247, 252, 0.8);">Lv.{{ trophy_level }}</span>
+                {% if xp_rank %}
+                <span style="color: rgba(245, 247, 252, 0.2);">|</span>
+                <span style="color: #ffaa5c; font-weight: 600;">#{{ xp_rank|intcomma }} <span style="color: rgba(245, 247, 252, 0.35); font-weight: 400;">Global</span></span>
+                {% endif %}
+                {% if country_xp_rank and country_code %}
+                <span style="color: rgba(245, 247, 252, 0.2);">|</span>
+                <span style="color: #67f8c8; font-weight: 600;">#{{ country_xp_rank|intcomma }} <span style="color: rgba(245, 247, 252, 0.35); font-weight: 400;">{{ country_code }}</span></span>
+                {% endif %}
+                <span style="color: rgba(245, 247, 252, 0.2);">|</span>
+                <span style="color: #67f8c8; font-weight: 600;">{{ earn_rate }}%</span>
+                <span style="color: rgba(245, 247, 252, 0.3); font-style: italic;">earn</span>
+            </div>
+
+            {# Trophy breakdown bar (full center width) #}
+            {% if total_earned > 0 %}
+            <div style="display: flex; height: 8px; border-radius: 4px; overflow: hidden; box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.4);">
+                {% if pct_plats > 0 %}<div style="width: {{ pct_plats }}%; background: linear-gradient(to bottom, #67d1f8, #4db8e0);"></div>{% endif %}
+                {% if pct_golds > 0 %}<div style="width: {{ pct_golds }}%; background: linear-gradient(to bottom, #ffd700, #d4b000);"></div>{% endif %}
+                {% if pct_silvers > 0 %}<div style="width: {{ pct_silvers }}%; background: linear-gradient(to bottom, #c0c0c0, #a0a0a0);"></div>{% endif %}
+                {% if pct_bronzes > 0 %}<div style="width: {{ pct_bronzes }}%; background: linear-gradient(to bottom, #cd7f32, #b06a28);"></div>{% endif %}
+            </div>
+            {% endif %}
+        </div>
+
+        {# Right: Plat count + XP + Branding (simplified) #}
+        <div style="width: 180px; flex-shrink: 0; border-left: 2px solid #1a1b1f; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 8px 10px; background: rgba(26, 27, 31, 0.25); gap: 2px;">
+            {# Platinum count #}
+            <div style="display: flex; align-items: center; gap: 5px;">
+                <svg style="height: 16px; width: 16px; flex-shrink: 0;" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="#67d1f8"><path d="M102.49,0c0,27.414,0,104.166,0,137.062c0,112.391,99.33,156.25,153.51,156.25c54.18,0,153.51-43.859,153.51-156.25c0-32.896,0-109.648,0-137.062H102.49z M256.289,50.551l-68.164,29.768v98.474l-0.049,19.53c-0.526-0.112-47.274-10.112-47.274-78.391c0-28.17,0-69.6,0-69.6h60.385L256.289,50.551z"/><polygon points="315.473,400.717 291.681,367.482 279.791,318.506 256,322.004 232.209,318.506 220.314,367.482 205.347,388.394 196.527,400.476 196.699,400.476 196.527,400.717"/><polygon points="366.93,432.24 366.93,432 145.07,432 145.07,511.598 145.07,511.76 145.07,511.76 145.07,512 366.93,512 366.93,432.402 366.93,432.24"/><path d="M511.638,96.668c-0.033-1.268-0.068-2.336-0.068-3.174V45.1h-73.889v38.736h35.152v9.658c0,1.127,0.037,2.557,0.086,4.258c0.389,13.976,1.303,46.707-21.545,70.203c-5.121,5.266-11.221,9.787-18.219,13.613c-3.883,17.635-10.109,33.564-18.104,47.814c26.561-6.406,48.026-17.898,64.096-34.422C513.402,159.734,512.121,113.918,511.638,96.668z"/><path d="M60.625,167.955c-22.848-23.496-21.934-56.227-21.541-70.203c0.047-1.701,0.082-3.131,0.082-4.258v-9.658h34.842h0.07l0,0h0.24V45.1H0.43v48.394c0,0.838-0.032,1.906-0.068,3.174c-0.482,17.25-1.76,63.066,32.494,98.293c16.068,16.524,37.531,28.014,64.092,34.422c-7.996-14.25-14.22-30.182-18.103-47.816C71.846,177.74,65.746,173.221,60.625,167.955z"/></svg>
+                {% if total_plats > 0 %}
+                <span style="font-size: 20px; font-weight: 700; color: #67d1f8; text-shadow: 0 0 6px rgba(103, 209, 248, 0.3);">{{ total_plats|intcomma }}</span>
+                {% else %}
+                <span style="font-size: 20px; font-weight: 700; color: #f5f7fc;">{{ total_earned|intcomma }}</span>
+                {% endif %}
+            </div>
+            <div style="font-size: 9px; color: rgba(245, 247, 252, 0.45); text-transform: uppercase; font-weight: bold; font-style: italic; letter-spacing: 0.06em;">{% if total_plats > 0 %}Platinums{% else %}Trophies{% endif %}</div>
+
+            {# XP #}
+            <div style="display: flex; align-items: center; gap: 4px; margin-top: 2px;">
+                <svg style="height: 12px; width: 12px; flex-shrink: 0;" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#ffaa5c"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+                <span style="font-size: 14px; font-weight: 700; color: #ffaa5c;">{{ total_badge_xp|intcomma }}</span>
+                <span style="font-size: 9px; color: rgba(245, 247, 252, 0.45); font-weight: bold; font-style: italic;">XP</span>
+            </div>
+
+            {# Branding #}
+            <div style="display: flex; align-items: center; gap: 4px; margin-top: 4px; border-top: 1px solid rgba(245, 247, 252, 0.06); padding-top: 4px;">
+                <img src="{% static 'images/logo.png' %}" style="width: 12px; height: 12px;" />
+                <span style="font-size: 9px; color: #67d1f8; font-weight: 600; font-style: italic;">platpursuit.com</span>
+            </div>
+        </div>
+    </div>
+</div>

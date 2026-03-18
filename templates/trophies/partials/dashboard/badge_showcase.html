@@ -1,0 +1,89 @@
+{% load static %}
+{# Dashboard module: Badge Showcase. Select your featured badge for profile card and public profile. #}
+<div class="card bg-base-200/80 border-2 border-base-300 shadow-lg shadow-neutral">
+    <div class="card-body p-5 lg:p-7">
+        {# Header #}
+        <div class="flex items-center justify-between mb-3">
+            <h2 class="card-title text-base lg:text-lg font-bold flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-secondary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="8" r="7"></circle>
+                    <polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"></polyline>
+                </svg>
+                Badge Showcase
+            </h2>
+            {% if data.total_badges > 0 %}
+                <a href="{% url 'badges_list' %}" class="text-xs text-base-content/40 hover:text-primary transition-colors">View All</a>
+            {% endif %}
+        </div>
+
+        {% if data.total_badges > 0 %}
+            {# Displayed Badge (large) #}
+            {% if data.displayed_badge %}
+            <div class="flex items-center gap-4 mb-4 bg-base-300/50 rounded-xl p-4 border border-base-content/5">
+                <div class="w-16 h-16 lg:w-20 lg:h-20 flex-shrink-0">
+                    {% if data.displayed_badge.image_url %}
+                    <img src="{{ data.displayed_badge.image_url }}" alt="{{ data.displayed_badge.name }}"
+                         class="w-full h-full object-contain rounded-lg" />
+                    {% else %}
+                    <div class="w-full h-full bg-base-300 rounded-lg flex items-center justify-center">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-8 h-8 text-base-content/30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="7"></circle><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"></polyline></svg>
+                    </div>
+                    {% endif %}
+                </div>
+                <div class="min-w-0">
+                    <div class="text-sm font-bold text-base-content truncate">{{ data.displayed_badge.name }}</div>
+                    <div class="text-xs text-base-content/50">{{ data.displayed_badge.series }}</div>
+                    <div class="mt-1">
+                        <span class="badge badge-sm {% if data.displayed_badge.tier == 4 %}badge-primary{% elif data.displayed_badge.tier == 3 %}badge-warning{% elif data.displayed_badge.tier == 2 %}badge-ghost{% else %}text-amber-700 bg-amber-700/10 border-amber-700/30{% endif %}">
+                            {{ data.displayed_badge.tier_name }}
+                        </span>
+                        {% if data.displayed_badge.is_displayed %}
+                        <span class="badge badge-sm badge-secondary ml-1">Featured</span>
+                        {% else %}
+                        <span class="badge badge-sm badge-ghost ml-1">Auto-selected</span>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
+            {# Badge Grid (selectable) #}
+            <div class="grid grid-cols-4 lg:grid-cols-5 gap-2" id="badge-showcase-grid">
+                {% for badge in data.badges %}
+                <button class="badge-showcase-item group relative aspect-square rounded-lg border-2 transition-all duration-200 hover:scale-105 cursor-pointer {% if badge.is_displayed %}border-secondary bg-secondary/10{% else %}border-base-content/10 bg-base-300/30 hover:border-primary/40{% endif %}"
+                        data-badge-id="{{ badge.id }}"
+                        title="{{ badge.name }} ({{ badge.tier_name }})"
+                        onclick="PlatPursuit.setBadgeDisplayed({{ badge.id }})">
+                    {% if badge.image_url %}
+                    <img src="{{ badge.image_url }}" alt="{{ badge.name }}"
+                         class="w-full h-full object-contain p-1 rounded-lg" />
+                    {% else %}
+                    <div class="w-full h-full flex items-center justify-center">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 text-base-content/20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="7"></circle><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"></polyline></svg>
+                    </div>
+                    {% endif %}
+                    {# Selection indicator #}
+                    {% if badge.is_displayed %}
+                    <div class="absolute -top-1 -right-1 w-4 h-4 bg-secondary rounded-full flex items-center justify-center">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3 text-secondary-content" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                    </div>
+                    {% endif %}
+                </button>
+                {% endfor %}
+            </div>
+
+            <p class="text-xs text-base-content/40 mt-3 italic pr-1">Tap a badge to feature it on your profile and share cards.</p>
+
+        {% else %}
+            {# Empty state #}
+            <div class="text-center py-6">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-12 h-12 mx-auto text-base-content/20 mb-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <circle cx="12" cy="8" r="7"></circle>
+                    <polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"></polyline>
+                </svg>
+                <p class="text-sm text-base-content/50">No badges earned yet.</p>
+                <a href="{% url 'badges_list' %}" class="btn btn-sm btn-outline btn-primary mt-2">Explore Badges</a>
+            </div>
+        {% endif %}
+    </div>
+</div>

@@ -1,0 +1,44 @@
+{% load static %}
+{% comment %}
+Profile Card tab content for My Shareables page.
+Social Media Card: Format toggle, theme, preview, download (via ShareImageManager)
+{% endcomment %}
+
+{# Social Media Card Section #}
+<div class="card bg-base-100 border-4 border-base-300 shadow-md shadow-neutral">
+    <div class="card-body">
+        <h2 class="text-xl font-bold flex items-center gap-2">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+            </svg>
+            Profile Card
+        </h2>
+        <p class="text-base-content/60 text-sm">Download a shareable image of your profile for Discord, Twitter, and more.</p>
+
+        {# ShareImageManager will render theme picker, preview, and download button here #}
+        <div id="profile-card-share-content">
+            <div class="flex justify-center items-center py-12">
+                <span class="loading loading-spinner loading-lg"></span>
+            </div>
+        </div>
+    </div>
+</div>
+
+{# Full-Size Card Preview Modal #}
+<dialog id="card-preview-modal" class="modal backdrop-blur-sm">
+    <div class="modal-box max-w-none w-auto p-4 bg-base-200 border-2 border-base-300" style="max-height: none; overflow: visible;">
+        <form method="dialog">
+            <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2 z-10">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+            </button>
+        </form>
+        <div id="card-preview-fullsize" class="flex justify-center">
+            {# Full-size card HTML rendered here by JS #}
+        </div>
+    </div>
+    <form method="dialog" class="modal-backdrop">
+        <button>close</button>
+    </form>
+</dialog>

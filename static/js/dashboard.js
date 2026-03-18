@@ -78,6 +78,9 @@
 
             // Rate My Games module: hover-to-scroll preview strip
             this.registerModuleInit('rate_my_games', (el) => this._initRateStrip(el));
+
+            // Profile Card Preview module: fetch HTML preview and scale to fit
+            this.registerModuleInit('profile_card_preview', (el) => this._initProfileCardPreview(el));
         }
 
         // -----------------------------------------------------------------
@@ -350,6 +353,147 @@
                 strip.addEventListener('mouseenter', () => { track.style.animationPlayState = 'paused'; });
                 strip.addEventListener('mouseleave', () => { track.style.animationPlayState = 'running'; });
             }
+        }
+
+        // -----------------------------------------------------------------
+        // Profile Card Preview
+        // -----------------------------------------------------------------
+
+        _initProfileCardPreview(el) {
+            const card = el.querySelector('[data-card-theme]');
+            let currentTheme = card ? card.dataset.cardTheme : 'default';
+            const isPremium = card && card.dataset.isPremium === 'true';
+            const container = el.querySelector('.profile-card-module-preview');
+            const content = el.querySelector('.profile-card-module-content');
+            const loading = el.querySelector('.profile-card-module-loading');
+            const downloadBtn = el.querySelector('.profile-card-module-download');
+            const swatches = el.querySelectorAll('.theme-swatch');
+            if (!container || !content || !loading) return;
+
+            function getDownloadUrl() {
+                return '/api/v1/profile-card/png/?theme=' + encodeURIComponent(currentTheme);
+            }
+
+            function scaleToFit() {
+                if (content.style.display !== 'none') {
+                    const scale = container.offsetWidth / 1200;
+                    content.style.transform = 'scale(' + scale + ')';
+                }
+            }
+
+            // Apply theme background to a card element (preview or modal)
+            function applyTheme(themeKey, target) {
+                const shareContent = (target || content).querySelector('.share-image-content');
+                if (!shareContent) return;
+
+                const themes = window.GRADIENT_THEMES;
+                if (!themes || !themes[themeKey]) return;
+
+                const t = themes[themeKey];
+                shareContent.style.background = t.background;
+                if (t.backgroundSize) shareContent.style.backgroundSize = t.backgroundSize;
+                if (t.backgroundPosition) shareContent.style.backgroundPosition = t.backgroundPosition;
+                if (t.backgroundRepeat) shareContent.style.backgroundRepeat = t.backgroundRepeat;
+
+                // Update banner accent if present
+                const banner = shareContent.querySelector('[data-element="profile-banner"]');
+                if (banner && t.bannerBackground) {
+                    banner.style.background = t.bannerBackground;
+                }
+            }
+
+            // Update swatch selection UI
+            function updateSwatchUI(themeKey) {
+                swatches.forEach(function(s) {
+                    const isSelected = s.dataset.themeKey === themeKey;
+                    s.classList.toggle('border-primary', isSelected);
+                    s.classList.toggle('ring-2', isSelected);
+                    s.classList.toggle('ring-primary', isSelected);
+                    s.classList.toggle('border-base-content/20', !isSelected);
+                });
+            }
+
+            // Fetch and render HTML preview
+            function fetchPreview() {
+                PlatPursuit.API.get('/api/v1/profile-card/html/?image_format=landscape')
+                    .then(function(data) {
+                        content.innerHTML = data.html;
+                        content.style.display = 'block';
+                        content.style.width = '1200px';
+                        content.style.height = '630px';
+                        loading.style.display = 'none';
+                        requestAnimationFrame(function() {
+                            scaleToFit();
+                            applyTheme(currentTheme);
+                        });
+                    })
+                    .catch(function() {
+                        loading.innerHTML = '<span class="text-sm text-base-content/40">Unable to load preview</span>';
+                    });
+            }
+
+            fetchPreview();
+
+            // Re-fetch preview when featured badge changes
+            document.addEventListener('platpursuit:badge-changed', fetchPreview);
+
+            // Theme swatch clicks
+            swatches.forEach(function(swatch) {
+                swatch.addEventListener('click', function() {
+                    const key = swatch.dataset.themeKey;
+
+                    // Free users can only use default
+                    if (!isPremium && key !== 'default') {
+                        PlatPursuit.ToastManager.show('Premium required for custom themes.', 'warning');
+                        return;
+                    }
+
+                    // Apply immediately to preview
+                    currentTheme = key;
+                    applyTheme(key);
+                    updateSwatchUI(key);
+
+                    // Save to server
+                    PlatPursuit.API.post('/api/v1/profile-card/settings/', { card_theme: key })
+                        .catch(async function(err) {
+                            const errData = await err.response?.json().catch(function() { return null; });
+                            PlatPursuit.ToastManager.show(errData?.error || 'Failed to save theme.', 'error');
+                        });
+                });
+            });
+
+            // Download on button click
+            if (downloadBtn) {
+                downloadBtn.addEventListener('click', function() {
+                    window.location.href = getDownloadUrl();
+                });
+            }
+
+            // Preview click opens full-size modal
+            const modal = el.querySelector('.profile-card-module-modal');
+            const modalContent = el.querySelector('.profile-card-module-modal-content');
+            container.addEventListener('click', function(e) {
+                if (e.target.closest('.profile-card-module-download')) return;
+                if (e.target.closest('.theme-swatch')) return;
+                if (!modal || !modalContent) return;
+
+                // Clone the full-size card HTML into the modal
+                modalContent.innerHTML = content.innerHTML;
+                // Reset the scale so it renders at full size
+                const fullCard = modalContent.querySelector('.share-image-content');
+                if (fullCard) {
+                    fullCard.style.transform = '';
+                }
+                applyTheme(currentTheme, modalContent);
+                modal.showModal();
+            });
+
+            // Rescale on resize
+            let resizeTimer;
+            window.addEventListener('resize', function() {
+                clearTimeout(resizeTimer);
+                resizeTimer = setTimeout(scaleToFit, 150);
+            });
         }
 
         // -----------------------------------------------------------------

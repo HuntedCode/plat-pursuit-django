@@ -135,7 +135,7 @@ Not a Django model. Local filesystem directory at `{BASE_DIR}/share_temp_images/
 
 - **SiteEvent tracking**: `recap_share_generate` tracked server-side when recap HTML is fetched. `recap_image_download` tracked client-side on download button click.
 - **Theme system** (`trophies/themes.py`): `GRADIENT_THEMES` dictionary defines all available backgrounds. Share cards and the main site share the same theme definitions.
-- **Font system**: Share cards use the same Poppins and Inter fonts from `static/fonts/`. The Playwright renderer embeds them as base64 to avoid file system access issues.
+- **Font system**: Share cards use Poppins and Inter fonts from `static/fonts/`. The Playwright renderer embeds them as base64 `@font-face` rules (cached per process). Available weights: Inter Regular (400), SemiBold (600), Bold (700); Poppins Regular (400), SemiBold (600), Bold (700). The site's Google Fonts link (`base.html`) loads matching weights so browser previews and Playwright PNGs render consistently.
 - **My Shareables page**: Centralized hub at `/my-shareables/` that lists all platinum trophies, challenges, and recaps with share card generation for each.
 
 ## Rate Before Download

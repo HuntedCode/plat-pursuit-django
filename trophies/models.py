@@ -1,3 +1,5 @@
+import uuid
+
 from django.db import models, DatabaseError, IntegrityError, OperationalError
 from django.utils import timezone
 from users.models import CustomUser
@@ -3427,3 +3429,57 @@ class DashboardConfig(models.Model):
 
     def __str__(self):
         return f"DashboardConfig for {self.profile.psn_username}"
+
+
+class ProfileCardSettings(models.Model):
+    """
+    Per-user profile card preferences: theme, public forum signature toggle,
+    and pre-render cache metadata.
+
+    The public_sig_token forms the URL for the publicly-accessible forum
+    signature image. Users can regenerate the token to invalidate old embeds.
+    """
+    profile = models.OneToOneField(
+        Profile,
+        on_delete=models.CASCADE,
+        related_name='card_settings',
+        primary_key=True,
+    )
+
+    # Public access control
+    public_sig_enabled = models.BooleanField(
+        default=False,
+        help_text='Whether the public forum signature URL is active.',
+    )
+    public_sig_token = models.UUIDField(
+        default=uuid.uuid4, unique=True, db_index=True,
+        help_text='Unique token for the public forum signature URL.',
+    )
+
+    # Card customization
+    card_theme = models.CharField(
+        max_length=50, default='default',
+        help_text='Theme key for the profile card background.',
+    )
+
+    # Pre-rendered cache metadata
+    sig_last_rendered = models.DateTimeField(
+        null=True, blank=True,
+        help_text='When the forum sig PNG/SVG was last rendered.',
+    )
+    sig_render_hash = models.CharField(
+        max_length=32, blank=True,
+        help_text='MD5 of the data used for last render (to skip unchanged).',
+    )
+
+    class Meta:
+        verbose_name = 'Profile Card Settings'
+        verbose_name_plural = 'Profile Card Settings'
+
+    def __str__(self):
+        return f"ProfileCardSettings for {self.profile.psn_username}"
+
+    def regenerate_token(self):
+        """Generate a new public sig token, invalidating old embed URLs."""
+        self.public_sig_token = uuid.uuid4()
+        self.save(update_fields=['public_sig_token'])

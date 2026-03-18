@@ -15,9 +15,16 @@
     </div>
 </section>
 
-{# Tabs for future extensibility #}
+{# Tabs #}
 <section class="shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 w-full p-0 lg:p-4 mt-6">
     <div class="tabs tabs-boxed bg-base-100 p-2">
+        <a href="?tab=profile_card" class="tab tab-lg {% if active_tab == 'profile_card' %}tab-active{% endif %}">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-5m-4 0V5a2 2 0 114 0v1m-4 0a2 2 0 104 0m-5 8a2 2 0 100-4 2 2 0 000 4zm0 0c1.306 0 2.417.835 2.83 2M9 14a3.001 3.001 0 00-2.83 2M15 11h3m-3 4h2"/>
+            </svg>
+            Profile Card
+            <span class="badge badge-primary badge-sm ml-2">New</span>
+        </a>
         <a href="?tab=platinum_images" class="tab tab-lg {% if active_tab == 'platinum_images' %}tab-active{% endif %}">
             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="var(--color-trophy-platinum)" viewBox="0 0 24 24">
                 <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/>
@@ -27,26 +34,13 @@
                 <span class="badge badge-sm ml-2">{{ total_platinums }}</span>
             {% endif %}
         </a>
-        {# Future tabs - disabled for now #}
-        <a href="#" class="tab tab-lg opacity-50 cursor-not-allowed" title="Coming Soon" onclick="return false;">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
-            </svg>
-            Trophy Mosaic
-            <span class="badge badge-ghost badge-sm ml-2">Soon</span>
-        </a>
-        <a href="#" class="tab tab-lg opacity-50 cursor-not-allowed" title="Coming Soon" onclick="return false;">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
-            </svg>
-            Trophy Calendar
-            <span class="badge badge-ghost badge-sm ml-2">Soon</span>
-        </a>
     </div>
 
     {# Tab Content #}
     <div class="mt-4 p-4">
-        {% if active_tab == 'platinum_images' %}
+        {% if active_tab == 'profile_card' %}
+            {% include 'shareables/partials/profile_card_tab.html' %}
+        {% elif active_tab == 'platinum_images' %}
             {% include 'shareables/partials/platinum_grid.html' %}
         {% endif %}
     </div>
@@ -89,4 +83,54 @@
 <script src="{% static 'js/share-image.js' %}"></script>
 <script src="{% static 'js/color-grid-modal.js' %}"></script>
 <script src="{% static 'js/shareable-manager.js' %}"></script>
+<script src="{% static 'js/profile-card-share.js' %}"></script>
+{% if active_tab == 'profile_card' %}
+<script>
+(function() {
+    const manager = new PlatPursuit.ProfileCardShareManager();
+
+    // Initialize social card share section
+    const shareContent = document.getElementById('profile-card-share-content');
+    if (shareContent) {
+        shareContent.innerHTML = manager.renderShareSection();
+        manager.init();
+    }
+
+    // Click preview to open full-size modal
+    const preview = document.getElementById('share-preview');
+    if (preview) {
+        preview.style.cursor = 'pointer';
+        preview.title = 'Click to view full size';
+        preview.addEventListener('click', async function() {
+            const modal = document.getElementById('card-preview-modal');
+            const fullsize = document.getElementById('card-preview-fullsize');
+            if (!modal || !fullsize) return;
+
+            try {
+                const html = await manager.fetchCardHTML(manager.currentFormat);
+                const dims = manager.dimensions[manager.currentFormat];
+                // Scale to fit viewport with padding (48px top/bottom)
+                const maxW = window.innerWidth - 80;
+                const maxH = window.innerHeight - 96;
+                const scale = Math.min(1, maxW / dims.width, maxH / dims.height);
+                fullsize.innerHTML = html;
+                const inner = fullsize.querySelector('.share-image-content');
+                if (inner) {
+                    inner.style.transform = 'scale(' + scale + ')';
+                    inner.style.transformOrigin = 'top center';
+                    fullsize.style.width = (dims.width * scale) + 'px';
+                    fullsize.style.height = (dims.height * scale) + 'px';
+                    manager.applyBackground(inner);
+                }
+                modal.showModal();
+            } catch (err) {
+                console.error('Failed to load full-size preview:', err);
+            }
+        });
+    }
+
+    // Forum sig management removed (kept in back pocket for later)
+})();
+</script>
+{% endif %}
 {% endblock %}

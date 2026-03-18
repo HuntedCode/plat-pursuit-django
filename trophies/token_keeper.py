@@ -1372,6 +1372,16 @@ class TokenKeeper:
             from trophies.services.timeline_service import invalidate_timeline_cache
             invalidate_timeline_cache(profile_id)
 
+            # Re-render forum signature if enabled (SVG only: fast, no Playwright)
+            try:
+                from trophies.models import ProfileCardSettings
+                if ProfileCardSettings.objects.filter(profile_id=profile_id, public_sig_enabled=True).exists():
+                    from core.services.profile_card_renderer import render_sig_svg
+                    render_sig_svg(profile)
+                    logger.info(f"Re-rendered forum sig SVG for profile {profile_id}")
+            except Exception:
+                logger.exception(f"Failed to re-render forum sig for profile {profile_id}")
+
             logger.info(f"{profile.display_psn_username} account has finished syncing!")
         except Exception as e:
             # Deadlock/lock-timeout errors are transient (our fault, not the user's).

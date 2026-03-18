@@ -13,5 +13,6 @@ logs/plat_pursuit.log
 .VSCodeCounter/
 docker-compose.yml
 share_temp_images/
+profile_sigs/
 docs/minigames/DEVELOPMENT_GUIDE.md
 .claude

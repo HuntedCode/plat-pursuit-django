@@ -1,0 +1,244 @@
+{% load static humanize %}
+{% comment %}
+Profile Card Share Image - Portrait (1080x1350)
+For Instagram sharing. Rendered by Playwright for PNG output.
+
+Full-width stacked sections. Portrait has more vertical room so sections
+breathe more than landscape, with larger typography and generous spacing.
+
+Variables: same as profile_card_landscape.html
+{% endcomment %}
+
+<div class="share-image-content" style="width: 1080px; height: 1350px; background: linear-gradient(to bottom right, #2a2e34, #32363d, #2a2e34); padding: 20px; font-family: 'Inter', 'Poppins', system-ui, -apple-system, sans-serif; box-sizing: border-box;">
+    <div style="width: 1040px; height: 1310px; border: 3px solid #67d1f8; border-radius: 8px; box-shadow: 0 10px 15px -3px rgba(103, 209, 248, 0.2); overflow: hidden; display: flex; flex-direction: column; box-sizing: border-box;">
+
+        {# ── Section 1: Header Banner ── #}
+        <div data-element="profile-banner" style="padding: 16px 28px; background: linear-gradient(to right, rgba(103, 209, 248, 0.15), rgba(103, 209, 248, 0.05)); border-bottom: 2px solid #1a1b1f; display: flex; align-items: center; justify-content: space-between;">
+            <div style="display: flex; align-items: center;">
+                <svg style="height: 36px; width: 36px; margin-right: 14px;" version="1.1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="#67d1f8"><path d="M102.49,0c0,27.414,0,104.166,0,137.062c0,112.391,99.33,156.25,153.51,156.25 c54.18,0,153.51-43.859,153.51-156.25c0-32.896,0-109.648,0-137.062H102.49z M256.289,50.551l-68.164,29.768v98.474l-0.049,19.53 c-0.526-0.112-47.274-10.112-47.274-78.391c0-28.17,0-69.6,0-69.6h60.385L256.289,50.551z"></path><polygon points="315.473,400.717 291.681,367.482 279.791,318.506 256,322.004 232.209,318.506 220.314,367.482 205.347,388.394 196.527,400.476 196.699,400.476 196.527,400.717"></polygon><polygon points="366.93,432.24 366.93,432 145.07,432 145.07,511.598 145.07,511.76 145.07,511.76 145.07,512 366.93,512 366.93,432.402 366.93,432.24"></polygon></svg>
+                <div>
+                    <div style="font-size: 28px; font-weight: bold; color: #67d1f8; text-transform: uppercase; letter-spacing: 0.1em; font-style: italic;">Player Profile</div>
+                    <div style="font-size: 14px; color: rgba(245, 247, 252, 0.5); letter-spacing: 0.05em;">Platinum Pursuit</div>
+                </div>
+            </div>
+        </div>
+
+        {# ── Section 2: Identity (Avatar + Name) ── #}
+        <div style="display: flex; align-items: center; gap: 24px; padding: 28px 32px; border-bottom: 2px solid #1a1b1f;">
+            {# Avatar #}
+            <div style="position: relative; flex-shrink: 0;">
+                {% if avatar_url %}
+                <img src="{{ avatar_url }}" style="width: 140px; height: 140px; border-radius: 50%; object-fit: cover; border: 4px solid {% if is_plus %}#ffd700{% else %}#67d1f8{% endif %}; box-sizing: border-box; box-shadow: 0 0 24px {% if is_plus %}rgba(255, 215, 0, 0.3){% else %}rgba(103, 209, 248, 0.3){% endif %}, 0 6px 16px rgba(0, 0, 0, 0.5);" />
+                {% else %}
+                <div style="width: 140px; height: 140px; border-radius: 50%; border: 4px solid #67d1f8; box-sizing: border-box; background: linear-gradient(135deg, #32363d, #2a2e34); display: flex; align-items: center; justify-content: center; box-shadow: 0 0 24px rgba(103, 209, 248, 0.3), 0 6px 16px rgba(0, 0, 0, 0.5);">
+                    <svg style="height: 64px; width: 64px;" version="1.1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="#67d1f8"><path d="M102.49,0c0,27.414,0,104.166,0,137.062c0,112.391,99.33,156.25,153.51,156.25 c54.18,0,153.51-43.859,153.51-156.25c0-32.896,0-109.648,0-137.062H102.49z M256.289,50.551l-68.164,29.768v98.474l-0.049,19.53 c-0.526-0.112-47.274-10.112-47.274-78.391c0-28.17,0-69.6,0-69.6h60.385L256.289,50.551z"></path><polygon points="315.473,400.717 291.681,367.482 279.791,318.506 256,322.004 232.209,318.506 220.314,367.482 205.347,388.394 196.527,400.476 196.699,400.476 196.527,400.717"></polygon><polygon points="366.93,432.24 366.93,432 145.07,432 145.07,511.598 145.07,511.76 145.07,511.76 145.07,512 366.93,512 366.93,432.402 366.93,432.24"></polygon></svg>
+                </div>
+                {% endif %}
+                {% if is_plus %}
+                <div style="position: absolute; bottom: 0; right: 0; width: 32px; height: 32px; background: #ffd700; border-radius: 50%; border: 3px solid #2a2e34; display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: bold; color: #1a1b1f; box-shadow: 0 0 8px rgba(255, 215, 0, 0.4);">+</div>
+                {% endif %}
+            </div>
+
+            {# Name + Title + Level + Badge #}
+            <div style="flex: 1; min-width: 0;">
+                <h1 style="font-size: 44px; font-weight: bold; color: #f5f7fc; line-height: 1.15; margin: 0 0 6px 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);">{{ psn_username }} {% if flag %}<span style="font-size: 28px;">{{ flag }}</span>{% endif %}</h1>
+                {% if displayed_title %}
+                <div style="font-size: 20px; font-style: italic; color: #9580ff; margin-bottom: 6px; padding-right: 4px;">"{{ displayed_title }}"</div>
+                {% endif %}
+                <div style="display: flex; align-items: center; gap: 14px; font-size: 18px; margin-bottom: {% if badge_image_url %}10{% else %}0{% endif %}px;">
+                    <span style="font-weight: 600; color: rgba(245, 247, 252, 0.8);">Level {{ trophy_level }}</span>
+                    {% if xp_rank %}
+                    <span style="color: rgba(245, 247, 252, 0.25);">|</span>
+                    <span style="font-weight: 600; color: #ffaa5c;">#{{ xp_rank|intcomma }} Global</span>
+                    {% endif %}
+                </div>
+                {% if badge_image_url %}
+                <div style="display: inline-flex; align-items: center; gap: 10px; background: rgba(42, 46, 52, 0.8); border: 2px solid rgba(149, 128, 255, 0.25); border-radius: 8px; padding: 6px 14px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);">
+                    <img src="{{ badge_image_url }}" style="width: 32px; height: 32px; object-fit: contain;" />
+                    <div>
+                        <div style="font-size: 13px; font-weight: 600; color: #f5f7fc;">{{ badge_name }}</div>
+                        {% if badge_series %}<div style="font-size: 10px; color: rgba(245, 247, 252, 0.4);">{{ badge_series }}</div>{% endif %}
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        {# ── Section 3: Trophy Counts 2x2 ── #}
+        <div style="padding: 24px 32px; border-bottom: 2px solid #1a1b1f;">
+            <div style="display: flex; gap: 16px; margin-bottom: 16px;">
+                <div style="flex: 1; background: rgba(103, 209, 248, 0.06); border: 4px solid #1a1b1f; border-top: 3px solid #67d1f8; border-radius: 12px; padding: 22px 16px; text-align: center; box-shadow: 0 4px 8px rgba(0, 0, 0, 0.5), 0 0 14px rgba(103, 209, 248, 0.12);">
+                    <div style="font-size: 52px; font-weight: bold; color: #67d1f8; text-shadow: 0 0 12px rgba(103, 209, 248, 0.25); line-height: 1;">{{ total_plats|intcomma }}</div>
+                    <div style="font-size: 14px; color: rgba(245, 247, 252, 0.5); text-transform: uppercase; font-weight: bold; font-style: italic; letter-spacing: 0.06em; margin-top: 6px;">Platinums</div>
+                </div>
+                <div style="flex: 1; background: rgba(255, 215, 0, 0.04); border: 4px solid #1a1b1f; border-top: 3px solid #ffd700; border-radius: 12px; padding: 22px 16px; text-align: center; box-shadow: 0 4px 8px rgba(0, 0, 0, 0.5);">
+                    <div style="font-size: 52px; font-weight: bold; color: #ffd700; line-height: 1;">{{ total_golds|intcomma }}</div>
+                    <div style="font-size: 14px; color: rgba(245, 247, 252, 0.5); text-transform: uppercase; font-weight: bold; font-style: italic; letter-spacing: 0.06em; margin-top: 6px;">Golds</div>
+                </div>
+            </div>
+            <div style="display: flex; gap: 16px;">
+                <div style="flex: 1; background: rgba(192, 192, 192, 0.04); border: 4px solid #1a1b1f; border-top: 3px solid #c0c0c0; border-radius: 12px; padding: 22px 16px; text-align: center; box-shadow: 0 4px 8px rgba(0, 0, 0, 0.5);">
+                    <div style="font-size: 52px; font-weight: bold; color: #c0c0c0; line-height: 1;">{{ total_silvers|intcomma }}</div>
+                    <div style="font-size: 14px; color: rgba(245, 247, 252, 0.5); text-transform: uppercase; font-weight: bold; font-style: italic; letter-spacing: 0.06em; margin-top: 6px;">Silvers</div>
+                </div>
+                <div style="flex: 1; background: rgba(205, 127, 50, 0.04); border: 4px solid #1a1b1f; border-top: 3px solid #cd7f32; border-radius: 12px; padding: 22px 16px; text-align: center; box-shadow: 0 4px 8px rgba(0, 0, 0, 0.5);">
+                    <div style="font-size: 52px; font-weight: bold; color: #cd7f32; line-height: 1;">{{ total_bronzes|intcomma }}</div>
+                    <div style="font-size: 14px; color: rgba(245, 247, 252, 0.5); text-transform: uppercase; font-weight: bold; font-style: italic; letter-spacing: 0.06em; margin-top: 6px;">Bronzes</div>
+                </div>
+            </div>
+        </div>
+
+        {# ── Section 4: Trophy Breakdown Bar ── #}
+        {% if total_earned > 0 %}
+        <div style="padding: 18px 32px; border-bottom: 2px solid #1a1b1f;">
+            <div style="display: flex; align-items: center; gap: 14px; margin-bottom: 10px;">
+                <span style="font-size: 12px; color: rgba(245, 247, 252, 0.4); text-transform: uppercase; font-weight: 600; font-style: italic; letter-spacing: 0.06em;">Trophy Breakdown</span>
+                <span style="font-size: 16px; font-weight: 700; color: #f5f7fc;">{{ total_earned|intcomma }}</span>
+                <span style="font-size: 12px; color: rgba(245, 247, 252, 0.35); font-style: italic;">earned</span>
+            </div>
+            <div style="display: flex; height: 24px; border-radius: 8px; overflow: hidden; box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.4);">
+                {% if pct_plats > 0 %}<div style="width: {{ pct_plats }}%; background: linear-gradient(to bottom, #67d1f8, #4db8e0);"></div>{% endif %}
+                {% if pct_golds > 0 %}<div style="width: {{ pct_golds }}%; background: linear-gradient(to bottom, #ffd700, #d4b000);"></div>{% endif %}
+                {% if pct_silvers > 0 %}<div style="width: {{ pct_silvers }}%; background: linear-gradient(to bottom, #c0c0c0, #a0a0a0);"></div>{% endif %}
+                {% if pct_bronzes > 0 %}<div style="width: {{ pct_bronzes }}%; background: linear-gradient(to bottom, #cd7f32, #b06a28);"></div>{% endif %}
+            </div>
+            <div style="display: flex; gap: 24px; margin-top: 8px;">
+                <span style="font-size: 11px; color: #67d1f8; font-weight: 600;"><span style="display: inline-block; width: 10px; height: 10px; border-radius: 3px; background: #67d1f8; margin-right: 5px; vertical-align: middle;"></span>Plat {{ pct_plats }}%</span>
+                <span style="font-size: 11px; color: #ffd700; font-weight: 600;"><span style="display: inline-block; width: 10px; height: 10px; border-radius: 3px; background: #ffd700; margin-right: 5px; vertical-align: middle;"></span>Gold {{ pct_golds }}%</span>
+                <span style="font-size: 11px; color: #c0c0c0; font-weight: 600;"><span style="display: inline-block; width: 10px; height: 10px; border-radius: 3px; background: #c0c0c0; margin-right: 5px; vertical-align: middle;"></span>Silver {{ pct_silvers }}%</span>
+                <span style="font-size: 11px; color: #cd7f32; font-weight: 600;"><span style="display: inline-block; width: 10px; height: 10px; border-radius: 3px; background: #cd7f32; margin-right: 5px; vertical-align: middle;"></span>Bronze {{ pct_bronzes }}%</span>
+            </div>
+        </div>
+        {% endif %}
+
+        {# ── Section 5: Stats Pills ── #}
+        <div style="display: flex; align-items: center; justify-content: center; gap: 12px; padding: 16px 32px; border-bottom: 2px solid #1a1b1f; flex-wrap: wrap;">
+            {# XP #}
+            <div style="display: flex; align-items: center; gap: 6px; background: rgba(255, 170, 92, 0.1); border: 2px solid rgba(255, 170, 92, 0.3); border-radius: 9999px; padding: 10px 20px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4), 0 0 8px rgba(255, 170, 92, 0.08);">
+                <svg style="height: 18px; width: 18px; flex-shrink: 0;" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#ffaa5c"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+                <span style="font-size: 20px; font-weight: 700; color: #ffaa5c;">{{ total_badge_xp|intcomma }}</span>
+                <span style="font-size: 12px; color: rgba(245, 247, 252, 0.5); font-style: italic;">XP</span>
+            </div>
+            {# Games #}
+            <div style="display: flex; align-items: center; gap: 6px; background: rgba(103, 209, 248, 0.06); border: 2px solid rgba(103, 209, 248, 0.2); border-radius: 9999px; padding: 10px 20px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);">
+                <svg style="height: 18px; width: 18px; flex-shrink: 0;" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#67d1f8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"/><line x1="6" y1="12" x2="10" y2="12"/><line x1="8" y1="10" x2="8" y2="14"/><circle cx="15" cy="11" r="1"/><circle cx="18" cy="13" r="1"/></svg>
+                <span style="font-size: 20px; font-weight: 700; color: #67d1f8;">{{ total_games|intcomma }}</span>
+                <span style="font-size: 12px; color: rgba(245, 247, 252, 0.5); font-style: italic;">Games</span>
+            </div>
+            {# Completes #}
+            <div style="display: flex; align-items: center; gap: 6px; background: rgba(103, 248, 200, 0.06); border: 2px solid rgba(103, 248, 200, 0.2); border-radius: 9999px; padding: 10px 20px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);">
+                <svg style="height: 18px; width: 18px; flex-shrink: 0;" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#67f8c8" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                <span style="font-size: 20px; font-weight: 700; color: #67f8c8;">{{ total_completes|intcomma }}</span>
+                <span style="font-size: 12px; color: rgba(245, 247, 252, 0.5); font-style: italic;">100%</span>
+            </div>
+            {# Avg #}
+            <div style="display: flex; align-items: center; gap: 6px; background: rgba(149, 128, 255, 0.06); border: 2px solid rgba(149, 128, 255, 0.2); border-radius: 9999px; padding: 10px 20px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);">
+                <svg style="height: 18px; width: 18px; flex-shrink: 0;" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#9580ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+                <span style="font-size: 20px; font-weight: 700; color: #9580ff;">{{ avg_progress }}%</span>
+                <span style="font-size: 12px; color: rgba(245, 247, 252, 0.5); font-style: italic;">Avg</span>
+            </div>
+            {# Badges #}
+            {% if total_badges_earned > 0 %}
+            <div style="display: flex; align-items: center; gap: 6px; background: rgba(245, 247, 252, 0.03); border: 2px solid rgba(245, 247, 252, 0.1); border-radius: 9999px; padding: 10px 20px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);">
+                <svg style="height: 18px; width: 18px; flex-shrink: 0;" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#f5f7fc" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="7"/><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"/></svg>
+                <span style="font-size: 20px; font-weight: 700; color: #f5f7fc;">{{ total_badges_earned|intcomma }}</span>
+                <span style="font-size: 12px; color: rgba(245, 247, 252, 0.5); font-style: italic;">Badges</span>
+            </div>
+            {% endif %}
+            {# Earned #}
+            <div style="display: flex; align-items: center; gap: 6px; background: rgba(103, 209, 248, 0.06); border: 2px solid rgba(103, 209, 248, 0.15); border-radius: 9999px; padding: 10px 20px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);">
+                <svg style="height: 18px; width: 18px; flex-shrink: 0;" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="#67d1f8"><path d="M102.49,0c0,27.414,0,104.166,0,137.062c0,112.391,99.33,156.25,153.51,156.25c54.18,0,153.51-43.859,153.51-156.25c0-32.896,0-109.648,0-137.062H102.49z M256.289,50.551l-68.164,29.768v98.474l-0.049,19.53c-0.526-0.112-47.274-10.112-47.274-78.391c0-28.17,0-69.6,0-69.6h60.385L256.289,50.551z"/><polygon points="315.473,400.717 291.681,367.482 279.791,318.506 256,322.004 232.209,318.506 220.314,367.482 205.347,388.394 196.527,400.476 196.699,400.476 196.527,400.717"/><polygon points="366.93,432.24 366.93,432 145.07,432 145.07,511.598 145.07,511.76 145.07,511.76 145.07,512 366.93,512 366.93,432.402 366.93,432.24"/><path d="M511.638,96.668c-0.033-1.268-0.068-2.336-0.068-3.174V45.1h-73.889v38.736h35.152v9.658c0,1.127,0.037,2.557,0.086,4.258c0.389,13.976,1.303,46.707-21.545,70.203c-5.121,5.266-11.221,9.787-18.219,13.613c-3.883,17.635-10.109,33.564-18.104,47.814c26.561-6.406,48.026-17.898,64.096-34.422C513.402,159.734,512.121,113.918,511.638,96.668z"/><path d="M60.625,167.955c-22.848-23.496-21.934-56.227-21.541-70.203c0.047-1.701,0.082-3.131,0.082-4.258v-9.658h34.842h0.07l0,0h0.24V45.1H0.43v48.394c0,0.838-0.032,1.906-0.068,3.174c-0.482,17.25-1.76,63.066,32.494,98.293c16.068,16.524,37.531,28.014,64.092,34.422c-7.996-14.25-14.22-30.182-18.103-47.816C71.846,177.74,65.746,173.221,60.625,167.955z"/></svg>
+                <span style="font-size: 20px; font-weight: 700; color: #67d1f8;">{{ total_earned|intcomma }}</span>
+                <span style="font-size: 12px; color: rgba(245, 247, 252, 0.5); font-style: italic;">Earned</span>
+            </div>
+            {# Unearned #}
+            {% if total_unearned > 0 %}
+            <div style="display: flex; align-items: center; gap: 6px; background: rgba(245, 247, 252, 0.02); border: 2px solid rgba(245, 247, 252, 0.08); border-radius: 9999px; padding: 10px 20px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);">
+                <svg style="height: 18px; width: 18px; flex-shrink: 0; opacity: 0.35;" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="rgba(245, 247, 252, 0.6)"><path d="M102.49,0c0,27.414,0,104.166,0,137.062c0,112.391,99.33,156.25,153.51,156.25c54.18,0,153.51-43.859,153.51-156.25c0-32.896,0-109.648,0-137.062H102.49z M256.289,50.551l-68.164,29.768v98.474l-0.049,19.53c-0.526-0.112-47.274-10.112-47.274-78.391c0-28.17,0-69.6,0-69.6h60.385L256.289,50.551z"/><polygon points="315.473,400.717 291.681,367.482 279.791,318.506 256,322.004 232.209,318.506 220.314,367.482 205.347,388.394 196.527,400.476 196.699,400.476 196.527,400.717"/><polygon points="366.93,432.24 366.93,432 145.07,432 145.07,511.598 145.07,511.76 145.07,511.76 145.07,512 366.93,512 366.93,432.402 366.93,432.24"/><path d="M511.638,96.668c-0.033-1.268-0.068-2.336-0.068-3.174V45.1h-73.889v38.736h35.152v9.658c0,1.127,0.037,2.557,0.086,4.258c0.389,13.976,1.303,46.707-21.545,70.203c-5.121,5.266-11.221,9.787-18.219,13.613c-3.883,17.635-10.109,33.564-18.104,47.814c26.561-6.406,48.026-17.898,64.096-34.422C513.402,159.734,512.121,113.918,511.638,96.668z"/><path d="M60.625,167.955c-22.848-23.496-21.934-56.227-21.541-70.203c0.047-1.701,0.082-3.131,0.082-4.258v-9.658h34.842h0.07l0,0h0.24V45.1H0.43v48.394c0,0.838-0.032,1.906-0.068,3.174c-0.482,17.25-1.76,63.066,32.494,98.293c16.068,16.524,37.531,28.014,64.092,34.422c-7.996-14.25-14.22-30.182-18.103-47.816C71.846,177.74,65.746,173.221,60.625,167.955z"/></svg>
+                <span style="font-size: 20px; font-weight: 700; color: rgba(245, 247, 252, 0.5);">{{ total_unearned|intcomma }}</span>
+                <span style="font-size: 12px; color: rgba(245, 247, 252, 0.35); font-style: italic;">Unearned</span>
+            </div>
+            {% endif %}
+        </div>
+
+        {# ── Section 6: Highlights ── #}
+        <div style="flex: 1; display: flex; gap: 0; align-items: stretch;">
+            {# Earn rate hero #}
+            <div style="width: 180px; flex-shrink: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; border-right: 2px solid #1a1b1f; background: rgba(103, 248, 200, 0.04); padding: 12px 8px;">
+                <div style="font-size: 50px; font-weight: bold; color: #67f8c8; line-height: 1; text-shadow: 0 0 12px rgba(103, 248, 200, 0.2);">{{ earn_rate }}%</div>
+                <div style="font-size: 11px; color: rgba(245, 247, 252, 0.4); text-transform: uppercase; font-weight: 600; font-style: italic; letter-spacing: 0.06em; margin-top: 4px;">Earn Rate</div>
+            </div>
+
+            {# Plat highlights stacked #}
+            <div style="flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 0; border-right: 2px solid #1a1b1f;">
+                {% if recent_plat_name %}
+                <div style="flex: 1; display: flex; align-items: center; gap: 14px; padding: 12px 24px; border-bottom: 1px solid rgba(245, 247, 252, 0.06);">
+                    {% if recent_plat_icon %}
+                    <img src="{{ recent_plat_icon }}" style="width: 56px; height: 56px; border-radius: 8px; object-fit: cover; border: 2px solid #1a1b1f; flex-shrink: 0; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.5);" />
+                    {% endif %}
+                    <div style="min-width: 0; flex: 1;">
+                        <div style="font-size: 11px; color: rgba(245, 247, 252, 0.4); text-transform: uppercase; font-weight: 600; font-style: italic; letter-spacing: 0.06em;">Latest Platinum</div>
+                        <div style="font-size: 17px; font-weight: 600; color: #67d1f8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ recent_plat_name }}</div>
+                    </div>
+                </div>
+                {% endif %}
+                {% if rarest_plat_name %}
+                <div style="flex: 1; display: flex; align-items: center; gap: 14px; padding: 12px 24px;">
+                    {% if rarest_plat_icon %}
+                    <img src="{{ rarest_plat_icon }}" style="width: 56px; height: 56px; border-radius: 8px; object-fit: cover; border: 2px solid #1a1b1f; flex-shrink: 0; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.5);" />
+                    {% endif %}
+                    <div style="min-width: 0; flex: 1;">
+                        <div style="font-size: 11px; color: rgba(245, 247, 252, 0.4); text-transform: uppercase; font-weight: 600; font-style: italic; letter-spacing: 0.06em;">Rarest Platinum{% if rarest_plat_earn_rate %} &middot; {{ rarest_plat_earn_rate }}%{% endif %}</div>
+                        <div style="font-size: 17px; font-weight: 600; color: #9580ff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ rarest_plat_name }}</div>
+                    </div>
+                </div>
+                {% endif %}
+                {% if not recent_plat_name and not rarest_plat_name %}
+                <div style="flex: 1; display: flex; align-items: center; justify-content: center;">
+                    <span style="font-size: 16px; color: rgba(245, 247, 252, 0.2); font-style: italic;">No platinums earned yet</span>
+                </div>
+                {% endif %}
+            </div>
+
+            {# Global rank #}
+            {% if xp_rank %}
+            <div style="width: 160px; flex-shrink: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; border-right: 2px solid #1a1b1f; padding: 10px; background: rgba(255, 170, 92, 0.03);">
+                <svg style="height: 18px; width: 18px; margin-bottom: 4px;" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#ffaa5c" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+                <div style="font-size: 28px; font-weight: 700; color: #ffaa5c; line-height: 1;">#{{ xp_rank|intcomma }}</div>
+                <div style="font-size: 10px; color: rgba(245, 247, 252, 0.4); margin-top: 2px;">of {{ xp_total_users|intcomma }}</div>
+                <div style="font-size: 9px; color: rgba(245, 247, 252, 0.3); text-transform: uppercase; font-weight: 600; font-style: italic; letter-spacing: 0.06em; margin-top: 4px;">Global Rank</div>
+            </div>
+            {% endif %}
+            {# Country rank #}
+            {% if country_xp_rank and flag %}
+            <div style="width: 160px; flex-shrink: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; border-right: 2px solid #1a1b1f; padding: 10px; background: rgba(103, 248, 200, 0.03);">
+                <span style="font-size: 20px; margin-bottom: 4px;">{{ flag }}</span>
+                <div style="font-size: 28px; font-weight: 700; color: #67f8c8; line-height: 1;">#{{ country_xp_rank|intcomma }}</div>
+                <div style="font-size: 10px; color: rgba(245, 247, 252, 0.4); margin-top: 2px;">of {{ country_xp_total|intcomma }}</div>
+                <div style="font-size: 9px; color: rgba(245, 247, 252, 0.3); text-transform: uppercase; font-weight: 600; font-style: italic; letter-spacing: 0.06em; margin-top: 4px;">{{ country_code }} Rank</div>
+            </div>
+            {% endif %}
+
+            {# Featured badge #}
+            <div style="width: 180px; flex-shrink: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgba(149, 128, 255, 0.03); padding: 12px;">
+                {% if badge_image_url %}
+                <img src="{{ badge_image_url }}" style="width: 64px; height: 64px; object-fit: contain; margin-bottom: 6px;" />
+                <div style="font-size: 13px; font-weight: 600; color: #f5f7fc; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 156px;">{{ badge_name }}</div>
+                {% if badge_series %}
+                <div style="font-size: 10px; color: rgba(245, 247, 252, 0.4); text-align: center;">{{ badge_series }}</div>
+                {% endif %}
+                <div style="font-size: 9px; color: rgba(149, 128, 255, 0.6); text-transform: uppercase; font-weight: 600; letter-spacing: 0.06em; margin-top: 4px;">Featured Badge</div>
+                {% else %}
+                <svg style="height: 48px; width: 48px; margin-bottom: 6px;" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="rgba(245, 247, 252, 0.15)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="7"/><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"/></svg>
+                <div style="font-size: 12px; color: rgba(245, 247, 252, 0.25); font-style: italic;">No badge yet</div>
+                {% endif %}
+            </div>
+        </div>
+
+        {# ── Footer ── #}
+        <div style="border-top: 2px solid #1a1b1f; background: rgba(42, 46, 52, 0.5); height: 56px; box-sizing: border-box; line-height: 56px; padding: 0 28px;">
+            <img src="{% static 'images/logo.png' %}" style="display: inline-block; width: 30px; height: 30px; vertical-align: middle; margin-right: 10px;" /><span style="font-size: 20px; color: #67d1f8; font-weight: bold; font-style: italic; vertical-align: middle;">platpursuit.com</span>
+            <span style="float: right; font-size: 14px; color: rgba(245, 247, 252, 0.5); font-style: italic; letter-spacing: 0.03em;">No trophy can hide from us</span>
+        </div>
+    </div>
+</div>

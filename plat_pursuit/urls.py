@@ -42,6 +42,7 @@ from trophies.recap_views import RecapIndexView, RecapSlideView
 from users.views import CustomConfirmEmailView, stripe_webhook, paypal_webhook
 from users.subscription_admin_views import SubscriptionAdminView
 from fundraiser.views import FundraiserView, DonationSuccessView, FundraiserAdminView, BadgeRevealView
+from api.profile_card_views import serve_profile_sig
 from notifications.views import (
     NotificationInboxView,
     AdminNotificationCenterView,
@@ -160,6 +161,9 @@ urlpatterns = [
     path('about/', AboutView.as_view(), name='about'),
     path('contact/', ContactView.as_view(), name='contact'),
     path('beta-access/', TemplateView.as_view(template_name='pages/beta_access_required.html'), name='beta_access_required'),
+
+    # Public forum signature images (no auth required)
+    path('sig/<uuid:token>.<str:ext>', serve_profile_sig, name='profile_sig'),
 
     # Arcade (mini-games)
     path('arcade/stellar-circuit/', TemplateView.as_view(template_name='minigames/stellar-circuit.html'), name='stellar_circuit'),

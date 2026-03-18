@@ -20,8 +20,8 @@ The dashboard uses a **Module Registry** pattern with a **Tabbed Carousel** layo
 | 2 | Trophy Cup | At a Glance | `at_a_glance` | Trophy Snapshot, Recent Platinums |
 | 3 | Chart | Progress | `progress` | Challenge Hub |
 | 4 | Medal | Badges | `badges` | Badge Progress |
-| 5 | Users | Community | `community` | (future modules) |
-| 6 | Star | Highlights | `highlights` | (future modules) |
+| 5 | Share | Share & Export | `share` | Badge Showcase, Profile Card |
+| 6 | Star | Highlights | `highlights` | My Reviews, Rate My Games |
 
 ### Custom Tabs (Premium only, max 6)
 
@@ -55,10 +55,12 @@ Premium users can create custom tabs with a name (max 20 chars) and icon (from 8
 | `calendar_challenge` | Platinum Calendar | progress | Lazy | 5m | No |
 | `completion_milestones` | Almost There | progress | Lazy | 10m | No |
 | `milestone_tracker` | Milestone Tracker | progress | Lazy | 10m | No |
-| `my_reviews` | My Reviews | community | Lazy | 10m | No |
+| `my_reviews` | My Reviews | highlights | Lazy | 10m | No |
 | `rarity_showcase` | Rarity Showcase | highlights | Lazy | 10m | No |
-| `rate_my_games` | Rate My Games | community | Lazy | 30m | No |
+| `rate_my_games` | Rate My Games | highlights | Lazy | 30m | No |
 | `trophy_timeline` | Trophy Timeline | highlights | Lazy | 60m | No |
+| `badge_showcase` | Badge Showcase | share | Lazy | 10m | No |
+| `profile_card_preview` | Profile Card | share | Lazy | None | No |
 
 See [Module Catalog](../design/dashboard-module-catalog.md) for the full module roadmap.
 
@@ -157,7 +159,7 @@ Each tab is a collapsible section listing its modules. Each module row shows:
 
 ## Caching
 
-Cache keys: `dashboard:mod:{slug}:{profile_id}:{settings_hash}`
+Cache keys: `dashboard:mod:{slug}:{profile_id}:{settings_hash}` where `settings_hash` is an MD5 of the module's effective settings. Invalidation uses `cache.delete_pattern()` with a wildcard prefix to clear all variants for a given module and profile.
 
 **Invalidation points:**
 - `Challenge.soft_delete()` in `trophies/models.py`

@@ -213,7 +213,7 @@ All homepage keys use 2x TTL as safety margin (cron refreshes before expiry). Da
 
 | Key Pattern | TTL | Purpose |
 |-------------|-----|---------|
-| `dashboard:mod:{module_slug}:{profile_id}` | Per-module `cache_ttl` (default 600s) | Lazy-loaded module data; deleted by `invalidate_dashboard_cache()` |
+| `dashboard:mod:{module_slug}:{profile_id}:{settings_hash}` | Per-module `cache_ttl` (default 600s) | Lazy-loaded module data; `settings_hash` is MD5 of effective settings. Invalidated by `invalidate_dashboard_cache()` using `cache.delete_pattern()` with wildcard prefix. |
 
 **Files**: `trophies/services/dashboard_service.py`
 
