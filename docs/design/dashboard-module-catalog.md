@@ -66,6 +66,7 @@ Badges are a flagship feature with dedicated real estate.
 | 13 | Recent Badges | Lazy (10m) | **Done** | UserBadge (earned_at desc) |
 | 14 | Badge Stats | Lazy (10m) | **Done** | UserBadge tier breakdown, rarest badge, collection rate |
 | 15 | Badge XP & Leaderboard | Lazy (10m) | **Done** | ProfileGamification + leaderboard neighborhood (2 above/below) |
+| 15b | Country XP Leaderboard | Lazy (10m) | **Done** | Per-country Redis sorted sets + leaderboard neighborhood |
 
 ## Category: Community
 
@@ -274,7 +275,7 @@ These are the crown jewels that make premium feel indispensable.
 | `premium` | Premium | Advanced Stats, Theme Preview, Trophy Roadmap, Platinum Heatmap, Rarity Radar, Personal Records, Year in Review, Trophy Type Breakdown |
 | `at_a_glance` | At a Glance | Trophy Snapshot, Recent Platinums, Recent Activity, Sync Status, Notifications, Quick Settings |
 | `progress` | Progress & Challenges | Challenge Hub, A-Z, Calendar, Genre, Milestones, Completion Milestones |
-| `badges` | Badges & Achievements | Badge Progress, Recent Badges, Badge Showcase, Badge XP & Leaderboard |
+| `badges` | Badges & Achievements | Badge Progress, Recent Badges, Badge Showcase, Badge XP & Leaderboard, Country XP Leaderboard |
 | `community` | Community | My Reviews, Community Spotlight, Rate My Games, My Checklists, My Game Lists |
 | `highlights` | Highlights & History | Trophy Timeline, Monthly Recap Preview, Rarity Showcase |
 

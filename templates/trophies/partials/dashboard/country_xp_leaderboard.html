@@ -1,0 +1,80 @@
+{% load static custom_filters %}
+{# Dashboard module: Country XP Leaderboard. Country rank and mini leaderboard. #}
+<div class="card bg-base-200/80 border-2 border-base-300 shadow-lg shadow-neutral">
+    <div class="card-body p-5 lg:p-7">
+        {# Header #}
+        <div class="flex items-center justify-between mb-3">
+            <h2 class="card-title text-base lg:text-lg font-bold flex items-center gap-2">
+                <span class="text-xl">{{ data.flag }}</span>
+                Country XP
+            </h2>
+            <a href="{% url 'overall_badge_leaderboards' %}?tab=country&country={{ data.country_code }}" class="text-xs text-base-content/40 hover:text-primary transition-colors" aria-label="View full country leaderboard">Full Board</a>
+        </div>
+
+        {% if data.no_country %}
+            <div class="text-center py-6">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-10 h-10 text-accent/30 mx-auto mb-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
+                </svg>
+                <p class="text-sm text-base-content/50">Country data not available.</p>
+                <p class="text-xs text-base-content/40 mt-1">Sync your PSN profile to see your country ranking.</p>
+            </div>
+
+        {% elif data.has_stats %}
+            {# Stats grid #}
+            <div class="grid grid-cols-3 gap-2 lg:gap-3 mb-4">
+                <div class="bg-base-300/50 rounded-lg p-2 lg:p-3 text-center">
+                    <div class="text-lg lg:text-2xl font-black text-primary">{% if data.user_rank %}#{{ data.user_rank }}{% else %}-{% endif %}</div>
+                    <div class="text-xs text-base-content/50 font-medium">Country Rank</div>
+                </div>
+                <div class="bg-base-300/50 rounded-lg p-2 lg:p-3 text-center">
+                    <div class="text-lg lg:text-2xl font-black text-base-content">{{ data.total_participants }}</div>
+                    <div class="text-xs text-base-content/50 font-medium">Hunters</div>
+                </div>
+                <div class="bg-base-300/50 rounded-lg p-2 lg:p-3 text-center">
+                    <div class="text-lg lg:text-2xl font-black text-accent">{{ data.total_xp_formatted }}</div>
+                    <div class="text-xs text-base-content/50 font-medium">Your XP</div>
+                </div>
+            </div>
+
+            {# Mini leaderboard #}
+            {% if data.leaderboard_entries %}
+                <div class="space-y-1">
+                    {% for entry in data.leaderboard_entries %}
+                        {% if data.show_gap and forloop.counter == 4 %}
+                            <div class="text-center text-base-content/30 text-xs py-0.5">...</div>
+                        {% endif %}
+                        <div class="flex items-center gap-2 p-2 rounded-lg {% if entry.is_self %}bg-accent/10 border border-accent/30{% else %}bg-base-300/20{% endif %}">
+                            <span class="text-xs font-bold w-6 text-center text-base-content/50">#{{ entry.rank }}</span>
+                            <div class="w-6 h-6 rounded-full overflow-hidden shrink-0 ring-1 {% if entry.is_self %}ring-accent{% else %}ring-base-300{% endif %}">
+                                {% if entry.avatar_url %}
+                                    <img src="{{ entry.avatar_url }}" alt="{{ entry.psn_username }}" class="w-full h-full object-cover" loading="lazy" />
+                                {% else %}
+                                    <div class="w-full h-full bg-base-300 flex items-center justify-center">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3 text-base-content/30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="7" r="4"></circle><path d="M5.5 21a8.38 8.38 0 0 1 13 0"></path></svg>
+                                    </div>
+                                {% endif %}
+                            </div>
+                            <span class="text-sm font-medium line-clamp-1 pr-1 flex-1 {% if entry.is_self %}text-accent{% endif %}" title="{{ entry.psn_username }}">{{ entry.psn_username }}</span>
+                            <span class="text-xs text-base-content/50 shrink-0 font-medium">{{ entry.total_xp_formatted }} XP</span>
+                        </div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+
+            <div class="flex items-center justify-between mt-3 pt-3 border-t border-base-300/50 text-xs text-base-content/40">
+                <span class="italic pr-1">{{ data.country_name }}</span>
+                <span>{{ data.total_participants }} hunter{{ data.total_participants|pluralize }} ranked</span>
+            </div>
+        {% else %}
+            <div class="text-center py-6">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-10 h-10 text-accent/30 mx-auto mb-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
+                </svg>
+                <p class="text-sm text-base-content/50">No badge XP yet.</p>
+                <p class="text-xs text-base-content/40 mt-1">Start earning badges to climb your country's leaderboard!</p>
+                <a href="{% url 'badges_list' %}" class="btn btn-accent btn-xs mt-3">Explore Badges</a>
+            </div>
+        {% endif %}
+    </div>
+</div>

@@ -19,12 +19,12 @@ The XP leaderboard benefits from `ProfileGamification` denormalization: XP total
 |------|---------|
 | `trophies/services/redis_leaderboard_service.py` | All sorted set operations, RedisPaginator/RedisPage, rebuild functions |
 | `trophies/services/leaderboard_service.py` | ORM computation functions (used by rebuilds) |
-| `trophies/services/xp_service.py` | XP + community XP sorted set writes via `update_profile_gamification()`, bulk pipeline via `bulk_gamification_update()` |
+| `trophies/services/xp_service.py` | XP + country XP + community XP sorted set writes via `update_profile_gamification()`, bulk pipeline via `bulk_gamification_update()` |
 | `trophies/signals.py` | Earners sorted set writes on UserBadge post_save/post_delete |
-| `core/management/commands/update_leaderboards.py` | Cron: rebuilds all sorted sets, supports `--series` flag |
+| `core/management/commands/update_leaderboards.py` | Cron: rebuilds all sorted sets, supports `--series` and `--country` flags |
 | `trophies/management/commands/refresh_badge_series.py` | Calls `rebuild_series_leaderboards()` after badge awards |
 | `trophies/views/badge_views.py` | `BadgeLeaderboardsView`, `OverallBadgeLeaderboardsView`, `BadgeDetailView` |
-| `trophies/services/dashboard_service.py` | `provide_badge_xp_leaderboard()` dashboard module |
+| `trophies/services/dashboard_service.py` | `provide_badge_xp_leaderboard()` and `provide_country_xp_leaderboard()` dashboard modules |
 
 ## Leaderboard Types
 
@@ -43,11 +43,20 @@ The XP leaderboard benefits from `ProfileGamification` denormalization: XP total
 | Total XP | `lb:xp:scores` | `total_badge_xp * 10^4 + total_badges` | `update_profile_gamification()` signal |
 | Total Progress | `lb:progress:global:scores` | Same as per-series progress | Sync-complete |
 
+### Per-Country (one sorted set per country with active users)
+
+| Type | Redis Key | Score Formula | Update Trigger |
+|------|-----------|---------------|----------------|
+| Country XP | `lb:xp:country:{cc}:scores` | Same as Total XP | `update_profile_gamification()` signal |
+| Country Index | `lb:xp:country:index` | N/A (SET of active country codes) | SADD during incremental updates + cron rebuild |
+
+Country leaderboards use the same composite score as the global XP leaderboard but are partitioned by ISO 3166-1 alpha-2 country code (from `Profile.country_code`). Profiles without a country code are excluded. The country index SET tracks which countries have active leaderboards, used by the country picker UI.
+
 ## Key Flows
 
 ### Incremental Updates (Real-Time)
 
-**XP Leaderboard + Community XP**: Signal fires on UserBadgeProgress/UserBadge change -> `update_profile_gamification()` -> `update_xp_entry()` writes to sorted set + `update_community_xp_deltas()` applies per-series XP deltas via INCRBY. During bulk sync, writes are pipelined via `bulk_gamification_update()`.
+**XP Leaderboard + Country XP + Community XP**: Signal fires on UserBadgeProgress/UserBadge change -> `update_profile_gamification()` -> `update_xp_entry()` writes to global sorted set + `update_country_xp_entry()` writes to per-country sorted set (if profile has country_code) + `update_community_xp_deltas()` applies per-series XP deltas via INCRBY. During bulk sync, writes are pipelined via `bulk_gamification_update()`.
 
 **Earners Leaderboard**: Signal fires on UserBadge post_save/post_delete -> `_update_earner_leaderboard_on_badge_change()` finds highest tier -> ZADD or ZREM.
 
@@ -56,7 +65,7 @@ The XP leaderboard benefits from `ProfileGamification` denormalization: XP total
 ### Reconciliation Cron
 
 1. `update_leaderboards` runs periodically (recommended: every 12-24 hours)
-2. Calls `rebuild_xp_leaderboard()`, `rebuild_global_progress_leaderboard()`
+2. Calls `rebuild_xp_leaderboard()`, `rebuild_global_progress_leaderboard()`, `rebuild_country_xp_leaderboards()`
 3. For each live series: `rebuild_series_leaderboards(slug)` (earners + progress + community XP)
 4. Individual failures caught and logged without blocking
 
@@ -86,6 +95,9 @@ When adding a new badge series:
 | `lb:progress:{slug}:data` | Hash | Progress display data |
 | `lb:progress:global:scores` | Sorted Set | Global progress |
 | `lb:progress:global:data` | Hash | Global progress display data |
+| `lb:xp:country:{cc}:scores` | Sorted Set | Per-country XP leaderboard; same score as global XP |
+| `lb:xp:country:{cc}:data` | Hash | Per-country XP display data |
+| `lb:xp:country:index` | Set | Active country codes with leaderboard entries |
 | `lb:community_xp:{slug}` | String (int) | Community XP total per series, maintained via INCRBY delta |
 | `lb:meta:last_rebuild` | Hash | Rebuild timestamps per leaderboard key |
 
@@ -111,12 +123,15 @@ Redis sorted set scores are 64-bit IEEE 754 doubles, representing integers exact
 
 - **Community XP uses INCRBY deltas**: Updated incrementally by computing the difference between old and new `series_badge_xp` values in `update_profile_gamification()`. If the delta calculation drifts (e.g., missed signal, Redis flush), the cron reconciliation does a full recompute via `rebuild_community_xp(slug)`.
 
+- **Country leaderboard stale entries on region change**: If a user's PSN region changes (extremely rare), the old country's sorted set retains a stale entry until the next cron reconciliation. The new country gets the correct entry immediately. This is by design: adding eager cleanup would add complexity for a near-zero-frequency event.
+
 ## Management Commands
 
 | Command | Purpose | Usage |
 |---------|---------|-------|
 | `update_leaderboards` | Full rebuild of all leaderboards (reconciliation) | `python manage.py update_leaderboards` (cron) |
 | `update_leaderboards --series <slug>` | Targeted rebuild for one series | After adding a new badge series |
+| `update_leaderboards --country <CC>` | Targeted rebuild for one country | After data fixes for a specific country |
 | `refresh_badge_series --series <slug>` | Award badges + rebuild series leaderboards | New series setup |
 
 ## Related Docs

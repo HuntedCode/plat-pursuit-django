@@ -39,11 +39,14 @@
         {# ─── Tabbed Layout ────────────────────────────────────────────── #}
         <div class="tabs tabs-box bg-base-300/80 mb-3" role="tablist" aria-label="Leaderboard type">
             <a href="?tab=xp" class="tab {% if active_tab == 'xp' %}tab-active{% endif %}">XP Leaderboard</a>
+            <a href="?tab=country" class="tab {% if active_tab == 'country' %}tab-active{% endif %}">Country XP</a>
             <a href="?tab=progress" class="tab {% if active_tab == 'progress' %}tab-active{% endif %}">Badge Progress</a>
             <a href="?tab=series" class="tab {% if active_tab == 'series' %}tab-active{% endif %}">Series Leaderboards</a>
         </div>
         {% if active_tab == 'xp' %}
             {% include 'trophies/partials/leaderboard_total_xp_table.html' %}
+        {% elif active_tab == 'country' %}
+            {% include 'trophies/partials/leaderboard_country_xp.html' %}
         {% elif active_tab == 'progress' %}
             {% include 'trophies/partials/leaderboard_progress_table.html' with progress_heading='Badge Progress Leaderboard' progress_page_obj=lb_total_progress_page_obj progress_paginator=lb_total_progress_paginator progress_page_param='lb_total_progress_page' progress_user_page=lb_total_progress_user_page progress_user_rank=lb_total_progress_user_rank progress_rank_prefix='2' progress_empty_text='No badge trophy progress recorded.' progress_empty_subtext='Time to start collecting.' %}
         {% else %}

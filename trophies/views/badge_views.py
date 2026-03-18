@@ -32,6 +32,8 @@ from trophies.services.redis_leaderboard_service import (
     get_earners_page, get_earners_rank, get_earners_count,
     get_progress_page, get_progress_rank, get_progress_count,
     get_community_xp,
+    get_country_xp_page, get_country_xp_rank, get_country_xp_count,
+    get_active_country_codes,
 )
 from trophies.milestone_constants import (
     MILESTONE_CATEGORIES, CRITERIA_TYPE_DISPLAY_NAMES,
@@ -899,7 +901,7 @@ class OverallBadgeLeaderboardsView(ProfileHotbarMixin, TemplateView):
         ]
 
         active_tab = self.request.GET.get('tab', 'xp')
-        if active_tab not in ('xp', 'progress', 'series'):
+        if active_tab not in ('xp', 'progress', 'series', 'country'):
             active_tab = 'xp'
         context['active_tab'] = active_tab
 
@@ -920,8 +922,83 @@ class OverallBadgeLeaderboardsView(ProfileHotbarMixin, TemplateView):
                 directory.append(badge)
             context['series_directory'] = directory
 
+        elif active_tab == 'country':
+            context.update(self._get_country_tab_context(user, paginate_by))
+
         track_page_view('overall_leaderboard', 'global', self.request)
         return context
+
+    def _get_country_tab_context(self, user, paginate_by):
+        """Build context for the Country XP leaderboard tab."""
+        ctx = {}
+
+        # Determine selected country (default to user's country, fallback to first active)
+        active_codes = get_active_country_codes()
+        selected_cc = self.request.GET.get('country', '').upper()
+
+        user_country_code = None
+        if user.is_authenticated and hasattr(user, 'profile') and user.profile.country_code:
+            user_country_code = user.profile.country_code
+
+        if selected_cc not in active_codes:
+            selected_cc = user_country_code if user_country_code in active_codes else ''
+
+        # Build country list for picker (single DB query for display names/flags)
+        if active_codes:
+            country_list = list(
+                Profile.objects.filter(
+                    country_code__in=active_codes
+                ).exclude(
+                    country__isnull=True
+                ).exclude(
+                    country=''
+                ).values_list('country', 'country_code', 'flag').distinct().order_by('country')
+            )
+            # Deduplicate by country_code (multiple profiles have the same data)
+            seen = set()
+            deduplicated = []
+            for country_name, cc, flag in country_list:
+                if cc not in seen:
+                    seen.add(cc)
+                    deduplicated.append({
+                        'name': country_name or cc,
+                        'code': cc,
+                        'flag': flag or '',
+                    })
+            ctx['country_list'] = deduplicated
+        else:
+            ctx['country_list'] = []
+
+        # Selected country info
+        ctx['selected_country_code'] = selected_cc
+        selected_info = next((c for c in ctx['country_list'] if c['code'] == selected_cc), None)
+        ctx['selected_country_name'] = selected_info['name'] if selected_info else ''
+        ctx['selected_country_flag'] = selected_info['flag'] if selected_info else ''
+        ctx['user_country_code'] = user_country_code
+
+        if not selected_cc:
+            return ctx
+
+        # Country XP leaderboard page
+        country_page_num = max(1, int(self.request.GET.get('lb_country_xp_page', 1) or 1))
+        country_total = get_country_xp_count(selected_cc)
+        country_entries = get_country_xp_page(selected_cc, country_page_num, paginate_by)
+        country_paginator = RedisPaginator(country_total, paginate_by)
+        country_page_num = min(country_page_num, country_paginator.num_pages)
+        ctx['lb_country_xp_page_obj'] = RedisPage(country_entries, country_page_num, country_paginator)
+        ctx['lb_country_xp_paginator'] = country_paginator
+        ctx['lb_country_xp_total'] = country_total
+
+        # User's country rank
+        if user.is_authenticated and hasattr(user, 'profile'):
+            profile = user.profile
+            if profile.country_code == selected_cc:
+                country_rank = get_country_xp_rank(selected_cc, profile.id)
+                if country_rank:
+                    ctx['lb_country_xp_user_rank'] = country_rank
+                    ctx['lb_country_xp_user_page'] = (country_rank - 1) // paginate_by + 1
+
+        return ctx
 
 
 

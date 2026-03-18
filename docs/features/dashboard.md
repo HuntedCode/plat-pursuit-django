@@ -49,6 +49,7 @@ Premium users can create custom tabs with a name (max 20 chars) and icon (from 8
 | `quick_settings` | Quick Settings | at_a_glance | Server | None | No |
 | `badge_stats` | Badge Stats | badges | Lazy | 10m | No |
 | `badge_xp_leaderboard` | Badge XP & Leaderboard | badges | Lazy | 10m | No |
+| `country_xp_leaderboard` | Country XP Leaderboard | badges | Lazy | 10m | No |
 | `az_challenge` | A-Z Challenge | progress | Lazy | 5m | No |
 | `genre_challenge` | Genre Challenge | progress | Lazy | 5m | No |
 | `calendar_challenge` | Platinum Calendar | progress | Lazy | 5m | No |

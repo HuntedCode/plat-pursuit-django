@@ -591,6 +591,83 @@ def provide_badge_xp_leaderboard(profile, settings=None):
     }
 
 
+def provide_country_xp_leaderboard(profile, settings=None):
+    """Country-specific XP leaderboard: rank, stats, and mini leaderboard within the user's country."""
+    from trophies.models import ProfileGamification
+    from trophies.services.redis_leaderboard_service import (
+        get_country_xp_rank, get_country_xp_count,
+        get_country_xp_top, get_country_xp_neighborhood,
+    )
+
+    if not profile.country_code:
+        return {'has_stats': False, 'no_country': True}
+
+    try:
+        gamification = profile.gamification
+    except ProfileGamification.DoesNotExist:
+        return {'has_stats': False}
+
+    total_xp = gamification.total_badge_xp
+    if total_xp == 0:
+        return {'has_stats': False}
+
+    country_code = profile.country_code
+    display_username = profile.display_psn_username
+    user_rank = get_country_xp_rank(country_code, profile.id)
+    total_participants = get_country_xp_count(country_code)
+
+    TOP_N = 5
+    NEIGHBORHOOD = 2
+
+    def _format_entry(e):
+        return {
+            'rank': e['rank'],
+            'psn_username': e['psn_username'],
+            'avatar_url': e.get('avatar_url', ''),
+            'flag': e.get('flag', ''),
+            'is_premium': e.get('is_premium', False),
+            'total_xp': e['total_xp'],
+            'total_xp_formatted': f"{e['total_xp']:,}",
+            'total_badges': e.get('total_badges', 0),
+            'is_self': e['psn_username'] == display_username,
+        }
+
+    user_in_top = user_rank is not None and user_rank <= TOP_N
+    show_gap = False
+    entries = []
+
+    if user_in_top:
+        for e in get_country_xp_top(country_code, TOP_N):
+            entries.append(_format_entry(e))
+    elif user_rank is not None:
+        for e in get_country_xp_top(country_code, 3):
+            entries.append(_format_entry(e))
+        neighborhood_entries = get_country_xp_neighborhood(
+            country_code, profile.id, above=NEIGHBORHOOD, below=NEIGHBORHOOD
+        )
+        show_gap = neighborhood_entries and neighborhood_entries[0]['rank'] > 4
+        for e in neighborhood_entries:
+            if e['rank'] > 3:
+                entries.append(_format_entry(e))
+    else:
+        for e in get_country_xp_top(country_code, TOP_N):
+            entries.append(_format_entry(e))
+
+    return {
+        'has_stats': True,
+        'country_code': country_code,
+        'country_name': profile.country or country_code,
+        'flag': profile.flag or '',
+        'total_xp': total_xp,
+        'total_xp_formatted': f"{total_xp:,}",
+        'user_rank': user_rank,
+        'total_participants': total_participants,
+        'leaderboard_entries': entries,
+        'user_in_top': user_in_top,
+        'show_gap': show_gap,
+    }
+
+
 def provide_az_challenge(profile):
     """Full 26-letter A-Z challenge grid with game icons and completion status."""
     challenge = _find_challenge(profile, 'az')
@@ -1148,6 +1225,73 @@ def provide_trophy_timeline(profile, settings=None):
     }
 
 
+def provide_badge_showcase(profile, settings=None):
+    """
+    Badge showcase: shows the user's displayed badge and all earned badges
+    for selection. Allows users to pick which badge to feature on their profile.
+    """
+    from trophies.models import UserBadge
+
+    earned_badges = list(
+        UserBadge.objects
+        .filter(profile=profile)
+        .select_related('badge', 'badge__base_badge')
+        .order_by('-badge__tier', '-earned_at')
+    )
+
+    displayed_badge = None
+    badge_list = []
+
+    for ub in earned_badges:
+        badge = ub.badge
+        try:
+            layers = badge.get_badge_layers()
+            image_url = layers.get('main', '')
+        except Exception:
+            image_url = ''
+
+        entry = {
+            'id': badge.id,
+            'name': badge.name,
+            'series': badge.effective_display_series or badge.series_slug,
+            'tier': badge.tier,
+            'tier_name': {1: 'Bronze', 2: 'Silver', 3: 'Gold', 4: 'Platinum'}.get(badge.tier, ''),
+            'image_url': image_url,
+            'is_displayed': ub.is_displayed,
+        }
+        badge_list.append(entry)
+
+        if ub.is_displayed:
+            displayed_badge = entry
+
+    # Fallback: auto-select highest tier badge if none is displayed
+    if not displayed_badge and badge_list:
+        displayed_badge = badge_list[0]  # Already sorted by -tier, -earned_at
+
+    return {
+        'displayed_badge': displayed_badge,
+        'badges': badge_list,
+        'total_badges': len(badge_list),
+    }
+
+
+def provide_profile_card_preview(profile, settings=None):
+    """
+    Profile card preview: provides theme and shareables URL for the
+    client-side preview module. The actual card HTML is fetched via
+    the existing /api/v1/profile-card/html/ endpoint on the client.
+    """
+    from trophies.models import ProfileCardSettings
+    from django.urls import reverse
+
+    card_settings, _ = ProfileCardSettings.objects.get_or_create(profile=profile)
+
+    return {
+        'theme': card_settings.card_theme or 'default',
+        'shareables_url': reverse('my_shareables'),
+    }
+
+
 # ---------------------------------------------------------------------------
 # Module Registry
 # ---------------------------------------------------------------------------
@@ -1326,6 +1470,22 @@ DASHBOARD_MODULES = [
         'allowed_sizes': ['small', 'medium', 'large'],
     },
     {
+        'slug': 'country_xp_leaderboard',
+        'name': 'Country XP Leaderboard',
+        'description': 'How you rank in your country. Local glory awaits.',
+        'category': 'badges',
+        'template': 'trophies/partials/dashboard/country_xp_leaderboard.html',
+        'provider': provide_country_xp_leaderboard,
+        'requires_premium': False,
+        'load_strategy': 'lazy',
+        'default_order': 11,
+        'default_settings': {},
+        'configurable_settings': [],
+        'cache_ttl': 600,
+        'default_size': 'small',
+        'allowed_sizes': ['small', 'medium'],
+    },
+    {
         'slug': 'az_challenge',
         'name': 'A-Z Challenge',
         'description': 'Your full 26-letter A-Z challenge grid. Every letter, every platinum.',
@@ -1417,7 +1577,7 @@ DASHBOARD_MODULES = [
         'slug': 'my_reviews',
         'name': 'My Reviews',
         'description': 'Your reviews at a glance. Helpful votes, replies, and recent posts.',
-        'category': 'community',
+        'category': 'highlights',
         'template': 'trophies/partials/dashboard/my_reviews.html',
         'provider': provide_my_reviews,
         'requires_premium': False,
@@ -1455,7 +1615,7 @@ DASHBOARD_MODULES = [
         'slug': 'rate_my_games',
         'name': 'Rate My Games',
         'description': 'Platinums waiting for your rating. Help the community with your insights!',
-        'category': 'community',
+        'category': 'highlights',
         'template': 'trophies/partials/dashboard/rate_my_games.html',
         'provider': provide_rate_my_games,
         'requires_premium': False,
@@ -1485,6 +1645,38 @@ DASHBOARD_MODULES = [
         'cache_ttl': 3600,
         'default_size': 'medium',
         'allowed_sizes': ['small', 'medium', 'large'],
+    },
+    {
+        'slug': 'badge_showcase',
+        'name': 'Badge Showcase',
+        'description': 'Choose your featured badge. This badge appears on your profile card and public profile.',
+        'category': 'share',
+        'template': 'trophies/partials/dashboard/badge_showcase.html',
+        'provider': provide_badge_showcase,
+        'requires_premium': False,
+        'load_strategy': 'lazy',
+        'default_order': 10,
+        'default_settings': {},
+        'configurable_settings': [],
+        'cache_ttl': 600,
+        'default_size': 'medium',
+        'allowed_sizes': ['small', 'medium', 'large'],
+    },
+    {
+        'slug': 'profile_card_preview',
+        'name': 'Profile Card',
+        'description': 'Preview and download your shareable profile card image.',
+        'category': 'share',
+        'template': 'trophies/partials/dashboard/profile_card_preview.html',
+        'provider': provide_profile_card_preview,
+        'requires_premium': False,
+        'load_strategy': 'lazy',
+        'default_order': 11,
+        'default_settings': {},
+        'configurable_settings': [],
+        'cache_ttl': 0,
+        'default_size': 'large',
+        'allowed_sizes': ['medium', 'large'],
     },
 ]
 
@@ -1762,7 +1954,7 @@ CATEGORY_DISPLAY_NAMES = {
     'at_a_glance': 'At a Glance',
     'progress': 'Progress & Challenges',
     'badges': 'Badges & Achievements',
-    'community': 'Community',
+    'share': 'Share & Export',
     'highlights': 'Highlights & History',
     'premium': 'Premium',
 }
@@ -1772,24 +1964,24 @@ CATEGORY_SHORT_NAMES = {
     'at_a_glance': 'At a Glance',
     'progress': 'Progress',
     'badges': 'Badges',
-    'community': 'Community',
+    'share': 'Share',
     'highlights': 'Highlights',
     'premium': 'Premium',
 }
 
 # Default tab order and icons (SVG path data for inline rendering)
-DEFAULT_TAB_ORDER = ['premium', 'at_a_glance', 'progress', 'badges', 'community', 'highlights']
+DEFAULT_TAB_ORDER = ['premium', 'at_a_glance', 'progress', 'badges', 'share', 'highlights']
 
 TAB_ICONS = {
     'at_a_glance': 'trophy_cup',
     'progress': 'chart',
     'badges': 'medal',
-    'community': 'users',
+    'share': 'share',
     'highlights': 'star',
     'premium': 'crown',
 }
 
-VALID_TAB_ICONS = {'trophy_cup', 'target', 'chart', 'medal', 'users', 'star', 'crown', 'heart'}
+VALID_TAB_ICONS = {'trophy_cup', 'target', 'chart', 'medal', 'users', 'share', 'star', 'crown', 'heart'}
 
 
 def _category_display_name(key):

@@ -206,8 +206,17 @@ def update_profile_gamification(profile) -> 'ProfileGamification':
     if profile.is_linked:
         pipeline = getattr(_bulk_update_context, 'pipeline', None)
         try:
-            from trophies.services.redis_leaderboard_service import update_xp_entry, update_community_xp_deltas
+            from trophies.services.redis_leaderboard_service import (
+                update_xp_entry, update_community_xp_deltas, update_country_xp_entry,
+            )
             update_xp_entry(profile, total_xp, total_badges, pipeline=pipeline)
+
+            # Update country XP leaderboard
+            if profile.country_code:
+                update_country_xp_entry(
+                    profile.country_code, profile, total_xp, total_badges,
+                    pipeline=pipeline
+                )
 
             # Compute per-series XP deltas and update community totals
             all_slugs = set(list(old_series_xp.keys()) + list(series_xp.keys()))

@@ -128,6 +128,9 @@ Incrementally updated via signals, fully rebuilt by `update_leaderboards` cron e
 | `lb:progress:{slug}:data` | Hash | Progress display data |
 | `lb:progress:global:scores` | Sorted Set | Global progress leaderboard |
 | `lb:progress:global:data` | Hash | Global progress display data |
+| `lb:xp:country:{cc}:scores` | Sorted Set | Per-country XP leaderboard; same score formula as global XP |
+| `lb:xp:country:{cc}:data` | Hash | Per-country XP display data |
+| `lb:xp:country:index` | Set | Active country codes (ISO alpha-2) with leaderboard entries |
 | `lb:community_xp:{slug}` | String (int) | Community XP total per series, INCRBY delta from gamification updates |
 | `lb:meta:last_rebuild` | Hash | Rebuild timestamps per leaderboard key |
 

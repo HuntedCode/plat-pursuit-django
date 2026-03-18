@@ -105,6 +105,18 @@ def _progress_scores_key(slug=None):
     return 'lb:progress:global:scores'
 
 
+def _country_xp_scores_key(country_code):
+    return f'lb:xp:country:{country_code}:scores'
+
+
+def _country_xp_data_key(country_code):
+    return f'lb:xp:country:{country_code}:data'
+
+
+def _country_xp_index_key():
+    return 'lb:xp:country:index'
+
+
 def _community_xp_key(slug):
     return f'lb:community_xp:{slug}'
 
@@ -775,6 +787,166 @@ def rebuild_community_xp(series_slug):
 
 
 # ---------------------------------------------------------------------------
+# Country XP Leaderboard
+# ---------------------------------------------------------------------------
+
+def update_country_xp_entry(country_code, profile, total_xp, total_badges, pipeline=None):
+    """Update a profile's country XP leaderboard position."""
+    if total_xp <= 0:
+        remove_country_xp_entry(country_code, profile.id, pipeline=pipeline)
+        return
+
+    score = compute_xp_score(total_xp, total_badges)
+    display_data = _build_xp_display_data(profile, total_xp, total_badges)
+    pipe = pipeline or redis_client.pipeline()
+    _update_entry(
+        _country_xp_scores_key(country_code),
+        _country_xp_data_key(country_code),
+        profile.id, score, display_data, pipeline=pipe
+    )
+    pipe.sadd(_country_xp_index_key(), country_code)
+    if pipeline is None:
+        pipe.execute()
+
+
+def remove_country_xp_entry(country_code, profile_id, pipeline=None):
+    """Remove a profile from a country XP leaderboard."""
+    _remove_entry(
+        _country_xp_scores_key(country_code),
+        _country_xp_data_key(country_code),
+        profile_id, pipeline=pipeline
+    )
+
+
+def get_country_xp_page(country_code, page, page_size=50):
+    """Get a page of country XP leaderboard entries."""
+    return _get_page(
+        _country_xp_scores_key(country_code),
+        _country_xp_data_key(country_code),
+        page, page_size
+    )
+
+
+def get_country_xp_rank(country_code, profile_id):
+    """Get a profile's country XP leaderboard rank (1-indexed), or None."""
+    return _get_rank(_country_xp_scores_key(country_code), profile_id)
+
+
+def get_country_xp_count(country_code):
+    """Get total number of profiles on a country XP leaderboard."""
+    return _get_count(_country_xp_scores_key(country_code))
+
+
+def get_country_xp_neighborhood(country_code, profile_id, above=2, below=2):
+    """Get entries around a profile's rank on a country XP leaderboard."""
+    return _get_neighborhood(
+        _country_xp_scores_key(country_code),
+        _country_xp_data_key(country_code),
+        profile_id, above, below
+    )
+
+
+def get_country_xp_top(country_code, n=5):
+    """Get top N entries from a country XP leaderboard."""
+    return _get_page(
+        _country_xp_scores_key(country_code),
+        _country_xp_data_key(country_code),
+        page=1, page_size=n
+    )
+
+
+def get_active_country_codes():
+    """Get all country codes that have active XP leaderboards."""
+    codes = redis_client.smembers(_country_xp_index_key())
+    return {c.decode() if isinstance(c, bytes) else c for c in codes}
+
+
+def rebuild_country_xp_leaderboard(country_code):
+    """Full rebuild of country XP leaderboard for a single country."""
+    from trophies.models import ProfileGamification
+
+    queryset = ProfileGamification.objects.filter(
+        total_badge_xp__gt=0,
+        profile__is_linked=True,
+        profile__country_code=country_code,
+    ).select_related('profile')
+
+    entries = []
+    for gamification in queryset.iterator(chunk_size=500):
+        profile = gamification.profile
+        total_xp = gamification.total_badge_xp
+        total_badges = gamification.total_badges_earned
+        score = compute_xp_score(total_xp, total_badges)
+        display_data = _build_xp_display_data(profile, total_xp, total_badges)
+        entries.append((profile.id, score, display_data))
+
+    _rebuild_leaderboard(
+        _country_xp_scores_key(country_code),
+        _country_xp_data_key(country_code),
+        entries
+    )
+    logger.info(f"Rebuilt country XP leaderboard for {country_code} with {len(entries)} entries")
+    return len(entries)
+
+
+def rebuild_country_xp_leaderboards():
+    """
+    Full rebuild of all country XP leaderboards from ProfileGamification.
+
+    Groups profiles by country_code and rebuilds each country's sorted set.
+    Also rebuilds the country index SET.
+
+    Returns:
+        dict: {country_code: entry_count}
+    """
+    from collections import defaultdict
+    from trophies.models import ProfileGamification
+
+    queryset = ProfileGamification.objects.filter(
+        total_badge_xp__gt=0,
+        profile__is_linked=True,
+        profile__country_code__isnull=False,
+    ).exclude(
+        profile__country_code=''
+    ).select_related('profile')
+
+    # Group entries by country
+    country_entries = defaultdict(list)
+    for gamification in queryset.iterator(chunk_size=500):
+        profile = gamification.profile
+        cc = profile.country_code
+        total_xp = gamification.total_badge_xp
+        total_badges = gamification.total_badges_earned
+        score = compute_xp_score(total_xp, total_badges)
+        display_data = _build_xp_display_data(profile, total_xp, total_badges)
+        country_entries[cc].append((profile.id, score, display_data))
+
+    results = {}
+    pipe = redis_client.pipeline()
+
+    # Rebuild index: clear and repopulate
+    pipe.delete(_country_xp_index_key())
+    for cc in country_entries:
+        pipe.sadd(_country_xp_index_key(), cc)
+    pipe.execute()
+
+    # Rebuild each country's leaderboard
+    for cc, entries in country_entries.items():
+        _rebuild_leaderboard(
+            _country_xp_scores_key(cc),
+            _country_xp_data_key(cc),
+            entries
+        )
+        results[cc] = len(entries)
+
+    logger.info(
+        f"Rebuilt country XP leaderboards: {len(results)} countries, "
+        f"{sum(results.values())} total entries"
+    )
+    return results
+
+
+# ---------------------------------------------------------------------------
 # Aggregate rebuild helpers
 # ---------------------------------------------------------------------------
 
@@ -792,6 +964,7 @@ def rebuild_all_leaderboards():
 
     xp_count = rebuild_xp_leaderboard()
     global_progress_count = rebuild_global_progress_leaderboard()
+    country_results = rebuild_country_xp_leaderboards()
 
     unique_slugs = list(
         Badge.objects.filter(is_live=True)
@@ -812,11 +985,13 @@ def rebuild_all_leaderboards():
     logger.info(
         f"Full leaderboard rebuild complete: {xp_count} XP entries, "
         f"{global_progress_count} global progress entries, "
+        f"{len(country_results)} countries, "
         f"{len(unique_slugs)} series processed"
     )
 
     return {
         'xp': xp_count,
         'global_progress': global_progress_count,
+        'country_xp': country_results,
         'series': series_results,
     }

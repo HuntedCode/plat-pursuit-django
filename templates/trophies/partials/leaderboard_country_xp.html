@@ -1,0 +1,122 @@
+{% load static custom_filters query_tags humanize %}
+<div class="flex flex-col justify-start gap-2">
+    <div class="flex flex-col md:flex-row items-start md:items-center gap-3 md:gap-4">
+        <div class="flex items-center gap-2">
+            <h2 class="text-lg italic font-bold">Country XP Leaderboard</h2>
+            <div class="tooltip tooltip-bottom" data-tip="See how you stack up against hunters in your region">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-base-content/50 cursor-help" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>
+                </svg>
+            </div>
+        </div>
+
+        {# Country picker #}
+        {% if country_list %}
+            <form method="get" class="flex items-center gap-2">
+                <input type="hidden" name="tab" value="country" />
+                <select name="country" class="select select-bordered select-sm w-64" onchange="this.form.submit()">
+                    {% for c in country_list %}
+                        <option value="{{ c.code }}" {% if c.code == selected_country_code %}selected{% endif %}>{{ c.flag }} {{ c.name }}</option>
+                    {% endfor %}
+                </select>
+            </form>
+        {% endif %}
+    </div>
+
+    {% if not country_list %}
+        <div class="bg-base-100/50 rounded-box border-2 border-base-300 border-dashed text-center py-8 px-6">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-12 h-12 mx-auto text-base-content/30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
+            </svg>
+            <p class="text-base-content/50 font-bold mt-3 italic pr-1">No country leaderboards available yet.</p>
+            <p class="text-base-content/50 text-sm italic pr-1">Country data is populated when profiles sync. Check back soon.</p>
+        </div>
+
+    {% elif not selected_country_code %}
+        <div class="bg-base-100/50 rounded-box border-2 border-base-300 border-dashed text-center py-8 px-6">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-12 h-12 mx-auto text-base-content/30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
+            </svg>
+            <p class="text-base-content/50 font-bold mt-3 italic pr-1">Select a country to view its leaderboard.</p>
+            <p class="text-base-content/50 text-sm italic pr-1">Link your PSN account to automatically see your country.</p>
+        </div>
+
+    {% elif lb_country_xp_page_obj.object_list %}
+        {# Country header #}
+        <div class="flex items-center gap-3 bg-base-100/50 rounded-box border-2 border-base-300 px-4 py-3">
+            <span class="text-3xl lg:text-4xl">{{ selected_country_flag }}</span>
+            <div class="flex flex-col">
+                <span class="text-base lg:text-lg font-bold italic pr-1">{{ selected_country_name }}</span>
+                <span class="text-xs text-base-content/50 italic pr-1">{{ lb_country_xp_total|intcomma }} hunter{{ lb_country_xp_total|pluralize }} ranked</span>
+            </div>
+            {% if lb_country_xp_user_rank %}
+                <div class="ml-auto flex items-center gap-2 bg-accent/10 border border-accent/30 rounded-lg px-3 py-2">
+                    <span class="text-xs text-accent font-bold italic">Your Rank</span>
+                    <span class="text-lg font-black text-accent">#{{ lb_country_xp_user_rank }}</span>
+                </div>
+            {% endif %}
+        </div>
+
+        {% include 'partials/leaderboard_pagination.html' with page_obj=lb_country_xp_page_obj paginator=lb_country_xp_paginator page_param='lb_country_xp_page' user_page=lb_country_xp_user_page user_rank=lb_country_xp_user_rank rank_prefix='c' %}
+
+        <div class="w-full overflow-x-auto">
+            <table class="table table-zebra bg-base-100/80 border-4 border-base-300 shadow-lg shadow-neutral rounded-box w-full">
+                <thead>
+                    <tr class="bg-base-200/50 border-b-2 border-base-300">
+                        <th class="text-xs text-base-content/50 italic font-bold uppercase tracking-wide w-12"></th>
+                        <th class="text-xs text-base-content/50 italic font-bold uppercase tracking-wide">User</th>
+                        <th class="text-xs text-base-content/50 italic font-bold uppercase tracking-wide">Total XP</th>
+                        <th class="text-xs text-base-content/50 italic font-bold uppercase tracking-wide">Total Badges</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for entry in lb_country_xp_page_obj %}
+                        <tr id="c-rank-{{ entry.rank }}" class="{% if request.user.is_authenticated and request.user.profile.display_psn_username == entry.psn_username %}bg-success/15{% endif %}{% if entry.rank == 1 %} border-l-6 border-warning bg-warning/5 shadow-sm shadow-warning/20{% elif entry.rank == 2 %} border-l-4 border-base-content/30 bg-base-content/5{% elif entry.rank == 3 %} border-l-4 border-accent bg-accent/5{% endif %} h-15 hover:bg-base-200/50 transition-colors duration-200">
+                            <td class="text-center">
+                                {% include 'trophies/partials/leaderboard_rank_cell.html' with rank=entry.rank %}
+                            </td>
+                            <td class="text-sm lg:text-base">
+                                {% include 'trophies/partials/leaderboard_user_cell.html' with entry=entry %}
+                            </td>
+                            <td class="text-sm lg:text-base">
+                                <div class="flex items-center gap-1">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-secondary shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                        <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+                                    </svg>
+                                    <span>{{ entry.total_xp|intcomma }}</span>
+                                </div>
+                            </td>
+                            <td class="text-sm lg:text-base">
+                                <div class="flex items-center gap-1">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-success shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline>
+                                    </svg>
+                                    <span>{{ entry.total_badges|intcomma }}</span>
+                                </div>
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        {% include 'partials/leaderboard_pagination.html' with page_obj=lb_country_xp_page_obj paginator=lb_country_xp_paginator page_param='lb_country_xp_page' user_page=lb_country_xp_user_page user_rank=lb_country_xp_user_rank rank_prefix='c' %}
+
+    {% else %}
+        {# Country selected but empty leaderboard #}
+        <div class="flex items-center gap-3 bg-base-100/50 rounded-box border-2 border-base-300 px-4 py-3 mb-2">
+            <span class="text-3xl lg:text-4xl">{{ selected_country_flag }}</span>
+            <div class="flex flex-col">
+                <span class="text-base lg:text-lg font-bold italic pr-1">{{ selected_country_name }}</span>
+                <span class="text-xs text-base-content/50 italic pr-1">0 hunters ranked</span>
+            </div>
+        </div>
+        <div class="bg-base-100/50 rounded-box border-2 border-base-300 border-dashed text-center py-8 px-6">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-12 h-12 mx-auto text-base-content/30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+            </svg>
+            <p class="text-base-content/50 font-bold mt-3 italic pr-1">No XP earned in {{ selected_country_name }} yet.</p>
+            <p class="text-base-content/50 text-sm italic pr-1">Be the first to represent your country on the leaderboard.</p>
+        </div>
+    {% endif %}
+</div>
