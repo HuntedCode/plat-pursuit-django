@@ -7,6 +7,8 @@ Provides:
 """
 import logging
 
+from django.utils.decorators import method_decorator
+from django_ratelimit.decorators import ratelimit
 from rest_framework import status
 from rest_framework.authentication import SessionAuthentication, TokenAuthentication
 from rest_framework.permissions import IsAuthenticated, IsAdminUser
@@ -25,8 +27,8 @@ class SubscriptionAdminActionView(APIView):
     """Staff-only actions: resend emails, resend notifications, force deactivate."""
     authentication_classes = [SessionAuthentication, TokenAuthentication]
     permission_classes = [IsAuthenticated, IsAdminUser]
-    throttle_classes = []
 
+    @method_decorator(ratelimit(key='user', rate='10/m', method='POST', block=True))
     def post(self, request):
         action = request.data.get('action')
         user_id = request.data.get('user_id')
@@ -69,7 +71,7 @@ class SubscriptionAdminActionView(APIView):
                     triggered_by='admin_manual',
                     metadata={
                         'action': 'resend_notification',
-                        'admin_user': request.user.email,
+                        'admin_user_id': request.user.id,
                     },
                 )
                 return Response({'success': True, 'message': 'In-app notification sent'})
@@ -89,7 +91,7 @@ class SubscriptionAdminActionView(APIView):
                     triggered_by='admin_manual',
                     metadata={
                         'admin_notes': notes,
-                        'admin_user': request.user.email,
+                        'admin_user_id': request.user.id,
                         'force_deactivate': True,
                     },
                 )

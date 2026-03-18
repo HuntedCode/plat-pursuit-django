@@ -63,6 +63,7 @@ How-to and operational documentation.
 | [Email Setup](guides/email-setup.md) | SendGrid configuration, Cloudflare email routing |
 | [Mobile App](guides/mobile-app.md) | Mobile backend API, implementation status |
 | [Social Media Strategy](guides/social-media-strategy.md) | Platform strategy, content pillars, calendar, growth tactics |
+| [Security](guides/security.md) | Security headers, CSP, rate limiting, CORS, admin log privacy |
 
 ## Reference
 

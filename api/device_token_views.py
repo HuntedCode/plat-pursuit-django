@@ -1,5 +1,7 @@
 import logging
 
+from django.utils.decorators import method_decorator
+from django_ratelimit.decorators import ratelimit
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -21,6 +23,7 @@ class DeviceTokenRegisterView(APIView):
     """
     permission_classes = [IsAuthenticated]
 
+    @method_decorator(ratelimit(key='user', rate='10/m', method='POST', block=True))
     def post(self, request):
         token = request.data.get('token', '').strip()
         platform = request.data.get('platform', '').strip().lower()
@@ -78,6 +81,7 @@ class DeviceTokenDeleteView(APIView):
     """
     permission_classes = [IsAuthenticated]
 
+    @method_decorator(ratelimit(key='user', rate='10/m', method='DELETE', block=True))
     def delete(self, request, token):
         deleted_count, _ = DeviceToken.objects.filter(
             user=request.user, token=token

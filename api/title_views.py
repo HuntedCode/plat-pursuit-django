@@ -3,6 +3,8 @@ REST API views for title equipping.
 """
 import logging
 
+from django.utils.decorators import method_decorator
+from django_ratelimit.decorators import ratelimit
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status as http_status
@@ -24,6 +26,7 @@ class EquipTitleAPIView(APIView):
     permission_classes = [IsAuthenticated]
     authentication_classes = [SessionAuthentication]
 
+    @method_decorator(ratelimit(key='user', rate='15/m', method='POST', block=True))
     def post(self, request):
         profile = getattr(request.user, 'profile', None)
         if not profile:

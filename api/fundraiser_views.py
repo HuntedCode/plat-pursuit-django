@@ -10,7 +10,9 @@ from django.db import transaction
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
+from django.utils.decorators import method_decorator
 from django.views import View
+from django_ratelimit.decorators import ratelimit
 
 from trophies.mixins import StaffRequiredAPIMixin
 
@@ -24,6 +26,7 @@ logger = logging.getLogger(__name__)
 class CreateDonationView(LoginRequiredMixin, View):
     """POST: Create a Stripe/PayPal checkout session for a one-time donation."""
 
+    @method_decorator(ratelimit(key='user', rate='5/m', method='POST', block=True))
     def post(self, request, slug):
         fundraiser = get_object_or_404(Fundraiser, slug=slug)
 
@@ -188,7 +191,7 @@ class UpdateClaimStatusView(StaffRequiredAPIMixin, View):
 
         logger.info(
             f"Claim {claim_id} ({claim.series_name}) status updated: "
-            f"{old_status} -> {new_status} by {request.user.email}"
+            f"{old_status} -> {new_status} by admin (user_id={request.user.id})"
         )
 
         # Send notifications when artwork is completed

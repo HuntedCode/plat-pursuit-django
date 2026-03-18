@@ -30,7 +30,7 @@ from .recap_views import (
     RecapShareImagePNGView, RecapSlidePartialView
 )
 from .tracking_views import TrackSiteEventView
-from .easter_egg_views import ClaimEasterEggView
+from .easter_egg_views import RollEasterEggView, ClaimEasterEggView
 from .share_temp_views import serve_share_temp_image
 from .game_list_views import (
     GameListCreateView, GameListDetailView, GameListUpdateView, GameListDeleteView,
@@ -89,6 +89,10 @@ from .review_views import (
     ReviewVoteView, ReviewReportView,
     ReviewReplyListView, ReviewReplyDetailView,
     GroupRatingView,
+)
+from .profile_card_views import (
+    ProfileCardHTMLView, ProfileCardPNGView,
+    ProfileCardSettingsView, ProfileCardRegenerateTokenView,
 )
 
 app_name = 'api'
@@ -223,6 +227,7 @@ urlpatterns = [
     path('tracking/site-event/', TrackSiteEventView.as_view(), name='tracking-site-event'),
 
     # Easter egg endpoints
+    path('easter-eggs/roll/', RollEasterEggView.as_view(), name='easter-egg-roll'),
     path('easter-eggs/claim/', ClaimEasterEggView.as_view(), name='easter-egg-claim'),
 
     # Temp share image serving
@@ -317,6 +322,12 @@ urlpatterns = [
     # User settings endpoints
     path('user/timezone/', UpdateTimezoneAPIView.as_view(), name='user-timezone-update'),
     path('user/quick-settings/', UpdateQuickSettingsAPIView.as_view(), name='user-quick-settings'),
+
+    # Profile Card endpoints
+    path('profile-card/html/', ProfileCardHTMLView.as_view(), name='profile-card-html'),
+    path('profile-card/png/', ProfileCardPNGView.as_view(), name='profile-card-png'),
+    path('profile-card/settings/', ProfileCardSettingsView.as_view(), name='profile-card-settings'),
+    path('profile-card/regenerate-token/', ProfileCardRegenerateTokenView.as_view(), name='profile-card-regenerate-token'),
 
     # Review Hub endpoints
     path('reviews/recent/', RecentReviewsView.as_view(), name='review-recent'),

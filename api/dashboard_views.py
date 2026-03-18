@@ -6,7 +6,9 @@ import logging
 
 from django.http import JsonResponse
 from django.template.loader import render_to_string
+from django.utils.decorators import method_decorator
 from django.views import View
+from django_ratelimit.decorators import ratelimit
 
 from trophies.mixins import StaffRequiredAPIMixin
 
@@ -84,6 +86,7 @@ class DashboardConfigUpdateView(StaffRequiredAPIMixin, View):
     }
     """
 
+    @method_decorator(ratelimit(key='user', rate='15/m', method='POST', block=True))
     def post(self, request):
         profile = request.user.profile
         is_premium = get_effective_premium(request)
@@ -222,6 +225,7 @@ class DashboardModuleReorderView(StaffRequiredAPIMixin, View):
     Body: {"module_order": ["slug1", "slug2", ...]}
     """
 
+    @method_decorator(ratelimit(key='user', rate='15/m', method='POST', block=True))
     def post(self, request):
         profile = request.user.profile
 
@@ -259,6 +263,7 @@ class DashboardPreviewToggleView(StaffRequiredAPIMixin, View):
     Sets a session variable that overrides is_premium on the dashboard.
     """
 
+    @method_decorator(ratelimit(key='user', rate='15/m', method='POST', block=True))
     def post(self, request):
         current = request.session.get('dashboard_preview_premium')
         if current is None:

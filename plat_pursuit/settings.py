@@ -107,8 +107,64 @@ SECURE_SSL_REDIRECT = not DEBUG
 SECURE_HSTS_SECONDS = 31536000
 SECURE_HSTS_INCLUDE_SUBDOMAINS = True
 SECURE_HSTS_PRELOAD = True
+SECURE_CONTENT_TYPE_NOSNIFF = True     # X-Content-Type-Options: nosniff
+X_FRAME_OPTIONS = 'DENY'               # Prevent framing entirely
 CSRF_COOKIE_SECURE = True
 SESSION_COOKIE_SECURE = True
+
+# ─── Content Security Policy (django-csp) ────────────────────────────────────
+# Pragmatic CSP: allows inline scripts/styles (needed for template <script>
+# blocks and Tailwind) while restricting sources to known-good origins.
+#
+# Google AdSense requires broad access to Google domains for scripts, images,
+# iframes, and styles. These are the minimum domains documented by Google.
+CONTENT_SECURITY_POLICY = {
+    "DIRECTIVES": {
+        "default-src": ["'self'"],
+        "script-src": [
+            "'self'",
+            "'unsafe-inline'",                    # Template <script> blocks
+            "https://cdn.jsdelivr.net",           # chart.js, marked, dompurify, confetti
+            "https://pagead2.googlesyndication.com",  # AdSense loader
+            "https://www.googletagservices.com",      # AdSense
+            "https://adservice.google.com",           # AdSense
+            "https://tpc.googlesyndication.com",      # AdSense
+            "https://www.google.com",                 # AdSense
+        ],
+        "style-src": [
+            "'self'",
+            "'unsafe-inline'",                    # Tailwind + dynamic styles
+            "https://fonts.googleapis.com",
+        ],
+        "font-src": [
+            "'self'",
+            "https://fonts.gstatic.com",
+        ],
+        "img-src": [
+            "'self'",
+            "data:",
+            "https://image.api.playstation.com",      # PSN game/trophy icons
+            "https://*.playstation.net",               # PSN avatars (legacy CDN)
+            "http://*.playstation.net",                # PSN avatars (some stored as http)
+            "https://*.s3.amazonaws.com",              # S3 media uploads
+            "https://pagead2.googlesyndication.com",   # AdSense ad images
+            "https://tpc.googlesyndication.com",       # AdSense
+            "https://www.google.com",                  # AdSense
+            "https://www.gstatic.com",                 # AdSense
+        ],
+        "frame-src": [
+            "'self'",
+            "https://googleads.g.doubleclick.net",     # AdSense iframes
+            "https://tpc.googlesyndication.com",       # AdSense iframes
+            "https://www.google.com",                  # AdSense iframes
+        ],
+        "connect-src": [
+            "'self'",
+            "https://pagead2.googlesyndication.com",   # AdSense reporting
+        ],
+        "frame-ancestors": ["'none'"],
+    },
+}
 
 
 DATA_UPLOAD_MAX_NUMBER_FIELDS = 50000
@@ -148,6 +204,7 @@ AUTHENTICATION_BACKENDS = [
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "csp.middleware.CSPMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
     "corsheaders.middleware.CorsMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
@@ -263,10 +320,11 @@ REST_FRAMEWORK = {
 # CORS configuration for mobile app
 # Token-auth API requests are CSRF-exempt, so CORS is the only cross-origin guard needed.
 CORS_ALLOWED_ORIGINS = [origin.strip() for origin in os.getenv('CORS_ALLOWED_ORIGINS', '').split(',') if origin.strip()]
-CORS_ALLOWED_ORIGINS += [
-    'http://localhost:8081',   # Expo dev server (default)
-    'http://localhost:19006',  # Expo web dev server
-]
+if DEBUG:
+    CORS_ALLOWED_ORIGINS += [
+        'http://localhost:8081',   # Expo dev server (default)
+        'http://localhost:19006',  # Expo web dev server
+    ]
 # Allow Authorization header so mobile clients can send the DRF token
 CORS_ALLOW_HEADERS = [
     'accept',

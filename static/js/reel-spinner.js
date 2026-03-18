@@ -90,8 +90,7 @@ ReelSpinner.SPEAKER_OFF_SVG = `
 // ─── Knife Easter Egg ────────────────────────────────────────────────────────
 
 ReelSpinner.KNIFE_IMAGE = '/static/images/easter-eggs/knife.png';
-ReelSpinner.KNIFE_APPEAR_CHANCE = 0.01;  // 1-in-100: knife shows up in reel
-ReelSpinner.KNIFE_LAND_CHANCE = 0.001;    // 1-in-1000: knife is the winner
+// Probabilities are now server-side (RollEasterEggView). These constants are removed.
 
 ReelSpinner.KNIFE_NEAR_MISS_TEXTS = [
     'So close to the knife...',
@@ -279,7 +278,7 @@ ReelSpinner.prototype._bindEvents = function() {
 
 // ─── Reel Strip ──────────────────────────────────────────────────────────────
 
-ReelSpinner.prototype._buildReelStrip = function() {
+ReelSpinner.prototype._buildReelStrip = function(serverRoll) {
     const strip = document.getElementById('spinner-strip');
     strip.innerHTML = '';
     strip.style.transform = 'translateX(0)';
@@ -289,10 +288,9 @@ ReelSpinner.prototype._buildReelStrip = function() {
     this._knifeLanded = false;
     this._nearKnifeHit = false;
 
-    // Roll knife chances once per spin
-    const knifeLandRoll = Math.random() < ReelSpinner.KNIFE_LAND_CHANCE;
-    const knifeAppears = knifeLandRoll || Math.random() < ReelSpinner.KNIFE_APPEAR_CHANCE;
-    if (knifeLandRoll) this._knifeLanded = true;
+    // Use server-side roll results (fallback: no knife on API failure)
+    var knifeAppears = serverRoll ? serverRoll.appears : false;
+    if (serverRoll && serverRoll.landed) this._knifeLanded = true;
 
     const e = PlatPursuit.HTMLUtils.escape;
     const slots = this._spinnerSlots;
@@ -432,7 +430,7 @@ ReelSpinner.prototype._calculateFinalPosition = function() {
 
 // ─── Animation ───────────────────────────────────────────────────────────────
 
-ReelSpinner.prototype._startSpin = function() {
+ReelSpinner.prototype._startSpin = async function() {
     const spinBtn = document.getElementById('spinner-spin-btn');
     const againBtn = document.getElementById('spinner-again-btn');
     spinBtn.disabled = true;
@@ -446,7 +444,17 @@ ReelSpinner.prototype._startSpin = function() {
     document.getElementById('spinner-area').classList.remove('hidden');
     document.getElementById('spinner-result').classList.add('hidden');
 
-    this._buildReelStrip();
+    // Server-side roll: determines if knife appears/lands
+    var serverRoll = null;
+    try {
+        serverRoll = await PlatPursuit.API.post('/api/v1/easter-eggs/roll/', {
+            easter_egg_id: 'knife_landed'
+        });
+    } catch (err) {
+        // Graceful degradation: proceed without knife on API failure
+    }
+
+    this._buildReelStrip(serverRoll);
     this._pickWinner();
     this._insertKnifeTile();
     this._calculateFinalPosition();
@@ -570,7 +578,9 @@ ReelSpinner.prototype._showResult = function() {
                     PlatPursuit.ToastManager.success(msg, { duration: 8000 });
                 }, 2000);
             }
-        }).catch(function() {});
+        }).catch(function(err) {
+            console.warn('Easter egg claim failed:', err);
+        });
     } else {
         // Normal game result
         resultIcon.innerHTML =

@@ -248,7 +248,7 @@ class AdminSendNotificationView(APIView):
             )
 
             logger.info(
-                f"Admin {request.user.email} sent {created_count} notifications "
+                f"Admin (user_id={request.user.id}) sent {created_count} notifications "
                 f"(type: {notification_type}, target: {target_type})"
             )
 
@@ -288,7 +288,7 @@ class NotificationBulkDeleteView(APIView):
                 recipient=request.user
             ).delete()
 
-            logger.info(f"User {request.user.email} bulk deleted {deleted_count} notifications")
+            logger.info(f"User (user_id={request.user.id}) bulk deleted {deleted_count} notifications")
 
             return Response({
                 'success': True,
@@ -317,7 +317,7 @@ class NotificationDeleteView(APIView):
             ).delete()
 
             if deleted_count > 0:
-                logger.info(f"User {request.user.email} deleted notification {pk}")
+                logger.info(f"User (user_id={request.user.id}) deleted notification {pk}")
                 return Response({'success': True})
             else:
                 return Response(
