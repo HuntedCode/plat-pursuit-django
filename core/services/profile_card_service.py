@@ -245,8 +245,9 @@ class ProfileCardDataService:
             if ub:
                 badge = ub.badge
                 image_url = ProfileCardDataService._get_badge_image_url(badge)
-                result['badge_name'] = badge.name
-                result['badge_series'] = badge.effective_display_series or badge.series_slug
+                series_name = badge.effective_display_series or badge.series_slug
+                result['badge_name'] = series_name
+                result['badge_series'] = series_name
                 result['badge_tier'] = badge.tier
                 result['badge_image_url'] = image_url
                 return result
@@ -263,8 +264,9 @@ class ProfileCardDataService:
                 badge = ub.badge
                 image_url = ProfileCardDataService._get_badge_image_url(badge)
                 if image_url:
-                    result['badge_name'] = badge.name
-                    result['badge_series'] = badge.effective_display_series or badge.series_slug
+                    series_name = badge.effective_display_series or badge.series_slug
+                    result['badge_name'] = series_name
+                    result['badge_series'] = series_name
                     result['badge_tier'] = badge.tier
                     result['badge_image_url'] = image_url
                     break

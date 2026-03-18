@@ -1241,9 +1241,21 @@ def provide_badge_showcase(profile, settings=None):
 
     displayed_badge = None
     badge_list = []
+    seen_series = set()
 
     for ub in earned_badges:
         badge = ub.badge
+
+        # Deduplicate by series: only show the highest tier per series
+        # (query is ordered by -badge__tier so first per series is highest)
+        if badge.series_slug in seen_series:
+            # Still check if this tier is the displayed one
+            if ub.is_displayed and not displayed_badge:
+                pass  # Fall through to build entry for displayed badge
+            else:
+                continue
+        seen_series.add(badge.series_slug)
+
         try:
             layers = badge.get_badge_layers()
             image_url = layers.get('main', '')
@@ -1258,7 +1270,7 @@ def provide_badge_showcase(profile, settings=None):
 
         entry = {
             'id': badge.id,
-            'name': badge.name,
+            'name': badge.effective_display_series or badge.series_slug,
             'series': badge.effective_display_series or badge.series_slug,
             'tier': badge.tier,
             'tier_name': {1: 'Bronze', 2: 'Silver', 3: 'Gold', 4: 'Platinum'}.get(badge.tier, ''),
@@ -2198,6 +2210,8 @@ def get_lazy_module_data(profile, slug, size=None, module_settings=None):
     if ttl > 0:
         try:
             cache.set(cache_key, data, ttl)
+            # Track this key so invalidate_dashboard_cache can delete it directly
+            _track_cache_key(profile.id, cache_key, ttl)
         except Exception:
             logger.debug("Could not cache dashboard module %s (non-serializable data)", slug)
 
@@ -2214,13 +2228,48 @@ def _module_cache_key(slug, profile_id, size=None):
     return f"dashboard:mod:{slug}:{profile_id}"
 
 
+def _cache_key_tracker(profile_id):
+    """Key that stores the set of active dashboard cache keys for a profile."""
+    return f"dashboard:active_keys:{profile_id}"
+
+
+def _track_cache_key(profile_id, cache_key, ttl):
+    """Register a cache key so invalidate_dashboard_cache can find it."""
+    tracker_key = _cache_key_tracker(profile_id)
+    try:
+        existing = cache.get(tracker_key) or set()
+        existing.add(cache_key)
+        # TTL slightly longer than the longest module cache to outlive all entries
+        cache.set(tracker_key, existing, max(ttl + 60, 3660))
+    except Exception:
+        pass  # Non-critical: worst case, stale cache until natural expiry
+
+
 def invalidate_dashboard_cache(profile_id):
-    """Delete all dashboard module cache keys for a profile."""
-    # Cache keys use settings hashes as suffixes, so enumerate exact keys
-    # from stored patterns would be fragile. Use prefix-pattern delete instead.
+    """Delete all dashboard module cache keys for a profile.
+
+    Uses a tracked key set for fast O(1) invalidation. Falls back to
+    pattern-based deletion (wrapped safely) for pre-tracker cache entries.
+    """
+    tracker_key = _cache_key_tracker(profile_id)
+    tracked_keys = cache.get(tracker_key) or set()
+
+    keys_to_delete = list(tracked_keys)
+    keys_to_delete.append(tracker_key)  # Clear the tracker itself
+
+    # Also include bare keys (without settings hash) as a safety net
     for mod in DASHBOARD_MODULES:
         if mod.get('cache_ttl', DEFAULT_CACHE_TTL) > 0:
-            pattern = f"dashboard:mod:{mod['slug']}:{profile_id}:*"
-            cache.delete_pattern(pattern)
-            # Also delete the bare key (no suffix)
-            cache.delete(_module_cache_key(mod['slug'], profile_id))
+            keys_to_delete.append(_module_cache_key(mod['slug'], profile_id))
+
+    if keys_to_delete:
+        cache.delete_many(keys_to_delete)
+
+    # Fallback: if tracker was empty (pre-deploy cache entries), use
+    # pattern delete for this profile only. Safe because it's a single
+    # narrow pattern per call, not the full-keyspace SCAN of the old approach.
+    if not tracked_keys:
+        try:
+            cache.delete_pattern(f"dashboard:mod:*:{profile_id}:*")
+        except Exception:
+            logger.debug("Pattern-based cache fallback failed for profile %s", profile_id)
