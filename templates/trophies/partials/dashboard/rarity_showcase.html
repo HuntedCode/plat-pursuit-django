@@ -1,0 +1,73 @@
+{% load custom_filters %}
+{# Dashboard module: Rarity Showcase. User's rarest earned trophies in 2-column grid. #}
+<div class="card bg-base-200/80 border-2 border-base-300 shadow-lg shadow-neutral">
+    <div class="card-body p-5 lg:p-7">
+        {# Header #}
+        <div class="flex items-center justify-between mb-3">
+            <h2 class="card-title text-base lg:text-lg font-bold flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-pink-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M6 3h12l4 6-10 13L2 9z"></path>
+                </svg>
+                Rarity Showcase
+            </h2>
+        </div>
+
+        {% if data.has_trophies %}
+            <div class="grid grid-cols-2 gap-2 lg:gap-3">
+                {% for trophy in data.trophies %}
+                    {% with rarity=trophy.earn_rate|rarity_color_hex %}
+                    <a href="{% url 'game_detail' trophy.np_communication_id %}" class="p-2 rounded-lg bg-base-300/30 hover:bg-base-300/60 transition-colors group">
+                        {# Top row: both icons + trophy name + rarity #}
+                        <div class="flex items-start gap-2 mb-1.5">
+                            {# Trophy icon #}
+                            <div class="w-10 h-10 lg:w-12 lg:h-12 rounded-lg overflow-hidden shrink-0 ring-1 ring-base-300">
+                                {% if trophy.trophy_icon_url %}
+                                    <img src="{{ trophy.trophy_icon_url }}" alt="{{ trophy.trophy_name }}" class="w-full h-full object-cover" loading="lazy" />
+                                {% else %}
+                                    <div class="w-full h-full bg-base-300 flex items-center justify-center">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-base-content/30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 3h12l4 6-10 13L2 9z"></path></svg>
+                                    </div>
+                                {% endif %}
+                            </div>
+                            {# Game icon (smaller, overlapping bottom-right of trophy icon) #}
+                            {% if trophy.icon_url %}
+                                <div class="w-5 h-5 lg:w-6 lg:h-6 rounded overflow-hidden ring-1 ring-base-200 shrink-0 -ml-4 mt-5 lg:mt-6 relative z-10">
+                                    <img src="{{ trophy.icon_url }}" alt="{{ trophy.game_name }}" class="w-full h-full object-cover" loading="lazy" />
+                                </div>
+                            {% endif %}
+                            <div class="flex-1 min-w-0">
+                                <div class="text-xs font-semibold line-clamp-1 pr-1 group-hover:text-primary transition-colors">{{ trophy.trophy_name }}</div>
+                                <div class="flex items-center gap-1.5 mt-0.5">
+                                    <span class="badge badge-xs font-bold" style="background-color: {{ rarity.bg }}; color: {{ rarity.color }};">{{ trophy.earn_rate }}%</span>
+                                    {% if trophy.trophy_type == 'platinum' %}
+                                        <span class="text-primary" style="font-size: 0.6rem;">Plat</span>
+                                    {% elif trophy.trophy_type == 'gold' %}
+                                        <span class="text-warning" style="font-size: 0.6rem;">Gold</span>
+                                    {% elif trophy.trophy_type == 'silver' %}
+                                        <span class="text-base-content/50" style="font-size: 0.6rem;">Silver</span>
+                                    {% else %}
+                                        <span class="text-amber-700" style="font-size: 0.6rem;">Bronze</span>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                        {# Description + game name #}
+                        {% if trophy.trophy_detail %}
+                            <div class="text-xs text-base-content/40 line-clamp-2 pr-1 mb-1 italic">{{ trophy.trophy_detail }}</div>
+                        {% endif %}
+                        <div class="text-xs text-base-content/30 line-clamp-1 pr-1">{{ trophy.game_name }}</div>
+                    </a>
+                    {% endwith %}
+                {% endfor %}
+            </div>
+        {% else %}
+            <div class="text-center py-6">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-10 h-10 text-pink-400/30 mx-auto mb-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M6 3h12l4 6-10 13L2 9z"></path>
+                </svg>
+                <p class="text-sm text-base-content/50">No rare trophies yet.</p>
+                <p class="text-xs text-base-content/40 mt-1">Start hunting and your rarest catches will appear here!</p>
+            </div>
+        {% endif %}
+    </div>
+</div>

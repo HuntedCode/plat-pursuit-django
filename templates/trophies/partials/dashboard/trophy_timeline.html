@@ -1,0 +1,55 @@
+{% load custom_filters %}
+{# Dashboard module: Trophy Timeline. Horizontal scrollable timeline of key moments. #}
+<div class="card bg-base-200/80 border-2 border-base-300 shadow-lg shadow-neutral">
+    <div class="card-body p-5 lg:p-7">
+        {# Header #}
+        <div class="flex items-center justify-between mb-3">
+            <h2 class="card-title text-base lg:text-lg font-bold flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <polyline points="12 6 12 12 16 14"></polyline>
+                </svg>
+                Trophy Timeline
+            </h2>
+        </div>
+
+        {% if data.has_events %}
+            {# Horizontal scrollable timeline #}
+            <div class="overflow-x-auto pb-2 -mb-2 scrollbar-thin">
+                <div class="relative min-w-max px-2">
+                    {# Events in a flex row #}
+                    <div class="flex justify-center">
+                        {% for event in data.events %}
+                            <div class="relative pt-7 text-center w-28 lg:w-32 shrink-0">
+                                {# Connector line: only between dots (not before first) #}
+                                {% if not forloop.first %}
+                                    <div class="absolute top-3 right-1/2 w-full h-px bg-base-300/60"></div>
+                                {% endif %}
+
+                                {# Timeline dot #}
+                                <div class="absolute top-1 left-1/2 -translate-x-1/2 w-4 h-4 rounded-full border-2 border-base-200 z-10"
+                                     style="background-color: var(--color-{% if event.color == 'trophy-platinum' %}primary{% else %}{{ event.color }}{% endif %});"></div>
+
+                                {# Event content #}
+                                <div class="text-xs font-semibold line-clamp-2 pr-1 leading-tight mb-0.5">{{ event.title }}</div>
+                                {% if event.subtitle %}
+                                    <div class="text-xs text-base-content/40 line-clamp-1 pr-1 italic" style="font-size: 0.65rem;">{{ event.subtitle }}</div>
+                                {% endif %}
+                                <div class="text-base-content/25 mt-0.5" style="font-size: 0.6rem;" data-time-format="relative" data-time="{{ event.date|date:'c' }}">{{ event.date|iso_naturaltime }}</div>
+                            </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        {% else %}
+            <div class="text-center py-6">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-10 h-10 text-accent/30 mx-auto mb-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <polyline points="12 6 12 12 16 14"></polyline>
+                </svg>
+                <p class="text-sm text-base-content/50">Your trophy timeline is just beginning!</p>
+                <p class="text-xs text-base-content/40 mt-1">Earn trophies and milestones to build your story.</p>
+            </div>
+        {% endif %}
+    </div>
+</div>

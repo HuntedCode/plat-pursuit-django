@@ -55,7 +55,9 @@ Premium users can create custom tabs with a name (max 20 chars) and icon (from 8
 | `completion_milestones` | Almost There | progress | Lazy | 10m | No |
 | `milestone_tracker` | Milestone Tracker | progress | Lazy | 10m | No |
 | `my_reviews` | My Reviews | community | Lazy | 10m | No |
-| `my_checklists` | My Checklists | community | Lazy | 10m | No |
+| `rarity_showcase` | Rarity Showcase | highlights | Lazy | 10m | No |
+| `rate_my_games` | Rate My Games | community | Lazy | 30m | No |
+| `trophy_timeline` | Trophy Timeline | highlights | Lazy | 60m | No |
 
 See [Module Catalog](../design/dashboard-module-catalog.md) for the full module roadmap.
 
@@ -160,6 +162,8 @@ Cache keys: `dashboard:mod:{slug}:{profile_id}:{settings_hash}`
 - `Challenge.soft_delete()` in `trophies/models.py`
 - `create_az_challenge()`, `create_calendar_challenge()`, `create_genre_challenge()` in `challenge_service.py`
 - `check_profile_badges()` in `badge_service.py` (after sync)
+- `check_all_milestones_for_user()` in `milestone_service.py` (covers milestone tracker + reviews via milestone checks)
+- `award_milestone_directly()` in `milestone_service.py`
 
 ## Staff Premium Preview Toggle
 
@@ -195,8 +199,10 @@ Staff can switch between "view as premium" and "view as free" via a header butto
 - **Almost There hidden game filtering**: Always excludes `user_hidden=True`. Additionally excludes `hidden_flag=True` only if `profile.hide_hiddens` is enabled.
 - **Almost There configurable threshold**: Default 90%, options 80/90/95. Stored in `module_settings` and included in cache key hash.
 - **My Reviews aggregate fallback**: Django `Sum()` returns `None` for empty querysets. Provider handles with `or 0` on all aggregate values.
-- **My Checklists dual sections**: "My Guides" (published checklists by user) and "Tracking" (checklists with UserChecklistProgress). Both sections use the same configurable limit.
-- **Cache invalidation coverage**: Milestone tracker invalidated via `check_all_milestones_for_user` hook. Reviews invalidated via same (milestone check called in create/delete). Checklists invalidated via direct hooks in publish/delete. Almost There covered by existing sync pipeline.
+- **Cache invalidation coverage**: Milestone tracker invalidated via `check_all_milestones_for_user` hook. Reviews invalidated via same (milestone check called in create/delete). Almost There and Rarity Showcase covered by existing sync pipeline.
+- **Rate My Games ticker strip**: Auto-scrolling CSS animation with duplicated icons for seamless loop. Pauses on hover. Icons are clickable links to review_hub. Defensive slug check prevents crash on concepts without slugs.
+- **Trophy Timeline horizontal scroll**: Scrollable flex row with per-event connector lines (skipped on first event). Centered via `justify-center`. Dot colors use `var(--color-X)` CSS variables with `trophy-platinum` mapped to `primary`.
+- **Rarity Showcase 2-column grid**: Shows trophy icon with overlapping game icon badge. Includes trophy description (`trophy_detail`). Even limit options (4/6/8). Filters `earn_rate > 0`. Uses `rarity_color_hex` filter.
 - **Staff-gated during dev**: Switch mixins to `LoginRequiredMixin` for production. Remove preview toggle UI.
 
 ## How to Add a New Module

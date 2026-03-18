@@ -14,8 +14,8 @@ The dashboard serves as the index page for all logged-in users. Modules are orga
 
 | Status | Count |
 |--------|-------|
-| Complete (Tier 1-3B) | 17 |
-| Planned (Tier 4) | 9 |
+| Complete (Tier 1-4) | 19 |
+| Cut (low value) | 7 |
 | Premium Exclusive | 9 |
 | Future (Gamification) | 3 |
 | **Total** | **38** |
@@ -29,8 +29,8 @@ The dashboard serves as the index page for all logged-in users. Modules are orga
 | 1 | Trophy Snapshot | Server | **Done** | Profile (denormalized, 0 queries) |
 | 2 | Recent Platinums | Lazy (5m) | **Done** | EarnedTrophy + Trophy + Game + Concept |
 | 3 | Recent Activity | Lazy (5m) | **Done** | EarnedTrophy + UserBadge, grouped by game+day |
-| 4 | Sync Status | Server | Planned | Profile (sync fields) |
-| 5 | Unread Notifications | Lazy | Planned | Notification model |
+| 4 | Sync Status | Server | **Cut** | Redundant with sync hotbar on every page |
+| 5 | Unread Notifications | Lazy | **Cut** | Redundant with navbar notification bell |
 | 29 | Quick Settings | Server | **Done** | Profile + CustomUser (settings fields) |
 
 ### Quick Settings (#29) - DONE
@@ -72,25 +72,25 @@ Badges are a flagship feature with dedicated real estate.
 | # | Module | Strategy | Status | Data Source |
 |---|--------|----------|--------|------------|
 | 16 | My Reviews | Lazy (10m) | **Done** | Review aggregate stats + recent list |
-| 17 | Community Spotlight | Lazy | Planned | ReviewHubService (shared cache) |
-| 18 | Rate My Games | Lazy | Planned | ProfileGame LEFT JOIN UserConceptRating |
-| 19 | My Checklists | Lazy (10m) | **Done** | Checklist (published) + UserChecklistProgress (tracking) |
-| 20 | My Game Lists | Lazy | Planned | GameList + GameListItem |
+| 17 | Community Spotlight | Lazy | **Cut** | Dashboard should focus on individual user, not community |
+| 18 | Rate My Games | Lazy (30m) | **Done** | CTA card: unrated platinum count + preview strip |
+| 19 | My Checklists | Lazy | **Cut** | May revisit later |
+| 20 | My Game Lists | Lazy | **Cut** | May revisit later |
 
 ## Category: Highlights & History
 
 | # | Module | Strategy | Status | Data Source |
 |---|--------|----------|--------|------------|
-| 21 | Trophy Timeline | Lazy | Planned | timeline_service (expensive, high cache) |
+| 21 | Trophy Timeline | Lazy (60m) | **Done** | timeline_service.build_timeline_events, high cache |
 | 22 | Monthly Recap Preview | Lazy (30m) | **Done** | MonthlyRecap (most recent finalized) |
-| 23 | Rarity Showcase | Lazy | Planned | EarnedTrophy + Trophy.rarity |
+| 23 | Rarity Showcase | Lazy (10m) | **Done** | EarnedTrophy sorted by earn_rate, rarity_color_hex |
 
 ## Category: Utility
 
 | # | Module | Strategy | Status | Data Source |
 |---|--------|----------|--------|------------|
-| 24 | Quick Links | Server | Planned | Static links + light count queries |
-| 25 | Featured Content | Lazy | Planned | FeaturedGame, FeaturedProfile, FeaturedGuide |
+| 24 | Quick Links | Server | **Cut** | Low value: navbar covers navigation |
+| 25 | Featured Content | Lazy | **Cut** | Better suited for homepage than dashboard |
 
 ## Category: Premium Exclusive
 
@@ -227,28 +227,28 @@ For visualization modules, two approaches:
 | 8 | Calendar Challenge Progress | Full 12-month view with navigation. |
 | 9 | Genre Challenge Progress | Focused view for participants. |
 
-### Tier 3B: Depth (COMPLETE)
+### Tier 3B: Depth (COMPLETE, 1 cut)
 
-| # | Module | Why |
-|---|--------|-----|
-| 10 | Milestone Tracker | Progress is motivating. |
-| 11 | Completion Milestones | "Almost there" games are actionable. |
-| 16 | My Reviews | Community hub connection. |
-| 19 | My Checklists | Checklist participation. |
+| # | Module | Status |
+|---|--------|--------|
+| 10 | Milestone Tracker | Done: progress is motivating |
+| 11 | Completion Milestones | Done: "almost there" games are actionable |
+| 16 | My Reviews | Done: engagement-focused (weekly vote feed) |
+| 19 | My Checklists | Cut: may revisit later |
 
-### Tier 4: Polish
+### Tier 4: Polish (COMPLETE, 6 cut)
 
-| # | Module | Why |
-|---|--------|-----|
-| 4 | Sync Status | Utility widget. |
-| 5 | Unread Notifications | Notification system. |
-| 17 | Community Spotlight | Discovery. |
-| 18 | Rate My Games | Engagement prompt. |
-| 20 | My Game Lists | List creators. |
-| 21 | Trophy Timeline | Beautiful but expensive. |
-| 23 | Rarity Showcase | Bragging rights. |
-| 24 | Quick Links | Utility. |
-| 25 | Featured Content | Staff-curated. |
+| # | Module | Status |
+|---|--------|--------|
+| 18 | Rate My Games | Done: ticker strip CTA with hover effects |
+| 21 | Trophy Timeline | Done: horizontal scrollable with colored dots |
+| 23 | Rarity Showcase | Done: 2-col grid with trophy + game icons |
+| 4 | Sync Status | Cut: redundant with sync hotbar |
+| 5 | Unread Notifications | Cut: redundant with navbar bell |
+| 17 | Community Spotlight | Cut: dashboard should focus on individual user |
+| 20 | My Game Lists | Cut: may revisit later |
+| 24 | Quick Links | Cut: navbar covers navigation |
+| 25 | Featured Content | Cut: better suited for homepage |
 
 ### Premium Visualization Tier
 

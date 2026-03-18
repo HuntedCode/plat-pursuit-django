@@ -1,0 +1,96 @@
+{% load custom_filters %}
+{# Dashboard module: Rate My Games. CTA card with auto-scrolling ticker strip. #}
+<div class="card bg-base-200/80 border-2 border-base-300 shadow-lg shadow-neutral">
+    <div class="card-body p-5 lg:p-7">
+        {# Header #}
+        <div class="flex items-center justify-between mb-3">
+            <h2 class="card-title text-base lg:text-lg font-bold flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-warning" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+                </svg>
+                Rate My Games
+            </h2>
+        </div>
+
+        {% if data.has_unrated %}
+            {# Auto-scrolling ticker strip #}
+            {% if data.preview_games %}
+                <div class="relative mb-4 py-2" data-rate-strip>
+                    {# Fade edges #}
+                    <div class="absolute left-0 top-0 bottom-0 w-8 z-10 bg-gradient-to-r from-base-200 to-transparent pointer-events-none"></div>
+                    <div class="absolute right-0 top-0 bottom-0 w-8 z-10 bg-gradient-to-l from-base-200 to-transparent pointer-events-none"></div>
+
+                    {# Ticker container: clips horizontally but allows vertical overflow for hover scale #}
+                    <div class="overflow-x-clip overflow-y-visible">
+                        <div class="flex gap-3 w-max" data-rate-track>
+                            {# Duplicate the icons so the loop is seamless #}
+                            {% for game in data.preview_games %}
+                                {% if game.slug %}
+                                <a href="{% url 'review_hub' game.slug %}" class="w-16 h-16 lg:w-20 lg:h-20 rounded-xl overflow-hidden ring-1 ring-base-300 shrink-0 shadow-md transition-all duration-150 hover:scale-110 hover:ring-warning hover:shadow-lg hover:shadow-warning/20 hover:z-20 block" title="{{ game.name }}">
+                                {% else %}
+                                <div class="w-16 h-16 lg:w-20 lg:h-20 rounded-xl overflow-hidden ring-1 ring-base-300 shrink-0 shadow-md transition-all duration-150 hover:scale-110 hover:ring-warning hover:shadow-lg hover:shadow-warning/20 hover:z-20" title="{{ game.name }}">
+                                {% endif %}
+                                    {% if game.icon_url %}
+                                        <img src="{{ game.icon_url }}" alt="{{ game.name }}" class="w-full h-full object-cover" loading="lazy" />
+                                    {% else %}
+                                        <div class="w-full h-full bg-base-300 flex items-center justify-center">
+                                            <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-base-content/30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="6" width="20" height="12" rx="2"></rect></svg>
+                                        </div>
+                                    {% endif %}
+                                {% if game.slug %}</a>{% else %}</div>{% endif %}
+                            {% endfor %}
+                            {# Second copy for seamless loop #}
+                            {% for game in data.preview_games %}
+                                {% if game.slug %}
+                                <a href="{% url 'review_hub' game.slug %}" class="w-16 h-16 lg:w-20 lg:h-20 rounded-xl overflow-hidden ring-1 ring-base-300 shrink-0 shadow-md transition-all duration-150 hover:scale-110 hover:ring-warning hover:shadow-lg hover:shadow-warning/20 hover:z-20 block" title="{{ game.name }}" tabindex="-1">
+                                {% else %}
+                                <div class="w-16 h-16 lg:w-20 lg:h-20 rounded-xl overflow-hidden ring-1 ring-base-300 shrink-0 shadow-md transition-all duration-150 hover:scale-110 hover:ring-warning hover:shadow-lg hover:shadow-warning/20 hover:z-20" title="{{ game.name }}">
+                                {% endif %}
+                                    {% if game.icon_url %}
+                                        <img src="{{ game.icon_url }}" alt="" class="w-full h-full object-cover" loading="lazy" />
+                                    {% else %}
+                                        <div class="w-full h-full bg-base-300 flex items-center justify-center">
+                                            <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-base-content/30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="6" width="20" height="12" rx="2"></rect></svg>
+                                        </div>
+                                    {% endif %}
+                                {% if game.slug %}</a>{% else %}</div>{% endif %}
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            {% endif %}
+
+            {# Stats #}
+            <p class="text-sm text-base-content/60 text-center mb-3">
+                <span class="font-bold text-warning">{{ data.unrated_count }}</span> platinum{{ data.unrated_count|pluralize }} waiting for your rating.
+            </p>
+
+            {# Progress bar #}
+            <div class="mb-4">
+                <div class="flex items-center justify-between text-xs text-base-content/50 mb-1">
+                    <span>{{ data.rated_count }}/{{ data.total_plats }} rated</span>
+                    <span class="font-bold">{{ data.rate_pct }}%</span>
+                </div>
+                <div class="w-full bg-base-300 rounded-full h-1.5">
+                    <div class="bg-warning rounded-full h-1.5 transition-all duration-500" style="width: {{ data.rate_pct }}%"></div>
+                </div>
+            </div>
+
+            <a href="{% url 'rate_my_games' %}" class="btn btn-warning btn-sm w-full gap-1.5">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+                </svg>
+                Rate Your Games
+            </a>
+        {% else %}
+            <div class="text-center py-4">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-8 h-8 text-success mx-auto mb-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                    <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                </svg>
+                <p class="text-sm text-base-content/60 font-medium">All platinums rated!</p>
+                <p class="text-xs text-base-content/40 mt-1">You have rated all your platinums. Well done, critic!</p>
+            </div>
+        {% endif %}
+    </div>
+</div>

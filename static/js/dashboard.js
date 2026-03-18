@@ -75,6 +75,9 @@
 
             // Calendar Challenge module: paginated month navigation
             this.registerModuleInit('calendar_challenge', (el) => this._initCalendarPagination(el));
+
+            // Rate My Games module: hover-to-scroll preview strip
+            this.registerModuleInit('rate_my_games', (el) => this._initRateStrip(el));
         }
 
         // -----------------------------------------------------------------
@@ -314,6 +317,39 @@
             prevBtn.addEventListener('click', () => { if (currentPage > 0) { currentPage--; render(); } });
             nextBtn.addEventListener('click', () => { if (currentPage < TOTAL_PAGES - 1) { currentPage++; render(); } });
             render();
+        }
+
+        _initRateStrip(el) {
+            const track = el.querySelector('[data-rate-track]');
+            if (!track) return;
+
+            // The track contains two copies of the games (for seamless looping).
+            // Animate translateX from 0 to -halfWidth so it loops perfectly.
+            const halfWidth = track.scrollWidth / 2;
+            if (halfWidth <= 0) return;
+
+            // Speed: ~40px/s feels smooth
+            const duration = halfWidth / 40;
+
+            // Inject keyframes dynamically for this specific track width
+            const id = 'rate-ticker-' + Date.now();
+            const style = document.createElement('style');
+            style.textContent = `
+                @keyframes ${id} {
+                    0% { transform: translateX(0); }
+                    100% { transform: translateX(-${halfWidth}px); }
+                }
+            `;
+            document.head.appendChild(style);
+
+            track.style.animation = `${id} ${duration}s linear infinite`;
+
+            // Pause on hover so users can interact with individual icons
+            const strip = el.querySelector('[data-rate-strip]');
+            if (strip) {
+                strip.addEventListener('mouseenter', () => { track.style.animationPlayState = 'paused'; });
+                strip.addEventListener('mouseleave', () => { track.style.animationPlayState = 'running'; });
+            }
         }
 
         // -----------------------------------------------------------------

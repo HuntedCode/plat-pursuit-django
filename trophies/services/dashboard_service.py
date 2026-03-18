@@ -1048,6 +1048,106 @@ def provide_my_checklists(profile, settings=None):
     }
 
 
+def provide_rarity_showcase(profile, settings=None):
+    """User's rarest earned trophies, ordered by earn rate ascending."""
+    from trophies.models import EarnedTrophy
+
+    settings = settings or {}
+    limit = settings.get('limit', 6)
+
+    rarest_qs = (
+        EarnedTrophy.objects
+        .filter(profile=profile, earned=True, trophy__trophy_earn_rate__gt=0)
+        .select_related('trophy__game__concept')
+        .order_by('trophy__trophy_earn_rate')[:limit]
+    )
+
+    trophies = []
+    for et in rarest_qs:
+        trophy = et.trophy
+        game = trophy.game
+        concept = getattr(game, 'concept', None) if game else None
+        trophies.append({
+            'trophy_name': trophy.trophy_name,
+            'trophy_type': trophy.trophy_type,
+            'trophy_detail': trophy.trophy_detail or '',
+            'trophy_icon_url': trophy.trophy_icon_url or '',
+            'earn_rate': trophy.trophy_earn_rate,
+            'game_name': concept.unified_title if concept else (game.title_name if game else 'Unknown'),
+            'icon_url': concept.concept_icon_url if concept else (game.title_image if game else ''),
+            'np_communication_id': game.np_communication_id if game else None,
+            'earned_date': et.earned_date_time,
+        })
+
+    return {'trophies': trophies, 'has_trophies': bool(trophies)}
+
+
+def provide_rate_my_games(profile):
+    """CTA card showing unrated platinums with preview strip."""
+    from trophies.services.review_hub_service import ReviewHubService
+    from trophies.models import EarnedTrophy, UserConceptRating, Concept
+
+    unrated_count = ReviewHubService.get_unrated_platinum_count(profile)
+    unreviewed_count = ReviewHubService.get_unreviewed_platinum_count(profile)
+
+    # Get platted concept IDs (non-shovelware)
+    plat_concept_ids = list(
+        EarnedTrophy.objects
+        .filter(profile=profile, earned=True, trophy__trophy_type='platinum')
+        .exclude(trophy__game__shovelware_status__in=['auto_flagged', 'manually_flagged'])
+        .values_list('trophy__game__concept_id', flat=True)
+        .distinct()
+    )
+    total_plats = len(plat_concept_ids)
+
+    # Preview: up to 12 unrated game icons for the scrollable strip
+    preview_games = []
+    if unrated_count > 0 and plat_concept_ids:
+        rated_ids = set(
+            UserConceptRating.objects
+            .filter(profile=profile, concept_trophy_group__isnull=True)
+            .values_list('concept_id', flat=True)
+        )
+        unrated_ids = [cid for cid in plat_concept_ids if cid and cid not in rated_ids][:12]
+        if unrated_ids:
+            for c in Concept.objects.filter(id__in=unrated_ids).exclude(slug='').exclude(slug__isnull=True).values('unified_title', 'concept_icon_url', 'slug'):
+                preview_games.append({
+                    'name': c['unified_title'],
+                    'icon_url': c['concept_icon_url'] or '',
+                    'slug': c['slug'],
+                })
+
+    rated_count = max(0, total_plats - unrated_count)
+    return {
+        'unrated_count': unrated_count,
+        'unreviewed_count': unreviewed_count,
+        'rated_count': rated_count,
+        'total_plats': total_plats,
+        'preview_games': preview_games,
+        'has_unrated': unrated_count > 0,
+        'rate_pct': round(rated_count / total_plats * 100) if total_plats else 100,
+    }
+
+
+def provide_trophy_timeline(profile, settings=None):
+    """Key moments from the user's trophy hunting journey."""
+    from trophies.services.timeline_service import build_timeline_events
+
+    settings = settings or {}
+    limit = settings.get('limit', 6)
+
+    events = build_timeline_events(profile, max_events=limit)
+
+    if events is None:
+        return {'has_events': False, 'events': []}
+
+    return {
+        'has_events': True,
+        'events': events[:limit],
+        'total_events': len(events),
+    }
+
+
 # ---------------------------------------------------------------------------
 # Module Registry
 # ---------------------------------------------------------------------------
@@ -1333,21 +1433,56 @@ DASHBOARD_MODULES = [
         'allowed_sizes': ['small', 'medium', 'large'],
     },
     {
-        'slug': 'my_checklists',
-        'name': 'My Checklists',
-        'description': 'Your created guides and checklists you are tracking.',
-        'category': 'community',
-        'template': 'trophies/partials/dashboard/my_checklists.html',
-        'provider': provide_my_checklists,
+        'slug': 'rarity_showcase',
+        'name': 'Rarity Showcase',
+        'description': 'Your rarest earned trophies. Bragging rights for the dedicated hunter.',
+        'category': 'highlights',
+        'template': 'trophies/partials/dashboard/rarity_showcase.html',
+        'provider': provide_rarity_showcase,
         'requires_premium': False,
         'load_strategy': 'lazy',
         'default_order': 17,
-        'default_settings': {'limit': 4},
+        'default_settings': {'limit': 6},
         'configurable_settings': [
-            {'key': 'limit', 'label': 'Items per section', 'type': 'select', 'default': 4,
-             'options': [{'value': 2, 'label': '2'}, {'value': 4, 'label': '4'}, {'value': 6, 'label': '6'}]},
+            {'key': 'limit', 'label': 'Trophies to show', 'type': 'select', 'default': 6,
+             'options': [{'value': 4, 'label': '4'}, {'value': 6, 'label': '6'}, {'value': 8, 'label': '8'}]},
         ],
         'cache_ttl': 600,
+        'default_size': 'medium',
+        'allowed_sizes': ['small', 'medium', 'large'],
+    },
+    {
+        'slug': 'rate_my_games',
+        'name': 'Rate My Games',
+        'description': 'Platinums waiting for your rating. Help the community with your insights!',
+        'category': 'community',
+        'template': 'trophies/partials/dashboard/rate_my_games.html',
+        'provider': provide_rate_my_games,
+        'requires_premium': False,
+        'load_strategy': 'lazy',
+        'default_order': 18,
+        'default_settings': {},
+        'configurable_settings': [],
+        'cache_ttl': 1800,
+        'default_size': 'small',
+        'allowed_sizes': ['small', 'medium'],
+    },
+    {
+        'slug': 'trophy_timeline',
+        'name': 'Trophy Timeline',
+        'description': 'Key moments from your trophy hunting journey. Milestones, firsts, and badges.',
+        'category': 'highlights',
+        'template': 'trophies/partials/dashboard/trophy_timeline.html',
+        'provider': provide_trophy_timeline,
+        'requires_premium': False,
+        'load_strategy': 'lazy',
+        'default_order': 19,
+        'default_settings': {'limit': 6},
+        'configurable_settings': [
+            {'key': 'limit', 'label': 'Events to show', 'type': 'select', 'default': 6,
+             'options': [{'value': 6, 'label': '6'}, {'value': 8, 'label': '8'}, {'value': 12, 'label': '12'}]},
+        ],
+        'cache_ttl': 3600,
         'default_size': 'medium',
         'allowed_sizes': ['small', 'medium', 'large'],
     },
