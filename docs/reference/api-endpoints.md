@@ -243,6 +243,7 @@ Review responses include a `body_html` field containing server-rendered markdown
 | POST | `/api/v1/equip-title/` | Login | Equip/unequip title |
 | POST | `/api/v1/user/timezone/` | Login | Update user timezone |
 | POST | `/api/v1/tracking/site-event/` | No | Track client-side event |
+| POST | `/api/v1/easter-eggs/claim/` | Login | Claim easter egg milestone (server-side mapping) |
 | GET | `/api/v1/game-backgrounds/` | Login | Search game backgrounds |
 
 ### Mobile App

@@ -116,7 +116,7 @@ Badge claiming uses `select_for_update()` on the Badge row to prevent race condi
 - **DEBUG mode payment completion**: In development, `DonationSuccessView` calls `complete_donation()` on redirect because webhooks cannot reach localhost. This is disabled in production.
 - **Badge claim race condition**: `select_for_update()` + `OneToOneField` IntegrityError handling prevents double-claiming. Do not remove either guard.
 - **Denormalized series data on claims**: `series_name` and `series_slug` are stored at claim time because the Badge/series could theoretically be deleted or renamed later.
-- **Milestone idempotency**: `_grant_fundraiser_milestone()` uses `get_or_create()` and only increments `Milestone.earned_count` on first claim. Safe for repeat donors.
+- **Milestone idempotency**: `_grant_fundraiser_milestone()` delegates to the shared `award_manual_milestone()` service which uses `get_or_create()` and only increments `Milestone.earned_count` on first claim. Safe for repeat donors.
 - **PayPal nested response structure**: Capture data is deeply nested in `purchase_units[0].payments.captures[0]`. The `custom_id` field links back to the Donation.
 - **Badge picks are Tier 1 only**: Users can only claim badges at their base tier (Tier 1). Validated in `claim_badge()`.
 - **Anonymous donations**: `is_anonymous` hides identity on donor wall but admin dashboard always shows full donor info.

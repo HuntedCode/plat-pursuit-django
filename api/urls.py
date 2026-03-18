@@ -30,6 +30,7 @@ from .recap_views import (
     RecapShareImagePNGView, RecapSlidePartialView
 )
 from .tracking_views import TrackSiteEventView
+from .easter_egg_views import ClaimEasterEggView
 from .share_temp_views import serve_share_temp_image
 from .game_list_views import (
     GameListCreateView, GameListDetailView, GameListUpdateView, GameListDeleteView,
@@ -220,6 +221,9 @@ urlpatterns = [
 
     # Tracking endpoints
     path('tracking/site-event/', TrackSiteEventView.as_view(), name='tracking-site-event'),
+
+    # Easter egg endpoints
+    path('easter-eggs/claim/', ClaimEasterEggView.as_view(), name='easter-egg-claim'),
 
     # Temp share image serving
     path('share-temp/<str:filename>', serve_share_temp_image, name='share-temp-image'),

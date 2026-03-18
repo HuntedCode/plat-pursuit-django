@@ -377,58 +377,20 @@ class DonationService:
         """
         Grant the fundraiser milestone, title, and Discord role.
 
-        Uses the 'manual' criteria_type milestone pattern: directly creates
-        UserMilestone record. Idempotent for repeat donors.
+        Delegates to the shared award_manual_milestone() service.
+        Idempotent for repeat donors.
         """
-        from trophies.models import Milestone, UserMilestone, UserTitle
-        from trophies.services.badge_service import notify_bot_role_earned
+        from trophies.models import Milestone
+        from trophies.services.milestone_service import award_manual_milestone
 
         profile = donation.profile
         if not profile:
             return
 
         try:
-            milestone = Milestone.objects.select_related('title').get(
-                name='Badge Artwork Patron',
-                criteria_type='manual',
-            )
+            award_manual_milestone(profile, 'Badge Artwork Patron')
         except Milestone.DoesNotExist:
             logger.warning("Fundraiser milestone 'Badge Artwork Patron' not found. Run populate_milestones.")
-            return
-
-        user_milestone, created = UserMilestone.objects.get_or_create(
-            profile=profile,
-            milestone=milestone,
-        )
-
-        if created:
-            # Update earned_count via F() to avoid race conditions
-            Milestone.objects.filter(pk=milestone.pk).update(
-                earned_count=F('earned_count') + 1,
-            )
-
-            # Grant title if milestone has one
-            if milestone.title:
-                UserTitle.objects.get_or_create(
-                    profile=profile,
-                    title=milestone.title,
-                    defaults={'source_type': 'milestone', 'source_id': milestone.pk},
-                )
-
-            # Assign Discord role
-            if (milestone.discord_role_id
-                    and profile.is_discord_verified
-                    and profile.discord_id):
-                transaction.on_commit(
-                    lambda p=profile, r=milestone.discord_role_id:
-                        notify_bot_role_earned(p, r)
-                )
-
-            logger.info(f"Fundraiser milestone granted to {profile.psn_username}")
-
-            # Send milestone notification
-            from notifications.signals import create_milestone_notification
-            create_milestone_notification(user_milestone)
 
     # ──────────────────────────────────────────────
     # Email Notifications

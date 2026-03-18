@@ -193,3 +193,93 @@ def check_all_milestones_for_user(profile, criteria_type=None, criteria_types=No
     invalidate_dashboard_cache(profile.id)
 
     return all_awarded, notified_user_milestones
+
+
+@transaction.atomic
+def award_milestone_directly(profile, milestone, notify=True):
+    """
+    Directly award a milestone to a profile, bypassing handler evaluation.
+
+    Handles all side effects: earned_count increment, UserTitle creation,
+    Discord role assignment, in-app notification, and dashboard cache
+    invalidation.
+
+    Idempotent: if already awarded, created=False and no side effects occur.
+
+    Args:
+        profile: Profile instance
+        milestone: Milestone instance (must have title pre-fetched via
+                   select_related('title') for best performance)
+        notify: If True, send in-app milestone notification
+
+    Returns:
+        tuple: (user_milestone, created) where created is True if newly awarded
+    """
+    from trophies.models import Milestone as MilestoneModel, UserMilestone
+
+    user_milestone, created = UserMilestone.objects.get_or_create(
+        profile=profile,
+        milestone=milestone,
+    )
+
+    if created:
+        MilestoneModel.objects.filter(pk=milestone.pk).update(
+            earned_count=F('earned_count') + 1,
+        )
+
+        if milestone.title:
+            UserTitle.objects.get_or_create(
+                profile=profile,
+                title=milestone.title,
+                defaults={'source_type': 'milestone', 'source_id': milestone.pk},
+            )
+
+        if (milestone.discord_role_id
+                and profile.is_discord_verified
+                and profile.discord_id):
+            transaction.on_commit(
+                lambda p=profile, r=milestone.discord_role_id:
+                    notify_bot_role_earned(p, r)
+            )
+
+        if notify:
+            from notifications.signals import create_milestone_notification
+            transaction.on_commit(
+                lambda um=user_milestone: create_milestone_notification(um)
+            )
+
+        from trophies.services.dashboard_service import invalidate_dashboard_cache
+        invalidate_dashboard_cache(profile.id)
+
+        logger.info(f"Milestone '{milestone.name}' awarded to {profile.psn_username}")
+
+    return user_milestone, created
+
+
+def award_manual_milestone(profile, milestone_name, notify=True):
+    """
+    Look up a manual milestone by name and award it directly.
+
+    Convenience wrapper around award_milestone_directly() for manual
+    milestones (easter eggs, admin awards, fundraiser, etc.).
+
+    Args:
+        profile: Profile instance
+        milestone_name: Exact Milestone.name string
+        notify: If True, send in-app milestone notification
+
+    Returns:
+        tuple: (milestone, created) where created is True if newly awarded
+
+    Raises:
+        Milestone.DoesNotExist: if milestone_name not found or not manual type
+    """
+    from trophies.models import Milestone
+
+    milestone = Milestone.objects.select_related('title').get(
+        name=milestone_name,
+        criteria_type='manual',
+    )
+
+    _, created = award_milestone_directly(profile, milestone, notify=notify)
+    return milestone, created

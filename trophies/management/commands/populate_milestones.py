@@ -302,6 +302,7 @@ MILESTONE_DEFINITIONS = [
     # ── manual (special milestones, granted programmatically) ──────────
     {'name': 'Badge Artwork Patron',  'criteria_type': 'manual', 'criteria_details': {'target': 1}, 'description': 'Donated to the Badge Artwork Fundraiser. Your generosity brings our badges to life.', 'title_name': 'Patron of the Arts'},
     {'name': 'Platinum Race Winner',  'criteria_type': 'manual', 'criteria_details': {'target': 1}, 'description': 'Won an official Plat Pursuit Plat Race! Gotta go fast!', 'title_name': 'Fastest Plat in the West'},
+    {'name': 'Unboxed!',             'criteria_type': 'manual', 'criteria_details': {'target': 1}, 'description': 'The reel spinner giveth. 0.1% of the time, it giveth a knife. Congratulations, you beautiful anomaly.', 'title_name': 'Case Hardened'},
 
     # ── review_count (20 tiers, max 250, 150+ word reviews) ──────────
     {'name': 'First Draft',              'criteria_type': 'review_count', 'criteria_details': {'target': 1},   'description': 'Your first quality review (150+ words). Your voice matters!',                 'title_name': 'Writer'},

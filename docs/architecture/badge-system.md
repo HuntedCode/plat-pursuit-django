@@ -242,6 +242,8 @@ Milestones use a **handler registry pattern**:
 
 5. Calendar month milestones use a parameterized handler: a single `_handle_calendar_month()` function is registered for all 12 `calendar_month_*` types. It shares a pre-fetched `_calendar_month_counts` cache across all months to avoid 12 separate COUNT queries.
 
+6. **Manual milestone awarding**: `award_milestone_directly(profile, milestone)` bypasses handler evaluation and directly creates the `UserMilestone`, increments `earned_count`, creates `UserTitle`, and handles Discord role + notification side effects. `award_manual_milestone(profile, milestone_name)` is a convenience wrapper that looks up the milestone by name (filtered to `criteria_type='manual'`). Used by the easter egg claim API, fundraiser donation service, and `grant_milestone` management command.
+
 **Currently registered handlers** (21 types):
 `manual`, `plat_count`, `psn_linked`, `discord_linked`, `rating_count`, `playtime_hours`, `trophy_count`, `checklist_upvotes`, `badge_count`, `unique_badge_count`, `completion_count`, `stage_count`, `az_progress`, `genre_progress`, `subgenre_progress`, `calendar_month_jan` through `calendar_month_dec`, `calendar_months_total`, `calendar_complete`, `is_premium`, `subscription_months`.
 

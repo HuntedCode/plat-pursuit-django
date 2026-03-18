@@ -1043,24 +1043,29 @@ class MilestoneListView(ProfileHotbarMixin, ListView):
                 })
             elif ct in ONE_OFF_TYPES:
                 # One-off milestones (calendar_complete, psn_linked, etc.)
-                ms = by_type[ct][0]
-                progress_value = progress_dict.get(ms.id, 0)
-                required_value = ms.required_value
-                if required_value > 0:
-                    pct = min((progress_value / required_value) * 100, 100)
-                else:
-                    pct = 100 if ms.id in earned_ids else 0
-                oneoff_cards.append({
-                    'milestone': ms,
-                    'criteria_type': ct,
-                    'display_name': display_name,
-                    'is_earned': ms.id in earned_ids,
-                    'earned_at': earned_dates.get(ms.id),
-                    'progress_value': progress_value,
-                    'required_value': required_value,
-                    'progress_percentage': round(pct, 1),
-                    'earned_count': ms.earned_count,
-                })
+                # Manual milestones are "Feats of Strength": show all of them,
+                # but only display earned ones (hidden until unlocked).
+                milestones_for_type = by_type[ct] if ct == 'manual' else [by_type[ct][0]]
+                for ms in milestones_for_type:
+                    if ct == 'manual' and ms.id not in earned_ids:
+                        continue
+                    progress_value = progress_dict.get(ms.id, 0)
+                    required_value = ms.required_value
+                    if required_value > 0:
+                        pct = min((progress_value / required_value) * 100, 100)
+                    else:
+                        pct = 100 if ms.id in earned_ids else 0
+                    oneoff_cards.append({
+                        'milestone': ms,
+                        'criteria_type': ct,
+                        'display_name': display_name,
+                        'is_earned': ms.id in earned_ids,
+                        'earned_at': earned_dates.get(ms.id),
+                        'progress_value': progress_value,
+                        'required_value': required_value,
+                        'progress_percentage': round(pct, 1),
+                        'earned_count': ms.earned_count,
+                    })
             else:
                 # Tiered ladder
                 ladder = self._build_tier_ladder(
@@ -1087,6 +1092,10 @@ class MilestoneListView(ProfileHotbarMixin, ListView):
                 continue
             types = config['criteria_types']
             cat_milestones = [m for m in milestones if m.criteria_type in types]
+            # Special/manual milestones are only visible when earned,
+            # so total should reflect only earned ones for accurate counts
+            if slug == 'special':
+                cat_milestones = [m for m in cat_milestones if m.id in earned_ids] if profile else []
             total = len(cat_milestones)
             earned = sum(1 for m in cat_milestones if m.id in earned_ids) if profile else 0
             pct = round((earned / total * 100), 1) if total > 0 else 0
@@ -1173,6 +1182,10 @@ class MilestoneListView(ProfileHotbarMixin, ListView):
                 continue
             types = config['criteria_types']
             cat_ms = [m for m in milestones if m.criteria_type in types]
+            # Special/manual milestones are only visible when earned,
+            # so total should reflect only earned ones for accurate tab counts
+            if slug == 'special':
+                cat_ms = [m for m in cat_ms if m.id in earned_ids] if profile else []
             total = len(cat_ms)
             earned = sum(1 for m in cat_ms if m.id in earned_ids) if profile else 0
             tab_data.append({

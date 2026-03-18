@@ -1,10 +1,7 @@
 from django.core.management.base import BaseCommand
-from django.db import transaction
-from django.db.models import F
 
-from trophies.models import Milestone, Profile, UserMilestone, UserTitle
-from trophies.services.badge_service import notify_bot_role_earned
-from notifications.signals import create_milestone_notification
+from trophies.models import Milestone, Profile, UserMilestone
+from trophies.services.milestone_service import award_milestone_directly
 
 
 class Command(BaseCommand):
@@ -81,11 +78,13 @@ class Command(BaseCommand):
                     granted += 1
                 continue
 
-            result = self._grant(profile, milestone, silent)
-            if result == 'granted':
+            _, created = award_milestone_directly(
+                profile, milestone, notify=(not silent)
+            )
+            if created:
                 self.stdout.write(self.style.SUCCESS(f'  {username}: granted'))
                 granted += 1
-            elif result == 'skipped':
+            else:
                 self.stdout.write(f'  {username}: already granted')
                 skipped += 1
 
@@ -94,37 +93,3 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS(
             f'Done. {label}: {granted}, Already had: {skipped}, Errors: {errors}'
         ))
-
-    def _grant(self, profile, milestone, silent):
-        with transaction.atomic():
-            user_milestone, created = UserMilestone.objects.get_or_create(
-                profile=profile,
-                milestone=milestone,
-            )
-
-            if not created:
-                return 'skipped'
-
-            Milestone.objects.filter(pk=milestone.pk).update(
-                earned_count=F('earned_count') + 1,
-            )
-
-            if milestone.title:
-                UserTitle.objects.get_or_create(
-                    profile=profile,
-                    title=milestone.title,
-                    defaults={'source_type': 'milestone', 'source_id': milestone.pk},
-                )
-
-            if (milestone.discord_role_id
-                    and profile.is_discord_verified
-                    and profile.discord_id):
-                transaction.on_commit(
-                    lambda p=profile, r=milestone.discord_role_id:
-                        notify_bot_role_earned(p, r)
-                )
-
-        if not silent:
-            create_milestone_notification(user_milestone)
-
-        return 'granted'
