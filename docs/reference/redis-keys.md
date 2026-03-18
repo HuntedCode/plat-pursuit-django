@@ -50,9 +50,7 @@ Workers consume from all 5 queues via priority-ordered `brpop`.
 | `sync_queued_games:{profile_id}` | Set | 7200s (2h) | `np_communication_id` values already queued this cycle (deduplication) |
 | `pending_sync_complete:{profile_id}` | String (JSON) | 21600s (6h) | `{touched_profilegame_ids, queue_name}` waiting for jobs to drain |
 | `sync_complete_in_progress:{profile_id}` | String (NX lock) | 1800s (30m) | Prevents duplicate concurrent `_job_sync_complete` runs |
-| `sync_complete_semaphore` | String (int) | None | Global counter of currently running sync_complete operations |
-| `sync_complete_holder:{profile_id}` | String | 1800s (30m) | Per-holder lease for semaphore crash safety |
-| `sync:sync_complete_max_concurrent` | String (int) | None | Configurable max concurrent sync_completes (default: 12) |
+| `stuck_sync_check_lock` | String (NX lock) | 90s | Ensures only one TK instance runs stuck-sync detection per cycle |
 
 **Files**: `trophies/psn_manager.py`, `trophies/token_keeper.py`, `trophies/views/sync_views.py`
 
@@ -261,9 +259,7 @@ The `redis_admin.py` management command provides targeted flush operations for o
 |------|-------------|
 | `--flush-index` | All homepage keys: `featured_games_*`, `featured_guide_*`, `playing_now_*`, `featured_badges_*`, `featured_checklists_*`, `whats_new_*`, `latest_badges_*` |
 | `--flush-game-page {np_id}` | `game:imageurls:{np_id}`, `game:trophygroups:{np_id}`, `game:stats:{np_id}:*` |
-| `--flush-token-keeper` | All 5 job queues + `profile_jobs:*`, `deferred_jobs:*`, `pending_sync_complete:*`, `sync_started_at:*`, `sync_trophies_lock:*`, `shovelware_concept_lock:*`, `sync_orchestrator_pending:*`, `sync_queued_games:*`, `sync_complete_in_progress:*`, `sync_complete_holder:*`, `sync_complete_semaphore`, `active_profiles`, `site:high_sync_volume` |
-| `--get-sync-complete-max` | (read-only) Shows current max concurrent sync_complete setting and active count |
-| `--set-sync-complete-max N` | Sets `sync:sync_complete_max_concurrent` to N (takes effect immediately, no restart needed) |
+| `--flush-token-keeper` | All 5 job queues + `profile_jobs:*`, `deferred_jobs:*`, `pending_sync_complete:*`, `sync_started_at:*`, `sync_trophies_lock:*`, `shovelware_concept_lock:*`, `sync_orchestrator_pending:*`, `sync_queued_games:*`, `sync_complete_in_progress:*`, `active_profiles`, `site:high_sync_volume` |
 | `--flush-complete-lock {profile_id}` | `pending_sync_complete:{id}`, `sync_started_at:{id}`, `sync_orchestrator_pending:{id}`, `sync_queued_games:{id}`, `sync_complete_in_progress:{id}` |
 | `--flush-dashboard {profile_id}` | `dashboard:mod:{slug}:{id}` for each registered module |
 | `--flush-concept {concept_id}` | Game page keys for all games under the concept |

@@ -313,20 +313,9 @@ Worker threads rely on Django's `CONN_MAX_AGE=600` for connection lifecycle mana
 
 **History**: Previously, every job worker iteration called `connection.close()` in the `finally` block to prevent pool exhaustion. This was removed because it forced a new TCP+TLS handshake per job, causing significant CPU overhead on the database at scale (24 workers = dozens of TLS handshakes/second).
 
-### sync_complete Concurrency Semaphore
+### Stuck Syncing Detection (Single-Instance)
 
-A Redis-based semaphore limits how many `sync_complete` operations can run concurrently across all TokenKeeper instances. Each sync_complete runs multiple heavy aggregate queries (COUNT/SUM/MAX with GROUP BY) that can saturate database CPU when too many run simultaneously.
-
-**Redis keys:**
-- `sync_complete_semaphore` (string/int, no TTL): Global counter of currently running sync_completes
-- `sync_complete_holder:{profile_id}` (string, 1800s TTL): Per-holder lease for crash safety
-- `sync:sync_complete_max_concurrent` (string/int, no TTL): Configurable max (env: `SYNC_COMPLETE_MAX_CONCURRENT`, default: 12)
-
-**Behavior when full**: The job stores its data back to `pending_sync_complete:{profile_id}`, waits 3 seconds, then re-queues to the orchestrator queue. The worker thread is briefly occupied during the wait, which is intentional to apply back-pressure.
-
-**Crash safety**: Each holder sets a TTL-guarded key. The health loop runs `_reconcile_sync_complete_semaphore()` every 60 seconds, counting actual holder keys via SCAN and correcting the counter if it drifts (e.g., after a worker crash where the holder key expired but the counter was never decremented).
-
-**Tuning**: Use `python manage.py redis_admin --set-sync-complete-max N` to adjust at runtime without restarting TokenKeeper. Use `--get-sync-complete-max` to see current setting and active count.
+The `_check_stuck_syncing_profiles()` health loop check uses a Redis lock (`stuck_sync_check_lock`, 90s TTL, NX) to ensure only one TokenKeeper instance runs the check per cycle, preventing duplicate `sync_complete` job assignments when multiple TK instances are active.
 
 ### API Audit Log IP Lookup
 

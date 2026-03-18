@@ -220,17 +220,9 @@ class TokenKeeper:
             time.sleep(self.stats_interval)
             try:
                 stats = self.stats
-                max_concurrent = int(
-                    redis_client.get("sync:sync_complete_max_concurrent")
-                    or os.getenv("SYNC_COMPLETE_MAX_CONCURRENT", 12)
-                )
                 stats_with_id = {
                     "machine_id": self.machine_id,
                     "instances": stats,
-                    "sync_complete_semaphore": {
-                        "current": int(redis_client.get("sync_complete_semaphore") or 0),
-                        "max": max_concurrent,
-                    },
                 }
                 redis_client.publish(f"token_keeper_stats:{self.machine_id}", json.dumps(stats_with_id))
                 redis_client.set(f"token_keeper_latest_stats:{self.machine_id}", json.dumps(stats_with_id), ex=60)
@@ -372,8 +364,6 @@ class TokenKeeper:
             # Check for stuck syncing profiles on every health loop iteration
             self._check_stuck_syncing_profiles()
             self._check_high_sync_volume()
-            # Reconcile sync_complete semaphore to handle crashed workers
-            self._reconcile_sync_complete_semaphore()
             for group_id, group in self.group_instances.items():
                 for instance_id, inst in group['instances'].items():
                     self._check_and_refresh(inst)
@@ -633,6 +623,9 @@ class TokenKeeper:
 
     def _check_stuck_syncing_profiles(self):
         """Periodically check for profiles stuck in 'syncing' state with no pending jobs."""
+        # Only one TK instance should run this check per cycle
+        if not redis_client.set("stuck_sync_check_lock", self.machine_id, nx=True, ex=90):
+            return
         try:
             stuck_profiles = Profile.objects.filter(sync_status='syncing')
             stuck_count = 0
@@ -897,106 +890,10 @@ class TokenKeeper:
         instance.last_health = 0
         time.sleep(60)
         instance.last_health = time.time()
-        
-    # --- sync_complete concurrency semaphore ---
-
-    def _acquire_sync_complete_slot(self, profile_id: int) -> bool:
-        """Try to acquire a global sync_complete semaphore slot.
-
-        Limits how many sync_complete operations can run concurrently across
-        all TokenKeeper instances. Uses INCR/DECR with per-holder TTL keys
-        for crash safety.
-
-        Returns True if acquired, False if the semaphore is full.
-        """
-        max_concurrent = int(
-            redis_client.get("sync:sync_complete_max_concurrent")
-            or os.getenv("SYNC_COMPLETE_MAX_CONCURRENT", 12)
-        )
-
-        holder_key = f"sync_complete_holder:{profile_id}"
-
-        # Already holding a slot (re-entrant call, defensive)
-        if redis_client.exists(holder_key):
-            return True
-
-        # Atomically increment and check
-        current = redis_client.incr("sync_complete_semaphore")
-
-        if current <= max_concurrent:
-            # Successfully acquired: set holder lease with TTL for crash safety
-            redis_client.set(holder_key, "1", ex=1800)
-            return True
-        else:
-            # Over limit: decrement back and reject
-            redis_client.decr("sync_complete_semaphore")
-            return False
-
-    def _release_sync_complete_slot(self, profile_id: int):
-        """Release the global sync_complete semaphore slot."""
-        holder_key = f"sync_complete_holder:{profile_id}"
-        if redis_client.exists(holder_key):
-            redis_client.delete(holder_key)
-            redis_client.decr("sync_complete_semaphore")
-            # Floor the counter at 0 to prevent drift from edge cases
-            current = int(redis_client.get("sync_complete_semaphore") or 0)
-            if current < 0:
-                redis_client.set("sync_complete_semaphore", 0)
-
-    def _reconcile_sync_complete_semaphore(self):
-        """Reconcile the semaphore counter against actual holder keys.
-
-        If a worker crashes while holding a semaphore slot, the holder key
-        expires (30 min TTL) but the counter won't be decremented.
-        This check fixes the drift. Called from the health loop every 60s.
-        """
-        try:
-            actual_holders = 0
-            cursor = 0
-            while True:
-                cursor, keys = redis_client.scan(
-                    cursor=cursor, match="sync_complete_holder:*", count=100
-                )
-                actual_holders += len(keys)
-                if cursor == 0:
-                    break
-
-            current_counter = int(redis_client.get("sync_complete_semaphore") or 0)
-
-            if current_counter != actual_holders:
-                logger.warning(
-                    f"Sync complete semaphore drift detected: "
-                    f"counter={current_counter}, actual_holders={actual_holders}. Correcting."
-                )
-                redis_client.set("sync_complete_semaphore", actual_holders)
-        except Exception as e:
-            logger.error(f"Error reconciling sync_complete semaphore: {e}")
 
     # Job Requests
 
     def _job_sync_complete(self, profile_id: int, touched_profilegame_ids: list[int], queue_name: str):
-        # Global concurrency limiter: prevent too many sync_completes from
-        # running simultaneously across all TokenKeeper instances.
-        if not self._acquire_sync_complete_slot(profile_id):
-            logger.info(
-                f"sync_complete for profile {profile_id} throttled "
-                f"(global semaphore full), re-queuing with delay"
-            )
-            pending_key = f"pending_sync_complete:{profile_id}"
-            pending_data = json.dumps({
-                'touched_profilegame_ids': touched_profilegame_ids,
-                'queue_name': queue_name
-            })
-            redis_client.set(pending_key, pending_data, ex=21600)
-            time.sleep(3)
-            PSNManager.assign_job(
-                'sync_complete',
-                args=[touched_profilegame_ids, queue_name],
-                profile_id=profile_id,
-                priority_override='orchestrator'
-            )
-            return
-
         sync_complete_key = f"sync_complete_in_progress:{profile_id}"
 
         # Atomic guard: only one sync_complete runs at a time per profile.
@@ -1009,7 +906,6 @@ class TokenKeeper:
                 'queue_name': queue_name
             })
             redis_client.set(pending_key, pending_data, ex=21600)
-            self._release_sync_complete_slot(profile_id)
             return
 
         try:
@@ -1017,7 +913,6 @@ class TokenKeeper:
         except Profile.DoesNotExist:
             logger.error(f"Profile {profile_id} does not exist.")
             redis_client.delete(sync_complete_key)
-            self._release_sync_complete_slot(profile_id)
             return
         job_type = 'sync_complete'
 
@@ -1414,7 +1309,6 @@ class TokenKeeper:
             # Always clear the sync_complete in-progress flag, even on error
             redis_client.delete(sync_complete_key)
             redis_client.delete(f"sync_started_at:{profile_id}")
-            self._release_sync_complete_slot(profile_id)
 
     def _job_handle_privacy_error(self, profile_id: int):
         try:
