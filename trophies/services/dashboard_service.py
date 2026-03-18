@@ -2265,11 +2265,6 @@ def invalidate_dashboard_cache(profile_id):
     if keys_to_delete:
         cache.delete_many(keys_to_delete)
 
-    # Fallback: if tracker was empty (pre-deploy cache entries), use
-    # pattern delete for this profile only. Safe because it's a single
-    # narrow pattern per call, not the full-keyspace SCAN of the old approach.
-    if not tracked_keys:
-        try:
-            cache.delete_pattern(f"dashboard:mod:*:{profile_id}:*")
-        except Exception:
-            logger.debug("Pattern-based cache fallback failed for profile %s", profile_id)
+    # Pre-tracker cache entries (set before this deploy) are NOT explicitly
+    # cleared here. They expire naturally via their TTL (max 1 hour).
+    # This avoids Redis SCAN which caused production worker timeouts.
