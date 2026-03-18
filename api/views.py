@@ -7,6 +7,7 @@ from api.permissions import IsDiscordBot
 from .serializers import GenerateCodeSerializer, VerifySerializer, ProfileSerializer, TrophyCaseSerializer, CommentSerializer, CommentCreateSerializer
 from trophies.models import Profile, Comment, Concept
 from trophies.services.comment_service import CommentService
+from django.conf import settings
 from django.core.paginator import Paginator
 from django.db.models import F
 from django.utils import timezone
@@ -25,10 +26,21 @@ from api.utils import safe_int
 
 logger = logging.getLogger('psn_api')
 
+
+def bot_exempt_rate(default_rate):
+    """Return a rate function that exempts the Discord bot from rate limiting."""
+    def rate_fn(group, request):
+        if hasattr(request, 'auth') and hasattr(request.auth, 'key'):
+            if request.auth.key == settings.BOT_API_KEY:
+                return None
+        return default_rate
+    return rate_fn
+
+
 class GenerateCodeView(APIView):
     permission_classes = [IsAuthenticated, IsDiscordBot]
 
-    @method_decorator(ratelimit(key='user', rate='5/m', method='POST', block=True))
+    @method_decorator(ratelimit(key='user', rate=bot_exempt_rate('5/m'), method='POST', block=True))
     def post(self, request):
         serializer = GenerateCodeSerializer(data=request.data)
         if serializer.is_valid():
@@ -55,7 +67,7 @@ class GenerateCodeView(APIView):
 class VerifyView(APIView):
     permission_classes = [IsAuthenticated, IsDiscordBot]
 
-    @method_decorator(ratelimit(key='user', rate='3/m', method='POST', block=True))
+    @method_decorator(ratelimit(key='user', rate=bot_exempt_rate('3/m'), method='POST', block=True))
     def post(self, request):
         serializer = VerifySerializer(data=request.data)
         if serializer.is_valid():
@@ -149,7 +161,7 @@ class SyncRolesView(APIView):
     """
     permission_classes = [IsAuthenticated, IsDiscordBot]
 
-    @method_decorator(ratelimit(key='user', rate='5/m', method='POST', block=True))
+    @method_decorator(ratelimit(key='user', rate=bot_exempt_rate('5/m'), method='POST', block=True))
     def post(self, request):
         discord_id = request.data.get('discord_id')
         if not discord_id:
@@ -184,7 +196,7 @@ class RecheckBadgesView(APIView):
     """
     permission_classes = [IsAuthenticated, IsDiscordBot]
 
-    @method_decorator(ratelimit(key='user', rate='5/m', method='POST', block=True))
+    @method_decorator(ratelimit(key='user', rate=bot_exempt_rate('5/m'), method='POST', block=True))
     def post(self, request):
         from trophies.models import UserBadge, Badge
 
@@ -233,7 +245,7 @@ class RecheckBadgesView(APIView):
 class RefreshView(APIView):
     permission_classes = [IsAuthenticated, IsDiscordBot]
 
-    @method_decorator(ratelimit(key='user', rate='5/m', method='POST', block=True))
+    @method_decorator(ratelimit(key='user', rate=bot_exempt_rate('5/m'), method='POST', block=True))
     def post(self, request):
         discord_id = request.data.get('discord_id')
         admin_override = request.data.get('admin_override', False)
