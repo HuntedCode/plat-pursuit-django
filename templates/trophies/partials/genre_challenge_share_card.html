@@ -91,7 +91,7 @@ Grid layout: 4x4 for both landscape and portrait
                 {% for row in slot_rows %}
                 <div style="display: flex; gap: 5px;">
                     {% for slot in row %}
-                    <div style="width: 270px; height: 80px; border-radius: 6px; position: relative; overflow: hidden; box-sizing: border-box; flex-shrink: 0;
+                    <div style="width: 270px; height: 74px; border-radius: 6px; position: relative; overflow: hidden; box-sizing: border-box; flex-shrink: 0;
                         {% if slot.state == 'completed' %}background: #2a2e34; border: 3px solid #fbbf24; box-shadow: 0 0 10px rgba(251, 191, 36, 0.3), inset 0 0 6px rgba(251, 191, 36, 0.1);
                         {% elif slot.state == 'assigned' %}background: #2a2e34; border: 2px solid rgba(103, 209, 248, 0.4);
                         {% else %}background: rgba(42, 46, 52, 0.6); border: 2px solid #1a1b1f;{% endif %}">
@@ -213,7 +213,7 @@ Grid layout: 4x4 for both landscape and portrait
             </div>
 
             {# 4x4 Genre Grid #}
-            <div style="display: flex; flex-direction: column; gap: 7px; align-items: center; flex: 1;">
+            <div style="display: flex; flex-direction: column; gap: 7px; align-items: center; justify-content: center; flex: 1;">
                 {% for row in slot_rows %}
                 <div style="display: flex; gap: 7px;">
                     {% for slot in row %}

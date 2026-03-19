@@ -250,4 +250,5 @@ class ShareableDataService:
             'tier1_badges': tier1_badges,
             'user_rating': user_rating,
             'is_shovelware': game.is_shovelware,
+            'defined_trophies': game.defined_trophies or {},
         }

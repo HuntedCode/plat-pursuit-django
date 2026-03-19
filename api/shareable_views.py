@@ -152,7 +152,7 @@ class ShareableImageHTMLView(APIView):
         first_played_date_time = format_share_date(metadata.get('first_played_date_time'))
         earned_date_time = format_share_date(metadata.get('earned_date_time'))
 
-        return {
+        context = {
             'format': format_type,
             'game_name': metadata.get('game_name', 'Unknown Game'),
             'username': metadata.get('username', 'Player'),
@@ -178,6 +178,22 @@ class ShareableImageHTMLView(APIView):
             'avatar_url': avatar_url,
             'is_plus': is_plus,
         }
+
+        # Compute per-game trophy breakdown percentages
+        defined = metadata.get('defined_trophies', {})
+        total_defined = sum(defined.values()) if defined else 0
+        if total_defined > 0:
+            context['game_total_trophies'] = total_defined
+            context['game_bronze_count'] = defined.get('bronze', 0)
+            context['game_silver_count'] = defined.get('silver', 0)
+            context['game_gold_count'] = defined.get('gold', 0)
+            context['game_plat_count'] = defined.get('platinum', 0)
+            context['pct_bronzes'] = round(defined.get('bronze', 0) / total_defined * 100)
+            context['pct_silvers'] = round(defined.get('silver', 0) / total_defined * 100)
+            context['pct_golds'] = round(defined.get('gold', 0) / total_defined * 100)
+            context['pct_plats'] = round(defined.get('platinum', 0) / total_defined * 100)
+
+        return context
 
 
 

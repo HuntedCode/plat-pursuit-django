@@ -634,7 +634,8 @@ class NotificationShareImageHTMLView(APIView):
             logger.warning(f"[SHARE] Failed to cache trophy icon: {trophy_icon_url}")
 
         # Fetch LIVE badge data from database (metadata may be stale)
-        badge_xp, tier1_badges = self._get_live_badge_data(request.user.profile, metadata)
+        profile = request.user.profile
+        badge_xp, tier1_badges = self._get_live_badge_data(profile, metadata)
         badge_xp = to_int(badge_xp)
         processed_badges = process_badge_images(tier1_badges)
 
@@ -642,7 +643,13 @@ class NotificationShareImageHTMLView(APIView):
         first_played_date_time = format_share_date(metadata.get('first_played_date_time'))
         earned_date_time = format_share_date(metadata.get('earned_date_time'))
 
-        return {
+        # Cache avatar for identity bar
+        avatar_url = ''
+        raw_avatar = profile.avatar_url or ''
+        if raw_avatar:
+            avatar_url = ShareImageCache.fetch_and_cache(raw_avatar) or ''
+
+        context = {
             'format': format_type,
             'game_name': metadata.get('game_name', 'Unknown Game'),
             'username': metadata.get('username', 'Player'),
@@ -664,8 +671,34 @@ class NotificationShareImageHTMLView(APIView):
             'earned_year': to_int(metadata.get('earned_year', 0)),
             'badge_xp': badge_xp,
             'tier1_badges': processed_badges,
-            'user_rating': self._get_live_user_rating(request.user.profile, metadata),
+            'user_rating': self._get_live_user_rating(profile, metadata),
+            'avatar_url': avatar_url,
+            'is_plus': getattr(profile, 'is_plus', False),
         }
+
+        # Compute per-game trophy breakdown percentages
+        game_id = metadata.get('game_id')
+        if game_id:
+            try:
+                from trophies.models import Game
+                game = Game.objects.filter(id=game_id).only('defined_trophies').first()
+                if game:
+                    defined = game.defined_trophies or {}
+                    total_defined = sum(defined.values()) if defined else 0
+                    if total_defined > 0:
+                        context['game_total_trophies'] = total_defined
+                        context['game_bronze_count'] = defined.get('bronze', 0)
+                        context['game_silver_count'] = defined.get('silver', 0)
+                        context['game_gold_count'] = defined.get('gold', 0)
+                        context['game_plat_count'] = defined.get('platinum', 0)
+                        context['pct_bronzes'] = round(defined.get('bronze', 0) / total_defined * 100)
+                        context['pct_silvers'] = round(defined.get('silver', 0) / total_defined * 100)
+                        context['pct_golds'] = round(defined.get('gold', 0) / total_defined * 100)
+                        context['pct_plats'] = round(defined.get('platinum', 0) / total_defined * 100)
+            except Exception:
+                pass  # Non-critical: card renders fine without breakdown bar
+
+        return context
 
     @staticmethod
     def _get_live_user_rating(profile, metadata):
