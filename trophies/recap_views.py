@@ -128,6 +128,15 @@ class RecapSlideView(LoginRequiredMixin, RecapSyncGateMixin, ProfileHotbarMixin,
         if (year > now_local.year) or (year == now_local.year and month > now_local.month):
             raise Http404("Cannot view recap for future months")
 
+        # Mark recap as viewed (for dashboard share card gating)
+        from trophies.models import MonthlyRecap
+        updated = MonthlyRecap.objects.filter(
+            profile=profile, year=year, month=month, has_been_viewed=False
+        ).update(has_been_viewed=True)
+        if updated:
+            from trophies.services.dashboard_service import invalidate_dashboard_cache
+            invalidate_dashboard_cache(profile.id)
+
         return super().get(request, *args, year=year, month=month, **kwargs)
 
     def get_context_data(self, year, month, **kwargs):

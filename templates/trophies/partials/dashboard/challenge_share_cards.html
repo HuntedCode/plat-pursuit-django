@@ -1,0 +1,64 @@
+{% load custom_filters %}
+{# Dashboard module: Challenge Share Cards. Up to 3 challenge card previews with theme pickers. #}
+{# JS init via _initShareCards in dashboard.js. Themes from window.GRADIENT_THEMES. #}
+<div class="card bg-base-200/80 border-2 border-base-300 shadow-lg shadow-neutral">
+    <div class="card-body p-5 lg:p-7">
+        {# Header #}
+        <div class="flex items-center justify-between mb-3">
+            <h2 class="card-title text-base lg:text-lg font-bold flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path>
+                    <polyline points="16 6 12 2 8 6"></polyline>
+                    <line x1="12" y1="2" x2="12" y2="15"></line>
+                </svg>
+                Challenge Cards
+            </h2>
+        </div>
+
+        {% if data.has_challenges %}
+            <div class="space-y-5">
+                {% for type, challenge in data.challenges.items %}
+                    <div>
+                        {# Challenge label + download #}
+                        <div class="flex items-center justify-between mb-1.5">
+                            <span class="text-xs font-semibold text-base-content/60">
+                                {% if type == 'az' %}A-Z Challenge{% elif type == 'calendar' %}Platinum Calendar{% else %}Genre Challenge{% endif %}
+                                {% if challenge.is_complete %}<span class="badge badge-success badge-xs ml-1">Complete</span>{% endif %}
+                            </span>
+                            <button type="button" class="btn btn-accent btn-xs share-card-download gap-1"
+                                    data-png-url="/api/v1/challenges/{{ type }}/{{ challenge.challenge_id }}/share/png/">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                                Download
+                            </button>
+                        </div>
+
+                        {# Preview #}
+                        <div class="share-card-preview relative w-full rounded-lg overflow-hidden border border-base-content/10 bg-base-300/50"
+                             data-share-html-url="/api/v1/challenges/{{ type }}/{{ challenge.challenge_id }}/share/html/"
+                             data-share-png-url="/api/v1/challenges/{{ type }}/{{ challenge.challenge_id }}/share/png/"
+                             style="aspect-ratio: 1200/630;">
+                            <div class="share-card-loading absolute inset-0 flex items-center justify-center">
+                                <span class="loading loading-spinner loading-sm text-accent"></span>
+                            </div>
+                            <div class="share-card-content absolute inset-0 origin-top-left" style="display: none;"></div>
+                        </div>
+
+                        {# Theme swatches #}
+                        <div class="share-card-swatches mt-1.5"></div>
+                    </div>
+                {% endfor %}
+            </div>
+        {% else %}
+            <div class="text-center py-6">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-10 h-10 text-accent/30 mx-auto mb-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path>
+                    <polyline points="16 6 12 2 8 6"></polyline>
+                    <line x1="12" y1="2" x2="12" y2="15"></line>
+                </svg>
+                <p class="text-sm text-base-content/50">No challenges yet.</p>
+                <p class="text-xs text-base-content/40 mt-1">Start a challenge to unlock share cards!</p>
+                <a href="{% url 'challenges_browse' %}" class="btn btn-accent btn-xs mt-3">Browse Challenges</a>
+            </div>
+        {% endif %}
+    </div>
+</div>

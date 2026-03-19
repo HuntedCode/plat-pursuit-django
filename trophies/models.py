@@ -3023,6 +3023,10 @@ class MonthlyRecap(models.Model):
         blank=True,
         help_text='Timestamp when recap email was sent'
     )
+    has_been_viewed = models.BooleanField(
+        default=False,
+        help_text='True once the user has viewed this recap on the slides page'
+    )
     notification_sent = models.BooleanField(
         default=False,
         help_text='True if recap in-app notification has been sent to user'

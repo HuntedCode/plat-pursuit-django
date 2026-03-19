@@ -1206,25 +1206,6 @@ def provide_rate_my_games(profile):
     }
 
 
-def provide_trophy_timeline(profile, settings=None):
-    """Key moments from the user's trophy hunting journey."""
-    from trophies.services.timeline_service import build_timeline_events
-
-    settings = settings or {}
-    limit = settings.get('limit', 6)
-
-    events = build_timeline_events(profile, max_events=limit)
-
-    if events is None:
-        return {'has_events': False, 'events': []}
-
-    return {
-        'has_events': True,
-        'events': events[:limit],
-        'total_events': len(events),
-    }
-
-
 def provide_badge_showcase(profile, settings=None):
     """
     Badge showcase: shows the user's displayed badge and all earned badges
@@ -1320,6 +1301,78 @@ def provide_profile_card_preview(profile, settings=None):
         'is_premium': is_premium,
         'themes': themes,
         'shareables_url': reverse('my_shareables') + '?tab=profile_card',
+    }
+
+
+def provide_recent_platinum_card(profile):
+    """Most recent platinum share card data for client-side HTML preview."""
+    from trophies.models import EarnedTrophy
+
+    et = (
+        EarnedTrophy.objects
+        .filter(profile=profile, earned=True, trophy__trophy_type='platinum')
+        .select_related('trophy__game__concept')
+        .order_by('-earned_date_time')
+        .first()
+    )
+
+    if not et:
+        return {'has_platinum': False}
+
+    trophy = et.trophy
+    game = trophy.game
+    concept = getattr(game, 'concept', None) if game else None
+
+    return {
+        'has_platinum': True,
+        'earned_trophy_id': et.id,
+        'game_name': concept.unified_title if concept else (game.title_name if game else 'Unknown'),
+        'icon_url': concept.concept_icon_url if concept else (game.title_image if game else ''),
+        'trophy_name': trophy.trophy_name,
+        'earn_rate': trophy.trophy_earn_rate,
+        'earned_date': et.earned_date_time,
+    }
+
+
+def provide_challenge_share_cards(profile):
+    """Challenge IDs for client-side share card HTML previews."""
+    challenges = {}
+    for ctype in ('az', 'calendar', 'genre'):
+        challenge = _find_challenge(profile, ctype)
+        if challenge:
+            challenges[ctype] = {
+                'challenge_id': challenge.id,
+                'challenge_name': challenge.name,
+                'is_complete': challenge.is_complete,
+            }
+
+    return {
+        'challenges': challenges,
+        'has_challenges': bool(challenges),
+    }
+
+
+def provide_recap_share_card(profile):
+    """Most recent finalized recap data for client-side share card preview."""
+    from trophies.models import MonthlyRecap
+    import calendar as cal_module
+
+    recap = (
+        MonthlyRecap.objects
+        .filter(profile=profile, is_finalized=True)
+        .order_by('-year', '-month')
+        .first()
+    )
+
+    if not recap:
+        return {'has_recap': False}
+
+    return {
+        'has_recap': True,
+        'has_been_viewed': recap.has_been_viewed,
+        'year': recap.year,
+        'month': recap.month,
+        'month_name': f"{cal_module.month_name[recap.month]} {recap.year}",
     }
 
 
@@ -1659,25 +1712,6 @@ DASHBOARD_MODULES = [
         'allowed_sizes': ['small', 'medium'],
     },
     {
-        'slug': 'trophy_timeline',
-        'name': 'Trophy Timeline',
-        'description': 'Key moments from your trophy hunting journey. Milestones, firsts, and badges.',
-        'category': 'highlights',
-        'template': 'trophies/partials/dashboard/trophy_timeline.html',
-        'provider': provide_trophy_timeline,
-        'requires_premium': False,
-        'load_strategy': 'lazy',
-        'default_order': 19,
-        'default_settings': {'limit': 6},
-        'configurable_settings': [
-            {'key': 'limit', 'label': 'Events to show', 'type': 'select', 'default': 6,
-             'options': [{'value': 6, 'label': '6'}, {'value': 8, 'label': '8'}, {'value': 12, 'label': '12'}]},
-        ],
-        'cache_ttl': 3600,
-        'default_size': 'medium',
-        'allowed_sizes': ['small', 'medium', 'large'],
-    },
-    {
         'slug': 'badge_showcase',
         'name': 'Badge Showcase',
         'description': 'Choose your featured badge. This badge appears on your profile card and public profile.',
@@ -1706,6 +1740,54 @@ DASHBOARD_MODULES = [
         'default_settings': {},
         'configurable_settings': [],
         'cache_ttl': 0,
+        'default_size': 'large',
+        'allowed_sizes': ['medium', 'large'],
+    },
+    {
+        'slug': 'recent_platinum_card',
+        'name': 'Latest Platinum',
+        'description': 'Preview and download the share card for your most recent platinum.',
+        'category': 'share',
+        'template': 'trophies/partials/dashboard/recent_platinum_card.html',
+        'provider': provide_recent_platinum_card,
+        'requires_premium': False,
+        'load_strategy': 'lazy',
+        'default_order': 12,
+        'default_settings': {},
+        'configurable_settings': [],
+        'cache_ttl': 600,
+        'default_size': 'large',
+        'allowed_sizes': ['medium', 'large'],
+    },
+    {
+        'slug': 'challenge_share_cards',
+        'name': 'Challenge Cards',
+        'description': 'Preview and download share cards for your active challenges.',
+        'category': 'share',
+        'template': 'trophies/partials/dashboard/challenge_share_cards.html',
+        'provider': provide_challenge_share_cards,
+        'requires_premium': False,
+        'load_strategy': 'lazy',
+        'default_order': 13,
+        'default_settings': {},
+        'configurable_settings': [],
+        'cache_ttl': 600,
+        'default_size': 'large',
+        'allowed_sizes': ['medium', 'large'],
+    },
+    {
+        'slug': 'recap_share_card',
+        'name': 'Recap Card',
+        'description': 'Preview and download the share card for your latest monthly recap.',
+        'category': 'share',
+        'template': 'trophies/partials/dashboard/recap_share_card.html',
+        'provider': provide_recap_share_card,
+        'requires_premium': False,
+        'load_strategy': 'lazy',
+        'default_order': 14,
+        'default_settings': {},
+        'configurable_settings': [],
+        'cache_ttl': 1800,
         'default_size': 'large',
         'allowed_sizes': ['medium', 'large'],
     },
@@ -2001,7 +2083,7 @@ CATEGORY_SHORT_NAMES = {
 }
 
 # Default tab order and icons (SVG path data for inline rendering)
-DEFAULT_TAB_ORDER = ['premium', 'at_a_glance', 'progress', 'badges', 'share', 'highlights']
+DEFAULT_TAB_ORDER = ['premium', 'at_a_glance', 'progress', 'badges', 'highlights', 'share']
 
 TAB_ICONS = {
     'at_a_glance': 'trophy_cup',

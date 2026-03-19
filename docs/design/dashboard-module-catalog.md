@@ -14,11 +14,11 @@ The dashboard serves as the index page for all logged-in users. Modules are orga
 
 | Status | Count |
 |--------|-------|
-| Complete (Tier 1-4) | 19 |
-| Cut (low value) | 7 |
+| Complete (Tier 1-4 + Share) | 21 |
+| Cut (low value) | 8 |
 | Premium Exclusive | 9 |
 | Future (Gamification) | 3 |
-| **Total** | **38** |
+| **Total** | **41** |
 
 ---
 
@@ -74,6 +74,9 @@ Badges are a flagship feature with dedicated real estate.
 |---|--------|----------|--------|------------|
 | 16 | Badge Showcase | Lazy (10m) | **Done** | UserBadge selection, featured badge for profile card |
 | 17 | Profile Card | Lazy (none) | **Done** | Client-side HTML preview via `/api/v1/profile-card/html/`, PNG download |
+| S1 | Latest Platinum | Lazy (10m) | **Done** | Live share card preview via `/api/v1/shareables/platinum/<id>/html/` |
+| S2 | Challenge Cards | Lazy (10m) | **Done** | Up to 3 challenge share card previews (A-Z, Calendar, Genre) |
+| S3 | Recap Card | Lazy (30m) | **Done** | Most recent finalized recap share card preview |
 
 Moved to Highlights: My Reviews (#16 old), Rate My Games (#18 old). Cut: Community Spotlight, My Checklists, My Game Lists.
 
@@ -81,7 +84,7 @@ Moved to Highlights: My Reviews (#16 old), Rate My Games (#18 old). Cut: Communi
 
 | # | Module | Strategy | Status | Data Source |
 |---|--------|----------|--------|------------|
-| 21 | Trophy Timeline | Lazy (60m) | **Done** | timeline_service.build_timeline_events, high cache |
+| 21 | Trophy Timeline | Lazy | **Cut** | Low utility, didn't add enough value |
 | 22 | Monthly Recap Preview | Lazy (30m) | **Done** | MonthlyRecap (most recent finalized) |
 | 23 | Rarity Showcase | Lazy (10m) | **Done** | EarnedTrophy sorted by earn_rate, rarity_color_hex |
 
@@ -241,7 +244,7 @@ For visualization modules, two approaches:
 | # | Module | Status |
 |---|--------|--------|
 | 18 | Rate My Games | Done: ticker strip CTA with hover effects |
-| 21 | Trophy Timeline | Done: horizontal scrollable with colored dots |
+| 21 | Trophy Timeline | Cut: low utility |
 | 23 | Rarity Showcase | Done: 2-col grid with trophy + game icons |
 | 4 | Sync Status | Cut: redundant with sync hotbar |
 | 5 | Unread Notifications | Cut: redundant with navbar bell |
@@ -275,8 +278,8 @@ These are the crown jewels that make premium feel indispensable.
 | `at_a_glance` | At a Glance | Trophy Snapshot, Recent Platinums, Recent Activity, Sync Status, Notifications, Quick Settings |
 | `progress` | Progress & Challenges | Challenge Hub, A-Z, Calendar, Genre, Milestones, Completion Milestones |
 | `badges` | Badges & Achievements | Badge Progress, Recent Badges, Badge Stats, Badge XP & Leaderboard, Country XP Leaderboard |
-| `share` | Share & Export | Badge Showcase, Profile Card |
-| `highlights` | Highlights & History | Trophy Timeline, Monthly Recap Preview, Rarity Showcase, My Reviews, Rate My Games |
+| `highlights` | Highlights & History | Monthly Recap Preview, Rarity Showcase, My Reviews, Rate My Games |
+| `share` | Share & Export | Badge Showcase, Profile Card, Latest Platinum, Challenge Cards, Recap Card |
 
 Utility modules (Quick Links, Featured Content) fold into At a Glance or Highlights.
 

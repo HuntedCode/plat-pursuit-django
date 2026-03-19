@@ -1,0 +1,78 @@
+{% load custom_filters %}
+{# Dashboard module: Recap Share Card. CTA to view recap first, then share card preview. #}
+{# JS init via _initShareCards in dashboard.js. Themes from window.GRADIENT_THEMES. #}
+<div class="card bg-base-200/80 border-2 border-base-300 shadow-lg shadow-neutral">
+    <div class="card-body p-5 lg:p-7">
+        {# Header #}
+        <div class="flex items-center justify-between mb-3">
+            <h2 class="card-title text-base lg:text-lg font-bold flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-secondary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                    <line x1="16" y1="2" x2="16" y2="6"></line>
+                    <line x1="8" y1="2" x2="8" y2="6"></line>
+                    <line x1="3" y1="10" x2="21" y2="10"></line>
+                </svg>
+                Recap Card
+            </h2>
+            {% if data.has_recap %}
+                <a href="{% url 'recap_view' data.year data.month %}" class="text-xs text-base-content/40 hover:text-primary transition-colors" aria-label="View full recap">View Recap</a>
+            {% endif %}
+        </div>
+
+        {% if data.has_recap %}
+            {% if data.has_been_viewed %}
+                {# User has viewed the recap: show share card preview #}
+                <div class="share-card-preview relative w-full rounded-lg overflow-hidden border border-base-content/10 bg-base-300/50"
+                     data-share-html-url="/api/v1/recap/{{ data.year }}/{{ data.month }}/html/"
+                     data-share-png-url="/api/v1/recap/{{ data.year }}/{{ data.month }}/png/"
+                     style="aspect-ratio: 1200/630;">
+                    <div class="share-card-loading absolute inset-0 flex items-center justify-center">
+                        <span class="loading loading-spinner loading-md text-secondary"></span>
+                    </div>
+                    <div class="share-card-content absolute inset-0 origin-top-left" style="display: none;"></div>
+                </div>
+
+                {# Theme swatches #}
+                <div class="share-card-swatches mt-2"></div>
+
+                {# Info + download #}
+                <div class="flex items-center justify-between mt-3">
+                    <span class="text-sm font-semibold text-base-content/60">{{ data.month_name }}</span>
+                    <button type="button" class="btn btn-secondary btn-xs share-card-download shrink-0 gap-1">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                        Download
+                    </button>
+                </div>
+            {% else %}
+                {# User hasn't viewed the recap yet: show CTA #}
+                <div class="text-center py-6">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-12 h-12 text-secondary mx-auto mb-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                        <line x1="16" y1="2" x2="16" y2="6"></line>
+                        <line x1="8" y1="2" x2="8" y2="6"></line>
+                        <line x1="3" y1="10" x2="21" y2="10"></line>
+                    </svg>
+                    <p class="text-sm font-semibold text-base-content/70 mb-1">Your {{ data.month_name }} recap is ready!</p>
+                    <p class="text-xs text-base-content/40 mb-4 italic pr-1">Relive your highlights, stats, and quizzes.</p>
+                    <a href="{% url 'recap_view' data.year data.month %}" class="btn btn-secondary btn-sm gap-1.5">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                        </svg>
+                        Relive {{ data.month_name }}
+                    </a>
+                </div>
+            {% endif %}
+        {% else %}
+            <div class="text-center py-6">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-10 h-10 text-secondary/30 mx-auto mb-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                    <line x1="16" y1="2" x2="16" y2="6"></line>
+                    <line x1="8" y1="2" x2="8" y2="6"></line>
+                    <line x1="3" y1="10" x2="21" y2="10"></line>
+                </svg>
+                <p class="text-sm text-base-content/50">No recap data yet.</p>
+                <p class="text-xs text-base-content/40 mt-1">Finish a month of trophy hunting to unlock your recap card!</p>
+            </div>
+        {% endif %}
+    </div>
+</div>
