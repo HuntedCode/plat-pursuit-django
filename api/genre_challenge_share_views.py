@@ -189,6 +189,7 @@ def _build_template_context(challenge, format_type):
         'subgenre_total': len(GENRE_CHALLENGE_SUBGENRES),
         'slot_rows': slot_rows,
         'subgenres': subgenre_data,
+        'is_plus': getattr(challenge.profile, 'is_plus', False),
     }
 
     return context

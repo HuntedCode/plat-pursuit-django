@@ -44,21 +44,32 @@ Empty day cells: rgba(245, 247, 252, 0.08)
 {# Landscape Card: 1200x630                               #}
 {# Layout: Header → Name+Stats → Stat Cards → 2x6 Month Grid → Bottom Bar → Footer #}
 {# ═══════════════════════════════════════════════════════ #}
-<div class="share-image-content" style="width: 1200px; height: 630px; background: linear-gradient(to bottom right, #2a2e34, #32363d, #2a2e34); padding: 20px; font-family: system-ui, -apple-system, sans-serif; box-sizing: border-box;">
+<div class="share-image-content" style="width: 1200px; height: 630px; background: linear-gradient(to bottom right, #2a2e34, #32363d, #2a2e34); padding: 20px; font-family: 'Inter', 'Poppins', system-ui, -apple-system, sans-serif; box-sizing: border-box;">
     <div style="width: 1160px; height: 590px; border: 3px solid #fbbf24; border-radius: 8px; box-shadow: 0 10px 15px -3px rgba(251, 191, 36, 0.2); overflow: hidden; display: flex; flex-direction: column; box-sizing: border-box;">
 
         {# Header Banner #}
-        <div data-element="challenge-banner" style="padding: 8px 24px; background: linear-gradient(to right, rgba(251, 191, 36, 0.15), rgba(251, 191, 36, 0.05)), rgba(42, 46, 52, 0.85); border-bottom: 2px solid #1a1b1f; border-left: 4px solid #fbbf24; display: flex; align-items: center; justify-content: space-between; flex-shrink: 0;">
-            <div style="display: flex; align-items: center; gap: 12px;">
-                <svg style="height: 24px; width: 24px; flex-shrink: 0;" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-                <span style="font-size: 20px; font-weight: bold; color: #fbbf24; text-transform: uppercase; letter-spacing: 0.1em; font-style: italic;">Platinum Calendar</span>
+        <div data-element="challenge-banner" style="padding: 12px 24px; background: linear-gradient(to right, rgba(251, 191, 36, 0.15), rgba(251, 191, 36, 0.05)), rgba(42, 46, 52, 0.85); border-bottom: 2px solid #1a1b1f; display: flex; align-items: center; justify-content: space-between; flex-shrink: 0;">
+            {# Left: Avatar + Username #}
+            <div style="display: flex; align-items: center; gap: 10px; flex-shrink: 0;">
+                {# Avatar #}
+                <div style="position: relative; flex-shrink: 0;">
+                    {% if avatar_url %}
+                    <img src="{{ avatar_url }}" style="width: 44px; height: 44px; border-radius: 50%; object-fit: cover; border: 3px solid {% if is_plus %}#ffd700{% else %}#fbbf24{% endif %}; box-sizing: border-box; box-shadow: 0 0 12px {% if is_plus %}rgba(255, 215, 0, 0.3){% else %}rgba(251, 191, 36, 0.3){% endif %}, 0 2px 6px rgba(0, 0, 0, 0.5);" />
+                    {% else %}
+                    <div style="width: 44px; height: 44px; border-radius: 50%; border: 3px solid #fbbf24; box-sizing: border-box; background: linear-gradient(135deg, #32363d, #2a2e34); display: flex; align-items: center; justify-content: center; box-shadow: 0 0 12px rgba(251, 191, 36, 0.3);">
+                        <svg style="height: 22px; width: 22px;" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                    </div>
+                    {% endif %}
+                    {% if is_plus %}
+                    <div style="position: absolute; bottom: -2px; right: -2px; width: 16px; height: 16px; background: #ffd700; border-radius: 50%; border: 2px solid #2a2e34; display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: bold; color: #1a1b1f; box-shadow: 0 0 6px rgba(255, 215, 0, 0.4);">+</div>
+                    {% endif %}
+                </div>
+                <span style="font-size: 18px; color: #fbbf24; font-weight: bold;">{{ username }}</span>
             </div>
-            <div style="display: flex; align-items: center; gap: 10px;">
-                {% if avatar_url %}
-                <img src="{{ avatar_url }}" style="width: 32px; height: 32px; border-radius: 50%; border: 2px solid #1a1b1f;" />
-                {% endif %}
-                <span style="font-size: 18px; color: #fbbf24; font-weight: 600;">{{ username }}</span>
-            </div>
+            {# Center: Challenge Title #}
+            <span style="font-size: 20px; font-weight: bold; color: #fbbf24; text-transform: uppercase; letter-spacing: 0.1em; font-style: italic;">Platinum Calendar</span>
+            {# Right: Branding #}
+            <span style="font-size: 12px; color: rgba(245, 247, 252, 0.35); font-style: italic; letter-spacing: 0.03em; flex-shrink: 0;">Platinum Pursuit</span>
         </div>
 
         {# Main Content Area #}
@@ -139,12 +150,10 @@ Empty day cells: rgba(245, 247, 252, 0.08)
             </div>
 
             {# Bottom Bar: Stats + Progress + Hall of Fame #}
-            <div style="display: flex; justify-content: center; gap: 24px; margin-top: 6px; margin-bottom: 4px;">
-                <span style="font-size: 11px; color: rgba(245, 247, 252, 0.6);">Best Month: <span style="color: #67f8c8; font-weight: bold;">{{ stats.best_month_name }} ({{ stats.best_month_filled }}/{{ stats.best_month_total }})</span></span>
-                <span style="font-size: 11px; color: rgba(245, 247, 252, 0.3);">|</span>
-                <span style="font-size: 11px; color: rgba(245, 247, 252, 0.6);">Longest Streak: <span style="color: #fbbf24; font-weight: bold;">{{ stats.longest_streak }} days</span></span>
-                <span style="font-size: 11px; color: rgba(245, 247, 252, 0.3);">|</span>
-                <span style="font-size: 11px; color: rgba(245, 247, 252, 0.6);">Most in a Day: <span style="color: #67d1f8; font-weight: bold;">{{ stats.max_plat_day_count }} ({{ stats.max_plat_day_label }})</span></span>
+            <div style="display: flex; justify-content: center; gap: 10px; margin-top: 6px; margin-bottom: 4px;">
+                <span style="display: inline-flex; align-items: center; gap: 4px; font-size: 11px; color: rgba(245, 247, 252, 0.6); background: rgba(103, 248, 200, 0.06); border: 1px solid rgba(103, 248, 200, 0.15); border-radius: 9999px; padding: 3px 12px;">Best Month: <span style="color: #67f8c8; font-weight: bold;">{{ stats.best_month_name }} ({{ stats.best_month_filled }}/{{ stats.best_month_total }})</span></span>
+                <span style="display: inline-flex; align-items: center; gap: 4px; font-size: 11px; color: rgba(245, 247, 252, 0.6); background: rgba(251, 191, 36, 0.06); border: 1px solid rgba(251, 191, 36, 0.15); border-radius: 9999px; padding: 3px 12px;">Longest Streak: <span style="color: #fbbf24; font-weight: bold;">{{ stats.longest_streak }} days</span></span>
+                <span style="display: inline-flex; align-items: center; gap: 4px; font-size: 11px; color: rgba(245, 247, 252, 0.6); background: rgba(103, 209, 248, 0.06); border: 1px solid rgba(103, 209, 248, 0.15); border-radius: 9999px; padding: 3px 12px;">Most in a Day: <span style="color: #67d1f8; font-weight: bold;">{{ stats.max_plat_day_count }} ({{ stats.max_plat_day_label }})</span></span>
             </div>
             <div style="display: flex; align-items: center; gap: 10px;">
                 <div style="flex: 1; height: 8px; background: #1a1b1f; border-radius: 4px; overflow: hidden;">
@@ -164,9 +173,9 @@ Empty day cells: rgba(245, 247, 252, 0.08)
         </div>
 
         {# Footer #}
-        <div style="border-top: 2px solid #1a1b1f; background: rgba(42, 46, 52, 0.85); height: 42px; box-sizing: border-box; line-height: 42px; padding: 0 24px; flex-shrink: 0;">
-            <img src="{% static 'images/logo.png' %}" style="display: inline-block; width: 26px; height: 26px; vertical-align: middle; margin-right: 8px;" /><span style="font-size: 16px; color: #67d1f8; font-weight: bold; font-style: italic; vertical-align: middle;">platpursuit.com</span>
-            <span style="float: right; font-size: 12px; color: rgba(245, 247, 252, 0.5); font-style: italic;">Every day is a chance for platinum</span>
+        <div style="border-top: 2px solid #1a1b1f; background: rgba(42, 46, 52, 0.5); height: 44px; box-sizing: border-box; line-height: 44px; padding: 0 28px; flex-shrink: 0;">
+            <img src="{% static 'images/logo.png' %}" style="display: inline-block; width: 24px; height: 24px; vertical-align: middle; margin-right: 8px;" /><span style="font-size: 16px; color: #67d1f8; font-weight: bold; font-style: italic; vertical-align: middle;">platpursuit.com</span>
+            <span style="float: right; font-size: 12px; color: rgba(245, 247, 252, 0.4); font-style: italic; letter-spacing: 0.03em;">Every day is a chance for platinum</span>
         </div>
     </div>
 </div>
@@ -176,21 +185,32 @@ Empty day cells: rgba(245, 247, 252, 0.08)
 {# Portrait Card: 1080x1350                               #}
 {# Layout: Header → Name → HoF → Stats → 3x4 Month Grid → Progress → Footer #}
 {# ═══════════════════════════════════════════════════════ #}
-<div class="share-image-content" style="width: 1080px; height: 1350px; background: linear-gradient(to bottom right, #2a2e34, #32363d, #2a2e34); padding: 20px; font-family: system-ui, -apple-system, sans-serif; box-sizing: border-box;">
+<div class="share-image-content" style="width: 1080px; height: 1350px; background: linear-gradient(to bottom right, #2a2e34, #32363d, #2a2e34); padding: 20px; font-family: 'Inter', 'Poppins', system-ui, -apple-system, sans-serif; box-sizing: border-box;">
     <div style="width: 1040px; height: 1310px; border: 3px solid #fbbf24; border-radius: 8px; box-shadow: 0 10px 15px -3px rgba(251, 191, 36, 0.2); overflow: hidden; display: flex; flex-direction: column; box-sizing: border-box;">
 
         {# Header Banner #}
-        <div data-element="challenge-banner" style="padding: 14px 28px; background: linear-gradient(to right, rgba(251, 191, 36, 0.15), rgba(251, 191, 36, 0.05)), rgba(42, 46, 52, 0.85); border-bottom: 2px solid #1a1b1f; border-left: 4px solid #fbbf24; display: flex; align-items: center; justify-content: space-between; flex-shrink: 0;">
-            <div style="display: flex; align-items: center; gap: 12px;">
-                <svg style="height: 32px; width: 32px; flex-shrink: 0;" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-                <span style="font-size: 26px; font-weight: bold; color: #fbbf24; text-transform: uppercase; letter-spacing: 0.1em; font-style: italic;">Platinum Calendar</span>
+        <div data-element="challenge-banner" style="padding: 16px 28px; background: linear-gradient(to right, rgba(251, 191, 36, 0.15), rgba(251, 191, 36, 0.05)), rgba(42, 46, 52, 0.85); border-bottom: 2px solid #1a1b1f; display: flex; align-items: center; justify-content: space-between; flex-shrink: 0;">
+            {# Left: Avatar + Username #}
+            <div style="display: flex; align-items: center; gap: 12px; flex-shrink: 0;">
+                {# Avatar #}
+                <div style="position: relative; flex-shrink: 0;">
+                    {% if avatar_url %}
+                    <img src="{{ avatar_url }}" style="width: 50px; height: 50px; border-radius: 50%; object-fit: cover; border: 3px solid {% if is_plus %}#ffd700{% else %}#fbbf24{% endif %}; box-sizing: border-box; box-shadow: 0 0 12px {% if is_plus %}rgba(255, 215, 0, 0.3){% else %}rgba(251, 191, 36, 0.3){% endif %}, 0 2px 6px rgba(0, 0, 0, 0.5);" />
+                    {% else %}
+                    <div style="width: 50px; height: 50px; border-radius: 50%; border: 3px solid #fbbf24; box-sizing: border-box; background: linear-gradient(135deg, #32363d, #2a2e34); display: flex; align-items: center; justify-content: center; box-shadow: 0 0 12px rgba(251, 191, 36, 0.3);">
+                        <svg style="height: 25px; width: 25px;" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                    </div>
+                    {% endif %}
+                    {% if is_plus %}
+                    <div style="position: absolute; bottom: -2px; right: -2px; width: 18px; height: 18px; background: #ffd700; border-radius: 50%; border: 2px solid #2a2e34; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: bold; color: #1a1b1f; box-shadow: 0 0 6px rgba(255, 215, 0, 0.4);">+</div>
+                    {% endif %}
+                </div>
+                <span style="font-size: 20px; color: #fbbf24; font-weight: bold;">{{ username }}</span>
             </div>
-            <div style="display: flex; align-items: center; gap: 10px;">
-                {% if avatar_url %}
-                <img src="{{ avatar_url }}" style="width: 34px; height: 34px; border-radius: 50%; border: 2px solid #1a1b1f;" />
-                {% endif %}
-                <span style="font-size: 18px; color: #fbbf24; font-weight: 600;">{{ username }}</span>
-            </div>
+            {# Center: Challenge Title #}
+            <span style="font-size: 26px; font-weight: bold; color: #fbbf24; text-transform: uppercase; letter-spacing: 0.1em; font-style: italic;">Platinum Calendar</span>
+            {# Right: Branding #}
+            <span style="font-size: 14px; color: rgba(245, 247, 252, 0.35); font-style: italic; letter-spacing: 0.03em; flex-shrink: 0;">Platinum Pursuit</span>
         </div>
 
         {# Main Content Area #}
@@ -214,22 +234,22 @@ Empty day cells: rgba(245, 247, 252, 0.08)
 
             {# Stats Row: 4 cards #}
             <div style="display: flex; gap: 12px; justify-content: center; margin-bottom: 16px;">
-                <div style="flex: 1; background: rgba(42, 46, 52, 0.8); border: 3px solid #1a1b1f; border-radius: 8px; padding: 14px 12px; text-align: center; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.6); box-sizing: border-box;">
+                <div style="flex: 1; background: rgba(103, 248, 200, 0.06); border: 2px solid rgba(103, 248, 200, 0.3); border-radius: 8px; padding: 14px 12px; text-align: center; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4); box-sizing: border-box;">
                     <div style="font-size: 12px; color: #67f8c8; text-transform: uppercase; letter-spacing: 0.05em; font-weight: bold; font-style: italic; margin-bottom: 4px;">Best Month</div>
                     <div style="font-size: 32px; font-weight: bold; color: #f5f7fc;">{{ stats.best_month_filled }}<span style="font-size: 18px; color: rgba(245, 247, 252, 0.4);">/{{ stats.best_month_total }}</span></div>
                     <div style="font-size: 11px; color: rgba(245, 247, 252, 0.5); margin-top: 2px;">{{ stats.best_month_name }}</div>
                 </div>
-                <div style="flex: 1; background: rgba(42, 46, 52, 0.8); border: 3px solid #1a1b1f; border-radius: 8px; padding: 14px 12px; text-align: center; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.6); box-sizing: border-box;">
+                <div style="flex: 1; background: rgba(251, 191, 36, 0.06); border: 2px solid rgba(251, 191, 36, 0.3); border-radius: 8px; padding: 14px 12px; text-align: center; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4); box-sizing: border-box;">
                     <div style="font-size: 12px; color: #fbbf24; text-transform: uppercase; letter-spacing: 0.05em; font-weight: bold; font-style: italic; margin-bottom: 4px;">Longest Streak</div>
                     <div style="font-size: 32px; font-weight: bold; color: #f5f7fc;">{{ stats.longest_streak }}</div>
                     <div style="font-size: 11px; color: rgba(245, 247, 252, 0.5); margin-top: 2px;">consecutive days</div>
                 </div>
-                <div style="flex: 1; background: rgba(42, 46, 52, 0.8); border: 3px solid #1a1b1f; border-radius: 8px; padding: 14px 12px; text-align: center; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.6); box-sizing: border-box;">
+                <div style="flex: 1; background: rgba(103, 209, 248, 0.06); border: 2px solid rgba(103, 209, 248, 0.3); border-radius: 8px; padding: 14px 12px; text-align: center; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4); box-sizing: border-box;">
                     <div style="font-size: 12px; color: #67d1f8; text-transform: uppercase; letter-spacing: 0.05em; font-weight: bold; font-style: italic; margin-bottom: 4px;">Most in a Day</div>
                     <div style="font-size: 32px; font-weight: bold; color: #f5f7fc;">{{ stats.max_plat_day_count }}</div>
                     <div style="font-size: 11px; color: rgba(245, 247, 252, 0.5); margin-top: 2px;">{{ stats.max_plat_day_label }}</div>
                 </div>
-                <div style="flex: 1; background: rgba(42, 46, 52, 0.8); border: 3px solid #1a1b1f; border-radius: 8px; padding: 14px 12px; text-align: center; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.6); box-sizing: border-box;">
+                <div style="flex: 1; background: rgba(245, 247, 252, 0.03); border: 2px solid rgba(245, 247, 252, 0.1); border-radius: 8px; padding: 14px 12px; text-align: center; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4); box-sizing: border-box;">
                     <div style="font-size: 12px; color: rgba(245, 247, 252, 0.5); text-transform: uppercase; letter-spacing: 0.05em; font-weight: bold; font-style: italic; margin-bottom: 4px;">Weakest Month</div>
                     <div style="font-size: 32px; font-weight: bold; color: #f5f7fc;">{{ stats.worst_month_filled }}<span style="font-size: 18px; color: rgba(245, 247, 252, 0.4);">/{{ stats.worst_month_total }}</span></div>
                     <div style="font-size: 11px; color: rgba(245, 247, 252, 0.5); margin-top: 2px;">{{ stats.worst_month_name }}</div>
@@ -348,9 +368,9 @@ Empty day cells: rgba(245, 247, 252, 0.08)
         </div>
 
         {# Footer #}
-        <div style="border-top: 2px solid #1a1b1f; background: rgba(42, 46, 52, 0.85); height: 60px; box-sizing: border-box; line-height: 60px; padding: 0 28px; flex-shrink: 0;">
+        <div style="border-top: 2px solid #1a1b1f; background: rgba(42, 46, 52, 0.5); height: 60px; box-sizing: border-box; line-height: 60px; padding: 0 28px; flex-shrink: 0;">
             <img src="{% static 'images/logo.png' %}" style="display: inline-block; width: 36px; height: 36px; vertical-align: middle; margin-right: 10px;" /><span style="font-size: 20px; color: #67d1f8; font-weight: bold; font-style: italic; vertical-align: middle;">platpursuit.com</span>
-            <span style="float: right; font-size: 14px; color: rgba(245, 247, 252, 0.5); font-style: italic;">Every day is a chance for platinum</span>
+            <span style="float: right; font-size: 14px; color: rgba(245, 247, 252, 0.4); font-style: italic; letter-spacing: 0.03em;">Every day is a chance for platinum</span>
         </div>
     </div>
 </div>

@@ -1,0 +1,64 @@
+{% load custom_filters %}
+{# Dashboard module: Latest Platinum share card preview with theme picker and download. #}
+{# JS init via _initShareCards in dashboard.js. Themes from window.GRADIENT_THEMES. #}
+<div class="card bg-base-200/80 border-2 border-base-300 shadow-lg shadow-neutral">
+    <div class="card-body p-5 lg:p-7">
+        {# Header #}
+        <div class="flex items-center justify-between mb-3">
+            <h2 class="card-title text-base lg:text-lg font-bold flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="8" r="7"></circle>
+                    <polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"></polyline>
+                </svg>
+                Latest Platinum
+            </h2>
+            {% if data.has_platinum %}
+                <a href="{% url 'my_shareables' %}" class="text-xs text-base-content/40 hover:text-primary transition-colors" aria-label="View all shareable images">All Cards</a>
+            {% endif %}
+        </div>
+
+        {% if data.has_platinum %}
+            {# Preview container #}
+            <div class="share-card-preview relative w-full rounded-lg overflow-hidden border border-base-content/10 bg-base-300/50"
+                 data-share-html-url="/api/v1/shareables/platinum/{{ data.earned_trophy_id }}/html/"
+                 data-share-png-url="/api/v1/shareables/platinum/{{ data.earned_trophy_id }}/png/"
+                 data-supports-game-art="true"
+                 data-game-name="{{ data.game_name }}"
+                 style="aspect-ratio: 1200/630;">
+                <div class="share-card-loading absolute inset-0 flex items-center justify-center">
+                    <span class="loading loading-spinner loading-md text-primary"></span>
+                </div>
+                <div class="share-card-content absolute inset-0 origin-top-left" style="display: none;"></div>
+            </div>
+
+            {# Theme swatches (populated by JS from window.GRADIENT_THEMES) #}
+            <div class="share-card-swatches mt-2"></div>
+
+            {# Game info + download #}
+            <div class="flex items-center justify-between mt-3">
+                <div class="flex items-center gap-2 min-w-0">
+                    {% if data.icon_url %}
+                        <img src="{{ data.icon_url }}" alt="{{ data.game_name }}" class="w-8 h-8 rounded-lg object-cover shrink-0 ring-1 ring-base-300" loading="lazy" />
+                    {% endif %}
+                    <div class="min-w-0">
+                        <div class="text-sm font-semibold line-clamp-1 pr-1">{{ data.game_name }}</div>
+                        <div class="text-xs text-base-content/40" data-time-format="relative" data-time="{{ data.earned_date|date:'c' }}">{{ data.earned_date|iso_naturaltime }}</div>
+                    </div>
+                </div>
+                <button type="button" class="btn btn-primary btn-xs share-card-download shrink-0 gap-1">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                    Download
+                </button>
+            </div>
+        {% else %}
+            <div class="text-center py-6">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-10 h-10 text-primary/30 mx-auto mb-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="8" r="7"></circle>
+                    <polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"></polyline>
+                </svg>
+                <p class="text-sm text-base-content/50">No platinums earned yet.</p>
+                <p class="text-xs text-base-content/40 mt-1">Earn your first platinum to unlock a share card!</p>
+            </div>
+        {% endif %}
+    </div>
+</div>

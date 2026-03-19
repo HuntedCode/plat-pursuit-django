@@ -169,6 +169,7 @@ def _build_template_context(challenge, format_type, featured_letter=None):
         'featured_game_icon': featured_game_icon,
         'featured_progress': featured_progress,
         'featured_letter': resolved_featured_letter,
+        'is_plus': getattr(challenge.profile, 'is_plus', False),
     }
 
     return context, in_progress_slots

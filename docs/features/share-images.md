@@ -8,7 +8,7 @@ The rendering pipeline has three layers: data assembly, HTML generation, and PNG
 
 **Data assembly** is handled by `ShareableDataService`, which collects all the metadata needed for a share card from Django models. For platinum cards, this includes game info, trophy stats, earn rate, rarity, badge XP earned, tier 1 badge progress, and the user's personal rating. The service computes historical totals (e.g., "Platinum #47" at the time of earning) rather than current totals, so cards remain accurate even when generated weeks after the fact. Each share card type (challenge, recap, badge) has its own data assembly logic in its respective view.
 
-**HTML generation** uses Django's `render_to_string()` with dedicated share card templates. These templates use the same Tailwind classes and component patterns as the main site but are self-contained: no external CSS dependencies, no JavaScript. Images reference `/api/v1/share-temp/<hash>` URLs or `/static/` paths.
+**HTML generation** uses Django's `render_to_string()` with dedicated share card templates. These templates use fully inline styles (no Tailwind, no external CSS) with hex colors for maximum Playwright rendering compatibility. All cards follow a unified design language: rich identity bar (avatar with glow border, Plus subscriber badge, username, card type label, "Platinum Pursuit" branding), colored-tint stat boxes, and normalized footers. Font stack is `'Inter', 'Poppins', system-ui, -apple-system, sans-serif`. Images reference `/api/v1/share-temp/<hash>` URLs or `/static/` paths.
 
 **PNG rendering** uses Playwright (headless Chromium) via `playwright_renderer.py`. Before handing HTML to Chromium, the renderer inlines all external resources as base64 data URIs: fonts become embedded `@font-face` rules, images from the share temp directory and `/static/` are converted to `data:` URIs. This is necessary because `page.set_content()` runs in an `about:blank` origin with no file system access. The renderer runs Playwright in a dedicated daemon thread (`ThreadPoolExecutor` with `max_workers=1`) to keep its asyncio event loop isolated from Django's synchronous ORM.
 
@@ -91,12 +91,19 @@ Not a Django model. Local filesystem directory at `{BASE_DIR}/share_temp_images/
 
 ### Theme Application
 
-1. User selects a theme (default, gradient variants, or game art themes)
-2. `_get_background_css()` resolves the theme:
-   - Standard themes: CSS gradient background
-   - Game art themes (`requires_game_image=True`): embeds game cover or concept background as a base64 data URI with a dark overlay
-3. `_get_banner_css()` resolves the banner/header element styles per theme
-4. Both are injected into the full HTML document's `<style>` block
+Themes are applied at two levels depending on context:
+
+**Server-side (PNG download via Playwright)**:
+1. `_get_background_css()` resolves the theme gradient or game art overlay
+2. `_get_banner_css()` resolves banner/header styles using `[data-element]` CSS selectors
+3. Both are injected into the full HTML document's `<style>` block with `!important`
+
+**Client-side (dashboard previews)**:
+1. `_initShareCards()` fetches default-themed HTML via API, then applies themes by modifying the DOM directly via `applyTheme()`
+2. Standard themes: sets `.share-image-content` background to the gradient CSS
+3. Game art themes (`requiresGameImage`): composites a dark overlay with the game cover URL (captured from the API response's `game_image_base64` / `concept_bg_base64` fields)
+4. Banner accent updated via `[data-element]` querySelector if theme provides `bannerBackground`
+5. Game art themes are only shown in swatch grids for cards that set `data-supports-game-art="true"` (platinum card only, since it has game images available)
 
 ## API Endpoints
 
@@ -144,11 +151,19 @@ When a user clicks "Download Image" on a platinum share card, the system checks 
 
 ### Flow
 
+**My Shareables / Notifications** (ShareImageManager):
 1. `ShareImageManager.generateAndDownload()` checks `this.ratingData.hasRating` (populated from the HTML API response during preview rendering)
 2. If unrated and not yet prompted: opens the `#rate-before-download-modal` dialog
 3. User can "Rate and Download" (submits rating via `/api/v1/reviews/<concept_id>/group/default/rate/`, refreshes preview, then downloads) or "Skip, just download"
 4. If already rated or already prompted: download proceeds immediately
 5. Prompted IDs are tracked in `ShareImageManager._promptedIds` (class-level `Set`) to avoid nagging
+
+**Dashboard** (DashboardManager):
+1. When the platinum card HTML is fetched, `concept_id`, `has_rating`, `is_shovelware`, and `playtime` are captured from the API response and stored on the preview element's dataset
+2. Download button click checks these data attributes before proceeding
+3. If unrated and not shovelware: `_showRatingPrompt()` opens the same `#rate-before-download-modal`
+4. After rating submission (or skip), the PNG download URL is triggered via `window.location.href`
+5. Prompted IDs tracked in a local `Set` per `_initShareCards` call, scoped to the session
 
 ### Key Files
 
@@ -157,16 +172,17 @@ When a user clicks "Download Image" on a platinum share card, the system checks 
 | `templates/partials/rate_before_download_modal.html` | Rating prompt modal with all 5 rating fields |
 | `static/js/share-image.js` | Interception logic in base `ShareImageManager` class |
 | `static/js/shareable-manager.js` | Passes `conceptId` from data attributes to manager |
-| `api/shareable_views.py` | Returns `has_rating` and `concept_id` in HTML API response |
+| `static/js/dashboard.js` | `_showRatingPrompt()` method for dashboard platinum card downloads |
+| `api/shareable_views.py` | Returns `has_rating`, `concept_id`, `playtime`, `is_shovelware` in HTML API response |
 | `api/notification_views.py` | Same metadata in notification HTML API response |
 
 ### Data Flow
 
-Rating metadata flows through two paths:
-- **Data attributes**: `data-concept-id` on share card elements provides `conceptId` at construction time
-- **API response**: `has_rating` and `concept_id` returned alongside the HTML preview during `fetchCardHTML()`, which fires on modal open
+Rating metadata flows through two paths depending on the page:
+- **My Shareables / Notifications**: `data-concept-id` on share card elements provides `conceptId` at construction time. `has_rating` returned in HTML API response during `fetchCardHTML()`.
+- **Dashboard**: The platinum card HTML API response includes `has_rating`, `concept_id`, `is_shovelware`, and `playtime`. These are stored as `data-*` attributes on the preview element after fetch, then read by the download button handler.
 
-This means the JS knows the rating status before the user clicks download, with no extra API call.
+In both cases, the JS knows the rating status before the user clicks download, with no extra API call.
 
 ## Gotchas and Pitfalls
 
@@ -178,6 +194,9 @@ This means the JS knows the rating status before the user clicks download, with 
 - **Legacy Pillow renderer limitations**: `_wrap_text()` is a naive implementation that truncates at 40 characters. The Pillow renderer also creates gradients pixel by pixel, which is slow for large images. New card types should always use the Playwright pipeline.
 - **Font loading is cached per process**: `_cached_font_faces` is a module-level global. Changing fonts requires a process restart (Gunicorn reload).
 - **Rate prompt is session-scoped**: `ShareImageManager._promptedIds` is a class-level `Set` that resets on page navigation. This is intentional: users should not be nagged across sessions, but a fresh page load gives one prompt opportunity per card.
+- **Identity bar `is_plus` must be passed by every view**: All share card HTML views pass `is_plus` from the profile to the template context. For `shareable_views.py`, the `profile` parameter on `_build_template_context()` is optional (defaults to `None`) to avoid breaking the notification view which calls it without a profile.
+- **Dashboard theme switching is client-side**: The share card HTML endpoints do NOT apply themes. Dashboard previews fetch default-styled HTML, then `applyTheme()` modifies the DOM. Only the PNG endpoint applies themes server-side (via Playwright CSS injection).
+- **Game art theme swatches update asynchronously**: Game art swatch buttons are created with the fallback gradient background. After the API response returns game image URLs, `updateGameArtSwatches()` updates them with the actual composited game cover. This avoids blocking swatch grid rendering on the API call.
 
 ## Related Docs
 

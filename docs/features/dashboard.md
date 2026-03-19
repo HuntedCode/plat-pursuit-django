@@ -20,8 +20,8 @@ The dashboard uses a **Module Registry** pattern with a **Tabbed Carousel** layo
 | 2 | Trophy Cup | At a Glance | `at_a_glance` | Trophy Snapshot, Recent Platinums |
 | 3 | Chart | Progress | `progress` | Challenge Hub |
 | 4 | Medal | Badges | `badges` | Badge Progress |
-| 5 | Share | Share & Export | `share` | Badge Showcase, Profile Card |
-| 6 | Star | Highlights | `highlights` | My Reviews, Rate My Games |
+| 5 | Star | Highlights | `highlights` | My Reviews, Rate My Games |
+| 6 | Share | Share & Export | `share` | Badge Showcase, Profile Card, Latest Platinum, Challenge Cards, Recap Card |
 
 ### Custom Tabs (Premium only, max 6)
 
@@ -58,9 +58,11 @@ Premium users can create custom tabs with a name (max 20 chars) and icon (from 8
 | `my_reviews` | My Reviews | highlights | Lazy | 10m | No |
 | `rarity_showcase` | Rarity Showcase | highlights | Lazy | 10m | No |
 | `rate_my_games` | Rate My Games | highlights | Lazy | 30m | No |
-| `trophy_timeline` | Trophy Timeline | highlights | Lazy | 60m | No |
 | `badge_showcase` | Badge Showcase | share | Lazy | 10m | No |
 | `profile_card_preview` | Profile Card | share | Lazy | None | No |
+| `recent_platinum_card` | Latest Platinum | share | Lazy | 10m | No |
+| `challenge_share_cards` | Challenge Cards | share | Lazy | 10m | No |
+| `recap_share_card` | Recap Card | share | Lazy | 30m | No |
 
 See [Module Catalog](../design/dashboard-module-catalog.md) for the full module roadmap.
 
@@ -204,8 +206,11 @@ Staff can switch between "view as premium" and "view as free" via a header butto
 - **My Reviews aggregate fallback**: Django `Sum()` returns `None` for empty querysets. Provider handles with `or 0` on all aggregate values.
 - **Cache invalidation coverage**: Milestone tracker invalidated via `check_all_milestones_for_user` hook. Reviews invalidated via same (milestone check called in create/delete). Almost There and Rarity Showcase covered by existing sync pipeline.
 - **Rate My Games ticker strip**: Auto-scrolling CSS animation with duplicated icons for seamless loop. Pauses on hover. Icons are clickable links to review_hub. Defensive slug check prevents crash on concepts without slugs.
-- **Trophy Timeline horizontal scroll**: Scrollable flex row with per-event connector lines (skipped on first event). Centered via `justify-center`. Dot colors use `var(--color-X)` CSS variables with `trophy-platinum` mapped to `primary`.
 - **Rarity Showcase 2-column grid**: Shows trophy icon with overlapping game icon badge. Includes trophy description (`trophy_detail`). Even limit options (4/6/8). Filters `earn_rate > 0`. Uses `rarity_color_hex` filter.
+- **Share card preview pattern**: All share card modules (platinum, challenge, recap) use `_initShareCards()` in dashboard.js. Finds `.share-card-preview` containers by `data-share-html-url`, fetches HTML via API, scales to 1200x630 aspect ratio. Theme switching is client-side via `applyTheme()` (modifies DOM directly). Game art themes are excluded unless the preview has `data-supports-game-art="true"` (platinum card only). Clicking a preview opens a full-size modal (`<dialog>`). Download buttons use `data-share-png-url` with the selected theme key.
+- **Share card rating prompt**: The platinum card download button triggers a rate-before-download modal (same `#rate-before-download-modal` partial as shareables page) if the user hasn't rated the game. Rating metadata (`concept_id`, `has_rating`, `is_shovelware`, `playtime`) is captured from the HTML API response and stored on the preview element's dataset. Prompted once per session per concept.
+- **Share card identity bars**: All share card templates (platinum, A-Z, calendar, genre, recap) include a rich identity bar with avatar (glow border, Plus subscriber badge), username, card type label, and "Platinum Pursuit" branding. Avatar and `is_plus` are passed from the view layer. `data-element` attributes are preserved for Playwright theme rendering.
+- **Share tab is last**: `DEFAULT_TAB_ORDER` places share at the end (after highlights).
 - **Staff-gated during dev**: Switch mixins to `LoginRequiredMixin` for production. Remove preview toggle UI.
 
 ## How to Add a New Module

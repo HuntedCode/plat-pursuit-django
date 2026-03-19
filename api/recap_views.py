@@ -435,6 +435,8 @@ class RecapShareImageHTMLView(APIView):
             # Badge stats
             'badge_xp': recap.badge_xp_earned,
             'badges_count': recap.badges_earned_count,
+            # Identity
+            'is_plus': getattr(profile, 'is_plus', False),
         }
 
 

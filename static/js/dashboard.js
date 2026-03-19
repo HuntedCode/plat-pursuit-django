@@ -81,6 +81,11 @@
 
             // Profile Card Preview module: fetch HTML preview and scale to fit
             this.registerModuleInit('profile_card_preview', (el) => this._initProfileCardPreview(el));
+
+            // Share card preview modules: fetch + scale + download pattern
+            this.registerModuleInit('recent_platinum_card', (el) => this._initShareCards(el));
+            this.registerModuleInit('challenge_share_cards', (el) => this._initShareCards(el));
+            this.registerModuleInit('recap_share_card', (el) => this._initShareCards(el));
         }
 
         // -----------------------------------------------------------------
@@ -353,6 +358,365 @@
                 strip.addEventListener('mouseenter', () => { track.style.animationPlayState = 'paused'; });
                 strip.addEventListener('mouseleave', () => { track.style.animationPlayState = 'running'; });
             }
+        }
+
+        // -----------------------------------------------------------------
+        // Share Card Previews (generic: platinum, challenge, recap)
+        // -----------------------------------------------------------------
+
+        _initShareCards(el) {
+            const themes = window.GRADIENT_THEMES || {};
+            const scaleFns = [];
+
+            // Apply theme to a share card's DOM (matches profile card pattern)
+            const applyTheme = (themeKey, contentEl, gameImages) => {
+                const shareContent = contentEl.querySelector('.share-image-content');
+                if (!shareContent) return;
+                if (!themes[themeKey]) return;
+
+                const t = themes[themeKey];
+
+                // Handle game art themes (need image URL composited into background)
+                if (t.requiresGameImage && gameImages) {
+                    const source = t.gameImageSource || 'game_image';
+                    const imageUrl = gameImages[source] || gameImages.game_image;
+                    if (imageUrl) {
+                        shareContent.style.background = 'linear-gradient(rgba(26, 27, 31, 0.85), rgba(26, 27, 31, 0.9)), url("' + imageUrl + '")';
+                        shareContent.style.backgroundSize = 'cover';
+                        shareContent.style.backgroundPosition = 'center';
+                        shareContent.style.backgroundRepeat = '';
+                    } else {
+                        return; // No image available, skip
+                    }
+                } else {
+                    shareContent.style.background = t.background;
+                    if (t.backgroundSize) shareContent.style.backgroundSize = t.backgroundSize;
+                    else shareContent.style.backgroundSize = '';
+                    if (t.backgroundPosition) shareContent.style.backgroundPosition = t.backgroundPosition;
+                    else shareContent.style.backgroundPosition = '';
+                    if (t.backgroundRepeat) shareContent.style.backgroundRepeat = t.backgroundRepeat;
+                    else shareContent.style.backgroundRepeat = '';
+                }
+
+                // Update banner accent if theme provides one
+                if (t.bannerBackground) {
+                    const banner = shareContent.querySelector('[data-element]');
+                    if (banner) banner.style.background = t.bannerBackground;
+                }
+            };
+
+            // Create a shared full-size preview modal (once per module)
+            let modal = el.querySelector('.share-card-modal');
+            if (!modal) {
+                modal = document.createElement('dialog');
+                modal.className = 'share-card-modal modal backdrop-blur-sm';
+                modal.innerHTML =
+                    '<div class="modal-box max-w-none w-auto p-4 bg-base-200 border-2 border-base-300" style="max-height: none; overflow: visible;">'
+                    + '<form method="dialog"><button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2 z-10">'
+                    + '<svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>'
+                    + '</button></form>'
+                    + '<div class="share-card-modal-content flex justify-center"></div>'
+                    + '</div>'
+                    + '<form method="dialog" class="modal-backdrop"><button>close</button></form>';
+                el.appendChild(modal);
+            }
+            const modalContent = modal.querySelector('.share-card-modal-content');
+
+            // Find all preview containers within this module
+            el.querySelectorAll('.share-card-preview').forEach(preview => {
+                const baseHtmlUrl = preview.dataset.shareHtmlUrl;
+                const basePngUrl = preview.dataset.sharePngUrl;
+                if (!baseHtmlUrl) return;
+
+                const content = preview.querySelector('.share-card-content');
+                const loading = preview.querySelector('.share-card-loading');
+                if (!content || !loading) return;
+
+                let currentTheme = 'default';
+                const supportsGameArt = preview.dataset.supportsGameArt === 'true';
+                // Stores game image URLs from API response (for game art themes)
+                let gameImages = null;
+
+                const scaleToFit = () => {
+                    if (content.style.display !== 'none') {
+                        content.style.transform = 'scale(' + (preview.offsetWidth / 1200) + ')';
+                    }
+                };
+
+                // Update game art swatch backgrounds once images are available
+                let swatchGrid = null;
+                const updateGameArtSwatches = () => {
+                    if (!swatchGrid || !gameImages) return;
+                    swatchGrid.querySelectorAll('[data-game-art]').forEach(btn => {
+                        const t = themes[btn.dataset.themeKey];
+                        if (!t) return;
+                        const source = t.gameImageSource || 'game_image';
+                        const url = gameImages[source] || gameImages.game_image;
+                        if (url) {
+                            btn.style.background = 'linear-gradient(rgba(26, 27, 31, 0.7), rgba(26, 27, 31, 0.8)), url("' + url + '")';
+                            btn.style.backgroundSize = 'cover';
+                            btn.style.backgroundPosition = 'center';
+                        }
+                    });
+                };
+
+                const fetchPreview = () => {
+                    loading.style.display = '';
+                    loading.innerHTML = '<span class="loading loading-spinner loading-sm"></span>';
+                    content.style.display = 'none';
+
+                    PlatPursuit.API.get(baseHtmlUrl)
+                        .then(data => {
+                            content.innerHTML = data.html;
+                            content.style.display = 'block';
+                            content.style.width = '1200px';
+                            content.style.height = '630px';
+                            loading.style.display = 'none';
+                            // Capture game image URLs for game art themes
+                            if (supportsGameArt) {
+                                gameImages = {};
+                                if (data.game_image_base64) gameImages.game_image = data.game_image_base64;
+                                if (data.concept_bg_base64) gameImages.concept_bg_url = data.concept_bg_base64;
+                                updateGameArtSwatches();
+                            }
+                            // Store rating metadata for download prompt (platinum cards)
+                            if (data.concept_id) {
+                                preview.dataset.conceptId = data.concept_id;
+                                preview.dataset.hasRating = data.has_rating ? 'true' : 'false';
+                                preview.dataset.isShovelware = data.is_shovelware ? 'true' : 'false';
+                                preview.dataset.playtime = data.playtime || '';
+                            }
+                            requestAnimationFrame(() => {
+                                scaleToFit();
+                                if (currentTheme !== 'default') applyTheme(currentTheme, content, gameImages);
+                            });
+                        })
+                        .catch(() => {
+                            loading.innerHTML = '<span class="text-xs text-base-content/30">Unable to load preview</span>';
+                        });
+                };
+
+                fetchPreview();
+
+                // Click preview to open full-size modal
+                preview.style.cursor = 'pointer';
+                preview.addEventListener('click', (e) => {
+                    if (e.target.closest('button') || e.target.closest('a')) return;
+                    if (!modalContent || content.style.display === 'none') return;
+                    modalContent.innerHTML = content.innerHTML;
+                    const fullCard = modalContent.querySelector('.share-image-content');
+                    if (fullCard) fullCard.style.transform = '';
+                    if (currentTheme !== 'default') applyTheme(currentTheme, modalContent, gameImages);
+                    modal.showModal();
+                });
+
+                // Populate theme swatches (skip game art themes unless this card supports them)
+                const swatchContainer = preview.parentElement?.querySelector('.share-card-swatches');
+                if (swatchContainer && Object.keys(themes).length > 0) {
+                    swatchGrid = document.createElement('div');
+                    swatchGrid.className = 'grid grid-cols-8 lg:grid-cols-10 gap-1';
+                    for (const [key, t] of Object.entries(themes)) {
+                        // Skip game art themes unless this preview supports them
+                        if (t.requiresGameImage && !supportsGameArt) continue;
+
+                        const btn = document.createElement('button');
+                        btn.className = 'aspect-square rounded border-2 transition-all duration-150 hover:scale-105 cursor-pointer '
+                            + (key === 'default' ? 'border-primary ring-1 ring-primary' : 'border-base-content/20 hover:border-base-content/40');
+                        btn.style.background = t.background || '';
+                        if (t.requiresGameImage) btn.dataset.gameArt = 'true';
+                        btn.title = t.name || key;
+                        btn.dataset.themeKey = key;
+                        btn.addEventListener('click', () => {
+                            currentTheme = key;
+                            applyTheme(key, content, gameImages);
+                            swatchGrid.querySelectorAll('button').forEach(s => {
+                                const sel = s.dataset.themeKey === key;
+                                s.classList.toggle('border-primary', sel);
+                                s.classList.toggle('ring-1', sel);
+                                s.classList.toggle('ring-primary', sel);
+                                s.classList.toggle('border-base-content/20', !sel);
+                            });
+                        });
+                        swatchGrid.appendChild(btn);
+                    }
+                    swatchContainer.appendChild(swatchGrid);
+                }
+
+                scaleFns.push(scaleToFit);
+            });
+
+            // Single shared resize handler for all previews in this module
+            let resizeTimer;
+            window.addEventListener('resize', () => {
+                clearTimeout(resizeTimer);
+                resizeTimer = setTimeout(() => scaleFns.forEach(fn => fn()), 150);
+            });
+
+            // Track which cards have already shown the rating prompt this session
+            const promptedIds = new Set();
+
+            // Build the download URL for a given preview
+            const buildDownloadUrl = (preview) => {
+                const basePngUrl = preview.dataset.sharePngUrl;
+                if (!basePngUrl) return null;
+                const swatchBtn = preview.parentElement?.querySelector('.share-card-swatches button.border-primary');
+                const themeKey = swatchBtn?.dataset.themeKey || 'default';
+                const sep = basePngUrl.includes('?') ? '&' : '?';
+                return themeKey !== 'default' ? basePngUrl + sep + 'theme=' + encodeURIComponent(themeKey) : basePngUrl;
+            };
+
+            // Download buttons
+            el.querySelectorAll('.share-card-download').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const nearestPreview = btn.closest('.card-body')?.querySelector('.share-card-preview')
+                        || btn.closest('[class*="space-y"]')?.querySelector('.share-card-preview');
+                    const basePngUrl = btn.dataset.pngUrl || nearestPreview?.dataset.sharePngUrl;
+                    if (!basePngUrl) return;
+
+                    const downloadUrl = nearestPreview ? buildDownloadUrl(nearestPreview) : basePngUrl;
+                    if (!downloadUrl) return;
+
+                    // Check if this card has rating data and should prompt
+                    const conceptId = nearestPreview?.dataset.conceptId;
+                    const hasRating = nearestPreview?.dataset.hasRating === 'true';
+                    const isShovelware = nearestPreview?.dataset.isShovelware === 'true';
+                    const playtime = nearestPreview?.dataset.playtime || '';
+
+                    if (conceptId && !hasRating && !isShovelware && !promptedIds.has(conceptId)) {
+                        promptedIds.add(conceptId);
+                        this._showRatingPrompt(conceptId, playtime, downloadUrl, nearestPreview);
+                        return;
+                    }
+
+                    window.location.href = downloadUrl;
+                });
+            });
+        }
+
+        // -----------------------------------------------------------------
+        // Rate Before Download (platinum share cards)
+        // -----------------------------------------------------------------
+
+        _showRatingPrompt(conceptId, playtime, downloadUrl, preview) {
+            const modal = document.getElementById('rate-before-download-modal');
+            if (!modal) {
+                console.warn('rate-before-download-modal not found in DOM. Rating prompt disabled.');
+                window.location.href = downloadUrl;
+                return;
+            }
+
+            // Set game title
+            const titleEl = document.getElementById('rbd-game-title');
+            if (titleEl) titleEl.textContent = preview?.dataset.gameName || 'Rate This Platinum';
+
+            // Reset form
+            const form = document.getElementById('rbd-rating-form');
+            if (form) form.reset();
+
+            // Update slider displays
+            const mappings = {
+                'overall_rating': 'rbd-overall-value',
+                'difficulty': 'rbd-difficulty-value',
+                'grindiness': 'rbd-grindiness-value',
+                'fun_ranking': 'rbd-fun-value',
+            };
+            for (const [inputName, displayId] of Object.entries(mappings)) {
+                const input = form?.querySelector('[name="' + inputName + '"]');
+                const display = document.getElementById(displayId);
+                if (input && display) {
+                    display.textContent = inputName === 'overall_rating'
+                        ? parseFloat(input.value).toFixed(1) : input.value;
+                }
+            }
+
+            // Wire slider live updates (clone to remove old listeners)
+            modal.querySelectorAll('input[type="range"]').forEach(slider => {
+                const fresh = slider.cloneNode(true);
+                slider.parentNode.replaceChild(fresh, slider);
+                fresh.addEventListener('input', () => {
+                    for (const [n, d] of Object.entries(mappings)) {
+                        const inp = form?.querySelector('[name="' + n + '"]');
+                        const disp = document.getElementById(d);
+                        if (inp && disp) disp.textContent = n === 'overall_rating'
+                            ? parseFloat(inp.value).toFixed(1) : inp.value;
+                    }
+                });
+            });
+
+            // Playtime hint
+            const playtimeHint = document.getElementById('rbd-playtime-hint');
+            if (playtimeHint) {
+                if (playtime) {
+                    playtimeHint.textContent = 'Your tracked playtime: ' + playtime;
+                    playtimeHint.classList.remove('hidden');
+                } else {
+                    playtimeHint.classList.add('hidden');
+                }
+            }
+
+            // Hours input enables submit
+            const hoursInput = form?.querySelector('[name="hours_to_platinum"]');
+            if (hoursInput) {
+                const freshH = hoursInput.cloneNode(true);
+                hoursInput.parentNode.replaceChild(freshH, hoursInput);
+                freshH.addEventListener('input', () => {
+                    const btn = document.getElementById('rbd-submit-btn');
+                    if (btn) btn.disabled = !(parseInt(freshH.value) >= 1);
+                });
+            }
+
+            // Submit: rate then download
+            const submitBtn = document.getElementById('rbd-submit-btn');
+            if (submitBtn) {
+                const freshS = submitBtn.cloneNode(true);
+                submitBtn.parentNode.replaceChild(freshS, submitBtn);
+                freshS.addEventListener('click', async () => {
+                    const fd = new FormData(form);
+                    const hours = fd.get('hours_to_platinum');
+                    if (!hours || parseInt(hours) < 1) {
+                        PlatPursuit.ToastManager.error('Please enter hours to platinum (minimum 1)');
+                        return;
+                    }
+                    freshS.classList.add('loading');
+                    freshS.disabled = true;
+                    try {
+                        await PlatPursuit.API.post(
+                            '/api/v1/reviews/' + conceptId + '/group/default/rate/',
+                            {
+                                difficulty: parseInt(fd.get('difficulty')),
+                                grindiness: parseInt(fd.get('grindiness')),
+                                fun_ranking: parseInt(fd.get('fun_ranking')),
+                                hours_to_platinum: parseInt(hours),
+                                overall_rating: parseFloat(fd.get('overall_rating')),
+                            }
+                        );
+                        if (preview) preview.dataset.hasRating = 'true';
+                        PlatPursuit.ToastManager.success('Rating submitted!');
+                        modal.close();
+                        window.location.href = downloadUrl;
+                    } catch (err) {
+                        const errData = await err.response?.json?.().catch(() => null);
+                        PlatPursuit.ToastManager.error(errData?.error || 'Failed to submit rating.');
+                    } finally {
+                        freshS.classList.remove('loading');
+                        freshS.disabled = false;
+                    }
+                });
+            }
+
+            // Skip: just download
+            const skipBtn = document.getElementById('rbd-skip-btn');
+            if (skipBtn) {
+                const freshK = skipBtn.cloneNode(true);
+                skipBtn.parentNode.replaceChild(freshK, skipBtn);
+                freshK.addEventListener('click', () => {
+                    modal.close();
+                    window.location.href = downloadUrl;
+                });
+            }
+
+            modal.showModal();
         }
 
         // -----------------------------------------------------------------

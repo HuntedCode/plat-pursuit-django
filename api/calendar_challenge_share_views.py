@@ -97,6 +97,7 @@ def _build_calendar_template_context(challenge, format_type, show_us_holidays=Fa
         ),
         'months': _annotate_holidays(month_data, show_us=show_us_holidays),
         'stats': stats,
+        'is_plus': getattr(challenge.profile, 'is_plus', False),
     }
 
     return context

@@ -65,7 +65,7 @@ class ShareableImageHTMLView(APIView):
         metadata = ShareableDataService.get_platinum_share_data(earned_trophy)
 
         # Build template context (matching NotificationShareImageHTMLView pattern)
-        context = self._build_template_context(metadata, format_type)
+        context = self._build_template_context(metadata, format_type, profile=profile)
 
         # Render the template
         html = render_to_string('notifications/partials/share_image_card.html', context)
@@ -95,8 +95,17 @@ class ShareableImageHTMLView(APIView):
 
         return Response(response_data)
 
-    def _build_template_context(self, metadata, format_type):
+    def _build_template_context(self, metadata, format_type, profile=None):
         """Build the context dict for the share image template."""
+        # Cache avatar for identity bar
+        avatar_url = ''
+        is_plus = False
+        if profile:
+            is_plus = getattr(profile, 'is_plus', False)
+            raw_avatar = profile.avatar_url or ''
+            if raw_avatar:
+                avatar_url = ShareImageCache.fetch_and_cache(raw_avatar) or ''
+
         # Calculate playtime string
         playtime = ''
         play_duration_seconds = metadata.get('play_duration_seconds')
@@ -166,6 +175,8 @@ class ShareableImageHTMLView(APIView):
             'badge_xp': badge_xp,
             'tier1_badges': processed_badges,
             'user_rating': metadata.get('user_rating'),
+            'avatar_url': avatar_url,
+            'is_plus': is_plus,
         }
 
 
@@ -207,7 +218,7 @@ class ShareableImagePNGView(APIView):
         # Reuse existing HTML view's context builder
         html_view = ShareableImageHTMLView()
         metadata = ShareableDataService.get_platinum_share_data(earned_trophy)
-        context = html_view._build_template_context(metadata, format_type)
+        context = html_view._build_template_context(metadata, format_type, profile=profile)
 
         html = render_to_string('notifications/partials/share_image_card.html', context)
 
