@@ -1,5 +1,6 @@
 {% load static custom_filters %}
-<div class="card bg-base-100 border-4 border-base-300 shadow-md shadow-neutral mb-1 transition-all duration-300 hover:border-primary hover:shadow-primary">
+<div class="card bg-base-100 border-4 border-base-300 shadow-md shadow-neutral mb-1 transition-all duration-300 hover:border-primary hover:shadow-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary cursor-pointer"
+     data-stage-toggle="{{ stage.stage_number }}" role="button" aria-expanded="true" tabindex="0">
     <div class="card-body p-2 lg:p-3">
         <div class="flex flex-row items-center gap-2 lg:gap-3">
             <!-- Stage Icon -->
@@ -74,6 +75,14 @@
                     {% endif %}
                 </div>
             {% endif %}
+
+            <!-- Game count (visible when collapsed) -->
+            <span class="badge badge-ghost badge-sm font-bold italic shrink-0 hidden" data-stage-game-count="{{ stage.stage_number }}">
+                {{ data.games|length }} game{{ data.games|length|pluralize }}
+            </span>
+
+            <!-- Collapse chevron -->
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 lg:w-5 lg:h-5 text-base-content/40 shrink-0 transition-transform duration-300" data-stage-chevron="{{ stage.stage_number }}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg>
         </div>
     </div>
 </div>

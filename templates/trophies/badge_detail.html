@@ -23,6 +23,14 @@
     <!-- Leaderboard Section -->
     {% include 'trophies/partials/badge_detail/badge_leaderboard_section.html' %}
 
+    <!-- Bulk Stage Toggle -->
+    <div class="flex justify-end mt-4">
+        <button id="badge-stage-toggle-all" class="btn btn-ghost btn-sm gap-1 text-base-content/60 hover:text-base-content">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 transition-transform duration-200" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg>
+            <span>Collapse All</span>
+        </button>
+    </div>
+
     <!-- Stage Sections -->
     {% for data in stage_data %}
         {% with data.stage as stage %}
@@ -57,16 +65,20 @@
                     <div class="flex-1 min-w-0 shadow-lg shadow-neutral bg-base-200/95 rounded-box border-2 border-base-300 p-2 lg:p-3">
                         {% include 'trophies/partials/badge_detail/badge_detail_stages.html' %}
                         {% include 'trophies/partials/badge_detail/badge_stage_stats.html' %}
-                        <div class="flex flex-col gap-1.5">
-                            {% for games in data.games %}
-                            {% with games.game as game %}
-                            {% with games.profile_game as pgame %}
-                            {% with games.community_ratings as ratings %}
-                                {% include 'trophies/partials/badge_detail/badge_detail_items.html' %}
-                            {% endwith %}
-                            {% endwith %}
-                            {% endwith %}
-                            {% endfor %}
+                        <div class="grid transition-[grid-template-rows] duration-300 ease-in-out" data-stage-games="{{ stage.stage_number }}" style="grid-template-rows: 1fr;">
+                            <div class="overflow-hidden">
+                                <div class="flex flex-col gap-1.5">
+                                    {% for games in data.games %}
+                                    {% with games.game as game %}
+                                    {% with games.profile_game as pgame %}
+                                    {% with games.community_ratings as ratings %}
+                                        {% include 'trophies/partials/badge_detail/badge_detail_items.html' %}
+                                    {% endwith %}
+                                    {% endwith %}
+                                    {% endwith %}
+                                    {% endfor %}
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -94,5 +106,133 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
 });
+
+// Stage collapse/expand functionality
+(function() {
+    const STORAGE_KEY = 'badge_stage_collapse_{{ badge.series_slug }}';
+
+    function loadState() {
+        try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || {}; }
+        catch { return {}; }
+    }
+
+    function saveState(state) {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    }
+
+    function setStageCollapsed(stageNum, collapsed) {
+        const gamesContainer = document.querySelector('[data-stage-games="' + stageNum + '"]');
+        const chevron = document.querySelector('[data-stage-chevron="' + stageNum + '"]');
+        const toggle = document.querySelector('[data-stage-toggle="' + stageNum + '"]');
+        const gameCount = document.querySelector('[data-stage-game-count="' + stageNum + '"]');
+        if (!gamesContainer) return;
+
+        if (collapsed) {
+            gamesContainer.style.gridTemplateRows = '0fr';
+            if (chevron) chevron.style.transform = 'rotate(-90deg)';
+            if (toggle) toggle.setAttribute('aria-expanded', 'false');
+            if (gameCount) gameCount.classList.remove('hidden');
+        } else {
+            gamesContainer.style.gridTemplateRows = '1fr';
+            if (chevron) chevron.style.transform = '';
+            if (toggle) toggle.setAttribute('aria-expanded', 'true');
+            if (gameCount) gameCount.classList.add('hidden');
+        }
+    }
+
+    function notifyZoomScaler() {
+        window.dispatchEvent(new Event('resize'));
+    }
+
+    // Bulk toggle button
+    const bulkBtn = document.getElementById('badge-stage-toggle-all');
+
+    function updateBulkButton() {
+        if (!bulkBtn) return;
+        const state = loadState();
+        const hasCollapsed = Object.keys(state).length > 0;
+        const label = bulkBtn.querySelector('span');
+        const icon = bulkBtn.querySelector('svg');
+        if (label) label.textContent = hasCollapsed ? 'Expand All' : 'Collapse All';
+        if (icon) icon.style.transform = hasCollapsed ? 'rotate(-90deg)' : '';
+    }
+
+    // Initialize: apply saved state without animation
+    const savedState = loadState();
+    document.querySelectorAll('[data-stage-toggle]').forEach(function(toggle) {
+        const stageNum = toggle.dataset.stageToggle;
+        if (savedState[stageNum]) {
+            const gamesContainer = document.querySelector('[data-stage-games="' + stageNum + '"]');
+            if (gamesContainer) {
+                gamesContainer.style.transition = 'none';
+                setStageCollapsed(stageNum, true);
+                requestAnimationFrame(function() {
+                    requestAnimationFrame(function() {
+                        gamesContainer.style.transition = '';
+                    });
+                });
+            }
+        }
+    });
+    updateBulkButton();
+
+    // Individual stage toggle
+    document.addEventListener('click', function(e) {
+        const toggle = e.target.closest('[data-stage-toggle]');
+        if (!toggle) return;
+        if (e.target.closest('a')) return;
+
+        const stageNum = toggle.dataset.stageToggle;
+        const state = loadState();
+        const isCollapsed = !!state[stageNum];
+
+        setStageCollapsed(stageNum, !isCollapsed);
+
+        if (isCollapsed) {
+            delete state[stageNum];
+        } else {
+            state[stageNum] = true;
+        }
+        saveState(state);
+        updateBulkButton();
+        setTimeout(notifyZoomScaler, 320);
+    });
+
+    // Keyboard support (guard against form elements)
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter' || e.key === ' ') {
+            const tag = e.target.tagName;
+            if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+            const toggle = e.target.closest('[data-stage-toggle]');
+            if (toggle) {
+                e.preventDefault();
+                toggle.click();
+            }
+        }
+    });
+
+    // Bulk toggle
+    if (bulkBtn) {
+        bulkBtn.addEventListener('click', function() {
+            const state = loadState();
+            const hasCollapsed = Object.keys(state).length > 0;
+            const newState = {};
+
+            document.querySelectorAll('[data-stage-toggle]').forEach(function(toggle) {
+                const stageNum = toggle.dataset.stageToggle;
+                if (hasCollapsed) {
+                    setStageCollapsed(stageNum, false);
+                } else {
+                    setStageCollapsed(stageNum, true);
+                    newState[stageNum] = true;
+                }
+            });
+
+            saveState(newState);
+            updateBulkButton();
+            setTimeout(notifyZoomScaler, 320);
+        });
+    }
+})();
 </script>
 {% endblock %}
