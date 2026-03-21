@@ -516,11 +516,9 @@ class MyShareablesView(LoginRequiredMixin, ProfileHotbarMixin, TemplateView):
         card_settings, _ = ProfileCardSettings.objects.get_or_create(profile=profile)
         context['card_settings'] = card_settings
 
-        # Add available themes for color grid modal
-        # Exclude game art themes for profile card (no game context);
-        # platinum share cards have their own game art handling client-side
+        # Add available themes for color grid modal (include game art for platinum cards)
         from trophies.themes import get_available_themes_for_grid
-        context['available_themes'] = get_available_themes_for_grid(include_game_art=False)
+        context['available_themes'] = get_available_themes_for_grid(include_game_art=True)
 
         # Breadcrumbs
         context['breadcrumb'] = [
