@@ -21,6 +21,12 @@ class Command(BaseCommand):
         parser.add_argument('--unreg-days', type=int, default=self.UNREGISTERED_THRESHOLD_DAYS, help='Days for unregistered.')
 
     def handle(self, *args, **options):
+        from trophies.util_modules.cache import redis_client
+        if redis_client.get('site:psn_outage'):
+            logger.info("PSN outage active. Skipping profile refresh.")
+            self.stdout.write(self.style.WARNING("Skipped: PSN outage active."))
+            return
+
         # Calculate thresholds from args
         premium_threshold = timezone.now() - timedelta(hours=options['premium_hours'])
         basic_threshold = timezone.now() - timedelta(hours=options['basic_hours'])

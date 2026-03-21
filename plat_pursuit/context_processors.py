@@ -138,3 +138,26 @@ def high_sync_volume(request):
     except Exception:
         logger.debug("Failed to read high sync volume flag from Redis", exc_info=True)
         return {}
+
+
+def psn_outage(request):
+    """
+    Check Redis for PSN outage flag and inject banner data into all templates.
+    Single Redis GET per request (sub-millisecond).
+    """
+    try:
+        from trophies.util_modules.cache import redis_client
+
+        raw = redis_client.get('site:psn_outage')
+        if not raw:
+            return {}
+
+        raw_str = raw.decode() if isinstance(raw, bytes) else raw
+        parsed = json.loads(raw_str)
+        return {
+            'psn_outage': True,
+            'psn_outage_activated_at': parsed.get('activated_at', 0),
+        }
+    except Exception:
+        logger.debug("Failed to read PSN outage flag from Redis", exc_info=True)
+        return {}

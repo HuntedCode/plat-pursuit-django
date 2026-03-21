@@ -70,7 +70,15 @@ class PSNManager:
     
     # Public Tasks
     @classmethod
+    def is_psn_outage_active(cls):
+        """Check if PSN is currently experiencing an outage."""
+        return redis_client.get('site:psn_outage') is not None
+
+    @classmethod
     def initial_sync(cls, profile: Profile):
+        if cls.is_psn_outage_active():
+            logger.warning(f"Skipping initial_sync for profile {profile.id}: PSN outage active")
+            return
         if not profile.sync_status == 'syncing':
             profile.reset_sync_progress()
             profile.set_sync_status('syncing')
@@ -83,6 +91,9 @@ class PSNManager:
 
     @classmethod
     def profile_refresh(cls, profile: Profile):
+        if cls.is_psn_outage_active():
+            logger.warning(f"Skipping profile_refresh for profile {profile.id}: PSN outage active")
+            return
         if profile.sync_status == 'error':
             cls.initial_sync(profile)
         elif profile.sync_status == 'synced':

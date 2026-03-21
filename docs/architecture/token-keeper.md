@@ -266,6 +266,26 @@ During `sync_trophy_groups`, after creating TrophyGroup records for a game, `Con
 
 The health loop calls `_check_high_sync_volume()` which uses hysteresis logic to set/clear a `site:high_sync_volume` Redis key. This drives a site-wide banner informing users that sync times may be longer than usual. Activation threshold: 10+ profiles with 200+ pending jobs. Deactivation threshold: fewer than 5 such profiles.
 
+### PSN Outage Circuit Breaker
+
+Detects PSN infrastructure outages (502/503/504 errors) and prevents profiles from being incorrectly marked as errored for systemic problems.
+
+**Detection**: Each 5xx gateway error from `_execute_api_call()` records a timestamp to the `psn:5xx_timestamps` Redis sorted set. When 5 or more errors accumulate within 60 seconds, the circuit breaker trips: `site:psn_outage` is set in Redis and `_psn_outage_active` is set in memory.
+
+**Behavior when open**:
+- `_execute_api_call()` short-circuits immediately with `PSNOutageError` (no API call made)
+- Job handlers catch `PSNOutageError` and apply outage recovery instead of setting error status
+- Outage recovery follows the deadlock pattern: backdate `last_synced` by 10 days, set `sync_status='synced'`, so the cron picks profiles up after recovery
+- `PSNManager.initial_sync()` and `profile_refresh()` skip queueing during outage
+- `refresh_profiles` cron exits early
+- Manual sync triggers return 503 with a friendly message
+- Verification flows return 503 with PSN-down messages
+- A site-wide error banner is displayed via the `psn_outage` context processor
+
+**Recovery**: The health loop calls `_check_psn_outage()` every 60 seconds. While the outage flag is active, it probes PSN with a lightweight `trophy_summary` call for a known synced profile. If the probe succeeds, the circuit breaker resets: Redis flags are cleared, the in-memory flag is set to False, and the banner disappears. Profiles with backdated `last_synced` are picked up by the `refresh_profiles` cron on its next run.
+
+**Manual override**: `python manage.py redis_admin --clear-psn-outage` clears the flag immediately.
+
 ## Gotchas and Pitfalls
 
 ### SQLite Bucket in psnawp

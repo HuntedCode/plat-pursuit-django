@@ -16,6 +16,7 @@ from django.views.decorators.cache import never_cache
 from django_ratelimit.decorators import ratelimit
 from datetime import timedelta
 from trophies.psn_manager import PSNManager
+from trophies.util_modules.cache import redis_client
 from trophies.services.badge_service import initial_badge_check, sync_discord_roles
 from trophies.services.milestone_service import check_all_milestones_for_user
 from trophies.milestone_constants import ALL_CALENDAR_TYPES
@@ -42,6 +43,11 @@ class GenerateCodeView(APIView):
 
     @method_decorator(ratelimit(key='user', rate=bot_exempt_rate('5/m'), method='POST', block=True))
     def post(self, request):
+        if redis_client.get('site:psn_outage'):
+            return Response(
+                {'error': 'PSN is currently unavailable. Try again later.'},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
         serializer = GenerateCodeSerializer(data=request.data)
         if serializer.is_valid():
             psn_username = serializer.validated_data['psn_username'].lower()
@@ -69,6 +75,11 @@ class VerifyView(APIView):
 
     @method_decorator(ratelimit(key='user', rate=bot_exempt_rate('3/m'), method='POST', block=True))
     def post(self, request):
+        if redis_client.get('site:psn_outage'):
+            return Response(
+                {'error': 'PSN is currently unavailable. Try again later.'},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
         serializer = VerifySerializer(data=request.data)
         if serializer.is_valid():
             discord_id = serializer.validated_data['discord_id']

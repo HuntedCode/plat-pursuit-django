@@ -65,6 +65,11 @@ class Command(BaseCommand):
             action='store_true',
             help='Move sync_trophies jobs from low_priority to bulk_priority for profiles exceeding the bulk threshold.'
         )
+        group.add_argument(
+            '--clear-psn-outage',
+            action='store_true',
+            help='Clear the PSN outage circuit breaker flag and 5xx timestamp tracking.'
+        )
 
     def handle(self, *args, **options):
         if not settings.DEBUG:
@@ -92,6 +97,8 @@ class Command(BaseCommand):
             self._handle_set_bulk_threshold(options['set_bulk_threshold'])
         elif options['move_whale_jobs']:
             self._handle_move_whale_jobs()
+        elif options['clear_psn_outage']:
+            self._handle_clear_psn_outage()
 
     def _confirm_action(self, action_desc):
         confirm = input(f"Are you sure you want to {action_desc}? (y/n):").strip().lower()
@@ -229,6 +236,10 @@ class Command(BaseCommand):
 
             # Clear high sync volume banner flag
             deleted_count += redis_client.delete('site:high_sync_volume')
+
+            # Clear PSN outage circuit breaker
+            deleted_count += redis_client.delete('site:psn_outage')
+            deleted_count += redis_client.delete('psn:5xx_timestamps')
 
             logger.info(f"Flushed {deleted_count} TokenKeeper-related keys/queues.")
             self.stdout.write(self.style.SUCCESS(f"Flushed {deleted_count} TokenKeeper queues and profiles."))
@@ -394,3 +405,15 @@ class Command(BaseCommand):
         except Exception as e:
             logger.exception(f"Error during whale job migration: {e}")
             self.stdout.write(self.style.ERROR(f"Error: {e}"))
+
+    def _handle_clear_psn_outage(self):
+        """Clear the PSN outage circuit breaker flag and 5xx timestamp tracking."""
+        deleted = 0
+        for key in ('site:psn_outage', 'psn:5xx_timestamps'):
+            deleted += redis_client.delete(key)
+        if deleted:
+            self.stdout.write(self.style.SUCCESS(
+                f"PSN outage flag cleared ({deleted} key(s) removed)."
+            ))
+        else:
+            self.stdout.write(self.style.WARNING("No PSN outage flag was active."))

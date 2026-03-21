@@ -1,4 +1,50 @@
-{% if high_sync_volume %}
+{% if psn_outage %}
+<div id="site-banner-psn-outage"
+     class="bg-error/15 border-b-2 border-error text-error-content"
+     role="alert"
+     aria-live="assertive"
+     data-activated-at="{{ psn_outage_activated_at }}">
+    <div class="mx-auto px-4 py-2 flex items-center justify-between gap-3">
+        <div class="flex items-center gap-2 min-w-0">
+            <svg class="w-5 h-5 shrink-0 text-error" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"/>
+            </svg>
+            <p class="text-xs lg:text-sm font-medium">
+                <span class="font-bold">PlayStation Network is currently unavailable.</span>
+                Syncs are paused and will resume automatically when PSN recovers. Your data is safe!
+            </p>
+        </div>
+        <button class="site-banner-dismiss btn btn-ghost btn-xs shrink-0"
+                aria-label="Dismiss banner">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+        </button>
+    </div>
+</div>
+<script>
+(function() {
+    var banner = document.getElementById('site-banner-psn-outage');
+    var dismissBtn = banner ? banner.querySelector('.site-banner-dismiss') : null;
+    if (!banner || !dismissBtn) return;
+
+    var STORAGE_KEY = 'pp_psn_outage_dismissed_at';
+    var activatedAt = parseFloat(banner.dataset.activatedAt) || 0;
+
+    var dismissedAt = parseFloat(localStorage.getItem(STORAGE_KEY)) || 0;
+    if (dismissedAt >= activatedAt) {
+        banner.style.display = 'none';
+        return;
+    }
+
+    dismissBtn.addEventListener('click', function() {
+        localStorage.setItem(STORAGE_KEY, String(activatedAt));
+        banner.style.display = 'none';
+    });
+})();
+</script>
+{% elif high_sync_volume %}
 <div id="site-banner"
      class="bg-warning/15 border-b-2 border-warning text-warning-content"
      role="alert"
@@ -16,8 +62,7 @@
                 Your sync may take longer than usual. Hang tight, hunter!
             </p>
         </div>
-        <button id="site-banner-dismiss"
-                class="btn btn-ghost btn-xs shrink-0"
+        <button class="site-banner-dismiss btn btn-ghost btn-xs shrink-0"
                 aria-label="Dismiss banner">
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
@@ -28,13 +73,12 @@
 <script>
 (function() {
     var banner = document.getElementById('site-banner');
-    var dismissBtn = document.getElementById('site-banner-dismiss');
+    var dismissBtn = banner ? banner.querySelector('.site-banner-dismiss') : null;
     if (!banner || !dismissBtn) return;
 
     var STORAGE_KEY = 'pp_banner_dismissed_at';
     var activatedAt = parseFloat(banner.dataset.activatedAt) || 0;
 
-    // Check if user already dismissed THIS specific banner event
     var dismissedAt = parseFloat(localStorage.getItem(STORAGE_KEY)) || 0;
     if (dismissedAt >= activatedAt) {
         banner.style.display = 'none';

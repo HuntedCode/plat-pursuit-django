@@ -11,6 +11,7 @@ from rest_framework.views import APIView
 
 from trophies.models import Profile
 from trophies.psn_manager import PSNManager
+from trophies.util_modules.cache import redis_client
 from trophies.services.badge_service import initial_badge_check
 from trophies.services.verification_service import VerificationService
 from .serializers import GenerateCodeSerializer
@@ -32,6 +33,11 @@ class MobilePSNGenerateCodeView(APIView):
 
     @method_decorator(ratelimit(key='user', rate='5/m', method='POST', block=True))
     def post(self, request):
+        if redis_client.get('site:psn_outage'):
+            return Response(
+                {'error': 'PlayStation Network is currently unavailable. Please try again later.'},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
         # If user already has a linked profile, reject to prevent re-linking confusion
         existing_profile = getattr(request.user, 'profile', None)
         if existing_profile and existing_profile.is_linked:
@@ -104,6 +110,12 @@ class MobilePSNVerifyView(APIView):
 
     @method_decorator(ratelimit(key='user', rate='3/m', method='POST', block=True))
     def post(self, request):
+        if redis_client.get('site:psn_outage'):
+            return Response(
+                {'error': 'PlayStation Network is currently unavailable. '
+                          'Verification will work once PSN recovers.'},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
         psn_username = request.data.get('psn_username', '').strip().lower()
         if not psn_username:
             return Response(

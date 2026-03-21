@@ -35,6 +35,12 @@ from trophies.services.milestone_service import check_all_milestones_for_user
 
 logger = logging.getLogger("psn_api")
 
+
+class PSNOutageError(Exception):
+    """Raised when PSN API returns a 5xx gateway error or the circuit breaker is open."""
+    pass
+
+
 class ProxiedRequestBuilder(BaseRequestBuilder):
     def __init__(self, common_headers, rate_limit, proxy_url=None):
         # DO NOT call super().__init__() - it creates an SQLite bucket which causes
@@ -205,6 +211,10 @@ class TokenKeeper:
         self._shutdown_requested = False
         self._db_lock_lock = threading.Lock()  # Thread safety for error tracking
 
+        # PSN outage circuit breaker
+        self._psn_outage_active = False
+        self._psn_outage_lock = threading.Lock()
+
         running_key = f"token_keeper:running:{self.machine_id}"
         if redis_client.get(running_key):
             raise RuntimeError(f"TokenKeeper already running for machine {self.machine_id}. Clear Redis key '{running_key}' to force start.")
@@ -334,6 +344,80 @@ class TokenKeeper:
             self._record_db_lock_error()
         return False
 
+    def _record_psn_5xx(self, status_code: int):
+        """Record a PSN 5xx gateway error and trip circuit breaker if threshold met."""
+        REDIS_KEY = 'psn:5xx_timestamps'
+        WINDOW = 60
+        THRESHOLD = 5
+
+        try:
+            now = time.time()
+            pipe = redis_client.pipeline()
+            pipe.zadd(REDIS_KEY, {f"{now}:{status_code}": now})
+            pipe.zremrangebyscore(REDIS_KEY, 0, now - WINDOW)
+            pipe.zcard(REDIS_KEY)
+            pipe.expire(REDIS_KEY, WINDOW * 2)
+            results = pipe.execute()
+            count = results[2]
+
+            if count >= THRESHOLD and not self._psn_outage_active:
+                self._trip_psn_outage()
+        except Exception as e:
+            logger.error(f"Error recording PSN 5xx: {e}")
+
+    def _trip_psn_outage(self):
+        """Activate the PSN outage circuit breaker."""
+        with self._psn_outage_lock:
+            if self._psn_outage_active:
+                return
+            self._psn_outage_active = True
+
+        data = json.dumps({
+            'activated_at': time.time(),
+            'machine_id': self.machine_id,
+        })
+        redis_client.set('site:psn_outage', data, ex=600)
+        logger.critical(
+            "PSN OUTAGE DETECTED: Circuit breaker tripped. "
+            "Profiles will not be marked as error during outage."
+        )
+
+    def _handle_outage_recovery(self, profile):
+        """Reset a profile that failed due to PSN outage.
+
+        Follows the deadlock recovery pattern: backdate last_synced and set
+        status to synced so the cron job picks the profile up for a normal
+        refresh when PSN recovers.
+        """
+        try:
+            profile.refresh_from_db()
+            if profile.sync_status == 'syncing':
+                profile.last_synced = (
+                    profile.last_synced - timedelta(days=10)
+                    if profile.last_synced else None
+                )
+                profile.sync_status = 'synced'
+                profile.sync_progress_value = 0
+                profile.sync_progress_target = 0
+                profile.save(update_fields=[
+                    'last_synced', 'sync_status',
+                    'sync_progress_value', 'sync_progress_target',
+                ])
+                # Clean up sync-related Redis keys
+                redis_client.delete(f"sync_started_at:{profile.id}")
+                redis_client.delete(f"sync_orchestrator_pending:{profile.id}")
+                redis_client.srem('active_profiles', str(profile.id))
+                logger.info(
+                    f"PSN outage recovery: profile {profile.id} reset to synced "
+                    f"with backdated last_synced"
+                )
+        except Profile.DoesNotExist:
+            logger.warning(
+                f"Profile {profile.id} no longer exists during PSN outage recovery"
+            )
+        except Exception as e:
+            logger.error(f"Error during PSN outage recovery for profile {profile.id}: {e}")
+
     def _start_health_monitor(self):
         """Start background thread for proactive health checks."""
         self._health_thread = threading.Thread(target=self._health_loop, daemon=True, name="tk-health")
@@ -364,6 +448,7 @@ class TokenKeeper:
             # Check for stuck syncing profiles on every health loop iteration
             self._check_stuck_syncing_profiles()
             self._check_high_sync_volume()
+            self._check_psn_outage()
             for group_id, group in self.group_instances.items():
                 for instance_id, inst in group['instances'].items():
                     self._check_and_refresh(inst)
@@ -552,6 +637,17 @@ class TokenKeeper:
                 else:
                     logger.error(f"Database error in job worker: {db_err}")
                 self._check_stuck_instances()
+            except PSNOutageError:
+                logger.warning(
+                    f"PSN outage during {job_type} for profile {profile_id}, "
+                    f"applying outage recovery"
+                )
+                if profile_id:
+                    try:
+                        profile = Profile.objects.get(id=profile_id)
+                        self._handle_outage_recovery(profile)
+                    except Profile.DoesNotExist:
+                        pass
             except Exception as e:
                 logger.error(f"Error in job worker: {e}")
                 # Reset any instances stuck in busy state for too long
@@ -742,6 +838,93 @@ class TokenKeeper:
         except Exception as e:
             logger.error(f"Error checking high sync volume: {e}")
 
+    def _check_psn_outage(self):
+        """Check and manage PSN outage state.
+
+        When outage is active: refresh TTL and probe PSN to detect recovery.
+        When outage is not active: sync in-memory flag from Redis (handles
+        cross-machine detection).
+        """
+        REDIS_KEY = 'site:psn_outage'
+        TTL = 600
+
+        try:
+            existing = redis_client.get(REDIS_KEY)
+
+            if existing:
+                recovered = self._probe_psn_api()
+
+                if recovered:
+                    redis_client.delete(REDIS_KEY)
+                    redis_client.delete('psn:5xx_timestamps')
+                    with self._psn_outage_lock:
+                        self._psn_outage_active = False
+                    logger.info(
+                        "PSN OUTAGE CLEARED: API probe succeeded. Circuit breaker reset."
+                    )
+                else:
+                    redis_client.expire(REDIS_KEY, TTL)
+                    with self._psn_outage_lock:
+                        self._psn_outage_active = True
+                    logger.warning("PSN outage still active. Probe failed.")
+            else:
+                with self._psn_outage_lock:
+                    self._psn_outage_active = False
+        except Exception as e:
+            logger.error(f"Error checking PSN outage state: {e}")
+
+    def _probe_psn_api(self) -> bool:
+        """Make a lightweight PSN API call to check if the service has recovered.
+
+        Uses trophy_summary for a known synced profile. Returns True if the
+        call succeeds, False on any error.
+        """
+        try:
+            test_profile = Profile.objects.filter(
+                account_id__isnull=False,
+                sync_status='synced',
+            ).first()
+
+            if not test_profile:
+                logger.warning("No suitable profile for PSN probe.")
+                return False
+
+            instance = None
+            for group_id, group in self.group_instances.items():
+                for inst_id, inst in group['instances'].items():
+                    if (not inst.is_busy
+                            and self._is_healthy(inst)
+                            and inst.last_health != 0):
+                        instance = inst
+                        break
+                if instance:
+                    break
+
+            if not instance:
+                logger.warning("No idle instance for PSN probe.")
+                return False
+
+            # Direct API call bypassing _execute_api_call (which would
+            # short-circuit due to the outage flag).
+            # Note: we don't formally acquire the instance (no is_busy/lock),
+            # so no release needed. This is a quick, non-blocking probe.
+            lookup_key = test_profile.account_id
+            if lookup_key not in instance.user_cache:
+                instance.user_cache[lookup_key] = {
+                    "user": instance.client.user(
+                        account_id=test_profile.account_id
+                    ),
+                    "timestamp": datetime.now(),
+                }
+            user = instance.user_cache[lookup_key]['user']
+            user.trophy_summary()
+
+            logger.info(f"PSN probe succeeded for profile {test_profile.id}")
+            return True
+        except Exception as e:
+            logger.debug(f"PSN probe failed: {e}")
+            return False
+
     def _get_instance_for_job(self, job_type: str) -> TokenInstance:
         """Selects best instance for job with atomic acquisition using Redis locks."""
         start = time.time()
@@ -802,7 +985,12 @@ class TokenKeeper:
         wait=wait_exponential(multiplier=1, min=4, max=30),
         reraise=True
     )
-    def _execute_api_call(self, instance : TokenInstance, profile : Profile, endpoint : str, **kwargs):       
+    def _execute_api_call(self, instance : TokenInstance, profile : Profile, endpoint : str, **kwargs):
+        # Short-circuit if PSN is known to be down
+        if self._psn_outage_active:
+            self._release_instance(instance)
+            raise PSNOutageError("PSN API is currently unavailable (circuit breaker open)")
+
         start_time = time.time()
         try:
             lookup_key = profile.account_id if profile.account_id else profile.psn_username
@@ -853,8 +1041,14 @@ class TokenKeeper:
             self._rollback_call(instance.token)
             raise
         except HTTPError as e:
-            log_api_call(endpoint, instance.token, profile.id if profile else None, e.response.status_code, time.time() - start_time, str(e))
+            status_code = e.response.status_code if hasattr(e, 'response') and e.response is not None else 0
+            log_api_call(endpoint, instance.token, profile.id if profile else None, status_code, time.time() - start_time, str(e))
             self._rollback_call(instance.token)
+            if status_code in (502, 503, 504):
+                self._record_psn_5xx(status_code)
+                raise PSNOutageError(
+                    f"PSN service unavailable ({status_code})"
+                ) from e
             raise
         except Exception as e:
             log_api_call(endpoint, instance.token, profile.id if profile else None, 500, time.time() - start_time, str(e))
@@ -1278,6 +1472,12 @@ class TokenKeeper:
                 logger.exception(f"Failed to re-render forum sig for profile {profile_id}")
 
             logger.info(f"{profile.display_psn_username} account has finished syncing!")
+        except PSNOutageError:
+            logger.warning(
+                f"PSN outage during sync_complete for profile {profile_id}, deferring"
+            )
+            self._handle_outage_recovery(profile)
+            return
         except Exception as e:
             # Deadlock/lock-timeout errors are transient (our fault, not the user's).
             # Instead of marking 'error', reset to 'synced' with a stale last_synced
@@ -1335,6 +1535,9 @@ class TokenKeeper:
 
         try:
             legacy = self._execute_api_call(self._get_instance_for_job(job_type), profile, 'get_profile_legacy')
+        except PSNOutageError:
+            self._handle_outage_recovery(profile)
+            return
         except Exception as e:
             profile.set_sync_status('error')
             raise
@@ -1358,6 +1561,9 @@ class TokenKeeper:
 
         try:
             region = self._execute_api_call(self._get_instance_for_job(job_type), profile, 'get_region')
+        except PSNOutageError:
+            self._handle_outage_recovery(profile)
+            return
         except Exception as e:
             profile.set_sync_status('error')
             raise
@@ -1702,6 +1908,8 @@ class TokenKeeper:
                         logger.info(f"Created default concept for {game.title_name} (game_title was None)")
                     except Exception:
                         logger.exception(f"Failed to create default concept for {game.title_name} (Title ID {title_id.title_id})")
+        except PSNOutageError:
+            raise  # Let the worker loop handle outage recovery
         except Exception as e:
             profile.increment_sync_progress()
             logger.exception(f"Error while syncing Title ID {title_id.title_id}: {e}")

@@ -62,6 +62,25 @@ document.addEventListener('DOMContentLoaded', () => {
      * Updates the hotbar UI based on sync status data
      */
     function updateHotbar(data) {
+        // PSN outage: show warning badge and disable sync
+        if (data.psn_outage && data.sync_status !== 'synced') {
+            syncBadge?.classList.remove('badge-success', 'badge-warning', 'badge-error');
+            syncBadge?.classList.add('badge-warning');
+            if (syncBadge) syncBadge.textContent = 'PSN Down';
+            hide(syncDiv);
+            hide(syncQueuePosition);
+            if (syncBtn) {
+                syncBtn.textContent = 'PSN Down';
+                syncBtn.disabled = true;
+            }
+            show(syncBtn);
+            if (syncAnnouncement) {
+                syncAnnouncement.textContent = 'PlayStation Network is currently unavailable';
+            }
+            stopPolling();
+            return;
+        }
+
         if (data.sync_status === 'synced') {
             syncBadge?.classList.remove('badge-warning', 'badge-error');
             syncBadge?.classList.add('badge-success');
@@ -223,10 +242,22 @@ document.addEventListener('DOMContentLoaded', () => {
                     startPolling();
                 }
             })
-            .catch(error => {
+            .catch(async error => {
                 console.error('Sync trigger error:', error);
                 stopPolling();
-                PlatPursuit.ToastManager.error('Failed to start sync. Please try again.');
+                let message = 'Failed to start sync. Please try again.';
+                try {
+                    const errData = await error.response?.json().catch(() => null);
+                    if (errData?.error) message = errData.error;
+                } catch (_) {}
+                PlatPursuit.ToastManager.error(message);
+
+                // Restore button state
+                syncBadge?.classList.remove('badge-warning');
+                syncBadge?.classList.add('badge-error');
+                if (syncBadge) syncBadge.textContent = 'Error';
+                hide(syncDiv);
+                show(syncBtn);
             });
     }
 

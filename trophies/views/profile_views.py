@@ -15,6 +15,7 @@ from django.views.generic import ListView, DetailView, View
 from django_ratelimit.decorators import ratelimit
 from urllib.parse import urlencode
 
+from trophies.util_modules.cache import redis_client
 from ..forms import (
     ProfileSearchForm,
     ProfileGamesForm,
@@ -623,6 +624,7 @@ class LinkPSNView(LoginRequiredMixin, View):
 
     def post(self, request):
         action = request.POST.get('action')
+        psn_outage = bool(redis_client.get('site:psn_outage'))
 
         if action == 'submit_username':
             form = self.form_class(request.POST)
@@ -642,6 +644,14 @@ class LinkPSNView(LoginRequiredMixin, View):
                     if not profile.verification_code or profile.verification_expires_at < timezone.now():
                         profile.generate_verification_code()
 
+                    if psn_outage:
+                        messages.warning(
+                            request,
+                            'PlayStation Network is currently unavailable. '
+                            'Verification will not work until PSN recovers. '
+                            'Your code has been generated and will be ready when service returns.'
+                        )
+
                     context = {
                         'form': form,
                         'step': 2,
@@ -655,6 +665,25 @@ class LinkPSNView(LoginRequiredMixin, View):
                     messages.error(request, 'An error occured during sync. Please try again later.')
             return render(request, self.template_name, {'form': form, 'step': 1})
         elif action == 'verify':
+            if psn_outage:
+                form = self.form_class(request.POST)
+                psn_username = form.data.get('psn_username', '')
+                messages.error(
+                    request,
+                    'PlayStation Network is currently unavailable. '
+                    'Please try verifying again once service recovers.'
+                )
+                try:
+                    profile = Profile.objects.get(psn_username=psn_username.lower())
+                    return render(request, self.template_name, {
+                        'form': self.form_class(initial={'psn_username': psn_username}),
+                        'step': 2,
+                        'verification_code': profile.verification_code,
+                        'profile': profile,
+                    })
+                except Profile.DoesNotExist:
+                    return redirect('link_psn')
+
             form = self.form_class(request.POST)
             if form.is_valid():
                 psn_username = form.cleaned_data['psn_username'].lower()
@@ -696,6 +725,13 @@ class ProfileVerifyView(LoginRequiredMixin, View):
     """
     @method_decorator(ratelimit(key='user', rate='60/m', method='GET'))
     def get(self, request):
+        if redis_client.get('site:psn_outage'):
+            return JsonResponse({
+                'psn_outage': True,
+                'error': 'PlayStation Network is currently unavailable. '
+                         'Verification will resume when PSN recovers.',
+            }, status=503)
+
         user = request.user
         profile_id = request.GET.get('profile_id')
         start_time = request.GET.get('start_time')

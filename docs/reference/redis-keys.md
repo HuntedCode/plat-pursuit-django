@@ -108,6 +108,8 @@ Workers consume from all 5 queues via priority-ordered `brpop`.
 | Key Pattern | Type | TTL | Purpose |
 |-------------|------|-----|---------|
 | `site:high_sync_volume` | String (JSON) | 300s (refreshed while active) | `{activated_at, heavy_count}` for high sync volume banner |
+| `site:psn_outage` | String (JSON) | 600s (refreshed while active) | `{activated_at, machine_id}` circuit breaker flag for PSN outages |
+| `psn:5xx_timestamps` | Sorted Set | 120s | Rolling window of PSN 5xx gateway error timestamps for circuit breaker detection |
 | `sync:bulk_threshold` | String (int) | None (persistent) | Threshold for moving whale profiles to `bulk_priority`; default 5000 |
 
 **Files**: `trophies/token_keeper.py`, `plat_pursuit/context_processors.py`, `trophies/management/commands/redis_admin.py`
@@ -259,7 +261,8 @@ The `redis_admin.py` management command provides targeted flush operations for o
 |------|-------------|
 | `--flush-index` | All homepage keys: `featured_games_*`, `featured_guide_*`, `playing_now_*`, `featured_badges_*`, `featured_checklists_*`, `whats_new_*`, `latest_badges_*` |
 | `--flush-game-page {np_id}` | `game:imageurls:{np_id}`, `game:trophygroups:{np_id}`, `game:stats:{np_id}:*` |
-| `--flush-token-keeper` | All 5 job queues + `profile_jobs:*`, `deferred_jobs:*`, `pending_sync_complete:*`, `sync_started_at:*`, `sync_trophies_lock:*`, `shovelware_concept_lock:*`, `sync_orchestrator_pending:*`, `sync_queued_games:*`, `sync_complete_in_progress:*`, `active_profiles`, `site:high_sync_volume` |
+| `--flush-token-keeper` | All 5 job queues + `profile_jobs:*`, `deferred_jobs:*`, `pending_sync_complete:*`, `sync_started_at:*`, `sync_trophies_lock:*`, `shovelware_concept_lock:*`, `sync_orchestrator_pending:*`, `sync_queued_games:*`, `sync_complete_in_progress:*`, `active_profiles`, `site:high_sync_volume`, `site:psn_outage`, `psn:5xx_timestamps` |
+| `--clear-psn-outage` | `site:psn_outage`, `psn:5xx_timestamps` |
 | `--flush-complete-lock {profile_id}` | `pending_sync_complete:{id}`, `sync_started_at:{id}`, `sync_orchestrator_pending:{id}`, `sync_queued_games:{id}`, `sync_complete_in_progress:{id}` |
 | `--flush-dashboard {profile_id}` | `dashboard:mod:{slug}:{id}` for each registered module |
 | `--flush-concept {concept_id}` | Game page keys for all games under the concept |

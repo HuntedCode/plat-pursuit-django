@@ -83,6 +83,7 @@ class ProfileSyncStatusView(LoginRequiredMixin, View):
             'sync_target': profile.sync_progress_target,
             'sync_percentage': profile.sync_percentage,
             'seconds_to_next_sync': seconds_to_next_sync,
+            'psn_outage': bool(redis_client.get('site:psn_outage')),
         }
 
         if profile.sync_status == 'syncing':
@@ -100,6 +101,12 @@ class TriggerSyncView(LoginRequiredMixin, View):
     def post(self, request):
         if not hasattr(request.user, 'profile'):
             return JsonResponse({'error': 'No linked profile'}, status=400)
+
+        if redis_client.get('site:psn_outage'):
+            return JsonResponse({
+                'error': 'PlayStation Network is currently unavailable. '
+                         'Syncs will resume automatically when PSN recovers.'
+            }, status=503)
 
         profile = request.user.profile
         is_syncing = profile.attempt_sync()
@@ -120,6 +127,12 @@ class SearchSyncProfileView(LoginRequiredMixin, View):
     """
     @method_decorator(ratelimit(key='user', rate='5/m', method='POST', block=True))
     def post(self, request):
+        if redis_client.get('site:psn_outage'):
+            return JsonResponse({
+                'error': 'PlayStation Network is currently unavailable. '
+                         'Please try again later.'
+            }, status=503)
+
         psn_username = request.POST.get('psn_username')
         if not psn_username:
             return JsonResponse({'error': 'Username required'}, status=400)
