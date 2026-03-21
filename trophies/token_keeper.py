@@ -1,4 +1,5 @@
 import json
+import re
 from random import choice
 import time
 import threading
@@ -17,7 +18,7 @@ from django.db.models.functions import Coalesce
 from psnawp_api import PSNAWP as BasePSNAWP
 from psnawp_api.core.request_builder import RequestBuilder as BaseRequestBuilder
 from psnawp_api.core.authenticator import Authenticator as BaseAuthenticator
-from psnawp_api.core.psnawp_exceptions import PSNAWPForbiddenError
+from psnawp_api.core.psnawp_exceptions import PSNAWPForbiddenError, PSNAWPServerError
 from psnawp_api.models.trophies.trophy_constants import PlatformType
 from requests import HTTPError
 from requests.exceptions import ConnectionError, Timeout
@@ -1050,6 +1051,17 @@ class TokenKeeper:
                     f"PSN service unavailable ({status_code})"
                 ) from e
             raise
+        except PSNAWPServerError as e:
+            # psnawp raises PSNAWPServerError (not HTTPError) for 5xx responses.
+            # Extract status code from message if possible (e.g., "Error 503 - ...")
+            match = re.search(r'(\d{3})', str(e))
+            status_code = int(match.group(1)) if match else 503
+            log_api_call(endpoint, instance.token, profile.id if profile else None, status_code, time.time() - start_time, str(e))
+            self._rollback_call(instance.token)
+            self._record_psn_5xx(status_code)
+            raise PSNOutageError(
+                f"PSN service unavailable ({status_code})"
+            ) from e
         except Exception as e:
             log_api_call(endpoint, instance.token, profile.id if profile else None, 500, time.time() - start_time, str(e))
             instance.last_error = f"{datetime.now().isoformat()} Error: {str(e)}"
