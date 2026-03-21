@@ -1,20 +1,20 @@
-Hi Claude! We need to make sure that all code is efficient and high quality, prioritizing reuse and organization. If you see something that is worthy of a refactor, include it in your plans for discussion/implementation (unless told otherwise).
-Be sure to ask questions when creating plans. Clarification will always be better than assumptions.
-Indicate to me when first starting to build a plan that you have read this document.
-Your thoughts/insights/recommendations/suggestions are always welcome if they help make our systems better. Even if they are not currently related to the task you are working on, it's better to mention it for later than to ignore it entirely.
-All pages should be designed with the following "Platinum Pursuit Standard" mind: Professional, Sleek, Modern but never losing the charm that comes with our indie development team and our passion for trophy hunting. Flavor text, easter eggs and nods to the community are welcomed within reason! Fun should always be a priority.
+# PlatPursuit — Project CLAUDE.md
 
-## Writing Style
+> This file contains project-specific standards. See `~/.claude/CLAUDE.md` for universal collaboration, workflow, and quality standards that apply across all projects.
 
-- **Never use em dashes** (the long dash character). Use colons, periods, or rephrase instead.
+## Design Standard: Platinum Pursuit
+
+All pages should be designed with the "Platinum Pursuit Standard" in mind: Professional, Sleek, Modern but never losing the charm that comes with our indie development team and our passion for trophy hunting. Flavor text, easter eggs, and nods to the community are welcomed within reason! Fun should always be a priority.
+
+---
 
 ## Responsive Design Standards
 
 ### Philosophy: Two Layouts, Not Three
 
-We build **two** layouts per page — **tablet (768px)** and **desktop (1024px+)**. We do NOT build separate mobile layouts. Instead, screens below 768px receive the tablet layout uniformly scaled down via `transform: scale()`. This means every page looks identical on an iPhone as it does on a tablet, just proportionally smaller.
+We build **two** layouts per page: **tablet (768px)** and **desktop (1024px+)**. We do NOT build separate mobile layouts. Instead, screens below 768px receive the tablet layout uniformly scaled down via `transform: scale()`. This means every page looks identical on an iPhone as it does on a tablet, just proportionally smaller.
 
-**NEVER use CSS `zoom`** — it is non-standard and has inconsistent inheritance in Safari/WebKit.
+**NEVER use CSS `zoom`**: it is non-standard and has inconsistent inheritance in Safari/WebKit.
 
 ### Design Targets
 
@@ -24,11 +24,11 @@ We build **two** layouts per page — **tablet (768px)** and **desktop (1024px+)
 
 ### Breakpoint Strategy
 
-- `md:` (768px-1023px): Tablet optimizations — this is the smallest layout you actually design
-- `lg:` (1024px+): Desktop and above — primary design target
+- `md:` (768px-1023px): Tablet optimizations, this is the smallest layout you actually design
+- `lg:` (1024px+): Desktop and above, primary design target
 - `xl:` (1280px+), `2xl:` (1536px+): Large desktop refinements
-- Base styles (no prefix): Must look correct at 768px since that's the scaled-down view
-- **NEVER use `sm:` breakpoints** — they target below 768px, which we don't design for
+- Base styles (no prefix): Must look correct at 768px since that is the scaled-down view
+- **NEVER use `sm:` breakpoints**: they target below 768px, which we don't design for
 - **NEVER use `grid-cols-1 md:grid-cols-2`** or similar patterns that collapse to single-column below `md:`. Since 768px is the minimum layout, base styles should already show the tablet layout (e.g., use `grid-cols-2` directly, not `grid-cols-1 md:grid-cols-2`)
 
 ### Layout Patterns
@@ -55,9 +55,9 @@ Every page has this structure in `base.html`:
 
 - `#zoom-wrapper` has `min-h-screen flex flex-col` (the page's flex column layout)
 - Fixed-position elements live OUTSIDE the wrapper so they aren't affected by the transform
-- The CSS rules live in `input.css`, gated behind `#zoom-container.zoom-active` — dormant until activated
-- The JS utility `ZoomScaler` lives in `utils.js` — adds `.zoom-active` class and handles height correction
-- Pages without `ZoomScaler.init()` are completely unaffected — the wrapper divs are layout-invisible
+- The CSS rules live in `input.css`, gated behind `#zoom-container.zoom-active`, dormant until activated
+- The JS utility `ZoomScaler` lives in `utils.js`, adds `.zoom-active` class and handles height correction
+- Pages without `ZoomScaler.init()` are completely unaffected, the wrapper divs are layout-invisible
 
 ### How to Opt a Page into Uniform Scaling
 
@@ -68,7 +68,7 @@ PlatPursuit.ZoomScaler.init();
 
 That's it. The CSS is already in `input.css` and the JS utility handles everything (adding `.zoom-active` class, height correction, resize/mutation listeners).
 
-Verify the page's layout looks correct at exactly 768px wide — that is the baseline that gets scaled down.
+Verify the page's layout looks correct at exactly 768px wide, that is the baseline that gets scaled down.
 
 ### Reference Implementation
 
@@ -85,7 +85,9 @@ See `templates/trophies/profile_detail.html` for a working example.
 - `transform-origin: top left` anchors the scale to the top-left corner
 - MutationObserver handles dynamic content (infinite scroll, AJAX) recalculating the height
 
-## Concept Model — Critical: `absorb()` Method
+---
+
+## Concept Model: Critical `absorb()` Method
 
 The `Concept.absorb(other)` method in `trophies/models.py` migrates ALL related data from one Concept to another before the old one is deleted. This is called automatically by `Game.add_concept()` when a concept reassignment orphans the old Concept.
 
@@ -106,21 +108,25 @@ Currently handled by `absorb()`:
 - GameFamily (inherit if target has none)
 - Concept.title_ids (merged/deduplicated)
 
+---
+
 ## Image Styling Conventions
 
-### Game & Trophy Icons
+### Game and Trophy Icons
 - **Always** use `object-cover` with square aspect ratio (`w-N h-N` pairs or `w-full aspect-square`)
-- **Never** use `object-fill` — it stretches/distorts images
+- **Never** use `object-fill`, it stretches/distorts images
 - In inline-style contexts (share cards), use `object-fit: cover`
 
 ### Badge Images
-- Use `object-contain` — badges have transparent backgrounds and custom shapes
+- Use `object-contain`, badges have transparent backgrounds and custom shapes
 
 ### Exceptions
 - Generic PS placeholder icons (no `title_image`): `object-contain p-3`
 - Content rating icons: `object-contain`
 - Banner/hero images: `object-cover` but not necessarily square
 - User-uploaded content images (guide screenshots): `object-contain h-auto`
+
+---
 
 ## Text Clipping Prevention
 
@@ -129,40 +135,27 @@ Currently handled by `absorb()`:
 - Italic glyphs slant beyond the text box boundary, and `line-clamp` clips overflow, causing the rightmost characters to be visually cut off
 - `pr-1` (4px) provides enough breathing room to prevent clipping
 
-## Quality Workflow: Plan, Build, Polish
+---
 
-The development workflow has three distinct audit phases. Each phase catches different categories of issues at the cheapest possible time.
+## Quality Workflow: Project-Specific Extensions
 
-### Phase 1: Planning — Reuse Verification (Mandatory)
+The global CLAUDE.md defines the three-phase workflow (Plan, Build, Polish). Below are PlatPursuit-specific additions to each phase.
 
-Before finalizing any plan, grep the codebase for existing implementations that overlap with the proposed work. This is a structural concern, not a style concern.
+### Phase 1 Additions: Reuse Targets
 
-**Checklist before exiting plan mode:**
-- Search `static/js/utils.js` for utilities that cover the proposed functionality (API, ToastManager, HTMLUtils, debounce, InfiniteScroller, UnsavedChangesManager, ZoomScaler)
-- Search existing JS files for similar UI patterns (modals, tabs, infinite scroll, form handling)
-- Search existing templates for component patterns that can be reused or extended
-- Search existing Django views/services for logic that can be shared rather than duplicated
-- If the plan proposes a new helper, utility, or abstraction: verify nothing equivalent already exists
+Before exiting plan mode, specifically search:
+- `static/js/utils.js` for utilities (API, ToastManager, HTMLUtils, debounce, InfiniteScroller, UnsavedChangesManager, ZoomScaler)
+- Existing JS files for similar UI patterns (modals, tabs, infinite scroll, form handling)
+- Existing templates for component patterns that can be reused or extended
+- Existing Django views/services for logic that can be shared rather than duplicated
 
-**If existing code covers the need**: reuse it. If it almost covers it: extend it. Only create new abstractions when nothing suitable exists.
+### Phase 2 Additions: Security Focus
 
-### Phase 2: Implementation — Inline Audits (Background)
+In addition to the standard inline audit, check for Django-specific security pitfalls (CSRF, SQL injection, XSS in templates, unsafe querystring handling).
 
-During implementation, launch a background **Explore subagent** after each logical chunk of work (a completed file, a feature slice, or a significant set of changes) to audit what was just written. The audit agent should check for:
+### Phase 3 Additions: Style Audit Criteria
 
-- Code quality and readability
-- Missed edge cases or potential bugs
-- Consistency with existing project patterns and conventions
-- Security issues (OWASP top 10, Django-specific pitfalls)
-- Code duplication: is the new code reimplementing something that already exists?
-
-Continue implementing the next chunk while the audit runs in the background. When audit results come back, surface any findings and fix issues immediately rather than accumulating them.
-
-### Phase 3: Post-Implementation — Style Audit Pass (Mandatory)
-
-After all functional code is complete and working, run a dedicated style audit before marking the task as done. This is the "polish" step. The framework gets built first, then refined.
-
-**The style audit agent should review every new/modified template and JS file against:**
+The final audit should review every new/modified template and JS file against:
 
 1. **Platinum Pursuit Standard**: Does it feel professional, sleek, and modern while retaining the indie charm? Or does it feel generic/sterile?
 2. **Responsive design compliance**: Two-layout system, no `sm:` breakpoints, base styles correct at 768px, proper `md:`/`lg:` progression
@@ -172,15 +165,17 @@ After all functional code is complete and working, run a dedicated style audit b
 6. **Text handling**: `pr-1` on italic + line-clamped text, proper truncation
 7. **Tailwind consistency**: Using project-standard classes rather than one-off values
 
-Surface all findings and fix them before presenting the work as complete. The goal: the user should not need to do their own style audit pass.
+---
 
-**Overall workflow**: brainstorm -> plan (with reuse check) -> implement (with inline audits) -> style polish -> done.
+## Git Commit Scopes
 
-## Documentation Maintenance
+Scopes for this project: `models`, `views`, `templates`, `static`, `sync`, `badges`, `payments`, `notifications`, `admin`, `api`, `commands`
+
+---
+
+## Documentation Structure
 
 All system documentation lives in `docs/`. See [docs/README.md](docs/README.md) for the full index.
-
-**Mandatory**: When creating, modifying, or extending any system, update the corresponding doc in the same PR. If no doc exists yet, create one using [docs/TEMPLATE.md](docs/TEMPLATE.md). Every doc must include a **Gotchas and Pitfalls** section.
 
 **What counts as a doc-worthy change:**
 - New models, services, views, or management commands
@@ -197,3 +192,5 @@ All system documentation lives in `docs/`. See [docs/README.md](docs/README.md) 
 - `docs/guides/` : How-to and operational docs (setup, commands, cron, email)
 - `docs/reference/` : Quick-lookup tables (API endpoints, JS utils, Redis keys, settings)
 - `docs/design/` : Long-form vision docs for unimplemented systems
+
+New docs should use [docs/TEMPLATE.md](docs/TEMPLATE.md) as a starting point.
