@@ -1,7 +1,7 @@
 {% load custom_filters %}
 {# Dashboard module: Rarity Showcase. User's rarest earned trophies in 2-column grid. #}
-<div class="card bg-base-200/80 border-2 border-base-300 shadow-lg shadow-neutral">
-    <div class="card-body p-5 lg:p-7">
+<div class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral">
+    <div class="card-body p-3 md:p-5 lg:p-7">
         {# Header #}
         <div class="flex items-center justify-between mb-3">
             <h2 class="card-title text-base lg:text-lg font-bold flex items-center gap-2">
@@ -13,10 +13,10 @@
         </div>
 
         {% if data.has_trophies %}
-            <div class="grid grid-cols-2 gap-2 lg:gap-3">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-2 lg:gap-3">
                 {% for trophy in data.trophies %}
                     {% with rarity=trophy.earn_rate|rarity_color_hex %}
-                    <a href="{% url 'game_detail' trophy.np_communication_id %}" class="p-2 rounded-lg bg-base-300/30 hover:bg-base-300/60 transition-colors group">
+                    <a href="{% url 'game_detail' trophy.np_communication_id %}" class="p-2 rounded-lg bg-base-300/40 hover:bg-base-300/60 transition-colors group">
                         {# Top row: both icons + trophy name + rarity #}
                         <div class="flex items-start gap-2 mb-1.5">
                             {# Trophy icon #}

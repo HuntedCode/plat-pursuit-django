@@ -1,7 +1,7 @@
 {% load custom_filters %}
 {# Dashboard module: Challenge Hub. A-Z, Calendar, Genre with mini previews. #}
-<div class="card bg-base-200/80 border-2 border-base-300 shadow-lg shadow-neutral">
-    <div class="card-body p-5 lg:p-7">
+<div class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral">
+    <div class="card-body p-3 md:p-5 lg:p-7">
         {# Header #}
         <div class="flex items-center justify-between mb-4">
             <h2 class="card-title text-base lg:text-lg font-bold flex items-center gap-2">
@@ -14,11 +14,11 @@
         </div>
 
         {# Three challenge sections #}
-        <div class="grid grid-cols-3 gap-3 lg:gap-4">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-2 md:gap-3 lg:gap-4">
 
             {# ─── A-Z Challenge ─────────────────────────────── #}
             {% with challenge_data=data.az %}
-                <div class="rounded-lg border border-base-300/60 bg-base-300/20 p-3 flex flex-col">
+                <div class="rounded-lg border border-base-300/60 bg-base-300/20 p-2 md:p-3 flex flex-col">
                     {% if challenge_data %}
                         {% if challenge_data.is_complete %}
                             <div class="flex items-center gap-2 mb-2">
@@ -71,7 +71,7 @@
 
             {# ─── Calendar Challenge ────────────────────────── #}
             {% with challenge_data=data.calendar %}
-                <div class="rounded-lg border border-base-300/60 bg-base-300/20 p-3 flex flex-col">
+                <div class="rounded-lg border border-base-300/60 bg-base-300/20 p-2 md:p-3 flex flex-col">
                     {% if challenge_data %}
                         {% if challenge_data.is_complete %}
                             <div class="flex items-center gap-2 mb-2">
@@ -134,7 +134,7 @@
 
             {# ─── Genre Challenge ───────────────────────────── #}
             {% with challenge_data=data.genre %}
-                <div class="rounded-lg border border-base-300/60 bg-base-300/20 p-3 flex flex-col">
+                <div class="rounded-lg border border-base-300/60 bg-base-300/20 p-2 md:p-3 flex flex-col">
                     {% if challenge_data %}
                         {% if challenge_data.is_complete %}
                             <div class="flex items-center gap-2 mb-2">

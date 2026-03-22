@@ -1,7 +1,7 @@
 {% load custom_filters %}
 {# Dashboard module: Trophy Visualizations. Combined premium analytics suite. #}
-<div class="card bg-base-200/80 border-2 border-base-300 shadow-lg shadow-neutral">
-    <div class="card-body p-5 lg:p-7">
+<div class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral">
+    <div class="card-body p-3 md:p-5 lg:p-7">
         {# Header with year selector #}
         <div class="flex items-center justify-between mb-1">
             <h2 class="card-title text-base lg:text-lg font-bold flex items-center gap-2">
@@ -66,7 +66,7 @@
                                     </div>
                                     {% for cell in row.cells %}
                                         {% if cell.in_year %}
-                                            <div class="rounded-sm {% if cell.level == 0 %}bg-base-300/30{% elif cell.level == 1 %}bg-primary/30{% elif cell.level == 2 %}bg-primary/50{% elif cell.level == 3 %}bg-primary/70{% else %}bg-primary{% endif %}"
+                                            <div class="rounded-sm {% if cell.level == 0 %}bg-base-300/40{% elif cell.level == 1 %}bg-primary/30{% elif cell.level == 2 %}bg-primary/50{% elif cell.level == 3 %}bg-primary/70{% else %}bg-primary{% endif %}"
                                                  style="flex: 1; aspect-ratio: 1; min-width: 6px;"
                                                  title="{{ cell.date }}: {{ cell.count }} trophy{{ cell.count|pluralize:"ies" }}"></div>
                                         {% else %}
@@ -80,7 +80,7 @@
                     {# Legend #}
                     <div class="flex items-center justify-end gap-1 mt-2">
                         <span class="text-[0.55rem] text-base-content/40">Less</span>
-                        <div class="w-2.5 h-2.5 rounded-sm bg-base-300/30"></div>
+                        <div class="w-2.5 h-2.5 rounded-sm bg-base-300/40"></div>
                         <div class="w-2.5 h-2.5 rounded-sm bg-primary/30"></div>
                         <div class="w-2.5 h-2.5 rounded-sm bg-primary/50"></div>
                         <div class="w-2.5 h-2.5 rounded-sm bg-primary/70"></div>
@@ -96,11 +96,11 @@
         {% endwith %}
 
         {# Divider #}
-        <div class="border-t border-base-300 my-3"></div>
+        <div class="border-t border-base-content/10 my-3"></div>
         {% endif %}
 
         {# ========== Genre Radar + Year in Review ========== #}
-        <div class="grid grid-cols-2 gap-4 my-4">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4 my-4">
 
             {# Genre Radar #}
             {% with gr=data.genre_radar %}
@@ -115,7 +115,7 @@
                         <div class="flex items-center justify-between mb-2">
                             <span class="text-xs text-base-content/40">{{ gr.total }} trophies across genres</span>
                         </div>
-                        <div style="max-height: 240px;">
+                        <div style="max-height: 240px;" class="max-w-xs mx-auto md:max-w-none">
                             <canvas class="genre-radar-canvas"
                                     data-labels='{{ gr.labels|tojson }}'
                                     data-counts='{{ gr.counts|tojson }}'></canvas>
@@ -196,10 +196,10 @@
         </div>
 
         {# Divider #}
-        <div class="border-t border-base-300 my-3"></div>
+        <div class="border-t border-base-content/10 my-3"></div>
 
         {# ========== Games Started vs Completed + Earned vs Unearned (side by side) ========== #}
-        <div class="grid grid-cols-2 gap-4 mt-4">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4 mt-4">
 
             {# Games Started vs Completed #}
             {% with gf=data.games_flow %}

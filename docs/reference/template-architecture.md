@@ -55,18 +55,17 @@ The template system uses Django's template inheritance with a single `base.html`
 - **Background images**: Supports concept-specific backgrounds via `image_urls.bg_url` context
 - **Premium theme gradients**: CSS custom properties via `user_theme_style` context
 
-## Zoom Wrapper System
+## Responsive System
 
-Every page has the wrapper divs (`#zoom-container` > `#zoom-wrapper`) but scaling is **dormant** until activated. The CSS rules in `input.css` are gated behind `#zoom-container.zoom-active`.
+Pages are being incrementally migrated from the legacy ZoomScaler (transform-scale) system to proper mobile-first responsive styles. Both approaches coexist safely since the zoom wrapper divs in `base.html` are inert without `.zoom-active`.
 
-To opt a page into scaling:
-```js
-PlatPursuit.ZoomScaler.init();  // in {% block js_scripts %}
-```
+**Migrated pages** (e.g., dashboard): Use mobile-first Tailwind classes with `md:`/`lg:` breakpoints. No `ZoomScaler.init()` call. See [Design System Reference](design-system.md) for all styling tokens and patterns.
 
-This adds `.zoom-active` and runs height correction. Below 768px, the page renders at 768px width and `transform: scale()` shrinks it to fit. Fixed-position elements (toasts, modals, tabbar) live **outside** the wrapper so they aren't affected.
+**Non-migrated pages**: Still call `PlatPursuit.ZoomScaler.init()` which adds `.zoom-active` to `#zoom-container`, activating CSS transform rules in `input.css` that scale the 768px layout down for smaller screens.
 
-See CLAUDE.md for full responsive design standards.
+Fixed-position elements (toasts, modals, tabbar) live **outside** the wrapper divs so they are unaffected by either system.
+
+See CLAUDE.md for the full responsive design standards and migration instructions.
 
 ## Context Processors
 

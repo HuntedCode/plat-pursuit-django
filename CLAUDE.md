@@ -10,80 +10,61 @@ All pages should be designed with the "Platinum Pursuit Standard" in mind: Profe
 
 ## Responsive Design Standards
 
-### Philosophy: Two Layouts, Not Three
+### Philosophy: Three Layouts, Mobile-First
 
-We build **two** layouts per page: **tablet (768px)** and **desktop (1024px+)**. We do NOT build separate mobile layouts. Instead, screens below 768px receive the tablet layout uniformly scaled down via `transform: scale()`. This means every page looks identical on an iPhone as it does on a tablet, just proportionally smaller.
+We build **three** layouts per page: **mobile (375px+)**, **tablet (768px+)**, and **desktop (1024px+)**. Tailwind's mobile-first breakpoints mean base styles target phones, with `md:` and `lg:` adding complexity for larger screens.
 
-**NEVER use CSS `zoom`**: it is non-standard and has inconsistent inheritance in Safari/WebKit.
+**Migration in progress**: Pages are being incrementally migrated from the legacy ZoomScaler system (transform-scale) to proper responsive styles. Migrated and non-migrated pages coexist safely. See the ZoomScaler Legacy section below for details on non-migrated pages.
 
 ### Design Targets
 
+- **Mobile (375px+, base)**: Tightest layout. Must be functional and readable at 375px.
+- **Tablet (768px-1023px, `md:`)**: More breathing room, multi-column where appropriate.
 - **Desktop/4K (1024px+, `lg:`)**: Primary target. Best, most polished experience.
-- **Tablet (768px-1023px, `md:`)**: Minimum designed layout. This is what sub-768px screens see (scaled down).
-- **Below 768px**: Automatically handled by transform scaling. DO NOT write mobile-specific styles. DO NOT TOUCH this behavior.
 
 ### Breakpoint Strategy
 
-- `md:` (768px-1023px): Tablet optimizations, this is the smallest layout you actually design
-- `lg:` (1024px+): Desktop and above, primary design target
-- `xl:` (1280px+), `2xl:` (1536px+): Large desktop refinements
-- Base styles (no prefix): Must look correct at 768px since that is the scaled-down view
-- **NEVER use `sm:` breakpoints**: they target below 768px, which we don't design for
-- **NEVER use `grid-cols-1 md:grid-cols-2`** or similar patterns that collapse to single-column below `md:`. Since 768px is the minimum layout, base styles should already show the tablet layout (e.g., use `grid-cols-2` directly, not `grid-cols-1 md:grid-cols-2`)
+- Base styles (no prefix): Must look correct at **375px** (iPhone SE)
+- `md:` (768px+): Tablet, where layouts can expand to multi-column
+- `lg:` (1024px+): Desktop, primary design target
+- `xl:` (1280px+), `2xl:` (1536px+): Large desktop refinements (optional)
+- `sm:` (640px): Available but rarely needed; most layouts jump from mobile to `md:`
 
-### Layout Patterns
+### Design System Reference
 
-- Stack vertically at md:, arrange horizontally at lg: `flex flex-col md:flex-col lg:flex-row`
-- Scale elements progressively: `w-32 md:w-40 lg:w-48`
-- Always include `md:` variants to bridge the gap between the tablet and desktop layouts
-- Touch targets: At `md:` and above, interactive elements should be at least 44px
-- Grids should start at their tablet column count: `grid-cols-2 lg:grid-cols-3` not `grid-cols-1 md:grid-cols-2 lg:grid-cols-3`
+All styling tokens, patterns, and rules are documented in **[docs/reference/design-system.md](docs/reference/design-system.md)**. This includes:
 
-### Architecture: Zoom Wrapper System
+- Card anatomy and class strings
+- Responsive spacing progressions (`p-3 md:p-5 lg:p-7`)
+- Grid collapse rules (which grids go 1-col on mobile vs. stay multi-col)
+- Color/contrast tokens (backgrounds, borders, dividers)
+- Mobile-specific patterns (icon-only buttons, short dates, hidden timestamps)
+- Typography scale
 
-Every page has this structure in `base.html`:
-```
-<body>
-  <div id="zoom-container">        <!-- Clips overflow when scaling is active -->
-    <div id="zoom-wrapper">         <!-- Receives transform: scale() -->
-      navbar, main content, footer
-    </div>
-  </div>
-  back-to-top, mobile tabbar, toasts, modals  <!-- Fixed elements, OUTSIDE wrapper -->
-</body>
-```
-
-- `#zoom-wrapper` has `min-h-screen flex flex-col` (the page's flex column layout)
-- Fixed-position elements live OUTSIDE the wrapper so they aren't affected by the transform
-- The CSS rules live in `input.css`, gated behind `#zoom-container.zoom-active`, dormant until activated
-- The JS utility `ZoomScaler` lives in `utils.js`, adds `.zoom-active` class and handles height correction
-- Pages without `ZoomScaler.init()` are completely unaffected, the wrapper divs are layout-invisible
-
-### How to Opt a Page into Uniform Scaling
-
-Add one line to the page's `{% block js_scripts %}`:
-```js
-PlatPursuit.ZoomScaler.init();
-```
-
-That's it. The CSS is already in `input.css` and the JS utility handles everything (adding `.zoom-active` class, height correction, resize/mutation listeners).
-
-Verify the page's layout looks correct at exactly 768px wide, that is the baseline that gets scaled down.
+**Consult the design system doc before styling any page.** It is the single source of truth for how components should look.
 
 ### Reference Implementation
 
-See `templates/trophies/profile_detail.html` for a working example.
+See `templates/trophies/dashboard.html` and its module partials in `templates/trophies/partials/dashboard/` for the canonical responsive implementation.
 
-### Technical Details
+### ZoomScaler Legacy System (Non-Migrated Pages)
 
-- All scaling CSS lives in `input.css`, gated behind `#zoom-container.zoom-active` selector
-- `ZoomScaler.init()` in `utils.js` adds `.zoom-active` to `#zoom-container` and runs the height correction IIFE
-- `transform: scale()` shrinks the visual rendering but does NOT change the element's layout box
-- `width: calc(100% / scale)` compensates so the scaled result fills 100% of the viewport
-- `overflow: hidden` on `#zoom-container` prevents horizontal scrollbar from the expanded width
-- Height correction JS sets `container.style.height` to `wrapper.scrollHeight * scale` to eliminate bottom whitespace
-- `transform-origin: top left` anchors the scale to the top-left corner
-- MutationObserver handles dynamic content (infinite scroll, AJAX) recalculating the height
+Pages not yet migrated still use the ZoomScaler transform-scale system. This is being phased out incrementally.
+
+**How it works**: The `#zoom-container` and `#zoom-wrapper` divs in `base.html` are always present but inert. When a page calls `PlatPursuit.ZoomScaler.init()`, it adds `.zoom-active` which activates CSS transform rules that scale the 768px layout down to fit smaller screens.
+
+**For non-migrated pages:**
+- Base styles target 768px (tablet), `lg:` targets desktop
+- Do NOT use `grid-cols-1 md:grid-cols-2` patterns (base must show the tablet layout)
+- Verify layout at exactly 768px wide (the baseline that gets scaled down)
+
+**To migrate a page:**
+1. Remove `PlatPursuit.ZoomScaler.init()` from the page's JS
+2. Apply the design system tokens: shift base styles to mobile-first, push current base to `md:`
+3. Run `npm run build` to regenerate Tailwind CSS
+4. Test at 375px, 768px, and 1024px+
+
+Fixed-position elements (toasts, modals, mobile tabbar) live OUTSIDE the wrapper divs in `base.html` and are unaffected by either system.
 
 ---
 

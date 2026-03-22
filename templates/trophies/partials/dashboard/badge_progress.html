@@ -1,7 +1,7 @@
 {% load static custom_filters %}
 {# Dashboard module: Badge Progress. Badges closest to earning. #}
-<div class="card bg-base-200/80 border-2 border-base-300 shadow-lg shadow-neutral">
-    <div class="card-body p-5 lg:p-7">
+<div class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral">
+    <div class="card-body p-3 md:p-5 lg:p-7">
         {# Header #}
         <div class="flex items-center justify-between mb-3">
             <h2 class="card-title text-base lg:text-lg font-bold flex items-center gap-2">
@@ -19,9 +19,9 @@
         </div>
 
         {% if data.badges_in_progress %}
-            <div class="grid grid-cols-2 gap-3">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-2 md:gap-3">
                 {% for bp in data.badges_in_progress %}
-                    <a href="{% url 'badge_detail' bp.series_slug %}" class="flex items-center gap-3 p-2 rounded-lg bg-base-300/30 hover:bg-base-300/60 transition-colors group">
+                    <a href="{% url 'badge_detail' bp.series_slug %}" class="flex items-center gap-2 md:gap-3 p-2 rounded-lg bg-base-300/40 hover:bg-base-300/60 transition-colors group">
                         <figure class="w-10 h-10 lg:w-12 lg:h-12 shrink-0 {% if bp.tier == 1 %}grayscale group-hover:grayscale-0 transition-all{% endif %}">
                             {% include 'partials/badge.html' with layers=bp.layers %}
                         </figure>
@@ -43,7 +43,7 @@
             </div>
 
             {% if data.total_earned %}
-                <div class="flex items-center justify-between mt-3 pt-3 border-t border-base-300/50 text-xs text-base-content/50">
+                <div class="flex items-center justify-between mt-3 pt-3 border-t border-base-content/10 text-xs text-base-content/50">
                     <span>{{ data.total_earned }} badges earned ({{ data.unique_earned }} unique series)</span>
                     <a href="{% url 'badges_list' %}" class="link link-primary font-medium">View All</a>
                 </div>

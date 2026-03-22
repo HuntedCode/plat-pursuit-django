@@ -42,7 +42,7 @@
             <div id="custom-tabs-list" class="space-y-1 mb-2">
                 {% for tab in customize_tabs %}
                     {% if tab.is_custom %}
-                        <div class="flex items-center gap-2 p-2 rounded bg-base-300/30 cursor-grab" data-custom-tab-slug="{{ tab.slug }}">
+                        <div class="flex items-center gap-2 p-2 rounded bg-base-300/40 cursor-grab" data-custom-tab-slug="{{ tab.slug }}">
                             <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-base-content/30 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                 <line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line>
                                 <line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line>
@@ -176,7 +176,7 @@
 
                             {# Collapsible settings panel #}
                             {% if is_premium and not mod.is_locked and mod.configurable_settings %}
-                                <div class="module-settings-panel hidden px-3 pb-3 pt-0 border-t border-base-300/50"
+                                <div class="module-settings-panel hidden px-3 pb-3 pt-0 border-t border-base-content/10"
                                      data-settings-slug="{{ mod.slug }}">
                                     <div class="flex flex-wrap items-center gap-x-4 gap-y-2 pt-2">
                                         {% for setting in mod.configurable_settings %}

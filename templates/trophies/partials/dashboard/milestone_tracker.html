@@ -1,7 +1,7 @@
 {% load custom_filters %}
 {# Dashboard module: Milestone Tracker. In-progress milestones + recently earned. #}
-<div class="card bg-base-200/80 border-2 border-base-300 shadow-lg shadow-neutral">
-    <div class="card-body p-5 lg:p-7">
+<div class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral">
+    <div class="card-body p-3 md:p-5 lg:p-7">
         {# Header #}
         <div class="flex items-center justify-between mb-3">
             <h2 class="card-title text-base lg:text-lg font-bold flex items-center gap-2">
@@ -19,9 +19,9 @@
 
         {% if data.in_progress %}
             {# In-progress milestones #}
-            <div class="grid grid-cols-2 gap-3">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-2 md:gap-3">
                 {% for m in data.in_progress %}
-                    <div class="flex items-center gap-3 p-2 rounded-lg bg-base-300/30">
+                    <div class="flex items-center gap-2 md:gap-3 p-2 rounded-lg bg-base-300/40">
                         {# Milestone image #}
                         <div class="w-10 h-10 lg:w-12 lg:h-12 shrink-0">
                             {% if m.image_url %}
@@ -53,7 +53,7 @@
 
             {# Recently earned section #}
             {% if data.recently_earned %}
-                <div class="border-t border-base-300/50 pt-3 mt-3">
+                <div class="border-t border-base-content/10 pt-3 mt-3">
                     <div class="text-xs font-bold text-base-content/50 uppercase tracking-wider mb-2">Recently Earned</div>
                     <div class="space-y-1.5">
                         {% for m in data.recently_earned %}
@@ -68,7 +68,8 @@
                                 <span class="text-sm line-clamp-1 pr-1 flex-1 min-w-0">{{ m.name }}</span>
                                 <div class="flex items-center gap-1.5 shrink-0">
                                     <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-success" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                                    <span class="text-xs text-base-content/40" data-time-format="relative" data-time="{{ m.earned_at|date:'c' }}">{{ m.earned_at|iso_naturaltime }}</span>
+                                    <span class="text-xs text-base-content/40 md:hidden">{{ m.earned_at|date:"n/j/y" }}</span>
+                                    <span class="text-xs text-base-content/40 hidden md:inline" data-time-format="relative" data-time="{{ m.earned_at|date:'c' }}">{{ m.earned_at|iso_naturaltime }}</span>
                                 </div>
                             </div>
                         {% endfor %}
@@ -77,7 +78,7 @@
             {% endif %}
 
             {# Footer #}
-            <div class="flex items-center justify-end mt-3 pt-3 border-t border-base-300/50 text-xs text-base-content/50">
+            <div class="flex items-center justify-end mt-3 pt-3 border-t border-base-content/10 text-xs text-base-content/50">
                 <a href="{% url 'milestones_list' %}" class="link link-primary font-medium">View All Milestones</a>
             </div>
         {% else %}

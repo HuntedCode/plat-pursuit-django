@@ -1,7 +1,7 @@
 {% load custom_filters %}
 {# Dashboard module: Genre Challenge. Genre slots, subgenre tags, and bonus progress. #}
-<div class="card bg-base-200/80 border-2 border-base-300 shadow-lg shadow-neutral">
-    <div class="card-body p-5 lg:p-7">
+<div class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral">
+    <div class="card-body p-3 md:p-5 lg:p-7">
         {# Header #}
         <div class="flex items-center justify-between mb-3">
             <h2 class="card-title text-base lg:text-lg font-bold flex items-center gap-2">
@@ -41,7 +41,7 @@
                 </div>
 
                 {# Genre slots grid #}
-                <div class="grid grid-cols-2 lg:grid-cols-3 gap-2 mb-3">
+                <div class="grid grid-cols-2 lg:grid-cols-3 gap-1.5 md:gap-2 mb-3">
                     {% for slot in data.slots %}
                         <div class="flex items-center gap-2 p-2 rounded-lg
                             {% if slot.state == 'completed' %}bg-success/10 border border-success/30
@@ -71,7 +71,7 @@
 
                 {# Subgenre section #}
                 {% if data.subgenres or data.bonus_count %}
-                    <div class="border-t border-base-300/50 pt-3 mt-1">
+                    <div class="border-t border-base-content/10 pt-3 mt-1">
                         <div class="text-xs text-base-content/40 font-medium mb-1.5">
                             Subgenres: {{ data.platted_subgenre_count }}/{{ data.subgenre_total }}
                             {% if data.bonus_count %} | {{ data.bonus_count }} bonus{% endif %}

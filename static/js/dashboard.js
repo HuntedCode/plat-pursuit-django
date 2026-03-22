@@ -35,7 +35,6 @@
 
             this.activeTab = null;
             this.loadedTabs = new Set();
-            this.dragManagers = {};  // Per-tab drag managers
             this._moduleInits = {};
 
             // Debounced persistence
@@ -65,9 +64,6 @@
             // Load active tab's lazy modules
             if (this.activeTab) {
                 this._loadTabModules(this.activeTab);
-                if (this.isPremium) {
-                    this._initDragForTab(this.activeTab);
-                }
             }
 
             // Quick Settings module: bind auto-save controls (server-rendered, already in DOM)
@@ -176,9 +172,6 @@
             // Load lazy modules for this tab if not already loaded
             if (!this.loadedTabs.has(newSlug)) {
                 this._loadTabModules(newSlug);
-                if (this.isPremium) {
-                    this._initDragForTab(newSlug);
-                }
             }
 
             // Save active tab (debounced)
@@ -214,7 +207,7 @@
                 if (skeleton) {
                     skeleton.outerHTML = data.html;
                 } else {
-                    // Replace only the card, preserving drag handle and other siblings
+                    // Replace only the card, preserving the module wrapper and its attributes
                     const existingCard = el.querySelector('.card');
                     if (existingCard) {
                         const tmp = document.createElement('div');
@@ -420,7 +413,7 @@
                     const resp = await PlatPursuit.API.get(
                         `${this.moduleDataUrl}advanced_stats/?settings=${encodeURIComponent(JSON.stringify({range}))}`
                     );
-                    // Replace the card inside the module wrapper (preserve drag handle)
+                    // Replace the card inside the module wrapper
                     const card = moduleEl.querySelector('.card');
                     if (card) {
                         const tmp = document.createElement('div');
@@ -2297,31 +2290,8 @@
         }
 
         // -----------------------------------------------------------------
-        // Drag Reorder (Premium)
+        // Drag Reorder (Premium, via Customize panel only)
         // -----------------------------------------------------------------
-
-        _initDragForTab(tabSlug) {
-            if (!PlatPursuit.DragReorderManager) return;
-            if (this.dragManagers[tabSlug]) return;  // Already initialized
-
-            const panel = document.getElementById('tab-panel-' + tabSlug);
-            if (!panel) return;
-
-            this.dragManagers[tabSlug] = new PlatPursuit.DragReorderManager({
-                container: panel,
-                itemSelector: '.dashboard-module',
-                handleSelector: '.module-drag-handle',
-                onReorder: (_itemId, _newPosition, allItemIds) => {
-                    this._pendingOrder = allItemIds;
-                    this._debouncedSaveOrder();
-                },
-            });
-
-            // Show drag handles
-            panel.querySelectorAll('.module-drag-handle').forEach(handle => {
-                handle.classList.remove('hidden');
-            });
-        }
 
         _initCustomizeDragReorder() {
             if (!PlatPursuit.DragReorderManager) return;

@@ -1,7 +1,7 @@
 {% load custom_filters %}
 {# Dashboard module: My Reviews. Engagement stats + recent votes on your reviews. #}
-<div class="card bg-base-200/80 border-2 border-base-300 shadow-lg shadow-neutral">
-    <div class="card-body p-5 lg:p-7">
+<div class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral">
+    <div class="card-body p-3 md:p-5 lg:p-7">
         {# Header #}
         <div class="flex items-center justify-between mb-3">
             <h2 class="card-title text-base lg:text-lg font-bold flex items-center gap-2">
@@ -20,7 +20,7 @@
 
         {% if data.has_reviews %}
             {# Stats bar #}
-            <div class="grid grid-cols-3 gap-2 mb-3">
+            <div class="grid grid-cols-3 gap-1.5 md:gap-2 mb-3">
                 <div class="bg-base-300/50 rounded-lg p-2 text-center">
                     <div class="text-sm lg:text-base font-black text-info">{{ data.total_helpful }}</div>
                     <div class="text-xs text-base-content/50">Helpful</div>
@@ -45,7 +45,7 @@
                 </div>
                 <div class="space-y-2">
                     {% for vote in data.recent_engagement %}
-                        <a href="{% url 'review_hub' vote.concept_slug %}" class="flex items-center gap-3 p-2 rounded-lg bg-base-300/30 hover:bg-base-300/60 transition-colors group">
+                        <a href="{% url 'review_hub' vote.concept_slug %}" class="flex items-center gap-2 md:gap-3 p-2 rounded-lg bg-base-300/40 hover:bg-base-300/60 transition-colors group">
                             <div class="w-8 h-8 lg:w-10 lg:h-10 rounded-lg overflow-hidden shrink-0 ring-1 ring-base-300">
                                 {% if vote.icon_url %}
                                     <img src="{{ vote.icon_url }}" alt="{{ vote.game_name }}" class="w-full h-full object-cover" loading="lazy" />
@@ -77,7 +77,7 @@
             {% endif %}
 
             {# Footer #}
-            <div class="flex items-center justify-end mt-3 pt-3 border-t border-base-300/50 text-xs text-base-content/50">
+            <div class="flex items-center justify-end mt-3 pt-3 border-t border-base-content/10 text-xs text-base-content/50">
                 <a href="{% url 'reviews_landing' %}" class="link link-info font-medium">View All Reviews</a>
             </div>
         {% else %}

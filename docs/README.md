@@ -74,6 +74,7 @@ Quick-lookup tables for mid-task reference.
 | Doc | Description |
 |-----|-------------|
 | [API Endpoints](reference/api-endpoints.md) | All routes, authentication, request/response shapes |
+| [Design System](reference/design-system.md) | Site-wide styling tokens, responsive patterns, grid rules, color/contrast reference |
 | [JS Utilities](reference/js-utilities.md) | utils.js shared library (API, ToastManager, InfiniteScroller, etc.) |
 | [Template Architecture](reference/template-architecture.md) | base.html, zoom wrapper, templatetags, context processors, mixins, themes |
 | [Settings Overview](reference/settings-overview.md) | Key Django settings, environment variables, constants files |

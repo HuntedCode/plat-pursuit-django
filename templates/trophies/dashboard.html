@@ -12,11 +12,11 @@
     {% include 'partials/breadcrumb.html' with items=breadcrumb %}
 
     <div class="card bg-base-100 border-4 border-base-300 shadow-lg shadow-neutral">
-        <div class="card-body p-4 lg:p-6">
-            <div class="flex items-center gap-3 lg:gap-4">
+        <div class="card-body p-3 md:p-4 lg:p-6">
+            <div class="flex items-center gap-2 md:gap-3 lg:gap-4">
                 {# Avatar with premium shimmer #}
                 <div class="avatar">
-                    <div class="w-14 h-14 lg:w-18 lg:h-18 rounded-full ring-2 ring-primary {% if is_premium %}border-2 shimmer{% endif %}">
+                    <div class="w-12 h-12 md:w-14 md:h-14 lg:w-18 lg:h-18 rounded-full ring-2 ring-primary {% if is_premium %}border-2 shimmer{% endif %}">
                         <img src="{{ profile.avatar_url }}"
                              alt="{{ profile.display_psn_username|default:profile.psn_username }}"
                              class="object-cover" loading="eager" />
@@ -24,9 +24,9 @@
                 </div>
                 <div class="flex-1">
                     <div class="flex items-center gap-2 flex-wrap">
-                        <h1 class="text-2xl lg:text-3xl font-bold">My Dashboard</h1>
+                        <h1 class="text-xl md:text-2xl lg:text-3xl font-bold">My Dashboard</h1>
                         {% if profile.flag %}
-                            <span class="text-lg lg:text-xl" title="{{ profile.country }}">{{ profile.flag }}</span>
+                            <span class="text-base md:text-lg lg:text-xl" title="{{ profile.country }}">{{ profile.flag }}</span>
                         {% endif %}
                     </div>
                     <div class="flex items-center gap-2 flex-wrap mt-0.5">
@@ -45,13 +45,13 @@
                             <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
                                 <path d="M5 16L3 5l5.5 5L12 4l3.5 6L21 5l-2 11H5z"/>
                             </svg>
-                            Premium
+                            <span class="hidden md:inline">Premium</span>
                         {% else %}
                             <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                 <circle cx="12" cy="12" r="10"></circle>
                                 <path d="M12 6v6l4 2"></path>
                             </svg>
-                            Free
+                            <span class="hidden md:inline">Free</span>
                         {% endif %}
                     </button>
                     {% if preview_mode %}
@@ -62,7 +62,7 @@
                             <circle cx="12" cy="12" r="3"></circle>
                             <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
                         </svg>
-                        Customize
+                        <span class="hidden md:inline">Customize</span>
                     </button>
                 </div>
             </div>
@@ -76,7 +76,7 @@
         {% if not tab.is_custom %}
         <button role="tab"
                 id="tab-btn-{{ tab.slug }}"
-                class="tab-btn flex-1 flex items-center justify-center gap-1.5 px-2 lg:px-3 py-2.5 rounded-lg text-xs lg:text-sm font-medium transition-all duration-200
+                class="tab-btn flex-1 flex items-center justify-center gap-1.5 px-1.5 md:px-2 lg:px-3 py-2 md:py-2.5 rounded-lg text-xs lg:text-sm font-medium transition-all duration-200
                        {% if tab.is_active %}bg-primary text-primary-content shadow-sm{% else %}text-base-content/60 hover:text-base-content hover:bg-base-300/50{% endif %}"
                 data-tab-slug="{{ tab.slug }}"
                 title="{{ tab.name }}"
@@ -95,14 +95,14 @@
     {% for tab in custom_tabs %}
         <button role="tab"
                 id="tab-btn-{{ tab.slug }}"
-                class="tab-btn flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all duration-200
+                class="tab-btn flex items-center justify-center gap-1.5 px-2 md:px-3 py-1 md:py-1.5 rounded-md text-xs font-medium transition-all duration-200
                        {% if tab.is_active %}bg-accent text-accent-content shadow-sm{% else %}text-base-content/50 hover:text-base-content hover:bg-base-300/50{% endif %}"
                 data-tab-slug="{{ tab.slug }}"
                 title="{{ tab.name }}"
                 aria-selected="{{ tab.is_active|yesno:'true,false' }}"
                 aria-controls="tab-panel-{{ tab.slug }}">
             {% include 'trophies/partials/dashboard/tab_icon.html' with icon=tab.icon size='w-3.5 h-3.5' %}
-            <span>{{ tab.name }}</span>
+            <span class="hidden md:inline">{{ tab.name }}</span>
         </button>
     {% endfor %}
 </div>
@@ -114,7 +114,7 @@
          role="tabpanel"
          aria-labelledby="tab-btn-{{ tab.slug }}"
          aria-live="polite"
-         class="dashboard-tab-panel {% if not tab.is_active %}hidden{% endif %} flex flex-col gap-4 lg:gap-6 mt-4 max-w-4xl mx-auto"
+         class="dashboard-tab-panel {% if not tab.is_active %}hidden{% endif %} flex flex-col gap-3 md:gap-4 lg:gap-6 mt-3 md:mt-4 max-w-4xl mx-auto"
          data-tab-slug="{{ tab.slug }}"
          data-tab-loaded="{{ tab.is_active|yesno:'true,false' }}">
 
@@ -124,19 +124,6 @@
                      data-item-id="{{ module.slug }}"
                      id="module-{{ module.slug }}"
                      class="dashboard-module relative">
-                    {% if is_premium %}
-                        <div class="module-drag-handle hidden absolute top-2 left-2 z-10 cursor-grab opacity-40 hover:opacity-100 transition-opacity bg-base-100/80 rounded p-1" aria-label="Drag to reorder">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                <line x1="8" y1="6" x2="21" y2="6"></line>
-                                <line x1="8" y1="12" x2="21" y2="12"></line>
-                                <line x1="8" y1="18" x2="21" y2="18"></line>
-                                <line x1="3" y1="6" x2="3.01" y2="6"></line>
-                                <line x1="3" y1="12" x2="3.01" y2="12"></line>
-                                <line x1="3" y1="18" x2="3.01" y2="18"></line>
-                            </svg>
-                        </div>
-                    {% endif %}
-
                     {% if module.is_preview %}
                         {# Blurred premium preview with upgrade overlay #}
                         {% with preview=preview_html|get_item:module.slug %}
@@ -145,7 +132,7 @@
                                     <div class="blur-sm pointer-events-none select-none" aria-hidden="true">
                                         {{ preview|safe }}
                                     </div>
-                                    <div class="absolute inset-0 bg-base-200/40 flex flex-col items-center justify-center text-center p-6">
+                                    <div class="absolute inset-0 bg-base-200/40 flex flex-col items-center justify-center text-center p-3 md:p-6">
                                         <svg xmlns="http://www.w3.org/2000/svg" class="w-8 h-8 text-warning mb-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                             <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
                                             <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
@@ -169,8 +156,8 @@
                         {% endwith %}
                     {% else %}
                         <div class="dashboard-module-skeleton">
-                            <div class="card bg-base-200/80 border-2 border-base-300 shadow-lg shadow-neutral">
-                                <div class="card-body p-4 lg:p-6">
+                            <div class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral">
+                                <div class="card-body p-3 md:p-4 lg:p-6">
                                     <div class="animate-pulse">
                                         <div class="h-5 bg-base-300 rounded w-1/3 mb-4"></div>
                                         <div class="space-y-3">
@@ -188,8 +175,8 @@
         {% else %}
             {# Empty state for this tab #}
             <div class="text-center py-12">
-                <div class="card bg-base-200/80 border-2 border-base-300 shadow-lg shadow-neutral max-w-md mx-auto">
-                    <div class="card-body items-center text-center p-8">
+                <div class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral max-w-md mx-auto">
+                    <div class="card-body items-center text-center p-4 md:p-8">
                         {% include 'trophies/partials/dashboard/tab_icon.html' with icon=tab.icon size='w-12 h-12 text-base-content/20 mb-3' %}
                         <h3 class="text-lg font-bold text-base-content/50">{{ tab.name }}</h3>
                         <p class="text-base-content/40 text-sm mt-1">
@@ -238,8 +225,6 @@
 <script src="{% static 'js/vendor/chart.umd.min.js' %}"></script>
 <script>
 document.addEventListener('DOMContentLoaded', () => {
-    PlatPursuit.ZoomScaler.init();
-
     const dashboard = new PlatPursuit.DashboardManager({
         moduleDataUrl: '/api/v1/dashboard/module/',
         configUrl: '/api/v1/dashboard/config/',

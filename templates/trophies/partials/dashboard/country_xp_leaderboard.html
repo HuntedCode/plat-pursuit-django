@@ -1,7 +1,7 @@
 {% load static custom_filters %}
 {# Dashboard module: Country XP Leaderboard. Country rank and mini leaderboard. #}
-<div class="card bg-base-200/80 border-2 border-base-300 shadow-lg shadow-neutral">
-    <div class="card-body p-5 lg:p-7">
+<div class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral">
+    <div class="card-body p-3 md:p-5 lg:p-7">
         {# Header #}
         <div class="flex items-center justify-between mb-3">
             <h2 class="card-title text-base lg:text-lg font-bold flex items-center gap-2">
@@ -22,7 +22,7 @@
 
         {% elif data.has_stats %}
             {# Stats grid #}
-            <div class="grid grid-cols-3 gap-2 lg:gap-3 mb-4">
+            <div class="grid grid-cols-3 gap-1.5 md:gap-2 lg:gap-3 mb-4">
                 <div class="bg-base-300/50 rounded-lg p-2 lg:p-3 text-center">
                     <div class="text-lg lg:text-2xl font-black text-primary">{% if data.user_rank %}#{{ data.user_rank }}{% else %}-{% endif %}</div>
                     <div class="text-xs text-base-content/50 font-medium">Country Rank</div>
@@ -62,7 +62,7 @@
                 </div>
             {% endif %}
 
-            <div class="flex items-center justify-between mt-3 pt-3 border-t border-base-300/50 text-xs text-base-content/40">
+            <div class="flex items-center justify-between mt-3 pt-3 border-t border-base-content/10 text-xs text-base-content/40">
                 <span class="italic pr-1">{{ data.country_name }}</span>
                 <span>{{ data.total_participants }} hunter{{ data.total_participants|pluralize }} ranked</span>
             </div>
