@@ -121,13 +121,31 @@
                         <span class="text-xs font-semibold text-base-content/60 uppercase tracking-wider">Badge Types</span>
                     </div>
                     <div class="space-y-1.5">
+                        <div class="flex items-center gap-3 mb-2">
+                            <span class="text-[0.6rem] text-base-content/40 flex items-center gap-1"><span class="inline-block w-2 h-2 rounded-full bg-info"></span> Badges</span>
+                            <span class="text-[0.6rem] text-base-content/40 flex items-center gap-1"><span class="inline-block w-2 h-2 rounded-full bg-error/60"></span> Stages</span>
+                        </div>
                         {% for t in data.badge_types %}
-                            <div class="flex items-center gap-2">
-                                <span class="text-xs text-base-content/50 w-16 shrink-0">{{ t.label }}</span>
-                                <div class="flex-1 bg-base-300 rounded-full h-1.5">
-                                    <div class="bg-info rounded-full h-1.5 transition-all duration-500" style="width: {{ t.pct }}%"></div>
+                            <div class="mb-1.5">
+                                <div class="flex items-baseline justify-between mb-0.5">
+                                    <span class="text-xs text-base-content/50">{{ t.label }}</span>
                                 </div>
-                                <span class="text-xs font-bold w-6 text-right shrink-0">{{ t.count }}</span>
+                                <div class="flex items-center gap-2">
+                                    <div class="flex-1 space-y-0.5">
+                                        <div class="flex items-center gap-1">
+                                            <div class="flex-1 bg-base-300 rounded-full h-1.5">
+                                                <div class="bg-info rounded-full h-1.5 transition-all duration-500" style="width: {{ t.pct }}%"></div>
+                                            </div>
+                                            <span class="text-[0.6rem] font-bold w-8 text-right shrink-0">{{ t.count }}</span>
+                                        </div>
+                                        <div class="flex items-center gap-1">
+                                            <div class="flex-1 bg-base-300 rounded-full h-1.5">
+                                                <div class="bg-error/60 rounded-full h-1.5 transition-all duration-500" style="width: {{ t.stage_pct }}%"></div>
+                                            </div>
+                                            <span class="text-[0.6rem] text-base-content/40 w-8 text-right shrink-0">{{ t.stages }}</span>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                         {% endfor %}
                     </div>

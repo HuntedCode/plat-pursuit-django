@@ -2345,7 +2345,7 @@ def provide_trophy_visualizations(profile, settings=None):
 
 def provide_advanced_badge_stats(profile, settings=None):
     """Deep badge analytics: velocity, series completion, XP breakdown, types, tiers, rarest."""
-    from trophies.models import UserBadge, ProfileGamification
+    from trophies.models import UserBadge, ProfileGamification, StageCompletionEvent
     from django.db.models import Min, Max, Count, Q
     from django.utils import timezone
     from datetime import timedelta
@@ -2413,7 +2413,7 @@ def provide_advanced_badge_stats(profile, settings=None):
     except ProfileGamification.DoesNotExist:
         series_xp = {}
 
-    sorted_series = sorted(series_xp.items(), key=lambda x: -x[1])[:5]
+    sorted_series = sorted(series_xp.items(), key=lambda x: -x[1])[:8]
     xp_max = sorted_series[0][1] if sorted_series else 1
 
     def _format_series(slug):
@@ -2424,9 +2424,16 @@ def provide_advanced_badge_stats(profile, settings=None):
         for name, xp in sorted_series
     ]
 
-    # --- Badge Type Distribution ---
+    # --- Badge Type Distribution (badges + stages per type) ---
     type_counts = dict(
         badge_qs
+        .values('badge__badge_type')
+        .annotate(count=Count('id'))
+        .values_list('badge__badge_type', 'count')
+    )
+    type_stage_counts = dict(
+        StageCompletionEvent.objects
+        .filter(profile=profile)
         .values('badge__badge_type')
         .annotate(count=Count('id'))
         .values_list('badge__badge_type', 'count')
@@ -2436,9 +2443,12 @@ def provide_advanced_badge_stats(profile, settings=None):
         'developer': 'Developer', 'user': 'User', 'genre': 'Genre', 'misc': 'Misc',
     }
     type_max = max(type_counts.values()) if type_counts else 1
+    stage_max = max(type_stage_counts.values()) if type_stage_counts else 1
     badge_types = [
         {'label': TYPE_LABELS.get(t, t.title()), 'count': _fmt(type_counts.get(t, 0)),
-         'pct': round(type_counts.get(t, 0) / type_max * 100) if type_max else 0}
+         'stages': _fmt(type_stage_counts.get(t, 0)),
+         'pct': round(type_counts.get(t, 0) / type_max * 100) if type_max else 0,
+         'stage_pct': round(type_stage_counts.get(t, 0) / stage_max * 100) if stage_max else 0}
         for t in ['series', 'collection', 'megamix', 'developer', 'user', 'genre', 'misc']
         if type_counts.get(t, 0) > 0
     ]
@@ -3937,10 +3947,7 @@ DASHBOARD_MODULES = [
         'load_strategy': 'lazy',
         'default_order': 4,
         'default_settings': {'year': ''},
-        'configurable_settings': [
-            {'key': 'year', 'label': 'Year', 'type': 'select', 'default': '',
-             'options': [{'value': 'all', 'label': 'All'}, {'value': '', 'label': 'Current'}]},
-        ],
+        'configurable_settings': [],
         'cache_ttl': 1800,
         'default_size': 'large',
         'allowed_sizes': ['large'],
@@ -3997,10 +4004,7 @@ DASHBOARD_MODULES = [
         'load_strategy': 'lazy',
         'default_order': 9,
         'default_settings': {'year': ''},
-        'configurable_settings': [
-            {'key': 'year', 'label': 'Year', 'type': 'select', 'default': '',
-             'options': [{'value': 'all', 'label': 'All'}, {'value': '', 'label': 'Current'}]},
-        ],
+        'configurable_settings': [],
         'cache_ttl': 1800,
         'default_size': 'large',
         'allowed_sizes': ['large'],
