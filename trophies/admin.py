@@ -302,7 +302,7 @@ class GameAdmin(admin.ModelAdmin):
         ),
     )
     readonly_fields = ('shovelware_updated_at',)
-    actions = ['toggle_is_regional', 'add_psvr_platform', 'mark_concepts_stale', 'copy_concept_icon', 'lock_concept', 'unlock_concept', 'mark_as_shovelware', 'clear_shovelware_flag', 'reset_shovelware_auto']
+    actions = ['toggle_is_regional', 'add_psvr_platform', 'mark_concepts_stale', 'copy_concept_icon', 'lock_concept', 'unlock_concept', 'mark_as_shovelware', 'clear_shovelware_flag', 'reset_shovelware_auto', 'mark_unobtainable', 'mark_obtainable', 'mark_has_online_trophies', 'mark_no_online_trophies']
     autocomplete_fields=['concept']
 
     @admin.action(description="Toggle is_regional for selected games")
@@ -390,6 +390,26 @@ class GameAdmin(admin.ModelAdmin):
             ShovelwareDetectionService.evaluate_game(game)
             count += 1
         messages.success(request, f"Unlocked and re-evaluated {count} game(s) with auto-detection.")
+
+    @admin.action(description="Mark as unobtainable")
+    def mark_unobtainable(self, request, queryset):
+        updated = queryset.filter(is_obtainable=True).update(is_obtainable=False)
+        messages.success(request, f"Marked {updated} game(s) as unobtainable.")
+
+    @admin.action(description="Mark as obtainable")
+    def mark_obtainable(self, request, queryset):
+        updated = queryset.filter(is_obtainable=False).update(is_obtainable=True)
+        messages.success(request, f"Marked {updated} game(s) as obtainable.")
+
+    @admin.action(description="Mark as having online trophies")
+    def mark_has_online_trophies(self, request, queryset):
+        updated = queryset.filter(has_online_trophies=False).update(has_online_trophies=True)
+        messages.success(request, f"Marked {updated} game(s) as having online trophies.")
+
+    @admin.action(description="Mark as no online trophies")
+    def mark_no_online_trophies(self, request, queryset):
+        updated = queryset.filter(has_online_trophies=True).update(has_online_trophies=False)
+        messages.success(request, f"Marked {updated} game(s) as not having online trophies.")
 
     def save_model(self, request, obj, form, change):
         if change and 'concept' in form.changed_data:
