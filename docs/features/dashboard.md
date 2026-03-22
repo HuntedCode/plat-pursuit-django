@@ -176,6 +176,16 @@ Cache keys: `dashboard:mod:{slug}:{profile_id}:{settings_hash}` where `settings_
 - `check_all_milestones_for_user()` in `milestone_service.py` (covers milestone tracker + reviews via milestone checks)
 - `award_milestone_directly()` in `milestone_service.py`
 
+## Premium Module Previews (Free Users)
+
+Free users see blurred previews of all premium modules using real data from the showcase profile (`SHOWCASE_PROFILE_ID = 3` in `dashboard_service.py`). Each preview renders the actual module template with blur + overlay containing the module name, description, "Preview data from the PlatPursuit team" attribution, and an upgrade CTA.
+
+- `get_premium_preview_html(slug)`: renders module template with showcase profile data, caches HTML for 24 hours
+- `_get_preview_settings(slug)`: per-module overrides (trophy viz uses previous year, badge viz uses all-time)
+- Provider called directly with overrides (bypasses `get_effective_settings` validation)
+- Chart.js loaded for all users so charts render behind the blur
+- Premium modules included in `get_dashboard_tabs()` with `is_preview=True` and `load_strategy='server'`
+
 ## Staff Premium Preview Toggle
 
 Staff can switch between "view as premium" and "view as free" via a header button. Uses session variable `dashboard_preview_premium`. The `get_effective_premium(request)` helper is used by all views and API endpoints.
