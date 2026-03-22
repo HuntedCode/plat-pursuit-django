@@ -13,7 +13,7 @@ Menus are organized by intent, not by data type:
 - **Browse**: Finding content (Games, Profiles, Trophies)
 - **Community**: Social features (Discord, Challenges, Game Lists, Review Hub)
 - **Earn**: Progression features (Badges, Milestones, Leaderboards, Titles)
-- **Guides**: Learning content (Guide Hub, PPTV Guides)
+- **Guides**: Learning content (Guide Hub)
 - **My Pursuit**: Personal hub (Dashboard, Customization, Recap, My Guides/Challenges/Lists/Profile/Shareables)
 
 ## File Map
@@ -37,7 +37,7 @@ Menus are organized by intent, not by data type:
 |------|-------|------------------|
 | Community | Discord, Challenges, Game Lists, Review Hub | Fundraiser (when active) |
 | Earn | Badges, Milestones, Leaderboards, Titles | Titles |
-| Guides | Guide Hub, PPTV Guides, My Guides | My Guides |
+| Guides | Guide Hub, My Guides | My Guides |
 | My Pursuit | Dashboard, Customization, Monthly Recap, My Guides, My Challenges, My Lists, My Profile, My Shareables | All (entire menu auth-gated) |
 
 Dashboard is staff-only within My Pursuit.
@@ -61,7 +61,7 @@ Six-column grid (`grid-cols-3 lg:grid-cols-6`):
 | Browse | Community | Earn | Guides | My Pursuit / Account | Legal + Connect |
 |--------|-----------|------|--------|---------------------|-----------------|
 | Games | Discord | Badges | Guide Hub | My Profile | Privacy |
-| Profiles | Challenges | Milestones | PPTV Guides | My Guides | Terms |
+| Profiles | Challenges | Milestones | | My Guides | Terms |
 | Trophies | Game Lists | Leaderboards | | My Challenges | About |
 | | Review Hub | Titles* | | My Lists | Contact |
 | | | | | My Shareables | + Social icons |

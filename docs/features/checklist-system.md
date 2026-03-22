@@ -391,9 +391,6 @@ All endpoints are under `/api/v1/`. Authentication is via SessionAuthentication 
 - Checklist thumbnails: max 1200x1200. Section thumbnails: max 600x600. Inline images: max 1200x1200.
 - Old images are deleted from storage before replacement.
 
-### Featured Guide System
-- The `FeaturedGuide` model (separate from Checklist) references Concepts for homepage showcase. It is not directly tied to the Checklist model but surfaces guides for the same concepts.
-
 ### Homepage Showcase
 - The homepage's checklists showcase section (from `featured_checklists.py` service) pulls from published checklists.
 

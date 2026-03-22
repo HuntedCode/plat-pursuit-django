@@ -85,7 +85,6 @@ Returns profiles with recent sync activity, indicating currently active users.
 | `featured_badges_{YYYY-MM-DD}` | 86400s | Daily | Curated badge showcase |
 | `featured_checklists_{YYYY-MM-DD}` | 86400s | Daily | Curated checklist showcase |
 | `featured_games_{YYYY-MM-DD}` | 86400s | Daily | Featured games |
-| `featured_guide_{YYYY-MM-DD}` | 86400s | Daily | Featured guide concept |
 | `playing_now_{YYYY-MM-DD}` | 172800s | Daily | Active players |
 
 ### Fallback Pattern
