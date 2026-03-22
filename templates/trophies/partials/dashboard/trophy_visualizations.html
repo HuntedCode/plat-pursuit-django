@@ -1,0 +1,262 @@
+{% load custom_filters %}
+{# Dashboard module: Trophy Visualizations. Combined premium analytics suite. #}
+<div class="card bg-base-200/80 border-2 border-base-300 shadow-lg shadow-neutral">
+    <div class="card-body p-5 lg:p-7">
+        {# Header with year selector #}
+        <div class="flex items-center justify-between mb-1">
+            <h2 class="card-title text-base lg:text-lg font-bold flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="18" y1="20" x2="18" y2="10"></line>
+                    <line x1="12" y1="20" x2="12" y2="4"></line>
+                    <line x1="6" y1="20" x2="6" y2="14"></line>
+                </svg>
+                Trophy Visualizations
+                <span class="badge badge-xs badge-primary shimmer font-bold tracking-wide">PLUS</span>
+            </h2>
+        </div>
+
+        {# Year selector #}
+        <div class="flex items-center gap-1 mb-4 viz-year-select">
+            <button type="button" class="btn btn-xs {% if data.year == 'all' %}btn-primary{% else %}btn-ghost{% endif %}" data-year="all">All</button>
+            {% if data.year != 'all' %}
+                {% if data.current_year > data.year %}
+                    <button type="button" class="btn btn-xs btn-ghost" data-year="{{ data.year|add:1 }}">{{ data.year|add:1 }}</button>
+                {% endif %}
+                <button type="button" class="btn btn-xs btn-primary" data-year="{{ data.year }}">{{ data.year }}</button>
+                <button type="button" class="btn btn-xs btn-ghost" data-year="{{ data.year|add:-1 }}">{{ data.year|add:-1 }}</button>
+            {% else %}
+                <button type="button" class="btn btn-xs btn-ghost" data-year="{{ data.current_year }}">{{ data.current_year }}</button>
+                <button type="button" class="btn btn-xs btn-ghost" data-year="{{ data.current_year|add:-1 }}">{{ data.current_year|add:-1 }}</button>
+            {% endif %}
+        </div>
+
+        {# ========== Trophy Heatmap (year view only) ========== #}
+        {% if data.year != 'all' %}
+        {% with hm=data.heatmap %}
+            <div class="mb-5">
+                <div class="flex items-center justify-between mb-2">
+                    <h3 class="text-sm font-semibold text-base-content/70 flex items-center gap-1.5">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-primary/60" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                            <line x1="16" y1="2" x2="16" y2="6"></line>
+                            <line x1="8" y1="2" x2="8" y2="6"></line>
+                            <line x1="3" y1="10" x2="21" y2="10"></line>
+                        </svg>
+                        Trophy Heatmap
+                    </h3>
+                    {% if hm.has_data %}
+                        <span class="text-xs text-base-content/40">{{ hm.total_trophies }} trophies</span>
+                    {% endif %}
+                </div>
+
+                {% if hm.has_data %}
+                    <div class="overflow-x-auto">
+                        <div style="min-width: 580px;">
+                            {# Month labels #}
+                            <div style="display: flex; padding-left: 24px; margin-bottom: 2px;">
+                                {% for month in hm.months %}
+                                    <div style="flex: {{ month.span }};" class="text-[0.55rem] text-base-content/40">{{ month.name }}</div>
+                                {% endfor %}
+                            </div>
+                            {# Grid rows #}
+                            {% for row in hm.rows %}
+                                <div style="display: flex; gap: 2px; margin-bottom: 2px;">
+                                    <div style="width: 20px; flex-shrink: 0;" class="flex items-center justify-end pr-1">
+                                        {% if row.show_label %}<span class="text-[0.5rem] text-base-content/30 leading-none">{{ row.label }}</span>{% endif %}
+                                    </div>
+                                    {% for cell in row.cells %}
+                                        {% if cell.in_year %}
+                                            <div class="rounded-sm {% if cell.level == 0 %}bg-base-300/30{% elif cell.level == 1 %}bg-primary/30{% elif cell.level == 2 %}bg-primary/50{% elif cell.level == 3 %}bg-primary/70{% else %}bg-primary{% endif %}"
+                                                 style="flex: 1; aspect-ratio: 1; min-width: 6px;"
+                                                 title="{{ cell.date }}: {{ cell.count }} trophy{{ cell.count|pluralize:"ies" }}"></div>
+                                        {% else %}
+                                            <div style="flex: 1; aspect-ratio: 1; min-width: 6px;"></div>
+                                        {% endif %}
+                                    {% endfor %}
+                                </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {# Legend #}
+                    <div class="flex items-center justify-end gap-1 mt-2">
+                        <span class="text-[0.55rem] text-base-content/40">Less</span>
+                        <div class="w-2.5 h-2.5 rounded-sm bg-base-300/30"></div>
+                        <div class="w-2.5 h-2.5 rounded-sm bg-primary/30"></div>
+                        <div class="w-2.5 h-2.5 rounded-sm bg-primary/50"></div>
+                        <div class="w-2.5 h-2.5 rounded-sm bg-primary/70"></div>
+                        <div class="w-2.5 h-2.5 rounded-sm bg-primary"></div>
+                        <span class="text-[0.55rem] text-base-content/40">More</span>
+                    </div>
+                {% else %}
+                    <div class="text-center py-4">
+                        <p class="text-xs text-base-content/40">No trophies earned in {{ data.year }}.</p>
+                    </div>
+                {% endif %}
+            </div>
+        {% endwith %}
+
+        {# Divider #}
+        <div class="border-t border-base-300/50 my-1"></div>
+        {% endif %}
+
+        {# ========== Genre Radar + Year in Review ========== #}
+        <div class="grid grid-cols-2 gap-4 my-4">
+
+            {# Genre Radar #}
+            {% with gr=data.genre_radar %}
+                <div>
+                    <h3 class="text-sm font-semibold text-base-content/70 flex items-center gap-1.5 mb-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-accent/60" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+                        </svg>
+                        Genre Radar
+                    </h3>
+                    {% if gr.has_data %}
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="text-xs text-base-content/40">{{ gr.total }} trophies across genres</span>
+                        </div>
+                        <div style="max-height: 240px;">
+                            <canvas class="genre-radar-canvas"
+                                    data-labels='{{ gr.labels|tojson }}'
+                                    data-counts='{{ gr.counts|tojson }}'></canvas>
+                        </div>
+                    {% else %}
+                        <div class="text-center py-6">
+                            <p class="text-xs text-base-content/40">No genre data available.</p>
+                        </div>
+                    {% endif %}
+                </div>
+            {% endwith %}
+
+            {# Year in Review / Yearly Totals #}
+            {% with yr=data.year_review %}
+                <div>
+                    {% if data.year == 'all' %}
+                        {# All-time: yearly totals bar chart #}
+                        <h3 class="text-sm font-semibold text-base-content/70 flex items-center gap-1.5 mb-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-success/60" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <line x1="18" y1="20" x2="18" y2="10"></line>
+                                <line x1="12" y1="20" x2="12" y2="4"></line>
+                                <line x1="6" y1="20" x2="6" y2="14"></line>
+                            </svg>
+                            Trophies by Year
+                        </h3>
+                        {% if yr.has_data %}
+                            <div class="flex items-center gap-3 mb-2">
+                                <span class="text-xs"><span class="font-bold text-success">{{ yr.total }}</span> <span class="text-base-content/40">total</span></span>
+                                <span class="text-xs"><span class="font-bold text-warning">{{ yr.best_year }}</span> <span class="text-base-content/40">best year ({{ yr.best_count }})</span></span>
+                            </div>
+                            <div style="max-height: 200px;">
+                                <canvas class="yearly-totals-canvas"
+                                        data-labels='{{ yr.labels|tojson }}'
+                                        data-q1='{{ yr.q1|tojson }}'
+                                        data-q2='{{ yr.q2|tojson }}'
+                                        data-q3='{{ yr.q3|tojson }}'
+                                        data-q4='{{ yr.q4|tojson }}'></canvas>
+                            </div>
+                        {% else %}
+                            <div class="text-center py-6">
+                                <p class="text-xs text-base-content/40">No trophy data available.</p>
+                            </div>
+                        {% endif %}
+                    {% else %}
+                        {# Year view: cumulative comparison #}
+                        <h3 class="text-sm font-semibold text-base-content/70 flex items-center gap-1.5 mb-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-success/60" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+                            </svg>
+                            Year in Review
+                        </h3>
+                        {% if yr.has_data %}
+                            <div class="flex items-center gap-3 mb-2">
+                                <span class="text-xs"><span class="font-bold text-success">{{ yr.current_total }}</span> <span class="text-base-content/40">{{ yr.current_year }}</span></span>
+                                <span class="text-xs"><span class="font-bold text-base-content/40">{{ yr.prev_total }}</span> <span class="text-base-content/30">{{ yr.prev_year }}</span></span>
+                                {% if yr.pct_change is not None %}
+                                    <span class="text-xs font-bold {% if yr.pct_change > 0 %}text-success{% elif yr.pct_change < 0 %}text-error{% else %}text-base-content/40{% endif %}">
+                                        {% if yr.pct_change > 0 %}+{% endif %}{{ yr.pct_change }}%
+                                    </span>
+                                {% endif %}
+                            </div>
+                            <div style="max-height: 200px;">
+                                <canvas class="year-review-canvas"
+                                        data-labels='{{ yr.labels|tojson }}'
+                                        data-current='{{ yr.current_data|tojson }}'
+                                        data-prev='{{ yr.prev_data|tojson }}'
+                                        data-current-year="{{ yr.current_year }}"
+                                        data-prev-year="{{ yr.prev_year }}"></canvas>
+                            </div>
+                        {% else %}
+                            <div class="text-center py-6">
+                                <p class="text-xs text-base-content/40">No data to compare for {{ data.year }}.</p>
+                            </div>
+                        {% endif %}
+                    {% endif %}
+                </div>
+            {% endwith %}
+        </div>
+
+        {# Divider #}
+        <div class="border-t border-base-300/50 my-1"></div>
+
+        {# ========== Games Started vs Completed + Earned vs Unearned (side by side) ========== #}
+        <div class="grid grid-cols-2 gap-4 mt-4">
+
+            {# Games Started vs Completed #}
+            {% with gf=data.games_flow %}
+                <div>
+                    <h3 class="text-sm font-semibold text-base-content/70 flex items-center gap-1.5 mb-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-info/60" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                            <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                        </svg>
+                        Games Flow
+                    </h3>
+                    {% if gf.has_data %}
+                        <div style="max-height: 200px;">
+                            <canvas class="games-flow-canvas"
+                                    data-labels='{{ gf.labels|tojson }}'
+                                    data-started='{{ gf.started|tojson }}'
+                                    data-completed='{{ gf.completed|tojson }}'></canvas>
+                        </div>
+                    {% else %}
+                        <div class="text-center py-6">
+                            <p class="text-xs text-base-content/40">No game data for {{ data.year }}.</p>
+                        </div>
+                    {% endif %}
+                </div>
+            {% endwith %}
+
+            {# Earned vs Unearned #}
+            {% with eu=data.earned_unearned %}
+                <div>
+                    <h3 class="text-sm font-semibold text-base-content/70 flex items-center gap-1.5 mb-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-warning/60" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"></path>
+                            <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"></path>
+                            <path d="M4 22h16"></path>
+                            <path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"></path>
+                        </svg>
+                        Trophy Progress
+                    </h3>
+                    {% if eu.has_data %}
+                        <div class="flex items-center gap-3 mb-2">
+                            <span class="text-xs"><span class="font-bold text-success">{{ eu.current_total }}</span> <span class="text-base-content/40">earned</span></span>
+                            <span class="text-xs"><span class="font-bold text-error/70">{{ eu.current_unearned }}</span> <span class="text-base-content/40">unearned</span></span>
+                            <span class="text-xs"><span class="font-bold text-warning">{{ eu.avg_completion }}%</span> <span class="text-base-content/40">avg</span></span>
+                        </div>
+                        <div style="max-height: 200px;">
+                            <canvas class="trophy-progress-canvas"
+                                    data-labels='{{ eu.labels|tojson }}'
+                                    data-earned='{{ eu.cumulative_earned|tojson }}'
+                                    data-unearned='{{ eu.cumulative_unearned|tojson }}'></canvas>
+                        </div>
+                    {% else %}
+                        <div class="text-center py-6">
+                            <p class="text-xs text-base-content/40">No trophy data for {{ data.year }}.</p>
+                        </div>
+                    {% endif %}
+                </div>
+            {% endwith %}
+        </div>
+    </div>
+</div>

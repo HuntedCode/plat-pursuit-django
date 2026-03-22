@@ -92,6 +92,9 @@
 
             // Advanced Stats module: date range switcher
             this.registerModuleInit('advanced_stats', (el) => this._initAdvancedStatsRange(el));
+
+            // Combined visualization module: heatmap + genre radar + year review + type breakdown
+            this.registerModuleInit('trophy_visualizations', (el) => this._initTrophyVisualizations(el));
         }
 
         // -----------------------------------------------------------------
@@ -415,6 +418,271 @@
                     PlatPursuit.ToastManager.error('Failed to update stats.');
                 }
             });
+        }
+
+        // -----------------------------------------------------------------
+        // Trophy Visualizations (combined: heatmap + genre radar + year review + type breakdown)
+        // -----------------------------------------------------------------
+
+        _getChartColor(name) {
+            return getComputedStyle(document.documentElement).getPropertyValue(`--color-${name}`).trim();
+        }
+
+        _initTrophyVisualizations(el) {
+            // Year selector (controls all visualizations)
+            const yearSelect = el.querySelector('.viz-year-select');
+            if (yearSelect) {
+                yearSelect.addEventListener('click', async (e) => {
+                    const btn = e.target.closest('[data-year]');
+                    if (!btn || btn.classList.contains('btn-primary')) return;
+
+                    const year = btn.dataset.year;
+                    const moduleEl = el.closest('[id^="module-"]');
+                    if (!moduleEl) return;
+
+                    yearSelect.querySelectorAll('[data-year]').forEach(b => {
+                        b.classList.remove('btn-primary');
+                        b.classList.add('btn-ghost');
+                    });
+                    btn.classList.remove('btn-ghost');
+                    btn.classList.add('btn-primary');
+
+                    try {
+                        const resp = await PlatPursuit.API.get(
+                            `${this.moduleDataUrl}trophy_visualizations/?settings=${encodeURIComponent(JSON.stringify({year}))}`
+                        );
+                        const card = moduleEl.querySelector('.card');
+                        if (card) {
+                            const tmp = document.createElement('div');
+                            tmp.innerHTML = resp.html;
+                            const newCard = tmp.querySelector('.card') || tmp.firstElementChild;
+                            if (newCard) {
+                                card.replaceWith(newCard);
+                                this._initTrophyVisualizations(moduleEl);
+                            }
+                        }
+                    } catch {
+                        PlatPursuit.ToastManager.error('Failed to update visualizations.');
+                    }
+                });
+            }
+
+            // Genre Radar (Chart.js radar)
+            const radarCanvas = el.querySelector('.genre-radar-canvas');
+            if (radarCanvas && typeof Chart !== 'undefined') {
+                const labels = JSON.parse(radarCanvas.dataset.labels || '[]');
+                const counts = JSON.parse(radarCanvas.dataset.counts || '[]');
+                if (labels.length) {
+                    const accentColor = this._getChartColor('accent') || '#f59e0b';
+                    new Chart(radarCanvas, {
+                        type: 'radar',
+                        data: {
+                            labels: labels,
+                            datasets: [{
+                                label: 'Platinums',
+                                data: counts,
+                                backgroundColor: 'rgba(245, 158, 11, 0.15)',
+                                borderColor: accentColor.includes('oklch') ? '#f59e0b' : accentColor,
+                                borderWidth: 2,
+                                pointBackgroundColor: accentColor.includes('oklch') ? '#f59e0b' : accentColor,
+                                pointRadius: 4,
+                                pointHoverRadius: 6,
+                            }],
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: true,
+                            plugins: { legend: { display: false } },
+                            scales: {
+                                r: {
+                                    beginAtZero: true,
+                                    ticks: { display: false },
+                                    grid: { color: 'rgba(150, 150, 150, 0.15)' },
+                                    angleLines: { color: 'rgba(150, 150, 150, 0.15)' },
+                                    pointLabels: { color: 'rgba(150, 150, 150, 0.6)', font: { size: 10 } },
+                                },
+                            },
+                        },
+                    });
+                }
+            }
+
+            // Yearly Totals with Quarterly Breakdown (Chart.js stacked bar, all-time mode)
+            const yearlyCanvas = el.querySelector('.yearly-totals-canvas');
+            if (yearlyCanvas && typeof Chart !== 'undefined') {
+                const labels = JSON.parse(yearlyCanvas.dataset.labels || '[]');
+                const q1 = JSON.parse(yearlyCanvas.dataset.q1 || '[]');
+                const q2 = JSON.parse(yearlyCanvas.dataset.q2 || '[]');
+                const q3 = JSON.parse(yearlyCanvas.dataset.q3 || '[]');
+                const q4 = JSON.parse(yearlyCanvas.dataset.q4 || '[]');
+                if (labels.length) {
+                    new Chart(yearlyCanvas, {
+                        type: 'bar',
+                        data: {
+                            labels: labels,
+                            datasets: [
+                                { label: 'Q1 (Jan-Mar)', data: q1, backgroundColor: 'rgba(59, 130, 246, 0.7)' },
+                                { label: 'Q2 (Apr-Jun)', data: q2, backgroundColor: 'rgba(34, 197, 94, 0.7)' },
+                                { label: 'Q3 (Jul-Sep)', data: q3, backgroundColor: 'rgba(245, 158, 11, 0.7)' },
+                                { label: 'Q4 (Oct-Dec)', data: q4, backgroundColor: 'rgba(239, 68, 68, 0.7)' },
+                            ],
+                        },
+                        options: {
+                            responsive: true, maintainAspectRatio: true,
+                            plugins: {
+                                legend: { display: true, position: 'bottom', labels: { color: 'rgba(150,150,150,0.6)', font: { size: 9 }, boxWidth: 8, padding: 10 } },
+                            },
+                            scales: {
+                                x: { stacked: true, ticks: { color: 'rgba(150,150,150,0.5)', font: { size: 9 } }, grid: { display: false } },
+                                y: { stacked: true, beginAtZero: true, ticks: { color: 'rgba(150,150,150,0.5)', font: { size: 9 } }, grid: { color: 'rgba(150,150,150,0.1)' } },
+                            },
+                        },
+                    });
+                }
+            }
+
+            // Year in Review (Chart.js line)
+            const lineCanvas = el.querySelector('.year-review-canvas');
+            if (lineCanvas && typeof Chart !== 'undefined') {
+                const labels = JSON.parse(lineCanvas.dataset.labels || '[]');
+                const currentData = JSON.parse(lineCanvas.dataset.current || '[]');
+                const prevData = JSON.parse(lineCanvas.dataset.prev || '[]');
+                const currentYear = lineCanvas.dataset.currentYear;
+                const prevYear = lineCanvas.dataset.prevYear;
+                if (labels.length) {
+                    const primaryColor = this._getChartColor('primary') || '#6366f1';
+                    new Chart(lineCanvas, {
+                        type: 'line',
+                        data: {
+                            labels: labels,
+                            datasets: [
+                                {
+                                    label: currentYear,
+                                    data: currentData,
+                                    borderColor: primaryColor.includes('oklch') ? '#6366f1' : primaryColor,
+                                    backgroundColor: 'rgba(99, 102, 241, 0.1)',
+                                    fill: true,
+                                    tension: 0.3,
+                                    borderWidth: 2,
+                                    pointRadius: 3,
+                                    pointHoverRadius: 5,
+                                },
+                                {
+                                    label: prevYear,
+                                    data: prevData,
+                                    borderColor: 'rgba(150, 150, 150, 0.4)',
+                                    backgroundColor: 'transparent',
+                                    fill: false,
+                                    tension: 0.3,
+                                    borderWidth: 1.5,
+                                    borderDash: [4, 4],
+                                    pointRadius: 2,
+                                    pointHoverRadius: 4,
+                                },
+                            ],
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: true,
+                            plugins: {
+                                legend: {
+                                    display: true, position: 'bottom',
+                                    labels: { color: 'rgba(150, 150, 150, 0.6)', font: { size: 10 }, boxWidth: 10, padding: 12 },
+                                },
+                            },
+                            scales: {
+                                x: { ticks: { color: 'rgba(150, 150, 150, 0.5)', font: { size: 9 } }, grid: { display: false } },
+                                y: { beginAtZero: true, ticks: { color: 'rgba(150, 150, 150, 0.5)', font: { size: 9 } }, grid: { color: 'rgba(150, 150, 150, 0.1)' } },
+                            },
+                        },
+                    });
+                }
+            }
+
+            // Games Started vs Completed (Chart.js line)
+            const gamesCanvas = el.querySelector('.games-flow-canvas');
+            if (gamesCanvas && typeof Chart !== 'undefined') {
+                const labels = JSON.parse(gamesCanvas.dataset.labels || '[]');
+                const started = JSON.parse(gamesCanvas.dataset.started || '[]');
+                const completed = JSON.parse(gamesCanvas.dataset.completed || '[]');
+                if (labels.length) {
+                    new Chart(gamesCanvas, {
+                        type: 'line',
+                        data: {
+                            labels: labels,
+                            datasets: [
+                                {
+                                    label: 'Started',
+                                    data: started,
+                                    borderColor: 'rgba(59, 130, 246, 0.8)',
+                                    backgroundColor: 'rgba(59, 130, 246, 0.08)',
+                                    fill: true, tension: 0.3, borderWidth: 2, pointRadius: 2, pointHoverRadius: 4,
+                                },
+                                {
+                                    label: 'Completed',
+                                    data: completed,
+                                    borderColor: 'rgba(34, 197, 94, 0.8)',
+                                    backgroundColor: 'rgba(34, 197, 94, 0.08)',
+                                    fill: true, tension: 0.3, borderWidth: 2, pointRadius: 2, pointHoverRadius: 4,
+                                },
+                            ],
+                        },
+                        options: {
+                            responsive: true, maintainAspectRatio: true,
+                            plugins: {
+                                legend: { display: true, position: 'bottom', labels: { color: 'rgba(150,150,150,0.6)', font: { size: 10 }, boxWidth: 10, padding: 12 } },
+                            },
+                            scales: {
+                                x: { ticks: { color: 'rgba(150,150,150,0.5)', font: { size: 9 } }, grid: { display: false } },
+                                y: { beginAtZero: true, ticks: { color: 'rgba(150,150,150,0.5)', font: { size: 9 }, stepSize: 1 }, grid: { color: 'rgba(150,150,150,0.1)' } },
+                            },
+                        },
+                    });
+                }
+            }
+
+            // Trophy Progress (Chart.js cumulative earned vs unearned)
+            const progressCanvas = el.querySelector('.trophy-progress-canvas');
+            if (progressCanvas && typeof Chart !== 'undefined') {
+                const labels = JSON.parse(progressCanvas.dataset.labels || '[]');
+                const earned = JSON.parse(progressCanvas.dataset.earned || '[]');
+                const unearned = JSON.parse(progressCanvas.dataset.unearned || '[]');
+                if (labels.length) {
+                    const primaryColor = this._getChartColor('primary') || '#6366f1';
+                    new Chart(progressCanvas, {
+                        type: 'line',
+                        data: {
+                            labels: labels,
+                            datasets: [
+                                {
+                                    label: 'Earned',
+                                    data: earned,
+                                    borderColor: primaryColor.includes('oklch') ? '#6366f1' : primaryColor,
+                                    backgroundColor: 'rgba(99, 102, 241, 0.08)',
+                                    fill: true, tension: 0.3, borderWidth: 2, pointRadius: 2, pointHoverRadius: 4,
+                                },
+                                {
+                                    label: 'Unearned',
+                                    data: unearned,
+                                    borderColor: 'rgba(239, 68, 68, 0.5)',
+                                    backgroundColor: 'rgba(239, 68, 68, 0.05)',
+                                    fill: true, tension: 0.3, borderWidth: 2, pointRadius: 2, pointHoverRadius: 4,
+                                },
+                            ],
+                        },
+                        options: {
+                            responsive: true, maintainAspectRatio: true,
+                            plugins: {
+                                legend: { display: true, position: 'bottom', labels: { color: 'rgba(150,150,150,0.6)', font: { size: 10 }, boxWidth: 10, padding: 12 } },
+                            },
+                            scales: {
+                                x: { ticks: { color: 'rgba(150,150,150,0.5)', font: { size: 9 } }, grid: { display: false } },
+                                y: { ticks: { color: 'rgba(150,150,150,0.5)', font: { size: 9 } }, grid: { color: 'rgba(150,150,150,0.1)' } },
+                            },
+                        },
+                    });
+                }
+            }
         }
 
         // -----------------------------------------------------------------

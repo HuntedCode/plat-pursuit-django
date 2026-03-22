@@ -208,7 +208,8 @@
 <script>window.GRADIENT_THEMES = {% gradient_themes_json %};</script>
 <script src="{% static 'js/dashboard.js' %}"></script>
 <script src="{% static 'js/profile-card-share.js' %}"></script>
-{% if is_premium %}<script src="{% static 'js/color-grid-modal.js' %}"></script>{% endif %}
+{% if is_premium %}<script src="{% static 'js/color-grid-modal.js' %}"></script>
+<script src="{% static 'js/vendor/chart.umd.min.js' %}"></script>{% endif %}
 <script>
 document.addEventListener('DOMContentLoaded', () => {
     PlatPursuit.ZoomScaler.init();

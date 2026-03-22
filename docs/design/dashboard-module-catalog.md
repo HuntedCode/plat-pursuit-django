@@ -14,11 +14,11 @@ The dashboard serves as the index page for all logged-in users. Modules are orga
 
 | Status | Count |
 |--------|-------|
-| Complete (Tier 1-4 + Share + Premium) | 22 |
+| Complete (Tier 1-4 + Share + Premium + Viz) | 23 |
 | Cut (low value) | 8 |
-| Premium Planned (Visualization + Stats Page) | 6 |
-| Future (Gamification) | 3 |
-| **Total** | **39** |
+| Planned (Stats Page) | 1 |
+| Future (Gamification + Roadmap) | 4 |
+| **Total** | **36** |
 
 ---
 
@@ -104,14 +104,11 @@ The premium dashboard should feel indispensable. Visualization modules are the p
 
 | # | Module | Strategy | Status | Data Source |
 |---|--------|----------|--------|------------|
-| 26 | Advanced Stats | Lazy (30m) | **Done** | EarnedTrophy aggregates (velocity, rarity tiers, platform breakdown, completion tiers) |
+| 26 | Advanced Stats | Lazy (30m) | **Done** | EarnedTrophy aggregates (velocity, rarity tiers, platform breakdown, completion tiers, time/day patterns) |
 | 27 | Premium Settings | Lazy (none) | **Done** | Profile theme/background inline management (theme picker + background search) |
 | 28 | Trophy Roadmap | Lazy | Future | Requires standalone Roadmap feature first |
-| 30 | Platinum Heatmap | Lazy | Planned | EarnedTrophy (platinum earns by date), requires Chart.js |
-| 31 | Rarity Radar | Lazy | Planned | EarnedTrophy + Trophy.trophy_earn_rate, requires Chart.js |
+| 30-34 | Trophy Visualizations | Lazy (30m) | **Done** | Combined module with year/all selector. Contains: trophy heatmap (CSS grid), genre radar (Chart.js), year-in-review (Chart.js line), games started vs completed (Chart.js line), trophy progress earned vs unearned (Chart.js line), yearly totals with quarterly breakdown (Chart.js stacked bar, all-time mode). Uses first-earn-per-game reconstruction for accurate unearned history. |
 | 32 | Personal Records / Stats Page | - | Planned | Dedicated `/my-stats/` page (not a module), video game stats screen aesthetic |
-| 33 | Year in Review | Lazy | Planned | EarnedTrophy + ProfileGame (year comparison), requires Chart.js |
-| 34 | Trophy Type Breakdown | Lazy | Planned | EarnedTrophy (type counts by month), requires Chart.js |
 
 ### Visualization Module Details
 

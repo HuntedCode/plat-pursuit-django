@@ -61,13 +61,14 @@ SIZE_LIMITS = {
 
 def provide_trophy_snapshot(profile):
     """Trophy collection summary. Zero additional queries (all on Profile)."""
-    total_earned = profile.total_trophies - profile.total_unearned
+    total_earned = profile.total_trophies  # total_trophies is already the earned count
+    total_all = total_earned + profile.total_unearned
     return {
         'total_plats': profile.total_plats,
         'total_golds': profile.total_golds,
         'total_silvers': profile.total_silvers,
         'total_bronzes': profile.total_bronzes,
-        'total_trophies': profile.total_trophies,
+        'total_trophies': total_all,
         'total_earned': total_earned,
         'total_unearned': profile.total_unearned,
         'total_games': profile.total_games,
@@ -77,7 +78,7 @@ def provide_trophy_snapshot(profile):
         'trophy_level': profile.trophy_level,
         'tier': profile.tier,
         'is_plus': profile.is_plus,
-        'earn_rate': round(total_earned / profile.total_trophies * 100, 1) if profile.total_trophies else 0,
+        'earn_rate': round(total_earned / total_all * 100, 1) if total_all else 0,
     }
 
 
@@ -1661,6 +1662,679 @@ def provide_premium_settings(profile):
     }
 
 
+def _build_heatmap_data(profile, year):
+    """GitHub-style contribution grid for all trophy earns over a year."""
+    from trophies.models import EarnedTrophy
+    from django.db.models import Count
+    from django.db.models.functions import TruncDate
+    from django.utils import timezone
+    from datetime import date, timedelta
+    import calendar as cal_module
+
+    now = timezone.now()
+
+    earned_qs = EarnedTrophy.objects.filter(
+        profile=profile, earned=True, earned_date_time__isnull=False,
+        earned_date_time__year=year,
+    )
+
+    # Daily trophy counts
+    daily = dict(
+        earned_qs
+        .annotate(day=TruncDate('earned_date_time'))
+        .values('day')
+        .annotate(count=Count('id'))
+        .values_list('day', 'count')
+    )
+
+    total_trophies = sum(daily.values())
+    if not daily and year == now.year:
+        # No data for current year, still show empty grid
+        pass
+
+    # Build grid as 7 rows (Sun-Sat), each row has one cell per week column
+    jan1 = date(year, 1, 1)
+    dec31 = date(year, 12, 31)
+    # Pad to start on Sunday
+    start = jan1 - timedelta(days=(jan1.weekday() + 1) % 7)
+
+    # Compute dynamic intensity thresholds based on actual data
+    nonzero_counts = sorted([c for c in daily.values() if c > 0])
+    if nonzero_counts:
+        q1 = nonzero_counts[len(nonzero_counts) // 4] if len(nonzero_counts) > 3 else 1
+        q2 = nonzero_counts[len(nonzero_counts) // 2] if len(nonzero_counts) > 1 else q1
+        q3 = nonzero_counts[3 * len(nonzero_counts) // 4] if len(nonzero_counts) > 3 else q2
+    else:
+        q1, q2, q3 = 1, 2, 4
+
+    def _level(count):
+        if count == 0:
+            return 0
+        if count <= q1:
+            return 1
+        if count <= q2:
+            return 2
+        if count <= q3:
+            return 3
+        return 4
+
+    # Build flat list of all days, grouped into weeks
+    all_cells = []
+    current = start
+    while current <= dec31 or current.weekday() != 6:
+        if current.year == year:
+            count = daily.get(current, 0)
+            all_cells.append({
+                'date': current.isoformat(),
+                'count': count,
+                'level': _level(count),
+                'in_year': True,
+            })
+        else:
+            all_cells.append({'in_year': False})
+        current += timedelta(days=1)
+
+    # Compute number of week columns
+    num_weeks = len(all_cells) // 7
+
+    # Transpose into 7 rows (day 0=Sun through day 6=Sat)
+    rows = []
+    day_labels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+    for day_idx in range(7):
+        row_cells = []
+        for week_idx in range(num_weeks):
+            cell_idx = week_idx * 7 + day_idx
+            if cell_idx < len(all_cells):
+                row_cells.append(all_cells[cell_idx])
+            else:
+                row_cells.append({'in_year': False})
+        rows.append({
+            'label': day_labels[day_idx],
+            'show_label': day_idx in (1, 3, 5),  # Mon, Wed, Fri
+            'cells': row_cells,
+        })
+
+    # Month label positions with span widths for simple template iteration
+    month_positions = []
+    for m in range(1, 13):
+        first_of_month = date(year, m, 1)
+        week_start = (first_of_month - start).days // 7
+        if m < 12:
+            next_month = date(year, m + 1, 1)
+            week_end = (next_month - start).days // 7
+        else:
+            week_end = num_weeks
+        month_positions.append({
+            'name': cal_module.month_abbr[m],
+            'span': max(week_end - week_start, 1),
+        })
+
+    return {
+        'has_data': True,
+        'rows': rows,
+        'num_weeks': num_weeks,
+        'months': month_positions,
+        'year': year,
+        'current_year': now.year,
+        'total_trophies': total_trophies,
+    }
+
+
+def _build_genre_radar_data(profile, year):
+    """Genre distribution across all earned trophies for Chart.js radar chart."""
+    from trophies.models import EarnedTrophy
+
+    # Count trophies per genre via game concept genres
+    earned_qs = EarnedTrophy.objects.filter(
+        profile=profile, earned=True, earned_date_time__isnull=False,
+    ).select_related('trophy__game__concept')
+    if year is not None:
+        earned_qs = earned_qs.filter(earned_date_time__year=year)
+
+    genre_counts = defaultdict(int)
+    for et in earned_qs:
+        game = et.trophy.game if et.trophy else None
+        concept = getattr(game, 'concept', None) if game else None
+        if concept and concept.genres:
+            for genre in concept.genres:
+                genre_counts[genre] += 1
+
+    if not genre_counts:
+        return {'has_data': False}
+
+    # Sort by count descending, cap at top 8 for readability
+    sorted_genres = sorted(genre_counts.items(), key=lambda x: -x[1])[:8]
+
+    GENRE_ALIASES = {
+        'role_playing_games': 'RPG',
+        'role playing games': 'RPG',
+    }
+
+    def _format_genre(name):
+        key = name.lower().strip()
+        if key in GENRE_ALIASES:
+            return GENRE_ALIASES[key]
+        return name.replace('_', ' ').title()
+
+    labels = [_format_genre(g[0]) for g in sorted_genres]
+    counts = [g[1] for g in sorted_genres]
+    total = sum(counts)
+
+    return {
+        'has_data': True,
+        'labels': labels,
+        'counts': counts,
+        'total': total,
+    }
+
+
+def _months_to_show(year):
+    """How many months of data to include: current month for current year, 12 for past years."""
+    from django.utils import timezone
+    now = timezone.now()
+    if year >= now.year:
+        return now.month
+    return 12
+
+
+def _build_year_review_data(profile, current_year):
+    """Year-over-year trophy earning comparison for Chart.js line chart."""
+    from trophies.models import EarnedTrophy
+    from django.db.models import Count
+    from django.db.models.functions import TruncMonth
+    import calendar as cal_module
+
+    prev_year = current_year - 1
+
+    earned_qs = EarnedTrophy.objects.filter(
+        profile=profile, earned=True, earned_date_time__isnull=False,
+    )
+
+    labels = [cal_module.month_abbr[m] for m in range(1, 13)]
+
+    def _monthly_cumulative(yr):
+        monthly_raw = list(
+            earned_qs.filter(earned_date_time__year=yr)
+            .annotate(month=TruncMonth('earned_date_time'))
+            .values('month')
+            .annotate(count=Count('id'))
+            .order_by('month')
+        )
+        month_counts = [0] * 12
+        for entry in monthly_raw:
+            m = entry['month'].month
+            month_counts[m - 1] = entry['count']
+
+        # Cumulative
+        cumulative = []
+        running = 0
+        for c in month_counts:
+            running += c
+            cumulative.append(running)
+        return cumulative, running
+
+    current_data, current_total = _monthly_cumulative(current_year)
+    prev_data, prev_total = _monthly_cumulative(prev_year)
+
+    if current_total == 0 and prev_total == 0:
+        return {'has_data': False}
+
+    pct_change = None
+    if prev_total > 0:
+        pct_change = round((current_total - prev_total) / prev_total * 100, 1)
+
+    n = _months_to_show(current_year)
+
+    return {
+        'has_data': True,
+        'labels': labels[:n],
+        'current_year': current_year,
+        'prev_year': prev_year,
+        'current_data': current_data[:n],
+        'prev_data': prev_data[:n],
+        'current_total': f"{current_total:,}",
+        'prev_total': f"{prev_total:,}",
+        'pct_change': pct_change,
+    }
+
+
+def _build_games_started_completed_data(profile, year):
+    """Monthly games started vs completed for Chart.js line chart."""
+    from trophies.models import ProfileGame
+    from django.db.models import Count
+    from django.db.models.functions import TruncMonth
+    import calendar as cal_module
+
+    labels = [cal_module.month_abbr[m] for m in range(1, 13)]
+
+    # Games started (first trophy in that game during this year)
+    started_raw = list(
+        ProfileGame.objects
+        .filter(profile=profile, first_played_date_time__isnull=False,
+                first_played_date_time__year=year)
+        .annotate(month=TruncMonth('first_played_date_time'))
+        .values('month')
+        .annotate(count=Count('id'))
+        .order_by('month')
+    )
+    started = [0] * 12
+    for entry in started_raw:
+        started[entry['month'].month - 1] = entry['count']
+
+    # Games completed (reached 100% during this year)
+    completed_raw = list(
+        ProfileGame.objects
+        .filter(profile=profile, progress=100,
+                most_recent_trophy_date__isnull=False,
+                most_recent_trophy_date__year=year)
+        .annotate(month=TruncMonth('most_recent_trophy_date'))
+        .values('month')
+        .annotate(count=Count('id'))
+        .order_by('month')
+    )
+    completed = [0] * 12
+    for entry in completed_raw:
+        completed[entry['month'].month - 1] = entry['count']
+
+    if not any(started) and not any(completed):
+        return {'has_data': False}
+
+    # Convert to cumulative
+    cum_started = []
+    cum_completed = []
+    running_s = 0
+    running_c = 0
+    for i in range(12):
+        running_s += started[i]
+        running_c += completed[i]
+        cum_started.append(running_s)
+        cum_completed.append(running_c)
+
+    n = _months_to_show(year)
+
+    return {
+        'has_data': True,
+        'labels': labels[:n],
+        'started': cum_started[:n],
+        'completed': cum_completed[:n],
+        'total_started': running_s,
+        'total_completed': running_c,
+    }
+
+
+def _build_trophy_pool_history(profile):
+    """Reconstruct when each game's trophies entered the user's pool.
+
+    Uses the earliest earned_date_time per game (via EarnedTrophy) as the
+    "game start" date. At that point, the game's total trophies enter the pool.
+
+    Returns dict: {date: total_trophies_entering_pool_that_day}
+    """
+    from trophies.models import EarnedTrophy, ProfileGame
+    from django.db.models import Min
+
+    # Get first earn date per game from EarnedTrophy side
+    first_earns = dict(
+        EarnedTrophy.objects
+        .filter(profile=profile, earned=True, earned_date_time__isnull=False)
+        .values('trophy__game_id')
+        .annotate(first_earn=Min('earned_date_time'))
+        .values_list('trophy__game_id', 'first_earn')
+    )
+
+    # Get total trophy counts per game from ProfileGame
+    game_totals = dict(
+        ProfileGame.objects
+        .filter(profile=profile, game_id__in=first_earns.keys())
+        .values_list('game_id', 'earned_trophies_count')
+    )
+    game_unearned = dict(
+        ProfileGame.objects
+        .filter(profile=profile, game_id__in=first_earns.keys())
+        .values_list('game_id', 'unearned_trophies_count')
+    )
+
+    # Build: {date: total_trophies_entering_pool}
+    game_starts = defaultdict(int)
+    for game_id, first_dt in first_earns.items():
+        total = (game_totals.get(game_id, 0) or 0) + (game_unearned.get(game_id, 0) or 0)
+        game_starts[first_dt.date()] += total
+
+    return game_starts
+
+
+def _build_earned_unearned_data(profile, year):
+    """Cumulative earned vs unearned over the year using first-earn reconstruction."""
+    from trophies.models import EarnedTrophy, ProfileGame
+    from django.db.models import Count, Avg
+    from django.db.models.functions import TruncMonth
+    from datetime import date
+    import calendar as cal_module
+
+    labels = [cal_module.month_abbr[m] for m in range(1, 13)]
+    game_starts = _build_trophy_pool_history(profile)
+
+    # Pool entering before this year
+    pool_baseline = sum(v for d, v in game_starts.items() if d < date(year, 1, 1))
+
+    # Earned baseline
+    earned_baseline = EarnedTrophy.objects.filter(
+        profile=profile, earned=True, earned_date_time__isnull=False,
+        earned_date_time__lt=date(year, 1, 1),
+    ).count()
+
+    unearned_baseline = max(pool_baseline - earned_baseline, 0)
+
+    # Pool entering per month this year
+    monthly_pool = [0] * 12
+    for d, total in game_starts.items():
+        if d.year == year:
+            monthly_pool[d.month - 1] += total
+
+    # Earned per month this year
+    earned_raw = list(
+        EarnedTrophy.objects
+        .filter(profile=profile, earned=True, earned_date_time__isnull=False,
+                earned_date_time__year=year)
+        .annotate(month=TruncMonth('earned_date_time'))
+        .values('month')
+        .annotate(count=Count('id'))
+        .order_by('month')
+    )
+    monthly_earned = [0] * 12
+    for entry in earned_raw:
+        monthly_earned[entry['month'].month - 1] = entry['count']
+
+    year_earned = sum(monthly_earned)
+
+    if earned_baseline == 0 and year_earned == 0:
+        return {'has_data': False}
+
+    # Build cumulative lines
+    cumulative_earned = []
+    cumulative_unearned = []
+    running_earned = earned_baseline
+    running_unearned = unearned_baseline
+    for i in range(12):
+        running_unearned += monthly_pool[i]  # New games add to unearned
+        running_earned += monthly_earned[i]   # Earning moves from unearned
+        running_unearned -= monthly_earned[i]
+        cumulative_earned.append(running_earned)
+        cumulative_unearned.append(max(running_unearned, 0))
+
+    avg_completion = (
+        ProfileGame.objects.filter(profile=profile).aggregate(avg=Avg('progress'))
+    )['avg'] or 0
+
+    n = _months_to_show(year)
+
+    return {
+        'has_data': True,
+        'labels': labels[:n],
+        'cumulative_earned': cumulative_earned[:n],
+        'cumulative_unearned': cumulative_unearned[:n],
+        'year_earned': f"{year_earned:,}",
+        'current_total': f"{cumulative_earned[n - 1]:,}" if cumulative_earned else '0',
+        'current_unearned': f"{cumulative_unearned[n - 1]:,}" if cumulative_unearned else '0',
+        'avg_completion': round(avg_completion, 1),
+    }
+
+
+def _build_quarterly_labels(start_year, end_year):
+    """Build quarterly labels like ['Q1 2020', 'Q2 2020', ...]."""
+    labels = []
+    for y in range(start_year, end_year + 1):
+        for q in range(1, 5):
+            labels.append(f"Q{q} {y}")
+    return labels
+
+
+def _build_all_time_games_flow(profile):
+    """All-time games started vs completed by quarter."""
+    from trophies.models import ProfileGame, EarnedTrophy
+    from django.db.models import Count, Min
+    from django.db.models.functions import TruncQuarter
+    from django.utils import timezone
+
+    now = timezone.now()
+
+    # Find earliest year
+    first = EarnedTrophy.objects.filter(
+        profile=profile, earned=True, earned_date_time__isnull=False
+    ).aggregate(first=Min('earned_date_time'))['first']
+    if not first:
+        return {'has_data': False}
+    start_year = first.year
+
+    labels = _build_quarterly_labels(start_year, now.year)
+    num_q = len(labels)
+
+    def _quarter_idx(dt):
+        return (dt.year - start_year) * 4 + (dt.month - 1) // 3
+
+    # Games started by quarter
+    started_raw = list(
+        ProfileGame.objects
+        .filter(profile=profile, first_played_date_time__isnull=False)
+        .annotate(quarter=TruncQuarter('first_played_date_time'))
+        .values('quarter')
+        .annotate(count=Count('id'))
+        .order_by('quarter')
+    )
+    started = [0] * num_q
+    for entry in started_raw:
+        idx = _quarter_idx(entry['quarter'])
+        if 0 <= idx < num_q:
+            started[idx] = entry['count']
+
+    # Games completed by quarter
+    completed_raw = list(
+        ProfileGame.objects
+        .filter(profile=profile, progress=100,
+                most_recent_trophy_date__isnull=False)
+        .annotate(quarter=TruncQuarter('most_recent_trophy_date'))
+        .values('quarter')
+        .annotate(count=Count('id'))
+        .order_by('quarter')
+    )
+    completed = [0] * num_q
+    for entry in completed_raw:
+        idx = _quarter_idx(entry['quarter'])
+        if 0 <= idx < num_q:
+            completed[idx] = entry['count']
+
+    # Cumulative
+    cum_s, cum_c = [], []
+    rs, rc = 0, 0
+    for i in range(num_q):
+        rs += started[i]
+        rc += completed[i]
+        cum_s.append(rs)
+        cum_c.append(rc)
+
+    # Truncate to current quarter
+    current_q_idx = _quarter_idx(now)
+    n = min(current_q_idx + 1, num_q)
+
+    return {
+        'has_data': True,
+        'labels': labels[:n],
+        'started': cum_s[:n],
+        'completed': cum_c[:n],
+        'total_started': rs,
+        'total_completed': rc,
+    }
+
+
+def _build_all_time_earned_unearned(profile):
+    """All-time earned vs unearned trophies by quarter using first-earn reconstruction."""
+    from trophies.models import EarnedTrophy, ProfileGame
+    from django.db.models import Count, Min, Avg
+    from django.db.models.functions import TruncQuarter
+    from django.utils import timezone
+
+    now = timezone.now()
+    game_starts = _build_trophy_pool_history(profile)
+
+    first = EarnedTrophy.objects.filter(
+        profile=profile, earned=True, earned_date_time__isnull=False
+    ).aggregate(first=Min('earned_date_time'))['first']
+    if not first:
+        return {'has_data': False}
+    start_year = first.year
+
+    labels = _build_quarterly_labels(start_year, now.year)
+    num_q = len(labels)
+
+    def _quarter_idx(dt):
+        return (dt.year - start_year) * 4 + (dt.month - 1) // 3
+
+    # Pool entering per quarter (from game starts)
+    quarterly_pool = [0] * num_q
+    for d, total in game_starts.items():
+        idx = _quarter_idx(d)
+        if 0 <= idx < num_q:
+            quarterly_pool[idx] += total
+
+    # Earned per quarter
+    earned_raw = list(
+        EarnedTrophy.objects
+        .filter(profile=profile, earned=True, earned_date_time__isnull=False)
+        .annotate(quarter=TruncQuarter('earned_date_time'))
+        .values('quarter')
+        .annotate(count=Count('id'))
+        .order_by('quarter')
+    )
+    quarterly_earned = [0] * num_q
+    for entry in earned_raw:
+        idx = _quarter_idx(entry['quarter'])
+        if 0 <= idx < num_q:
+            quarterly_earned[idx] = entry['count']
+
+    # Build cumulative lines
+    cum_earned, cum_unearned = [], []
+    re, ru = 0, 0
+    for i in range(num_q):
+        ru += quarterly_pool[i]    # New games add to unearned
+        re += quarterly_earned[i]  # Earning moves from unearned
+        ru -= quarterly_earned[i]
+        cum_earned.append(re)
+        cum_unearned.append(max(ru, 0))
+
+    # Truncate to current quarter
+    current_q_idx = _quarter_idx(now)
+    n = min(current_q_idx + 1, num_q)
+
+    avg_completion = (
+        ProfileGame.objects.filter(profile=profile).aggregate(avg=Avg('progress'))
+    )['avg'] or 0
+
+    total_earned_now = profile.total_trophies
+
+    return {
+        'has_data': True,
+        'labels': labels[:n],
+        'cumulative_earned': cum_earned[:n],
+        'cumulative_unearned': cum_unearned[:n],
+        'year_earned': f"{total_earned_now:,}",
+        'current_total': f"{cum_earned[n - 1]:,}" if cum_earned else '0',
+        'current_unearned': f"{cum_unearned[n - 1]:,}" if cum_unearned else '0',
+        'avg_completion': round(avg_completion, 1),
+    }
+
+
+def _build_all_time_yearly_totals(profile):
+    """Trophies earned per year with quarterly breakdown for stacked bar chart."""
+    from trophies.models import EarnedTrophy
+    from django.db.models import Count, Min
+    from django.db.models.functions import ExtractYear, ExtractQuarter
+    from django.utils import timezone
+
+    now = timezone.now()
+
+    first = EarnedTrophy.objects.filter(
+        profile=profile, earned=True, earned_date_time__isnull=False
+    ).aggregate(first=Min('earned_date_time'))['first']
+    if not first:
+        return {'has_data': False}
+
+    start_year = first.year
+    years = list(range(start_year, now.year + 1))
+    labels = [str(y) for y in years]
+
+    # Get counts by year + quarter in one query
+    raw = list(
+        EarnedTrophy.objects
+        .filter(profile=profile, earned=True, earned_date_time__isnull=False)
+        .annotate(yr=ExtractYear('earned_date_time'), qtr=ExtractQuarter('earned_date_time'))
+        .values('yr', 'qtr')
+        .annotate(count=Count('id'))
+        .order_by('yr', 'qtr')
+    )
+
+    # Build lookup: {(year, quarter): count}
+    lookup = {(e['yr'], e['qtr']): e['count'] for e in raw}
+
+    q1 = [lookup.get((y, 1), 0) for y in years]
+    q2 = [lookup.get((y, 2), 0) for y in years]
+    q3 = [lookup.get((y, 3), 0) for y in years]
+    q4 = [lookup.get((y, 4), 0) for y in years]
+
+    totals = [q1[i] + q2[i] + q3[i] + q4[i] for i in range(len(years))]
+    best_idx = max(range(len(totals)), key=lambda i: totals[i]) if totals else 0
+    total = sum(totals)
+
+    return {
+        'has_data': True,
+        'labels': labels,
+        'q1': q1,
+        'q2': q2,
+        'q3': q3,
+        'q4': q4,
+        'best_year': labels[best_idx] if labels else '',
+        'best_count': f"{totals[best_idx]:,}" if totals else '0',
+        'total': f"{total:,}",
+    }
+
+
+def provide_trophy_visualizations(profile, settings=None):
+    """Combined premium visualization module: heatmap, genre radar, year review, games flow, earned/unearned."""
+    from django.utils import timezone
+
+    settings = settings or {}
+    now = timezone.now()
+    year_val = settings.get('year', '')
+    is_all = year_val == 'all'
+
+    try:
+        year = int(year_val) if year_val and not is_all else now.year
+    except (ValueError, TypeError):
+        year = now.year
+
+    if is_all:
+        return {
+            'year': 'all',
+            'year_label': 'All Time',
+            'current_year': now.year,
+            'heatmap': _build_heatmap_data(profile, now.year),
+            'genre_radar': _build_genre_radar_data(profile, None),
+            'year_review': _build_all_time_yearly_totals(profile),
+            'games_flow': _build_all_time_games_flow(profile),
+            'earned_unearned': _build_all_time_earned_unearned(profile),
+        }
+
+    return {
+        'year': year,
+        'year_label': str(year),
+        'current_year': now.year,
+        'heatmap': _build_heatmap_data(profile, year),
+        'genre_radar': _build_genre_radar_data(profile, year),
+        'year_review': _build_year_review_data(profile, year),
+        'games_flow': _build_games_started_completed_data(profile, year),
+        'earned_unearned': _build_earned_unearned_data(profile, year),
+    }
+
+
 # ---------------------------------------------------------------------------
 # Module Registry
 # ---------------------------------------------------------------------------
@@ -2117,6 +2791,25 @@ DASHBOARD_MODULES = [
         'cache_ttl': 0,
         'default_size': 'medium',
         'allowed_sizes': ['medium', 'large'],
+    },
+    {
+        'slug': 'trophy_visualizations',
+        'name': 'Trophy Visualizations',
+        'description': 'Premium analytics suite: platinum heatmap, genre radar, year comparison, and trophy type trends.',
+        'category': 'premium',
+        'template': 'trophies/partials/dashboard/trophy_visualizations.html',
+        'provider': provide_trophy_visualizations,
+        'requires_premium': True,
+        'load_strategy': 'lazy',
+        'default_order': 4,
+        'default_settings': {'year': ''},
+        'configurable_settings': [
+            {'key': 'year', 'label': 'Year', 'type': 'select', 'default': '',
+             'options': [{'value': 'all', 'label': 'All Time'}] + [{'value': str(y), 'label': str(y)} for y in range(2026, 2014, -1)] + [{'value': '', 'label': 'Current'}]},
+        ],
+        'cache_ttl': 1800,
+        'default_size': 'large',
+        'allowed_sizes': ['large'],
     },
 ]
 
