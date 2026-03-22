@@ -84,7 +84,7 @@
                             Current Grind
                         </h3>
                         {% if sp.has_bars %}
-                            <div>
+                            <div style="height: {{ sp.bar_height }}px; min-height: 120px;" class="relative">
                                 <canvas class="badge-stage-progress-canvas"
                                         data-labels='{{ sp.bar_labels|tojson }}'
                                         data-completed='{{ sp.bar_completed|tojson }}'

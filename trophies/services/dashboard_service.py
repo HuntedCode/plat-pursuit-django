@@ -2462,7 +2462,7 @@ def provide_advanced_badge_stats(profile, settings=None):
          'pct': round(type_counts.get(t, 0) / type_max * 100) if type_max else 0,
          'stage_pct': round(type_stage_counts.get(t, 0) / stage_max * 100) if stage_max else 0}
         for t in ['series', 'collection', 'megamix', 'developer', 'user', 'genre', 'misc']
-        if type_counts.get(t, 0) > 0
+        if type_counts.get(t, 0) > 0 or type_stage_counts.get(t, 0) > 0
     ]
 
     # --- Tier Distribution ---
@@ -2708,6 +2708,7 @@ def _build_stage_progress_data(profile):
         'bar_colors': bar_colors,
         'bar_tier_labels': bar_tier_labels,
         'has_bars': bool(sorted_bars),
+        'bar_height': max(len(sorted_bars) * 35, 120),
         # Tier grid data
         'grid_rows': grid_rows,
         'has_grid': bool(grid_rows),
