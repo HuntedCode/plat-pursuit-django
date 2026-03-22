@@ -1189,6 +1189,7 @@ class Badge(models.Model):
         ('megamix', 'Megamix'),
         ('developer', 'Developer'),
         ('user', 'User'),
+        ('genre', 'Genre'),
         ('misc', 'Miscellaneous'),
     ]
 

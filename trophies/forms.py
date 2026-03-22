@@ -172,6 +172,7 @@ class BadgeSearchForm(forms.Form):
             ('collection', 'Collection'),
             ('developer', 'Developer'),
             ('user', 'User'),
+            ('genre', 'Genre'),
             ('megamix', 'Megamix'),
         ],
         required=False,
@@ -276,7 +277,7 @@ class ProfileSettingsForm(forms.ModelForm):
 class BadgeCreationForm(forms.Form):
     name = forms.CharField(max_length=255, required=True, label="Name", widget=forms.TextInput(attrs={'class': 'input w-full'}))
     series_slug = forms.SlugField(max_length=100, required=False, label="Series Slug", widget=forms.TextInput(attrs={'class': 'input w-full'}))
-    badge_type = forms.ChoiceField(choices=[('series', 'Series'), ('collection', 'Collection'), ('megamix', 'Megamix'), ('developer', 'Developer'), ('user', 'User')], required=True, label="Badge Type", widget=forms.Select(attrs={'class': 'select w-full'}))
+    badge_type = forms.ChoiceField(choices=[('series', 'Series'), ('collection', 'Collection'), ('megamix', 'Megamix'), ('developer', 'Developer'), ('user', 'User'), ('genre', 'Genre')], required=True, label="Badge Type", widget=forms.Select(attrs={'class': 'select w-full'}))
     submitted_by = forms.CharField(max_length=100, required=False, label="Submitted By (PSN Username)", widget=forms.TextInput(attrs={'class': 'input w-full', 'placeholder': 'PSN username of submitter'}))
 
     def get_badge_data(self):

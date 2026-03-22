@@ -631,6 +631,8 @@ class PsnApiService:
             title = 'Studio Champion'
         elif badge_type_name == 'User':
             title = 'Community Champion'
+        elif badge_type_name == 'Genre':
+            title = 'Genre Guru'
         else:
             title = 'Series Master'
 

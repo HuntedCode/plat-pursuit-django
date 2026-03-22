@@ -2433,13 +2433,13 @@ def provide_advanced_badge_stats(profile, settings=None):
     )
     TYPE_LABELS = {
         'series': 'Series', 'collection': 'Collection', 'megamix': 'Megamix',
-        'developer': 'Developer', 'user': 'User', 'misc': 'Misc',
+        'developer': 'Developer', 'user': 'User', 'genre': 'Genre', 'misc': 'Misc',
     }
     type_max = max(type_counts.values()) if type_counts else 1
     badge_types = [
         {'label': TYPE_LABELS.get(t, t.title()), 'count': _fmt(type_counts.get(t, 0)),
          'pct': round(type_counts.get(t, 0) / type_max * 100) if type_max else 0}
-        for t in ['series', 'collection', 'megamix', 'developer', 'user', 'misc']
+        for t in ['series', 'collection', 'megamix', 'developer', 'user', 'genre', 'misc']
         if type_counts.get(t, 0) > 0
     ]
 

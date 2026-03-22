@@ -17,7 +17,7 @@ A **badge series** is identified by a `series_slug` (e.g., `god-of-war`, `reside
 
 Tiers are sequential prerequisites: you cannot earn Gold without first earning Silver, which requires Bronze. This is enforced by `_check_prerequisite_tier()`.
 
-Odd tiers (1, 3) check for `has_plat=True` on ProfileGame. Even tiers (2, 4) check for `progress=100`. This alternating pattern applies to `series`, `collection`, `developer`, and `user` badge types. Megamix badges always use platinum checks regardless of tier.
+Odd tiers (1, 3) check for `has_plat=True` on ProfileGame. Even tiers (2, 4) check for `progress=100`. This alternating pattern applies to `series`, `collection`, `developer`, `user`, and `genre` badge types. Megamix badges always use platinum checks regardless of tier.
 
 ### Stages and Concepts
 
@@ -33,11 +33,12 @@ The `required_tiers` ArrayField on Stage controls tier-specific visibility. An e
 - **collection**: A themed collection across franchises. Same logic as series.
 - **developer**: Groups games by studio. Same logic as series.
 - **user**: User-submitted badges. Same evaluation logic as series/collection/developer. Displays "Submitted by" attribution on the detail page via the `submitted_by` FK.
+- **genre**: Groups games by genre/subgenre. Same evaluation logic as series/collection.
 - **megamix**: Flexible completion. Can use `requires_all` (complete everything) or `min_required` (complete N of M stages). Always uses platinum checks.
 - **misc**: Admin-awarded only. Never evaluated automatically.
 
 These types are grouped into named constants in `trophies/constants.py`:
-- `CONCEPT_BASED_BADGE_TYPES`: series, collection, developer, user (all stages must be complete)
+- `CONCEPT_BASED_BADGE_TYPES`: series, collection, developer, user, genre (all stages must be complete)
 - `EVALUATABLE_BADGE_TYPES`: concept-based + megamix (all stage-evaluated types)
 
 ### XP System
@@ -75,7 +76,7 @@ The central model. Each row represents one tier of one badge series.
 
 - `series_slug`: Groups tiers together. All tiers of "God of War" share the same slug.
 - `tier`: 1-4 (Bronze through Platinum). Sequential prerequisite chain.
-- `badge_type`: Determines evaluation logic (series/collection/developer/user/megamix/misc).
+- `badge_type`: Determines evaluation logic (series/collection/developer/user/genre/megamix/misc).
 - `base_badge`: FK to Tier 1 badge. Higher tiers can inherit display properties (image, title, description) from their base badge via `effective_*` properties.
 - `requires_all` / `min_required`: Megamix flexibility. When `requires_all=False`, only `min_required` stages need completion.
 - `is_live`: Visibility flag. New badges start hidden until released.
@@ -303,7 +304,7 @@ Both Badge and Milestone `earned_count` fields are updated via `F('earned_count'
 Badge views read leaderboard data from cache. If the `update_leaderboards` cron fails or the cache is flushed, leaderboard pages will show empty results until the next successful cron run. The 7-hour TTL means data can be up to 7 hours stale under normal operation.
 
 ### `requires_all` vs `min_required` only matters for megamix
-For series, collection, developer, and user badges, ALL non-zero qualifying stages must be complete regardless of the `requires_all` flag. The `min_required` field is only consulted when `badge_type='megamix'` and `requires_all=False`.
+For series, collection, developer, user, and genre badges, ALL non-zero qualifying stages must be complete regardless of the `requires_all` flag. The `min_required` field is only consulted when `badge_type='megamix'` and `requires_all=False`.
 
 ### Milestone handler caching is per-batch, not persistent
 The `_cache` dict passed to milestone handlers lives only for the duration of a single `check_all_milestones_for_user()` call. It prevents redundant queries across tiers of the same type within that call, but the next call starts with a fresh cache.
