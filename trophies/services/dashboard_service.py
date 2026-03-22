@@ -4813,7 +4813,8 @@ def invalidate_dashboard_cache(profile_id):
     """Delete all dashboard module cache keys for a profile.
 
     Uses a tracked key set for fast O(1) invalidation. Falls back to
-    pattern-based deletion (wrapped safely) for pre-tracker cache entries.
+    bare keys (without settings hash) as a safety net.
+    Called frequently (every sync, badge check, etc.) so must be fast.
     """
     tracker_key = _cache_key_tracker(profile_id)
     tracked_keys = cache.get(tracker_key) or set()
@@ -4822,13 +4823,36 @@ def invalidate_dashboard_cache(profile_id):
     keys_to_delete.append(tracker_key)  # Clear the tracker itself
 
     # Also include bare keys (without settings hash) as a safety net
+    import hashlib
     for mod in DASHBOARD_MODULES:
         if mod.get('cache_ttl', DEFAULT_CACHE_TTL) > 0:
-            keys_to_delete.append(_module_cache_key(mod['slug'], profile_id))
+            slug = mod['slug']
+            keys_to_delete.append(_module_cache_key(slug, profile_id))
+            # Default settings hash (most common variant)
+            defaults = mod.get('default_settings', {})
+            if defaults:
+                settings_hash = hashlib.md5(str(sorted(defaults.items())).encode()).hexdigest()[:8]
+                keys_to_delete.append(_module_cache_key(slug, profile_id, settings_hash))
 
     if keys_to_delete:
         cache.delete_many(keys_to_delete)
 
-    # Pre-tracker cache entries (set before this deploy) are NOT explicitly
-    # cleared here. They expire naturally via their TTL (max 1 hour).
-    # This avoids Redis SCAN which caused production worker timeouts.
+
+def force_flush_dashboard_cache(profile_id):
+    """Force-delete ALL dashboard cache keys for a profile using pattern matching.
+
+    Uses Redis SCAN via delete_pattern() per module, which is slower than
+    invalidate_dashboard_cache but guaranteed to find all key variants.
+    Only use from management commands, NOT from hot paths (sync, badge checks).
+    """
+    tracker_key = _cache_key_tracker(profile_id)
+    cache.delete(tracker_key)
+
+    for mod in DASHBOARD_MODULES:
+        if mod.get('cache_ttl', DEFAULT_CACHE_TTL) > 0:
+            slug = mod['slug']
+            cache.delete(_module_cache_key(slug, profile_id))
+            try:
+                cache.delete_pattern(f"dashboard:mod:{slug}:{profile_id}:*")
+            except Exception:
+                pass

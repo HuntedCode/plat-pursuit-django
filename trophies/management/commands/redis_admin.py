@@ -278,8 +278,8 @@ class Command(BaseCommand):
     def _handle_flush_dashboard(self, profile_id: int):
         try:
             from django.core.cache import cache
-            from trophies.services.dashboard_service import invalidate_dashboard_cache, DASHBOARD_MODULES
-            invalidate_dashboard_cache(profile_id)
+            from trophies.services.dashboard_service import force_flush_dashboard_cache, DASHBOARD_MODULES
+            force_flush_dashboard_cache(profile_id)
 
             # Also flush premium preview caches (keyed by slug, not profile)
             preview_keys = [f'dashboard:preview:{mod["slug"]}' for mod in DASHBOARD_MODULES if mod.get('requires_premium')]

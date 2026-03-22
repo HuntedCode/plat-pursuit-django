@@ -211,7 +211,9 @@ All homepage keys use 2x TTL as safety margin (cron refreshes before expiry). Da
 
 | Key Pattern | TTL | Purpose |
 |-------------|-----|---------|
-| `dashboard:mod:{module_slug}:{profile_id}:{settings_hash}` | Per-module `cache_ttl` (default 600s) | Lazy-loaded module data; `settings_hash` is MD5 of effective settings. Invalidated by `invalidate_dashboard_cache()` using `cache.delete_pattern()` with wildcard prefix. |
+| `dashboard:mod:{module_slug}:{profile_id}:{settings_hash}` | Per-module `cache_ttl` (default 600s) | Lazy-loaded module data; `settings_hash` is MD5 of effective settings. Two invalidation paths: `invalidate_dashboard_cache()` (fast, tracker + default-hash keys, used by hot paths) and `force_flush_dashboard_cache()` (thorough, per-module pattern scan, used by redis_admin command). |
+| `dashboard:preview:{module_slug}` | 24 hours | Pre-rendered premium module preview HTML from showcase profile. Flushed by `redis_admin --flush-dashboard`. |
+| `dashboard:active_keys:{profile_id}` | ~1 hour | Tracker set of active cache keys for fast O(1) invalidation. |
 
 **Files**: `trophies/services/dashboard_service.py`
 
