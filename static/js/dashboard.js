@@ -774,7 +774,7 @@
                         },
                         options: {
                             indexAxis: 'y',
-                            responsive: true, maintainAspectRatio: true,
+                            responsive: true, maintainAspectRatio: false,
                             plugins: { legend: { display: false } },
                             scales: {
                                 x: { stacked: true, ticks: { color: 'rgba(150,150,150,0.5)', font: { size: 9 } }, grid: { color: 'rgba(150,150,150,0.1)' } },
@@ -961,39 +961,27 @@
                 }
             }
 
-            // Badge Growth: Badges Earned vs Stages Completed (Chart.js dual line)
+            // Badge Growth (cumulative line)
             const growthCanvas = el.querySelector('.badge-growth-canvas');
             if (growthCanvas && typeof Chart !== 'undefined') {
                 const labels = JSON.parse(growthCanvas.dataset.labels || '[]');
-                const badges = JSON.parse(growthCanvas.dataset.badges || '[]');
-                const stages = JSON.parse(growthCanvas.dataset.stages || '[]');
+                const cumulative = JSON.parse(growthCanvas.dataset.cumulative || '[]');
                 if (labels.length) {
                     new Chart(growthCanvas, {
                         type: 'line',
                         data: {
                             labels: labels,
-                            datasets: [
-                                {
-                                    label: 'Stages Completed',
-                                    data: stages,
-                                    borderColor: 'rgba(59, 130, 246, 0.8)',
-                                    backgroundColor: 'rgba(59, 130, 246, 0.08)',
-                                    fill: true, tension: 0.3, borderWidth: 2, pointRadius: 2, pointHoverRadius: 4,
-                                },
-                                {
-                                    label: 'Badges Earned',
-                                    data: badges,
-                                    borderColor: 'rgba(34, 197, 94, 0.8)',
-                                    backgroundColor: 'rgba(34, 197, 94, 0.08)',
-                                    fill: true, tension: 0.3, borderWidth: 2, pointRadius: 2, pointHoverRadius: 4,
-                                },
-                            ],
+                            datasets: [{
+                                label: 'Badges',
+                                data: cumulative,
+                                borderColor: 'rgba(34, 197, 94, 0.8)',
+                                backgroundColor: 'rgba(34, 197, 94, 0.08)',
+                                fill: true, tension: 0.3, borderWidth: 2, pointRadius: 2, pointHoverRadius: 4,
+                            }],
                         },
                         options: {
                             responsive: true, maintainAspectRatio: true,
-                            plugins: {
-                                legend: { display: true, position: 'bottom', labels: { color: 'rgba(150,150,150,0.6)', font: { size: 9 }, boxWidth: 8, padding: 10 } },
-                            },
+                            plugins: { legend: { display: false } },
                             scales: {
                                 x: { ticks: { color: 'rgba(150,150,150,0.5)', font: { size: 9 } }, grid: { display: false } },
                                 y: { beginAtZero: true, ticks: { color: 'rgba(150,150,150,0.5)', font: { size: 9 } }, grid: { color: 'rgba(150,150,150,0.1)' } },
@@ -1003,7 +991,68 @@
                 }
             }
 
-            // Stage Completion Rate (Chart.js bar + line combo)
+            // Badge Earning Rate (bar chart)
+            const badgeRateCanvas = el.querySelector('.badge-earning-rate-canvas');
+            if (badgeRateCanvas && typeof Chart !== 'undefined') {
+                const labels = JSON.parse(badgeRateCanvas.dataset.labels || '[]');
+                const monthly = JSON.parse(badgeRateCanvas.dataset.monthly || '[]');
+                if (labels.length) {
+                    new Chart(badgeRateCanvas, {
+                        type: 'bar',
+                        data: {
+                            labels: labels,
+                            datasets: [{
+                                label: 'Badges',
+                                data: monthly,
+                                backgroundColor: 'rgba(34, 197, 94, 0.5)',
+                                borderColor: 'rgba(34, 197, 94, 0.8)',
+                                borderWidth: 1,
+                                borderRadius: 2,
+                            }],
+                        },
+                        options: {
+                            responsive: true, maintainAspectRatio: true,
+                            plugins: { legend: { display: false } },
+                            scales: {
+                                x: { ticks: { color: 'rgba(150,150,150,0.5)', font: { size: 9 } }, grid: { display: false } },
+                                y: { beginAtZero: true, ticks: { color: 'rgba(150,150,150,0.5)', font: { size: 9 }, stepSize: 1 }, grid: { color: 'rgba(150,150,150,0.1)' } },
+                            },
+                        },
+                    });
+                }
+            }
+
+            // Stage Growth (cumulative line)
+            const stageGrowthCanvas = el.querySelector('.badge-stage-growth-canvas');
+            if (stageGrowthCanvas && typeof Chart !== 'undefined') {
+                const labels = JSON.parse(stageGrowthCanvas.dataset.labels || '[]');
+                const cumulative = JSON.parse(stageGrowthCanvas.dataset.cumulative || '[]');
+                if (labels.length) {
+                    new Chart(stageGrowthCanvas, {
+                        type: 'line',
+                        data: {
+                            labels: labels,
+                            datasets: [{
+                                label: 'Stages',
+                                data: cumulative,
+                                borderColor: 'rgba(59, 130, 246, 0.8)',
+                                backgroundColor: 'rgba(59, 130, 246, 0.08)',
+                                fill: true, tension: 0.3, borderWidth: 2, pointRadius: 2, pointHoverRadius: 4,
+                            }],
+                        },
+                        options: {
+                            responsive: true, maintainAspectRatio: true,
+                            plugins: { legend: { display: false } },
+                            scales: {
+                                x: { ticks: { color: 'rgba(150,150,150,0.5)', font: { size: 9 } }, grid: { display: false } },
+                                y: { beginAtZero: true, ticks: { color: 'rgba(150,150,150,0.5)', font: { size: 9 } }, grid: { color: 'rgba(150,150,150,0.1)' } },
+                            },
+                        },
+                    });
+                }
+            }
+
+            // Stage Completion Rate (bar chart)
             const rateCanvas = el.querySelector('.badge-stage-rate-canvas');
             if (rateCanvas && typeof Chart !== 'undefined') {
                 const labels = JSON.parse(rateCanvas.dataset.labels || '[]');

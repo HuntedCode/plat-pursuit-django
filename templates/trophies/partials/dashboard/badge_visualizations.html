@@ -117,24 +117,23 @@
         {# Divider #}
         <div class="border-t border-base-300 my-3"></div>
 
-        {# ========== Badges vs Stages + Stage Completion Rate (side by side) ========== #}
+        {# ========== Badge Growth + Badge Rate (side by side) ========== #}
         <div class="grid grid-cols-2 gap-4 mt-4">
 
-            {# Badges vs Stages #}
-            {% with bvs=data.badges_vs_stages %}
+            {# Badge Growth (cumulative line) #}
+            {% with bg=data.badge_growth %}
                 <div>
                     <h3 class="text-sm font-semibold text-base-content/70 flex items-center gap-1.5 mb-2">
                         <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-success/60" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
                         </svg>
-                        Badges vs Stages
+                        Badge Growth
                     </h3>
-                    {% if bvs.has_data %}
+                    {% if bg.has_data %}
                         <div style="max-height: 200px;">
                             <canvas class="badge-growth-canvas"
-                                    data-labels='{{ bvs.labels|tojson }}'
-                                    data-badges='{{ bvs.cumulative_badges|tojson }}'
-                                    data-stages='{{ bvs.cumulative_stages|tojson }}'></canvas>
+                                    data-labels='{{ bg.labels|tojson }}'
+                                    data-cumulative='{{ bg.cumulative|tojson }}'></canvas>
                         </div>
                     {% else %}
                         <div class="text-center py-6">
@@ -144,12 +143,74 @@
                 </div>
             {% endwith %}
 
-            {# Stage Completion Rate #}
-            {% with sr=data.stage_rate %}
+            {# Badge Earning Rate (bar chart) #}
+            {% with br=data.badge_rate %}
+                <div>
+                    <h3 class="text-sm font-semibold text-base-content/70 flex items-center gap-1.5 mb-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-success/60" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <line x1="18" y1="20" x2="18" y2="10"></line>
+                            <line x1="12" y1="20" x2="12" y2="4"></line>
+                            <line x1="6" y1="20" x2="6" y2="14"></line>
+                        </svg>
+                        Badge Rate
+                    </h3>
+                    {% if br.has_data %}
+                        <div class="flex items-center gap-3 mb-2">
+                            <span class="text-xs"><span class="font-bold text-success">{{ br.total }}</span> <span class="text-base-content/40">total</span></span>
+                            <span class="text-xs"><span class="font-bold text-base-content/50">{{ br.avg }}/mo</span> <span class="text-base-content/40">avg</span></span>
+                            <span class="text-xs"><span class="font-bold text-warning">{{ br.peak }}</span> <span class="text-base-content/40">peak</span></span>
+                        </div>
+                        <div style="max-height: 180px;">
+                            <canvas class="badge-earning-rate-canvas"
+                                    data-labels='{{ br.labels|tojson }}'
+                                    data-monthly='{{ br.monthly|tojson }}'></canvas>
+                        </div>
+                    {% else %}
+                        <div class="text-center py-6">
+                            <p class="text-xs text-base-content/40">No badge earning data available.</p>
+                        </div>
+                    {% endif %}
+                </div>
+            {% endwith %}
+        </div>
+
+        {# Divider #}
+        <div class="border-t border-base-300 my-3"></div>
+
+        {# ========== Stage Growth + Stage Rate (side by side) ========== #}
+        <div class="grid grid-cols-2 gap-4 mt-4">
+
+            {# Stage Growth (cumulative line) #}
+            {% with sg=data.stage_growth %}
                 <div>
                     <h3 class="text-sm font-semibold text-base-content/70 flex items-center gap-1.5 mb-2">
                         <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-info/60" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+                        </svg>
+                        Stage Growth
+                    </h3>
+                    {% if sg.has_data %}
+                        <div style="max-height: 200px;">
+                            <canvas class="badge-stage-growth-canvas"
+                                    data-labels='{{ sg.labels|tojson }}'
+                                    data-cumulative='{{ sg.cumulative|tojson }}'></canvas>
+                        </div>
+                    {% else %}
+                        <div class="text-center py-6">
+                            <p class="text-xs text-base-content/40">No stage data available.</p>
+                        </div>
+                    {% endif %}
+                </div>
+            {% endwith %}
+
+            {# Stage Completion Rate (bar chart) #}
+            {% with sr=data.stage_rate %}
+                <div>
+                    <h3 class="text-sm font-semibold text-base-content/70 flex items-center gap-1.5 mb-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-info/60" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <line x1="18" y1="20" x2="18" y2="10"></line>
+                            <line x1="12" y1="20" x2="12" y2="4"></line>
+                            <line x1="6" y1="20" x2="6" y2="14"></line>
                         </svg>
                         Stage Rate
                     </h3>

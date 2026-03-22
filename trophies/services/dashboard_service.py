@@ -2389,9 +2389,21 @@ def provide_advanced_badge_stats(profile, settings=None):
 
     days_since_last = (now - last_date).days if last_date else None
 
-    # XP earned in range (approximate: BADGE_TIER_XP per badge)
+    # XP earned in range: completion bonuses + stage XP
     from trophies.util_modules.constants import BADGE_TIER_XP
-    xp_in_range = total_badges * BADGE_TIER_XP
+    from trophies.services.xp_service import TIER_XP_MAP
+    completion_xp_in_range = total_badges * BADGE_TIER_XP
+
+    # Stage XP in range (tier-specific XP per stage completed)
+    stage_event_qs = StageCompletionEvent.objects.filter(profile=profile)
+    stage_xp_qs = stage_event_qs
+    if date_range_key in RANGE_DAYS:
+        stage_xp_qs = stage_xp_qs.filter(completed_at__gte=cutoff)
+    stage_xp_in_range = 0
+    for tier, count in stage_xp_qs.values('badge__tier').annotate(count=Count('id')).values_list('badge__tier', 'count'):
+        stage_xp_in_range += count * TIER_XP_MAP.get(tier, 0)
+
+    xp_in_range = completion_xp_in_range + stage_xp_in_range
     xp_per_month = round(xp_in_range / months_span) if first_date and last_date else 0
 
     # --- Series Completion Depth ---
@@ -2745,24 +2757,23 @@ def _build_series_xp_radar_data(profile):
 
 
 def _build_badge_xp_growth_data(profile, year):
-    """Cumulative badge XP over the year (monthly)."""
-    from trophies.models import UserBadge
-    from django.db.models import Count, Sum, Min
+    """Cumulative badge XP over the year (monthly). Includes stage XP + completion bonuses."""
+    from trophies.models import UserBadge, StageCompletionEvent
+    from django.db.models import Count
     from django.db.models.functions import TruncMonth
     from datetime import date
     import calendar as cal_module
     from trophies.util_modules.constants import BADGE_TIER_XP
+    from trophies.services.xp_service import TIER_XP_MAP
 
     labels = [cal_module.month_abbr[m] for m in range(1, 13)]
 
-    # Baseline: badges earned before this year
-    baseline_count = UserBadge.objects.filter(
+    # Badge completion XP: baseline + monthly
+    badge_baseline = UserBadge.objects.filter(
         profile=profile, earned_at__lt=date(year, 1, 1),
     ).count()
-    baseline_xp = baseline_count * BADGE_TIER_XP
 
-    # Badges earned per month this year
-    monthly_raw = list(
+    badge_monthly_raw = list(
         UserBadge.objects
         .filter(profile=profile, earned_at__year=year)
         .annotate(month=TruncMonth('earned_at'))
@@ -2770,19 +2781,45 @@ def _build_badge_xp_growth_data(profile, year):
         .annotate(count=Count('id'))
         .order_by('month')
     )
-    monthly = [0] * 12
-    for entry in monthly_raw:
-        monthly[entry['month'].month - 1] = entry['count']
+    monthly_badges = [0] * 12
+    for entry in badge_monthly_raw:
+        monthly_badges[entry['month'].month - 1] = entry['count']
 
-    year_badges = sum(monthly)
-    if baseline_count == 0 and year_badges == 0:
+    # Stage XP: baseline + monthly (each stage earns tier-specific XP)
+    stage_baseline_xp = 0
+    pre_year_stages = list(
+        StageCompletionEvent.objects
+        .filter(profile=profile, completed_at__lt=date(year, 1, 1))
+        .values_list('badge__tier', flat=True)
+    )
+    for tier in pre_year_stages:
+        stage_baseline_xp += TIER_XP_MAP.get(tier, 0)
+
+    stage_monthly_raw = list(
+        StageCompletionEvent.objects
+        .filter(profile=profile, completed_at__year=year)
+        .annotate(month=TruncMonth('completed_at'))
+        .values('month', 'badge__tier')
+        .annotate(count=Count('id'))
+        .order_by('month')
+    )
+    monthly_stage_xp = [0] * 12
+    for entry in stage_monthly_raw:
+        m = entry['month'].month
+        tier_xp = TIER_XP_MAP.get(entry['badge__tier'], 0)
+        monthly_stage_xp[m - 1] += entry['count'] * tier_xp
+
+    baseline_xp = (badge_baseline * BADGE_TIER_XP) + stage_baseline_xp
+    year_badges = sum(monthly_badges)
+
+    if baseline_xp == 0 and year_badges == 0 and sum(monthly_stage_xp) == 0:
         return {'has_data': False}
 
-    # Cumulative XP line
+    # Cumulative XP line (completion bonuses + stage XP)
     cumulative = []
     running = baseline_xp
-    for m in monthly:
-        running += m * BADGE_TIER_XP
+    for i in range(12):
+        running += (monthly_badges[i] * BADGE_TIER_XP) + monthly_stage_xp[i]
         cumulative.append(running)
 
     n = _months_to_show(year)
@@ -2797,18 +2834,19 @@ def _build_badge_xp_growth_data(profile, year):
 
 
 def _build_all_time_badge_xp_growth(profile):
-    """All-time badge XP by year with quarterly breakdown."""
-    from trophies.models import UserBadge
+    """All-time badge XP by year with quarterly breakdown. Includes stage XP + completion bonuses."""
+    from trophies.models import UserBadge, StageCompletionEvent
     from django.db.models import Count, Min
     from django.db.models.functions import ExtractYear, ExtractQuarter
     from django.utils import timezone
     from trophies.util_modules.constants import BADGE_TIER_XP
+    from trophies.services.xp_service import TIER_XP_MAP
 
     now = timezone.now()
 
-    first = UserBadge.objects.filter(
-        profile=profile,
-    ).aggregate(first=Min('earned_at'))['first']
+    first_badge = UserBadge.objects.filter(profile=profile).aggregate(first=Min('earned_at'))['first']
+    first_stage = StageCompletionEvent.objects.filter(profile=profile).aggregate(first=Min('completed_at'))['first']
+    first = min(filter(None, [first_badge, first_stage]), default=None)
     if not first:
         return {'has_data': False}
 
@@ -2816,7 +2854,8 @@ def _build_all_time_badge_xp_growth(profile):
     years = list(range(start_year, now.year + 1))
     labels = [str(y) for y in years]
 
-    raw = list(
+    # Badge completion XP by year+quarter
+    badge_raw = list(
         UserBadge.objects
         .filter(profile=profile)
         .annotate(yr=ExtractYear('earned_at'), qtr=ExtractQuarter('earned_at'))
@@ -2824,12 +2863,27 @@ def _build_all_time_badge_xp_growth(profile):
         .annotate(count=Count('id'))
         .order_by('yr', 'qtr')
     )
+    badge_lookup = {(e['yr'], e['qtr']): e['count'] * BADGE_TIER_XP for e in badge_raw}
 
-    lookup = {(e['yr'], e['qtr']): e['count'] for e in raw}
-    q1 = [lookup.get((y, 1), 0) * BADGE_TIER_XP for y in years]
-    q2 = [lookup.get((y, 2), 0) * BADGE_TIER_XP for y in years]
-    q3 = [lookup.get((y, 3), 0) * BADGE_TIER_XP for y in years]
-    q4 = [lookup.get((y, 4), 0) * BADGE_TIER_XP for y in years]
+    # Stage XP by year+quarter (tier-specific XP per stage)
+    stage_raw = list(
+        StageCompletionEvent.objects
+        .filter(profile=profile)
+        .annotate(yr=ExtractYear('completed_at'), qtr=ExtractQuarter('completed_at'))
+        .values('yr', 'qtr', 'badge__tier')
+        .annotate(count=Count('id'))
+        .order_by('yr', 'qtr')
+    )
+    stage_lookup = defaultdict(int)
+    for e in stage_raw:
+        key = (e['yr'], e['qtr'])
+        stage_lookup[key] += e['count'] * TIER_XP_MAP.get(e['badge__tier'], 0)
+
+    # Combine into quarterly totals
+    q1 = [badge_lookup.get((y, 1), 0) + stage_lookup.get((y, 1), 0) for y in years]
+    q2 = [badge_lookup.get((y, 2), 0) + stage_lookup.get((y, 2), 0) for y in years]
+    q3 = [badge_lookup.get((y, 3), 0) + stage_lookup.get((y, 3), 0) for y in years]
+    q4 = [badge_lookup.get((y, 4), 0) + stage_lookup.get((y, 4), 0) for y in years]
 
     totals = [q1[i] + q2[i] + q3[i] + q4[i] for i in range(len(years))]
     best_idx = max(range(len(totals)), key=lambda i: totals[i]) if totals else 0
@@ -2936,9 +2990,9 @@ def _build_all_time_badge_tier_trend(profile):
     }
 
 
-def _build_badges_vs_stages_data(profile, year):
-    """Cumulative badges earned vs stages completed (dual line chart)."""
-    from trophies.models import UserBadge, StageCompletionEvent
+def _build_badge_growth_data(profile, year):
+    """Cumulative badges earned over the year (line chart)."""
+    from trophies.models import UserBadge
     from django.db.models import Count
     from django.db.models.functions import TruncMonth
     from datetime import date
@@ -2946,12 +3000,11 @@ def _build_badges_vs_stages_data(profile, year):
 
     labels = [cal_module.month_abbr[m] for m in range(1, 13)]
 
-    # Badges earned: baseline + monthly
-    badge_baseline = UserBadge.objects.filter(
+    baseline = UserBadge.objects.filter(
         profile=profile, earned_at__lt=date(year, 1, 1),
     ).count()
 
-    badge_monthly = list(
+    monthly_raw = list(
         UserBadge.objects
         .filter(profile=profile, earned_at__year=year)
         .annotate(month=TruncMonth('earned_at'))
@@ -2959,16 +3012,84 @@ def _build_badges_vs_stages_data(profile, year):
         .annotate(count=Count('id'))
         .order_by('month')
     )
-    monthly_badges = [0] * 12
-    for entry in badge_monthly:
-        monthly_badges[entry['month'].month - 1] = entry['count']
+    monthly = [0] * 12
+    for entry in monthly_raw:
+        monthly[entry['month'].month - 1] = entry['count']
 
-    # Stages completed: baseline + monthly (from StageCompletionEvent)
-    stage_baseline = StageCompletionEvent.objects.filter(
+    year_total = sum(monthly)
+    if baseline == 0 and year_total == 0:
+        return {'has_data': False}
+
+    cumulative = []
+    running = baseline
+    for m in monthly:
+        running += m
+        cumulative.append(running)
+
+    n = _months_to_show(year)
+
+    return {
+        'has_data': True,
+        'labels': labels[:n],
+        'cumulative': cumulative[:n],
+    }
+
+
+def _build_badge_earning_rate_data(profile, year):
+    """Badges earned per month (bar chart)."""
+    from trophies.models import UserBadge
+    from django.db.models import Count
+    from django.db.models.functions import TruncMonth
+    import calendar as cal_module
+
+    labels = [cal_module.month_abbr[m] for m in range(1, 13)]
+
+    raw = list(
+        UserBadge.objects
+        .filter(profile=profile, earned_at__year=year)
+        .annotate(month=TruncMonth('earned_at'))
+        .values('month')
+        .annotate(count=Count('id'))
+        .order_by('month')
+    )
+
+    if not raw:
+        return {'has_data': False}
+
+    monthly = [0] * 12
+    for entry in raw:
+        monthly[entry['month'].month - 1] = entry['count']
+
+    n = _months_to_show(year)
+    total = sum(monthly[:n])
+    avg = round(total / n, 1) if n else 0
+    peak = max(monthly[:n]) if monthly[:n] else 0
+
+    return {
+        'has_data': True,
+        'labels': labels[:n],
+        'monthly': monthly[:n],
+        'total': f"{total:,}",
+        'avg': avg,
+        'peak': peak,
+    }
+
+
+def _build_stage_growth_data(profile, year):
+    """Cumulative stages completed over the year (line chart)."""
+    from trophies.models import StageCompletionEvent
+    from django.db.models import Count
+    from django.db.models.functions import TruncMonth
+    from datetime import date
+    import calendar as cal_module
+
+    labels = [cal_module.month_abbr[m] for m in range(1, 13)]
+
+    baseline = StageCompletionEvent.objects.filter(
         profile=profile, completed_at__lt=date(year, 1, 1),
     ).count()
 
-    stage_monthly = list(
+    monthly_raw = list(
         StageCompletionEvent.objects
         .filter(profile=profile, completed_at__year=year)
         .annotate(month=TruncMonth('completed_at'))
@@ -2976,49 +3097,38 @@ def _build_badges_vs_stages_data(profile, year):
         .annotate(count=Count('id'))
         .order_by('month')
     )
-    monthly_stages = [0] * 12
-    for entry in stage_monthly:
-        monthly_stages[entry['month'].month - 1] = entry['count']
+    monthly = [0] * 12
+    for entry in monthly_raw:
+        monthly[entry['month'].month - 1] = entry['count']
 
-    year_badges = sum(monthly_badges)
-    year_stages = sum(monthly_stages)
-    if badge_baseline == 0 and year_badges == 0 and stage_baseline == 0 and year_stages == 0:
+    year_total = sum(monthly)
+    if baseline == 0 and year_total == 0:
         return {'has_data': False}
 
-    # Build cumulative lines
-    cum_badges = []
-    cum_stages = []
-    rb, rs = badge_baseline, stage_baseline
-    for i in range(12):
-        rb += monthly_badges[i]
-        rs += monthly_stages[i]
-        cum_badges.append(rb)
-        cum_stages.append(rs)
+    cumulative = []
+    running = baseline
+    for m in monthly:
+        running += m
+        cumulative.append(running)
 
     n = _months_to_show(year)
 
     return {
         'has_data': True,
         'labels': labels[:n],
-        'cumulative_badges': cum_badges[:n],
-        'cumulative_stages': cum_stages[:n],
+        'cumulative': cumulative[:n],
     }
 
 
-def _build_all_time_badges_vs_stages(profile):
-    """All-time cumulative badges earned vs stages completed by quarter."""
-    from trophies.models import UserBadge, StageCompletionEvent
+def _build_all_time_badge_growth(profile):
+    """All-time cumulative badges earned by quarter."""
+    from trophies.models import UserBadge
     from django.db.models import Count, Min
     from django.db.models.functions import TruncQuarter
     from django.utils import timezone
 
     now = timezone.now()
-
-    # Find earliest date across both badges and stage completions
-    first_badge = UserBadge.objects.filter(profile=profile).aggregate(first=Min('earned_at'))['first']
-    first_stage = StageCompletionEvent.objects.filter(profile=profile).aggregate(first=Min('completed_at'))['first']
-
-    first = min(filter(None, [first_badge, first_stage]), default=None)
+    first = UserBadge.objects.filter(profile=profile).aggregate(first=Min('earned_at'))['first']
     if not first:
         return {'has_data': False}
 
@@ -3029,8 +3139,7 @@ def _build_all_time_badges_vs_stages(profile):
     def _quarter_idx(dt):
         return (dt.year - start_year) * 4 + (dt.month - 1) // 3
 
-    # Badges by quarter
-    badge_raw = list(
+    raw = list(
         UserBadge.objects
         .filter(profile=profile)
         .annotate(quarter=TruncQuarter('earned_at'))
@@ -3038,35 +3147,17 @@ def _build_all_time_badges_vs_stages(profile):
         .annotate(count=Count('id'))
         .order_by('quarter')
     )
-    quarterly_badges = [0] * num_q
-    for entry in badge_raw:
+    quarterly = [0] * num_q
+    for entry in raw:
         idx = _quarter_idx(entry['quarter'])
         if 0 <= idx < num_q:
-            quarterly_badges[idx] = entry['count']
+            quarterly[idx] = entry['count']
 
-    # Stages by quarter (from StageCompletionEvent)
-    stage_raw = list(
-        StageCompletionEvent.objects
-        .filter(profile=profile)
-        .annotate(quarter=TruncQuarter('completed_at'))
-        .values('quarter')
-        .annotate(count=Count('id'))
-        .order_by('quarter')
-    )
-    quarterly_stages = [0] * num_q
-    for entry in stage_raw:
-        idx = _quarter_idx(entry['quarter'])
-        if 0 <= idx < num_q:
-            quarterly_stages[idx] = entry['count']
-
-    # Build cumulative lines
-    cum_badges, cum_stages = [], []
-    rb, rs = 0, 0
-    for i in range(num_q):
-        rb += quarterly_badges[i]
-        rs += quarterly_stages[i]
-        cum_badges.append(rb)
-        cum_stages.append(rs)
+    cumulative = []
+    running = 0
+    for q in quarterly:
+        running += q
+        cumulative.append(running)
 
     current_q_idx = _quarter_idx(now)
     n = min(current_q_idx + 1, num_q)
@@ -3074,8 +3165,105 @@ def _build_all_time_badges_vs_stages(profile):
     return {
         'has_data': True,
         'labels': labels[:n],
-        'cumulative_badges': cum_badges[:n],
-        'cumulative_stages': cum_stages[:n],
+        'cumulative': cumulative[:n],
+    }
+
+
+def _build_all_time_badge_earning_rate(profile):
+    """All-time badges earned per quarter."""
+    from trophies.models import UserBadge
+    from django.db.models import Count, Min
+    from django.db.models.functions import TruncQuarter
+    from django.utils import timezone
+
+    now = timezone.now()
+    first = UserBadge.objects.filter(profile=profile).aggregate(first=Min('earned_at'))['first']
+    if not first:
+        return {'has_data': False}
+
+    start_year = first.year
+    labels = _build_quarterly_labels(start_year, now.year)
+    num_q = len(labels)
+
+    def _quarter_idx(dt):
+        return (dt.year - start_year) * 4 + (dt.month - 1) // 3
+
+    raw = list(
+        UserBadge.objects
+        .filter(profile=profile)
+        .annotate(quarter=TruncQuarter('earned_at'))
+        .values('quarter')
+        .annotate(count=Count('id'))
+        .order_by('quarter')
+    )
+    quarterly = [0] * num_q
+    for entry in raw:
+        idx = _quarter_idx(entry['quarter'])
+        if 0 <= idx < num_q:
+            quarterly[idx] = entry['count']
+
+    current_q_idx = _quarter_idx(now)
+    n = min(current_q_idx + 1, num_q)
+    total = sum(quarterly[:n])
+    avg = round(total / n, 1) if n else 0
+    peak = max(quarterly[:n]) if quarterly[:n] else 0
+
+    return {
+        'has_data': True,
+        'labels': labels[:n],
+        'monthly': quarterly[:n],
+        'total': f"{total:,}",
+        'avg': avg,
+        'peak': peak,
+    }
+
+
+def _build_all_time_stage_growth(profile):
+    """All-time cumulative stages completed by quarter."""
+    from trophies.models import StageCompletionEvent
+    from django.db.models import Count, Min
+    from django.db.models.functions import TruncQuarter
+    from django.utils import timezone
+
+    now = timezone.now()
+    first = StageCompletionEvent.objects.filter(profile=profile).aggregate(first=Min('completed_at'))['first']
+    if not first:
+        return {'has_data': False}
+
+    start_year = first.year
+    labels = _build_quarterly_labels(start_year, now.year)
+    num_q = len(labels)
+
+    def _quarter_idx(dt):
+        return (dt.year - start_year) * 4 + (dt.month - 1) // 3
+
+    raw = list(
+        StageCompletionEvent.objects
+        .filter(profile=profile)
+        .annotate(quarter=TruncQuarter('completed_at'))
+        .values('quarter')
+        .annotate(count=Count('id'))
+        .order_by('quarter')
+    )
+    quarterly = [0] * num_q
+    for entry in raw:
+        idx = _quarter_idx(entry['quarter'])
+        if 0 <= idx < num_q:
+            quarterly[idx] = entry['count']
+
+    cumulative = []
+    running = 0
+    for q in quarterly:
+        running += q
+        cumulative.append(running)
+
+    current_q_idx = _quarter_idx(now)
+    n = min(current_q_idx + 1, num_q)
+
+    return {
+        'has_data': True,
+        'labels': labels[:n],
+        'cumulative': cumulative[:n],
     }
 
 
@@ -3464,7 +3652,9 @@ def provide_badge_visualizations(profile, settings=None):
             'current_year': now.year,
             'xp_growth': _build_all_time_badge_xp_growth(profile),
             'stages_by_series': _build_all_time_stages_by_series(profile),
-            'badges_vs_stages': _build_all_time_badges_vs_stages(profile),
+            'badge_growth': _build_all_time_badge_growth(profile),
+            'badge_rate': _build_all_time_badge_earning_rate(profile),
+            'stage_growth': _build_all_time_stage_growth(profile),
             'stage_rate': _build_all_time_stage_completion_rate(profile),
         }
 
@@ -3474,7 +3664,9 @@ def provide_badge_visualizations(profile, settings=None):
         'current_year': now.year,
         'xp_growth': _build_badge_xp_growth_data(profile, year),
         'stages_by_series': _build_stages_by_series_data(profile, year),
-        'badges_vs_stages': _build_badges_vs_stages_data(profile, year),
+        'badge_growth': _build_badge_growth_data(profile, year),
+        'badge_rate': _build_badge_earning_rate_data(profile, year),
+        'stage_growth': _build_stage_growth_data(profile, year),
         'stage_rate': _build_stage_completion_rate_data(profile, year),
     }
 
