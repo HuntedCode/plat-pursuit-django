@@ -103,6 +103,7 @@ Currently handled by `absorb()`:
 - Profile.selected_background
 - Badge.most_recent_concept
 - Stage.concepts (M2M)
+- StageCompletionEvent.concept (FK, SET_NULL)
 - GameFamilyProposal M2M
 - Genre challenge slots + bonus slots
 - GameFamily (inherit if target has none)

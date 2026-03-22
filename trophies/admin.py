@@ -4,7 +4,7 @@ from django.db import transaction
 from django.db.models import Count, F, IntegerField, Q, Value
 from django.db.models.functions import Cast, Coalesce
 from datetime import timedelta
-from .models import Profile, Game, Trophy, EarnedTrophy, ProfileGame, APIAuditLog, FeaturedGame, FeaturedProfile, Concept, TitleID, TrophyGroup, ConceptTrophyGroup, UserTrophySelection, UserConceptRating, Badge, UserBadge, UserBadgeProgress, FeaturedGuide, Stage, PublisherBlacklist, Title, UserTitle, Milestone, UserMilestone, UserMilestoneProgress, Comment, CommentVote, CommentReport, ModerationLog, BannedWord, Checklist, ChecklistSection, ChecklistItem, ChecklistVote, UserChecklistProgress, ChecklistReport, ProfileGamification, StatType, StageStatValue, MonthlyRecap, GameList, GameListItem, GameListLike, Challenge, AZChallengeSlot, GameFamily, GameFamilyProposal, Review, ReviewVote, ReviewReply, ReviewReport, ReviewModerationLog, DashboardConfig
+from .models import Profile, Game, Trophy, EarnedTrophy, ProfileGame, APIAuditLog, FeaturedGame, FeaturedProfile, Concept, TitleID, TrophyGroup, ConceptTrophyGroup, UserTrophySelection, UserConceptRating, Badge, UserBadge, UserBadgeProgress, FeaturedGuide, Stage, PublisherBlacklist, Title, UserTitle, Milestone, UserMilestone, UserMilestoneProgress, Comment, CommentVote, CommentReport, ModerationLog, BannedWord, Checklist, ChecklistSection, ChecklistItem, ChecklistVote, UserChecklistProgress, ChecklistReport, ProfileGamification, StatType, StageStatValue, MonthlyRecap, GameList, GameListItem, GameListLike, Challenge, AZChallengeSlot, GameFamily, GameFamilyProposal, Review, ReviewVote, ReviewReply, ReviewReport, ReviewModerationLog, DashboardConfig, StageCompletionEvent
 
 
 # Register your models here.
@@ -696,6 +696,15 @@ class UserBadgeProgressAdmin(admin.ModelAdmin):
     list_select_related = ('profile', 'badge')
     search_fields = ['profile__psn_username']
     raw_id_fields = ('profile', 'badge')
+
+@admin.register(StageCompletionEvent)
+class StageCompletionEventAdmin(admin.ModelAdmin):
+    list_display = ['profile', 'badge', 'stage', 'concept', 'completed_at', 'created_at']
+    list_select_related = ('profile', 'badge', 'stage', 'concept')
+    list_filter = ['completed_at']
+    search_fields = ['profile__psn_username', 'badge__name']
+    raw_id_fields = ('profile', 'badge', 'stage', 'concept')
+    readonly_fields = ('created_at',)
     
 @admin.register(FeaturedGuide)
 class FeaturedGuideAdmin(admin.ModelAdmin):

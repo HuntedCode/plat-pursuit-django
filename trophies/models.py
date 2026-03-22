@@ -831,6 +831,9 @@ class Concept(models.Model):
             self.family = other.family
             self.save(update_fields=['family'])
 
+        # StageCompletionEvent concept references
+        StageCompletionEvent.objects.filter(concept=other).update(concept=self)
+
         # Merge title_ids
         for tid in other.title_ids:
             if tid not in self.title_ids:
@@ -1466,6 +1469,50 @@ class ProfileGamification(models.Model):
 
     def __str__(self):
         return f"Gamification for {self.profile.psn_username}"
+
+
+class StageCompletionEvent(models.Model):
+    """
+    Records when a profile completed a specific stage for a specific badge tier.
+
+    Used for time-series badge analytics (date-range filtering, charts).
+    One record per (profile, badge, stage) triple. Automatically created/deleted
+    by badge_service._record_stage_completions during badge evaluation.
+
+    completed_at logic:
+    - If user platted/100%'d the game AFTER the badge was created: use game completion date
+    - If user platted/100%'d the game BEFORE the badge existed: use badge.created_at (retroactive credit)
+    - If multiple concepts satisfy a stage: use the earliest qualifying completion
+    """
+    profile = models.ForeignKey(
+        Profile, on_delete=models.CASCADE, related_name='stage_completions'
+    )
+    badge = models.ForeignKey(
+        'Badge', on_delete=models.CASCADE, related_name='stage_completion_events'
+    )
+    stage = models.ForeignKey(
+        'Stage', on_delete=models.CASCADE, related_name='completion_events'
+    )
+    concept = models.ForeignKey(
+        'Concept', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='stage_completion_events',
+        help_text="Which concept satisfied this stage completion."
+    )
+    completed_at = models.DateTimeField(
+        db_index=True,
+        help_text="Effective completion date (max of game completion vs badge creation)."
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ['profile', 'badge', 'stage']
+        indexes = [
+            models.Index(fields=['profile', 'completed_at'], name='stagecomp_profile_date_idx'),
+            models.Index(fields=['profile', 'badge'], name='stagecomp_profile_badge_idx'),
+        ]
+
+    def __str__(self):
+        return f"{self.profile.display_psn_username} - {self.badge.name} Stage {self.stage.stage_number}"
 
 
 class StatType(models.Model):

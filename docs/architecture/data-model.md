@@ -116,6 +116,18 @@ Key relationships:
 - `profile` FK to `Profile`
 - `badge` FK to `Badge`
 
+### StageCompletionEvent
+Records when a profile completed a specific stage for a specific badge tier. Used for time-series badge analytics. One record per (profile, badge, stage) triple. Automatically created/deleted by `badge_service._record_stage_completions` during badge evaluation.
+
+Key relationships:
+- `profile` FK to `Profile`
+- `badge` FK to `Badge`
+- `stage` FK to `Stage`
+- `concept` FK to `Concept` (SET_NULL, nullable: which concept satisfied the stage)
+
+Key fields:
+- `completed_at`: effective completion date (max of game completion vs badge creation for retroactive credit)
+
 ### ProfileGamification
 OneToOne extension of Profile for gamification stats. Stores `total_badge_xp`, per-series XP breakdown (`series_badge_xp` JSON), and total/unique badge counts. Updated via signals when badge progress changes.
 

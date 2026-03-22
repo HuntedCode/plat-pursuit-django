@@ -255,6 +255,113 @@ def _update_badge_progress(profile, badge, completed_count):
     return progress
 
 
+def _find_stage_completion_details(profile, stage, badge, _context=None):
+    """
+    Find the earliest concept completion that satisfies a stage.
+
+    Returns (concept, completed_at) where completed_at is the later of:
+    - The game's completion date (plat/100% date)
+    - The badge's created_at (retroactive credit if game was done before badge existed)
+
+    Uses _context optimization when available (checks plat_game_ids/complete_game_ids
+    sets before falling back to individual queries).
+    """
+    from trophies.models import ProfileGame
+
+    is_plat_check = badge.tier in [1, 3]
+    concepts = stage.concepts.all()
+
+    earliest_date = None
+    earliest_concept = None
+
+    for concept in concepts:
+        game_ids = set(concept.games.values_list('id', flat=True))
+
+        # Quick check via context if available
+        if _context:
+            check_ids = _context.get('plat_game_ids' if is_plat_check else 'complete_game_ids', set())
+            matching = game_ids & check_ids
+            if not matching:
+                continue
+
+        if is_plat_check:
+            pg = (
+                ProfileGame.objects
+                .filter(profile=profile, game_id__in=game_ids, has_plat=True)
+                .exclude(most_recent_trophy_date__isnull=True)
+                .order_by('most_recent_trophy_date')
+                .first()
+            )
+        else:
+            pg = (
+                ProfileGame.objects
+                .filter(profile=profile, game_id__in=game_ids, progress=100)
+                .exclude(most_recent_trophy_date__isnull=True)
+                .order_by('most_recent_trophy_date')
+                .first()
+            )
+
+        if pg and pg.most_recent_trophy_date:
+            effective_date = max(pg.most_recent_trophy_date, badge.created_at)
+            if earliest_date is None or effective_date < earliest_date:
+                earliest_date = effective_date
+                earliest_concept = concept
+
+    return earliest_concept, earliest_date or badge.created_at
+
+
+def _record_stage_completions(profile, badge, stage_completion_dict, _context=None):
+    """
+    Record or remove StageCompletionEvent records based on current stage completion state.
+
+    Called from handle_badge() after stage completion is evaluated.
+    Creates events for newly completed stages, deletes events for revoked stages.
+    """
+    from trophies.models import StageCompletionEvent, Stage
+
+    # Get Stage objects for this series + tier
+    stages_qs = Stage.objects.filter(series_slug=badge.series_slug)
+    stage_map = {}
+    for s in stages_qs:
+        if s.applies_to_tier(badge.tier) and s.stage_number != 0:
+            stage_map[s.stage_number] = s
+
+    # Get existing completion events for this profile+badge
+    existing = {
+        sce.stage_id: sce
+        for sce in StageCompletionEvent.objects.filter(profile=profile, badge=badge)
+    }
+
+    for stage_number, is_complete in stage_completion_dict.items():
+        if stage_number == 0:
+            continue
+
+        stage_obj = stage_map.get(stage_number)
+        if not stage_obj:
+            continue
+
+        if is_complete and stage_obj.id not in existing:
+            # Stage newly completed: find which concept and when
+            concept, completed_at = _find_stage_completion_details(
+                profile, stage_obj, badge, _context
+            )
+            try:
+                StageCompletionEvent.objects.create(
+                    profile=profile,
+                    badge=badge,
+                    stage=stage_obj,
+                    concept=concept,
+                    completed_at=completed_at,
+                )
+            except Exception:
+                # Unique constraint violation (race condition): skip
+                pass
+
+        elif not is_complete and stage_obj.id in existing:
+            # Stage revoked: delete the event
+            existing[stage_obj.id].delete()
+
+
 def _award_badge(profile, badge, _already_checked_exists=None):
     """
     Award a badge to a profile and create associated title if applicable.
@@ -445,6 +552,9 @@ def handle_badge(profile, badge, add_role_only=False, _context=None):
                 continue
             completed_count += 1
 
+        # Record stage completion events
+        _record_stage_completions(profile, badge, stage_completion_dict, _context)
+
         # Update progress tracking
         _update_badge_progress(profile, badge, completed_count)
 
@@ -479,6 +589,9 @@ def handle_badge(profile, badge, add_role_only=False, _context=None):
         else:
             # At least min_required stages must be completed
             badge_earned = completed_count >= badge.min_required
+
+        # Record stage completion events
+        _record_stage_completions(profile, badge, stage_completion_dict, _context)
 
         # Update progress tracking
         _update_badge_progress(profile, badge, completed_count)
