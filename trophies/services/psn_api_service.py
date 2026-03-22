@@ -460,9 +460,13 @@ class PsnApiService:
 
     @classmethod
     def get_profile_trophy_summary(cls, profile: Profile):
-        """Get trophy counts using a single aggregation query instead of 5 separate queries."""
+        """Get trophy counts using a single aggregation query instead of 5 separate queries.
+
+        Excludes trophies flagged user_hidden so the local count matches PSN's
+        trophy_summary (which omits trophies from games the user has hidden).
+        """
         try:
-            result = EarnedTrophy.objects.filter(profile=profile, earned=True).aggregate(
+            result = EarnedTrophy.objects.filter(profile=profile, earned=True, user_hidden=False).aggregate(
                 total=Count('id'),
                 bronze=Count('id', filter=Q(trophy__trophy_type='bronze')),
                 silver=Count('id', filter=Q(trophy__trophy_type='silver')),

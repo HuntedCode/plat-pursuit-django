@@ -1138,7 +1138,7 @@ class TokenKeeper:
             earned = summary.earned_trophies
             summary_total = earned.bronze + earned.silver + earned.gold + earned.platinum
             total_tracked = tracked_trophies['total'] + profile.total_hiddens
-            profilegame_total = ProfileGame.objects.filter(profile=profile).aggregate(earned=Coalesce(Sum('earned_trophies_count'), 0))['earned']
+            profilegame_total = ProfileGame.objects.filter(profile=profile, user_hidden=False).aggregate(earned=Coalesce(Sum('earned_trophies_count'), 0))['earned']
 
             logger.info(f"Profile {profile_id} health: Summary: {summary_total} | Tracked: {total_tracked} (Hidden: {profile.total_hiddens}) | Profilegame: {profilegame_total} | {summary_total == total_tracked}")
 
@@ -1263,6 +1263,10 @@ class TokenKeeper:
                             profile=profile,
                             game_id__in=hidden_game_ids
                         ).update(user_hidden=True)
+                    logger.info(
+                        f"Health check for profile {profile_id}: hid {len(hidden_game_ids)} "
+                        f"game(s) not returned by PSN"
+                    )
 
                 has_trophy_mismatch = has_mismatch and len(trophy_titles_to_be_updated) > 0
                 has_missing_groups = len(games_needing_groups) > 0
