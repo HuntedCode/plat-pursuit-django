@@ -1377,6 +1377,291 @@ def provide_recap_share_card(profile):
 
 
 # ---------------------------------------------------------------------------
+# Premium module providers
+# ---------------------------------------------------------------------------
+
+
+def provide_advanced_stats(profile, settings=None):
+    """
+    Deep analytics: earning velocity, rarity profile, platform breakdown,
+    and completion tier distribution. Supports date range filtering.
+    """
+    from trophies.models import EarnedTrophy, ProfileGame
+    from django.db.models import Min, Max, Count, Avg, Q
+    from django.db.models.functions import TruncDate
+    from django.utils import timezone
+    from datetime import timedelta
+
+    settings = settings or {}
+    date_range_key = settings.get('range', 'all')
+
+    RANGE_DAYS = {'7d': 7, '30d': 30, '90d': 90, '1y': 365}
+    RANGE_LABELS = {'7d': 'Last 7 Days', '30d': 'Last 30 Days', '90d': 'Last 90 Days', '1y': 'Last Year', 'all': 'All Time'}
+    range_label = RANGE_LABELS.get(date_range_key, 'All Time')
+
+    base_qs = EarnedTrophy.objects.filter(
+        profile=profile, earned=True, earned_date_time__isnull=False,
+    )
+
+    # Apply date range filter
+    now = timezone.now()
+    if date_range_key in RANGE_DAYS:
+        cutoff = now - timedelta(days=RANGE_DAYS[date_range_key])
+        earned_qs = base_qs.filter(earned_date_time__gte=cutoff)
+    else:
+        earned_qs = base_qs
+
+    total_earned = earned_qs.count()
+    if total_earned == 0:
+        return {'has_data': False, 'range': date_range_key, 'range_label': range_label}
+
+    # --- Earning Velocity ---
+    date_agg = earned_qs.aggregate(
+        first=Min('earned_date_time'), last=Max('earned_date_time'),
+    )
+    first_date = date_agg['first']
+    last_date = date_agg['last']
+
+    # Avg per month over the selected range
+    if first_date and last_date:
+        months_span = max(
+            ((last_date.year - first_date.year) * 12
+             + last_date.month - first_date.month),
+            1,
+        )
+        avg_per_month = round(total_earned / months_span, 1)
+    else:
+        avg_per_month = 0
+
+    # Avg per week over the selected range
+    if first_date and last_date:
+        days_span = max((last_date - first_date).days, 1)
+        avg_per_week = round(total_earned / (days_span / 7), 1)
+    else:
+        avg_per_week = 0
+
+    days_since_last = (now - last_date).days if last_date else None
+
+    # Active days (distinct days with at least one trophy)
+    active_days = (
+        earned_qs
+        .annotate(day=TruncDate('earned_date_time'))
+        .values('day')
+        .distinct()
+        .count()
+    )
+
+    # Best week (most trophies in any 7-day window)
+    # Use a sliding window over daily counts for efficiency
+    daily_counts = list(
+        earned_qs
+        .annotate(day=TruncDate('earned_date_time'))
+        .values('day')
+        .annotate(n=Count('id'))
+        .order_by('day')
+        .values_list('day', 'n')
+    )
+    best_week = 0
+    if daily_counts:
+        from collections import deque
+        window = deque()
+        window_sum = 0
+        for day, n in daily_counts:
+            window.append((day, n))
+            window_sum += n
+            while (day - window[0][0]).days >= 7:
+                _, old_n = window.popleft()
+                window_sum -= old_n
+            best_week = max(best_week, window_sum)
+
+    # --- Rarity Profile ---
+    rarity_qs = earned_qs.filter(trophy__trophy_earn_rate__gt=0)
+    rarity = rarity_qs.aggregate(
+        avg_earn_rate=Avg('trophy__trophy_earn_rate'),
+        ultra_rare=Count('id', filter=Q(trophy__trophy_earn_rate__lt=5)),
+        very_rare=Count('id', filter=Q(
+            trophy__trophy_earn_rate__gte=5, trophy__trophy_earn_rate__lt=10,
+        )),
+        rare=Count('id', filter=Q(
+            trophy__trophy_earn_rate__gte=10, trophy__trophy_earn_rate__lt=20,
+        )),
+        uncommon=Count('id', filter=Q(
+            trophy__trophy_earn_rate__gte=20, trophy__trophy_earn_rate__lt=50,
+        )),
+        common=Count('id', filter=Q(trophy__trophy_earn_rate__gte=50)),
+    )
+    rarity_total = (
+        rarity['ultra_rare'] + rarity['very_rare'] + rarity['rare']
+        + rarity['uncommon'] + rarity['common']
+    )
+
+    # --- Platform Breakdown ---
+    platform_lists = (
+        earned_qs
+        .values_list('trophy__game__title_platform', flat=True)
+    )
+    platform_counts = defaultdict(int)
+    for plist in platform_lists:
+        if plist:
+            for p in plist:
+                platform_counts[p] += 1
+
+    # Sort by count descending, cap at top 6 platforms
+    sorted_platforms = sorted(platform_counts.items(), key=lambda x: -x[1])[:6]
+    platform_max = sorted_platforms[0][1] if sorted_platforms else 1
+
+    # --- Completion Tiers (filtered by activity in date range) ---
+    pg_qs = ProfileGame.objects.filter(profile=profile)
+    if date_range_key in RANGE_DAYS:
+        # Only include games with trophy activity in the selected window
+        pg_qs = pg_qs.filter(most_recent_trophy_date__gte=cutoff)
+    completion = pg_qs.aggregate(
+        tier_0_25=Count('id', filter=Q(progress__lt=25)),
+        tier_25_50=Count('id', filter=Q(progress__gte=25, progress__lt=50)),
+        tier_50_75=Count('id', filter=Q(progress__gte=50, progress__lt=75)),
+        tier_75_99=Count('id', filter=Q(progress__gte=75, progress__lt=100)),
+        tier_100=Count('id', filter=Q(progress=100)),
+    )
+    completion_total = sum(v for v in completion.values() if v)
+
+    # --- Time of Day & Day of Week (timezone-adjusted) ---
+    import pytz
+
+    tz_name = getattr(profile.user, 'user_timezone', None) or 'UTC'
+    try:
+        user_tz = pytz.timezone(tz_name)
+    except pytz.UnknownTimeZoneError:
+        user_tz = pytz.UTC
+
+    timestamps = list(
+        earned_qs.values_list('earned_date_time', flat=True)
+    )
+
+    # Time of day buckets
+    time_buckets = [
+        {'label': 'Morning', 'range': '6am-12pm', 'count': 0, 'hex': '#f59e0b'},
+        {'label': 'Afternoon', 'range': '12pm-6pm', 'count': 0, 'hex': '#f97316'},
+        {'label': 'Evening', 'range': '6pm-12am', 'count': 0, 'hex': '#8b5cf6'},
+        {'label': 'Night', 'range': '12am-6am', 'count': 0, 'hex': '#1e40af'},
+    ]
+    # Day of week counts (Mon=0 through Sun=6)
+    day_names = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+    day_counts = [0] * 7
+
+    for ts in timestamps:
+        local_dt = ts.astimezone(user_tz)
+        hour = local_dt.hour
+        if 6 <= hour < 12:
+            time_buckets[0]['count'] += 1
+        elif 12 <= hour < 18:
+            time_buckets[1]['count'] += 1
+        elif 18 <= hour < 24:
+            time_buckets[2]['count'] += 1
+        else:
+            time_buckets[3]['count'] += 1
+        day_counts[local_dt.weekday()] += 1
+
+    time_max = max((b['count'] for b in time_buckets), default=1) or 1
+    for b in time_buckets:
+        b['pct'] = round(b['count'] / time_max * 100)
+
+    day_max = max(day_counts) or 1
+    # Rank days by count (1=highest) for color grading
+    sorted_indices = sorted(range(7), key=lambda i: -day_counts[i])
+    day_ranks = [0] * 7
+    for rank, idx in enumerate(sorted_indices):
+        day_ranks[idx] = rank
+
+    # Colors: #1 gold, #2 silver, #3 bronze, rest primary
+    rank_hex = ['#f59e0b', '#9ca3af', '#b45309', '#6366f1', '#6366f1', '#6366f1', '#6366f1']
+    weekdays = [
+        {
+            'label': day_names[i],
+            'count': day_counts[i],
+            'pct': round(day_counts[i] / day_max * 100),
+            'hex': rank_hex[day_ranks[i]] if day_counts[i] > 0 else '#6366f1',
+        }
+        for i in range(7)
+    ]
+
+    def _fmt(n):
+        return f"{n:,}"
+
+    return {
+        'has_data': True,
+        'range': date_range_key,
+        'range_label': range_label,
+        'total_earned': _fmt(total_earned),
+        'velocity': {
+            'avg_per_week': avg_per_week,
+            'avg_per_month': avg_per_month,
+            'days_since_last': days_since_last,
+            'active_days': _fmt(active_days),
+            'best_week': _fmt(best_week),
+        },
+        'rarity': {
+            'avg_earn_rate': round(rarity['avg_earn_rate'] or 0, 1),
+            'tiers': [
+                {'label': 'Ultra Rare', 'desc': '<5% earn rate', 'count': _fmt(rarity['ultra_rare']), 'pct': round(rarity['ultra_rare'] / rarity_total * 100) if rarity_total else 0, 'hex': '#a855f7'},
+                {'label': 'Very Rare', 'desc': '5-10% earn rate', 'count': _fmt(rarity['very_rare']), 'pct': round(rarity['very_rare'] / rarity_total * 100) if rarity_total else 0, 'hex': '#3b82f6'},
+                {'label': 'Rare', 'desc': '10-20% earn rate', 'count': _fmt(rarity['rare']), 'pct': round(rarity['rare'] / rarity_total * 100) if rarity_total else 0, 'hex': '#06b6d4'},
+                {'label': 'Uncommon', 'desc': '20-50% earn rate', 'count': _fmt(rarity['uncommon']), 'pct': round(rarity['uncommon'] / rarity_total * 100) if rarity_total else 0, 'hex': '#22c55e'},
+                {'label': 'Common', 'desc': '50%+ earn rate', 'count': _fmt(rarity['common']), 'pct': round(rarity['common'] / rarity_total * 100) if rarity_total else 0, 'hex': '#6b7280'},
+            ],
+            'total': _fmt(rarity_total),
+        },
+        'platforms': [
+            {'name': name, 'count': _fmt(count), 'pct': round(count / platform_max * 100)}
+            for name, count in sorted_platforms
+        ],
+        'completion': {
+            'tiers': [
+                {'label': '0-24%', 'count': _fmt(completion['tier_0_25'] or 0), 'raw': completion['tier_0_25'] or 0, 'color': 'error'},
+                {'label': '25-49%', 'count': _fmt(completion['tier_25_50'] or 0), 'raw': completion['tier_25_50'] or 0, 'color': 'warning'},
+                {'label': '50-74%', 'count': _fmt(completion['tier_50_75'] or 0), 'raw': completion['tier_50_75'] or 0, 'color': 'info'},
+                {'label': '75-99%', 'count': _fmt(completion['tier_75_99'] or 0), 'raw': completion['tier_75_99'] or 0, 'color': 'accent'},
+                {'label': '100%', 'count': _fmt(completion['tier_100'] or 0), 'raw': completion['tier_100'] or 0, 'color': 'success'},
+            ],
+            'total': completion_total,
+        },
+        'time_of_day': [
+            {**b, 'count_fmt': _fmt(b['count'])} for b in time_buckets
+        ],
+        'weekdays': [
+            {**d, 'count_fmt': _fmt(d['count'])} for d in weekdays
+        ],
+    }
+
+
+def provide_premium_settings(profile):
+    """Current theme and background for inline management."""
+    from trophies.themes import GRADIENT_THEMES, get_theme_style
+
+    # Theme
+    theme_key = profile.selected_theme or ''
+    theme_data = GRADIENT_THEMES.get(theme_key) if theme_key else None
+    theme_name = theme_data['name'] if theme_data else 'Default'
+    theme_style = get_theme_style(theme_key) if theme_key else ''
+
+    # Background
+    bg_concept = profile.selected_background
+    bg_info = None
+    if bg_concept:
+        bg_info = {
+            'title': bg_concept.unified_title,
+            'icon_url': bg_concept.concept_icon_url or '',
+            'bg_url': bg_concept.bg_url or '',
+        }
+
+    return {
+        'theme_key': theme_key,
+        'theme_name': theme_name,
+        'theme_style': theme_style,
+        'background': bg_info,
+    }
+
+
+# ---------------------------------------------------------------------------
 # Module Registry
 # ---------------------------------------------------------------------------
 
@@ -1789,6 +2074,48 @@ DASHBOARD_MODULES = [
         'configurable_settings': [],
         'cache_ttl': 1800,
         'default_size': 'large',
+        'allowed_sizes': ['medium', 'large'],
+    },
+    # --- Premium modules ---
+    {
+        'slug': 'advanced_stats',
+        'name': 'Advanced Stats',
+        'description': 'Deep dive into your trophy hunting patterns: velocity, rarity, platforms, and completion.',
+        'category': 'premium',
+        'template': 'trophies/partials/dashboard/advanced_stats.html',
+        'provider': provide_advanced_stats,
+        'requires_premium': True,
+        'load_strategy': 'lazy',
+        'default_order': 2,
+        'default_settings': {'range': 'all'},
+        'configurable_settings': [
+            {'key': 'range', 'label': 'Date Range', 'type': 'select', 'default': 'all',
+             'options': [
+                 {'value': '7d', 'label': '7 Days'},
+                 {'value': '30d', 'label': '30 Days'},
+                 {'value': '90d', 'label': '90 Days'},
+                 {'value': '1y', 'label': '1 Year'},
+                 {'value': 'all', 'label': 'All Time'},
+             ]},
+        ],
+        'cache_ttl': 1800,
+        'default_size': 'large',
+        'allowed_sizes': ['medium', 'large'],
+    },
+    {
+        'slug': 'premium_settings',
+        'name': 'Premium Settings',
+        'description': 'Manage your theme and background art right from the dashboard.',
+        'category': 'premium',
+        'template': 'trophies/partials/dashboard/premium_settings.html',
+        'provider': provide_premium_settings,
+        'requires_premium': True,
+        'load_strategy': 'lazy',
+        'default_order': 3,
+        'default_settings': {},
+        'configurable_settings': [],
+        'cache_ttl': 0,
+        'default_size': 'medium',
         'allowed_sizes': ['medium', 'large'],
     },
 ]

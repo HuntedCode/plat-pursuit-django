@@ -14,11 +14,11 @@ The dashboard serves as the index page for all logged-in users. Modules are orga
 
 | Status | Count |
 |--------|-------|
-| Complete (Tier 1-4 + Share) | 21 |
+| Complete (Tier 1-4 + Share + Premium) | 22 |
 | Cut (low value) | 8 |
-| Premium Exclusive | 9 |
+| Premium Planned (Visualization + Stats Page) | 6 |
 | Future (Gamification) | 3 |
-| **Total** | **41** |
+| **Total** | **39** |
 
 ---
 
@@ -84,9 +84,12 @@ Moved to Highlights: My Reviews (#16 old), Rate My Games (#18 old). Cut: Communi
 
 | # | Module | Strategy | Status | Data Source |
 |---|--------|----------|--------|------------|
+| 16 | My Reviews | Lazy (10m) | **Done** | Review aggregate stats + recent review list |
+| 18 | Rate My Games | Lazy (30m) | **Done** | Unrated platinums with auto-scrolling ticker strip |
 | 21 | Trophy Timeline | Lazy | **Cut** | Low utility, didn't add enough value |
 | 22 | Monthly Recap Preview | Lazy (30m) | **Done** | MonthlyRecap (most recent finalized) |
 | 23 | Rarity Showcase | Lazy (10m) | **Done** | EarnedTrophy sorted by earn_rate, rarity_color_hex |
+| 32 | Personal Records | - | **Moved** | Moved to planned `/my-stats/` dedicated page |
 
 ## Category: Utility
 
@@ -101,14 +104,14 @@ The premium dashboard should feel indispensable. Visualization modules are the p
 
 | # | Module | Strategy | Status | Data Source |
 |---|--------|----------|--------|------------|
-| 26 | Advanced Stats | Lazy | Planned | Aggregated EarnedTrophy (expensive) |
-| 27 | Profile Theme Preview | Server | Planned | Profile (selected_background, selected_theme) |
+| 26 | Advanced Stats | Lazy (30m) | **Done** | EarnedTrophy aggregates (velocity, rarity tiers, platform breakdown, completion tiers) |
+| 27 | Premium Settings | Lazy (none) | **Done** | Profile theme/background inline management (theme picker + background search) |
 | 28 | Trophy Roadmap | Lazy | Future | Requires standalone Roadmap feature first |
-| 30 | Platinum Heatmap | Lazy | Planned | EarnedTrophy (platinum earns by date) |
-| 31 | Rarity Radar | Lazy | Planned | EarnedTrophy + Trophy.trophy_earn_rate |
-| 32 | Personal Records | Lazy | Planned | Aggregated EarnedTrophy (records/milestones) |
-| 33 | Year in Review | Lazy | Planned | EarnedTrophy + ProfileGame (year comparison) |
-| 34 | Trophy Type Breakdown | Lazy | Planned | EarnedTrophy (type counts by month) |
+| 30 | Platinum Heatmap | Lazy | Planned | EarnedTrophy (platinum earns by date), requires Chart.js |
+| 31 | Rarity Radar | Lazy | Planned | EarnedTrophy + Trophy.trophy_earn_rate, requires Chart.js |
+| 32 | Personal Records / Stats Page | - | Planned | Dedicated `/my-stats/` page (not a module), video game stats screen aesthetic |
+| 33 | Year in Review | Lazy | Planned | EarnedTrophy + ProfileGame (year comparison), requires Chart.js |
+| 34 | Trophy Type Breakdown | Lazy | Planned | EarnedTrophy (type counts by month), requires Chart.js |
 
 ### Visualization Module Details
 

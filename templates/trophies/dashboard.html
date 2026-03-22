@@ -198,12 +198,17 @@
     </form>
 </dialog>
 </div>
+
+{% if is_premium %}
+    {% include 'partials/color_grid_modal.html' with available_themes=available_themes %}
+{% endif %}
 {% endblock %}
 
 {% block js_scripts %}
 <script>window.GRADIENT_THEMES = {% gradient_themes_json %};</script>
 <script src="{% static 'js/dashboard.js' %}"></script>
 <script src="{% static 'js/profile-card-share.js' %}"></script>
+{% if is_premium %}<script src="{% static 'js/color-grid-modal.js' %}"></script>{% endif %}
 <script>
 document.addEventListener('DOMContentLoaded', () => {
     PlatPursuit.ZoomScaler.init();

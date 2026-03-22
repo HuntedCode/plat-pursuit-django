@@ -57,6 +57,19 @@ class DashboardModuleDataView(StaffRequiredAPIMixin, View):
         config, _ = DashboardConfig.objects.get_or_create(profile=profile)
         module_settings = (config.module_settings or {}) if is_premium else {}
 
+        # Allow inline settings override via query param (for interactive controls like date range)
+        import json
+        inline_settings = request.GET.get('settings')
+        if inline_settings:
+            try:
+                overrides = json.loads(inline_settings)
+                if isinstance(overrides, dict):
+                    per_module = module_settings.get(slug, {})
+                    per_module.update(overrides)
+                    module_settings = {**module_settings, slug: per_module}
+            except (json.JSONDecodeError, TypeError):
+                pass
+
         data = get_lazy_module_data(profile, slug, size=effective_size, module_settings=module_settings)
         if data is None:
             return JsonResponse({'error': 'Failed to load module data.'}, status=500)

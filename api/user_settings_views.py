@@ -148,6 +148,51 @@ class UpdateQuickSettingsAPIView(APIView):
             request.user.default_region = value if value else None
             request.user.save(update_fields=['default_region'])
 
+        # Premium theme setting
+        elif setting == 'selected_theme':
+            profile = getattr(request.user, 'profile', None)
+            if not profile:
+                return Response({'error': 'Profile not found.'}, status=http_status.HTTP_404_NOT_FOUND)
+            if not profile.user_is_premium:
+                return Response({'error': 'Premium required.'}, status=http_status.HTTP_403_FORBIDDEN)
+            if not isinstance(value, str):
+                return Response({'error': 'Value must be a string.'}, status=http_status.HTTP_400_BAD_REQUEST)
+            value = value.strip()
+            if value:
+                from trophies.themes import GRADIENT_THEMES
+                theme = GRADIENT_THEMES.get(value)
+                if not theme:
+                    return Response({'error': 'Invalid theme.'}, status=http_status.HTTP_400_BAD_REQUEST)
+                if theme.get('requires_game_image'):
+                    return Response({'error': 'Game art themes cannot be used as site theme.'}, status=http_status.HTTP_400_BAD_REQUEST)
+            profile.selected_theme = value or None
+            profile.save(update_fields=['selected_theme'])
+
+        # Premium background setting (concept_id or null to clear)
+        elif setting == 'selected_background':
+            profile = getattr(request.user, 'profile', None)
+            if not profile:
+                return Response({'error': 'Profile not found.'}, status=http_status.HTTP_404_NOT_FOUND)
+            if not profile.user_is_premium:
+                return Response({'error': 'Premium required.'}, status=http_status.HTTP_403_FORBIDDEN)
+            if value is None or value == '':
+                profile.selected_background = None
+                profile.save(update_fields=['selected_background'])
+            else:
+                try:
+                    concept_id = int(value)
+                except (ValueError, TypeError):
+                    return Response({'error': 'Invalid concept ID.'}, status=http_status.HTTP_400_BAD_REQUEST)
+                from trophies.models import Concept
+                try:
+                    concept = Concept.objects.get(id=concept_id)
+                except Concept.DoesNotExist:
+                    return Response({'error': 'Concept not found.'}, status=http_status.HTTP_404_NOT_FOUND)
+                if not concept.bg_url:
+                    return Response({'error': 'This game has no background art.'}, status=http_status.HTTP_400_BAD_REQUEST)
+                profile.selected_background = concept
+                profile.save(update_fields=['selected_background'])
+
         else:
             return Response({'error': f'Unknown setting: {setting}'}, status=http_status.HTTP_400_BAD_REQUEST)
 

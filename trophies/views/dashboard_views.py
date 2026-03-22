@@ -52,6 +52,12 @@ class DashboardView(StaffRequiredMixin, ProfileHotbarMixin, TemplateView):
         # Split tabs into system (default) and custom for separate tab bars
         custom_tabs = [t for t in tabs if t.get('is_custom')]
 
+        # Theme picker for premium settings module
+        available_themes = []
+        if is_premium:
+            from trophies.themes import get_available_themes_for_grid
+            available_themes = get_available_themes_for_grid(include_game_art=False)
+
         context.update({
             'profile': profile,
             'dashboard_config': config,
@@ -59,6 +65,7 @@ class DashboardView(StaffRequiredMixin, ProfileHotbarMixin, TemplateView):
             'custom_tabs': custom_tabs,
             'server_module_data': server_data,
             'is_premium': is_premium,
+            'available_themes': available_themes,
             'customize_tabs': customize_tabs,
             'all_tab_options': all_tab_options,
             'valid_tab_icons': sorted(VALID_TAB_ICONS),

@@ -1,0 +1,226 @@
+{% load custom_filters %}
+{# Dashboard module: Advanced Stats. Deep analytics for premium users with date range switcher. #}
+<div class="card bg-base-200/80 border-2 border-base-300 shadow-lg shadow-neutral">
+    <div class="card-body p-5 lg:p-7">
+        {# Header with range switcher #}
+        <div class="flex items-center justify-between mb-1">
+            <h2 class="card-title text-base lg:text-lg font-bold flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="18" y1="20" x2="18" y2="10"></line>
+                    <line x1="12" y1="20" x2="12" y2="4"></line>
+                    <line x1="6" y1="20" x2="6" y2="14"></line>
+                </svg>
+                Advanced Stats
+                <span class="badge badge-xs badge-primary shimmer font-bold tracking-wide">PLUS</span>
+            </h2>
+        </div>
+
+        {# Date range buttons #}
+        <div class="flex items-center gap-1 mb-3 advanced-stats-range">
+            <button type="button" class="btn btn-xs {% if data.range == '7d' %}btn-primary{% else %}btn-ghost{% endif %}" data-range="7d">7d</button>
+            <button type="button" class="btn btn-xs {% if data.range == '30d' %}btn-primary{% else %}btn-ghost{% endif %}" data-range="30d">30d</button>
+            <button type="button" class="btn btn-xs {% if data.range == '90d' %}btn-primary{% else %}btn-ghost{% endif %}" data-range="90d">90d</button>
+            <button type="button" class="btn btn-xs {% if data.range == '1y' %}btn-primary{% else %}btn-ghost{% endif %}" data-range="1y">1y</button>
+            <button type="button" class="btn btn-xs {% if data.range == 'all' %}btn-primary{% else %}btn-ghost{% endif %}" data-range="all">All</button>
+            {% if data.has_data %}
+                <span class="text-xs text-base-content/40 ml-auto">{{ data.total_earned }} trophies</span>
+            {% endif %}
+        </div>
+
+        {% if data.has_data %}
+            <div class="grid grid-cols-2 gap-3 lg:gap-4">
+
+                {# Earning Velocity #}
+                <div class="bg-base-300/30 rounded-lg p-3 lg:p-4">
+                    <div class="flex items-center gap-1.5 mb-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-success" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+                        </svg>
+                        <span class="text-xs font-semibold text-base-content/60 uppercase tracking-wider">Velocity</span>
+                    </div>
+                    <div class="space-y-1.5">
+                        <div class="flex items-baseline justify-between">
+                            <span class="text-xs text-base-content/50">Avg trophies / week</span>
+                            <span class="text-sm font-bold text-success">{{ data.velocity.avg_per_week }}</span>
+                        </div>
+                        <div class="flex items-baseline justify-between">
+                            <span class="text-xs text-base-content/50">Avg trophies / month</span>
+                            <span class="text-sm font-bold">{{ data.velocity.avg_per_month }}</span>
+                        </div>
+                        <div class="flex items-baseline justify-between">
+                            <span class="text-xs text-base-content/50">Best week</span>
+                            <span class="text-sm font-bold text-warning">{{ data.velocity.best_week }}</span>
+                        </div>
+                        <div class="flex items-baseline justify-between">
+                            <span class="text-xs text-base-content/50">Active days</span>
+                            <span class="text-sm font-bold">{{ data.velocity.active_days }}</span>
+                        </div>
+                        <div class="flex items-baseline justify-between">
+                            <span class="text-xs text-base-content/50">Days since last trophy</span>
+                            <span class="text-sm font-bold {% if data.velocity.days_since_last > 30 %}text-error{% elif data.velocity.days_since_last > 7 %}text-warning{% else %}text-success{% endif %}">
+                                {% if data.velocity.days_since_last is not None %}{{ data.velocity.days_since_last }}{% else %}--{% endif %}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+
+                {# Rarity Profile #}
+                <div class="bg-base-300/30 rounded-lg p-3 lg:p-4">
+                    <div class="flex items-center gap-1.5 mb-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+                        </svg>
+                        <span class="text-xs font-semibold text-base-content/60 uppercase tracking-wider">Rarity</span>
+                    </div>
+                    <div class="flex items-baseline justify-between mb-2">
+                        <span class="text-xs text-base-content/50">Avg PSN earn rate</span>
+                        <span class="text-sm font-bold text-accent">{{ data.rarity.avg_earn_rate }}%</span>
+                    </div>
+                    {# Stacked bar #}
+                    {% if data.rarity.total %}
+                        <div class="flex w-full h-3 rounded-full overflow-hidden bg-base-300" title="How rare are your earned trophies?">
+                            {% for tier in data.rarity.tiers %}
+                                {% if tier.pct %}<div style="width: {{ tier.pct }}%; background-color: {{ tier.hex }};" title="{{ tier.label }}: {{ tier.count }} trophies ({{ tier.pct }}% of total)"></div>{% endif %}
+                            {% endfor %}
+                        </div>
+                        <div class="space-y-0.5 mt-2">
+                            {% for tier in data.rarity.tiers %}
+                                <div class="flex items-center gap-1.5">
+                                    <span class="inline-block w-2 h-2 rounded-full shrink-0" style="background-color: {{ tier.hex }};"></span>
+                                    <span class="text-[0.6rem] flex-1"><span class="text-base-content/50">{{ tier.label }}</span> <span class="text-base-content/30">{{ tier.desc }}</span></span>
+                                    <span class="text-[0.6rem] font-bold text-base-content/50">{{ tier.count }}</span>
+                                </div>
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+                </div>
+
+                {# Platform Breakdown #}
+                <div class="bg-base-300/30 rounded-lg p-3 lg:p-4">
+                    <div class="flex items-center gap-1.5 mb-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-info" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+                            <line x1="8" y1="21" x2="16" y2="21"></line>
+                            <line x1="12" y1="17" x2="12" y2="21"></line>
+                        </svg>
+                        <span class="text-xs font-semibold text-base-content/60 uppercase tracking-wider">Platforms</span>
+                    </div>
+                    <div class="space-y-1.5">
+                        {% for platform in data.platforms %}
+                            <div class="flex items-center gap-2">
+                                <span class="text-xs text-base-content/50 w-12 shrink-0">{{ platform.name }}</span>
+                                <div class="flex-1 bg-base-300 rounded-full h-1.5">
+                                    <div class="bg-info rounded-full h-1.5 transition-all duration-500" style="width: {{ platform.pct }}%"></div>
+                                </div>
+                                <span class="text-xs font-bold w-8 text-right shrink-0">{{ platform.count }}</span>
+                            </div>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                {# Completion Tiers #}
+                <div class="bg-base-300/30 rounded-lg p-3 lg:p-4">
+                    <div class="flex items-center gap-1.5 mb-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-warning" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                            <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                        </svg>
+                        <span class="text-xs font-semibold text-base-content/60 uppercase tracking-wider">Completion</span>
+                    </div>
+                    <div class="space-y-1.5">
+                        {% for tier in data.completion.tiers %}
+                            <div class="flex items-center gap-2">
+                                <span class="text-xs text-base-content/50 w-12 shrink-0">{{ tier.label }}</span>
+                                <div class="flex-1 bg-base-300 rounded-full h-1.5">
+                                    {% if data.completion.total > 0 %}
+                                        <div class="bg-{{ tier.color }} rounded-full h-1.5 transition-all duration-500" style="width: {% widthratio tier.raw data.completion.total 100 %}%"></div>
+                                    {% endif %}
+                                </div>
+                                <span class="text-xs font-bold w-8 text-right shrink-0">{{ tier.count }}</span>
+                            </div>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                {# Time of Day #}
+                <div class="bg-base-300/30 rounded-lg p-3 lg:p-4">
+                    <div class="flex items-center gap-1.5 mb-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-secondary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <polyline points="12 6 12 12 16 14"></polyline>
+                        </svg>
+                        <span class="text-xs font-semibold text-base-content/60 uppercase tracking-wider">Time of Day</span>
+                    </div>
+                    <div class="space-y-1.5">
+                        {% for bucket in data.time_of_day %}
+                            <div>
+                                <div class="flex items-baseline justify-between mb-0.5">
+                                    <span class="text-xs text-base-content/50">{{ bucket.label }} <span class="text-base-content/30">{{ bucket.range }}</span></span>
+                                    <span class="text-xs font-bold">{{ bucket.count_fmt }}</span>
+                                </div>
+                                <div class="w-full bg-base-300 rounded-full h-1.5">
+                                    <div class="rounded-full h-1.5 transition-all duration-500" style="width: {{ bucket.pct }}%; background-color: {{ bucket.hex }};"></div>
+                                </div>
+                            </div>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                {# Day of Week #}
+                <div class="bg-base-300/30 rounded-lg p-3 lg:p-4 flex flex-col justify-between">
+                    <div class="flex items-center gap-1.5">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                            <line x1="16" y1="2" x2="16" y2="6"></line>
+                            <line x1="8" y1="2" x2="8" y2="6"></line>
+                            <line x1="3" y1="10" x2="21" y2="10"></line>
+                        </svg>
+                        <span class="text-xs font-semibold text-base-content/60 uppercase tracking-wider">Day of Week</span>
+                    </div>
+                    {# Count labels above bars #}
+                    <div class="flex gap-1">
+                        {% for day in data.weekdays %}
+                            <div class="flex-1 text-center">
+                                <span class="text-[0.55rem] font-bold text-base-content/40 leading-none">{{ day.count_fmt }}</span>
+                            </div>
+                        {% endfor %}
+                    </div>
+                    {# Bar chart with grid lines #}
+                    <div class="flex items-end gap-1 relative" style="height: 4rem;">
+                        <div class="absolute inset-0 flex flex-col justify-between pointer-events-none">
+                            <div class="border-b border-base-300/30"></div>
+                            <div class="border-b border-base-300/30"></div>
+                            <div class="border-b border-base-300/30"></div>
+                        </div>
+                        {% for day in data.weekdays %}
+                            <div class="flex-1 h-full relative z-[1]" title="{{ day.label }}: {{ day.count_fmt }} trophies">
+                                {% if day.count > 0 %}
+                                    <div class="absolute bottom-0 left-0 right-0 rounded-t transition-all duration-500" style="height: {{ day.pct }}%; min-height: 2px; background-color: {{ day.hex }};"></div>
+                                {% endif %}
+                            </div>
+                        {% endfor %}
+                    </div>
+                    {# Day labels #}
+                    <div class="flex gap-1 mt-0.5">
+                        {% for day in data.weekdays %}
+                            <div class="flex-1 text-center">
+                                <span class="text-[0.55rem] text-base-content/40 leading-none">{{ day.label }}</span>
+                            </div>
+                        {% endfor %}
+                    </div>
+                </div>
+
+            </div>
+        {% else %}
+            <div class="text-center py-6">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-10 h-10 text-primary/30 mx-auto mb-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="18" y1="20" x2="18" y2="10"></line>
+                    <line x1="12" y1="20" x2="12" y2="4"></line>
+                    <line x1="6" y1="20" x2="6" y2="14"></line>
+                </svg>
+                <p class="text-sm text-base-content/50">No trophy data for this period.</p>
+                <p class="text-xs text-base-content/40 mt-1">Try a wider date range or earn some trophies!</p>
+            </div>
+        {% endif %}
+    </div>
+</div>
