@@ -204,7 +204,8 @@ Rate limiting operates at two levels:
 
 - **Network errors** (`ConnectionError`, `Timeout`): Retried up to 10 times with exponential backoff (4s to 30s) via `@retry` decorator on `_execute_api_call()`.
 - **PSN privacy errors** (`PSNAWPForbiddenError`): Sets `psn_history_public = False` and queues a `handle_privacy_error` job that waits 3 seconds then checks if the flag persisted.
-- **HTTP errors**: Logged to `APIAuditLog`, rate limit counter rolled back, exception re-raised.
+- **HTTP errors** (`HTTPError`): Logged to `APIAuditLog`, rate limit counter rolled back, exception re-raised.
+- **PSN server errors** (`PSNAWPServerError`): psnawp raises its own exception for 5xx responses (not `requests.HTTPError`). Caught alongside `HTTPError` and converted to `PSNOutageError` to feed the circuit breaker.
 - **Database deadlocks**: Re-queued with a 2-second delay. Accumulated via `_record_db_lock_error()`. If the threshold is exceeded within the time window, `_initiate_restart()` gracefully shuts down all threads, waits for DB recovery, and reinitializes.
 
 ### Proxy Support
@@ -291,6 +292,10 @@ Detects PSN infrastructure outages (502/503/504 errors) and prevents profiles fr
 ### SQLite Bucket in psnawp
 
 `ProxiedRequestBuilder` and `ProxiedAuthenticator` intentionally **do NOT call `super().__init__()`**. The base classes create an SQLite-backed rate limiter bucket which spawns a daemon Leaker thread. In a multi-threaded environment, this causes "database is locked" errors. The proxied subclasses replicate the parent initialization manually with `InMemoryBucket` instead.
+
+### psnawp Exception Hierarchy vs requests
+
+psnawp does NOT raise `requests.HTTPError` for HTTP errors. It has its own exception tree rooted in `PSNAWPError`: `PSNAWPForbiddenError` for 403, `PSNAWPServerError` for 5xx, `PSNAWPTooManyRequestsError` for 429, etc. Any code in `_execute_api_call()` that handles HTTP status codes must catch BOTH `requests.HTTPError` (for direct requests calls) and the corresponding `PSNAWP*Error` (for psnawp-wrapped calls). Missing one will cause errors to fall through to the generic `except Exception` handler.
 
 ### Token Refresh Expiry Display Bug
 
