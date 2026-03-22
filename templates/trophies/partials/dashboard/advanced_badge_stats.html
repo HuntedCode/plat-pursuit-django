@@ -1,0 +1,299 @@
+{% load custom_filters %}
+{# Dashboard module: Advanced Badge Stats. Deep badge analytics for premium users. #}
+<div class="card bg-base-200/80 border-2 border-base-300 shadow-lg shadow-neutral">
+    <div class="card-body p-5 lg:p-7">
+        {# Header #}
+        <div class="flex items-center justify-between mb-1">
+            <h2 class="card-title text-base lg:text-lg font-bold flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-warning" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="8" r="7"></circle>
+                    <polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"></polyline>
+                </svg>
+                Advanced Badge Stats
+                <span class="badge badge-xs badge-primary shimmer font-bold tracking-wide">PLUS</span>
+            </h2>
+        </div>
+
+        {# Date range buttons #}
+        <div class="flex items-center gap-1 mb-3 badge-stats-range">
+            <button type="button" class="btn btn-xs {% if data.range == '7d' %}btn-primary{% else %}btn-ghost{% endif %}" data-range="7d">7d</button>
+            <button type="button" class="btn btn-xs {% if data.range == '30d' %}btn-primary{% else %}btn-ghost{% endif %}" data-range="30d">30d</button>
+            <button type="button" class="btn btn-xs {% if data.range == '90d' %}btn-primary{% else %}btn-ghost{% endif %}" data-range="90d">90d</button>
+            <button type="button" class="btn btn-xs {% if data.range == '1y' %}btn-primary{% else %}btn-ghost{% endif %}" data-range="1y">1y</button>
+            <button type="button" class="btn btn-xs {% if data.range == 'all' %}btn-primary{% else %}btn-ghost{% endif %}" data-range="all">All</button>
+            {% if data.has_data %}
+                <span class="text-xs text-base-content/40 ml-auto">{{ data.total_badges }} badges</span>
+            {% endif %}
+        </div>
+
+        {% if data.has_data %}
+            <div class="grid grid-cols-2 gap-3 lg:gap-4">
+
+                {# Badge Velocity #}
+                <div class="bg-base-300/30 rounded-lg p-3 lg:p-4">
+                    <div class="flex items-center gap-1.5 mb-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-success" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+                        </svg>
+                        <span class="text-xs font-semibold text-base-content/60 uppercase tracking-wider">Velocity</span>
+                    </div>
+                    <div class="space-y-1.5">
+                        <div class="flex items-baseline justify-between">
+                            <span class="text-xs text-base-content/50">Avg badges / month</span>
+                            <span class="text-sm font-bold text-success">{{ data.velocity.avg_per_month }}</span>
+                        </div>
+                        <div class="flex items-baseline justify-between">
+                            <span class="text-xs text-base-content/50">XP earned</span>
+                            <span class="text-sm font-bold text-warning">{{ data.velocity.xp_in_range }}</span>
+                        </div>
+                        <div class="flex items-baseline justify-between">
+                            <span class="text-xs text-base-content/50">Avg XP / month</span>
+                            <span class="text-sm font-bold">{{ data.velocity.xp_per_month }}</span>
+                        </div>
+                        <div class="flex items-baseline justify-between">
+                            <span class="text-xs text-base-content/50">Days since last badge</span>
+                            <span class="text-sm font-bold {% if data.velocity.days_since_last > 30 %}text-error{% elif data.velocity.days_since_last > 7 %}text-warning{% else %}text-success{% endif %}">
+                                {% if data.velocity.days_since_last is not None %}{{ data.velocity.days_since_last }}{% else %}--{% endif %}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+
+                {# Series Completion Depth #}
+                <div class="bg-base-300/30 rounded-lg p-3 lg:p-4">
+                    <div class="flex items-center gap-1.5 mb-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                            <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                        </svg>
+                        <span class="text-xs font-semibold text-base-content/60 uppercase tracking-wider">Series Depth</span>
+                    </div>
+                    <div class="space-y-1.5">
+                        <div class="flex items-baseline justify-between">
+                            <span class="text-xs text-base-content/50">Full set (4 tiers)</span>
+                            <span class="text-sm font-bold text-primary">{{ data.series_depth.4 }}</span>
+                        </div>
+                        <div class="flex items-baseline justify-between">
+                            <span class="text-xs text-base-content/50">3 tiers earned</span>
+                            <span class="text-sm font-bold">{{ data.series_depth.3 }}</span>
+                        </div>
+                        <div class="flex items-baseline justify-between">
+                            <span class="text-xs text-base-content/50">2 tiers earned</span>
+                            <span class="text-sm font-bold">{{ data.series_depth.2 }}</span>
+                        </div>
+                        <div class="flex items-baseline justify-between">
+                            <span class="text-xs text-base-content/50">1 tier only</span>
+                            <span class="text-sm font-bold text-base-content/40">{{ data.series_depth.1 }}</span>
+                        </div>
+                    </div>
+                </div>
+
+                {# XP Breakdown #}
+                <div class="bg-base-300/30 rounded-lg p-3 lg:p-4">
+                    <div class="flex items-center gap-1.5 mb-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-warning" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+                        </svg>
+                        <span class="text-xs font-semibold text-base-content/60 uppercase tracking-wider">Top Series XP</span>
+                    </div>
+                    <div class="space-y-1.5">
+                        {% for s in data.xp_breakdown %}
+                            <div class="flex items-center gap-2">
+                                <span class="text-xs text-base-content/50 w-20 shrink-0 line-clamp-1 pr-1">{{ s.name }}</span>
+                                <div class="flex-1 bg-base-300 rounded-full h-1.5">
+                                    <div class="bg-warning rounded-full h-1.5 transition-all duration-500" style="width: {{ s.pct }}%"></div>
+                                </div>
+                                <span class="text-xs font-bold w-12 text-right shrink-0">{{ s.xp }}</span>
+                            </div>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                {# Badge Type Distribution #}
+                <div class="bg-base-300/30 rounded-lg p-3 lg:p-4">
+                    <div class="flex items-center gap-1.5 mb-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-info" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <rect x="3" y="3" width="7" height="7"></rect>
+                            <rect x="14" y="3" width="7" height="7"></rect>
+                            <rect x="14" y="14" width="7" height="7"></rect>
+                            <rect x="3" y="14" width="7" height="7"></rect>
+                        </svg>
+                        <span class="text-xs font-semibold text-base-content/60 uppercase tracking-wider">Badge Types</span>
+                    </div>
+                    <div class="space-y-1.5">
+                        {% for t in data.badge_types %}
+                            <div class="flex items-center gap-2">
+                                <span class="text-xs text-base-content/50 w-16 shrink-0">{{ t.label }}</span>
+                                <div class="flex-1 bg-base-300 rounded-full h-1.5">
+                                    <div class="bg-info rounded-full h-1.5 transition-all duration-500" style="width: {{ t.pct }}%"></div>
+                                </div>
+                                <span class="text-xs font-bold w-6 text-right shrink-0">{{ t.count }}</span>
+                            </div>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                {# Tier Distribution #}
+                <div class="bg-base-300/30 rounded-lg p-3 lg:p-4">
+                    <div class="flex items-center gap-1.5 mb-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-secondary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <line x1="18" y1="20" x2="18" y2="10"></line>
+                            <line x1="12" y1="20" x2="12" y2="4"></line>
+                            <line x1="6" y1="20" x2="6" y2="14"></line>
+                        </svg>
+                        <span class="text-xs font-semibold text-base-content/60 uppercase tracking-wider">Tier Breakdown</span>
+                    </div>
+                    {% if data.tiers %}
+                        <div class="flex w-full h-3 rounded-full overflow-hidden bg-base-300 mb-2" title="Tier distribution">
+                            {% for tier in data.tiers %}
+                                {% if tier.pct %}
+                                    <div style="width: {{ tier.pct }}%;{% if tier.hex %} background-color: {{ tier.hex }};{% endif %}" class="{% if not tier.hex %}bg-primary{% endif %}" title="{{ tier.label }}: {{ tier.count }}"></div>
+                                {% endif %}
+                            {% endfor %}
+                        </div>
+                        <div class="space-y-0.5">
+                            {% for tier in data.tiers %}
+                                <div class="flex items-center gap-1.5">
+                                    <span class="inline-block w-2 h-2 rounded-full shrink-0 {% if not tier.hex %}bg-primary{% endif %}" {% if tier.hex %}style="background-color: {{ tier.hex }};"{% endif %}></span>
+                                    <span class="text-[0.6rem] text-base-content/50 flex-1">{{ tier.label }}</span>
+                                    <span class="text-[0.6rem] font-bold text-base-content/50">{{ tier.count }}</span>
+                                </div>
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+                </div>
+
+                {# Rarest Badges #}
+                <div class="bg-base-300/30 rounded-lg p-3 lg:p-4">
+                    <div class="flex items-center gap-1.5 mb-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+                        </svg>
+                        <span class="text-xs font-semibold text-base-content/60 uppercase tracking-wider">Rarest Earned</span>
+                    </div>
+                    <div class="space-y-1.5">
+                        {% for badge in data.rarest %}
+                            <a href="{% url 'badge_detail' badge.series_slug %}" class="flex items-baseline justify-between hover:text-primary transition-colors">
+                                <span class="text-xs text-base-content/50 line-clamp-1 pr-1 flex-1">{{ badge.name }} <span class="text-base-content/30">({{ badge.tier_name }})</span></span>
+                                <span class="text-xs font-bold shrink-0">{{ badge.earned_count }} hunters</span>
+                            </a>
+                        {% endfor %}
+                    </div>
+                </div>
+
+            </div>
+
+            {# Stage Progress (full width, always all-time) #}
+            {% if data.stage_progress %}
+                <div class="bg-base-300/30 rounded-lg p-3 lg:p-4 mt-3">
+                    <div class="flex items-center justify-between mb-2">
+                        <div class="flex items-center gap-1.5">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-success" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                                <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                            </svg>
+                            <span class="text-xs font-semibold text-base-content/60 uppercase tracking-wider">Stage Progress</span>
+                        </div>
+                        <span class="text-xs text-base-content/40">{{ data.stage_progress.total_series }} live series</span>
+                    </div>
+                    <div class="grid grid-cols-3 gap-3">
+                        <div class="text-center">
+                            <div class="text-lg font-black text-success">{{ data.stage_progress.completed }}</div>
+                            <div class="text-xs text-base-content/50">Stages done</div>
+                        </div>
+                        <div class="text-center">
+                            <div class="text-lg font-black text-base-content/50">{{ data.stage_progress.required }}</div>
+                            <div class="text-xs text-base-content/50">Required</div>
+                        </div>
+                        <div class="text-center">
+                            <div class="text-lg font-black text-warning">{{ data.stage_progress.avg_pct }}%</div>
+                            <div class="text-xs text-base-content/50">Avg completion</div>
+                        </div>
+                    </div>
+                </div>
+            {% endif %}
+
+            {# XP Efficiency + Stage Velocity (full width, side by side) #}
+            <div class="grid grid-cols-2 gap-3 lg:gap-4 mt-3">
+                {# XP Efficiency #}
+                <div class="bg-base-300/30 rounded-lg p-3 lg:p-4">
+                    <div class="flex items-center gap-1.5 mb-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-warning" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+                        </svg>
+                        <span class="text-xs font-semibold text-base-content/60 uppercase tracking-wider">XP Efficiency</span>
+                    </div>
+                    <div class="space-y-1.5">
+                        <div class="flex items-baseline justify-between">
+                            <span class="text-xs text-base-content/50">Total XP</span>
+                            <span class="text-sm font-bold text-warning">{{ data.xp_efficiency.total_xp }}</span>
+                        </div>
+                        <div class="flex items-baseline justify-between">
+                            <span class="text-xs text-base-content/50">From stages</span>
+                            <span class="text-sm font-bold">{{ data.xp_efficiency.stage_xp }} <span class="text-xs text-base-content/30 font-normal">({{ data.xp_efficiency.stage_pct }}%)</span></span>
+                        </div>
+                        <div class="flex items-baseline justify-between">
+                            <span class="text-xs text-base-content/50">From completions</span>
+                            <span class="text-sm font-bold">{{ data.xp_efficiency.completion_xp }} <span class="text-xs text-base-content/30 font-normal">({{ data.xp_efficiency.completion_pct }}%)</span></span>
+                        </div>
+                        <div class="flex items-baseline justify-between">
+                            <span class="text-xs text-base-content/50">Avg XP per badge</span>
+                            <span class="text-sm font-bold">{{ data.xp_efficiency.xp_per_badge }}</span>
+                        </div>
+                        <div class="flex items-baseline justify-between">
+                            <span class="text-xs text-base-content/50">Avg XP per stage</span>
+                            <span class="text-sm font-bold">{{ data.xp_efficiency.xp_per_stage }}</span>
+                        </div>
+                    </div>
+                </div>
+
+                {# Stage Velocity #}
+                <div class="bg-base-300/30 rounded-lg p-3 lg:p-4">
+                    <div class="flex items-center gap-1.5 mb-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-success" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+                        </svg>
+                        <span class="text-xs font-semibold text-base-content/60 uppercase tracking-wider">Stage Velocity</span>
+                    </div>
+                    <div class="space-y-1.5">
+                        <div class="flex items-baseline justify-between">
+                            <span class="text-xs text-base-content/50">Stages in range</span>
+                            <span class="text-sm font-bold text-success">{{ data.stage_velocity.stages_in_range }}</span>
+                        </div>
+                        <div class="flex items-baseline justify-between">
+                            <span class="text-xs text-base-content/50">Avg stages / month</span>
+                            <span class="text-sm font-bold">{{ data.stage_velocity.stages_per_month }}</span>
+                        </div>
+                        <div class="flex items-baseline justify-between">
+                            <span class="text-xs text-base-content/50">Avg stages / badge</span>
+                            <span class="text-sm font-bold">{{ data.stage_velocity.stages_per_badge }}</span>
+                        </div>
+                        <div class="flex items-baseline justify-between">
+                            <span class="text-xs text-base-content/50">Most progressed</span>
+                            <span class="text-sm font-bold line-clamp-1 pr-1 text-right" title="{{ data.stage_velocity.most_progressed }}">{{ data.stage_velocity.most_progressed }}</span>
+                        </div>
+                        <div class="flex items-baseline justify-between">
+                            <span class="text-xs text-base-content/50">Stages in top series</span>
+                            <span class="text-sm font-bold">{{ data.stage_velocity.most_progressed_count }}</span>
+                        </div>
+                        <div class="flex items-baseline justify-between">
+                            <span class="text-xs text-base-content/50">Days since last stage</span>
+                            <span class="text-sm font-bold {% if data.stage_velocity.days_since_last_stage > 30 %}text-error{% elif data.stage_velocity.days_since_last_stage > 7 %}text-warning{% else %}text-success{% endif %}">
+                                {% if data.stage_velocity.days_since_last_stage is not None %}{{ data.stage_velocity.days_since_last_stage }}{% else %}--{% endif %}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        {% else %}
+            <div class="text-center py-6">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-10 h-10 text-warning/30 mx-auto mb-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="8" r="7"></circle>
+                    <polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"></polyline>
+                </svg>
+                <p class="text-sm text-base-content/50">No badge data for this period.</p>
+                <p class="text-xs text-base-content/40 mt-1">Earn some badges and your analytics will appear here!</p>
+            </div>
+        {% endif %}
+    </div>
+</div>

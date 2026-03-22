@@ -61,6 +61,9 @@ Premium users can create custom tabs with a name (max 20 chars) and icon (from 8
 | `advanced_stats` | Advanced Stats | premium | Lazy | 30m | Yes |
 | `premium_settings` | Premium Settings | premium | Lazy | None | Yes |
 | `trophy_visualizations` | Trophy Visualizations | premium | Lazy | 30m | Yes |
+| `advanced_badge_stats` | Advanced Badge Stats | premium | Lazy | 30m | Yes |
+| `badge_series_overview` | Badge Series Overview | premium | Lazy | 30m | Yes |
+| `badge_visualizations` | Badge Visualizations | premium | Lazy | 30m | Yes |
 | `badge_showcase` | Badge Showcase | share | Lazy | 10m | No |
 | `profile_card_preview` | Profile Card | share | Lazy | None | No |
 | `recent_platinum_card` | Latest Platinum | share | Lazy | 10m | No |

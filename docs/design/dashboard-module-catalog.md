@@ -14,11 +14,11 @@ The dashboard serves as the index page for all logged-in users. Modules are orga
 
 | Status | Count |
 |--------|-------|
-| Complete (Tier 1-4 + Share + Premium + Viz) | 23 |
+| Complete (Tier 1-4 + Share + Premium + Viz) | 26 |
 | Cut (low value) | 8 |
 | Planned (Stats Page) | 1 |
 | Future (Gamification + Roadmap) | 4 |
-| **Total** | **36** |
+| **Total** | **39** |
 
 ---
 
@@ -108,6 +108,9 @@ The premium dashboard should feel indispensable. Visualization modules are the p
 | 27 | Premium Settings | Lazy (none) | **Done** | Profile theme/background inline management (theme picker + background search) |
 | 28 | Trophy Roadmap | Lazy | Future | Requires standalone Roadmap feature first |
 | 30-34 | Trophy Visualizations | Lazy (30m) | **Done** | Combined module with year/all selector. Contains: trophy heatmap (CSS grid), genre radar (Chart.js), year-in-review (Chart.js line), games started vs completed (Chart.js line), trophy progress earned vs unearned (Chart.js line), yearly totals with quarterly breakdown (Chart.js stacked bar, all-time mode). Uses first-earn-per-game reconstruction for accurate unearned history. |
+| 35 | Advanced Badge Stats | Lazy (30m) | **Done** | Badge velocity, series completion depth, XP breakdown by series, badge type distribution, tier distribution, rarest badges, stage progress, XP efficiency, stage velocity. Date range switcher using StageCompletionEvent. |
+| 36a | Badge Series Overview | Lazy (30m) | **Done** | All-time badge status: stage progress bar (current grind), series XP radar, series completion tier grid. Not date-filtered. |
+| 36b | Badge Visualizations | Lazy (30m) | **Done** | Date-filtered badge timeline with year/all selector: stages by series (stacked bar), XP growth, badges vs stages (dual cumulative line), stage completion rate. All stage data from StageCompletionEvent. |
 | 32 | Personal Records / Stats Page | - | Planned | Dedicated `/my-stats/` page (not a module), video game stats screen aesthetic |
 
 ### Visualization Module Details

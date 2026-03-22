@@ -183,7 +183,7 @@
                                             <div class="flex items-center gap-2">
                                                 <span class="text-xs text-base-content/50">{{ setting.label }}:</span>
                                                 {% if setting.type == 'select' %}
-                                                    <div class="join">
+                                                    <div class="join flex-wrap">
                                                         {% for opt in setting.options %}
                                                             <button type="button"
                                                                     class="join-item btn btn-xs module-setting-btn

@@ -1,0 +1,176 @@
+{% load custom_filters %}
+{# Dashboard module: Badge Visualizations. Combined premium badge analytics suite. #}
+<div class="card bg-base-200/80 border-2 border-base-300 shadow-lg shadow-neutral">
+    <div class="card-body p-5 lg:p-7">
+        {# Header with year selector #}
+        <div class="flex items-center justify-between mb-1">
+            <h2 class="card-title text-base lg:text-lg font-bold flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-warning" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="8" r="7"></circle>
+                    <polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"></polyline>
+                </svg>
+                Badge Visualizations
+                <span class="badge badge-xs badge-primary shimmer font-bold tracking-wide">PLUS</span>
+            </h2>
+        </div>
+
+        {# Year selector #}
+        <div class="flex items-center gap-1 mb-4 badge-viz-year-select">
+            <button type="button" class="btn btn-xs {% if data.year == 'all' %}btn-primary{% else %}btn-ghost{% endif %}" data-year="all">All</button>
+            {% if data.year != 'all' %}
+                {% if data.current_year > data.year %}
+                    <button type="button" class="btn btn-xs btn-ghost" data-year="{{ data.year|add:1 }}">{{ data.year|add:1 }}</button>
+                {% endif %}
+                <button type="button" class="btn btn-xs btn-primary" data-year="{{ data.year }}">{{ data.year }}</button>
+                <button type="button" class="btn btn-xs btn-ghost" data-year="{{ data.year|add:-1 }}">{{ data.year|add:-1 }}</button>
+            {% else %}
+                <button type="button" class="btn btn-xs btn-ghost" data-year="{{ data.current_year }}">{{ data.current_year }}</button>
+                <button type="button" class="btn btn-xs btn-ghost" data-year="{{ data.current_year|add:-1 }}">{{ data.current_year|add:-1 }}</button>
+            {% endif %}
+        </div>
+
+        {# ========== Stages by Series + XP Growth (side by side) ========== #}
+        <div class="grid grid-cols-2 gap-4 mb-4">
+
+            {# Stages by Series #}
+            {% with sbs=data.stages_by_series %}
+                <div>
+                    <h3 class="text-sm font-semibold text-base-content/70 flex items-center gap-1.5 mb-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-secondary/60" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <line x1="18" y1="20" x2="18" y2="10"></line>
+                            <line x1="12" y1="20" x2="12" y2="4"></line>
+                            <line x1="6" y1="20" x2="6" y2="14"></line>
+                        </svg>
+                        Stages by Series
+                    </h3>
+                    {% if sbs.has_data %}
+                        <div style="max-height: 220px;">
+                            <canvas class="badge-stages-by-series-canvas"
+                                    data-labels='{{ sbs.labels|tojson }}'
+                                    data-datasets='{{ sbs.datasets|tojson }}'></canvas>
+                        </div>
+                    {% else %}
+                        <div class="text-center py-6">
+                            <p class="text-xs text-base-content/40">No stage data for this period.</p>
+                        </div>
+                    {% endif %}
+                </div>
+            {% endwith %}
+
+            {# XP Growth / Yearly XP Totals #}
+            {% with xp=data.xp_growth %}
+                <div>
+                    {% if data.year == 'all' %}
+                        <h3 class="text-sm font-semibold text-base-content/70 flex items-center gap-1.5 mb-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-success/60" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <line x1="18" y1="20" x2="18" y2="10"></line>
+                                <line x1="12" y1="20" x2="12" y2="4"></line>
+                                <line x1="6" y1="20" x2="6" y2="14"></line>
+                            </svg>
+                            XP by Year
+                        </h3>
+                        {% if xp.has_data %}
+                            <div class="flex items-center gap-3 mb-2">
+                                <span class="text-xs"><span class="font-bold text-success">{{ xp.total }}</span> <span class="text-base-content/40">total XP</span></span>
+                                <span class="text-xs"><span class="font-bold text-warning">{{ xp.best_year }}</span> <span class="text-base-content/40">best ({{ xp.best_xp }})</span></span>
+                            </div>
+                            <div style="max-height: 200px;">
+                                <canvas class="badge-yearly-xp-canvas"
+                                        data-labels='{{ xp.labels|tojson }}'
+                                        data-q1='{{ xp.q1|tojson }}'
+                                        data-q2='{{ xp.q2|tojson }}'
+                                        data-q3='{{ xp.q3|tojson }}'
+                                        data-q4='{{ xp.q4|tojson }}'></canvas>
+                            </div>
+                        {% else %}
+                            <div class="text-center py-6">
+                                <p class="text-xs text-base-content/40">No XP data available.</p>
+                            </div>
+                        {% endif %}
+                    {% else %}
+                        <h3 class="text-sm font-semibold text-base-content/70 flex items-center gap-1.5 mb-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-success/60" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+                            </svg>
+                            XP Growth
+                        </h3>
+                        {% if xp.has_data %}
+                            <div class="flex items-center gap-3 mb-2">
+                                <span class="text-xs"><span class="font-bold text-success">{{ xp.current_xp }}</span> <span class="text-base-content/40">total XP</span></span>
+                                <span class="text-xs"><span class="font-bold text-warning">+{{ xp.year_xp }}</span> <span class="text-base-content/40">this year</span></span>
+                            </div>
+                            <div style="max-height: 200px;">
+                                <canvas class="badge-xp-growth-canvas"
+                                        data-labels='{{ xp.labels|tojson }}'
+                                        data-cumulative='{{ xp.cumulative|tojson }}'></canvas>
+                            </div>
+                        {% else %}
+                            <div class="text-center py-6">
+                                <p class="text-xs text-base-content/40">No XP data for {{ data.year }}.</p>
+                            </div>
+                        {% endif %}
+                    {% endif %}
+                </div>
+            {% endwith %}
+        </div>
+
+        {# Divider #}
+        <div class="border-t border-base-300 my-3"></div>
+
+        {# ========== Badges vs Stages + Stage Completion Rate (side by side) ========== #}
+        <div class="grid grid-cols-2 gap-4 mt-4">
+
+            {# Badges vs Stages #}
+            {% with bvs=data.badges_vs_stages %}
+                <div>
+                    <h3 class="text-sm font-semibold text-base-content/70 flex items-center gap-1.5 mb-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-success/60" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+                        </svg>
+                        Badges vs Stages
+                    </h3>
+                    {% if bvs.has_data %}
+                        <div style="max-height: 200px;">
+                            <canvas class="badge-growth-canvas"
+                                    data-labels='{{ bvs.labels|tojson }}'
+                                    data-badges='{{ bvs.cumulative_badges|tojson }}'
+                                    data-stages='{{ bvs.cumulative_stages|tojson }}'></canvas>
+                        </div>
+                    {% else %}
+                        <div class="text-center py-6">
+                            <p class="text-xs text-base-content/40">No badge data available.</p>
+                        </div>
+                    {% endif %}
+                </div>
+            {% endwith %}
+
+            {# Stage Completion Rate #}
+            {% with sr=data.stage_rate %}
+                <div>
+                    <h3 class="text-sm font-semibold text-base-content/70 flex items-center gap-1.5 mb-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-info/60" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+                        </svg>
+                        Stage Rate
+                    </h3>
+                    {% if sr.has_data %}
+                        <div class="flex items-center gap-3 mb-2">
+                            <span class="text-xs"><span class="font-bold text-info">{{ sr.total }}</span> <span class="text-base-content/40">total</span></span>
+                            <span class="text-xs"><span class="font-bold text-base-content/50">{{ sr.avg }}/mo</span> <span class="text-base-content/40">avg</span></span>
+                            <span class="text-xs"><span class="font-bold text-warning">{{ sr.peak }}</span> <span class="text-base-content/40">peak</span></span>
+                        </div>
+                        <div style="max-height: 180px;">
+                            <canvas class="badge-stage-rate-canvas"
+                                    data-labels='{{ sr.labels|tojson }}'
+                                    data-monthly='{{ sr.monthly|tojson }}'></canvas>
+                        </div>
+                    {% else %}
+                        <div class="text-center py-6">
+                            <p class="text-xs text-base-content/40">No stage completion data available.</p>
+                        </div>
+                    {% endif %}
+                </div>
+            {% endwith %}
+        </div>
+    </div>
+</div>

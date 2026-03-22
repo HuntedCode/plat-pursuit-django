@@ -1,0 +1,151 @@
+{% load custom_filters %}
+{# Dashboard module: Badge Series Overview. All-time badge series status. #}
+<div class="card bg-base-200/80 border-2 border-base-300 shadow-lg shadow-neutral">
+    <div class="card-body p-5 lg:p-7">
+        {# Header #}
+        <div class="flex items-center justify-between mb-3">
+            <h2 class="card-title text-base lg:text-lg font-bold flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-warning" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="8" r="7"></circle>
+                    <polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"></polyline>
+                </svg>
+                Badge Series Overview
+                <span class="badge badge-xs badge-primary shimmer font-bold tracking-wide">PLUS</span>
+            </h2>
+        </div>
+
+        {% with sp=data.stage_progress %}
+            {% if sp.has_data %}
+                {# Summary stats #}
+                <div class="flex items-center gap-3 mb-3">
+                    <span class="text-xs"><span class="font-bold text-success">{{ sp.series_completed }}</span> <span class="text-base-content/40">earned</span></span>
+                    <span class="text-xs"><span class="font-bold text-primary">{{ sp.series_platinumed }}</span> <span class="text-base-content/40">platinum'd</span></span>
+                    <span class="text-xs"><span class="font-bold text-warning">{{ sp.tiers_earned }}</span> <span class="text-base-content/40">tiers</span></span>
+                    <span class="text-xs"><span class="font-bold text-info">{{ sp.total_stages }}</span> <span class="text-base-content/40">stages</span></span>
+                </div>
+
+                {# ========== Series XP Radar + XP Ranked List (side by side, consistent size) ========== #}
+                {% with sr=data.series_radar %}
+                    {% if sr.has_data %}
+                        <div class="grid grid-cols-2 gap-4 mb-4">
+                            {# Radar #}
+                            <div>
+                                <h3 class="text-sm font-semibold text-base-content/70 flex items-center gap-1.5 mb-2">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-accent/60" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+                                    </svg>
+                                    Series XP
+                                </h3>
+                                <div style="max-height: 220px;">
+                                    <canvas class="badge-series-radar-canvas"
+                                            data-labels='{{ sr.labels|tojson }}'
+                                            data-counts='{{ sr.counts|tojson }}'></canvas>
+                                </div>
+                            </div>
+
+                            {# Ranked List #}
+                            <div>
+                                <h3 class="text-sm font-semibold text-base-content/70 flex items-center gap-1.5 mb-2">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-accent/60" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <line x1="18" y1="20" x2="18" y2="10"></line>
+                                        <line x1="12" y1="20" x2="12" y2="4"></line>
+                                        <line x1="6" y1="20" x2="6" y2="14"></line>
+                                    </svg>
+                                    XP Rankings
+                                </h3>
+                                <div class="space-y-1.5">
+                                    {% for s in sr.ranked_list %}
+                                        <div class="flex items-center gap-2">
+                                            <span class="text-xs text-base-content/50 w-20 shrink-0 line-clamp-1 pr-1">{{ s.name }}</span>
+                                            <div class="flex-1 bg-base-300 rounded-full h-1.5">
+                                                <div class="bg-accent rounded-full h-1.5 transition-all duration-500" style="width: {{ s.pct }}%"></div>
+                                            </div>
+                                            <span class="text-xs font-bold w-12 text-right shrink-0">{{ s.xp }}</span>
+                                        </div>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                        </div>
+                    {% endif %}
+                {% endwith %}
+
+                {# Divider #}
+                <div class="border-t border-base-300 my-3"></div>
+
+                {# ========== Current Grind + Series Completion (side by side, variable size) ========== #}
+                <div class="grid grid-cols-2 gap-4">
+                    {# Current Grind (progress bar chart) #}
+                    <div>
+                        <h3 class="text-sm font-semibold text-base-content/70 flex items-center gap-1.5 mb-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-warning/60" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                                <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                            </svg>
+                            Current Grind
+                        </h3>
+                        {% if sp.has_bars %}
+                            <div style="max-height: 280px;">
+                                <canvas class="badge-stage-progress-canvas"
+                                        data-labels='{{ sp.bar_labels|tojson }}'
+                                        data-completed='{{ sp.bar_completed|tojson }}'
+                                        data-remaining='{{ sp.bar_remaining|tojson }}'
+                                        data-colors='{{ sp.bar_colors|tojson }}'></canvas>
+                            </div>
+                        {% else %}
+                            <div class="text-center py-6">
+                                <p class="text-xs text-base-content/40">No badges in progress.</p>
+                            </div>
+                        {% endif %}
+                    </div>
+
+                    {# Series Completion (tier grid) #}
+                    <div>
+                        <h3 class="text-sm font-semibold text-base-content/70 flex items-center gap-1.5 mb-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-warning/60" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <circle cx="12" cy="8" r="7"></circle>
+                                <polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"></polyline>
+                            </svg>
+                            Series Completion
+                        </h3>
+                        {% if sp.has_grid %}
+                            <div class="space-y-1">
+                                {% for row in sp.grid_rows %}
+                                    <a href="{% url 'badge_detail' row.series_slug %}" class="flex items-center gap-2 p-1.5 rounded-lg hover:bg-base-300/40 transition-colors group">
+                                        <span class="text-xs text-base-content/60 flex-1 line-clamp-1 pr-1 group-hover:text-primary transition-colors">{{ row.name }}</span>
+                                        <div class="flex items-center gap-1 shrink-0">
+                                            {% for earned in row.tiers %}
+                                                {% if forloop.counter == 1 %}
+                                                    <div class="w-3 h-3 rounded-full {% if earned %}{% else %}border border-base-content/20{% endif %}" style="{% if earned %}background-color: #92400e;{% endif %}" title="Bronze{% if earned %} (earned){% endif %}"></div>
+                                                {% elif forloop.counter == 2 %}
+                                                    <div class="w-3 h-3 rounded-full {% if earned %}{% else %}border border-base-content/20{% endif %}" style="{% if earned %}background-color: #9ca3af;{% endif %}" title="Silver{% if earned %} (earned){% endif %}"></div>
+                                                {% elif forloop.counter == 3 %}
+                                                    <div class="w-3 h-3 rounded-full {% if earned %}{% else %}border border-base-content/20{% endif %}" style="{% if earned %}background-color: #facc15;{% endif %}" title="Gold{% if earned %} (earned){% endif %}"></div>
+                                                {% elif forloop.counter == 4 %}
+                                                    <div class="w-3 h-3 rounded-full {% if earned %}bg-primary{% else %}border border-base-content/20{% endif %}" title="Platinum{% if earned %} (earned){% endif %}"></div>
+                                                {% endif %}
+                                            {% endfor %}
+                                        </div>
+                                        <span class="text-xs font-bold w-10 text-right shrink-0 {% if row.current_pct == 100 %}text-success{% elif row.current_pct >= 50 %}text-warning{% else %}text-base-content/50{% endif %}">{{ row.current_pct }}%</span>
+                                    </a>
+                                {% endfor %}
+                            </div>
+                        {% else %}
+                            <div class="text-center py-6">
+                                <p class="text-xs text-base-content/40">No series data yet.</p>
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+            {% else %}
+                <div class="text-center py-6">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-10 h-10 text-warning/30 mx-auto mb-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="8" r="7"></circle>
+                        <polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"></polyline>
+                    </svg>
+                    <p class="text-sm text-base-content/50">No badge series data yet.</p>
+                    <p class="text-xs text-base-content/40 mt-1">Start earning badges and your series overview will appear here!</p>
+                </div>
+            {% endif %}
+        {% endwith %}
+    </div>
+</div>

@@ -2336,6 +2336,1137 @@ def provide_trophy_visualizations(profile, settings=None):
 
 
 # ---------------------------------------------------------------------------
+# Premium badge analytics providers
+# ---------------------------------------------------------------------------
+
+
+def provide_advanced_badge_stats(profile, settings=None):
+    """Deep badge analytics: velocity, series completion, XP breakdown, types, tiers, rarest."""
+    from trophies.models import UserBadge, ProfileGamification
+    from django.db.models import Min, Max, Count, Q
+    from django.utils import timezone
+    from datetime import timedelta
+
+    settings = settings or {}
+    date_range_key = settings.get('range', 'all')
+
+    RANGE_DAYS = {'7d': 7, '30d': 30, '90d': 90, '1y': 365}
+    RANGE_LABELS = {'7d': 'Last 7 Days', '30d': 'Last 30 Days', '90d': 'Last 90 Days', '1y': 'Last Year', 'all': 'All Time'}
+    range_label = RANGE_LABELS.get(date_range_key, 'All Time')
+
+    now = timezone.now()
+    base_qs = UserBadge.objects.filter(profile=profile)
+
+    if date_range_key in RANGE_DAYS:
+        cutoff = now - timedelta(days=RANGE_DAYS[date_range_key])
+        badge_qs = base_qs.filter(earned_at__gte=cutoff)
+    else:
+        badge_qs = base_qs
+
+    total_badges = badge_qs.count()
+    if total_badges == 0:
+        return {'has_data': False, 'range': date_range_key, 'range_label': range_label}
+
+    def _fmt(n):
+        return f"{n:,}"
+
+    # --- Badge Velocity ---
+    date_agg = badge_qs.aggregate(first=Min('earned_at'), last=Max('earned_at'))
+    first_date = date_agg['first']
+    last_date = date_agg['last']
+
+    if first_date and last_date:
+        months_span = max(
+            ((last_date.year - first_date.year) * 12 + last_date.month - first_date.month),
+            1,
+        )
+        avg_per_month = round(total_badges / months_span, 1)
+    else:
+        avg_per_month = 0
+
+    days_since_last = (now - last_date).days if last_date else None
+
+    # XP earned in range (approximate: BADGE_TIER_XP per badge)
+    from trophies.util_modules.constants import BADGE_TIER_XP
+    xp_in_range = total_badges * BADGE_TIER_XP
+    xp_per_month = round(xp_in_range / months_span) if first_date and last_date else 0
+
+    # --- Series Completion Depth ---
+    series_tiers = (
+        badge_qs
+        .filter(badge__series_slug__isnull=False)
+        .values('badge__series_slug')
+        .annotate(tier_count=Count('badge__tier', distinct=True))
+    )
+    depth_counts = {1: 0, 2: 0, 3: 0, 4: 0}
+    for entry in series_tiers:
+        tc = min(entry['tier_count'], 4)
+        depth_counts[tc] += 1
+
+    # --- XP Breakdown (always all-time, from pre-computed JSON) ---
+    try:
+        gamification = profile.gamification
+        series_xp = gamification.series_badge_xp or {}
+    except ProfileGamification.DoesNotExist:
+        series_xp = {}
+
+    sorted_series = sorted(series_xp.items(), key=lambda x: -x[1])[:5]
+    xp_max = sorted_series[0][1] if sorted_series else 1
+
+    def _format_series(slug):
+        return slug.replace('-', ' ').title() if slug else 'Unknown'
+
+    xp_breakdown = [
+        {'name': _format_series(name), 'xp': _fmt(xp), 'pct': round(xp / xp_max * 100)}
+        for name, xp in sorted_series
+    ]
+
+    # --- Badge Type Distribution ---
+    type_counts = dict(
+        badge_qs
+        .values('badge__badge_type')
+        .annotate(count=Count('id'))
+        .values_list('badge__badge_type', 'count')
+    )
+    TYPE_LABELS = {
+        'series': 'Series', 'collection': 'Collection', 'megamix': 'Megamix',
+        'developer': 'Developer', 'user': 'User', 'misc': 'Misc',
+    }
+    type_max = max(type_counts.values()) if type_counts else 1
+    badge_types = [
+        {'label': TYPE_LABELS.get(t, t.title()), 'count': _fmt(type_counts.get(t, 0)),
+         'pct': round(type_counts.get(t, 0) / type_max * 100) if type_max else 0}
+        for t in ['series', 'collection', 'megamix', 'developer', 'user', 'misc']
+        if type_counts.get(t, 0) > 0
+    ]
+
+    # --- Tier Distribution ---
+    tier_counts = dict(
+        badge_qs
+        .values('badge__tier')
+        .annotate(count=Count('id'))
+        .values_list('badge__tier', 'count')
+    )
+    TIER_NAMES = {1: 'Bronze', 2: 'Silver', 3: 'Gold', 4: 'Platinum'}
+    TIER_HEXES = {1: '#b45309', 2: '#9ca3af', 3: '#f59e0b', 4: None}
+    tier_total = sum(tier_counts.values()) or 1
+    tiers = [
+        {
+            'label': TIER_NAMES[t], 'count': _fmt(tier_counts.get(t, 0)),
+            'pct': round(tier_counts.get(t, 0) / tier_total * 100),
+            'hex': TIER_HEXES[t],
+        }
+        for t in [1, 2, 3, 4]
+    ]
+
+    # --- Rarest Badges ---
+    rarest_badges = list(
+        badge_qs
+        .select_related('badge')
+        .order_by('badge__earned_count')[:3]
+    )
+    rarest = []
+    for ub in rarest_badges:
+        b = ub.badge
+        rarest.append({
+            'name': b.effective_display_series or b.name,
+            'tier': b.tier,
+            'tier_name': TIER_NAMES.get(b.tier, ''),
+            'earned_count': _fmt(b.earned_count),
+            'series_slug': b.series_slug or '',
+        })
+
+    # --- Stage Progress (uses StageCompletionEvent, respects date range) ---
+    from trophies.models import UserBadgeProgress, Badge, StageCompletionEvent
+
+    # All-time stage totals (for overall progress stats)
+    all_progress = (
+        UserBadgeProgress.objects
+        .filter(profile=profile, badge__is_live=True, badge__required_stages__gt=0)
+        .select_related('badge')
+    )
+    total_stages_completed_all = 0
+    total_stages_required = 0
+    for ubp in all_progress:
+        total_stages_completed_all += ubp.completed_concepts
+        total_stages_required += ubp.badge.required_stages
+
+    total_live_series = Badge.objects.filter(is_live=True, tier=1).values('series_slug').distinct().count()
+    avg_stage_pct = round(total_stages_completed_all / total_stages_required * 100, 1) if total_stages_required else 0
+
+    # Stage completions in selected date range (from StageCompletionEvent)
+    stage_event_qs = StageCompletionEvent.objects.filter(profile=profile)
+    if date_range_key in RANGE_DAYS:
+        stages_in_range = stage_event_qs.filter(completed_at__gte=cutoff).count()
+    else:
+        stages_in_range = stage_event_qs.count()
+
+    stages_per_month = round(stages_in_range / months_span, 1) if first_date and last_date else 0
+
+    # Most active series in range
+    most_active_series = (
+        stage_event_qs
+        .filter(completed_at__gte=cutoff) if date_range_key in RANGE_DAYS else stage_event_qs
+    ).values('badge__series_slug', 'badge__name').annotate(
+        count=Count('id')
+    ).order_by('-count').first()
+
+    most_progressed = None
+    max_completed = 0
+    if most_active_series:
+        most_progressed = most_active_series['badge__name']
+        max_completed = most_active_series['count']
+
+    # Days since last stage completion
+    last_stage = stage_event_qs.order_by('-completed_at').first()
+    days_since_last_stage = (now - last_stage.completed_at).days if last_stage else None
+
+    # --- XP Efficiency (always all-time) ---
+    total_all_badges = base_qs.count()
+    total_xp = gamification.total_badge_xp if series_xp else 0
+    completion_xp_total = total_all_badges * BADGE_TIER_XP
+    stage_xp_total = max(total_xp - completion_xp_total, 0)
+    xp_per_badge = round(total_xp / total_all_badges) if total_all_badges else 0
+    xp_per_stage = round(stage_xp_total / total_stages_completed_all) if total_stages_completed_all else 0
+    completion_pct = round(completion_xp_total / total_xp * 100) if total_xp else 0
+    stage_pct = 100 - completion_pct
+
+    # Stages per badge (all-time)
+    stages_per_badge = round(total_stages_completed_all / total_all_badges, 1) if total_all_badges else 0
+
+    return {
+        'has_data': True,
+        'range': date_range_key,
+        'range_label': range_label,
+        'total_badges': _fmt(total_badges),
+        'velocity': {
+            'avg_per_month': avg_per_month,
+            'days_since_last': days_since_last,
+            'xp_in_range': _fmt(xp_in_range),
+            'xp_per_month': _fmt(xp_per_month),
+        },
+        'series_depth': depth_counts,
+        'xp_breakdown': xp_breakdown,
+        'badge_types': badge_types,
+        'tiers': tiers,
+        'rarest': rarest,
+        'stage_progress': {
+            'completed': _fmt(total_stages_completed_all),
+            'required': _fmt(total_stages_required),
+            'avg_pct': avg_stage_pct,
+            'total_series': total_live_series,
+        },
+        'xp_efficiency': {
+            'total_xp': _fmt(total_xp),
+            'stage_xp': _fmt(stage_xp_total),
+            'completion_xp': _fmt(completion_xp_total),
+            'stage_pct': stage_pct,
+            'completion_pct': completion_pct,
+            'xp_per_badge': _fmt(xp_per_badge),
+            'xp_per_stage': _fmt(xp_per_stage),
+        },
+        'stage_velocity': {
+            'stages_in_range': _fmt(stages_in_range),
+            'stages_per_month': stages_per_month,
+            'stages_per_badge': stages_per_badge,
+            'days_since_last_stage': days_since_last_stage,
+            'most_progressed': most_progressed or 'N/A',
+            'most_progressed_count': _fmt(max_completed),
+        },
+    }
+
+
+def _build_stage_progress_data(profile):
+    """Series stage completion: bar chart (current grind) + tier grid (big picture)."""
+    from trophies.models import UserBadgeProgress, Badge, UserBadge, StageCompletionEvent
+
+    TIER_NAMES = {1: 'Bronze', 2: 'Silver', 3: 'Gold', 4: 'Platinum'}
+    TIER_COLORS = {1: '#92400e', 2: '#9ca3af', 3: '#facc15', 4: None}
+
+    # Get all badge progress
+    progress_qs = (
+        UserBadgeProgress.objects
+        .filter(profile=profile, badge__is_live=True, badge__required_stages__gt=0)
+        .select_related('badge')
+        .order_by('-completed_concepts')
+    )
+
+    # Get earned badges
+    earned_badges = list(
+        UserBadge.objects
+        .filter(profile=profile, badge__series_slug__isnull=False)
+        .select_related('badge')
+    )
+    earned_ids = {ub.badge_id for ub in earned_badges}
+
+    # Build per-series earned tiers
+    series_tiers = defaultdict(set)
+    series_names = {}
+    for ub in earned_badges:
+        slug = ub.badge.series_slug
+        series_tiers[slug].add(ub.badge.tier)
+        if slug not in series_names:
+            series_names[slug] = ub.badge.effective_display_series or ub.badge.name
+
+    # --- Bar chart: current grind (next unearned tier per series) ---
+    # Collect all unearned badge progress, then pick the lowest tier per series
+    all_unearned = []
+    for ubp in progress_qs:
+        badge = ubp.badge
+        slug = badge.series_slug
+        if not slug or badge.id in earned_ids:
+            continue
+        if slug not in series_names:
+            series_names[slug] = badge.effective_display_series or badge.name
+        all_unearned.append((slug, badge, ubp))
+
+    # Group by series, pick the lowest tier (the next one to earn)
+    bar_series = {}
+    for slug, badge, ubp in sorted(all_unearned, key=lambda x: x[1].tier):
+        if slug in bar_series:
+            continue
+        pct = round(ubp.completed_concepts / badge.required_stages * 100, 1) if badge.required_stages else 0
+        bar_series[slug] = {
+            'name': series_names[slug],
+            'tier': badge.tier,
+            'tier_name': TIER_NAMES.get(badge.tier, ''),
+            'tier_color': TIER_COLORS.get(badge.tier),
+            'completed': ubp.completed_concepts,
+            'required': badge.required_stages,
+            'pct': min(pct, 100),
+        }
+
+    sorted_bars = sorted(bar_series.values(), key=lambda x: -x['pct'])[:8]
+
+    # Build bar chart datasets: one "completed" colored by tier + one "remaining"
+    bar_labels = [s['name'] for s in sorted_bars]
+    bar_completed = [s['completed'] for s in sorted_bars]
+    bar_remaining = [s['required'] - s['completed'] for s in sorted_bars]
+    bar_colors = [s['tier_color'] or '#6366f1' for s in sorted_bars]
+    bar_tier_labels = [s['tier_name'] for s in sorted_bars]
+
+    # --- Tier grid: full picture for top series ---
+    # Combine earned + in-progress series, sort by most tiers earned
+    all_slugs = set(series_tiers.keys()) | set(bar_series.keys())
+    grid_rows = []
+    for slug in all_slugs:
+        earned = series_tiers.get(slug, set())
+        in_prog = bar_series.get(slug)
+        current_pct = in_prog['pct'] if in_prog else (100.0 if len(earned) == 4 else 0)
+        current_tier = in_prog['tier'] if in_prog else (max(earned) + 1 if earned else 1)
+        grid_rows.append({
+            'name': series_names.get(slug, slug),
+            'series_slug': slug,
+            'tiers': [t in earned for t in [1, 2, 3, 4]],
+            'earned_count': len(earned),
+            'current_tier': min(current_tier, 4),
+            'current_pct': current_pct,
+        })
+
+    grid_rows.sort(key=lambda x: (-x['earned_count'], -x['current_pct']))
+    grid_rows = grid_rows[:10]
+
+    # Summary stats
+    tiers_earned = len(earned_ids)
+    series_completed = sum(1 for tiers in series_tiers.values() if 1 in tiers)
+    series_platinumed = sum(1 for tiers in series_tiers.values() if len(tiers) == 4)
+    total_stages = StageCompletionEvent.objects.filter(profile=profile).count()
+
+    has_data = bool(sorted_bars) or bool(grid_rows)
+
+    return {
+        'has_data': has_data,
+        # Bar chart data
+        'bar_labels': bar_labels,
+        'bar_completed': bar_completed,
+        'bar_remaining': bar_remaining,
+        'bar_colors': bar_colors,
+        'bar_tier_labels': bar_tier_labels,
+        'has_bars': bool(sorted_bars),
+        # Tier grid data
+        'grid_rows': grid_rows,
+        'has_grid': bool(grid_rows),
+        # Summary
+        'series_completed': series_completed,
+        'series_platinumed': series_platinumed,
+        'tiers_earned': tiers_earned,
+        'total_stages': f"{total_stages:,}",
+    }
+
+
+def _build_series_xp_radar_data(profile):
+    """Top series by XP for radar chart (always all-time)."""
+    from trophies.models import ProfileGamification
+
+    try:
+        gamification = profile.gamification
+        series_xp = gamification.series_badge_xp or {}
+    except ProfileGamification.DoesNotExist:
+        return {'has_data': False}
+
+    if not series_xp:
+        return {'has_data': False}
+
+    sorted_series = sorted(series_xp.items(), key=lambda x: -x[1])[:8]
+
+    def _format_slug(slug):
+        return slug.replace('-', ' ').title() if slug else 'Unknown'
+
+    labels = [_format_slug(s[0]) for s in sorted_series]
+    counts = [s[1] for s in sorted_series]
+    total = sum(counts)
+    max_xp = counts[0] if counts else 1
+
+    ranked_list = [
+        {'name': labels[i], 'xp': f"{counts[i]:,}", 'pct': round(counts[i] / max_xp * 100)}
+        for i in range(len(labels))
+    ]
+
+    return {
+        'has_data': True,
+        'labels': labels,
+        'counts': counts,
+        'total': total,
+        'ranked_list': ranked_list,
+    }
+
+
+def _build_badge_xp_growth_data(profile, year):
+    """Cumulative badge XP over the year (monthly)."""
+    from trophies.models import UserBadge
+    from django.db.models import Count, Sum, Min
+    from django.db.models.functions import TruncMonth
+    from datetime import date
+    import calendar as cal_module
+    from trophies.util_modules.constants import BADGE_TIER_XP
+
+    labels = [cal_module.month_abbr[m] for m in range(1, 13)]
+
+    # Baseline: badges earned before this year
+    baseline_count = UserBadge.objects.filter(
+        profile=profile, earned_at__lt=date(year, 1, 1),
+    ).count()
+    baseline_xp = baseline_count * BADGE_TIER_XP
+
+    # Badges earned per month this year
+    monthly_raw = list(
+        UserBadge.objects
+        .filter(profile=profile, earned_at__year=year)
+        .annotate(month=TruncMonth('earned_at'))
+        .values('month')
+        .annotate(count=Count('id'))
+        .order_by('month')
+    )
+    monthly = [0] * 12
+    for entry in monthly_raw:
+        monthly[entry['month'].month - 1] = entry['count']
+
+    year_badges = sum(monthly)
+    if baseline_count == 0 and year_badges == 0:
+        return {'has_data': False}
+
+    # Cumulative XP line
+    cumulative = []
+    running = baseline_xp
+    for m in monthly:
+        running += m * BADGE_TIER_XP
+        cumulative.append(running)
+
+    n = _months_to_show(year)
+
+    return {
+        'has_data': True,
+        'labels': labels[:n],
+        'cumulative': cumulative[:n],
+        'year_xp': f"{year_badges * BADGE_TIER_XP:,}",
+        'current_xp': f"{cumulative[n - 1]:,}" if cumulative else '0',
+    }
+
+
+def _build_all_time_badge_xp_growth(profile):
+    """All-time badge XP by year with quarterly breakdown."""
+    from trophies.models import UserBadge
+    from django.db.models import Count, Min
+    from django.db.models.functions import ExtractYear, ExtractQuarter
+    from django.utils import timezone
+    from trophies.util_modules.constants import BADGE_TIER_XP
+
+    now = timezone.now()
+
+    first = UserBadge.objects.filter(
+        profile=profile,
+    ).aggregate(first=Min('earned_at'))['first']
+    if not first:
+        return {'has_data': False}
+
+    start_year = first.year
+    years = list(range(start_year, now.year + 1))
+    labels = [str(y) for y in years]
+
+    raw = list(
+        UserBadge.objects
+        .filter(profile=profile)
+        .annotate(yr=ExtractYear('earned_at'), qtr=ExtractQuarter('earned_at'))
+        .values('yr', 'qtr')
+        .annotate(count=Count('id'))
+        .order_by('yr', 'qtr')
+    )
+
+    lookup = {(e['yr'], e['qtr']): e['count'] for e in raw}
+    q1 = [lookup.get((y, 1), 0) * BADGE_TIER_XP for y in years]
+    q2 = [lookup.get((y, 2), 0) * BADGE_TIER_XP for y in years]
+    q3 = [lookup.get((y, 3), 0) * BADGE_TIER_XP for y in years]
+    q4 = [lookup.get((y, 4), 0) * BADGE_TIER_XP for y in years]
+
+    totals = [q1[i] + q2[i] + q3[i] + q4[i] for i in range(len(years))]
+    best_idx = max(range(len(totals)), key=lambda i: totals[i]) if totals else 0
+    total = sum(totals)
+
+    return {
+        'has_data': True,
+        'labels': labels,
+        'q1': q1, 'q2': q2, 'q3': q3, 'q4': q4,
+        'best_year': labels[best_idx] if labels else '',
+        'best_xp': f"{totals[best_idx]:,}" if totals else '0',
+        'total': f"{total:,}",
+    }
+
+
+def _build_badge_tier_trend_data(profile, year):
+    """Badge tier distribution by month."""
+    from trophies.models import UserBadge
+    from django.db.models import Count
+    from django.db.models.functions import TruncMonth
+    import calendar as cal_module
+
+    labels = [cal_module.month_abbr[m] for m in range(1, 13)]
+
+    monthly_tiers = list(
+        UserBadge.objects
+        .filter(profile=profile, earned_at__year=year)
+        .annotate(month=TruncMonth('earned_at'))
+        .values('month', 'badge__tier')
+        .annotate(count=Count('id'))
+        .order_by('month')
+    )
+
+    if not monthly_tiers:
+        return {'has_data': False}
+
+    series = {1: [0] * 12, 2: [0] * 12, 3: [0] * 12, 4: [0] * 12}
+    for entry in monthly_tiers:
+        m = entry['month'].month
+        tier = entry['badge__tier']
+        if tier in series:
+            series[tier][m - 1] = entry['count']
+
+    n = _months_to_show(year)
+
+    return {
+        'has_data': True,
+        'labels': labels[:n],
+        'bronze': series[1][:n],
+        'silver': series[2][:n],
+        'gold': series[3][:n],
+        'platinum': series[4][:n],
+    }
+
+
+def _build_all_time_badge_tier_trend(profile):
+    """All-time badge tier distribution by quarter."""
+    from trophies.models import UserBadge
+    from django.db.models import Count, Min
+    from django.db.models.functions import TruncQuarter
+    from django.utils import timezone
+
+    now = timezone.now()
+
+    first = UserBadge.objects.filter(
+        profile=profile,
+    ).aggregate(first=Min('earned_at'))['first']
+    if not first:
+        return {'has_data': False}
+
+    start_year = first.year
+    labels = _build_quarterly_labels(start_year, now.year)
+    num_q = len(labels)
+
+    def _quarter_idx(dt):
+        return (dt.year - start_year) * 4 + (dt.month - 1) // 3
+
+    raw = list(
+        UserBadge.objects
+        .filter(profile=profile)
+        .annotate(quarter=TruncQuarter('earned_at'))
+        .values('quarter', 'badge__tier')
+        .annotate(count=Count('id'))
+        .order_by('quarter')
+    )
+
+    series = {1: [0] * num_q, 2: [0] * num_q, 3: [0] * num_q, 4: [0] * num_q}
+    for entry in raw:
+        idx = _quarter_idx(entry['quarter'])
+        tier = entry['badge__tier']
+        if 0 <= idx < num_q and tier in series:
+            series[tier][idx] = entry['count']
+
+    current_q_idx = _quarter_idx(now)
+    n = min(current_q_idx + 1, num_q)
+
+    return {
+        'has_data': True,
+        'labels': labels[:n],
+        'bronze': series[1][:n],
+        'silver': series[2][:n],
+        'gold': series[3][:n],
+        'platinum': series[4][:n],
+    }
+
+
+def _build_badges_vs_stages_data(profile, year):
+    """Cumulative badges earned vs stages completed (dual line chart)."""
+    from trophies.models import UserBadge, StageCompletionEvent
+    from django.db.models import Count
+    from django.db.models.functions import TruncMonth
+    from datetime import date
+    import calendar as cal_module
+
+    labels = [cal_module.month_abbr[m] for m in range(1, 13)]
+
+    # Badges earned: baseline + monthly
+    badge_baseline = UserBadge.objects.filter(
+        profile=profile, earned_at__lt=date(year, 1, 1),
+    ).count()
+
+    badge_monthly = list(
+        UserBadge.objects
+        .filter(profile=profile, earned_at__year=year)
+        .annotate(month=TruncMonth('earned_at'))
+        .values('month')
+        .annotate(count=Count('id'))
+        .order_by('month')
+    )
+    monthly_badges = [0] * 12
+    for entry in badge_monthly:
+        monthly_badges[entry['month'].month - 1] = entry['count']
+
+    # Stages completed: baseline + monthly (from StageCompletionEvent)
+    stage_baseline = StageCompletionEvent.objects.filter(
+        profile=profile, completed_at__lt=date(year, 1, 1),
+    ).count()
+
+    stage_monthly = list(
+        StageCompletionEvent.objects
+        .filter(profile=profile, completed_at__year=year)
+        .annotate(month=TruncMonth('completed_at'))
+        .values('month')
+        .annotate(count=Count('id'))
+        .order_by('month')
+    )
+    monthly_stages = [0] * 12
+    for entry in stage_monthly:
+        monthly_stages[entry['month'].month - 1] = entry['count']
+
+    year_badges = sum(monthly_badges)
+    year_stages = sum(monthly_stages)
+    if badge_baseline == 0 and year_badges == 0 and stage_baseline == 0 and year_stages == 0:
+        return {'has_data': False}
+
+    # Build cumulative lines
+    cum_badges = []
+    cum_stages = []
+    rb, rs = badge_baseline, stage_baseline
+    for i in range(12):
+        rb += monthly_badges[i]
+        rs += monthly_stages[i]
+        cum_badges.append(rb)
+        cum_stages.append(rs)
+
+    n = _months_to_show(year)
+
+    return {
+        'has_data': True,
+        'labels': labels[:n],
+        'cumulative_badges': cum_badges[:n],
+        'cumulative_stages': cum_stages[:n],
+    }
+
+
+def _build_all_time_badges_vs_stages(profile):
+    """All-time cumulative badges earned vs stages completed by quarter."""
+    from trophies.models import UserBadge, StageCompletionEvent
+    from django.db.models import Count, Min
+    from django.db.models.functions import TruncQuarter
+    from django.utils import timezone
+
+    now = timezone.now()
+
+    # Find earliest date across both badges and stage completions
+    first_badge = UserBadge.objects.filter(profile=profile).aggregate(first=Min('earned_at'))['first']
+    first_stage = StageCompletionEvent.objects.filter(profile=profile).aggregate(first=Min('completed_at'))['first']
+
+    first = min(filter(None, [first_badge, first_stage]), default=None)
+    if not first:
+        return {'has_data': False}
+
+    start_year = first.year
+    labels = _build_quarterly_labels(start_year, now.year)
+    num_q = len(labels)
+
+    def _quarter_idx(dt):
+        return (dt.year - start_year) * 4 + (dt.month - 1) // 3
+
+    # Badges by quarter
+    badge_raw = list(
+        UserBadge.objects
+        .filter(profile=profile)
+        .annotate(quarter=TruncQuarter('earned_at'))
+        .values('quarter')
+        .annotate(count=Count('id'))
+        .order_by('quarter')
+    )
+    quarterly_badges = [0] * num_q
+    for entry in badge_raw:
+        idx = _quarter_idx(entry['quarter'])
+        if 0 <= idx < num_q:
+            quarterly_badges[idx] = entry['count']
+
+    # Stages by quarter (from StageCompletionEvent)
+    stage_raw = list(
+        StageCompletionEvent.objects
+        .filter(profile=profile)
+        .annotate(quarter=TruncQuarter('completed_at'))
+        .values('quarter')
+        .annotate(count=Count('id'))
+        .order_by('quarter')
+    )
+    quarterly_stages = [0] * num_q
+    for entry in stage_raw:
+        idx = _quarter_idx(entry['quarter'])
+        if 0 <= idx < num_q:
+            quarterly_stages[idx] = entry['count']
+
+    # Build cumulative lines
+    cum_badges, cum_stages = [], []
+    rb, rs = 0, 0
+    for i in range(num_q):
+        rb += quarterly_badges[i]
+        rs += quarterly_stages[i]
+        cum_badges.append(rb)
+        cum_stages.append(rs)
+
+    current_q_idx = _quarter_idx(now)
+    n = min(current_q_idx + 1, num_q)
+
+    return {
+        'has_data': True,
+        'labels': labels[:n],
+        'cumulative_badges': cum_badges[:n],
+        'cumulative_stages': cum_stages[:n],
+    }
+
+
+def _build_xp_sources_data(profile, year):
+    """Monthly XP split: completion bonuses vs progress XP."""
+    from trophies.models import UserBadge
+    from django.db.models import Count
+    from django.db.models.functions import TruncMonth
+    from datetime import date
+    import calendar as cal_module
+    from trophies.util_modules.constants import BADGE_TIER_XP
+
+    labels = [cal_module.month_abbr[m] for m in range(1, 13)]
+
+    # Badges earned per month = completion bonus events
+    badge_monthly = list(
+        UserBadge.objects
+        .filter(profile=profile, earned_at__year=year)
+        .annotate(month=TruncMonth('earned_at'))
+        .values('month')
+        .annotate(count=Count('id'))
+        .order_by('month')
+    )
+    monthly_badges = [0] * 12
+    for entry in badge_monthly:
+        monthly_badges[entry['month'].month - 1] = entry['count']
+
+    # Completion XP per month = badges * BADGE_TIER_XP
+    completion_xp = [b * BADGE_TIER_XP for b in monthly_badges]
+
+    # Total XP we can compute per month: we know completion XP precisely.
+    # Progress XP is harder to attribute monthly (no timestamp on stage completion).
+    # Approximate: total progress XP / total months active, distributed evenly.
+    # Better for visualization: just show the completion XP line and note that
+    # progress XP is earned continuously between badge completions.
+
+    if not any(monthly_badges):
+        return {'has_data': False}
+
+    # Cumulative completion XP
+    cum_completion = []
+    baseline = UserBadge.objects.filter(
+        profile=profile, earned_at__lt=date(year, 1, 1),
+    ).count() * BADGE_TIER_XP
+    running = baseline
+    for c in completion_xp:
+        running += c
+        cum_completion.append(running)
+
+    n = _months_to_show(year)
+
+    return {
+        'has_data': True,
+        'labels': labels[:n],
+        'completion_xp': cum_completion[:n],
+        'year_completion_xp': f"{sum(completion_xp):,}",
+    }
+
+
+def _build_all_time_xp_sources(profile):
+    """All-time XP sources by quarter: completion bonus XP."""
+    from trophies.models import UserBadge
+    from django.db.models import Count, Min
+    from django.db.models.functions import TruncQuarter
+    from django.utils import timezone
+    from trophies.util_modules.constants import BADGE_TIER_XP
+
+    now = timezone.now()
+
+    first = UserBadge.objects.filter(
+        profile=profile,
+    ).aggregate(first=Min('earned_at'))['first']
+    if not first:
+        return {'has_data': False}
+
+    start_year = first.year
+    labels = _build_quarterly_labels(start_year, now.year)
+    num_q = len(labels)
+
+    def _quarter_idx(dt):
+        return (dt.year - start_year) * 4 + (dt.month - 1) // 3
+
+    raw = list(
+        UserBadge.objects
+        .filter(profile=profile)
+        .annotate(quarter=TruncQuarter('earned_at'))
+        .values('quarter')
+        .annotate(count=Count('id'))
+        .order_by('quarter')
+    )
+    quarterly = [0] * num_q
+    for entry in raw:
+        idx = _quarter_idx(entry['quarter'])
+        if 0 <= idx < num_q:
+            quarterly[idx] = entry['count'] * BADGE_TIER_XP
+
+    cum_xp = []
+    running = 0
+    for q in quarterly:
+        running += q
+        cum_xp.append(running)
+
+    current_q_idx = _quarter_idx(now)
+    n = min(current_q_idx + 1, num_q)
+
+    return {
+        'has_data': True,
+        'labels': labels[:n],
+        'completion_xp': cum_xp[:n],
+    }
+
+
+def _build_stages_by_series_data(profile, year):
+    """Stage completions by series per month for stacked bar chart."""
+    from trophies.models import StageCompletionEvent
+    from django.db.models import Count
+    from django.db.models.functions import TruncMonth
+    import calendar as cal_module
+
+    labels = [cal_module.month_abbr[m] for m in range(1, 13)]
+
+    raw = list(
+        StageCompletionEvent.objects
+        .filter(profile=profile, completed_at__year=year)
+        .annotate(month=TruncMonth('completed_at'))
+        .values('month', 'badge__series_slug')
+        .annotate(count=Count('id'))
+        .order_by('month')
+    )
+
+    if not raw:
+        return {'has_data': False}
+
+    # Find top series by total count across all months
+    series_totals = defaultdict(int)
+    for entry in raw:
+        slug = entry['badge__series_slug'] or 'other'
+        series_totals[slug] += entry['count']
+
+    top_series = sorted(series_totals.items(), key=lambda x: -x[1])[:6]
+    top_slugs = [s[0] for s in top_series]
+
+    def _format_slug(slug):
+        return slug.replace('-', ' ').title() if slug else 'Other'
+
+    # Build monthly data per series
+    series_data = {}
+    for slug in top_slugs:
+        series_data[slug] = [0] * 12
+    for entry in raw:
+        slug = entry['badge__series_slug'] or 'other'
+        if slug in series_data:
+            m = entry['month'].month
+            series_data[slug][m - 1] = entry['count']
+
+    n = _months_to_show(year)
+
+    # Color palette for series
+    SERIES_COLORS = [
+        'rgba(59, 130, 246, 0.7)',   # blue
+        'rgba(34, 197, 94, 0.7)',    # green
+        'rgba(245, 158, 11, 0.7)',   # amber
+        'rgba(239, 68, 68, 0.7)',    # red
+        'rgba(168, 85, 247, 0.7)',   # purple
+        'rgba(6, 182, 212, 0.7)',    # cyan
+    ]
+
+    datasets = []
+    for i, slug in enumerate(top_slugs):
+        datasets.append({
+            'label': _format_slug(slug),
+            'data': series_data[slug][:n],
+            'color': SERIES_COLORS[i % len(SERIES_COLORS)],
+        })
+
+    return {
+        'has_data': True,
+        'labels': labels[:n],
+        'datasets': datasets,
+    }
+
+
+def _build_all_time_stages_by_series(profile):
+    """All-time stage completions by series per quarter."""
+    from trophies.models import StageCompletionEvent
+    from django.db.models import Count, Min
+    from django.db.models.functions import TruncQuarter
+    from django.utils import timezone
+
+    now = timezone.now()
+
+    first = StageCompletionEvent.objects.filter(
+        profile=profile,
+    ).aggregate(first=Min('completed_at'))['first']
+    if not first:
+        return {'has_data': False}
+
+    start_year = first.year
+    labels = _build_quarterly_labels(start_year, now.year)
+    num_q = len(labels)
+
+    def _quarter_idx(dt):
+        return (dt.year - start_year) * 4 + (dt.month - 1) // 3
+
+    raw = list(
+        StageCompletionEvent.objects
+        .filter(profile=profile)
+        .annotate(quarter=TruncQuarter('completed_at'))
+        .values('quarter', 'badge__series_slug')
+        .annotate(count=Count('id'))
+        .order_by('quarter')
+    )
+
+    if not raw:
+        return {'has_data': False}
+
+    # Find top series
+    series_totals = defaultdict(int)
+    for entry in raw:
+        slug = entry['badge__series_slug'] or 'other'
+        series_totals[slug] += entry['count']
+
+    top_series = sorted(series_totals.items(), key=lambda x: -x[1])[:6]
+    top_slugs = [s[0] for s in top_series]
+
+    def _format_slug(slug):
+        return slug.replace('-', ' ').title() if slug else 'Other'
+
+    series_data = {}
+    for slug in top_slugs:
+        series_data[slug] = [0] * num_q
+    for entry in raw:
+        slug = entry['badge__series_slug'] or 'other'
+        if slug in series_data:
+            idx = _quarter_idx(entry['quarter'])
+            if 0 <= idx < num_q:
+                series_data[slug][idx] = entry['count']
+
+    current_q_idx = _quarter_idx(now)
+    n = min(current_q_idx + 1, num_q)
+
+    SERIES_COLORS = [
+        'rgba(59, 130, 246, 0.7)',
+        'rgba(34, 197, 94, 0.7)',
+        'rgba(245, 158, 11, 0.7)',
+        'rgba(239, 68, 68, 0.7)',
+        'rgba(168, 85, 247, 0.7)',
+        'rgba(6, 182, 212, 0.7)',
+    ]
+
+    datasets = []
+    for i, slug in enumerate(top_slugs):
+        datasets.append({
+            'label': _format_slug(slug),
+            'data': series_data[slug][:n],
+            'color': SERIES_COLORS[i % len(SERIES_COLORS)],
+        })
+
+    return {
+        'has_data': True,
+        'labels': labels[:n],
+        'datasets': datasets,
+    }
+
+
+def _build_stage_completion_rate_data(profile, year):
+    """Stages completed per month (rate line chart)."""
+    from trophies.models import StageCompletionEvent
+    from django.db.models import Count
+    from django.db.models.functions import TruncMonth
+    import calendar as cal_module
+
+    labels = [cal_module.month_abbr[m] for m in range(1, 13)]
+
+    raw = list(
+        StageCompletionEvent.objects
+        .filter(profile=profile, completed_at__year=year)
+        .annotate(month=TruncMonth('completed_at'))
+        .values('month')
+        .annotate(count=Count('id'))
+        .order_by('month')
+    )
+
+    if not raw:
+        return {'has_data': False}
+
+    monthly = [0] * 12
+    for entry in raw:
+        monthly[entry['month'].month - 1] = entry['count']
+
+    n = _months_to_show(year)
+    total = sum(monthly[:n])
+    avg = round(total / n, 1) if n else 0
+    peak = max(monthly[:n]) if monthly[:n] else 0
+
+    return {
+        'has_data': True,
+        'labels': labels[:n],
+        'monthly': monthly[:n],
+        'total': f"{total:,}",
+        'avg': avg,
+        'peak': peak,
+    }
+
+
+def _build_all_time_stage_completion_rate(profile):
+    """All-time stages completed per quarter (rate line chart)."""
+    from trophies.models import StageCompletionEvent
+    from django.db.models import Count, Min
+    from django.db.models.functions import TruncQuarter
+    from django.utils import timezone
+
+    now = timezone.now()
+
+    first = StageCompletionEvent.objects.filter(
+        profile=profile,
+    ).aggregate(first=Min('completed_at'))['first']
+    if not first:
+        return {'has_data': False}
+
+    start_year = first.year
+    labels = _build_quarterly_labels(start_year, now.year)
+    num_q = len(labels)
+
+    def _quarter_idx(dt):
+        return (dt.year - start_year) * 4 + (dt.month - 1) // 3
+
+    raw = list(
+        StageCompletionEvent.objects
+        .filter(profile=profile)
+        .annotate(quarter=TruncQuarter('completed_at'))
+        .values('quarter')
+        .annotate(count=Count('id'))
+        .order_by('quarter')
+    )
+
+    quarterly = [0] * num_q
+    for entry in raw:
+        idx = _quarter_idx(entry['quarter'])
+        if 0 <= idx < num_q:
+            quarterly[idx] = entry['count']
+
+    current_q_idx = _quarter_idx(now)
+    n = min(current_q_idx + 1, num_q)
+    total = sum(quarterly[:n])
+    avg = round(total / n, 1) if n else 0
+    peak = max(quarterly[:n]) if quarterly[:n] else 0
+
+    return {
+        'has_data': True,
+        'labels': labels[:n],
+        'monthly': quarterly[:n],
+        'total': f"{total:,}",
+        'avg': avg,
+        'peak': peak,
+    }
+
+
+def provide_badge_series_overview(profile):
+    """All-time badge series status: stage progress, tier grid, series XP radar."""
+    return {
+        'stage_progress': _build_stage_progress_data(profile),
+        'series_radar': _build_series_xp_radar_data(profile),
+    }
+
+
+def provide_badge_visualizations(profile, settings=None):
+    """Combined premium badge visualization module."""
+    from django.utils import timezone
+
+    settings = settings or {}
+    now = timezone.now()
+    year_val = settings.get('year', '')
+    is_all = year_val == 'all'
+
+    try:
+        year = int(year_val) if year_val and not is_all else now.year
+    except (ValueError, TypeError):
+        year = now.year
+
+    # Stage progress is always all-time (cumulative, not year-specific)
+    if is_all:
+        return {
+            'year': 'all',
+            'year_label': 'All Time',
+            'current_year': now.year,
+            'xp_growth': _build_all_time_badge_xp_growth(profile),
+            'stages_by_series': _build_all_time_stages_by_series(profile),
+            'badges_vs_stages': _build_all_time_badges_vs_stages(profile),
+            'stage_rate': _build_all_time_stage_completion_rate(profile),
+        }
+
+    return {
+        'year': year,
+        'year_label': str(year),
+        'current_year': now.year,
+        'xp_growth': _build_badge_xp_growth_data(profile, year),
+        'stages_by_series': _build_stages_by_series_data(profile, year),
+        'badges_vs_stages': _build_badges_vs_stages_data(profile, year),
+        'stage_rate': _build_stage_completion_rate_data(profile, year),
+    }
+
+
+# ---------------------------------------------------------------------------
 # Module Registry
 # ---------------------------------------------------------------------------
 
@@ -2795,7 +3926,7 @@ DASHBOARD_MODULES = [
     {
         'slug': 'trophy_visualizations',
         'name': 'Trophy Visualizations',
-        'description': 'Premium analytics suite: platinum heatmap, genre radar, year comparison, and trophy type trends.',
+        'description': 'Premium analytics suite: trophy heatmap, genre radar, year comparison, and progress tracking.',
         'category': 'premium',
         'template': 'trophies/partials/dashboard/trophy_visualizations.html',
         'provider': provide_trophy_visualizations,
@@ -2805,7 +3936,67 @@ DASHBOARD_MODULES = [
         'default_settings': {'year': ''},
         'configurable_settings': [
             {'key': 'year', 'label': 'Year', 'type': 'select', 'default': '',
-             'options': [{'value': 'all', 'label': 'All Time'}] + [{'value': str(y), 'label': str(y)} for y in range(2026, 2014, -1)] + [{'value': '', 'label': 'Current'}]},
+             'options': [{'value': 'all', 'label': 'All'}, {'value': '', 'label': 'Current'}]},
+        ],
+        'cache_ttl': 1800,
+        'default_size': 'large',
+        'allowed_sizes': ['large'],
+    },
+    {
+        'slug': 'advanced_badge_stats',
+        'name': 'Advanced Badge Stats',
+        'description': 'Deep badge analytics: earning velocity, series depth, XP breakdown, types, and rarest badges.',
+        'category': 'premium',
+        'template': 'trophies/partials/dashboard/advanced_badge_stats.html',
+        'provider': provide_advanced_badge_stats,
+        'requires_premium': True,
+        'load_strategy': 'lazy',
+        'default_order': 8,
+        'default_settings': {'range': 'all'},
+        'configurable_settings': [
+            {'key': 'range', 'label': 'Date Range', 'type': 'select', 'default': 'all',
+             'options': [
+                 {'value': '7d', 'label': '7 Days'},
+                 {'value': '30d', 'label': '30 Days'},
+                 {'value': '90d', 'label': '90 Days'},
+                 {'value': '1y', 'label': '1 Year'},
+                 {'value': 'all', 'label': 'All Time'},
+             ]},
+        ],
+        'cache_ttl': 1800,
+        'default_size': 'large',
+        'allowed_sizes': ['medium', 'large'],
+    },
+    {
+        'slug': 'badge_series_overview',
+        'name': 'Badge Series Overview',
+        'description': 'All-time badge series status: stage progress, tier completion grid, and series XP radar.',
+        'category': 'premium',
+        'template': 'trophies/partials/dashboard/badge_series_overview.html',
+        'provider': provide_badge_series_overview,
+        'requires_premium': True,
+        'load_strategy': 'lazy',
+        'default_order': 8,
+        'default_settings': {},
+        'configurable_settings': [],
+        'cache_ttl': 1800,
+        'default_size': 'large',
+        'allowed_sizes': ['medium', 'large'],
+    },
+    {
+        'slug': 'badge_visualizations',
+        'name': 'Badge Visualizations',
+        'description': 'Premium badge timeline: stages by series, XP growth, badges vs stages, and completion rate.',
+        'category': 'premium',
+        'template': 'trophies/partials/dashboard/badge_visualizations.html',
+        'provider': provide_badge_visualizations,
+        'requires_premium': True,
+        'load_strategy': 'lazy',
+        'default_order': 9,
+        'default_settings': {'year': ''},
+        'configurable_settings': [
+            {'key': 'year', 'label': 'Year', 'type': 'select', 'default': '',
+             'options': [{'value': 'all', 'label': 'All'}, {'value': '', 'label': 'Current'}]},
         ],
         'cache_ttl': 1800,
         'default_size': 'large',
@@ -2899,6 +4090,13 @@ def get_effective_settings(module_descriptor, module_settings):
     # Start with defaults, overlay user overrides
     effective = {**defaults}
     configurable = module_descriptor.get('configurable_settings', [])
+    configurable_keys = {s['key'] for s in configurable}
+
+    # Pass through overrides for keys in default_settings but not in configurable_settings
+    # (e.g., inline year selector sends values that aren't in the customize panel options)
+    for key, val in user_settings.items():
+        if key in defaults and key not in configurable_keys:
+            effective[key] = val
 
     for setting in configurable:
         key = setting['key']

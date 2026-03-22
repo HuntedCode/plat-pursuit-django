@@ -95,6 +95,11 @@
 
             // Combined visualization module: heatmap + genre radar + year review + type breakdown
             this.registerModuleInit('trophy_visualizations', (el) => this._initTrophyVisualizations(el));
+
+            // Badge analytics modules
+            this.registerModuleInit('advanced_badge_stats', (el) => this._initAdvancedBadgeStatsRange(el));
+            this.registerModuleInit('badge_series_overview', (el) => this._initBadgeSeriesOverview(el));
+            this.registerModuleInit('badge_visualizations', (el) => this._initBadgeVisualizations(el));
         }
 
         // -----------------------------------------------------------------
@@ -209,7 +214,20 @@
                 if (skeleton) {
                     skeleton.outerHTML = data.html;
                 } else {
-                    el.innerHTML = data.html;
+                    // Replace only the card, preserving drag handle and other siblings
+                    const existingCard = el.querySelector('.card');
+                    if (existingCard) {
+                        const tmp = document.createElement('div');
+                        tmp.innerHTML = data.html;
+                        const newCard = tmp.querySelector('.card') || tmp.firstElementChild;
+                        if (newCard) {
+                            existingCard.replaceWith(newCard);
+                        } else {
+                            el.innerHTML = data.html;
+                        }
+                    } else {
+                        el.innerHTML = data.html;
+                    }
                 }
 
                 if (this._moduleInits[mod.slug]) {
@@ -678,6 +696,338 @@
                             scales: {
                                 x: { ticks: { color: 'rgba(150,150,150,0.5)', font: { size: 9 } }, grid: { display: false } },
                                 y: { ticks: { color: 'rgba(150,150,150,0.5)', font: { size: 9 } }, grid: { color: 'rgba(150,150,150,0.1)' } },
+                            },
+                        },
+                    });
+                }
+            }
+        }
+
+        // -----------------------------------------------------------------
+        // Advanced Badge Stats (date range switcher)
+        // -----------------------------------------------------------------
+
+        _initAdvancedBadgeStatsRange(el) {
+            const rangeContainer = el.querySelector('.badge-stats-range');
+            if (!rangeContainer) return;
+
+            rangeContainer.addEventListener('click', async (e) => {
+                const btn = e.target.closest('[data-range]');
+                if (!btn) return;
+
+                const range = btn.dataset.range;
+                const moduleEl = el.closest('[id^="module-"]');
+                if (!moduleEl) return;
+
+                rangeContainer.querySelectorAll('[data-range]').forEach(b => {
+                    b.classList.remove('btn-primary');
+                    b.classList.add('btn-ghost');
+                });
+                btn.classList.remove('btn-ghost');
+                btn.classList.add('btn-primary');
+
+                const grid = el.querySelector('.grid');
+                if (grid) grid.style.opacity = '0.5';
+
+                try {
+                    const resp = await PlatPursuit.API.get(
+                        `${this.moduleDataUrl}advanced_badge_stats/?settings=${encodeURIComponent(JSON.stringify({range}))}`
+                    );
+                    const card = moduleEl.querySelector('.card');
+                    if (card) {
+                        const tmp = document.createElement('div');
+                        tmp.innerHTML = resp.html;
+                        const newCard = tmp.querySelector('.card') || tmp.firstElementChild;
+                        if (newCard) {
+                            card.replaceWith(newCard);
+                            this._initAdvancedBadgeStatsRange(moduleEl);
+                        }
+                    }
+                } catch {
+                    if (grid) grid.style.opacity = '1';
+                    PlatPursuit.ToastManager.error('Failed to update badge stats.');
+                }
+            });
+        }
+
+        // -----------------------------------------------------------------
+        // Badge Series Overview (stage progress bar + series XP radar)
+        // -----------------------------------------------------------------
+
+        _initBadgeSeriesOverview(el) {
+            // Stage Progress bar chart
+            const stageCanvas = el.querySelector('.badge-stage-progress-canvas');
+            if (stageCanvas && typeof Chart !== 'undefined') {
+                const labels = JSON.parse(stageCanvas.dataset.labels || '[]');
+                const completed = JSON.parse(stageCanvas.dataset.completed || '[]');
+                const remaining = JSON.parse(stageCanvas.dataset.remaining || '[]');
+                const colors = JSON.parse(stageCanvas.dataset.colors || '[]');
+                if (labels.length) {
+                    new Chart(stageCanvas, {
+                        type: 'bar',
+                        data: {
+                            labels: labels,
+                            datasets: [
+                                { label: 'Completed', data: completed, backgroundColor: 'rgba(34, 197, 94, 0.6)', borderRadius: 2 },
+                                { label: 'Remaining', data: remaining, backgroundColor: colors.map(c => c + '33'), borderRadius: 2 },
+                            ],
+                        },
+                        options: {
+                            indexAxis: 'y',
+                            responsive: true, maintainAspectRatio: true,
+                            plugins: { legend: { display: false } },
+                            scales: {
+                                x: { stacked: true, ticks: { color: 'rgba(150,150,150,0.5)', font: { size: 9 } }, grid: { color: 'rgba(150,150,150,0.1)' } },
+                                y: { stacked: true, ticks: { color: 'rgba(150,150,150,0.5)', font: { size: 9 } }, grid: { display: false } },
+                            },
+                        },
+                    });
+                }
+            }
+
+            // Series XP Radar
+            const radarCanvas = el.querySelector('.badge-series-radar-canvas');
+            if (radarCanvas && typeof Chart !== 'undefined') {
+                const labels = JSON.parse(radarCanvas.dataset.labels || '[]');
+                const counts = JSON.parse(radarCanvas.dataset.counts || '[]');
+                if (labels.length) {
+                    new Chart(radarCanvas, {
+                        type: 'radar',
+                        data: {
+                            labels: labels,
+                            datasets: [{
+                                label: 'XP',
+                                data: counts,
+                                backgroundColor: 'rgba(245, 158, 11, 0.15)',
+                                borderColor: '#f59e0b',
+                                borderWidth: 2,
+                                pointBackgroundColor: '#f59e0b',
+                                pointRadius: 4,
+                                pointHoverRadius: 6,
+                            }],
+                        },
+                        options: {
+                            responsive: true, maintainAspectRatio: true,
+                            plugins: { legend: { display: false } },
+                            scales: {
+                                r: {
+                                    beginAtZero: true,
+                                    ticks: { display: false },
+                                    grid: { color: 'rgba(150,150,150,0.15)' },
+                                    angleLines: { color: 'rgba(150,150,150,0.15)' },
+                                    pointLabels: { color: 'rgba(150,150,150,0.6)', font: { size: 10 } },
+                                },
+                            },
+                        },
+                    });
+                }
+            }
+        }
+
+        // -----------------------------------------------------------------
+        // Badge Visualizations (stage progress + series breakdown + XP growth + completion tracking)
+        // -----------------------------------------------------------------
+
+        _initBadgeVisualizations(el) {
+            // Year selector
+            const yearSelect = el.querySelector('.badge-viz-year-select');
+            if (yearSelect) {
+                yearSelect.addEventListener('click', async (e) => {
+                    const btn = e.target.closest('[data-year]');
+                    if (!btn || btn.classList.contains('btn-primary')) return;
+
+                    const year = btn.dataset.year;
+                    const moduleEl = el.closest('[id^="module-"]');
+                    if (!moduleEl) return;
+
+                    yearSelect.querySelectorAll('[data-year]').forEach(b => {
+                        b.classList.remove('btn-primary');
+                        b.classList.add('btn-ghost');
+                    });
+                    btn.classList.remove('btn-ghost');
+                    btn.classList.add('btn-primary');
+
+                    try {
+                        const resp = await PlatPursuit.API.get(
+                            `${this.moduleDataUrl}badge_visualizations/?settings=${encodeURIComponent(JSON.stringify({year}))}`
+                        );
+                        const card = moduleEl.querySelector('.card');
+                        if (card) {
+                            const tmp = document.createElement('div');
+                            tmp.innerHTML = resp.html;
+                            const newCard = tmp.querySelector('.card') || tmp.firstElementChild;
+                            if (newCard) {
+                                card.replaceWith(newCard);
+                                this._initBadgeVisualizations(moduleEl);
+                            }
+                        }
+                    } catch {
+                        PlatPursuit.ToastManager.error('Failed to update badge visualizations.');
+                    }
+                });
+            }
+
+            // XP Growth (Chart.js line, year mode)
+            const xpCanvas = el.querySelector('.badge-xp-growth-canvas');
+            if (xpCanvas && typeof Chart !== 'undefined') {
+                const labels = JSON.parse(xpCanvas.dataset.labels || '[]');
+                const cumulative = JSON.parse(xpCanvas.dataset.cumulative || '[]');
+                if (labels.length) {
+                    new Chart(xpCanvas, {
+                        type: 'line',
+                        data: {
+                            labels: labels,
+                            datasets: [{
+                                label: 'Total XP',
+                                data: cumulative,
+                                borderColor: '#f59e0b',
+                                backgroundColor: 'rgba(245, 158, 11, 0.08)',
+                                fill: true, tension: 0.3, borderWidth: 2, pointRadius: 2, pointHoverRadius: 4,
+                            }],
+                        },
+                        options: {
+                            responsive: true, maintainAspectRatio: true,
+                            plugins: { legend: { display: false } },
+                            scales: {
+                                x: { ticks: { color: 'rgba(150,150,150,0.5)', font: { size: 9 } }, grid: { display: false } },
+                                y: { ticks: { color: 'rgba(150,150,150,0.5)', font: { size: 9 } }, grid: { color: 'rgba(150,150,150,0.1)' } },
+                            },
+                        },
+                    });
+                }
+            }
+
+            // Yearly XP Totals (Chart.js stacked bar, all-time mode)
+            const yearlyCanvas = el.querySelector('.badge-yearly-xp-canvas');
+            if (yearlyCanvas && typeof Chart !== 'undefined') {
+                const labels = JSON.parse(yearlyCanvas.dataset.labels || '[]');
+                const q1 = JSON.parse(yearlyCanvas.dataset.q1 || '[]');
+                const q2 = JSON.parse(yearlyCanvas.dataset.q2 || '[]');
+                const q3 = JSON.parse(yearlyCanvas.dataset.q3 || '[]');
+                const q4 = JSON.parse(yearlyCanvas.dataset.q4 || '[]');
+                if (labels.length) {
+                    new Chart(yearlyCanvas, {
+                        type: 'bar',
+                        data: {
+                            labels: labels,
+                            datasets: [
+                                { label: 'Q1', data: q1, backgroundColor: 'rgba(59, 130, 246, 0.7)' },
+                                { label: 'Q2', data: q2, backgroundColor: 'rgba(34, 197, 94, 0.7)' },
+                                { label: 'Q3', data: q3, backgroundColor: 'rgba(245, 158, 11, 0.7)' },
+                                { label: 'Q4', data: q4, backgroundColor: 'rgba(239, 68, 68, 0.7)' },
+                            ],
+                        },
+                        options: {
+                            responsive: true, maintainAspectRatio: true,
+                            plugins: {
+                                legend: { display: true, position: 'bottom', labels: { color: 'rgba(150,150,150,0.6)', font: { size: 9 }, boxWidth: 8, padding: 10 } },
+                            },
+                            scales: {
+                                x: { stacked: true, ticks: { color: 'rgba(150,150,150,0.5)', font: { size: 9 } }, grid: { display: false } },
+                                y: { stacked: true, beginAtZero: true, ticks: { color: 'rgba(150,150,150,0.5)', font: { size: 9 } }, grid: { color: 'rgba(150,150,150,0.1)' } },
+                            },
+                        },
+                    });
+                }
+            }
+
+            // Stages by Series (Chart.js stacked bar with dynamic datasets)
+            const seriesCanvas = el.querySelector('.badge-stages-by-series-canvas');
+            if (seriesCanvas && typeof Chart !== 'undefined') {
+                const labels = JSON.parse(seriesCanvas.dataset.labels || '[]');
+                const datasets = JSON.parse(seriesCanvas.dataset.datasets || '[]');
+                if (labels.length && datasets.length) {
+                    new Chart(seriesCanvas, {
+                        type: 'bar',
+                        data: {
+                            labels: labels,
+                            datasets: datasets.map(ds => ({
+                                label: ds.label,
+                                data: ds.data,
+                                backgroundColor: ds.color,
+                            })),
+                        },
+                        options: {
+                            responsive: true, maintainAspectRatio: true,
+                            plugins: {
+                                legend: { display: true, position: 'bottom', labels: { color: 'rgba(150,150,150,0.6)', font: { size: 9 }, boxWidth: 8, padding: 8 } },
+                            },
+                            scales: {
+                                x: { stacked: true, ticks: { color: 'rgba(150,150,150,0.5)', font: { size: 9 } }, grid: { display: false } },
+                                y: { stacked: true, beginAtZero: true, ticks: { color: 'rgba(150,150,150,0.5)', font: { size: 9 } }, grid: { color: 'rgba(150,150,150,0.1)' } },
+                            },
+                        },
+                    });
+                }
+            }
+
+            // Badge Growth: Badges Earned vs Stages Completed (Chart.js dual line)
+            const growthCanvas = el.querySelector('.badge-growth-canvas');
+            if (growthCanvas && typeof Chart !== 'undefined') {
+                const labels = JSON.parse(growthCanvas.dataset.labels || '[]');
+                const badges = JSON.parse(growthCanvas.dataset.badges || '[]');
+                const stages = JSON.parse(growthCanvas.dataset.stages || '[]');
+                if (labels.length) {
+                    new Chart(growthCanvas, {
+                        type: 'line',
+                        data: {
+                            labels: labels,
+                            datasets: [
+                                {
+                                    label: 'Stages Completed',
+                                    data: stages,
+                                    borderColor: 'rgba(59, 130, 246, 0.8)',
+                                    backgroundColor: 'rgba(59, 130, 246, 0.08)',
+                                    fill: true, tension: 0.3, borderWidth: 2, pointRadius: 2, pointHoverRadius: 4,
+                                },
+                                {
+                                    label: 'Badges Earned',
+                                    data: badges,
+                                    borderColor: 'rgba(34, 197, 94, 0.8)',
+                                    backgroundColor: 'rgba(34, 197, 94, 0.08)',
+                                    fill: true, tension: 0.3, borderWidth: 2, pointRadius: 2, pointHoverRadius: 4,
+                                },
+                            ],
+                        },
+                        options: {
+                            responsive: true, maintainAspectRatio: true,
+                            plugins: {
+                                legend: { display: true, position: 'bottom', labels: { color: 'rgba(150,150,150,0.6)', font: { size: 9 }, boxWidth: 8, padding: 10 } },
+                            },
+                            scales: {
+                                x: { ticks: { color: 'rgba(150,150,150,0.5)', font: { size: 9 } }, grid: { display: false } },
+                                y: { beginAtZero: true, ticks: { color: 'rgba(150,150,150,0.5)', font: { size: 9 } }, grid: { color: 'rgba(150,150,150,0.1)' } },
+                            },
+                        },
+                    });
+                }
+            }
+
+            // Stage Completion Rate (Chart.js bar + line combo)
+            const rateCanvas = el.querySelector('.badge-stage-rate-canvas');
+            if (rateCanvas && typeof Chart !== 'undefined') {
+                const labels = JSON.parse(rateCanvas.dataset.labels || '[]');
+                const monthly = JSON.parse(rateCanvas.dataset.monthly || '[]');
+                if (labels.length) {
+                    new Chart(rateCanvas, {
+                        type: 'bar',
+                        data: {
+                            labels: labels,
+                            datasets: [{
+                                label: 'Stages',
+                                data: monthly,
+                                backgroundColor: 'rgba(59, 130, 246, 0.5)',
+                                borderColor: 'rgba(59, 130, 246, 0.8)',
+                                borderWidth: 1,
+                                borderRadius: 2,
+                            }],
+                        },
+                        options: {
+                            responsive: true, maintainAspectRatio: true,
+                            plugins: { legend: { display: false } },
+                            scales: {
+                                x: { ticks: { color: 'rgba(150,150,150,0.5)', font: { size: 9 } }, grid: { display: false } },
+                                y: { beginAtZero: true, ticks: { color: 'rgba(150,150,150,0.5)', font: { size: 9 }, stepSize: 1 }, grid: { color: 'rgba(150,150,150,0.1)' } },
                             },
                         },
                     });
