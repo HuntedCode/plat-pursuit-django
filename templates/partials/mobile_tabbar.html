@@ -73,17 +73,6 @@
         {% if user.is_authenticated and user.profile %}
             <li><a href="{% url 'my_guides' %}">My Guides</a></li>
         {% endif %}
-        <li>
-            <a href="{% url 'guides_list' %}">
-                <span class="flex flex-row gap-2 items-center">
-                    PPTV Guides
-                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="var(--color-error)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <rect x="2" y="7" width="20" height="15" rx="2" ry="2"></rect>
-                        <polyline points="17 2 12 7 7 2"></polyline>
-                    </svg>
-                </span>
-            </a>
-        </li>
     </ul>
 
     <!-- My Pursuit -->

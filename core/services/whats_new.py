@@ -65,7 +65,7 @@ def get_whats_new(limit=8):
     for concept in new_guides:
         # Get the first game for this concept to build URL
         game = concept.games.first()
-        url = reverse('game_detail', args=[game.np_communication_id]) if game else reverse('guides_list')
+        url = reverse('game_detail', args=[game.np_communication_id]) if game else reverse('guides_browse')
         items.append({
             'type': 'new_guide',
             'title': concept.unified_title or 'New Guide',

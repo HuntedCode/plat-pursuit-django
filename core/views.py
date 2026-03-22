@@ -10,9 +10,7 @@ from django.core.cache import cache
 from django.utils import timezone
 from datetime import timedelta
 from .services.playing_now import get_playing_now
-from .services.featured_guide import get_featured_guide
 from .services.tracking import track_page_view
-from trophies.models import Concept
 from trophies.mixins import ProfileHotbarMixin
 
 logger = logging.getLogger('psn_api')
@@ -23,8 +21,6 @@ class IndexView(ProfileHotbarMixin, TemplateView):
     STATS_CACHE_TIMEOUT = 3600
     FEATURED_GAMES_KEY = 'featured_games'
     FEATURED_GAMES_TIMEOUT = 86400
-    FEATURED_GUIDE_KEY = 'featured_guide'
-    FEATURED_GUIDE_TIMEOUT = 86400
     LATEST_BADGES_KEY = 'latest_badges'
     LATEST_BADGES_TIMEOUT = 3600
     PLAYING_NOW_KEY = 'playing_now'
@@ -69,18 +65,6 @@ class IndexView(ProfileHotbarMixin, TemplateView):
             prev_key = f"{self.FEATURED_GAMES_KEY}_{prev_day}"
             featured = cache.get(prev_key)
         context['featuredGames'] = featured
-
-        featured_guide_key = f"{self.FEATURED_GUIDE_KEY}_{today_utc}"
-        featured_guide_id = cache.get_or_set(
-            featured_guide_key,
-            get_featured_guide,
-            self.FEATURED_GUIDE_TIMEOUT
-        )
-        try:
-            featured_concept = Concept.objects.get(id=featured_guide_id)
-            context['featured_concept'] = featured_concept
-        except Concept.DoesNotExist:
-            pass
 
         # Latest badges - cache resets hourly at top of the hour UTC (cron)
         latest_badges_key = f"{self.LATEST_BADGES_KEY}_{today_utc}_{now_utc.hour:02d}"
