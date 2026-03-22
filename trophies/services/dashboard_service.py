@@ -1831,6 +1831,161 @@ def _build_genre_radar_data(profile, year):
     }
 
 
+def _build_rarity_radar_data(profile, year):
+    """Rarity distribution across earned trophies for Chart.js radar chart."""
+    from trophies.models import EarnedTrophy
+    from django.db.models import Count, Q
+
+    earned_qs = EarnedTrophy.objects.filter(
+        profile=profile, earned=True, earned_date_time__isnull=False,
+        trophy__trophy_earn_rate__gt=0,
+    )
+    if year is not None:
+        earned_qs = earned_qs.filter(earned_date_time__year=year)
+
+    rarity = earned_qs.aggregate(
+        ultra_rare=Count('id', filter=Q(trophy__trophy_earn_rate__lt=5)),
+        very_rare=Count('id', filter=Q(
+            trophy__trophy_earn_rate__gte=5, trophy__trophy_earn_rate__lt=10,
+        )),
+        rare=Count('id', filter=Q(
+            trophy__trophy_earn_rate__gte=10, trophy__trophy_earn_rate__lt=20,
+        )),
+        uncommon=Count('id', filter=Q(
+            trophy__trophy_earn_rate__gte=20, trophy__trophy_earn_rate__lt=50,
+        )),
+        common=Count('id', filter=Q(trophy__trophy_earn_rate__gte=50)),
+    )
+
+    counts = [
+        rarity['ultra_rare'], rarity['very_rare'], rarity['rare'],
+        rarity['uncommon'], rarity['common'],
+    ]
+    total = sum(counts)
+    if total == 0:
+        return {'has_data': False}
+
+    return {
+        'has_data': True,
+        'labels': ['Ultra Rare', 'Very Rare', 'Rare', 'Uncommon', 'Common'],
+        'counts': counts,
+        'total': total,
+    }
+
+
+def _build_platform_radar_data(profile, year):
+    """Platform distribution across earned trophies for Chart.js radar chart."""
+    from trophies.models import EarnedTrophy
+    from trophies.util_modules.constants import ALL_PLATFORMS
+
+    PLATFORM_LABELS = {
+        'PS5': 'PS5', 'PS4': 'PS4', 'PS3': 'PS3',
+        'PSVITA': 'PS Vita', 'PSVR': 'PS VR',
+    }
+
+    earned_qs = EarnedTrophy.objects.filter(
+        profile=profile, earned=True, earned_date_time__isnull=False,
+    )
+    if year is not None:
+        earned_qs = earned_qs.filter(earned_date_time__year=year)
+
+    platform_lists = earned_qs.values_list('trophy__game__title_platform', flat=True)
+    platform_counts = defaultdict(int)
+    for plist in platform_lists:
+        if plist:
+            for p in plist:
+                platform_counts[p] += 1
+
+    # Always show all platforms, even with 0 count
+    labels = [PLATFORM_LABELS.get(p, p) for p in ALL_PLATFORMS]
+    counts = [platform_counts.get(p, 0) for p in ALL_PLATFORMS]
+    total = sum(counts)
+
+    if total == 0:
+        return {'has_data': False}
+
+    return {
+        'has_data': True,
+        'labels': labels,
+        'counts': counts,
+        'total': total,
+    }
+
+
+def _build_trophy_type_breakdown_data(profile, year):
+    """Trophy type (bronze/silver/gold/plat) breakdown by month or year for stacked bar."""
+    from trophies.models import EarnedTrophy
+    from django.db.models import Count
+    from django.utils import timezone
+    import calendar as cal_module
+
+    earned_qs = EarnedTrophy.objects.filter(
+        profile=profile, earned=True, earned_date_time__isnull=False,
+    )
+
+    types = ['bronze', 'silver', 'gold', 'platinum']
+
+    if year is not None:
+        # Year mode: monthly breakdown
+        from django.db.models.functions import ExtractMonth
+        earned_qs = earned_qs.filter(earned_date_time__year=year)
+
+        raw = list(
+            earned_qs
+            .values('trophy__trophy_type', month=ExtractMonth('earned_date_time'))
+            .annotate(count=Count('id'))
+            .order_by('month')
+        )
+        lookup = {(e['trophy__trophy_type'], e['month']): e['count'] for e in raw}
+
+        n = _months_to_show(year)
+        labels = [cal_module.month_abbr[m] for m in range(1, n + 1)]
+        data = {t: [lookup.get((t, m), 0) for m in range(1, n + 1)] for t in types}
+    else:
+        # All mode: yearly breakdown
+        from django.db.models.functions import ExtractYear
+        from django.db.models import Min
+
+        first = earned_qs.aggregate(first=Min('earned_date_time'))['first']
+        if not first:
+            return {'has_data': False}
+
+        now = timezone.now()
+        years = list(range(first.year, now.year + 1))
+        labels = [str(y) for y in years]
+
+        raw = list(
+            earned_qs
+            .values('trophy__trophy_type', yr=ExtractYear('earned_date_time'))
+            .annotate(count=Count('id'))
+            .order_by('yr')
+        )
+        lookup = {(e['trophy__trophy_type'], e['yr']): e['count'] for e in raw}
+        data = {t: [lookup.get((t, y), 0) for y in years] for t in types}
+
+    total = sum(sum(v) for v in data.values())
+    if total == 0:
+        return {'has_data': False}
+
+    totals = {t: sum(data[t]) for t in types}
+
+    return {
+        'has_data': True,
+        'labels': labels,
+        'bronze': data['bronze'],
+        'silver': data['silver'],
+        'gold': data['gold'],
+        'platinum': data['platinum'],
+        'totals': totals,
+    }
+
+
+def _year_start_dt(year):
+    """Timezone-aware datetime for midnight Jan 1 of the given year."""
+    import datetime as dt
+    return dt.datetime(year, 1, 1, tzinfo=dt.timezone.utc)
+
+
 def _months_to_show(year):
     """How many months of data to include: current month for current year, 12 for past years."""
     from django.utils import timezone
@@ -2023,7 +2178,7 @@ def _build_earned_unearned_data(profile, year):
     # Earned baseline
     earned_baseline = EarnedTrophy.objects.filter(
         profile=profile, earned=True, earned_date_time__isnull=False,
-        earned_date_time__lt=date(year, 1, 1),
+        earned_date_time__lt=_year_start_dt(year),
     ).count()
 
     unearned_baseline = max(pool_baseline - earned_baseline, 0)
@@ -2321,7 +2476,10 @@ def provide_trophy_visualizations(profile, settings=None):
             'current_year': now.year,
             'heatmap': _build_heatmap_data(profile, now.year),
             'genre_radar': _build_genre_radar_data(profile, None),
+            'rarity_radar': _build_rarity_radar_data(profile, None),
+            'platform_radar': _build_platform_radar_data(profile, None),
             'year_review': _build_all_time_yearly_totals(profile),
+            'type_breakdown': _build_trophy_type_breakdown_data(profile, None),
             'games_flow': _build_all_time_games_flow(profile),
             'earned_unearned': _build_all_time_earned_unearned(profile),
         }
@@ -2332,7 +2490,10 @@ def provide_trophy_visualizations(profile, settings=None):
         'current_year': now.year,
         'heatmap': _build_heatmap_data(profile, year),
         'genre_radar': _build_genre_radar_data(profile, year),
+        'rarity_radar': _build_rarity_radar_data(profile, year),
+        'platform_radar': _build_platform_radar_data(profile, year),
         'year_review': _build_year_review_data(profile, year),
+        'type_breakdown': _build_trophy_type_breakdown_data(profile, year),
         'games_flow': _build_games_started_completed_data(profile, year),
         'earned_unearned': _build_earned_unearned_data(profile, year),
     }
@@ -2753,7 +2914,106 @@ def _build_series_xp_radar_data(profile):
         'labels': labels,
         'counts': counts,
         'total': total,
+        'total_formatted': f"{total:,}",
         'ranked_list': ranked_list,
+    }
+
+
+def _build_badge_type_radar_data(profile):
+    """Stage completion count per badge type for Chart.js radar chart. Excludes types with 0 stages."""
+    from trophies.models import StageCompletionEvent
+    from trophies.constants import BADGE_TYPES
+    from django.db.models import Count
+
+    TYPE_LABELS = {
+        'series': 'Series', 'collection': 'Collection', 'megamix': 'Megamix',
+        'developer': 'Developer', 'misc': 'Misc', 'user': 'User', 'genre': 'Genre',
+    }
+
+    type_counts = dict(
+        StageCompletionEvent.objects.filter(profile=profile)
+        .values_list('badge__badge_type')
+        .annotate(count=Count('id'))
+        .values_list('badge__badge_type', 'count')
+    )
+
+    # Only include types with stages > 0
+    active_types = [t for t in BADGE_TYPES if type_counts.get(t, 0) > 0]
+    if not active_types:
+        return {'has_data': False}
+
+    labels = [TYPE_LABELS.get(t, t.title()) for t in active_types]
+    counts = [type_counts[t] for t in active_types]
+    total = sum(counts)
+
+    return {
+        'has_data': True,
+        'labels': labels,
+        'counts': counts,
+        'total': total,
+    }
+
+
+def _build_series_stages_radar_data(profile):
+    """Top series by stage completion count for Chart.js radar chart."""
+    from trophies.models import StageCompletionEvent
+    from django.db.models import Count
+
+    raw = list(
+        StageCompletionEvent.objects.filter(profile=profile)
+        .values('badge__series_slug')
+        .annotate(count=Count('id'))
+        .order_by('-count')[:8]
+    )
+
+    if not raw:
+        return {'has_data': False}
+
+    def _format_slug(slug):
+        return slug.replace('-', ' ').title() if slug else 'Unknown'
+
+    labels = [_format_slug(r['badge__series_slug']) for r in raw]
+    counts = [r['count'] for r in raw]
+    total = sum(counts)
+
+    return {
+        'has_data': True,
+        'labels': labels,
+        'counts': counts,
+        'total': total,
+    }
+
+
+def _build_stage_type_breakdown_data(profile):
+    """Stages completed per badge type for Chart.js horizontal bar chart."""
+    from trophies.models import StageCompletionEvent
+    from trophies.constants import BADGE_TYPES
+    from django.db.models import Count
+
+    TYPE_LABELS = {
+        'series': 'Series', 'collection': 'Collection', 'megamix': 'Megamix',
+        'developer': 'Developer', 'misc': 'Misc', 'user': 'User', 'genre': 'Genre',
+    }
+
+    type_counts = dict(
+        StageCompletionEvent.objects.filter(profile=profile)
+        .values_list('badge__badge_type')
+        .annotate(count=Count('id'))
+        .values_list('badge__badge_type', 'count')
+    )
+
+    labels = [TYPE_LABELS.get(t, t.title()) for t in BADGE_TYPES]
+    counts = [type_counts.get(t, 0) for t in BADGE_TYPES]
+    total = sum(counts)
+
+    if total == 0:
+        return {'has_data': False}
+
+    return {
+        'has_data': True,
+        'labels': labels,
+        'counts': counts,
+        'total': total,
     }
 
 
@@ -2771,7 +3031,7 @@ def _build_badge_xp_growth_data(profile, year):
 
     # Badge completion XP: baseline + monthly
     badge_baseline = UserBadge.objects.filter(
-        profile=profile, earned_at__lt=date(year, 1, 1),
+        profile=profile, earned_at__lt=_year_start_dt(year),
     ).count()
 
     badge_monthly_raw = list(
@@ -2790,7 +3050,7 @@ def _build_badge_xp_growth_data(profile, year):
     stage_baseline_xp = 0
     pre_year_stages = list(
         StageCompletionEvent.objects
-        .filter(profile=profile, completed_at__lt=date(year, 1, 1))
+        .filter(profile=profile, completed_at__lt=_year_start_dt(year))
         .values_list('badge__tier', flat=True)
     )
     for tier in pre_year_stages:
@@ -3002,7 +3262,7 @@ def _build_badge_growth_data(profile, year):
     labels = [cal_module.month_abbr[m] for m in range(1, 13)]
 
     baseline = UserBadge.objects.filter(
-        profile=profile, earned_at__lt=date(year, 1, 1),
+        profile=profile, earned_at__lt=_year_start_dt(year),
     ).count()
 
     monthly_raw = list(
@@ -3087,7 +3347,7 @@ def _build_stage_growth_data(profile, year):
     labels = [cal_module.month_abbr[m] for m in range(1, 13)]
 
     baseline = StageCompletionEvent.objects.filter(
-        profile=profile, completed_at__lt=date(year, 1, 1),
+        profile=profile, completed_at__lt=_year_start_dt(year),
     ).count()
 
     monthly_raw = list(
@@ -3307,7 +3567,7 @@ def _build_xp_sources_data(profile, year):
     # Cumulative completion XP
     cum_completion = []
     baseline = UserBadge.objects.filter(
-        profile=profile, earned_at__lt=date(year, 1, 1),
+        profile=profile, earned_at__lt=_year_start_dt(year),
     ).count() * BADGE_TIER_XP
     running = baseline
     for c in completion_xp:
@@ -3624,10 +3884,13 @@ def _build_all_time_stage_completion_rate(profile):
 
 
 def provide_badge_series_overview(profile):
-    """All-time badge series status: stage progress, tier grid, series XP radar."""
+    """All-time badge series status: stage progress, tier grid, series XP radar, badge type/stages radars."""
     return {
         'stage_progress': _build_stage_progress_data(profile),
         'series_radar': _build_series_xp_radar_data(profile),
+        'type_radar': _build_badge_type_radar_data(profile),
+        'stages_radar': _build_series_stages_radar_data(profile),
+        'stage_type_breakdown': _build_stage_type_breakdown_data(profile),
     }
 
 

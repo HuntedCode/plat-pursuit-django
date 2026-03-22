@@ -439,6 +439,7 @@
             return getComputedStyle(document.documentElement).getPropertyValue(`--color-${name}`).trim();
         }
 
+
         _initTrophyVisualizations(el) {
             // Year selector (controls all visualizations)
             const yearSelect = el.querySelector('.viz-year-select');
@@ -502,7 +503,7 @@
                         },
                         options: {
                             responsive: true,
-                            maintainAspectRatio: true,
+                            maintainAspectRatio: false,
                             plugins: { legend: { display: false } },
                             scales: {
                                 r: {
@@ -512,6 +513,121 @@
                                     angleLines: { color: 'rgba(150, 150, 150, 0.15)' },
                                     pointLabels: { color: 'rgba(150, 150, 150, 0.6)', font: { size: 10 } },
                                 },
+                            },
+                        },
+                    });
+                }
+            }
+
+            // Rarity Radar (Chart.js radar)
+            const rarityCanvas = el.querySelector('.rarity-radar-canvas');
+            if (rarityCanvas && typeof Chart !== 'undefined') {
+                const labels = JSON.parse(rarityCanvas.dataset.labels || '[]');
+                const counts = JSON.parse(rarityCanvas.dataset.counts || '[]');
+                if (labels.length) {
+                    const infoColor = this._getChartColor('info') || '#06b6d4';
+                    new Chart(rarityCanvas, {
+                        type: 'radar',
+                        data: {
+                            labels: labels,
+                            datasets: [{
+                                label: 'Trophies',
+                                data: counts,
+                                backgroundColor: 'rgba(6, 182, 212, 0.15)',
+                                borderColor: infoColor.includes('oklch') ? '#06b6d4' : infoColor,
+                                borderWidth: 2,
+                                pointBackgroundColor: infoColor.includes('oklch') ? '#06b6d4' : infoColor,
+                                pointRadius: 3,
+                                pointHoverRadius: 5,
+                            }],
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            plugins: { legend: { display: false } },
+                            scales: {
+                                r: {
+                                    beginAtZero: true,
+                                    ticks: { display: false },
+                                    grid: { color: 'rgba(150, 150, 150, 0.15)' },
+                                    angleLines: { color: 'rgba(150, 150, 150, 0.15)' },
+                                    pointLabels: { color: 'rgba(150, 150, 150, 0.6)', font: { size: 9 } },
+                                },
+                            },
+                        },
+                    });
+                }
+            }
+
+            // Platform Radar (Chart.js radar)
+            const platformCanvas = el.querySelector('.platform-radar-canvas');
+            if (platformCanvas && typeof Chart !== 'undefined') {
+                const labels = JSON.parse(platformCanvas.dataset.labels || '[]');
+                const counts = JSON.parse(platformCanvas.dataset.counts || '[]');
+                if (labels.length) {
+                    const secondaryColor = this._getChartColor('secondary') || '#d946ef';
+                    new Chart(platformCanvas, {
+                        type: 'radar',
+                        data: {
+                            labels: labels,
+                            datasets: [{
+                                label: 'Trophies',
+                                data: counts,
+                                backgroundColor: 'rgba(217, 70, 239, 0.15)',
+                                borderColor: secondaryColor.includes('oklch') ? '#d946ef' : secondaryColor,
+                                borderWidth: 2,
+                                pointBackgroundColor: secondaryColor.includes('oklch') ? '#d946ef' : secondaryColor,
+                                pointRadius: 3,
+                                pointHoverRadius: 5,
+                            }],
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            plugins: { legend: { display: false } },
+                            scales: {
+                                r: {
+                                    beginAtZero: true,
+                                    ticks: { display: false },
+                                    grid: { color: 'rgba(150, 150, 150, 0.15)' },
+                                    angleLines: { color: 'rgba(150, 150, 150, 0.15)' },
+                                    pointLabels: { color: 'rgba(150, 150, 150, 0.6)', font: { size: 9 } },
+                                },
+                            },
+                        },
+                    });
+                }
+            }
+
+            // Trophy Type Breakdown (Chart.js stacked bar)
+            const typeCanvas = el.querySelector('.trophy-type-breakdown-canvas');
+            if (typeCanvas && typeof Chart !== 'undefined') {
+                const labels = JSON.parse(typeCanvas.dataset.labels || '[]');
+                const bronze = JSON.parse(typeCanvas.dataset.bronze || '[]');
+                const silver = JSON.parse(typeCanvas.dataset.silver || '[]');
+                const gold = JSON.parse(typeCanvas.dataset.gold || '[]');
+                const platinum = JSON.parse(typeCanvas.dataset.platinum || '[]');
+                if (labels.length) {
+                    const primaryColor = this._getChartColor('primary') || '#6366f1';
+                    new Chart(typeCanvas, {
+                        type: 'bar',
+                        data: {
+                            labels: labels,
+                            datasets: [
+                                { label: 'Bronze', data: bronze, backgroundColor: '#92400e' },
+                                { label: 'Silver', data: silver, backgroundColor: '#9ca3af' },
+                                { label: 'Gold', data: gold, backgroundColor: '#facc15' },
+                                { label: 'Platinum', data: platinum, backgroundColor: primaryColor.includes('oklch') ? '#6366f1' : primaryColor },
+                            ],
+                        },
+                        options: {
+                            responsive: true, maintainAspectRatio: true,
+                            plugins: {
+                                legend: { display: true, position: 'bottom', labels: { color: 'rgba(150,150,150,0.6)', font: { size: 9 }, boxWidth: 8, padding: 8 } },
+                            },
+                            scales: {
+                                x: { stacked: true, ticks: { color: 'rgba(150,150,150,0.5)', font: { size: 9 } }, grid: { display: false } },
+                                y: { stacked: true, beginAtZero: true, ticks: { color: 'rgba(150,150,150,0.5)', font: { size: 9 } }, grid: { color: 'rgba(150,150,150,0.1)' } },
                             },
                         },
                     });
@@ -784,6 +900,7 @@
                 const labels = JSON.parse(radarCanvas.dataset.labels || '[]');
                 const counts = JSON.parse(radarCanvas.dataset.counts || '[]');
                 if (labels.length) {
+                    const accentColor = this._getChartColor('accent') || '#f59e0b';
                     new Chart(radarCanvas, {
                         type: 'radar',
                         data: {
@@ -792,15 +909,15 @@
                                 label: 'XP',
                                 data: counts,
                                 backgroundColor: 'rgba(245, 158, 11, 0.15)',
-                                borderColor: '#f59e0b',
+                                borderColor: accentColor.includes('oklch') ? '#f59e0b' : accentColor,
                                 borderWidth: 2,
-                                pointBackgroundColor: '#f59e0b',
-                                pointRadius: 4,
-                                pointHoverRadius: 6,
+                                pointBackgroundColor: accentColor.includes('oklch') ? '#f59e0b' : accentColor,
+                                pointRadius: 3,
+                                pointHoverRadius: 5,
                             }],
                         },
                         options: {
-                            responsive: true, maintainAspectRatio: true,
+                            responsive: true, maintainAspectRatio: false,
                             plugins: { legend: { display: false } },
                             scales: {
                                 r: {
@@ -808,8 +925,125 @@
                                     ticks: { display: false },
                                     grid: { color: 'rgba(150,150,150,0.15)' },
                                     angleLines: { color: 'rgba(150,150,150,0.15)' },
-                                    pointLabels: { color: 'rgba(150,150,150,0.6)', font: { size: 10 } },
+                                    pointLabels: { color: 'rgba(150,150,150,0.6)', font: { size: 9 } },
                                 },
+                            },
+                        },
+                    });
+                }
+            }
+
+            // Stage Type Radar
+            const typeRadarCanvas = el.querySelector('.badge-type-radar-canvas');
+            if (typeRadarCanvas && typeof Chart !== 'undefined') {
+                const labels = JSON.parse(typeRadarCanvas.dataset.labels || '[]');
+                const counts = JSON.parse(typeRadarCanvas.dataset.counts || '[]');
+                if (labels.length) {
+                    const successColor = this._getChartColor('success') || '#22c55e';
+                    new Chart(typeRadarCanvas, {
+                        type: 'radar',
+                        data: {
+                            labels: labels,
+                            datasets: [{
+                                label: 'Stages',
+                                data: counts,
+                                backgroundColor: 'rgba(34, 197, 94, 0.15)',
+                                borderColor: successColor.includes('oklch') ? '#22c55e' : successColor,
+                                borderWidth: 2,
+                                pointBackgroundColor: successColor.includes('oklch') ? '#22c55e' : successColor,
+                                pointRadius: 3,
+                                pointHoverRadius: 5,
+                            }],
+                        },
+                        options: {
+                            responsive: true, maintainAspectRatio: false,
+                            plugins: { legend: { display: false } },
+                            scales: {
+                                r: {
+                                    beginAtZero: true,
+                                    ticks: { display: false },
+                                    grid: { color: 'rgba(150,150,150,0.15)' },
+                                    angleLines: { color: 'rgba(150,150,150,0.15)' },
+                                    pointLabels: { color: 'rgba(150,150,150,0.6)', font: { size: 9 } },
+                                },
+                            },
+                        },
+                    });
+                }
+            }
+
+            // Series Stages Radar
+            const stagesRadarCanvas = el.querySelector('.series-stages-radar-canvas');
+            if (stagesRadarCanvas && typeof Chart !== 'undefined') {
+                const labels = JSON.parse(stagesRadarCanvas.dataset.labels || '[]');
+                const counts = JSON.parse(stagesRadarCanvas.dataset.counts || '[]');
+                if (labels.length) {
+                    const warningColor = this._getChartColor('warning') || '#eab308';
+                    new Chart(stagesRadarCanvas, {
+                        type: 'radar',
+                        data: {
+                            labels: labels,
+                            datasets: [{
+                                label: 'Stages',
+                                data: counts,
+                                backgroundColor: 'rgba(234, 179, 8, 0.15)',
+                                borderColor: warningColor.includes('oklch') ? '#eab308' : warningColor,
+                                borderWidth: 2,
+                                pointBackgroundColor: warningColor.includes('oklch') ? '#eab308' : warningColor,
+                                pointRadius: 3,
+                                pointHoverRadius: 5,
+                            }],
+                        },
+                        options: {
+                            responsive: true, maintainAspectRatio: false,
+                            plugins: { legend: { display: false } },
+                            scales: {
+                                r: {
+                                    beginAtZero: true,
+                                    ticks: { display: false },
+                                    grid: { color: 'rgba(150,150,150,0.15)' },
+                                    angleLines: { color: 'rgba(150,150,150,0.15)' },
+                                    pointLabels: { color: 'rgba(150,150,150,0.6)', font: { size: 9 } },
+                                },
+                            },
+                        },
+                    });
+                }
+            }
+
+            // Stage Type Breakdown (horizontal bar)
+            const stageTypeCanvas = el.querySelector('.stage-type-breakdown-canvas');
+            if (stageTypeCanvas && typeof Chart !== 'undefined') {
+                const labels = JSON.parse(stageTypeCanvas.dataset.labels || '[]');
+                const counts = JSON.parse(stageTypeCanvas.dataset.counts || '[]');
+                if (labels.length) {
+                    const colors = [
+                        'rgba(59, 130, 246, 0.7)',   // Series - blue
+                        'rgba(168, 85, 247, 0.7)',   // Collection - purple
+                        'rgba(236, 72, 153, 0.7)',   // Megamix - pink
+                        'rgba(34, 197, 94, 0.7)',    // Developer - green
+                        'rgba(107, 114, 128, 0.7)',  // Misc - gray
+                        'rgba(245, 158, 11, 0.7)',   // User - amber
+                        'rgba(6, 182, 212, 0.7)',    // Genre - cyan
+                    ];
+                    new Chart(stageTypeCanvas, {
+                        type: 'bar',
+                        data: {
+                            labels: labels,
+                            datasets: [{
+                                label: 'Stages',
+                                data: counts,
+                                backgroundColor: colors.slice(0, labels.length),
+                                borderRadius: 3,
+                            }],
+                        },
+                        options: {
+                            indexAxis: 'y',
+                            responsive: true, maintainAspectRatio: false,
+                            plugins: { legend: { display: false } },
+                            scales: {
+                                x: { beginAtZero: true, ticks: { color: 'rgba(150,150,150,0.5)', font: { size: 9 } }, grid: { color: 'rgba(150,150,150,0.1)' } },
+                                y: { ticks: { color: 'rgba(150,150,150,0.6)', font: { size: 9 } }, grid: { display: false } },
                             },
                         },
                     });

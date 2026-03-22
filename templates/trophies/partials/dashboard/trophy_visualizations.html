@@ -68,7 +68,7 @@
                                         {% if cell.in_year %}
                                             <div class="rounded-sm {% if cell.level == 0 %}bg-base-300/40{% elif cell.level == 1 %}bg-primary/30{% elif cell.level == 2 %}bg-primary/50{% elif cell.level == 3 %}bg-primary/70{% else %}bg-primary{% endif %}"
                                                  style="flex: 1; aspect-ratio: 1; min-width: 6px;"
-                                                 title="{{ cell.date }}: {{ cell.count }} trophy{{ cell.count|pluralize:"ies" }}"></div>
+                                                 title="{{ cell.date }}: {{ cell.count }} troph{{ cell.count|pluralize:"y,ies" }}"></div>
                                         {% else %}
                                             <div style="flex: 1; aspect-ratio: 1; min-width: 6px;"></div>
                                         {% endif %}
@@ -99,40 +99,96 @@
         <div class="border-t border-base-content/10 my-3"></div>
         {% endif %}
 
-        {# ========== Genre Radar + Year in Review ========== #}
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4 my-4">
+        {# ========== Genre Radar + Rarity Radar + Platform Radar (3-col) ========== #}
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-0 md:gap-2 lg:gap-4 my-4 divide-y md:divide-y-0 md:divide-x divide-base-content/10">
 
             {# Genre Radar #}
             {% with gr=data.genre_radar %}
-                <div>
-                    <h3 class="text-sm font-semibold text-base-content/70 flex items-center gap-1.5 mb-2">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-accent/60" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <div class="pb-3 md:pb-0">
+                    <h3 class="text-xs lg:text-sm font-semibold text-base-content/70 flex items-center gap-1 lg:gap-1.5 mb-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3 lg:w-3.5 lg:h-3.5 text-accent/60" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
                         </svg>
                         Genre Radar
                     </h3>
                     {% if gr.has_data %}
-                        <div class="flex items-center justify-between mb-2">
-                            <span class="text-xs text-base-content/40">{{ gr.total }} trophies across genres</span>
-                        </div>
-                        <div style="max-height: 240px;" class="max-w-xs mx-auto md:max-w-none">
+                        <span class="text-[0.6rem] text-base-content/40">{{ gr.total }} trophies</span>
+                        <div style="height: 200px; position: relative;">
                             <canvas class="genre-radar-canvas"
                                     data-labels='{{ gr.labels|tojson }}'
                                     data-counts='{{ gr.counts|tojson }}'></canvas>
                         </div>
                     {% else %}
                         <div class="text-center py-6">
-                            <p class="text-xs text-base-content/40">No genre data available.</p>
+                            <p class="text-xs text-base-content/40">No genre data.</p>
                         </div>
                     {% endif %}
                 </div>
             {% endwith %}
 
+            {# Rarity Radar #}
+            {% with rr=data.rarity_radar %}
+                <div class="pt-3 pb-3 md:pt-0 md:pb-0 md:pl-2 lg:pl-4">
+                    <h3 class="text-xs lg:text-sm font-semibold text-base-content/70 flex items-center gap-1 lg:gap-1.5 mb-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3 lg:w-3.5 lg:h-3.5 text-info/60" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M12 2L2 7l10 5 10-5-10-5z"></path>
+                            <path d="M2 17l10 5 10-5"></path>
+                            <path d="M2 12l10 5 10-5"></path>
+                        </svg>
+                        Rarity Radar
+                    </h3>
+                    {% if rr.has_data %}
+                        <span class="text-[0.6rem] text-base-content/40">{{ rr.total }} rated</span>
+                        <div style="height: 200px; position: relative;">
+                            <canvas class="rarity-radar-canvas"
+                                    data-labels='{{ rr.labels|tojson }}'
+                                    data-counts='{{ rr.counts|tojson }}'></canvas>
+                        </div>
+                    {% else %}
+                        <div class="text-center py-6">
+                            <p class="text-xs text-base-content/40">No rarity data.</p>
+                        </div>
+                    {% endif %}
+                </div>
+            {% endwith %}
+
+            {# Platform Radar #}
+            {% with pr=data.platform_radar %}
+                <div class="pt-3 md:pt-0 md:pl-2 lg:pl-4">
+                    <h3 class="text-xs lg:text-sm font-semibold text-base-content/70 flex items-center gap-1 lg:gap-1.5 mb-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3 lg:w-3.5 lg:h-3.5 text-secondary/60" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+                            <line x1="8" y1="21" x2="16" y2="21"></line>
+                            <line x1="12" y1="17" x2="12" y2="21"></line>
+                        </svg>
+                        Platform Radar
+                    </h3>
+                    {% if pr.has_data %}
+                        <span class="text-[0.6rem] text-base-content/40">{{ pr.total }} trophies</span>
+                        <div style="height: 200px; position: relative;">
+                            <canvas class="platform-radar-canvas"
+                                    data-labels='{{ pr.labels|tojson }}'
+                                    data-counts='{{ pr.counts|tojson }}'></canvas>
+                        </div>
+                    {% else %}
+                        <div class="text-center py-6">
+                            <p class="text-xs text-base-content/40">No platform data.</p>
+                        </div>
+                    {% endif %}
+                </div>
+            {% endwith %}
+        </div>
+
+        {# Divider #}
+        <div class="border-t border-base-content/10 my-3"></div>
+
+        {# ========== Year in Review + Trophy Type Breakdown (side by side) ========== #}
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-3 lg:gap-4">
+
             {# Year in Review / Yearly Totals #}
             {% with yr=data.year_review %}
                 <div>
                     {% if data.year == 'all' %}
-                        {# All-time: yearly totals bar chart #}
                         <h3 class="text-sm font-semibold text-base-content/70 flex items-center gap-1.5 mb-2">
                             <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-success/60" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                 <line x1="18" y1="20" x2="18" y2="10"></line>
@@ -144,7 +200,7 @@
                         {% if yr.has_data %}
                             <div class="flex items-center gap-3 mb-2">
                                 <span class="text-xs"><span class="font-bold text-success">{{ yr.total }}</span> <span class="text-base-content/40">total</span></span>
-                                <span class="text-xs"><span class="font-bold text-warning">{{ yr.best_year }}</span> <span class="text-base-content/40">best year ({{ yr.best_count }})</span></span>
+                                <span class="text-xs"><span class="font-bold text-warning">{{ yr.best_year }}</span> <span class="text-base-content/40">best ({{ yr.best_count }})</span></span>
                             </div>
                             <div style="max-height: 200px;">
                                 <canvas class="yearly-totals-canvas"
@@ -160,7 +216,6 @@
                             </div>
                         {% endif %}
                     {% else %}
-                        {# Year view: cumulative comparison #}
                         <h3 class="text-sm font-semibold text-base-content/70 flex items-center gap-1.5 mb-2">
                             <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-success/60" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                 <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
@@ -193,13 +248,48 @@
                     {% endif %}
                 </div>
             {% endwith %}
+
+            {# Trophy Type Breakdown #}
+            {% with tb=data.type_breakdown %}
+                <div>
+                    <h3 class="text-sm font-semibold text-base-content/70 flex items-center gap-1.5 mb-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-warning/60" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <rect x="3" y="3" width="7" height="7"></rect>
+                            <rect x="14" y="3" width="7" height="7"></rect>
+                            <rect x="14" y="14" width="7" height="7"></rect>
+                            <rect x="3" y="14" width="7" height="7"></rect>
+                        </svg>
+                        Trophy Types
+                    </h3>
+                    {% if tb.has_data %}
+                        <div class="flex items-center gap-2 mb-2 flex-wrap">
+                            <span class="text-[0.6rem]"><span class="inline-block w-1.5 h-1.5 rounded-full mr-0.5" style="background:#92400e;"></span> <span class="text-base-content/50">{{ tb.totals.bronze }}</span></span>
+                            <span class="text-[0.6rem]"><span class="inline-block w-1.5 h-1.5 rounded-full mr-0.5" style="background:#9ca3af;"></span> <span class="text-base-content/50">{{ tb.totals.silver }}</span></span>
+                            <span class="text-[0.6rem]"><span class="inline-block w-1.5 h-1.5 rounded-full mr-0.5" style="background:#facc15;"></span> <span class="text-base-content/50">{{ tb.totals.gold }}</span></span>
+                            <span class="text-[0.6rem]"><span class="inline-block w-1.5 h-1.5 rounded-full bg-primary mr-0.5"></span> <span class="text-base-content/50">{{ tb.totals.platinum }}</span></span>
+                        </div>
+                        <div style="max-height: 200px;">
+                            <canvas class="trophy-type-breakdown-canvas"
+                                    data-labels='{{ tb.labels|tojson }}'
+                                    data-bronze='{{ tb.bronze|tojson }}'
+                                    data-silver='{{ tb.silver|tojson }}'
+                                    data-gold='{{ tb.gold|tojson }}'
+                                    data-platinum='{{ tb.platinum|tojson }}'></canvas>
+                        </div>
+                    {% else %}
+                        <div class="text-center py-6">
+                            <p class="text-xs text-base-content/40">No type data available.</p>
+                        </div>
+                    {% endif %}
+                </div>
+            {% endwith %}
         </div>
 
         {# Divider #}
         <div class="border-t border-base-content/10 my-3"></div>
 
         {# ========== Games Started vs Completed + Earned vs Unearned (side by side) ========== #}
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4 mt-4">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-3 lg:gap-4 mt-4">
 
             {# Games Started vs Completed #}
             {% with gf=data.games_flow %}
@@ -212,6 +302,13 @@
                         Games Flow
                     </h3>
                     {% if gf.has_data %}
+                        <div class="flex items-center gap-3 mb-2">
+                            <span class="text-xs"><span class="font-bold text-info">{{ gf.total_started }}</span> <span class="text-base-content/40">started</span></span>
+                            <span class="text-xs"><span class="font-bold text-success">{{ gf.total_completed }}</span> <span class="text-base-content/40">completed</span></span>
+                            {% if gf.total_started > 0 %}
+                                <span class="text-xs"><span class="font-bold text-warning">{% widthratio gf.total_completed gf.total_started 100 %}%</span> <span class="text-base-content/40">rate</span></span>
+                            {% endif %}
+                        </div>
                         <div style="max-height: 200px;">
                             <canvas class="games-flow-canvas"
                                     data-labels='{{ gf.labels|tojson }}'
