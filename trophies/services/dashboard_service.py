@@ -20,6 +20,9 @@ logger = logging.getLogger(__name__)
 # Maximum number of modules free users can hide
 MAX_FREE_HIDDEN = 3
 
+# Showcase profile for premium previews (PlatPursuit team account)
+SHOWCASE_PROFILE_ID = 3
+
 
 def get_effective_premium(request):
     """
@@ -4048,6 +4051,68 @@ def get_valid_slugs():
     return set(_MODULE_LOOKUP)
 
 
+def _get_preview_settings(slug):
+    """Per-module settings overrides for preview rendering."""
+    from django.utils import timezone
+    if slug == 'trophy_visualizations':
+        return {'year': str(timezone.now().year - 1)}
+    if slug == 'badge_visualizations':
+        return {'year': 'all'}
+    return {}
+
+
+def get_premium_preview_html(slug):
+    """
+    Get pre-rendered preview HTML for a premium module using the showcase profile.
+
+    Renders the module template with real data from SHOWCASE_PROFILE_ID and caches
+    the result for 24 hours. Used to show blurred previews to free users.
+    """
+    from django.template.loader import render_to_string
+    from trophies.models import Profile
+
+    cache_key = f'dashboard:preview:{slug}'
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return cached
+
+    mod = get_module_by_slug(slug)
+    if not mod or not mod.get('requires_premium'):
+        return None
+
+    try:
+        profile = Profile.objects.select_related('user').get(id=SHOWCASE_PROFILE_ID)
+    except Profile.DoesNotExist:
+        return None
+
+    # Call provider directly with preview overrides (bypasses settings validation)
+    overrides = _get_preview_settings(slug)
+    provider_fn = mod['provider']
+    try:
+        sig = inspect.signature(provider_fn)
+        if 'settings' in sig.parameters:
+            # Merge defaults with overrides
+            settings = {**mod.get('default_settings', {}), **overrides}
+            data = provider_fn(profile, settings=settings)
+        else:
+            data = provider_fn(profile)
+    except Exception:
+        logger.exception("Preview provider for %s failed", slug)
+        return None
+
+    if not data:
+        return None
+
+    try:
+        html = render_to_string(mod['template'], {'data': data})
+    except Exception:
+        logger.exception("Failed to render premium preview for %s", slug)
+        return None
+
+    cache.set(cache_key, html, 86400)  # 24 hours
+    return html
+
+
 # ---------------------------------------------------------------------------
 # Size Helpers
 # ---------------------------------------------------------------------------
@@ -4377,13 +4442,11 @@ def get_dashboard_tabs(config, is_premium):
 
     # Assign modules to tabs
     for mod in DASHBOARD_MODULES:
-        # Skip premium modules for free users
-        if mod['requires_premium'] and not is_premium:
-            continue
-
         slug = mod['slug']
-        # Skip hidden modules
-        if slug in hidden:
+        is_preview = mod['requires_premium'] and not is_premium
+
+        # Skip hidden modules (but never skip premium previews)
+        if slug in hidden and not is_preview:
             continue
 
         target_tab = module_tab_map.get(slug, mod['category'])
@@ -4398,7 +4461,12 @@ def get_dashboard_tabs(config, is_premium):
             'effective_size': size,
             'grid_class': get_size_grid_class(size),
             'effective_settings': settings,
+            'is_preview': is_preview,
         }
+
+        # Force server-rendered for previews (no lazy load)
+        if is_preview:
+            enriched['load_strategy'] = 'server'
 
         tabs[target_tab]['modules'].append(enriched)
 

@@ -13,6 +13,7 @@ from trophies.services.dashboard_service import (
     get_tabs_for_customize,
     get_server_module_data,
     get_effective_premium,
+    get_premium_preview_html,
     VALID_TAB_ICONS,
     MAX_FREE_HIDDEN,
 )
@@ -58,6 +59,16 @@ class DashboardView(StaffRequiredMixin, ProfileHotbarMixin, TemplateView):
             from trophies.themes import get_available_themes_for_grid
             available_themes = get_available_themes_for_grid(include_game_art=False)
 
+        # Pre-render premium module previews for free users
+        preview_html = {}
+        if not is_premium:
+            for tab in tabs:
+                for module in tab['modules']:
+                    if module.get('is_preview'):
+                        html = get_premium_preview_html(module['slug'])
+                        if html:
+                            preview_html[module['slug']] = html
+
         context.update({
             'profile': profile,
             'dashboard_config': config,
@@ -66,6 +77,7 @@ class DashboardView(StaffRequiredMixin, ProfileHotbarMixin, TemplateView):
             'server_module_data': server_data,
             'is_premium': is_premium,
             'available_themes': available_themes,
+            'preview_html': preview_html,
             'customize_tabs': customize_tabs,
             'all_tab_options': all_tab_options,
             'valid_tab_icons': sorted(VALID_TAB_ICONS),
