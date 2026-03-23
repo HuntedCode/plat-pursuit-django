@@ -104,6 +104,8 @@ Every content module uses this card structure:
 
 **Browse/item cards** (game cards, badge cards in grids): Minimal padding `p-1 md:p-1.5`. Shadow starts at `shadow-md`, with colored glow on hover: `hover:shadow-lg hover:shadow-{color}/30 hover:border-{color}`.
 
+**Cards over game artwork backgrounds** (game detail, badge detail, any page where game art shows behind cards): Use `bg-base-200/80` for outer cards and `bg-base-300/35` for inner stat cells (`hover:bg-base-300/50`). The artwork varies dramatically between games (bright vs dark, busy vs simple), so these opacities balance readability against letting the art show through. Do NOT use the standard `/90` or `/70` tokens on these pages as they are either too opaque (hiding the art) or too transparent (poor contrast on bright artwork).
+
 ---
 
 ## Inner Elements
