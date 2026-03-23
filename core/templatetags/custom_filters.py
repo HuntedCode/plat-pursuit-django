@@ -203,6 +203,8 @@ def rarity_color_hex(earn_rate):
 
 @register.filter
 def dict_get(dict_obj, key):
+    if not dict_obj:
+        return None
     result = dict_obj.get(key)
     if result is None and isinstance(key, str):
         try:

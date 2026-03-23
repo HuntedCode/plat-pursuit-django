@@ -18,7 +18,7 @@ from django.views.generic import ListView, DetailView
 from urllib.parse import urlencode
 from trophies.mixins import ProfileHotbarMixin
 from ..constants import CACHE_TIMEOUT_IMAGES
-from ..models import Game, Trophy, Profile, EarnedTrophy, ProfileGame, TrophyGroup, Badge, Concept, FeaturedGuide, Stage, Checklist
+from ..models import Game, Trophy, Profile, EarnedTrophy, ProfileGame, TrophyGroup, Badge, Concept, FeaturedGuide, Stage, Checklist, UserConceptRating
 from ..forms import GameSearchForm, GameDetailForm, GuideSearchForm
 from trophies.util_modules.constants import MODERN_PLATFORMS, ALL_PLATFORMS
 
@@ -40,7 +40,12 @@ class GamesListView(ProfileHotbarMixin, ListView):
     """
     model = Game
     template_name = 'trophies/game_list.html'
-    paginate_by = 25
+    paginate_by = 30
+
+    def get_filter_form(self):
+        if not hasattr(self, '_filter_form'):
+            self._filter_form = GameSearchForm(self.request.GET)
+        return self._filter_form
 
     def dispatch(self, request, *args, **kwargs):
         if not request.GET:
@@ -56,7 +61,7 @@ class GamesListView(ProfileHotbarMixin, ListView):
 
     def get_queryset(self):
         qs = super().get_queryset()
-        form = GameSearchForm(self.request.GET)
+        form = self.get_filter_form()
         order = [Lower('title_name')]
 
         platinums_earned = Subquery(Trophy.objects.filter(game=OuterRef('pk'), trophy_type='platinum').values('earned_count')[:1])
@@ -121,7 +126,7 @@ class GamesListView(ProfileHotbarMixin, ListView):
             {'text': 'Games'},
         ]
 
-        context['form'] = GameSearchForm(self.request.GET)
+        context['form'] = self.get_filter_form()
         context['selected_platforms'] = self.request.GET.getlist('platform')
         context['selected_regions'] = self.request.GET.getlist('regions')
         context['view_type'] = self.request.GET.get('view', 'grid')
@@ -132,6 +137,32 @@ class GamesListView(ProfileHotbarMixin, ListView):
             "Browse PlayStation games on Platinum Pursuit. "
             "Search by name, filter by platform, and track your trophy progress."
         )
+
+        # Post-pagination data (only for the 25 games on this page)
+        page_games = context['object_list']
+        game_ids = [g.id for g in page_games]
+
+        # User-specific game data (1 query)
+        if self.request.user.is_authenticated and hasattr(self.request.user, 'profile'):
+            user_games = ProfileGame.objects.filter(
+                profile=self.request.user.profile,
+                game_id__in=game_ids
+            ).values('game_id', 'progress', 'has_plat', 'earned_trophies_count')
+            context['user_game_map'] = {pg['game_id']: pg for pg in user_games}
+
+        # Community ratings (1 query)
+        concept_ids = [g.concept_id for g in page_games if g.concept_id]
+        if concept_ids:
+            ratings = UserConceptRating.objects.filter(
+                concept_id__in=concept_ids,
+                concept_trophy_group__isnull=True
+            ).values('concept_id').annotate(
+                avg_difficulty=Avg('difficulty'),
+                avg_fun=Avg('fun_ranking'),
+                avg_rating=Avg('overall_rating'),
+                rating_count=Count('id')
+            )
+            context['rating_map'] = {r['concept_id']: r for r in ratings}
 
         track_page_view('games_list', 'list', self.request)
         return context

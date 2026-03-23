@@ -1,54 +1,209 @@
 {% extends 'base.html' %}
 {% load static %}
 {% load query_tags %}
+{% load humanize %}
 {% block title %}Browse Games{% endblock %}
 
 {% block content %}
     {% include 'partials/breadcrumb.html' with items=breadcrumb %}
 
-    <form id="filter-form" method="get" class="mb-4">
-        <div class="flex flex-col lg:flex-row w-full justify-between">
-            <div class="form-control fieldset w-full lg:w-1/3">
-                <legend class="fieldset-legend text-lg lg:text-xl italic">Sort By</legend>
-                <select name="sort" id="id_sort" class="select select-primary w-7/8 justify-self-center">
-                    {% for value, display in form.sort.field.choices %}
-                        <option value="{{ value }}" {% if request.GET.sort == value %}selected{% endif %}>{{ display }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-            <div class="flex flex-row justify-center items-center w-full">
-                <div class="form-control fieldset w-full lg:w-1/2">
-                    <legend class="fieldset-legend text-lg lg:text-xl italic">Platforms</legend>
-                    <div class="flex flex-col xl:flex-row gap-2 xl:gap-0  flex-wrap justify-self-center justify-between bg-base-100 border-2 border-primary rounded-box w-7/8 p-2">
-                        {% for value, display in form.platform.field.choices %}
-                            <label class="cursor-pointer label justify-start gap-2">
-                                <input type="checkbox" name="platform" value="{{ value }}" class="checkbox checkbox-primary" {% if value in selected_platforms %}checked{% endif %} />
-                                <span class="text-sm xl:text-base">{{ display }}</span>
-                            </label>
-                        {% endfor %}
+    {# ── Header Card ── #}
+    <div class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral mb-3">
+        <div class="card-body p-3 md:p-4 lg:p-5">
+            <div class="flex items-center justify-between gap-3">
+                <div class="min-w-0">
+                    <div class="flex items-center gap-2 flex-wrap">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 md:w-6 md:h-6 text-primary shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <rect x="2" y="6" width="20" height="12" rx="2"></rect>
+                            <line x1="6" y1="12" x2="10" y2="12"></line>
+                            <line x1="8" y1="10" x2="8" y2="14"></line>
+                            <circle cx="15" cy="11" r="1" fill="currentColor"></circle>
+                            <circle cx="18" cy="13" r="1" fill="currentColor"></circle>
+                        </svg>
+                        <h1 class="text-lg md:text-xl lg:text-2xl font-bold">Browse Games</h1>
+                        {% with sort_val=request.GET.sort %}
+                            {% if sort_val %}
+                                {% for value, display in form.sort.field.choices %}
+                                    {% if value == sort_val %}
+                                        <span class="badge badge-sm badge-ghost">{{ display }}</span>
+                                    {% endif %}
+                                {% endfor %}
+                            {% else %}
+                                <span class="badge badge-sm badge-ghost">Alphabetical</span>
+                            {% endif %}
+                        {% endwith %}
                     </div>
+                    <p class="text-xs md:text-sm text-base-content/50 mt-0.5 italic pr-1">
+                        {% if request.GET.query %}
+                            Hunting for "{{ request.GET.query }}"
+                            {% if is_paginated %}across {{ paginator.count|intcomma }} result{{ paginator.count|pluralize }}...{% endif %}
+                        {% elif show_only_platinum == 'on' %}
+                            Platinum or bust. {{ paginator.count|intcomma|default:"No" }} game{{ paginator.count|pluralize }} with the ultimate prize.
+                        {% elif request.GET.letter %}
+                            {{ paginator.count|intcomma|default:"No" }} game{{ paginator.count|pluralize }} starting with "{{ request.GET.letter }}". Happy hunting!
+                        {% elif filter_shovelware == 'on' %}
+                            Quality over quantity. {{ paginator.count|intcomma }} game{{ paginator.count|pluralize }}, no filler.
+                        {% else %}
+                            {% if is_paginated %}
+                                {{ paginator.count|intcomma }} games and counting. Your next platinum is in here somewhere.
+                            {% else %}
+                                {{ object_list|length|intcomma }} games and counting. Your next platinum is in here somewhere.
+                            {% endif %}
+                        {% endif %}
+                    </p>
                 </div>
-                <div class="form-control fieldset w-full lg:w-1/2">
-                    <legend class="fieldset-legend text-lg lg:text-xl italic">Regions</legend>
-                    <div class="flex flex-col xl:flex-row gap-2 xl:gap-0 flex-wrap justify-self-center justify-between bg-base-100 border-2 border-primary rounded-box w-7/8 p-2">
-                        {% for value, display in form.regions.field.choices %}
-                            <label class="cursor-pointer label justify-start gap-2">
-                                <input type="checkbox" name="regions" value="{{ value }}" class="checkbox checkbox-primary" {% if value in selected_regions %}checked{% endif %} />
-                                <span class="text-sm xl:text-base">{{ display }}</span>
-                            </label>
-                        {% endfor %}
-                    </div>
+
+                {# Toggle buttons #}
+                <div class="flex flex-col md:flex-row items-stretch md:items-center gap-1 md:gap-1.5 shrink-0">
+                    <button id="shovelware-toggle" type="button"
+                            class="btn btn-xs md:btn-sm gap-1 {% if filter_shovelware == 'on' %}btn-warning{% else %}btn-ghost border border-base-300{% endif %}"
+                            data-filter-shovelware="{{ filter_shovelware|default:'' }}"
+                            title="{% if filter_shovelware == 'on' %}Show Shovelware{% else %}Hide Shovelware{% endif %}">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="m10.06 15.35 7.03-7.03c.98.42 2.16.23 2.95-.57l1.41-1.41c.29-.29.29-.77 0-1.06l-2.74-2.74a.754.754 0 0 0-1.06 0l-1.41 1.41c-.8.8-.98 1.97-.57 2.95l-7.03 7.03-1.77-1.77-3.54 3.54c-1.37 1.37-1.37 3.58 0 4.95s3.58 1.37 4.95 0l3.54-3.54-1.77-1.77Zm7.25-10.34.88-.88 1.68 1.68-.88.88c-.46.46-1.22.46-1.68 0s-.46-1.22 0-1.68M6.88 19.24c-.58.58-1.54.58-2.12 0s-.58-1.54 0-2.12L6.88 15 9 17.12z"/>
+                        </svg>
+                        {% if filter_shovelware == 'on' %}Filtered{% else %}Shovelware{% endif %}
+                    </button>
+
+                    <button id="platinum-toggle" type="button"
+                            class="btn btn-xs md:btn-sm gap-1 {% if show_only_platinum == 'on' %}btn-primary{% else %}btn-ghost border border-base-300{% endif %}"
+                            data-show-only-platinum="{{ show_only_platinum|default:'' }}"
+                            title="{% if show_only_platinum == 'on' %}Show All Games{% else %}Show Only Platinums{% endif %}">
+                        {% include 'partials/icons/trophy_cup.html' with color='currentColor' size='w-3.5 h-3.5' %}
+                        {% if show_only_platinum == 'on' %}Platinums{% else %}All Games{% endif %}
+                    </button>
+
+                    <button id="view-toggle" type="button"
+                            class="btn btn-xs md:btn-sm gap-1 btn-ghost border border-base-300"
+                            data-view-type="{{ view_type|default:'grid' }}"
+                            title="{% if view_type == 'list' %}Switch To Grid View{% else %}Switch To List View{% endif %}">
+                        {% if view_type == 'list' %}
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
+                        {% else %}
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
+                        {% endif %}
+                        {% if view_type == 'list' %}Grid{% else %}List{% endif %}
+                    </button>
                 </div>
             </div>
         </div>
+    </div>
 
-        <div class="flex justify-center">
-            <div class="form-control fieldset w-full lg:w-75/100">
-                <legend class="fieldset-legend text-lg lg:text-xl italic">Search By Name</legend>
-                <div class="flex flex-col md:flex-row justify-self-center gap-4 w-full md:w-15/16">
-                    <input type="text" name="query" id="id_query" value="{{ request.GET.query }}" class="input input-md md:input-lg input-primary w-23/24 justify-self-center" placeholder="Enter game name..." />
-                    <button id="submit-btn" type="submit" class="btn btn-md md:btn-lg border-3 shadow-md" disabled>Feel The Power...</button>
+    {# ── Search + Sort Toolbar Card ── #}
+    <form id="filter-form" method="get">
+        <div class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral mb-3">
+            <div class="card-body p-3 md:p-4">
+                {# Search + Sort row #}
+                <div class="flex flex-col md:flex-row gap-2 md:gap-3">
+                    {# Search input with icon #}
+                    <div class="relative flex-1">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-base-content/40 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                            <circle cx="11" cy="11" r="8"></circle>
+                            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                        </svg>
+                        <input type="text" name="query" id="id_query" value="{{ request.GET.query }}"
+                               class="input input-bordered input-sm md:input-md w-full pl-9 md:pl-10"
+                               placeholder="Search for a game..." />
+                    </div>
+
+                    {# Sort dropdown #}
+                    <select name="sort" id="id_sort"
+                            class="select select-bordered select-sm md:select-md w-full md:w-48 lg:w-56">
+                        {% for value, display in form.sort.field.choices %}
+                            <option value="{{ value }}" {% if request.GET.sort == value %}selected{% endif %}>{{ display }}</option>
+                        {% endfor %}
+                    </select>
+
+                    {# Submit button #}
+                    <button id="submit-btn" type="submit"
+                            class="btn btn-sm md:btn-md btn-primary w-full md:w-auto gap-1.5" disabled>
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                            <circle cx="11" cy="11" r="8"></circle>
+                            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                        </svg>
+                        <span class="hidden md:inline">Feel The Power</span>
+                    </button>
                 </div>
+
+                {# Collapsible filter drawer #}
+                <details class="collapse collapse-arrow bg-base-300/30 rounded-lg mt-2 border border-base-content/10"
+                         {% if request.GET.letter %}open{% endif %}>
+                    <summary class="collapse-title min-h-0 py-2 px-3 text-sm font-semibold text-base-content/60 flex items-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
+                        </svg>
+                        Filters
+                    </summary>
+                    <div class="collapse-content px-3 pb-3 pt-0">
+                        {# Platforms #}
+                        <div class="mb-3">
+                            <h4 class="text-xs font-semibold text-base-content/60 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <rect x="2" y="6" width="20" height="12" rx="2"></rect>
+                                    <line x1="6" y1="12" x2="10" y2="12"></line>
+                                    <line x1="8" y1="10" x2="8" y2="14"></line>
+                                    <circle cx="15" cy="11" r="0.5" fill="currentColor"></circle>
+                                    <circle cx="18" cy="13" r="0.5" fill="currentColor"></circle>
+                                </svg>
+                                Platforms
+                            </h4>
+                            <div class="flex flex-wrap gap-1.5">
+                                {% for value, display in form.platform.field.choices %}
+                                    <label class="cursor-pointer">
+                                        <input type="checkbox" name="platform" value="{{ value }}"
+                                               class="sr-only peer" {% if value in selected_platforms %}checked{% endif %} />
+                                        <span class="btn btn-xs peer-checked:btn-primary peer-checked:font-bold btn-ghost border border-base-300 transition-all">
+                                            {{ display }}
+                                        </span>
+                                    </label>
+                                {% endfor %}
+                            </div>
+                        </div>
+
+                        {# Regions #}
+                        <div class="border-t border-base-content/10 pt-3 mb-3">
+                            <h4 class="text-xs font-semibold text-base-content/60 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <circle cx="12" cy="12" r="10"></circle>
+                                    <line x1="2" y1="12" x2="22" y2="12"></line>
+                                    <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
+                                </svg>
+                                Regions
+                            </h4>
+                            <div class="flex flex-wrap gap-1.5">
+                                {% for value, display in form.regions.field.choices %}
+                                    <label class="cursor-pointer">
+                                        <input type="checkbox" name="regions" value="{{ value }}"
+                                               class="sr-only peer" {% if value in selected_regions %}checked{% endif %} />
+                                        <span class="btn btn-xs peer-checked:btn-primary peer-checked:font-bold btn-ghost border border-base-300 transition-all">
+                                            {{ display }}
+                                        </span>
+                                    </label>
+                                {% endfor %}
+                            </div>
+                        </div>
+
+                        {# Letter filter #}
+                        <div class="border-t border-base-content/10 pt-3">
+                            <h4 class="text-xs font-semibold text-base-content/60 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <polyline points="4 7 4 4 20 4 20 7"></polyline>
+                                    <line x1="9" y1="20" x2="15" y2="20"></line>
+                                    <line x1="12" y1="4" x2="12" y2="20"></line>
+                                </svg>
+                                Filter by Letter
+                            </h4>
+                            <div class="flex gap-1 overflow-x-auto md:flex-wrap md:overflow-x-visible pb-1">
+                                {% for value, display in form.fields.letter.choices %}
+                                    <a href="?{% query_transform letter=value page=1 %}"
+                                       class="btn btn-xs flex-shrink-0 transition-all duration-200 {% if request.GET.letter == value %}btn-primary font-bold{% else %}btn-ghost border border-base-300 hover:btn-primary{% endif %}">
+                                        {{ display|default:"All" }}
+                                    </a>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </div>
+                </details>
             </div>
         </div>
 
@@ -57,66 +212,38 @@
         <input type="hidden" name="show_only_platinum" value="{{ request.GET.show_only_platinum }}" />
         <input type="hidden" name="filter_shovelware" value="{{ request.GET.filter_shovelware }}" />
     </form>
-    <div class="divider divider-vertical"></div>
-    <div class="form-control fieldset w-full mb-6">
-        <legend class="fieldset-legend text-lg lg:text-xl italic">Filter By Letter</legend>
-        <div class="flex flex-row flex-wrap w-full justify-center gap-2 p-1 overflow-x-auto">
-            {% for value, display in form.fields.letter.choices %}
-                <a href="?{% query_transform letter=value page=1 %}" class="btn btn-sm 2xl:btn-md btn-square transition-all duration-200 cursor-pointer flex-shrink-0 {% if request.GET.letter == value %}btn-primary font-bold transform scale-105{% else %}hover:btn-primary{% endif %}">
-                    {{ display }}
-                </a>
+
+    {# ── Active Filter Summary ── #}
+    <div class="flex flex-wrap items-center gap-1.5 mb-3 text-xs text-base-content/50">
+        <span class="font-semibold">Showing:</span>
+        {% if selected_platforms %}
+            {% for p in selected_platforms %}
+                <span class="badge badge-xs badge-ghost">{{ p }}</span>
             {% endfor %}
-        </div>
-    </div>
-    <div class="flex flex-row justify-between">
-        <h1 class="text-2xl lg:text-3xl xl:text-4xl text-base-content text-start italic self-end mb-4">Games By
-            {% with sort_val=request.GET.sort %}
-                {% if sort_val %}
-                    {% for value, display in form.sort.field.choices %}
-                        {% if value == sort_val %}
-                            {{ display }}
-                        {% endif %}
-                    {% endfor %}
-                {% else %}
-                    Alphabetical
-                {% endif %}
-            {% endwith %}
-        </h1>
-        <div class="flex flex-row gap-2 self-end mb-4 pr-4">
-            <div class="tooltip" data-tip="{% if filter_shovelware == 'on' %}Show Shovelware{% else %}Hide Shovelware{% endif %}">
-                <button id="shovelware-toggle" type="button" class="btn btn-square btn-sm lg:btn-lg bg-base-100" data-filter-shovelware="{{ filter_shovelware|default:'' }}">
-                    {% if filter_shovelware %}
-                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
-                            <path fill="var(--color-base-content)" d="m10.06 15.35 7.03-7.03c.98.42 2.16.23 2.95-.57l1.41-1.41c.29-.29.29-.77 0-1.06l-2.74-2.74a.754.754 0 0 0-1.06 0l-1.41 1.41c-.8.8-.98 1.97-.57 2.95l-7.03 7.03-1.77-1.77-3.54 3.54c-1.37 1.37-1.37 3.58 0 4.95s3.58 1.37 4.95 0l3.54-3.54-1.77-1.77Zm7.25-10.34.88-.88 1.68 1.68-.88.88c-.46.46-1.22.46-1.68 0s-.46-1.22 0-1.68M6.88 19.24c-.58.58-1.54.58-2.12 0s-.58-1.54 0-2.12L6.88 15 9 17.12z"/>
-                            <circle cx="12" cy="12" r="11" stroke="var(--color-error)" stroke-width="2" fill="none"/>
-                            <line x1="20" y1="20" x2="4" y2="4" stroke="var(--color-error)" stroke-width="2"/>
-                        </svg>
-                    {% else %}
-                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="var(--color-base-content)" viewBox="0 0 24 24">
-                            <path d="m10.06 15.35 7.03-7.03c.98.42 2.16.23 2.95-.57l1.41-1.41c.29-.29.29-.77 0-1.06l-2.74-2.74a.754.754 0 0 0-1.06 0l-1.41 1.41c-.8.8-.98 1.97-.57 2.95l-7.03 7.03-1.77-1.77-3.54 3.54c-1.37 1.37-1.37 3.58 0 4.95s3.58 1.37 4.95 0l3.54-3.54-1.77-1.77Zm7.25-10.34.88-.88 1.68 1.68-.88.88c-.46.46-1.22.46-1.68 0s-.46-1.22 0-1.68M6.88 19.24c-.58.58-1.54.58-2.12 0s-.58-1.54 0-2.12L6.88 15 9 17.12z"/>
-                        </svg>
-                    {% endif %}
-                </button>
-            </div>
-            <div class="tooltip" data-tip="{% if show_only_platinum == 'on' %}Show All Games{% else %}Show Only Platinums{% endif %}">
-                <button id="platinum-toggle" type="button" class="btn btn-square btn-sm lg:btn-lg bg-base-100" data-show-only-platinum="{{ show_only_platinum|default:'' }}">
-                    {% if show_only_platinum == 'on' %}
-                        {% include 'partials/icons/trophy_cup.html' with color='var(--color-trophy-platinum)' size='w-5 h-5' extra_class='justify-self-center self-center' %}
-                    {% else %}
-                        {% include 'partials/icons/trophy_cup.html' with color='var(--color-base-content)' size='w-5 h-5' extra_class='justify-self-center self-center' %}
-                    {% endif %}
-                </button>
-            </div>
-            <div class="tooltip" data-tip="{% if view_type == 'list' %}Switch To Grid View{% else %}Switch To List View{% endif %}">
-                <button id="view-toggle" type="button" class="btn btn-square btn-sm lg:btn-lg bg-base-100" data-view-type="{{ view_type|default:'grid' }}">
-                    {% if view_type == 'list' %}
-                        <svg xmlns="http://www.w3.org/2000/svg" class="justify-self-center self-center" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--color-base-content)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
-                    {% else %}
-                        <svg xmlns="http://www.w3.org/2000/svg" class="justify-self-center self-center" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--color-base-content)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
-                    {% endif %}
-                </button>
-            </div>
-        </div>
+        {% endif %}
+        {% if selected_regions %}
+            <span class="text-base-content/30">·</span>
+            {% for r in selected_regions %}
+                <span class="badge badge-xs badge-ghost">{{ r|upper }}</span>
+            {% endfor %}
+        {% endif %}
+        {% if request.GET.query %}
+            <span class="text-base-content/30">·</span>
+            <span class="badge badge-xs badge-ghost">"{{ request.GET.query }}"</span>
+        {% endif %}
+        {% if request.GET.letter %}
+            <span class="text-base-content/30">·</span>
+            <span class="badge badge-xs badge-ghost">Letter: {{ request.GET.letter }}</span>
+        {% endif %}
+        {% if show_only_platinum == 'on' %}
+            <span class="text-base-content/30">·</span>
+            <span class="badge badge-xs badge-primary">Platinums only</span>
+        {% endif %}
+        {% if filter_shovelware == 'on' %}
+            <span class="text-base-content/30">·</span>
+            <span class="badge badge-xs badge-warning">No shovelware</span>
+        {% endif %}
+        <a href="{% url 'games_list' %}" class="link link-primary text-xs ml-1">Reset</a>
     </div>
 
     {% include 'partials/ad_unit.html' with ad_slot="6809027176" %}
@@ -124,11 +251,11 @@
     {% include 'partials/pagination.html' with position='top' show_page_jump=True anchor='filter-form' %}
 
     {% if view_type == 'list' %}
-        <div id="items-grid" class="space-y-2">
+        <div id="items-grid" class="space-y-1.5 md:space-y-2">
             {% include 'trophies/partials/game_list/game_list_items.html' %}
         </div>
     {% else %}
-        <div id="items-grid" class="grid grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-2">
+        <div id="items-grid" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-2 md:gap-2.5">
             {% include 'trophies/partials/game_list/game_cards.html' %}
         </div>
     {% endif %}
@@ -144,5 +271,4 @@
     <script src="{% static 'js/game-lists.js' %}"></script>
     <script>document.addEventListener('DOMContentLoaded', () => GameListQuickAdd.init());</script>
     {% endif %}
-    <script>PlatPursuit.ZoomScaler.init();</script>
 {% endblock %}

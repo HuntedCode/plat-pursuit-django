@@ -1,27 +1,44 @@
 {# Reusable pagination component. Usage: {% include 'partials/pagination.html' with position='top' show_page_jump=True anchor='filter-form' %} #}
 {% load query_tags %}
 {% if is_paginated %}
-    <div class="flex flex-col md:flex-row justify-center items-center gap-2 {% if position == 'top' %}mb-2{% else %}mt-6{% endif %}">
-        <div class="btn-group">
-            {% if page_obj.has_previous %}
-                <a href="?{% query_transform page=1 %}{% if anchor %}#{{ anchor }}{% endif %}" class="btn btn-outline btn-xs sm:btn-sm md:btn-md">&laquo; First</a>
-                <a href="?{% query_transform page=page_obj.previous_page_number %}{% if anchor %}#{{ anchor }}{% endif %}" class="btn btn-outline btn-xs sm:btn-sm md:btn-md">Previous</a>
-            {% endif %}
+    <div class="bg-base-300/30 rounded-lg px-3 py-2 md:px-4 md:py-2.5 {% if position == 'top' %}mb-3{% else %}mt-4{% endif %}">
+        <div class="flex flex-col md:flex-row justify-center items-center gap-2">
+            <div class="flex items-center gap-1">
+                {% if page_obj.has_previous %}
+                    <a href="?{% query_transform page=1 %}{% if anchor %}#{{ anchor }}{% endif %}"
+                       class="btn btn-xs md:btn-sm btn-ghost border border-base-content/10"
+                       title="First page">&laquo;</a>
+                    <a href="?{% query_transform page=page_obj.previous_page_number %}{% if anchor %}#{{ anchor }}{% endif %}"
+                       class="btn btn-xs md:btn-sm btn-ghost border border-base-content/10">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                        <span class="hidden md:inline">Prev</span>
+                    </a>
+                {% endif %}
 
-            <span class="btn btn-active btn-xs sm:btn-sm md:btn-md">Page {{ page_obj.number }} of {{ paginator.num_pages }}</span>
+                <span class="btn btn-xs md:btn-sm btn-primary no-animation cursor-default font-bold">
+                    {{ page_obj.number }} / {{ paginator.num_pages }}
+                </span>
 
-            {% if page_obj.has_next %}
-                <a href="?{% query_transform page=page_obj.next_page_number %}{% if anchor %}#{{ anchor }}{% endif %}" class="btn btn-outline btn-xs sm:btn-sm md:btn-md">Next</a>
-                <a href="?{% query_transform page=paginator.num_pages %}{% if anchor %}#{{ anchor }}{% endif %}" class="btn btn-outline btn-xs sm:btn-sm md:btn-md">Last &raquo;</a>
+                {% if page_obj.has_next %}
+                    <a href="?{% query_transform page=page_obj.next_page_number %}{% if anchor %}#{{ anchor }}{% endif %}"
+                       class="btn btn-xs md:btn-sm btn-ghost border border-base-content/10">
+                        <span class="hidden md:inline">Next</span>
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                    </a>
+                    <a href="?{% query_transform page=paginator.num_pages %}{% if anchor %}#{{ anchor }}{% endif %}"
+                       class="btn btn-xs md:btn-sm btn-ghost border border-base-content/10"
+                       title="Last page">&raquo;</a>
+                {% endif %}
+            </div>
+
+            {% if show_page_jump %}
+                <form class="page-jump-form flex items-center gap-1.5 md:ml-3" method="get" data-anchor="{{ anchor|default:'' }}">
+                    <label class="text-xs md:text-sm text-base-content/50 font-semibold">Jump:</label>
+                    <input type="number" name="page" min="1" max="{{ paginator.num_pages }}" value="{{ page_obj.number }}"
+                           class="input input-xs md:input-sm w-14 md:w-16 bg-base-100 border-base-content/10" />
+                    <button type="submit" class="btn btn-xs md:btn-sm btn-primary">Go</button>
+                </form>
             {% endif %}
         </div>
-
-        {% if show_page_jump %}
-            <form class="page-jump-form form-control flex-row items-center space-x-2 ml-4" method="get" data-anchor="{{ anchor|default:'' }}">
-                <label class="label font-semibold">Go to page:</label>
-                <input type="number" name="page" min="1" max="{{ paginator.num_pages }}" value="{{ page_obj.number }}" class="input w-20" />
-                <button type="submit" class="btn btn-primary btn-sm">Go</button>
-            </form>
-        {% endif %}
     </div>
 {% endif %}

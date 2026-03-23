@@ -1,8 +1,38 @@
 # Design System Reference
 
-The canonical styling reference for PlatPursuit. These tokens and patterns were established on the dashboard (the site's homepage and most component-rich page) and must be applied consistently across all pages during mobile-responsive migration.
+The canonical styling and design reference for PlatPursuit. The dashboard is the reference implementation and the design baseline for the entire site. Every page is being rebuilt from the ground up to match its design language.
 
-This doc covers **site-wide building blocks** (cards, grids, spacing, colors). Page-level layout decisions (content width, sidebars, tab systems) are page-specific and not covered here.
+This doc covers **site-wide building blocks** (cards, grids, spacing, colors, component patterns). Page-level layout decisions (content width, sidebars, tab systems) are page-specific and not covered here.
+
+## Site-Wide Redesign: Process
+
+Every page goes through a three-part rebuild process:
+
+### 1. Backend Audit
+
+Read the view, queryset, and any services. Identify:
+
+- **Performance issues**: N+1 queries, expensive subqueries, missing annotations, unnecessary prefetches
+- **Missing data opportunities**: User-specific context (played status, completion %), personalized data that the new design could surface
+- **Cleanup candidates**: Duplicate logic, organic growth that needs refactoring, context data the new design no longer needs
+
+Only rebuild the backend where there's a clear win. Don't touch views that are already clean and performant.
+
+### 2. Frontend Rebuild
+
+Ground-up template rebuild using the dashboard as the literal design target. This is NOT a "re-style" or "add breakpoints" pass. The question to ask is: **"Would this component look at home inside a dashboard module?"** If the answer is no, rebuild it until it does.
+
+Key principles:
+- Use the tokens and patterns defined in this doc
+- Every piece of data should have a clear visual hierarchy (labels, grouping, contrast)
+- Flavor text, personality, and contextual messaging are part of the Platinum Pursuit Standard
+- Mobile-first: design for 375px, then expand at `md:` and `lg:`
+
+### 3. Polish
+
+Final audit reviewing every new/modified file against the Platinum Pursuit Standard, responsive compliance, visual cohesion, and interactive polish (hover states, transitions, focus indicators). See CLAUDE.md for the full audit checklist.
+
+---
 
 ## Responsive Philosophy
 
@@ -21,7 +51,7 @@ We build **three layouts** per page: mobile, tablet, and desktop. Tailwind class
 - `lg:` values are the desktop experience
 - `sm:` (640px) is available but rarely needed; most layouts jump from mobile to `md:`
 
-### Migration Pattern
+### Legacy Migration Pattern
 
 When converting a page from ZoomScaler to proper responsive:
 
@@ -64,9 +94,30 @@ Every content module uses this card structure:
 | Card title | `card-title text-base lg:text-lg font-bold` | No size change at `md:` |
 | Title icon | `w-5 h-5` with theme color (e.g., `text-primary`) | Consistent 20px across all sizes |
 
+### Card Variants
+
+**Content module cards** (dashboard modules, detail page sections): Full card tokens with `p-3 md:p-5 lg:p-7` padding.
+
+**Compact utility cards** (toolbars, filter bars, page headers): Tighter padding `p-3 md:p-4`. These are control surfaces, not content display, so they should not feel bloated.
+
+**Page header cards**: Add a left accent border for visual identity: `border-l-4 border-l-primary`. Include an icon, title, contextual subtitle, and any page-level controls.
+
+**Browse/item cards** (game cards, badge cards in grids): Minimal padding `p-1 md:p-1.5`. Shadow starts at `shadow-md`, with colored glow on hover: `hover:shadow-lg hover:shadow-{color}/30 hover:border-{color}`.
+
 ---
 
 ## Inner Elements
+
+### Section Headers
+
+Dashboard-style labels for groups within a card:
+
+```html
+<h4 class="text-xs font-semibold text-base-content/60 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+    <svg class="w-3.5 h-3.5">...</svg>
+    Section Label
+</h4>
+```
 
 ### Stat Cells (number + label)
 
@@ -114,6 +165,191 @@ Used for game lists, badge lists, activity feeds, leaderboard entries.
 
 ---
 
+## Component Patterns
+
+### Page Header Card
+
+Every rebuilt page should have a header card that establishes context and houses page-level controls.
+
+```html
+<div class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral mb-3">
+    <div class="card-body p-3 md:p-4 lg:p-5">
+        <div class="flex items-center justify-between gap-3">
+            <div class="min-w-0">
+                <div class="flex items-center gap-2 flex-wrap">
+                    <svg class="w-5 h-5 md:w-6 md:h-6 text-primary shrink-0">...</svg>
+                    <h1 class="text-lg md:text-xl lg:text-2xl font-bold">Page Title</h1>
+                    <span class="badge badge-sm badge-ghost">Context Badge</span>
+                </div>
+                <p class="text-xs md:text-sm text-base-content/50 mt-0.5 italic pr-1">
+                    Dynamic, contextual subtitle with personality.
+                </p>
+            </div>
+            <div class="flex items-center gap-1.5 shrink-0">
+                <!-- Page-level toggle buttons -->
+            </div>
+        </div>
+    </div>
+</div>
+```
+
+**Subtitle guidelines**: The subtitle should be dynamic and contextual, not generic. Change based on active filters, current sort, result count, or user state. Add personality (flavor text, playful phrasing) per the Platinum Pursuit Standard.
+
+### Filter/Search Toolbar Card
+
+Compact card for search, sort, and filter controls. Collapsible drawer for secondary filters.
+
+```html
+<div class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral mb-3">
+    <div class="card-body p-3 md:p-4">
+        <!-- Row: search input (with icon) + sort dropdown + submit button -->
+        <div class="flex flex-col md:flex-row gap-2 md:gap-3">
+            <div class="relative flex-1">
+                <svg class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-base-content/40 pointer-events-none">...</svg>
+                <input class="input input-bordered input-sm md:input-md w-full pl-9 md:pl-10" />
+            </div>
+            <select class="select select-bordered select-sm md:select-md w-full md:w-48 lg:w-56">...</select>
+            <button class="btn btn-sm md:btn-md btn-primary w-full md:w-auto">...</button>
+        </div>
+
+        <!-- Collapsible filters -->
+        <details class="collapse collapse-arrow bg-base-300/30 rounded-lg mt-2 border border-base-content/10">
+            <summary class="collapse-title min-h-0 py-2 px-3 text-sm font-semibold text-base-content/60">
+                Filters
+            </summary>
+            <div class="collapse-content px-3 pb-3 pt-0">
+                <!-- Filter sections separated by border-t border-base-content/10 -->
+            </div>
+        </details>
+    </div>
+</div>
+```
+
+### Toggle-Button Checkboxes
+
+For filter options (platforms, regions, categories). Replaces traditional checkboxes.
+
+```html
+<label class="cursor-pointer">
+    <input type="checkbox" name="field" value="val" class="sr-only peer" />
+    <span class="btn btn-xs peer-checked:btn-primary peer-checked:font-bold btn-ghost border border-base-300 transition-all">
+        Label
+    </span>
+</label>
+```
+
+**Critical**: Use `sr-only` (not `hidden`) for the input. `hidden` applies `display: none` which prevents form submission.
+
+### Toggle Buttons (page-level controls)
+
+For binary toggles (show/hide, grid/list, filter on/off).
+
+```html
+<!-- Active state -->
+<button class="btn btn-xs md:btn-sm gap-1 btn-primary">
+    <svg class="w-3.5 h-3.5">...</svg>
+    <span class="hidden md:inline">Label</span>
+</button>
+
+<!-- Inactive state -->
+<button class="btn btn-xs md:btn-sm gap-1 btn-ghost border border-base-300">
+    <svg class="w-3.5 h-3.5">...</svg>
+    <span class="hidden md:inline">Label</span>
+</button>
+```
+
+Active states should use semantic colors: `btn-primary` for selection filters, `btn-warning` for exclusion filters.
+
+### Pagination
+
+Wrapped in a subtle panel with dashboard-style buttons.
+
+```html
+<div class="bg-base-300/30 rounded-lg px-3 py-2 md:px-4 md:py-2.5">
+    <div class="flex flex-col md:flex-row justify-center items-center gap-2">
+        <!-- Nav buttons: btn-ghost border border-base-content/10 -->
+        <!-- Current page: btn-primary no-animation cursor-default font-bold -->
+        <!-- Page jump form (optional) -->
+    </div>
+</div>
+```
+
+### Active Filter Summary
+
+Shows current filter state below the toolbar.
+
+```html
+<div class="flex flex-wrap items-center gap-1.5 mb-3 text-xs text-base-content/50">
+    <span class="font-semibold">Showing:</span>
+    <span class="badge badge-xs badge-ghost">Filter Value</span>
+    <span class="text-base-content/30">·</span>
+    <span class="badge badge-xs badge-primary">Special Filter</span>
+    <a href="{% url 'reset_url' %}" class="link link-primary text-xs ml-1">Reset</a>
+</div>
+```
+
+### Browse Cards (grid items)
+
+For game cards, badge cards, and similar grid items. Miniature versions of dashboard modules.
+
+```html
+<div class="card bg-base-200/90 border-2 border-base-300 shadow-md shadow-neutral
+            transition-all duration-300 hover:shadow-lg hover:shadow-{color}/30 hover:border-{color}
+            group p-1 md:p-1.5">
+    <!-- Image -->
+    <figure class="relative aspect-square bg-base-300/40 rounded-lg overflow-hidden">
+        <img class="w-full h-full object-cover" />
+    </figure>
+
+    <!-- Content -->
+    <div class="card-body m-0 px-1.5 md:px-2 py-1.5 md:py-2 gap-1">
+        <h3 class="text-xs font-bold line-clamp-2">Title</h3>
+        <!-- Badges, tags -->
+
+        <!-- Stats panel (pushed to bottom) -->
+        <div class="bg-base-300/40 rounded-lg p-1 md:p-1.5 mt-auto">
+            <!-- Stat rows separated by border-t border-base-content/10 -->
+        </div>
+    </div>
+</div>
+```
+
+**Hover**: Use colored shadow glow (`hover:shadow-lg hover:shadow-{color}/30`) instead of scale transforms. Scale can cause layout shifts and feels heavy.
+
+### Browse Rows (list items)
+
+For list view variants of browse pages.
+
+```html
+<div class="card bg-base-200/90 border-2 border-base-300 shadow-md shadow-neutral
+            transition-all duration-300 hover:shadow-lg hover:shadow-{color}/30 hover:border-{color} group">
+    <div class="card-body m-0 px-2 py-2 md:px-3 md:py-3">
+        <div class="flex flex-col md:flex-row md:items-center gap-2 md:gap-4">
+            <!-- Image + Title (always horizontal, flex-1 min-w-0) -->
+            <!-- Stats section (stacks below on mobile, inline on tablet+) -->
+            <!--   Mobile: bg-base-300/30 rounded-lg p-1.5 -->
+            <!--   Tablet+: md:bg-transparent md:rounded-none md:p-0 -->
+        </div>
+    </div>
+</div>
+```
+
+### Empty States
+
+Wrap in a card for consistency with surrounding content.
+
+```html
+<div class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral">
+    <div class="card-body items-center text-center py-12 md:py-16">
+        <svg class="h-12 w-12 md:h-16 md:w-16 text-base-content/30">...</svg>
+        <p class="text-base-content/60 mt-3 mb-1 text-base md:text-lg font-semibold">Primary message</p>
+        <p class="text-base-content/40 text-xs md:text-sm">Helpful suggestion</p>
+    </div>
+</div>
+```
+
+---
+
 ## Color and Contrast Tokens
 
 | Purpose | Class | Notes |
@@ -121,12 +357,16 @@ Used for game lists, badge lists, activity feeds, leaderboard entries.
 | Card background | `bg-base-200/90` | Slightly transparent, defined against page bg |
 | Inner cell background | `bg-base-300/50` | Stat cells, day cells |
 | Inner panel/row background | `bg-base-300/40` | List items, analytics panels |
+| Mobile stats panel | `bg-base-300/30` | Subtle panel for collapsed mobile stats |
 | Internal dividers | `border-base-content/10` | Visible in dark themes (content-based, not bg-based) |
 | Card outer border | `border-2 border-base-300` | Thicker, uses background scale (intentional) |
-| Card shadow | `shadow-lg shadow-neutral` | Consistent depth |
+| Card shadow (default) | `shadow-md shadow-neutral` | Browse cards, list items |
+| Card shadow (emphasis) | `shadow-lg shadow-neutral` | Content modules, page headers |
+| Hover glow | `hover:shadow-lg hover:shadow-{color}/30` | Colored glow on browse cards |
 | Muted text | `text-base-content/50` | Labels, secondary info |
 | Very muted text | `text-base-content/40` | Timestamps, hints |
 | Ghost text | `text-base-content/30` | Tertiary info, placeholders |
+| Dot separator | `text-base-content/15` or `text-base-content/20` | Between inline stat groups |
 
 ### Divider Pattern
 
@@ -138,6 +378,9 @@ Use `border-base-content/10` for all internal separators. This is more visible t
 
 <!-- Between repeated items -->
 <div class="divide-y divide-base-content/10">
+
+<!-- Vertical divider between inline groups -->
+<div class="w-px h-6 bg-base-content/10 shrink-0"></div>
 ```
 
 Do NOT use `border-base-content/10` for card outer borders (keep `border-base-300` there) or decorative chart gridlines (keep `border-base-300/30`).
@@ -166,6 +409,7 @@ Use this when cells contain **compact, self-contained data** (numbers, icons, sh
 | Stat numbers | `grid-cols-4 gap-1.5` | `md:gap-3` | `lg:gap-4` | Trophy type counts (P/G/S/B) |
 | Summary row | `grid-cols-3` | same | `lg:grid-cols-6` | Earned/Unearned/Games/etc. |
 | Badge tier grid | `grid-cols-4 gap-1.5` | `md:gap-2` | same | Bronze/Silver/Gold/Platinum |
+| Browse cards | `grid-cols-2 gap-1.5` | `md:grid-cols-3 md:gap-2` | `lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6` | Game/badge grids |
 | Calendar months | `grid-cols-3 gap-1.5` | `md:gap-3` | `lg:gap-4` | 3-month paginated calendar |
 | Badge icon grid | `grid-cols-4` | same | `lg:grid-cols-5` | Badge showcase selection |
 | Theme swatches | `grid-cols-6` | same | `lg:grid-cols-8` | Color picker dots |
@@ -177,6 +421,7 @@ Use this when cells contain **compact, self-contained data** (numbers, icons, sh
 |---------|---------|
 | Stat grids (compact) | `gap-1.5 md:gap-2 lg:gap-3` or `gap-1.5 md:gap-3 lg:gap-4` |
 | Content grids (list items) | `gap-2 md:gap-3 lg:gap-4` or `gap-2 lg:gap-3` |
+| Browse card grids | `gap-1.5 md:gap-2` |
 | Tab panel modules | `gap-3 md:gap-4 lg:gap-6` |
 
 ---
@@ -185,10 +430,12 @@ Use this when cells contain **compact, self-contained data** (numbers, icons, sh
 
 | Element | Mobile | Tablet | Desktop |
 |---------|--------|--------|---------|
-| Card body | `p-3` | `md:p-5` | `lg:p-7` |
+| Card body (content) | `p-3` | `md:p-5` | `lg:p-7` |
+| Card body (utility) | `p-3` | `md:p-4` | same |
 | Inner panel | `p-2` | `md:p-3` | `lg:p-4` |
 | Stat cell (large) | `p-1.5` | `md:p-3` | same |
 | Stat cell (small) | `p-1` | `md:p-2` | same |
+| Browse card padding | `p-1` | `md:p-1.5` | same |
 | Module gap | `gap-3` | `md:gap-4` | `lg:gap-6` |
 
 ---
@@ -200,7 +447,7 @@ Use this when cells contain **compact, self-contained data** (numbers, icons, sh
 On mobile, hide text labels and show only icons for toolbar/header buttons. Use `hidden md:inline` on the label text.
 
 ```html
-<button class="btn btn-xs gap-1">
+<button class="btn btn-xs md:btn-sm gap-1">
     <svg class="w-3.5 h-3.5">...</svg>
     <span class="hidden md:inline">Customize</span>
 </button>
@@ -239,11 +486,13 @@ When a chart (e.g., radar) stacks to full width on mobile, constrain and center 
 
 | Usage | Classes | Notes |
 |-------|---------|-------|
-| Card title | `text-base lg:text-lg` | No `md:` step |
-| Page heading | `text-xl md:text-2xl lg:text-3xl` | Full 3-step progression |
+| Page heading | `text-lg md:text-xl lg:text-2xl font-bold` | In page header cards |
+| Card title | `text-base lg:text-lg font-bold` | No `md:` step |
+| Section header | `text-xs font-semibold text-base-content/60 uppercase tracking-wider` | With `w-3.5 h-3.5` icon |
 | Large stat numbers | `text-lg md:text-xl lg:text-2xl` | In stat cells |
 | Small stat numbers | `text-sm lg:text-base` | In summary rows |
 | Body text | `text-sm` | List item names, descriptions |
+| Browse card title | `text-xs font-bold` | With `line-clamp-2` |
 | Labels | `text-xs` | Stat labels, timestamps, metadata |
 | Micro text | `text-[0.6rem]` or `text-[0.55rem]` | Calendar day numbers, chart legends |
 
@@ -253,7 +502,7 @@ When a chart (e.g., radar) stacks to full width on mobile, constrain and center 
 
 ## Image Styling (unchanged)
 
-These conventions apply site-wide and are not affected by the responsive migration:
+These conventions apply site-wide and are not affected by the redesign:
 
 - Game/trophy icons: `object-cover` with square aspect ratio
 - Badge images: `object-contain` (transparent backgrounds)
@@ -276,14 +525,16 @@ These are **page-specific** decisions, not site-wide tokens:
 ## Gotchas and Pitfalls
 
 - **Italic text clipping**: Always add `pr-1` when combining `line-clamp-*` with `italic`. The italic glyph slant gets clipped by line-clamp's overflow hidden.
-- **ZoomScaler coexistence**: During migration, some pages still use `ZoomScaler.init()`. The zoom wrapper divs in `base.html` are inert without `.zoom-active`, so migrated and non-migrated pages coexist safely.
+- **`sr-only` vs `hidden` for form inputs**: Toggle-button checkboxes must use `sr-only` (invisible but still submits). `hidden` applies `display: none` which prevents form submission entirely.
+- **ZoomScaler coexistence**: During the redesign, some pages still use `ZoomScaler.init()`. The zoom wrapper divs in `base.html` are inert without `.zoom-active`, so redesigned and legacy pages coexist safely.
 - **Tailwind rebuild required**: After adding new responsive class variants (e.g., `md:p-5`), run `npm run build` to regenerate `output.css`. The output is minified to a single line.
 - **`md:hidden` for mobile-only elements**: This class is visible below 768px and hidden at 768px+. Useful for short date formats shown only on mobile.
 - **Touch targets**: Interactive elements should be at least 44px on all sizes. DaisyUI `btn-xs` and `toggle-sm` are smaller but acceptable for secondary controls.
-- **Container class at 640px**: Tailwind's `.container` snaps to `max-width: 640px` at the `sm` breakpoint, which can cause a visual jump. On pages still using ZoomScaler, the zoom CSS overrides this. On migrated pages, the effect is minimal since content is typically narrower than 640px on phones.
+- **Hover glow vs scale**: Prefer colored shadow glow (`hover:shadow-lg hover:shadow-{color}/30`) over `hover:scale-105`. Scale causes layout shifts and feels heavy at tight grid gaps.
+- **Container class at 640px**: Tailwind's `.container` snaps to `max-width: 640px` at the `sm` breakpoint, which can cause a visual jump. On pages still using ZoomScaler, the zoom CSS overrides this. On redesigned pages, the effect is minimal since content is typically narrower than 640px on phones.
 
 ## Related Docs
 
 - [Template Architecture](template-architecture.md): base.html structure, zoom wrapper, blocks
-- [JS Utilities](js-utilities.md): ZoomScaler, ZoomAwareObserver (still used on non-migrated pages)
+- [JS Utilities](js-utilities.md): ZoomScaler, ZoomAwareObserver (still used on non-redesigned pages)
 - [Dashboard](../features/dashboard.md): Module registry, customization, the reference implementation
