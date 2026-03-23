@@ -66,18 +66,7 @@
                     </ul>
                 </details>
             </li>
-            <!-- Guides -->
-            <li>
-                <details class="mega-menu-dropdown">
-                    <summary>Guides</summary>
-                    <ul class="mega-menu-content">
-                        <li><a href="{% url 'guides_browse' %}">Guide Hub</a></li>
-                        {% if user.is_authenticated and user.profile %}
-                            <li><a href="{% url 'my_guides' %}">My Guides</a></li>
-                        {% endif %}
-                    </ul>
-                </details>
-            </li>
+            {# Guides section hidden during redesign - will be reintroduced later #}
             <!-- My Pursuit -->
             {% if user.is_authenticated and user.profile %}
             <li>
@@ -89,7 +78,6 @@
                         {% endif %}
                         <li><a href="{% url 'settings' %}">Customization</a></li>
                         <li><a href="{% url 'recap_index' %}">Monthly Recap</a></li>
-                        <li><a href="{% url 'my_guides' %}">My Guides</a></li>
                         <li><a href="{% url 'my_challenges' %}">My Challenges</a></li>
                         <li><a href="{% url 'my_lists' %}">My Lists</a></li>
                         <li><a href="{% url 'profile_detail' user.profile.psn_username %}">My Profile</a></li>

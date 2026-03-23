@@ -21,7 +21,7 @@ from django.contrib import admin
 from django.contrib.auth.views import LogoutView
 from django.contrib.sitemaps.views import sitemap
 from django.urls import path, include
-from django.views.generic import TemplateView
+from django.views.generic import RedirectView, TemplateView
 from core.views import IndexView, AdsTxtView, RobotsTxtView, PrivacyPolicyView, TermsOfServiceView, AboutView, ContactView
 from core.sitemaps import (
     StaticViewSitemap, GameSitemap, ProfileSitemap,
@@ -33,7 +33,7 @@ sitemaps = {
     'games': GameSitemap,
     'profiles': ProfileSitemap,
     'badges': BadgeSitemap,
-    'guides': GuideSitemap,
+    # 'guides': GuideSitemap,  # Hidden during redesign
     'lists': GameListSitemap,
     'challenges': ChallengeSitemap,
 }
@@ -73,13 +73,12 @@ urlpatterns = [
     path('leaderboard/badges/', OverallBadgeLeaderboardsView.as_view(), name='overall_badge_leaderboards'),
     path('leaderboard/badges/<str:series_slug>/', BadgeLeaderboardsView.as_view(), name='badge_leaderboards' ),
 
-    path('guides/', BrowseGuidesView.as_view(), name='guides_browse'),
-
-    # Guide URLs (checklists)
-    path('guides/<int:guide_id>/', ChecklistDetailView.as_view(), name='guide_detail'),
-    path('guides/<int:guide_id>/edit/', ChecklistEditView.as_view(), name='guide_edit'),
-    path('guides/create/<int:concept_id>/<str:np_communication_id>/', ChecklistCreateView.as_view(), name='guide_create'),
-    path('my-guides/', MyChecklistsView.as_view(), name='my_guides'),
+    # Guide URLs - redirected to homepage during redesign (will be reintroduced later)
+    path('guides/', RedirectView.as_view(pattern_name='home', permanent=False), name='guides_browse'),
+    path('guides/<int:guide_id>/', RedirectView.as_view(pattern_name='home', permanent=False), name='guide_detail'),
+    path('guides/<int:guide_id>/edit/', RedirectView.as_view(pattern_name='home', permanent=False), name='guide_edit'),
+    path('guides/create/<int:concept_id>/<str:np_communication_id>/', RedirectView.as_view(pattern_name='home', permanent=False), name='guide_create'),
+    path('my-guides/', RedirectView.as_view(pattern_name='home', permanent=False), name='my_guides'),
     path('my-shareables/', MyShareablesView.as_view(), name='my_shareables'),
 
     # Game List URLs

@@ -28,9 +28,7 @@
         <div class="grid grid-cols-3 gap-6">
             <div class="col-span-2 space-y-8">
                 {% include 'partials/index/latest-badges.html' with items=latestBadges %}
-                {% if featuredChecklists %}
-                    {% include 'partials/index/checklists-showcase.html' with items=featuredChecklists %}
-                {% endif %}
+                {# Checklists showcase hidden during redesign #}
                 {% include 'partials/index/playing-now.html' with items=playingNow %}
             </div>
             <aside class="col-span-1">

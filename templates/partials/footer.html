@@ -38,13 +38,7 @@
                 </ul>
             </nav>
 
-            <!-- Guides -->
-            <nav aria-label="Guides pages">
-                <h3 class="font-bold text-sm uppercase tracking-wider text-neutral-content/80 mb-3">Guides</h3>
-                <ul class="space-y-2 text-sm">
-                    <li><a href="{% url 'guides_browse' %}" class="text-neutral-content/60 hover:text-neutral-content transition-colors">Guide Hub</a></li>
-                </ul>
-            </nav>
+            {# Guides section hidden during redesign #}
 
             <!-- My Pursuit (auth only) / Account (guests) -->
             {% if user.is_authenticated and user.profile %}
@@ -52,7 +46,6 @@
                 <h3 class="font-bold text-sm uppercase tracking-wider text-neutral-content/80 mb-3">My Pursuit</h3>
                 <ul class="space-y-2 text-sm">
                     <li><a href="{% url 'profile_detail' user.profile.psn_username %}" class="text-neutral-content/60 hover:text-neutral-content transition-colors">My Profile</a></li>
-                    <li><a href="{% url 'my_guides' %}" class="text-neutral-content/60 hover:text-neutral-content transition-colors">My Guides</a></li>
                     <li><a href="{% url 'my_challenges' %}" class="text-neutral-content/60 hover:text-neutral-content transition-colors">My Challenges</a></li>
                     <li><a href="{% url 'my_lists' %}" class="text-neutral-content/60 hover:text-neutral-content transition-colors">My Lists</a></li>
                     <li><a href="{% url 'my_shareables' %}" class="text-neutral-content/60 hover:text-neutral-content transition-colors">My Shareables</a></li>
