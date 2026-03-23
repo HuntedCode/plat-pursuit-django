@@ -59,8 +59,17 @@ class SettingsView(LoginRequiredMixin, View):
 
         # Build available themes for the template
         # Exclude game art themes since settings page has no game context
-        from trophies.themes import get_available_themes_for_grid
-        available_themes = get_available_themes_for_grid(include_game_art=False)
+        from trophies.themes import get_available_themes_for_grid, get_theme, get_theme_css
+        available_themes = get_available_themes_for_grid(include_game_art=False, grouped=True)
+
+        # Resolve selected theme info directly so template doesn't need to search
+        selected_theme_name = ''
+        selected_theme_css = ''
+        if profile and profile.selected_theme:
+            selected_theme_data = get_theme(profile.selected_theme)
+            if selected_theme_data:
+                selected_theme_name = selected_theme_data['name']
+                selected_theme_css = get_theme_css(profile.selected_theme)
 
         # Serialize current background for the JS picker
         initial_bg_data = 'null'
@@ -79,6 +88,8 @@ class SettingsView(LoginRequiredMixin, View):
             'profile_form': profile_form,
             'profile': profile,
             'available_themes': available_themes,
+            'selected_theme_name': selected_theme_name,
+            'selected_theme_css': selected_theme_css,
             'initial_background_json': initial_bg_data,
         }
         track_page_view('settings', 'user', request)

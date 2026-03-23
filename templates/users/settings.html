@@ -133,7 +133,7 @@
 
                                 <!-- Theme Grid Preview -->
                                 <div class="mb-3 {% if not profile.user_is_premium %}opacity-50 pointer-events-none{% endif %}">
-                                    {% include 'partials/color_grid.html' with grid_id='theme-grid' selected_theme=profile.selected_theme available_themes=available_themes %}
+                                    {% include 'partials/color_grid.html' with grid_id='theme-grid' selected_theme=profile.selected_theme available_themes=available_themes grouped=True %}
                                 </div>
 
                                 <!-- Hidden select for form submission -->
@@ -145,11 +145,7 @@
                                 <div class="flex items-center gap-2 text-sm">
                                     <span class="text-base-content/70">Selected:</span>
                                     <span id="selected-theme-name" class="font-semibold">
-                                        {% if profile.selected_theme %}
-                                            {% for tk, td in available_themes %}{% if tk == profile.selected_theme %}{{ td.name }}{% endif %}{% endfor %}
-                                        {% else %}
-                                            None
-                                        {% endif %}
+                                        {% if selected_theme_name %}{{ selected_theme_name }}{% else %}None{% endif %}
                                     </span>
                                 </div>
 
@@ -164,7 +160,7 @@
                                     <span class="label-text">Preview</span>
                                 </label>
                                 <div id="theme-preview-container" class="h-24 rounded-lg border border-base-300 flex items-center justify-center overflow-hidden"
-                                     style="{% if profile.selected_theme %}{% for tk, td in available_themes %}{% if tk == profile.selected_theme %}background: {{ td.background_css }};{% endif %}{% endfor %}{% else %}background: linear-gradient(to bottom right, #2a2e34, #32363d, #2a2e34);{% endif %}">
+                                     style="background: {% if selected_theme_css %}{{ selected_theme_css }}{% else %}linear-gradient(to bottom right, #2a2e34, #32363d, #2a2e34){% endif %}">
                                     <span class="text-white font-bold text-lg drop-shadow-lg">{{ profile.display_psn_username }}</span>
                                 </div>
                             </div>
