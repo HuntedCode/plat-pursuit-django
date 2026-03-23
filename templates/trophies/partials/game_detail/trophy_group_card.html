@@ -1,48 +1,46 @@
-<div class="card bg-base-200/80 border-2 border-base-300 shadow-md shadow-neutral mb-2">
-    <div class="card-body m-0 p-2 md:p-3 flex flex-row items-center gap-2 md:gap-3">
-        {# Group icon #}
-        <div class="w-10 h-10 md:w-12 md:h-12 rounded-lg overflow-hidden shrink-0 ring-1 ring-base-300">
-            <img src="{{ group.trophy_group_icon_url }}" alt="{{ group.trophy_group_name }}"
-                 class="w-full h-full object-cover" loading="lazy" />
+<div class="bg-base-300/50 border-l-4 border-l-accent rounded-r-lg px-3 py-2 md:px-4 md:py-2.5 mb-2 flex items-center gap-2 md:gap-3">
+    {# Group icon #}
+    <div class="w-8 h-8 md:w-10 md:h-10 rounded-lg overflow-hidden shrink-0 ring-1 ring-base-300">
+        <img src="{{ group.trophy_group_icon_url }}" alt="{{ group.trophy_group_name }}"
+             class="w-full h-full object-cover" loading="lazy" />
+    </div>
+
+    {# Group name #}
+    <h3 class="font-bold text-sm md:text-base italic line-clamp-1 pr-1 flex-1 min-w-0">{{ group.trophy_group_name }}</h3>
+
+    {# Trophy counts #}
+    <div class="grid grid-cols-4 gap-0.5 md:gap-1 lg:gap-2 text-center shrink-0">
+        <div class="px-1 md:px-2 py-0.5">
+            {% if profile %}
+                <div class="text-xs md:text-sm font-black"><span class="text-primary">{{ profile_group_total.bronze|default:0 }}</span><span class="text-base-content/40 font-normal">/</span><span style="color: var(--color-trophy-bronze)">{{ group.defined_trophies.bronze }}</span></div>
+            {% else %}
+                <div class="text-xs md:text-sm font-black" style="color: var(--color-trophy-bronze)">{{ group.defined_trophies.bronze }}</div>
+            {% endif %}
+            <div class="text-[0.5rem] md:text-[0.55rem] text-base-content/40 font-medium leading-none">BRZ</div>
         </div>
-
-        {# Group name #}
-        <h3 class="font-semibold text-sm md:text-base lg:text-lg italic line-clamp-1 pr-1 flex-1 min-w-0">{{ group.trophy_group_name }}</h3>
-
-        {# Trophy counts: labeled stat grid #}
-        <div class="grid grid-cols-4 gap-0.5 md:gap-1 lg:gap-2 text-center shrink-0">
-            <div class="rounded-md px-1 md:px-2 py-0.5 md:py-1">
-                {% if profile %}
-                    <div class="text-xs md:text-sm lg:text-base font-black"><span class="text-primary">{{ profile_group_total.bronze|default:0 }}</span><span class="text-base-content/40 font-normal">/</span><span style="color: var(--color-trophy-bronze)">{{ group.defined_trophies.bronze }}</span></div>
-                {% else %}
-                    <div class="text-xs md:text-sm lg:text-base font-black" style="color: var(--color-trophy-bronze)">{{ group.defined_trophies.bronze }}</div>
-                {% endif %}
-                <div class="text-[0.5rem] md:text-[0.55rem] text-base-content/40 font-medium leading-none">BRZ</div>
-            </div>
-            <div class="rounded-md px-1 md:px-2 py-0.5 md:py-1">
-                {% if profile %}
-                    <div class="text-xs md:text-sm lg:text-base font-black"><span class="text-primary">{{ profile_group_total.silver|default:0 }}</span><span class="text-base-content/40 font-normal">/</span><span style="color: var(--color-trophy-silver)">{{ group.defined_trophies.silver }}</span></div>
-                {% else %}
-                    <div class="text-xs md:text-sm lg:text-base font-black" style="color: var(--color-trophy-silver)">{{ group.defined_trophies.silver }}</div>
-                {% endif %}
-                <div class="text-[0.5rem] md:text-[0.55rem] text-base-content/40 font-medium leading-none">SLV</div>
-            </div>
-            <div class="rounded-md px-1 md:px-2 py-0.5 md:py-1">
-                {% if profile %}
-                    <div class="text-xs md:text-sm lg:text-base font-black"><span class="text-primary">{{ profile_group_total.gold|default:0 }}</span><span class="text-base-content/40 font-normal">/</span><span style="color: var(--color-trophy-gold)">{{ group.defined_trophies.gold }}</span></div>
-                {% else %}
-                    <div class="text-xs md:text-sm lg:text-base font-black" style="color: var(--color-trophy-gold)">{{ group.defined_trophies.gold }}</div>
-                {% endif %}
-                <div class="text-[0.5rem] md:text-[0.55rem] text-base-content/40 font-medium leading-none">GLD</div>
-            </div>
-            <div class="rounded-md px-1 md:px-2 py-0.5 md:py-1">
-                {% if profile %}
-                    <div class="text-xs md:text-sm lg:text-base font-black"><span class="text-primary">{{ profile_group_total.platinum|default:0 }}</span><span class="text-base-content/40 font-normal">/</span><span style="color: var(--color-trophy-platinum)">{{ group.defined_trophies.platinum }}</span></div>
-                {% else %}
-                    <div class="text-xs md:text-sm lg:text-base font-black" style="color: var(--color-trophy-platinum)">{{ group.defined_trophies.platinum }}</div>
-                {% endif %}
-                <div class="text-[0.5rem] md:text-[0.55rem] text-base-content/40 font-medium leading-none">PLT</div>
-            </div>
+        <div class="px-1 md:px-2 py-0.5">
+            {% if profile %}
+                <div class="text-xs md:text-sm font-black"><span class="text-primary">{{ profile_group_total.silver|default:0 }}</span><span class="text-base-content/40 font-normal">/</span><span style="color: var(--color-trophy-silver)">{{ group.defined_trophies.silver }}</span></div>
+            {% else %}
+                <div class="text-xs md:text-sm font-black" style="color: var(--color-trophy-silver)">{{ group.defined_trophies.silver }}</div>
+            {% endif %}
+            <div class="text-[0.5rem] md:text-[0.55rem] text-base-content/40 font-medium leading-none">SLV</div>
+        </div>
+        <div class="px-1 md:px-2 py-0.5">
+            {% if profile %}
+                <div class="text-xs md:text-sm font-black"><span class="text-primary">{{ profile_group_total.gold|default:0 }}</span><span class="text-base-content/40 font-normal">/</span><span style="color: var(--color-trophy-gold)">{{ group.defined_trophies.gold }}</span></div>
+            {% else %}
+                <div class="text-xs md:text-sm font-black" style="color: var(--color-trophy-gold)">{{ group.defined_trophies.gold }}</div>
+            {% endif %}
+            <div class="text-[0.5rem] md:text-[0.55rem] text-base-content/40 font-medium leading-none">GLD</div>
+        </div>
+        <div class="px-1 md:px-2 py-0.5">
+            {% if profile %}
+                <div class="text-xs md:text-sm font-black"><span class="text-primary">{{ profile_group_total.platinum|default:0 }}</span><span class="text-base-content/40 font-normal">/</span><span style="color: var(--color-trophy-platinum)">{{ group.defined_trophies.platinum }}</span></div>
+            {% else %}
+                <div class="text-xs md:text-sm font-black" style="color: var(--color-trophy-platinum)">{{ group.defined_trophies.platinum }}</div>
+            {% endif %}
+            <div class="text-[0.5rem] md:text-[0.55rem] text-base-content/40 font-medium leading-none">PLT</div>
         </div>
     </div>
 </div>
