@@ -215,6 +215,17 @@ def dict_get(dict_obj, key):
 
 
 @register.filter
+def psn_rarity_label(rarity_val):
+    """Convert trophy_rarity integer (0-3) or string to display label."""
+    try:
+        rarity_int = int(rarity_val)
+    except (TypeError, ValueError):
+        return ''
+    labels = {0: 'Ultra Rare', 1: 'Very Rare', 2: 'Rare', 3: 'Common'}
+    return labels.get(rarity_int, '')
+
+
+@register.filter
 def get_item(dictionary, key):
     """
     Look up a key in a dictionary. Returns empty dict if key not found.

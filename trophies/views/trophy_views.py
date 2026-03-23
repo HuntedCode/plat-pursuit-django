@@ -30,7 +30,12 @@ class TrophiesListView(ProfileHotbarMixin, ListView):
     """
     model = Trophy
     template_name = 'trophies/trophy_list.html'
-    paginate_by = 25
+    paginate_by = 30
+
+    def get_filter_form(self):
+        if not hasattr(self, '_filter_form'):
+            self._filter_form = TrophySearchForm(self.request.GET)
+        return self._filter_form
 
     def dispatch(self, request, *args, **kwargs):
         if not request.GET:
@@ -46,7 +51,7 @@ class TrophiesListView(ProfileHotbarMixin, ListView):
 
     def get_queryset(self):
         qs = super().get_queryset().select_related('game')
-        form = TrophySearchForm(self.request.GET)
+        form = self.get_filter_form()
         order = [Lower('trophy_name')]
 
         if form.is_valid():
@@ -114,7 +119,7 @@ class TrophiesListView(ProfileHotbarMixin, ListView):
             {'text': 'Trophies'},
         ]
 
-        context['form'] = TrophySearchForm(self.request.GET)
+        context['form'] = self.get_filter_form()
         context['selected_platforms'] = self.request.GET.getlist('platform')
         context['selected_types'] = self.request.GET.getlist('type')
         context['selected_regions'] = self.request.GET.getlist('region')
@@ -125,6 +130,25 @@ class TrophiesListView(ProfileHotbarMixin, ListView):
         context['seo_description'] = (
             "Search PlayStation trophies on Platinum Pursuit. "
             "Filter by type, rarity, and game to find what you're looking for."
+        )
+
+        # Post-pagination: user earned data (1 query, authenticated only)
+        page_trophies = context['object_list']
+        if self.request.user.is_authenticated and hasattr(self.request.user, 'profile'):
+            trophy_ids = [t.id for t in page_trophies]
+            earned_ids = set(
+                EarnedTrophy.objects.filter(
+                    profile=self.request.user.profile,
+                    trophy_id__in=trophy_ids,
+                    earned=True
+                ).values_list('trophy_id', flat=True)
+            )
+            context['user_earned_ids'] = earned_ids
+
+        # Auto-open filter drawer when secondary filters active
+        context['has_active_filters'] = bool(
+            self.request.GET.getlist('type') or
+            self.request.GET.getlist('psn_rarity')
         )
 
         track_page_view('trophies_list', 'list', self.request)

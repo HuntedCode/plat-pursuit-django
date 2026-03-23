@@ -1,73 +1,132 @@
 {% load custom_filters humanize %}
 {% for trophy in object_list %}
-    <a href="{% url 'game_detail' trophy.game.np_communication_id %}#{{ trophy.trophy_id }}" class="card bg-base-100 border-4 border-base-300 shadow-md shadow-neutral cursor-pointer transition-all duration-300 hover:scale-105 hover:border-{{ trophy|trophy_color }} hover:shadow-{{ trophy|trophy_color }} hover:shadow-lg hover:z-10 group">
-        <div class="card-body m-0 px-3 py-3">
-            <div class="flex flex-row items-center gap-2 lg:gap-4">
+    <a href="{% url 'game_detail' trophy.game.np_communication_id %}#{{ trophy.trophy_id }}"
+       class="card bg-base-200/70 border-2 border-base-300 shadow-md shadow-neutral cursor-pointer
+              transition-all duration-300 hover:shadow-lg hover:shadow-trophy-{{ trophy.trophy_type }}/30
+              hover:border-trophy-{{ trophy.trophy_type }} hover:z-10 group
+              {% if user_earned_ids and trophy.id in user_earned_ids %}border-l-4 border-l-success{% endif %}">
+        <div class="card-body m-0 p-2 md:p-3">
+            <div class="flex items-center gap-2 md:gap-3 lg:gap-4">
 
-                {# Column 1: Game Icon + Trophy Icon + Name + Description + Badges #}
-                <div class="flex flex-row items-center justify-start gap-2 min-w-0 flex-1">
-                    <div class="flex flex-row">
-                        <figure class="border-4 border-base-300 rounded-box transition-colors duration-300 mr-1 lg:mr-2 group-hover:border-{{ trophy.game|platform_color }} overflow-hidden">
-                            {% if trophy.game.title_image and not trophy.game.force_title_icon %}
-                                <img src="{{ trophy.game.title_image }}" alt="{{ trophy.game.title_name }}" class="h-15 lg:h-18 w-15 lg:w-18 object-cover shrink-0" loading="lazy" />
-                            {% else %}
-                                <img src="{{ trophy.game.title_icon_url }}" alt="{{ trophy.game.title_name }}" class="h-15 lg:h-18 w-15 lg:w-18 object-cover shrink-0" loading="lazy" />
-                            {% endif %}
-                        </figure>
-                        <figure class="border-4 border-base-300 rounded-box transition-colors duration-300 mr-1 lg:mr-2 group-hover:border-{{ trophy|trophy_color }} overflow-hidden">
-                            <img src="{{ trophy.trophy_icon_url }}" alt="{{ trophy.trophy_name }}" class="h-15 lg:h-18 w-15 lg:w-18 object-cover shrink-0" loading="lazy" />
-                        </figure>
-                    </div>
-                    <div class="flex flex-col gap-0.5">
-                        <div class="flex flex-row items-center gap-1.5">
-                            {% include 'partials/icons/trophy_cup.html' with color=trophy|trophy_css_color size='w-4 h-4' %}
-                            <h1 class="text-base lg:text-lg text-base-content pr-1 line-clamp-2">{{ trophy.trophy_name }}</h1>
+                {# ── Trophy Icon (primary) ── #}
+                <div class="flex flex-col items-center gap-0.5 shrink-0">
+                    {% if user_earned_ids and trophy.id in user_earned_ids %}
+                        <div class="md:hidden" title="Earned!">
+                            {% include 'partials/icons/checkmark.html' with color='var(--color-success)' size='w-3.5 h-3.5' %}
                         </div>
-                        <p class="text-xs text-base-content/70 pr-1 line-clamp-1">{{ trophy.trophy_detail }}</p>
-                        <h3 class="text-sm text-accent italic pr-1 line-clamp-1">{{ trophy.game.title_name }}</h3>
-                        <div class="flex flex-row flex-wrap items-center gap-1">
-                            {% for platform in trophy.game.title_platform reversed %}
-                                <div class="badge badge-xs lg:badge-sm badge-ghost font-bold border-2 border-{{ platform|platform_color_str }} rounded-box hover:scale-105">{{ platform }}</div>
-                            {% endfor %}
-                            {% include 'partials/region_badges.html' with game=trophy.game badge_size='badge-xs lg:badge-sm' %}
-                        </div>
+                    {% endif %}
+                    <div class="relative w-12 h-12 md:w-14 md:h-14 rounded-lg overflow-hidden
+                                border-2 border-base-300 group-hover:border-trophy-{{ trophy.trophy_type }} transition-all">
+                        <img src="{{ trophy.trophy_icon_url }}" alt="{{ trophy.trophy_name }}"
+                             class="w-full h-full object-cover" loading="lazy" />
                     </div>
                 </div>
 
-                {# Right side: Rates + Counts — stacked at tablet, inline at desktop #}
-                <div class="flex flex-col lg:flex-row items-center gap-0 lg:gap-3 shrink-0">
-                    <div class="flex flex-row items-center gap-1 lg:gap-3">
-                        <div class="flex flex-row gap-1 justify-center items-center">
-                            {% include 'partials/icons/pp_logo.html' with size='w-5 h-5 lg:w-6 lg:h-6' %}
-                            <span class="text-sm lg:text-base italic text-base-content/70">{{ trophy.earn_rate|multiply:100|floatformat:2 }}%</span>
-                        </div>
-                        <div class="divider divider-horizontal mx-0 px-0"></div>
-                        <div class="flex flex-row gap-1 justify-center items-center">
-                            {% include 'partials/icons/ps_logo.html' with size='w-5 h-5 lg:w-6 lg:h-6' %}
-                            <span class="text-sm lg:text-base italic text-base-content/70">{{ trophy.trophy_earn_rate }}%</span>
-                        </div>
+                {# ── Game Icon (secondary, lg:+ only) ── #}
+                <div class="hidden lg:block w-8 h-8 rounded-md overflow-hidden shrink-0 ring-1 ring-base-300">
+                    {% if trophy.game.title_image and not trophy.game.force_title_icon %}
+                        <img src="{{ trophy.game.title_image }}" alt="{{ trophy.game.title_name }}"
+                             class="w-full h-full object-cover" loading="lazy" />
+                    {% else %}
+                        <img src="{{ trophy.game.title_icon_url }}" alt="{{ trophy.game.title_name }}"
+                             class="w-full h-full object-contain p-0.5" loading="lazy" />
+                    {% endif %}
+                </div>
+
+                {# ── Title + Description + Game + Badges ── #}
+                <div class="flex-1 min-w-0">
+                    {# Trophy name + type badge #}
+                    <div class="flex items-center gap-1.5">
+                        <span class="font-semibold text-sm md:text-base line-clamp-1 pr-1
+                                     group-hover:text-trophy-{{ trophy.trophy_type }} transition-colors">{{ trophy.trophy_name }}</span>
+                        <span class="badge badge-xs md:badge-sm font-bold shrink-0 border"
+                              style="color: {{ trophy|trophy_css_color }}; border-color: {{ trophy|trophy_css_color }};">
+                            {{ trophy.trophy_type|title }}
+                        </span>
                     </div>
-                    <div class="divider divider-horizontal mx-0 px-0 hidden lg:flex"></div>
-                    <div class="flex flex-row items-center gap-1 lg:gap-2">
-                        <div class="flex flex-row gap-1 justify-center items-center">
-                            {% include 'partials/icons/user.html' with size='w-5 h-5 lg:w-6 lg:h-6' %}
-                            <span class="text-sm lg:text-base italic text-base-content/70">{{ trophy.game.played_count|intcomma }}</span>
+
+                    {# Description #}
+                    <p class="text-xs text-base-content/50 line-clamp-1 pr-1 mt-0.5">{{ trophy.trophy_detail }}</p>
+
+                    {# Game name #}
+                    <span class="text-xs text-accent italic line-clamp-1 pr-1 mt-0.5">{{ trophy.game.title_name }}</span>
+
+                    {# Platform + region badges (own row on mobile, inline with game name at md:+) #}
+                    <div class="flex flex-wrap items-center gap-1 mt-0.5">
+                        {% for platform in trophy.game.title_platform reversed %}
+                            <div class="badge badge-xs badge-ghost font-bold border border-{{ platform|platform_color_str }} rounded-box">{{ platform }}</div>
+                        {% endfor %}
+                        {% include 'partials/region_badges.html' with game=trophy.game badge_size='badge-xs' %}
+                    </div>
+
+                    {# Stats row (MOBILE ONLY) #}
+                    <div class="flex items-center gap-1.5 mt-1 md:hidden text-xs text-base-content/50">
+                        <div class="flex items-center gap-0.5">
+                            {% include 'partials/icons/pp_logo.html' with size='w-3 h-3' %}
+                            <span>{{ trophy.earn_rate|multiply:100|floatformat:1 }}%</span>
                         </div>
-                        <div class="divider divider-horizontal mx-0 px-0"></div>
-                        <div class="flex flex-row gap-1 justify-center items-center">
-                            {% include 'partials/icons/checkmark.html' with size='w-5 h-5 lg:w-6 lg:h-6' %}
-                            <span class="text-sm lg:text-base italic text-base-content/70">{{ trophy.earned_count|intcomma }}</span>
+                        <span class="text-base-content/20">&middot;</span>
+                        <div class="flex items-center gap-0.5">
+                            {% include 'partials/icons/ps_logo.html' with size='w-3 h-3' %}
+                            <span>{{ trophy.trophy_earn_rate }}%</span>
                         </div>
+                        <span class="text-base-content/20">&middot;</span>
+                        <span>{{ trophy.earned_count|intcomma }} earned</span>
                     </div>
                 </div>
+
+                {# ── Stats Panel (md:+) ── #}
+                <div class="hidden md:flex items-center gap-2 lg:gap-3 shrink-0">
+                    {% if user_earned_ids and trophy.id in user_earned_ids %}
+                        <div class="flex items-center shrink-0" title="You earned this trophy!">
+                            {% include 'partials/icons/checkmark.html' with color='var(--color-success)' size='w-4 h-4 lg:w-5 lg:h-5' %}
+                        </div>
+                    {% endif %}
+                    {# PP Rate #}
+                    <div class="flex flex-col items-center gap-0.5 min-w-14 lg:min-w-16">
+                        <div class="flex items-center gap-1">
+                            {% include 'partials/icons/pp_logo.html' with size='w-3.5 h-3.5' %}
+                            <span class="text-sm lg:text-base font-bold text-base-content/80">{{ trophy.earn_rate|multiply:100|floatformat:1 }}%</span>
+                        </div>
+                        <span class="text-[0.6rem] text-base-content/40 font-medium uppercase">PP Rate</span>
+                    </div>
+
+                    {# PSN Rate #}
+                    <div class="flex flex-col items-center gap-0.5 min-w-14 lg:min-w-16">
+                        <div class="flex items-center gap-1">
+                            {% include 'partials/icons/ps_logo.html' with size='w-3.5 h-3.5' %}
+                            <span class="text-sm lg:text-base font-bold text-base-content/80">{{ trophy.trophy_earn_rate }}%</span>
+                        </div>
+                        <span class="text-[0.6rem] text-base-content/40 font-medium uppercase">PSN Rate</span>
+                    </div>
+
+                    {# Earned + Players (lg:+ only) #}
+                    <div class="hidden lg:flex flex-col items-center gap-0.5 min-w-20">
+                        <div class="flex items-center gap-2 text-sm text-base-content/60">
+                            <div class="flex items-center gap-0.5">
+                                {% include 'partials/icons/checkmark.html' with size='w-3 h-3' color='var(--color-success)' %}
+                                <span>{{ trophy.earned_count|intcomma }}</span>
+                            </div>
+                            <span class="text-base-content/20">&middot;</span>
+                            <div class="flex items-center gap-0.5">
+                                {% include 'partials/icons/user.html' with size='w-3 h-3' %}
+                                <span>{{ trophy.game.played_count|intcomma }}</span>
+                            </div>
+                        </div>
+                        <span class="text-[0.6rem] text-base-content/40 font-medium uppercase">Earned / Players</span>
+                    </div>
+                </div>
+
 
             </div>
         </div>
     </a>
 {% empty %}
-    <div class="col-span-full text-center py-16 px-4">
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 mx-auto text-base-content/30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="7" width="20" height="15" rx="2" ry="2"></rect><polyline points="17 2 12 7 7 2"></polyline></svg>
-        <p class="text-base-content/60 mt-4 mb-2 text-lg font-semibold">No trophies found</p>
-        <p class="text-base-content/40 text-sm">Try expanding your search or adjusting your filters</p>
+    <div class="card bg-base-200/70 border-2 border-base-300 shadow-lg shadow-neutral">
+        <div class="card-body items-center text-center py-12 md:py-16">
+            {% include 'partials/icons/trophy_cup.html' with color='var(--color-base-content)' size='w-12 h-12 md:w-16 md:h-16 opacity-30' %}
+            <p class="text-base-content/60 mt-3 mb-1 text-base md:text-lg font-semibold">No trophies found</p>
+            <p class="text-base-content/40 text-xs md:text-sm">Try expanding your search or adjusting your filters</p>
+        </div>
     </div>
 {% endfor %}
