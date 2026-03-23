@@ -182,6 +182,9 @@ class GameDetailView(ProfileHotbarMixin, DetailView):
     slug_url_kwarg = 'np_communication_id'
     context_object_name = 'game'
 
+    def get_queryset(self):
+        return super().get_queryset().select_related('concept')
+
     def _get_target_profile(self):
         """
         Get the target profile from URL parameter or authenticated user.
