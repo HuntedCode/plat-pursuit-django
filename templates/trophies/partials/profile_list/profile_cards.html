@@ -1,120 +1,135 @@
-{% load static custom_filters %}
-{% load humanize %}
+{% load static custom_filters humanize %}
 {% for profile in object_list %}
-    <a href="{% url 'profile_detail' profile.psn_username %}" class="card bg-base-100 border-4 {% if profile.user_is_premium %}shimmer{% else %}border-base-300{% endif %} shadow-xl shadow-neutral cursor-pointer transition-all duration-300 hover:scale-105 hover:border-primary hover:shadow-primary hover:z-10 group">
-        <div class="relative card-body m-0 px-3 py-3">
-            {# Top-right: Country flag #}
-            <div class="absolute top-2 right-4 text-lg text-base-content font-bold">{{ profile.flag }}</div>
+    <a href="{% url 'profile_detail' profile.psn_username %}"
+       class="card bg-base-200/70 border-2 {% if profile.user_is_premium %}shimmer{% else %}border-base-300{% endif %}
+              shadow-md shadow-neutral cursor-pointer transition-all duration-300
+              hover:shadow-lg hover:shadow-primary/30 hover:border-primary hover:z-10 group h-full">
+        <div class="relative card-body m-0 p-2 md:p-3 flex flex-col items-center">
 
-            {# Top-left: Privacy warning or Premium badge #}
+            {# ── Top badges (absolute) ── #}
             {% if not profile.psn_history_public %}
-                <div class="tooltip absolute top-2 left-4 z-50 hover:scale-105" data-tip="Game Data Privated">
-                    {% include 'partials/icons/privacy_warning.html' with size='w-7 h-7' %}
+                <div class="absolute top-2 left-2 z-10" title="Game Data Privated">
+                    {% include 'partials/icons/privacy_warning.html' with size='w-5 h-5 md:w-6 md:h-6' %}
                 </div>
             {% elif profile.user_is_premium %}
-                <div class="tooltip absolute top-2 left-4 z-50 hover:scale-105" data-tip="Premium User">
-                    <img src="{% static 'images/badges/default.png' %}" class="w-7.5 h-7.5" />
+                <div class="absolute top-2 left-2 z-10" title="Premium Hunter">
+                    <img src="{% static 'images/badges/default.png' %}" alt="Premium" class="w-5 h-5 md:w-6 md:h-6" />
                 </div>
             {% endif %}
+            <div class="absolute top-2 right-2 text-base md:text-lg">{{ profile.flag }}</div>
 
-            <div class="flex flex-col items-center">
-                {# Avatar #}
-                <div class="avatar mb-3 transition duration-300 group-hover:scale-105">
-                    <div class="w-24 rounded-full ring-3 ring-primary">
-                        <img src="{{ profile.avatar_url }}" alt="{{ profile.psn_username }}'s avatar" class="hover:scale-105" />
-                    </div>
+            {# ── Avatar ── #}
+            <div class="mt-3 mb-2">
+                <div class="w-16 h-16 md:w-20 md:h-20 rounded-full overflow-hidden
+                            ring-2 {% if profile.user_is_premium %}ring-primary{% else %}ring-base-300{% endif %}
+                            group-hover:ring-primary transition-all">
+                    <img src="{{ profile.avatar_url }}" alt="{{ profile.psn_username }}"
+                         class="w-full h-full object-cover" />
                 </div>
+            </div>
 
-                {# Username #}
-                <h3 class="text-lg text-base-content font-bold line-clamp-1">{{ profile.display_psn_username }}</h3>
+            {# ── Username ── #}
+            <h3 class="text-sm md:text-base font-bold line-clamp-1 text-center group-hover:text-primary transition-colors">{{ profile.display_psn_username }}</h3>
 
-                {# About me #}
-                <p class="text-xs text-base-content/70 text-center line-clamp-2 min-h-[2rem]">{{ profile.about_me }}</p>
+            {# ── About me ── #}
+            <p class="text-xs text-base-content/50 text-center line-clamp-2 min-h-[2rem] mt-0.5">{{ profile.about_me }}</p>
 
-                {# Title (always rendered for consistent card height) #}
-                <span class="text-lg line-clamp-1 pr-1 italic {% if profile.displayed_title %}{% if profile.user_is_premium %}legendary-title{% else %}text-base-content/70{% endif %}{% else %}invisible{% endif %}">{% if profile.displayed_title %}{{ profile.displayed_title }}{% else %}&nbsp;{% endif %}</span>
+            {# ── Title ── #}
+            <span class="text-sm md:text-base line-clamp-1 pr-1 italic text-center
+                         {% if profile.displayed_title %}{% if profile.user_is_premium %}legendary-title{% else %}text-base-content/60{% endif %}{% else %}invisible{% endif %}">
+                {% if profile.displayed_title %}{{ profile.displayed_title }}{% else %}&nbsp;{% endif %}
+            </span>
 
-                {# --- Stats Section --- #}
+            {# ── Stats Panel ── #}
+            <div class="bg-base-300/20 rounded-lg p-1.5 mt-auto w-full space-y-1">
                 {% if not profile.psn_history_public %}
-                    {# Single privacy banner instead of per-stat icons #}
-                    <div class="divider divider-vertical my-0"></div>
-                    <div class="flex items-center gap-2 py-3">
-                        {% include 'partials/icons/privacy_warning.html' with size='w-5 h-5' %}
+                    {# Private state #}
+                    <div class="flex items-center justify-center gap-1.5 py-3">
+                        {% include 'partials/icons/privacy_warning.html' with size='w-4 h-4' %}
                         <span class="text-xs text-error italic">Profile data is private</span>
                     </div>
+
                 {% elif profile.sync_status == 'syncing' %}
-                    {# Syncing state: single loading indicator #}
-                    <div class="divider divider-vertical my-0"></div>
+                    {# Syncing state #}
                     <div class="flex flex-col items-center gap-1 py-3">
-                        <span class="loading loading-infinity loading-lg"></span>
+                        <span class="loading loading-infinity loading-md"></span>
                         <span class="text-xs text-base-content/50 italic">Syncing profile...</span>
                     </div>
+
                 {% else %}
-                    {# Trophy type breakdown row #}
-                    <div class="divider divider-vertical my-0"></div>
-                    <div class="flex flex-row flex-wrap gap-2 justify-center items-center py-0.5">
-                        <div class="flex items-center gap-0.5">
-                            {% include 'partials/icons/trophy_cup.html' with color='var(--color-trophy-bronze)' size='w-3.5 h-3.5' %}
-                            <span class="text-xs font-semibold">{{ profile.total_bronzes|intcomma }}</span>
+                    {# Trophy counts: labeled 4-col grid #}
+                    <div class="grid grid-cols-4 gap-0.5 text-center">
+                        <div class="rounded p-0.5">
+                            <div class="text-xs font-black" style="color: var(--color-trophy-bronze)">{{ profile.total_bronzes|intcomma }}</div>
+                            <div class="text-[0.55rem] text-base-content/40 font-medium leading-none">BRZ</div>
                         </div>
-                        <div class="flex items-center gap-0.5">
-                            {% include 'partials/icons/trophy_cup.html' with color='var(--color-trophy-silver)' size='w-3.5 h-3.5' %}
-                            <span class="text-xs font-semibold">{{ profile.total_silvers|intcomma }}</span>
+                        <div class="rounded p-0.5">
+                            <div class="text-xs font-black" style="color: var(--color-trophy-silver)">{{ profile.total_silvers|intcomma }}</div>
+                            <div class="text-[0.55rem] text-base-content/40 font-medium leading-none">SLV</div>
                         </div>
-                        <div class="flex items-center gap-0.5">
-                            {% include 'partials/icons/trophy_cup.html' with color='var(--color-trophy-gold)' size='w-3.5 h-3.5' %}
-                            <span class="text-xs font-semibold">{{ profile.total_golds|intcomma }}</span>
+                        <div class="rounded p-0.5">
+                            <div class="text-xs font-black" style="color: var(--color-trophy-gold)">{{ profile.total_golds|intcomma }}</div>
+                            <div class="text-[0.55rem] text-base-content/40 font-medium leading-none">GLD</div>
                         </div>
-                        <div class="flex items-center gap-0.5">
-                            {% include 'partials/icons/trophy_cup.html' with color='var(--color-trophy-platinum)' size='w-3.5 h-3.5' %}
-                            <span class="text-xs font-semibold">{{ profile.total_plats|intcomma }}</span>
+                        <div class="rounded p-0.5">
+                            <div class="text-xs font-black" style="color: var(--color-trophy-platinum)">{{ profile.total_plats|intcomma }}</div>
+                            <div class="text-[0.55rem] text-base-content/40 font-medium leading-none">PLT</div>
                         </div>
                     </div>
 
-                    {# Compact stats row #}
-                    <div class="divider divider-vertical my-0"></div>
-                    <div class="flex flex-row flex-wrap gap-x-3 gap-y-1 justify-center items-center">
-                        <div class="flex flex-col items-center">
-                            <span class="text-xs text-base-content/70 italic">Level</span>
-                            <span class="text-sm text-accent font-bold">{{ profile.trophy_level }}</span>
+                    <div class="border-t border-base-content/10"></div>
+
+                    {# Compact stats: labeled 4-col grid #}
+                    <div class="grid grid-cols-4 gap-0.5 text-center">
+                        <div class="rounded p-0.5">
+                            <div class="text-xs font-bold text-accent">{{ profile.trophy_level }}</div>
+                            <div class="text-[0.55rem] text-base-content/40 font-medium leading-none">LVL</div>
                         </div>
-                        <div class="flex flex-col items-center">
-                            <span class="text-xs text-base-content/70 italic">Games</span>
-                            <span class="text-sm text-warning font-bold">{{ profile.total_games }}</span>
+                        <div class="rounded p-0.5">
+                            <div class="text-xs font-bold text-warning">{{ profile.total_games }}</div>
+                            <div class="text-[0.55rem] text-base-content/40 font-medium leading-none">GAMES</div>
                         </div>
-                        <div class="flex flex-col items-center">
-                            <span class="text-xs text-base-content/70 italic">100%'s</span>
-                            <span class="text-sm text-success font-bold">{{ profile.total_completes }}</span>
+                        <div class="rounded p-0.5">
+                            <div class="text-xs font-bold text-success">{{ profile.total_completes }}</div>
+                            <div class="text-[0.55rem] text-base-content/40 font-medium leading-none">100%</div>
                         </div>
-                        <div class="flex flex-col items-center">
-                            <span class="text-xs text-base-content/70 italic">Avg.</span>
-                            <span class="text-sm text-base-content font-bold">{{ profile.avg_progress|floatformat:0 }}%</span>
+                        <div class="rounded p-0.5">
+                            <div class="text-xs font-bold">{{ profile.avg_progress|floatformat:0 }}%</div>
+                            <div class="text-[0.55rem] text-base-content/40 font-medium leading-none">AVG</div>
                         </div>
                     </div>
-                {% endif %}
 
-                {# Latest Platinum (compact) #}
-                {% with profile.recent_platinum.0.trophy as recent %}
-                    {% if recent and profile.psn_history_public and profile.sync_status != 'syncing' %}
-                        <div class="divider divider-vertical my-0"></div>
-                        <div class="flex flex-row self-start items-center w-full gap-2">
-                            <figure class="border-2 border-{{ recent|trophy_color }} rounded-box shrink-0 transition-colors duration-300 hover:scale-105">
-                                <img src="{{ recent.trophy_icon_url }}" alt="{{ recent.trophy_name }}" class="h-8 w-8 object-cover shrink-0" loading="lazy" />
-                            </figure>
-                            <div class="flex flex-col gap-0 min-w-0">
-                                <span class="text-xs text-base-content text-start line-clamp-1">{{ recent.trophy_name }}</span>
-                                <span class="text-xs text-accent text-start italic pr-1 line-clamp-1">{{ recent.game.title_name }}</span>
+                    {# Recent platinum #}
+                    {% with profile.recent_platinum.0.trophy as recent %}
+                        {% if recent %}
+                            <div class="border-t border-base-content/10"></div>
+                            <div class="flex items-center gap-1.5 p-0.5">
+                                <div class="w-7 h-7 rounded-md overflow-hidden shrink-0 border border-trophy-platinum">
+                                    <img src="{{ recent.trophy_icon_url }}" alt="{{ recent.trophy_name }}"
+                                         class="w-full h-full object-cover" loading="lazy" />
+                                </div>
+                                <div class="flex-1 min-w-0">
+                                    <div class="text-xs font-semibold line-clamp-1">{{ recent.trophy_name }}</div>
+                                    <div class="text-[0.6rem] text-accent italic line-clamp-1 pr-1">{{ recent.game.title_name }}</div>
+                                </div>
                             </div>
-                        </div>
-                    {% endif %}
-                {% endwith %}
+                        {% endif %}
+                    {% endwith %}
+                {% endif %}
             </div>
         </div>
     </a>
 {% empty %}
-    <div class="col-span-full text-center py-16 px-4">
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 mx-auto text-base-content/30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
-        <p class="text-base-content/60 mt-4 mb-2 text-lg font-semibold">No profiles found</p>
-        <p class="text-base-content/40 text-sm">Try adjusting your search or filters</p>
+    <div class="col-span-full">
+        <div class="card bg-base-200/70 border-2 border-base-300 shadow-lg shadow-neutral">
+            <div class="card-body items-center text-center py-12 md:py-16">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 md:h-16 md:w-16 text-base-content/30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                    <circle cx="12" cy="7" r="4"></circle>
+                </svg>
+                <p class="text-base-content/60 mt-3 mb-1 text-base md:text-lg font-semibold">No hunters found</p>
+                <p class="text-base-content/40 text-xs md:text-sm">Try adjusting your search or filters</p>
+            </div>
+        </div>
     </div>
 {% endfor %}

@@ -54,14 +54,21 @@ class ProfilesListView(ProfileHotbarMixin, ListView):
     """
     model = Profile
     template_name = 'trophies/profile_list.html'
-    paginate_by = 25
+    paginate_by = 30
+
+    def get_filter_form(self):
+        if not hasattr(self, '_filter_form'):
+            self._filter_form = ProfileSearchForm(self.request.GET)
+        return self._filter_form
 
     def get_queryset(self):
         qs = super().get_queryset()
-        form = ProfileSearchForm(self.request.GET)
+        form = self.get_filter_form()
         order = [Lower('psn_username')]
 
-        #qs = qs.exclude(psn_history_public=False)
+        # Always prefetch recent platinum (needed by template regardless of form state)
+        recent_plat_qs = EarnedTrophy.objects.filter(earned=True, trophy__trophy_type='platinum').order_by(F('earned_date_time').desc(nulls_last=True))[:1]
+        qs = qs.prefetch_related(Prefetch('earned_trophy_entries', queryset=recent_plat_qs, to_attr='recent_platinum'))
 
         if form.is_valid():
             query = form.cleaned_data.get('query')
@@ -72,9 +79,6 @@ class ProfilesListView(ProfileHotbarMixin, ListView):
                 qs = qs.filter(Q(psn_username__icontains=query))
             if country:
                 qs = qs.filter(country_code=country)
-
-            recent_plat_qs = EarnedTrophy.objects.filter(earned=True, trophy__trophy_type='platinum').order_by(F('earned_date_time').desc(nulls_last=True))[:1]
-            qs = qs.prefetch_related(Prefetch('earned_trophy_entries', queryset=recent_plat_qs, to_attr='recent_platinum'))
 
             if sort_val == 'trophies':
                 order = ['-total_trophies', Lower('psn_username')]
@@ -97,7 +101,8 @@ class ProfilesListView(ProfileHotbarMixin, ListView):
             {'text': 'Profiles'},
         ]
 
-        context['form'] = ProfileSearchForm(self.request.GET)
+        context['form'] = self.get_filter_form()
+        context['selected_country'] = self.request.GET.get('country', '')
 
         context['seo_description'] = (
             "Browse PlayStation trophy hunter profiles and leaderboards on Platinum Pursuit."
