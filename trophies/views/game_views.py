@@ -433,7 +433,8 @@ class GameDetailView(ProfileHotbarMixin, DetailView):
                 content_rating_url = game.concept.content_rating.get('url')
 
             image_urls = {
-                'bg_url': game.concept.bg_url,
+                'bg_url': None,  # Disabled on body during redesign
+                'header_bg_url': game.concept.bg_url,  # Used for frosted glass header only
                 'screenshot_urls': screenshot_urls,
                 'content_rating_url': content_rating_url
             }

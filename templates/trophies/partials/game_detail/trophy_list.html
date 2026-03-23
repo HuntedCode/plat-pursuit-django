@@ -3,7 +3,7 @@
     {% for trophy in trophies %}
         {% with profile_earned|dict_get:trophy.trophy_id as earned %}
             <div id="{{ trophy.trophy_id }}"
-                 class="card bg-base-300/25 border border-base-content/10
+                 class="card bg-base-300/30 border border-base-content/10
                         transition-all duration-300 hover:shadow-lg hover:shadow-trophy-{{ trophy.trophy_type }}/30
                         hover:border-trophy-{{ trophy.trophy_type }} hover:z-10 group
                         {% if earned.earned %}border-l-4 border-l-success{% endif %}">
