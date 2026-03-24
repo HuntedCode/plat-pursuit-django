@@ -57,7 +57,7 @@ class DashboardView(StaffRequiredMixin, ProfileHotbarMixin, TemplateView):
         available_themes = []
         if is_premium:
             from trophies.themes import get_available_themes_for_grid
-            available_themes = get_available_themes_for_grid(include_game_art=False)
+            available_themes = get_available_themes_for_grid(include_game_art=False, grouped=True)
 
         # Pre-render premium module previews for free users
         preview_html = {}

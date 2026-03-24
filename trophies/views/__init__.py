@@ -27,6 +27,7 @@ from .challenge_views import (
 from .review_hub_views import ReviewHubLandingView, RateMyGamesView, ReviewHubDetailView
 from .dashboard_views import DashboardView
 from .title_views import MyTitlesView
+from .platinum_grid_views import PlatinumGridView
 
 __all__ = [
     # Game views
@@ -60,4 +61,6 @@ __all__ = [
     'DashboardView',
     # Title views
     'MyTitlesView',
+    # Platinum Grid views
+    'PlatinumGridView',
 ]

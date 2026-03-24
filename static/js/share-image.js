@@ -439,6 +439,12 @@ class ShareImageManager {
     async generateAndDownload(format) {
         if (this.isDownloading) return;
 
+        // Theme nudge: prompt if still on default theme
+        if (this.currentBackground === 'default') {
+            this._showThemeNudge(format);
+            return;
+        }
+
         const promptId = this.getTrackingId();
         const shouldPrompt = !this.ratingData.hasRating
             && this.ratingData.conceptId
@@ -452,6 +458,41 @@ class ShareImageManager {
         }
 
         await this._doGenerateAndDownload(format);
+    }
+
+    /**
+     * Show theme nudge modal when downloading with default theme.
+     */
+    _showThemeNudge(format) {
+        const modal = document.getElementById('theme-nudge-modal');
+        if (!modal) {
+            // No modal in DOM, proceed with download
+            this._doGenerateAndDownload(format);
+            return;
+        }
+
+        // Clean up any previous listeners by cloning buttons
+        const browseBtn = document.getElementById('nudge-browse-themes');
+        const continueBtn = document.getElementById('nudge-continue');
+
+        const newBrowse = browseBtn?.cloneNode(true);
+        const newContinue = continueBtn?.cloneNode(true);
+        browseBtn?.replaceWith(newBrowse);
+        continueBtn?.replaceWith(newContinue);
+
+        newBrowse?.addEventListener('click', () => {
+            modal.close();
+            const colorModal = document.getElementById('color-grid-modal')
+                || document.getElementById('theme-picker-modal');
+            colorModal?.showModal();
+        });
+
+        newContinue?.addEventListener('click', () => {
+            modal.close();
+            this._doGenerateAndDownload(format);
+        });
+
+        modal.showModal();
     }
 
     /**

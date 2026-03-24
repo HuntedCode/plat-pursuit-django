@@ -451,7 +451,7 @@ class AZChallengeDetailView(ProfileHotbarMixin, DetailView):
 
         # Provide theme grid data for share card color picker (owner only)
         if context['is_owner']:
-            context['available_themes'] = get_available_themes_for_grid(include_game_art=False)
+            context['available_themes'] = get_available_themes_for_grid(include_game_art=False, grouped=True)
 
             # Serialize eligible spinner slots for "Pick My Next Game" picker
             spinner_data = []
@@ -649,7 +649,7 @@ class CalendarChallengeDetailView(ProfileHotbarMixin, DetailView):
 
         # Provide theme grid data for share card color picker (owner only)
         if context['is_owner']:
-            context['available_themes'] = get_available_themes_for_grid(include_game_art=False)
+            context['available_themes'] = get_available_themes_for_grid(include_game_art=False, grouped=True)
 
         context['seo_description'] = (
             f"{challenge.name}: Platinum Calendar by {challenge.profile.display_psn_username}. "
@@ -965,7 +965,7 @@ class GenreChallengeDetailView(ProfileHotbarMixin, DetailView):
 
         # Provide theme grid data and spinner slots (owner only)
         if context['is_owner']:
-            context['available_themes'] = get_available_themes_for_grid(include_game_art=False)
+            context['available_themes'] = get_available_themes_for_grid(include_game_art=False, grouped=True)
 
             # Serialize eligible spinner slots for "Pick My Next Game" picker
             spinner_data = []
