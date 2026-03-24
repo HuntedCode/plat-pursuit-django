@@ -1,4 +1,5 @@
 import logging
+from datetime import timedelta
 
 from core.services.tracking import track_page_view
 from django.contrib import messages
@@ -167,6 +168,58 @@ class ProfileDetailView(ProfileHotbarMixin, DetailView):
             }
         else:
             header_stats['rarest_platinum'] = None
+
+        # Fastest platinum (shortest play_duration on a game where plat was earned)
+        fastest_plat_game = ProfileGame.objects.filter(
+            profile=profile,
+            has_plat=True,
+            play_duration__isnull=False,
+            play_duration__gt=timedelta(0),
+        ).select_related('game').order_by('play_duration').first()
+
+        if fastest_plat_game:
+            fastest_plat_trophy = EarnedTrophy.objects.filter(
+                profile=profile,
+                trophy__game=fastest_plat_game.game,
+                trophy__trophy_type='platinum',
+                earned=True,
+            ).select_related('trophy', 'trophy__game').first()
+            if fastest_plat_trophy:
+                header_stats['fastest_platinum'] = {
+                    'trophy': fastest_plat_trophy.trophy,
+                    'game': fastest_plat_game.game,
+                    'play_duration': fastest_plat_game.play_duration,
+                    'earned_date': fastest_plat_trophy.earned_date_time,
+                }
+            else:
+                header_stats['fastest_platinum'] = None
+        else:
+            header_stats['fastest_platinum'] = None
+
+        # Milestone platinum (most recent round-number plat: 10, 20, 30, etc.)
+        header_stats['milestone_platinum'] = None
+        if profile.total_plats >= 10:
+            # Find the highest milestone reached (10, 20, 30, ...)
+            milestone_number = (profile.total_plats // 10) * 10
+            # Get the Nth platinum earned chronologically
+            milestone_earned = EarnedTrophy.objects.filter(
+                profile=profile,
+                trophy__trophy_type='platinum',
+                earned=True,
+                earned_date_time__isnull=False,
+            ).select_related('trophy', 'trophy__game').order_by('earned_date_time')
+
+            # Use array slicing to get the Nth item (0-indexed)
+            try:
+                milestone_entry = milestone_earned[milestone_number - 1]
+                header_stats['milestone_platinum'] = {
+                    'trophy': milestone_entry.trophy,
+                    'game': milestone_entry.trophy.game,
+                    'milestone_number': milestone_number,
+                    'earned_date': milestone_entry.earned_date_time,
+                }
+            except (IndexError, Exception):
+                header_stats['milestone_platinum'] = None
 
         return header_stats
 
