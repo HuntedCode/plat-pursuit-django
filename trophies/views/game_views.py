@@ -6,7 +6,7 @@ from core.services.tracking import track_page_view, track_site_event
 from datetime import datetime, timedelta, date
 from django.core.cache import cache
 from django.contrib import messages
-from django.db.models import Q, F, Prefetch, Subquery, OuterRef, Value, IntegerField, FloatField, Avg, Case, When, Count
+from django.db.models import Q, F, Prefetch, Subquery, OuterRef, Value, IntegerField, FloatField, BooleanField, Avg, Case, When, Count
 from django.db.models.functions import Coalesce, Lower
 from django.http import HttpResponseRedirect
 from django.shortcuts import render
@@ -62,13 +62,19 @@ class GamesListView(ProfileHotbarMixin, ListView):
     def get_queryset(self):
         qs = super().get_queryset()
         form = self.get_filter_form()
-        order = [Lower('title_name')]
+        order = ['is_ascii_name', Lower('title_name')]
 
         platinums_earned = Subquery(Trophy.objects.filter(game=OuterRef('pk'), trophy_type='platinum').values('earned_count')[:1])
         platinums_rate = Subquery(Trophy.objects.filter(game=OuterRef('pk'), trophy_type='platinum').values('earn_rate')[:1])
+        # Sort ASCII names before non-ASCII (English-first for majority userbase)
         qs = qs.annotate(
             platinums_earned_count=Coalesce(platinums_earned, Value(0), output_field=IntegerField()),
-            platinums_earn_rate=Coalesce(platinums_rate, Value(0.0), output_field=FloatField())
+            platinums_earn_rate=Coalesce(platinums_rate, Value(0.0), output_field=FloatField()),
+            is_ascii_name=Case(
+                When(title_name__regex=r'^[A-Za-z0-9]', then=Value(0)),
+                default=Value(1),
+                output_field=IntegerField(),
+            ),
         )
 
         if form.is_valid():
@@ -102,17 +108,17 @@ class GamesListView(ProfileHotbarMixin, ListView):
                 qs = qs.exclude(shovelware_status__in=['auto_flagged', 'manually_flagged'])
 
             if sort_val == 'played':
-                order = ['-played_count', Lower('title_name')]
+                order = ['-played_count', 'is_ascii_name', Lower('title_name')]
             elif sort_val == 'played_inv':
-                order = ['played_count', Lower('title_name')]
+                order = ['played_count', 'is_ascii_name', Lower('title_name')]
             elif sort_val == 'plat_earned':
-                order = ['-platinums_earned_count', Lower('title_name')]
+                order = ['-platinums_earned_count', 'is_ascii_name', Lower('title_name')]
             elif sort_val == 'plat_earned_inv':
-                order = ['platinums_earned_count', Lower('title_name')]
+                order = ['platinums_earned_count', 'is_ascii_name', Lower('title_name')]
             elif sort_val == 'plat_rate':
-                order = ['-platinums_earn_rate', Lower('title_name')]
+                order = ['-platinums_earn_rate', 'is_ascii_name', Lower('title_name')]
             elif sort_val == 'plat_rate_inv':
-                order = ['platinums_earn_rate', Lower('title_name')]
+                order = ['platinums_earn_rate', 'is_ascii_name', Lower('title_name')]
 
         qs = qs.prefetch_related(
             Prefetch('trophies', queryset=Trophy.objects.filter(trophy_type='platinum'), to_attr='platinum_trophy')
