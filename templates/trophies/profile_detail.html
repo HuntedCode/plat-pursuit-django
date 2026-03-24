@@ -91,7 +91,7 @@
             <div id="lists-panel" class="tab-content bg-base-200/70 border-2 border-base-300 shadow-md shadow-neutral p-3 md:p-4" role="tabpanel" aria-labelledby="lists-tab">
                 {% if current_tab == 'lists' %}
                     {% if profile_lists %}
-                        <div id="lists-grid" class="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2 md:gap-3">
+                        <div id="lists-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2 md:gap-3">
                             {% for game_list in profile_lists %}
                                 {% include 'partials/game_list_card.html' with game_list=game_list %}
                             {% endfor %}

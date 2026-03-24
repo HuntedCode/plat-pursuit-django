@@ -5,7 +5,7 @@
        class="card bg-base-200/70 border-2 border-base-300 shadow-md shadow-neutral cursor-pointer
               transition-all duration-300 hover:shadow-lg hover:shadow-{{ game|platform_color }}/30
               hover:border-{{ game|platform_color }} hover:z-10 group
-              {% if pgame.progress == 100 %}border-l-4 border-l-success{% elif pgame.earned_trophies.platinum == 1 %}border-l-4 border-l-primary{% endif %}">
+              {% if pgame.progress == 100 %}border-l-4 border-l-success{% elif pgame.earned_trophies.platinum == 1 %}border-l-4 border-l-warning{% endif %}">
         <div class="card-body m-0 p-2 md:p-3">
             <div class="flex items-center gap-2 md:gap-3">
                 {# Game icon #}
@@ -33,10 +33,9 @@
                     {% endif %}
                 </div>
 
-                {# Progress + trophy counts #}
-                <div class="flex flex-col items-end gap-1 shrink-0">
-                    {# Trophy counts (compact, md:+ only) #}
-                    <div class="hidden md:grid grid-cols-4 gap-0.5 text-center">
+                {# Trophy counts + progress (md:+ only, inline right) #}
+                <div class="hidden md:flex flex-col items-end gap-1 shrink-0">
+                    <div class="grid grid-cols-4 gap-0.5 text-center">
                         <div class="px-1">
                             <div class="text-xs font-black"><span class="text-primary">{{ pgame.earned_trophies.bronze }}</span><span class="text-base-content/30">/</span><span style="color: var(--color-trophy-bronze)">{{ game.defined_trophies.bronze }}</span></div>
                             <div class="text-[0.5rem] text-base-content/40 font-medium leading-none">BRZ</div>
@@ -54,14 +53,22 @@
                             <div class="text-[0.5rem] text-base-content/40 font-medium leading-none">PLT</div>
                         </div>
                     </div>
-
-                    {# Progress bar #}
-                    <div class="w-24 md:w-32">
+                    <div class="w-32">
                         <div class="bg-base-300/50 rounded-full h-1.5">
                             <div class="h-full rounded-full transition-all {% if pgame.progress >= 100 %}bg-primary{% elif pgame.progress >= 66 %}bg-success{% elif pgame.progress >= 33 %}bg-warning{% else %}bg-error{% endif %}" style="width: {{ pgame.progress }}%"></div>
                         </div>
                         <div class="text-[0.6rem] text-base-content/50 text-center font-bold mt-0.5">{{ pgame.progress }}%</div>
                     </div>
+                </div>
+            </div>
+
+            {# Mobile progress bar (below the icon+info row) #}
+            <div class="md:hidden mt-1">
+                <div class="flex items-center gap-2">
+                    <div class="flex-1 bg-base-300/50 rounded-full h-1.5">
+                        <div class="h-full rounded-full transition-all {% if pgame.progress >= 100 %}bg-primary{% elif pgame.progress >= 66 %}bg-success{% elif pgame.progress >= 33 %}bg-warning{% else %}bg-error{% endif %}" style="width: {{ pgame.progress }}%"></div>
+                    </div>
+                    <span class="text-[0.6rem] text-base-content/50 font-bold shrink-0">{{ pgame.progress }}%</span>
                 </div>
             </div>
         </div>

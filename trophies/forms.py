@@ -82,28 +82,28 @@ class ProfileGamesForm(forms.Form):
     platform = forms.MultipleChoiceField(choices=[('PS5', 'PS5'), ('PS4', 'PS4'), ('PS3', 'PS3'), ('PSVITA', 'PSVita'), ('PSVR', 'PSVR')], required=False, label='Platforms')
     plat_status = forms.ChoiceField(
         choices=[
-            ('all', 'Show All'),
-            ('plats', 'Show Only Plats'),
-            ('no_plats', 'Show Only Non Plats'),
-            ('100s', 'Show Only 100%'),
-            ('no_100s', 'Show Only Non 100%'),
-            ('plats_100s', 'Show Only Plats & 100%'),
-            ('no_plats_100s', 'Show Only Non Plats Nor 100%'),
-            ('plats_no_100s', 'Show Only Plats & Non 100%'),
+            ('all', 'All Games'),
+            ('plats', 'Platinum Earned'),
+            ('no_plats', 'Platinum Not Earned'),
+            ('100s', '100% Complete'),
+            ('no_100s', 'Not 100%'),
+            ('plats_100s', 'Platinum Earned + 100%'),
+            ('no_plats_100s', 'No Platinum, Not 100%'),
+            ('plats_no_100s', 'Platinum Earned, Not 100%'),
         ],
         required=False,
-        label='Plat Status'
+        label='Filter'
     )
     sort = forms.ChoiceField(
         choices=[
             ('recent', 'Recently Played'),
             ('oldest', 'Oldest Played'),
             ('alpha', 'Alphabetical'),
-            ('completion', 'Highest Completion %'),
-            ('completion_inv', 'Lowest Completion %'),
-            ('trophies', 'Total Trophies'),
-            ('earned', 'Earned Trophies'),
-            ('unearned', 'Unearned Trophies'),
+            ('completion', 'Highest Completion'),
+            ('completion_inv', 'Lowest Completion'),
+            ('trophies', 'Most Trophies'),
+            ('earned', 'Most Earned'),
+            ('unearned', 'Most Unearned'),
         ],
         required=False,
         label='Sort By'
