@@ -107,8 +107,8 @@
     {% include 'partials/back_to_top.html' %}
     {% block fixed_overlays %}{% endblock %}
     {% if ADSENSE_ENABLED %}
-    <div id="mobile-ad-banner" class="fixed left-0 right-0 z-40 flex justify-center items-center overflow-hidden bg-base-300/90 lg:hidden"
-         style="bottom: calc(3.5rem + env(safe-area-inset-bottom, 0)); max-height:50px !important; overflow:hidden !important;">
+    <div id="mobile-ad-banner" class="fixed left-0 right-0 z-40 flex justify-center items-center bg-base-300/90 lg:hidden transition-transform duration-300"
+         style="bottom: calc(3.5rem + env(safe-area-inset-bottom, 0)); height:50px; contain:paint layout;">
         <ins class="adsbygoogle"
              style="display:inline-block;width:320px;height:50px;"
              data-ad-client="{{ ADSENSE_PUB_ID }}"
@@ -116,7 +116,33 @@
              data-ad-format="banner"
              {% if ADSENSE_TEST_MODE %}data-adtest="on"{% endif %}></ins>
         <script>(adsbygoogle = window.adsbygoogle || []).push({});</script>
+        <button id="mobile-ad-close" type="button"
+                class="absolute -top-3 right-2 w-6 h-6 rounded-full bg-base-300 border border-base-content/20 flex items-center justify-center text-base-content/60 hover:text-base-content hover:bg-base-200 transition-colors shadow-md"
+                aria-label="Close ad">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" viewBox="0 0 20 20" fill="currentColor">
+                <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/>
+            </svg>
+        </button>
     </div>
+    <script>
+    (function() {
+        const banner = document.getElementById('mobile-ad-banner');
+        const btn = document.getElementById('mobile-ad-close');
+        if (!banner || !btn) return;
+        if (sessionStorage.getItem('mobile-ad-dismissed')) {
+            banner.style.transform = 'translateY(200%)';
+            banner.style.pointerEvents = 'none';
+            document.body.classList.remove('has-mobile-ad');
+            return;
+        }
+        btn.addEventListener('click', function() {
+            banner.style.transform = 'translateY(200%)';
+            banner.style.pointerEvents = 'none';
+            document.body.classList.remove('has-mobile-ad');
+            sessionStorage.setItem('mobile-ad-dismissed', '1');
+        });
+    })();
+    </script>
     {% endif %}
     {% include 'partials/mobile_tabbar.html' %}
 
