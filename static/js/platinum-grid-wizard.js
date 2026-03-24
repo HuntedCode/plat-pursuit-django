@@ -57,7 +57,8 @@
         if (n === 3) {
             state.previewGenerated = false;
             $('#btn-download-png').disabled = true;
-            $('#preview-container').innerHTML = '<p class="text-base-content/40 text-sm italic">Click "Generate Preview" to see your grid.</p>';
+            $('#preview-container').innerHTML = '<p class="text-base-content/40 text-sm italic text-center pt-20">Click "Generate Preview" to see your grid.</p>';
+            $('#preview-container').style.height = '';
         }
 
         window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -250,6 +251,24 @@
         return params;
     }
 
+    // Scale preview to fit container width (called on generate + resize)
+    function scalePreview() {
+        const wrapper = $('#preview-wrapper');
+        const container = $('#preview-container');
+        if (!wrapper || !container || !state.previewWidth) return;
+
+        const availableWidth = container.clientWidth - 16;
+        const scale = Math.min(1, availableWidth / state.previewWidth);
+        wrapper.style.transform = `scale(${scale})`;
+        // Center horizontally via margin (flex centering breaks with transform-origin)
+        const scaledWidth = state.previewWidth * scale;
+        const leftMargin = Math.max(0, (availableWidth - scaledWidth) / 2);
+        wrapper.style.marginLeft = `${leftMargin}px`;
+        container.style.height = `${Math.ceil(state.previewHeight * scale) + 16}px`;
+    }
+
+    window.addEventListener('resize', PlatPursuit.debounce(scalePreview, 150));
+
     // Generate Preview
     async function generatePreview() {
         if (state.selected.size === 0) {
@@ -267,29 +286,27 @@
             const params = buildQueryParams();
             const data = await PlatPursuit.API.get(`${CONFIG.htmlUrl}?${params.toString()}`);
 
-            // Scale preview to fit container
-            const containerWidth = container.clientWidth - 32; // account for container padding
-            const scale = Math.min(1, containerWidth / data.width);
-
             // Apply theme background to the preview wrapper so it matches the final PNG
             const themeBg = state.themeBg || 'linear-gradient(to bottom right, #2a2e34, #32363d, #2a2e34)';
 
             container.innerHTML = `
                 <div id="preview-wrapper" style="
-                    transform: scale(${scale});
-                    transform-origin: top center;
                     width: ${data.width}px;
                     height: ${data.height}px;
                     background: ${themeBg};
                     border-radius: 8px;
                     box-shadow: 0 4px 24px rgba(0,0,0,0.4);
                     overflow: hidden;
+                    transform-origin: top left;
                 ">
                     ${data.html}
                 </div>
             `;
-            // Adjust container height to scaled content
-            container.style.height = `${Math.ceil(data.height * scale) + 32}px`;
+
+            // Store dimensions for resize handler
+            state.previewWidth = data.width;
+            state.previewHeight = data.height;
+            scalePreview();
 
             state.previewGenerated = true;
             $('#btn-download-png').disabled = false;
