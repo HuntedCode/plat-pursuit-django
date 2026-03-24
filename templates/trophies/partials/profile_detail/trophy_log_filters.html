@@ -1,34 +1,43 @@
-<form id="trophies-form" method="get" class="mb-4">
-    <div class="flex flex-col md:flex-col lg:flex-row w-full gap-4 md:gap-4 lg:gap-0 lg:justify-between">
-        <div class="form-control fieldset w-full md:w-full lg:w-1/3">
-            <legend class="fieldset-legend text-base md:text-lg italic">Type</legend>
-            <select name="type" id="id_type" class="select select-primary w-full md:w-full lg:w-7/8 text-sm md:text-base px-3 md:px-4 py-2 md:py-3">
+<form id="trophies-form" method="get">
+    <div class="bg-base-300/40 rounded-lg p-2 md:p-3">
+        <div class="flex flex-col md:flex-row gap-2 md:gap-3">
+            <select name="type" id="id_type"
+                    class="select select-bordered select-sm md:select-md w-full md:w-40 lg:w-48">
                 {% for value, display in form.type.field.choices %}
                     <option value="{{ value }}" {% if request.GET.type == value %}selected{% endif %}>{{ display }}</option>
                 {% endfor %}
             </select>
-        </div>
 
-        <div class="form-control fieldset w-full md:w-full lg:w-1/2">
-            <legend class="fieldset-legend text-base md:text-lg italic">Platforms</legend>
-            <div class="flex flex-row gap-2 flex-wrap justify-self-center justify-between bg-base-100 border-2 border-primary rounded-box w-full md:w-full lg:w-7/8 p-2 md:p-3">
+            <div class="flex flex-wrap gap-1.5 items-center flex-1">
                 {% for value, display in form.platform.field.choices %}
-                    <label class="cursor-pointer label justify-start gap-2">
-                        <input type="checkbox" name="platform" value="{{ value }}" class="checkbox checkbox-primary" {% if value in selected_platforms %}checked{% endif %} />
-                        <span class="text-base">{{ display }}</span>
+                    <label class="cursor-pointer">
+                        <input type="checkbox" name="platform" value="{{ value }}"
+                               class="sr-only peer" {% if value in selected_platforms %}checked{% endif %} />
+                        <span class="btn btn-xs peer-checked:btn-primary peer-checked:font-bold btn-ghost border border-base-300 transition-all">
+                            {{ display }}
+                        </span>
                     </label>
                 {% endfor %}
             </div>
-        </div>
-    </div>
 
-    <div class="flex justify-center mt-4">
-        <div class="form-control fieldset w-full md:w-full lg:w-75/100">
-            <legend class="fieldset-legend text-base md:text-lg italic">Search By Name</legend>
-            <div class="flex flex-col md:flex-row justify-self-center gap-2 md:gap-4 w-full md:w-15/16">
-                <input type="text" name="query" id="id_query" value="{{ request.GET.query }}" class="input input-md md:input-lg input-primary w-full md:w-23/24 text-sm md:text-base px-3 md:px-4 py-2 md:py-3" placeholder="Enter trophy or game name..." />
-                <button id="submit-btn" type="submit" class="btn btn-md md:btn-lg border-3 shadow-md w-full md:w-auto">Filter Trophies</button>
+            <div class="relative flex-1">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-base-content/40 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <circle cx="11" cy="11" r="8"></circle>
+                    <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                </svg>
+                <input type="text" name="query" id="id_query" value="{{ request.GET.query }}"
+                       class="input input-bordered input-sm md:input-md w-full pl-9 md:pl-10"
+                       placeholder="Search trophies..." />
             </div>
+
+            <button id="submit-btn" type="submit"
+                    class="btn btn-sm md:btn-md btn-primary w-full md:w-auto gap-1.5">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <circle cx="11" cy="11" r="8"></circle>
+                    <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                </svg>
+                <span class="hidden md:inline">Filter</span>
+            </button>
         </div>
     </div>
     <input type="hidden" name="tab" value="trophies">
