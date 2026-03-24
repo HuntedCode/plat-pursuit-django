@@ -178,15 +178,36 @@ class TrophyCaseView(ProfileHotbarMixin, ListView):
     paginate_by = 25
 
     def get_queryset(self):
-        form = TrophySearchForm(self.request.GET)
         profile = get_object_or_404(Profile, psn_username=self.kwargs['psn_username'].lower())
-        if form.is_valid():
-            query = form.cleaned_data.get('query')
-            qs = EarnedTrophy.objects.filter(profile=profile, earned=True, trophy__trophy_type='platinum').select_related('trophy', 'trophy__game').order_by(F('earned_date_time').desc(nulls_last=True))
+        qs = EarnedTrophy.objects.filter(
+            profile=profile, earned=True, trophy__trophy_type='platinum'
+        ).select_related('trophy', 'trophy__game')
 
-            if query:
-                qs = qs.filter(trophy__game__title_name__icontains=query)
-            return qs
+        # Search
+        query = self.request.GET.get('query', '').strip()
+        if query:
+            qs = qs.filter(trophy__game__title_name__icontains=query)
+
+        # Filter
+        filter_val = self.request.GET.get('filter', '')
+        if filter_val == 'selected':
+            selected_ids = list(profile.trophy_selections.values_list('earned_trophy_id', flat=True))
+            qs = qs.filter(id__in=selected_ids)
+
+        # Sort
+        sort_val = self.request.GET.get('sort', 'recent')
+        if sort_val == 'oldest':
+            qs = qs.order_by(F('earned_date_time').asc(nulls_last=True))
+        elif sort_val == 'rarest_psn':
+            qs = qs.order_by('trophy__trophy_earn_rate', F('earned_date_time').desc(nulls_last=True))
+        elif sort_val == 'rarest_pp':
+            qs = qs.order_by('trophy__earn_rate', F('earned_date_time').desc(nulls_last=True))
+        elif sort_val == 'alpha':
+            qs = qs.order_by(Lower('trophy__game__title_name'))
+        else:
+            qs = qs.order_by(F('earned_date_time').desc(nulls_last=True))
+
+        return qs
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
