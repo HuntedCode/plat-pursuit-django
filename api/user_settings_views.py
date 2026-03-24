@@ -193,6 +193,22 @@ class UpdateQuickSettingsAPIView(APIView):
                 profile.selected_background = concept
                 profile.save(update_fields=['selected_background'])
 
+        # Banner vertical position (0-100)
+        elif setting == 'banner_position':
+            profile = getattr(request.user, 'profile', None)
+            if not profile:
+                return Response({'error': 'Profile not found.'}, status=http_status.HTTP_404_NOT_FOUND)
+            if not profile.user_is_premium:
+                return Response({'error': 'Premium required.'}, status=http_status.HTTP_403_FORBIDDEN)
+            try:
+                pos = int(value)
+                if not 0 <= pos <= 100:
+                    raise ValueError
+            except (ValueError, TypeError):
+                return Response({'error': 'Position must be an integer between 0 and 100.'}, status=http_status.HTTP_400_BAD_REQUEST)
+            profile.banner_position = pos
+            profile.save(update_fields=['banner_position'])
+
         else:
             return Response({'error': f'Unknown setting: {setting}'}, status=http_status.HTTP_400_BAD_REQUEST)
 

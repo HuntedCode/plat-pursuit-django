@@ -11,6 +11,10 @@
 
     {% include 'trophies/partials/profile_detail/profile_detail_header.html' %}
 
+    {% if is_own_profile and profile.user_is_premium %}
+        {% include 'trophies/partials/profile_detail/banner_editor_modal.html' %}
+    {% endif %}
+
     {% include 'partials/ad_unit.html' with ad_slot="1939843878" %}
 
     {% if profile.psn_history_public %}
@@ -170,4 +174,16 @@
         });
     });
     </script>
+    {% if is_own_profile and profile.user_is_premium %}
+    <script src="{% static 'js/game-background-picker.js' %}"></script>
+    <script src="{% static 'js/profile-banner-editor.js' %}"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            new ProfileBannerEditor({
+                initialPosition: {% if profile_banner_position is not None %}{{ profile_banner_position }}{% else %}50{% endif %},
+                initialData: {% if profile_banner_data_json %}{{ profile_banner_data_json|safe }}{% else %}null{% endif %}
+            });
+        });
+    </script>
+    {% endif %}
 {% endblock %}

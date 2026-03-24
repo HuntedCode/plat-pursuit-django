@@ -627,8 +627,34 @@ class ProfileDetailView(ProfileHotbarMixin, DetailView):
         ]
         context['current_tab'] = tab
 
-        # Premium background art disabled during redesign (conflicts with card opacities)
-        # Profile uniqueness handled via theme accent colors instead
+        # Premium profile personalization
+        if profile.user_is_premium:
+            # Theme accent colors
+            if profile.selected_theme:
+                from trophies.themes import get_theme, get_theme_css
+                theme = get_theme(profile.selected_theme)
+                if theme:
+                    context['profile_theme_accent'] = theme['accent_color']
+                    context['profile_theme_gradient'] = get_theme_css(profile.selected_theme)
+
+            # Profile banner image from selected background concept
+            if profile.selected_background and profile.selected_background.bg_url:
+                context['profile_banner_url'] = profile.selected_background.bg_url
+                context['profile_banner_position'] = profile.banner_position
+                import json
+                context['profile_banner_data_json'] = json.dumps({
+                    'concept_id': profile.selected_background.id,
+                    'title_name': profile.selected_background.unified_title or '',
+                    'icon_url': profile.selected_background.concept_icon_url or '',
+                    'bg_url': profile.selected_background.bg_url or '',
+                })
+
+        # Own profile check (for edit controls)
+        context['is_own_profile'] = (
+            self.request.user.is_authenticated and
+            hasattr(self.request.user, 'profile') and
+            self.request.user.profile == profile
+        )
 
         context['seo_description'] = (
             f"{profile.display_psn_username}'s PlayStation trophy profile. "
