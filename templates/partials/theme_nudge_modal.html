@@ -1,0 +1,28 @@
+{# Theme nudge modal - shown when user downloads a share image with the default theme #}
+<dialog id="theme-nudge-modal" class="modal">
+    <div class="modal-box max-w-sm bg-base-200 text-center">
+        <div class="flex justify-center mb-3">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-10 h-10 text-warning" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z"/>
+                <path d="M12 16v.01M12 8v5" stroke-linecap="round"/>
+            </svg>
+        </div>
+        <h3 class="font-bold text-base mb-2">No theme selected</h3>
+        <p class="text-sm text-base-content/60 mb-4">
+            You're using the default background. We have <span class="font-bold text-primary">100+ themes</span> to make your image stand out!
+        </p>
+        <div class="flex flex-col gap-2">
+            <button type="button" id="nudge-browse-themes" class="btn btn-primary btn-sm gap-1.5">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/>
+                    <rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>
+                </svg>
+                Browse Themes
+            </button>
+            <button type="button" id="nudge-continue" class="btn btn-ghost btn-xs text-base-content/50">
+                Continue with default
+            </button>
+        </div>
+    </div>
+    <form method="dialog" class="modal-backdrop"><button>close</button></form>
+</dialog>

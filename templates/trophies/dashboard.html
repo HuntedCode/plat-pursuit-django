@@ -215,6 +215,7 @@
 {% if is_premium %}
     {% include 'partials/color_grid_modal.html' with available_themes=available_themes %}
 {% endif %}
+{% include 'partials/theme_nudge_modal.html' %}
 {% endblock %}
 
 {% block js_scripts %}

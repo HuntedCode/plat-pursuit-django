@@ -829,16 +829,12 @@ class MonthlyRecapManager {
         const downloadBtn = document.getElementById('download-recap-image');
         if (downloadBtn && !downloadBtn._hasListener) {
             downloadBtn.addEventListener('click', () => {
-                // Track download intent immediately when button is clicked
-                PlatPursuit.API.post('/api/v1/tracking/site-event/', {
-                    event_type: 'recap_image_download',
-                    object_id: `${this.year}-${String(this.month).padStart(2, '0')}`
-                }).catch(err => {
-                    console.error('[RECAP] Failed to track download:', err);
-                });
-
-                // Proceed with download
-                this.downloadShareImage();
+                // Theme nudge: prompt if still on default
+                if (this.currentBackground === 'default') {
+                    this._showThemeNudge();
+                    return;
+                }
+                this._trackAndDownload();
             });
             downloadBtn._hasListener = true;
         }
@@ -859,6 +855,44 @@ class MonthlyRecapManager {
             colorGridBtn.addEventListener('click', () => this.openColorModal());
             colorGridBtn._hasListener = true;
         }
+    }
+
+    _trackAndDownload() {
+        PlatPursuit.API.post('/api/v1/tracking/site-event/', {
+            event_type: 'recap_image_download',
+            object_id: `${this.year}-${String(this.month).padStart(2, '0')}`
+        }).catch(err => {
+            console.error('[RECAP] Failed to track download:', err);
+        });
+        this.downloadShareImage();
+    }
+
+    _showThemeNudge() {
+        const modal = document.getElementById('theme-nudge-modal');
+        if (!modal) {
+            this._trackAndDownload();
+            return;
+        }
+
+        const browseBtn = document.getElementById('nudge-browse-themes');
+        const continueBtn = document.getElementById('nudge-continue');
+
+        const newBrowse = browseBtn?.cloneNode(true);
+        const newContinue = continueBtn?.cloneNode(true);
+        browseBtn?.replaceWith(newBrowse);
+        continueBtn?.replaceWith(newContinue);
+
+        newBrowse?.addEventListener('click', () => {
+            modal.close();
+            this.openColorModal();
+        });
+
+        newContinue?.addEventListener('click', () => {
+            modal.close();
+            this._trackAndDownload();
+        });
+
+        modal.showModal();
     }
 
     /**

@@ -31,20 +31,20 @@
                 <div class="share-card-content absolute inset-0 origin-top-left" style="display: none;"></div>
             </div>
 
-            {# Theme swatches (populated by JS from window.GRADIENT_THEMES) #}
-            <div class="share-card-swatches mt-2"></div>
-
-            {# Game info + download #}
-            <div class="flex items-center justify-between mt-3">
-                <div class="flex items-center gap-2 min-w-0">
-                    {% if data.icon_url %}
-                        <img src="{{ data.icon_url }}" alt="{{ data.game_name }}" class="w-8 h-8 rounded-lg object-cover shrink-0 ring-1 ring-base-300" loading="lazy" />
-                    {% endif %}
-                    <div class="min-w-0">
-                        <div class="text-sm font-semibold line-clamp-1 pr-1">{{ data.game_name }}</div>
-                        <div class="text-xs text-base-content/40" data-time-format="relative" data-time="{{ data.earned_date|date:'c' }}">{{ data.earned_date|iso_naturaltime }}</div>
-                    </div>
+            {# Game info #}
+            <div class="flex items-center gap-2 min-w-0 mt-3">
+                {% if data.icon_url %}
+                    <img src="{{ data.icon_url }}" alt="{{ data.game_name }}" class="w-8 h-8 rounded-lg object-cover shrink-0 ring-1 ring-base-300" loading="lazy" />
+                {% endif %}
+                <div class="min-w-0">
+                    <div class="text-sm font-semibold line-clamp-1 pr-1">{{ data.game_name }}</div>
+                    <div class="text-xs text-base-content/40" data-time-format="relative" data-time="{{ data.earned_date|date:'c' }}">{{ data.earned_date|iso_naturaltime }}</div>
                 </div>
+            </div>
+
+            {# Theme + download #}
+            <div class="flex items-center gap-2 mt-2">
+                <div class="share-card-swatches flex-1"></div>
                 <button type="button" class="btn btn-primary btn-xs share-card-download shrink-0 gap-1">
                     <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
                     Download

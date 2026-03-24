@@ -370,7 +370,8 @@ def _build_full_html(inner_html, width, height, theme_key='default',
 
 
 def render_png(html, format_type='landscape', theme_key='default',
-               game_image_path=None, concept_bg_path=None):
+               game_image_path=None, concept_bg_path=None,
+               grid_width=None, grid_height=None):
     """
     Render share card HTML to PNG bytes using Playwright.
 
@@ -380,15 +381,20 @@ def render_png(html, format_type='landscape', theme_key='default',
 
     Args:
         html: The inner card HTML (from render_to_string)
-        format_type: 'landscape' or 'portrait'
+        format_type: 'landscape', 'portrait', or 'grid'
         theme_key: Theme key from GRADIENT_THEMES
         game_image_path: Absolute path to game image file (for game art themes)
         concept_bg_path: Absolute path to concept bg file (for game art themes)
+        grid_width: Explicit width override (for dynamic grid images)
+        grid_height: Explicit height override (for dynamic grid images)
 
     Returns:
         bytes: PNG image data
     """
-    width, height = DIMENSIONS.get(format_type, DIMENSIONS['landscape'])
+    if grid_width and grid_height:
+        width, height = int(grid_width), int(grid_height)
+    else:
+        width, height = DIMENSIONS.get(format_type, DIMENSIONS['landscape'])
 
     # Build the full HTML document (base64 embedding etc.) in the current thread
     full_html = _build_full_html(

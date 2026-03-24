@@ -1,0 +1,106 @@
+{% load static %}
+{% comment %}
+Platinum Grid Share Image - Rendered by Playwright for PNG output.
+
+Pure inline CSS (no Tailwind). All sizes are in px for pixel-perfect rendering.
+Variables: icons (list of {image_url, game_name}), cols, rows, width, height,
+           cell_size, cell_gap, header_height, footer_height, padding, section_gap,
+           username, total_plats, icon_type, theme_key
+{% endcomment %}
+
+<div class="share-image-content" style="
+    width: {{ width }}px;
+    height: {{ height }}px;
+    padding: {{ padding }}px;
+    font-family: 'Inter', 'Poppins', system-ui, -apple-system, sans-serif;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+">
+    {# Header / Branding Bar #}
+    <div style="
+        height: {{ header_height }}px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 8px 12px 8px;
+        border-bottom: 2px solid rgba(103, 209, 248, 0.25);
+        margin-bottom: {{ section_gap }}px;
+        flex-shrink: 0;
+    ">
+        <div style="display: flex; align-items: center; gap: 12px;">
+            <img src="{% static 'images/logo.png' %}" style="width: 40px; height: 40px; display: inline-block;" />
+            <div>
+                <div style="font-size: 20px; font-weight: 800; color: #f5f7fc; letter-spacing: -0.02em;">
+                    {{ username }}
+                </div>
+                <div style="font-size: 13px; color: #67d1f8; font-weight: 600; font-style: italic;">
+                    platpursuit.com
+                </div>
+            </div>
+        </div>
+        <div style="text-align: right;">
+            <div style="font-size: 32px; font-weight: 900; color: #67d1f8; line-height: 1;">
+                {{ total_plats }}
+            </div>
+            <div style="font-size: 11px; color: rgba(245, 247, 252, 0.5); font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;">
+                Platinum{% if total_plats != 1 %}s{% endif %}
+            </div>
+        </div>
+    </div>
+
+    {# Icon Grid #}
+    <div style="
+        display: grid;
+        grid-template-columns: repeat({{ cols }}, {{ cell_size }}px);
+        gap: {{ cell_gap }}px;
+        flex: 1;
+    ">
+        {% for icon in icons %}
+        <div style="
+            width: {{ cell_size }}px;
+            height: {{ cell_size }}px;
+            border-radius: 6px;
+            overflow: hidden;
+            border: 2px solid rgba(245, 247, 252, 0.08);
+        ">
+            {% if icon.image_url %}
+            <img src="{{ icon.image_url }}"
+                 style="width: 100%; height: 100%; object-fit: cover; display: block;"
+                 title="{{ icon.game_name }}" />
+            {% else %}
+            <div style="
+                width: 100%;
+                height: 100%;
+                background: rgba(245, 247, 252, 0.05);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                font-size: 10px;
+                color: rgba(245, 247, 252, 0.3);
+                text-align: center;
+                padding: 4px;
+            ">
+                {{ icon.game_name|truncatechars:20 }}
+            </div>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+
+    {# Footer #}
+    <div style="
+        height: {{ footer_height }}px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-top: {{ section_gap }}px;
+        border-top: 1px solid rgba(245, 247, 252, 0.06);
+        flex-shrink: 0;
+    ">
+        <span style="font-size: 11px; color: rgba(245, 247, 252, 0.3); font-style: italic;">
+            Generated on platpursuit.com
+        </span>
+    </div>
+</div>

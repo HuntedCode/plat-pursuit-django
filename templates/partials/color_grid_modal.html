@@ -15,9 +15,9 @@
             Select a gradient theme for your share card background.
         </p>
 
-        {# Scrollable grid container - expanded to use space saved from smaller preview #}
+        {# Scrollable grid container - grouped by category #}
         <div class="overflow-y-auto flex-shrink-0 max-h-72 mb-3 pr-1">
-            {% include 'partials/color_grid.html' with grid_id='modal-theme-grid' %}
+            {% include 'partials/color_grid.html' with grid_id='modal-theme-grid' grouped=True %}
         </div>
 
         {# Live preview of selected theme - scaled to 50% of original size #}

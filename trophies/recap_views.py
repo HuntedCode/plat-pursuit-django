@@ -197,6 +197,6 @@ class RecapSlideView(LoginRequiredMixin, RecapSyncGateMixin, ProfileHotbarMixin,
         context['is_current_month'] = is_current_month
 
         # Add available themes for color grid modal (no game art for recaps)
-        context['available_themes'] = get_available_themes_for_grid(include_game_art=False)
+        context['available_themes'] = get_available_themes_for_grid(include_game_art=False, grouped=True)
 
         return context

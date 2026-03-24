@@ -226,7 +226,7 @@ class GameListEditView(LoginRequiredMixin, ProfileHotbarMixin, DetailView):
 
         # Background theme grid
         from trophies.themes import get_available_themes_for_grid
-        context['available_themes'] = get_available_themes_for_grid(include_game_art=False)
+        context['available_themes'] = get_available_themes_for_grid(include_game_art=False, grouped=True)
 
         context['breadcrumb'] = [
             {'text': 'Home', 'url': reverse_lazy('home')},

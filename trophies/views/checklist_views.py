@@ -518,7 +518,7 @@ class MyShareablesView(LoginRequiredMixin, ProfileHotbarMixin, TemplateView):
 
         # Add available themes for color grid modal (include game art for platinum cards)
         from trophies.themes import get_available_themes_for_grid
-        context['available_themes'] = get_available_themes_for_grid(include_game_art=True)
+        context['available_themes'] = get_available_themes_for_grid(include_game_art=True, grouped=True)
 
         # Breadcrumbs
         context['breadcrumb'] = [

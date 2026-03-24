@@ -1660,36 +1660,54 @@
                     modal.showModal();
                 });
 
-                // Populate theme swatches (skip game art themes unless this card supports them)
+                // Theme picker button (opens the shared color grid modal)
                 const swatchContainer = preview.parentElement?.querySelector('.share-card-swatches');
-                if (swatchContainer && Object.keys(themes).length > 0) {
-                    swatchGrid = document.createElement('div');
-                    swatchGrid.className = 'grid grid-cols-8 lg:grid-cols-10 gap-1';
-                    for (const [key, t] of Object.entries(themes)) {
-                        // Skip game art themes unless this preview supports them
-                        if (t.requiresGameImage && !supportsGameArt) continue;
+                if (swatchContainer) {
+                    const themeRow = document.createElement('div');
+                    themeRow.className = 'flex items-center gap-2';
 
-                        const btn = document.createElement('button');
-                        btn.className = 'aspect-square rounded border-2 transition-all duration-150 hover:scale-105 cursor-pointer '
-                            + (key === 'default' ? 'border-primary ring-1 ring-primary' : 'border-base-content/20 hover:border-base-content/40');
-                        btn.style.background = t.background || '';
-                        if (t.requiresGameImage) btn.dataset.gameArt = 'true';
-                        btn.title = t.name || key;
-                        btn.dataset.themeKey = key;
-                        btn.addEventListener('click', () => {
-                            currentTheme = key;
-                            applyTheme(key, content, gameImages);
-                            swatchGrid.querySelectorAll('button').forEach(s => {
-                                const sel = s.dataset.themeKey === key;
-                                s.classList.toggle('border-primary', sel);
-                                s.classList.toggle('ring-1', sel);
-                                s.classList.toggle('ring-primary', sel);
-                                s.classList.toggle('border-base-content/20', !sel);
-                            });
-                        });
-                        swatchGrid.appendChild(btn);
-                    }
-                    swatchContainer.appendChild(swatchGrid);
+                    const swatch = document.createElement('div');
+                    swatch.className = 'w-6 h-6 rounded border-2 border-base-content/20 shrink-0';
+                    const defaultTheme = themes['default'];
+                    swatch.style.background = defaultTheme?.background || '';
+
+                    const label = document.createElement('span');
+                    label.className = 'share-card-theme-label text-xs text-base-content/50 flex-1 truncate';
+                    label.textContent = 'Default';
+
+                    const changeBtn = document.createElement('button');
+                    changeBtn.type = 'button';
+                    changeBtn.className = 'btn btn-xs btn-primary gap-1 shrink-0';
+                    changeBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">'
+                        + '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/>'
+                        + '<rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>'
+                        + '</svg> Theme';
+
+                    const openPicker = (e) => {
+                        e.stopPropagation();
+                        const colorModal = PlatPursuit.getColorGridModal?.();
+                        if (!colorModal) return;
+                        colorModal.open(currentTheme, (themeKey) => {
+                            currentTheme = themeKey;
+                            preview.dataset.currentTheme = themeKey;
+                            applyTheme(themeKey, content, gameImages);
+                            const t = themes[themeKey];
+                            label.textContent = t?.name || themeKey;
+                            swatch.style.background = t?.background || '';
+                        }, 'landscape', supportsGameArt ? gameImages : null);
+                    };
+
+                    changeBtn.addEventListener('click', openPicker);
+                    // Also make the swatch + label clickable
+                    swatch.style.cursor = 'pointer';
+                    swatch.addEventListener('click', openPicker);
+                    label.style.cursor = 'pointer';
+                    label.addEventListener('click', openPicker);
+
+                    themeRow.appendChild(swatch);
+                    themeRow.appendChild(label);
+                    themeRow.appendChild(changeBtn);
+                    swatchContainer.appendChild(themeRow);
                 }
 
                 scaleFns.push(scaleToFit);
@@ -1709,8 +1727,7 @@
             const buildDownloadUrl = (preview) => {
                 const basePngUrl = preview.dataset.sharePngUrl;
                 if (!basePngUrl) return null;
-                const swatchBtn = preview.parentElement?.querySelector('.share-card-swatches button.border-primary');
-                const themeKey = swatchBtn?.dataset.themeKey || 'default';
+                const themeKey = preview.dataset.currentTheme || 'default';
                 const sep = basePngUrl.includes('?') ? '&' : '?';
                 return themeKey !== 'default' ? basePngUrl + sep + 'theme=' + encodeURIComponent(themeKey) : basePngUrl;
             };
@@ -1723,6 +1740,35 @@
                         || btn.closest('[class*="space-y"]')?.querySelector('.share-card-preview');
                     const basePngUrl = btn.dataset.pngUrl || nearestPreview?.dataset.sharePngUrl;
                     if (!basePngUrl) return;
+
+                    const themeKey = nearestPreview?.dataset.currentTheme || 'default';
+
+                    // Theme nudge: prompt if still on default
+                    if (themeKey === 'default') {
+                        const nudgeModal = document.getElementById('theme-nudge-modal');
+                        if (nudgeModal) {
+                            const browseBtn = document.getElementById('nudge-browse-themes');
+                            const continueBtn = document.getElementById('nudge-continue');
+                            const newBrowse = browseBtn?.cloneNode(true);
+                            const newContinue = continueBtn?.cloneNode(true);
+                            browseBtn?.replaceWith(newBrowse);
+                            continueBtn?.replaceWith(newContinue);
+
+                            newBrowse?.addEventListener('click', () => {
+                                nudgeModal.close();
+                                // Find and click the theme button for this preview's card
+                                const themeBtn = nearestPreview?.parentElement?.querySelector('.share-card-swatches button');
+                                themeBtn?.click();
+                            });
+                            newContinue?.addEventListener('click', () => {
+                                nudgeModal.close();
+                                const downloadUrl = nearestPreview ? buildDownloadUrl(nearestPreview) : basePngUrl;
+                                if (downloadUrl) window.location.href = downloadUrl;
+                            });
+                            nudgeModal.showModal();
+                            return;
+                        }
+                    }
 
                     const downloadUrl = nearestPreview ? buildDownloadUrl(nearestPreview) : basePngUrl;
                     if (!downloadUrl) return;
@@ -1877,11 +1923,11 @@
             const card = el.querySelector('[data-card-theme]');
             let currentTheme = card ? card.dataset.cardTheme : 'default';
             const isPremium = card && card.dataset.isPremium === 'true';
+            const themes = window.GRADIENT_THEMES || {};
             const container = el.querySelector('.profile-card-module-preview');
             const content = el.querySelector('.profile-card-module-content');
             const loading = el.querySelector('.profile-card-module-loading');
             const downloadBtn = el.querySelector('.profile-card-module-download');
-            const swatches = el.querySelectorAll('.theme-swatch');
             if (!container || !content || !loading) return;
 
             function getDownloadUrl() {
@@ -1900,8 +1946,7 @@
                 const shareContent = (target || content).querySelector('.share-image-content');
                 if (!shareContent) return;
 
-                const themes = window.GRADIENT_THEMES;
-                if (!themes || !themes[themeKey]) return;
+                if (!themes[themeKey]) return;
 
                 const t = themes[themeKey];
                 shareContent.style.background = t.background;
@@ -1914,17 +1959,6 @@
                 if (banner && t.bannerBackground) {
                     banner.style.background = t.bannerBackground;
                 }
-            }
-
-            // Update swatch selection UI
-            function updateSwatchUI(themeKey) {
-                swatches.forEach(function(s) {
-                    const isSelected = s.dataset.themeKey === themeKey;
-                    s.classList.toggle('border-primary', isSelected);
-                    s.classList.toggle('ring-2', isSelected);
-                    s.classList.toggle('ring-primary', isSelected);
-                    s.classList.toggle('border-base-content/20', !isSelected);
-                });
             }
 
             // Fetch and render HTML preview
@@ -1951,34 +1985,89 @@
             // Re-fetch preview when featured badge changes
             document.addEventListener('platpursuit:badge-changed', fetchPreview);
 
-            // Theme swatch clicks
-            swatches.forEach(function(swatch) {
-                swatch.addEventListener('click', function() {
-                    const key = swatch.dataset.themeKey;
+            // Theme picker button (opens shared color grid modal)
+            const swatchContainer = el.querySelector('.share-card-swatches');
+            let themeLabel = null;
+            let themeSwatch = null;
+            if (swatchContainer) {
+                const themeRow = document.createElement('div');
+                themeRow.className = 'flex items-center gap-2';
 
-                    // Free users can only use default
-                    if (!isPremium && key !== 'default') {
+                themeSwatch = document.createElement('div');
+                themeSwatch.className = 'w-6 h-6 rounded border-2 border-base-content/20 shrink-0 cursor-pointer';
+                const ct = themes[currentTheme];
+                themeSwatch.style.background = ct?.background || '';
+
+                themeLabel = document.createElement('span');
+                themeLabel.className = 'text-xs text-base-content/50 flex-1 truncate cursor-pointer';
+                themeLabel.textContent = ct?.name || 'Default';
+
+                const changeBtn = document.createElement('button');
+                changeBtn.type = 'button';
+                changeBtn.className = 'btn btn-xs btn-primary gap-1 shrink-0';
+                changeBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">'
+                    + '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/>'
+                    + '<rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>'
+                    + '</svg> Theme';
+
+                const openPicker = function(e) {
+                    e.stopPropagation();
+                    if (!isPremium) {
                         PlatPursuit.ToastManager.show('Premium required for custom themes.', 'warning');
                         return;
                     }
+                    const colorModal = PlatPursuit.getColorGridModal?.();
+                    if (!colorModal) return;
+                    colorModal.open(currentTheme, function(themeKey) {
+                        currentTheme = themeKey;
+                        applyTheme(themeKey);
+                        const t = themes[themeKey];
+                        if (themeLabel) themeLabel.textContent = t?.name || themeKey;
+                        if (themeSwatch) themeSwatch.style.background = t?.background || '';
+                        // Save to server
+                        PlatPursuit.API.post('/api/v1/profile-card/settings/', { card_theme: themeKey })
+                            .catch(async function(err) {
+                                const errData = await err.response?.json().catch(function() { return null; });
+                                PlatPursuit.ToastManager.show(errData?.error || 'Failed to save theme.', 'error');
+                            });
+                    }, 'landscape');
+                };
 
-                    // Apply immediately to preview
-                    currentTheme = key;
-                    applyTheme(key);
-                    updateSwatchUI(key);
+                changeBtn.addEventListener('click', openPicker);
+                themeSwatch.addEventListener('click', openPicker);
+                themeLabel.addEventListener('click', openPicker);
 
-                    // Save to server
-                    PlatPursuit.API.post('/api/v1/profile-card/settings/', { card_theme: key })
-                        .catch(async function(err) {
-                            const errData = await err.response?.json().catch(function() { return null; });
-                            PlatPursuit.ToastManager.show(errData?.error || 'Failed to save theme.', 'error');
-                        });
-                });
-            });
+                themeRow.appendChild(themeSwatch);
+                themeRow.appendChild(themeLabel);
+                themeRow.appendChild(changeBtn);
+                swatchContainer.appendChild(themeRow);
+            }
 
-            // Download on button click
+            // Download on button click (with theme nudge)
             if (downloadBtn) {
                 downloadBtn.addEventListener('click', function() {
+                    if (currentTheme === 'default') {
+                        const nudgeModal = document.getElementById('theme-nudge-modal');
+                        if (nudgeModal) {
+                            const browseBtn = document.getElementById('nudge-browse-themes');
+                            const continueBtn = document.getElementById('nudge-continue');
+                            const newBrowse = browseBtn?.cloneNode(true);
+                            const newContinue = continueBtn?.cloneNode(true);
+                            browseBtn?.replaceWith(newBrowse);
+                            continueBtn?.replaceWith(newContinue);
+                            newBrowse?.addEventListener('click', function() {
+                                nudgeModal.close();
+                                const swatchBtn = swatchContainer?.querySelector('.btn-primary');
+                                swatchBtn?.click();
+                            });
+                            newContinue?.addEventListener('click', function() {
+                                nudgeModal.close();
+                                window.location.href = getDownloadUrl();
+                            });
+                            nudgeModal.showModal();
+                            return;
+                        }
+                    }
                     window.location.href = getDownloadUrl();
                 });
             }
@@ -1988,16 +2077,12 @@
             const modalContent = el.querySelector('.profile-card-module-modal-content');
             container.addEventListener('click', function(e) {
                 if (e.target.closest('.profile-card-module-download')) return;
-                if (e.target.closest('.theme-swatch')) return;
+                if (e.target.closest('.share-card-swatches')) return;
                 if (!modal || !modalContent) return;
 
-                // Clone the full-size card HTML into the modal
                 modalContent.innerHTML = content.innerHTML;
-                // Reset the scale so it renders at full size
                 const fullCard = modalContent.querySelector('.share-image-content');
-                if (fullCard) {
-                    fullCard.style.transform = '';
-                }
+                if (fullCard) fullCard.style.transform = '';
                 applyTheme(currentTheme, modalContent);
                 modal.showModal();
             });

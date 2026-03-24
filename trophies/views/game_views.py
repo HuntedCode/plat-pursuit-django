@@ -764,7 +764,7 @@ class GameDetailView(ProfileHotbarMixin, DetailView):
         # Add share card dependencies if user has earned platinum
         if rating_context.get('earned_trophy_id'):
             from trophies.themes import get_available_themes_for_grid
-            context['available_themes'] = get_available_themes_for_grid(include_game_art=True)
+            context['available_themes'] = get_available_themes_for_grid(include_game_art=True, grouped=True)
 
         # Build breadcrumbs
         context['breadcrumb'] = self._build_breadcrumbs(game, target_profile)

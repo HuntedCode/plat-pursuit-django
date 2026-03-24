@@ -25,6 +25,7 @@ from .notification_views import (
     AdminNotificationPreviewView, AdminTargetCountView, AdminUserSearchView
 )
 from .shareable_views import ShareableImageHTMLView, ShareableImagePNGView
+from .platinum_grid_views import PlatinumGridHTMLView, PlatinumGridPNGView
 from .recap_views import (
     RecapAvailableView, RecapDetailView, RecapRegenerateView, RecapShareImageHTMLView,
     RecapShareImagePNGView, RecapSlidePartialView
@@ -215,6 +216,10 @@ urlpatterns = [
     # Shareable image endpoints (EarnedTrophy-based, for My Shareables page)
     path('shareables/platinum/<int:earned_trophy_id>/html/', ShareableImageHTMLView.as_view(), name='shareable-platinum-html'),
     path('shareables/platinum/<int:earned_trophy_id>/png/', ShareableImagePNGView.as_view(), name='shareable-platinum-png'),
+
+    # Platinum Grid share image endpoints (staff-only during testing)
+    path('shareables/platinum-grid/html/', PlatinumGridHTMLView.as_view(), name='platinum-grid-html'),
+    path('shareables/platinum-grid/png/', PlatinumGridPNGView.as_view(), name='platinum-grid-png'),
 
     # Monthly recap endpoints
     path('recap/available/', RecapAvailableView.as_view(), name='recap-available'),
