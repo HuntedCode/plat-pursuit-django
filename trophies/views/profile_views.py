@@ -574,9 +574,8 @@ class ProfileDetailView(ProfileHotbarMixin, DetailView):
         ]
         context['current_tab'] = tab
 
-        # Add premium background if applicable
-        if profile.user_is_premium and profile.selected_background:
-            context['image_urls'] = {'bg_url': profile.selected_background.bg_url}
+        # Premium background art disabled during redesign (conflicts with card opacities)
+        # Profile uniqueness handled via theme accent colors instead
 
         context['seo_description'] = (
             f"{profile.display_psn_username}'s PlayStation trophy profile. "
