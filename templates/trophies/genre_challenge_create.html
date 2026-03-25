@@ -5,13 +5,13 @@
 {% block robots %}noindex, nofollow{% endblock %}
 
 {% block content %}
-<section class="shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 w-full p-0 lg:p-4">
+<section class="shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 w-full p-3 md:p-4">
     {% include 'partials/breadcrumb.html' with items=breadcrumb %}
 
-    <div class="card bg-base-100 border-4 border-base-300 shadow-md shadow-neutral">
+    <div class="card bg-base-100 border-2 border-base-300 shadow-md shadow-neutral">
         <div class="card-body items-center text-center">
-            <div class="text-5xl lg:text-6xl font-black text-primary tracking-tight">GENRE</div>
-            <h1 class="text-2xl lg:text-3xl font-bold mt-2">Start Your Genre Challenge</h1>
+            <div class="text-3xl md:text-4xl lg:text-5xl font-black text-primary tracking-tight">GENRE</div>
+            <h1 class="text-lg md:text-base md:text-lg lg:text-xl font-bold mt-2">Start Your Genre Challenge</h1>
             <p class="text-base-content/70 max-w-lg">
                 One platinum per genre, {{ genre_count }} genres to conquer. Show the world you can master any category.
             </p>
@@ -19,7 +19,7 @@
     </div>
 </section>
 
-<section class="shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 w-full p-0 lg:p-4 mt-6">
+<section class="shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 w-full p-3 md:p-4 mt-6">
     <div class="max-w-xl mx-auto p-4">
         <div class="card bg-base-100 border-2 border-base-300 shadow-md shadow-neutral">
             <div class="card-body">
@@ -88,7 +88,6 @@
 {% endblock %}
 
 {% block js_scripts %}
-<script>PlatPursuit.ZoomScaler.init();</script>
 <script>
     document.addEventListener('DOMContentLoaded', () => {
         const nameInput = document.getElementById('challenge-name');

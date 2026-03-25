@@ -6,10 +6,10 @@
 {% block twitter_image %}{% if challenge.profile.avatar_url %}{{ challenge.profile.avatar_url }}{% else %}{{ request.scheme }}://{{ request.get_host }}{{ logo_path }}{% endif %}{% endblock %}
 
 {% block content %}
-<section class="shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 w-full p-0 lg:p-4">
+<section class="shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 w-full p-3 md:p-4">
     {% include 'partials/breadcrumb.html' with items=breadcrumb %}
 
-    <div class="card bg-base-100 border-4 border-base-300 shadow-md shadow-neutral">
+    <div class="card bg-base-100 border-2 border-base-300 shadow-md shadow-neutral">
         <div class="card-body">
             <div class="flex flex-row items-start justify-between gap-4">
                 <div class="flex-1 max-w-[50%]">
@@ -32,7 +32,7 @@
                     {# Challenge name (inline-editable for owner) #}
                     {% if is_owner %}
                     <div class="flex items-center gap-2">
-                        <h1 class="text-2xl lg:text-3xl font-bold line-clamp-2 break-words" id="challenge-name-display">
+                        <h1 class="text-lg md:text-base md:text-lg lg:text-xl font-bold line-clamp-2 break-words" id="challenge-name-display">
                             <span id="challenge-name-text">{{ challenge.name }}</span>
                         </h1>
                         <button type="button" class="btn btn-ghost btn-xs btn-circle opacity-60 hover:opacity-100 transition-opacity"
@@ -44,7 +44,7 @@
                         <div class="hidden items-center gap-2" id="challenge-name-editor">
                             <div class="flex flex-col">
                                 <input type="text" id="challenge-name-input"
-                                       class="input input-bordered input-sm text-xl lg:text-2xl font-bold max-w-xs lg:max-w-md"
+                                       class="input input-bordered input-sm text-base md:text-lg lg:text-xl font-bold max-w-xs lg:max-w-md"
                                        maxlength="75" value="{{ challenge.name }}" />
                                 <span class="text-xs text-base-content/50 mt-0.5 ml-1" id="rename-counter">{{ challenge.name|length }}/75</span>
                             </div>
@@ -57,7 +57,7 @@
                         </div>
                     </div>
                     {% else %}
-                    <h1 class="text-2xl lg:text-3xl font-bold line-clamp-2 break-words">{{ challenge.name }}</h1>
+                    <h1 class="text-lg md:text-base md:text-lg lg:text-xl font-bold line-clamp-2 break-words">{{ challenge.name }}</h1>
                     {% endif %}
 
                     {# Progress bar #}
@@ -127,7 +127,7 @@
             </svg>
         </div>
         <div class="flex-1">
-            <h3 class="font-bold text-base lg:text-lg text-warning">Share Your Calendar</h3>
+            <h3 class="font-bold text-sm md:text-base lg:text-lg text-warning">Share Your Calendar</h3>
             <p class="text-sm text-base-content/60">Generate a beautiful share card to show off your Platinum Calendar progress</p>
         </div>
         <button id="banner-share-image-btn" class="btn btn-warning btn-sm lg:btn-md gap-2" data-challenge-name="{{ challenge.name }}">
@@ -142,22 +142,22 @@
 
 {# Stats cards #}
 {% if stats.total_filled > 0 %}
-<section class="shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 w-full p-0 lg:p-4 mt-6">
-    <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 p-4">
+<section class="shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 w-full p-3 md:p-4 mt-6">
+    <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 md:gap-3 p-4">
         <div class="card bg-base-100 border border-base-300 p-3 text-center">
-            <div class="text-2xl lg:text-3xl font-bold text-primary">{{ stats.best_month_filled }}/{{ stats.best_month_total }}</div>
+            <div class="text-lg md:text-base md:text-lg lg:text-xl font-bold text-primary">{{ stats.best_month_filled }}/{{ stats.best_month_total }}</div>
             <div class="text-xs text-base-content/60 mt-1">Best Month: {{ stats.best_month_name }}</div>
         </div>
         <div class="card bg-base-100 border border-base-300 p-3 text-center">
-            <div class="text-2xl lg:text-3xl font-bold text-primary">{{ stats.longest_streak }}</div>
+            <div class="text-lg md:text-base md:text-lg lg:text-xl font-bold text-primary">{{ stats.longest_streak }}</div>
             <div class="text-xs text-base-content/60 mt-1">Longest Streak (days)</div>
         </div>
         <div class="card bg-base-100 border border-base-300 p-3 text-center">
-            <div class="text-2xl lg:text-3xl font-bold text-primary">{{ stats.worst_month_filled }}/{{ stats.worst_month_total }}</div>
+            <div class="text-lg md:text-base md:text-lg lg:text-xl font-bold text-primary">{{ stats.worst_month_filled }}/{{ stats.worst_month_total }}</div>
             <div class="text-xs text-base-content/60 mt-1">Weakest Month: {{ stats.worst_month_name }}</div>
         </div>
         <div class="card bg-base-100 border border-base-300 p-3 text-center">
-            <div class="text-2xl lg:text-3xl font-bold text-primary">{{ stats.max_plat_day_count }}</div>
+            <div class="text-lg md:text-base md:text-lg lg:text-xl font-bold text-primary">{{ stats.max_plat_day_count }}</div>
             <div class="text-xs text-base-content/60 mt-1">Most in a Day: {{ stats.max_plat_day_label }}</div>
         </div>
     </div>
@@ -165,7 +165,7 @@
 {% endif %}
 
 {# 12-month calendar grid #}
-<section class="shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 w-full p-0 lg:p-4 mt-6">
+<section class="shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 w-full p-3 md:p-4 mt-6">
     <div class="p-4">
         {# Holiday toggle + legend bar #}
         <div class="flex items-center justify-between mb-3">
@@ -185,7 +185,7 @@
             </div>
         </div>
 
-        <div class="grid grid-cols-3 lg:grid-cols-4 gap-4 lg:gap-6">
+        <div class="grid grid-cols-3 md:grid-cols-4 gap-4 lg:gap-6">
             {% for month in months %}
             <div class="bg-base-100 rounded-lg border border-base-300 p-2 lg:p-3">
                 {# Month header #}
@@ -294,7 +294,6 @@
 {% endblock %}
 
 {% block js_scripts %}
-<script>PlatPursuit.ZoomScaler.init();</script>
 {% if is_owner %}
 <script>window.GRADIENT_THEMES = {% gradient_themes_json %};</script>
 <script src="{% static 'js/share-image.js' %}"></script>

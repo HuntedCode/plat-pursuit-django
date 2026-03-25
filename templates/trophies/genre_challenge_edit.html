@@ -5,15 +5,15 @@
 {% block robots %}noindex, nofollow{% endblock %}
 
 {% block content %}
-<section class="shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 w-full p-0 lg:p-4">
+<section class="shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 w-full p-3 md:p-4">
     {% include 'partials/breadcrumb.html' with items=breadcrumb %}
 
-    <div class="card bg-base-100 border-4 border-base-300 shadow-md shadow-neutral">
+    <div class="card bg-base-100 border-2 border-base-300 shadow-md shadow-neutral">
         <div class="card-body">
             <div class="flex flex-row items-center justify-between gap-4">
                 <div>
                     <div class="flex items-center gap-2">
-                        <h1 class="text-xl lg:text-2xl font-bold line-clamp-2" id="challenge-name-display">
+                        <h1 class="text-base md:text-lg lg:text-xl font-bold line-clamp-2" id="challenge-name-display">
                             Edit: <span id="challenge-name-text">{{ challenge.name }}</span>
                         </h1>
                         <button type="button" class="btn btn-ghost btn-xs btn-circle opacity-60 hover:opacity-100 transition-opacity"
@@ -23,7 +23,7 @@
                             </svg>
                         </button>
                         <div class="hidden items-center gap-2" id="challenge-name-editor">
-                            <span class="text-xl lg:text-2xl font-bold">Edit:</span>
+                            <span class="text-base md:text-lg lg:text-xl font-bold">Edit:</span>
                             <div class="flex flex-col">
                                 <input type="text" id="challenge-name-input"
                                        class="input input-bordered input-sm text-lg lg:text-xl font-bold max-w-xs lg:max-w-md"
@@ -75,7 +75,7 @@
 </section>
 
 {# Genre Slot Grid (editable) #}
-<section class="shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 w-full p-0 lg:p-4 mt-6">
+<section class="shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 w-full p-3 md:p-4 mt-6">
     <div class="p-4">
         {% include 'partials/genre_challenge/psn_attribution.html' %}
         <div id="genre-edit-grid" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
@@ -172,7 +172,7 @@
 </section>
 
 {# Bonus Games Section #}
-<section class="shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 w-full p-0 lg:p-4 mt-6">
+<section class="shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 w-full p-3 md:p-4 mt-6">
     <div class="p-4">
         <div class="flex items-center justify-between mb-3">
             <h2 class="text-base font-bold">
@@ -247,7 +247,7 @@
 </section>
 
 {# Subgenre Bonus Tracker #}
-<section class="shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 w-full p-0 lg:p-4 mt-6">
+<section class="shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 w-full p-3 md:p-4 mt-6">
     <div class="p-4">
         <div class="collapse collapse-arrow bg-base-100 border-2 border-base-300">
             <input type="checkbox" />
@@ -435,7 +435,6 @@
 {% endblock %}
 
 {% block js_scripts %}
-<script>PlatPursuit.ZoomScaler.init();</script>
 <script src="{% static 'js/genre-challenge.js' %}"></script>
 <script>
     document.addEventListener('DOMContentLoaded', () => {

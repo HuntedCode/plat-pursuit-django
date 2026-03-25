@@ -5,12 +5,12 @@
 {% block robots %}noindex, nofollow{% endblock %}
 
 {% block content %}
-<section class="shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 w-full p-0 lg:p-4">
+<section class="shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 w-full p-3 md:p-4">
     {% include 'partials/breadcrumb.html' with items=breadcrumb %}
 
-    <div class="card bg-base-100 border-4 border-base-300 shadow-md shadow-neutral">
+    <div class="card bg-base-100 border-2 border-base-300 shadow-md shadow-neutral">
         <div class="card-body">
-            <h1 class="text-xl lg:text-2xl font-bold">{{ challenge.name }}: Setup Wizard</h1>
+            <h1 class="text-base md:text-lg lg:text-xl font-bold">{{ challenge.name }}: Setup Wizard</h1>
             <p class="text-sm text-base-content/70">Pick a game for each letter. Skip any you're unsure about. You can always come back!</p>
 
             {# Progress bar: 26 letter buttons #}
@@ -36,7 +36,7 @@
 </section>
 
 {# Current Letter + Search #}
-<section class="shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 w-full p-0 lg:p-4 mt-6">
+<section class="shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 w-full p-3 md:p-4 mt-6">
     <div class="p-4">
         {# Current letter display #}
         <div class="text-center mb-4">
@@ -148,7 +148,6 @@
 {% endblock %}
 
 {% block js_scripts %}
-<script>PlatPursuit.ZoomScaler.init();</script>
 <script src="{% static 'js/az-challenge.js' %}"></script>
 <script>
     document.addEventListener('DOMContentLoaded', () => {

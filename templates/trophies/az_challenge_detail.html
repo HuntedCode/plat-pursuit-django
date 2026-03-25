@@ -6,10 +6,10 @@
 {% block twitter_image %}{% if challenge.profile.avatar_url %}{{ challenge.profile.avatar_url }}{% else %}{{ request.scheme }}://{{ request.get_host }}{{ logo_path }}{% endif %}{% endblock %}
 
 {% block content %}
-<section class="shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 w-full p-0 lg:p-4">
+<section class="shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 w-full p-3 md:p-4">
     {% include 'partials/breadcrumb.html' with items=breadcrumb %}
 
-    <div class="card bg-base-100 border-4 border-base-300 shadow-md shadow-neutral">
+    <div class="card bg-base-100 border-2 border-base-300 shadow-md shadow-neutral">
         <div class="card-body">
             <div class="flex flex-row items-start justify-between gap-4">
                 <div class="flex-1 max-w-[50%]">
@@ -29,7 +29,7 @@
                     </div>
                     {% if is_owner %}
                     <div class="flex items-center gap-2">
-                        <h1 class="text-2xl lg:text-3xl font-bold line-clamp-2 break-words" id="challenge-name-display">
+                        <h1 class="text-lg md:text-base md:text-lg lg:text-xl font-bold line-clamp-2 break-words" id="challenge-name-display">
                             <span id="challenge-name-text">{{ challenge.name }}</span>
                         </h1>
                         <button type="button" class="btn btn-ghost btn-xs btn-circle opacity-60 hover:opacity-100 transition-opacity"
@@ -41,7 +41,7 @@
                         <div class="hidden items-center gap-2" id="challenge-name-editor">
                             <div class="flex flex-col">
                                 <input type="text" id="challenge-name-input"
-                                       class="input input-bordered input-sm text-xl lg:text-2xl font-bold max-w-xs lg:max-w-md"
+                                       class="input input-bordered input-sm text-base md:text-lg lg:text-xl font-bold max-w-xs lg:max-w-md"
                                        maxlength="75" value="{{ challenge.name }}" />
                                 <span class="text-xs text-base-content/50 mt-0.5 ml-1" id="rename-counter">{{ challenge.name|length }}/75</span>
                             </div>
@@ -54,7 +54,7 @@
                         </div>
                     </div>
                     {% else %}
-                    <h1 class="text-2xl lg:text-3xl font-bold line-clamp-2 break-words">{{ challenge.name }}</h1>
+                    <h1 class="text-lg md:text-base md:text-lg lg:text-xl font-bold line-clamp-2 break-words">{{ challenge.name }}</h1>
                     {% endif %}
                     {% if challenge.description %}
                         <p class="text-base-content/70 mt-1">{{ challenge.description }}</p>
@@ -125,7 +125,7 @@
             </svg>
         </div>
         <div class="flex-1">
-            <h3 class="font-bold text-base lg:text-lg text-secondary">Can't Decide What to Play Next?</h3>
+            <h3 class="font-bold text-sm md:text-base lg:text-lg text-secondary">Can't Decide What to Play Next?</h3>
             <p class="text-sm text-base-content/60">Let fate decide. Spin the wheel and discover your next platinum!</p>
         </div>
         <button id="pick-next-game-btn" class="btn btn-secondary btn-sm lg:btn-md gap-2 flex-shrink-0">
@@ -153,7 +153,7 @@
             </svg>
         </div>
         <div class="flex-1">
-            <h3 class="font-bold text-base lg:text-lg text-primary">Share Your Challenge</h3>
+            <h3 class="font-bold text-sm md:text-base lg:text-lg text-primary">Share Your Challenge</h3>
             <p class="text-sm text-base-content/60">Generate a beautiful share card to show off your A-Z progress</p>
         </div>
         <button id="banner-share-image-btn" class="btn btn-primary btn-sm lg:btn-md gap-2" data-challenge-name="{{ challenge.name }}">
@@ -167,7 +167,7 @@
 {% endif %}
 
 {# 26-Slot Grid #}
-<section class="shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 w-full p-0 lg:p-4 mt-6">
+<section class="shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 w-full p-3 md:p-4 mt-6">
     <div class="p-4">
         <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-7 gap-3">
             {% for slot in slots %}
@@ -205,7 +205,6 @@
 {% endblock %}
 
 {% block js_scripts %}
-<script>PlatPursuit.ZoomScaler.init();</script>
 {% if is_owner %}
 <script>window.GRADIENT_THEMES = {% gradient_themes_json %};</script>
 <script>window._SPINNER_SLOTS = {{ spinner_slots_json|safe }};</script>
