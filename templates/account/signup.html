@@ -6,7 +6,7 @@
 {% block content %}
 <div class="flex-grow flex items-center justify-center bg-base-100 py-12">
     <div class="container mx-auto p-4 my-auto max-w-lg">
-        <div class="card bg-base-200 border-4 border-base-300 shadow-lg shadow-neutral">
+        <div class="card bg-base-200 border-2 border-base-300 shadow-lg shadow-neutral">
             <div class="card-body px-4">
                 <div class="flex flex-col justify-center items-center mb-6">
                     <figure class="w-25">
@@ -15,10 +15,10 @@
                     <p class="text-3xl text-base-content font-bold pr-1">Platinum Pursuit</p>
                     <p class="text-xs text-warning font-semibold italic pr-1">No Trophy Can Hide From Us</p>
                 </div>
-                <div class="bg-base-100 border-4 border-base-300 shadow-lg shadow-neutral rounded-box w-full mx-auto p-6 transition-all duration-300 hover:border-primary hover:shadow-primary">
+                <div class="bg-base-100 border-2 border-base-300 shadow-lg shadow-neutral rounded-box w-full mx-auto p-6 transition-all duration-300 hover:border-primary hover:shadow-primary">
                     <h2 class="text-2xl text-center font-semibold mb-4 italic">Sign Up</h2>
                     {% if form.errors %}
-                        <div class="alert alert-error border-4 border-base-300 rounded-box font-semibold w-3/4 mx-auto mb-4" role="alert">
+                        <div class="alert alert-error border-2 border-base-300 rounded-box font-semibold w-3/4 mx-auto mb-4" role="alert">
                             {{ form.errors }}
                         </div>
                     {% endif %}
@@ -43,7 +43,7 @@
                                        required>
                             </div>
                             {% if form.email.errors %}
-                                <div id="email-error" class="alert alert-error border-4 border-base-300 rounded-box font-semibold w-3/4 mx-auto mt-1" role="alert">
+                                <div id="email-error" class="alert alert-error border-2 border-base-300 rounded-box font-semibold w-3/4 mx-auto mt-1" role="alert">
                                     {{ form.email.errors }}
                                 </div>
                             {% endif %}
@@ -67,7 +67,7 @@
                                        required>
                             </div>
                             {% if form.email2.errors %}
-                                <div id="email2-error" class="alert alert-error border-4 border-base-300 rounded-box font-semibold w-3/4 mx-auto mt-1" role="alert">
+                                <div id="email2-error" class="alert alert-error border-2 border-base-300 rounded-box font-semibold w-3/4 mx-auto mt-1" role="alert">
                                     {{ form.email2.errors }}
                                 </div>
                             {% endif %}
@@ -97,7 +97,7 @@
                                 </button>
                             </div>
                             {% if form.password1.errors %}
-                                <div id="password1-error" class="alert alert-error border-4 border-base-300 rounded-box font-semibold w-3/4 mx-auto mt-1" role="alert">
+                                <div id="password1-error" class="alert alert-error border-2 border-base-300 rounded-box font-semibold w-3/4 mx-auto mt-1" role="alert">
                                     {{ form.password1.errors }}
                                 </div>
                             {% endif %}
@@ -127,7 +127,7 @@
                                 </button>
                             </div>
                             {% if form.password2.errors %}
-                                <div id="password2-error" class="alert alert-error border-4 border-base-300 rounded-box font-semibold w-3/4 mx-auto mt-1" role="alert">
+                                <div id="password2-error" class="alert alert-error border-2 border-base-300 rounded-box font-semibold w-3/4 mx-auto mt-1" role="alert">
                                     {{ form.password2.errors }}
                                 </div>
                             {% endif %}
@@ -147,7 +147,4 @@
 {% endblock %}
 {% block js_scripts %}
     <script src="{% static 'js/auth-forms.js' %}"></script>
-    <script>
-        PlatPursuit.ZoomScaler.init();
-    </script>
 {% endblock %}
