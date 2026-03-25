@@ -1380,6 +1380,37 @@ def provide_recap_share_card(profile):
     }
 
 
+def provide_platinum_grid_cta(profile):
+    """CTA for the Platinum Grid share image builder."""
+    from django.urls import reverse
+    from trophies.models import EarnedTrophy
+
+    plat_count = EarnedTrophy.objects.filter(
+        profile=profile, earned=True, trophy__trophy_type='platinum'
+    ).count()
+
+    # Grab up to 12 recent plat icons for a mini preview grid
+    preview_ets = (
+        EarnedTrophy.objects
+        .filter(profile=profile, earned=True, trophy__trophy_type='platinum')
+        .select_related('trophy__game')
+        .order_by('-earned_date_time')[:12]
+    )
+    preview_icons = [
+        et.trophy.game.title_image or et.trophy.game.title_icon_url or ''
+        for et in preview_ets
+    ]
+    # Pad to 12 for consistent 4x3 grid
+    while len(preview_icons) < 12:
+        preview_icons.append('')
+
+    return {
+        'plat_count': plat_count,
+        'grid_url': reverse('platinum_grid'),
+        'preview_icons': preview_icons,
+    }
+
+
 # ---------------------------------------------------------------------------
 # Premium module providers
 # ---------------------------------------------------------------------------
@@ -4349,6 +4380,22 @@ DASHBOARD_MODULES = [
         'cache_ttl': 1800,
         'default_size': 'large',
         'allowed_sizes': ['medium', 'large'],
+    },
+    {
+        'slug': 'platinum_grid_cta',
+        'name': 'Platinum Grid',
+        'description': 'Build a shareable grid image of your platinum trophy collection.',
+        'category': 'share',
+        'template': 'trophies/partials/dashboard/platinum_grid_cta.html',
+        'provider': provide_platinum_grid_cta,
+        'requires_premium': False,
+        'load_strategy': 'lazy',
+        'default_order': 15,
+        'default_settings': {},
+        'configurable_settings': [],
+        'cache_ttl': 600,
+        'default_size': 'medium',
+        'allowed_sizes': ['small', 'medium', 'large'],
     },
     # --- Premium modules ---
     {

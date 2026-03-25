@@ -1,0 +1,55 @@
+{# Dashboard module: Platinum Grid CTA. Promotes the platinum grid share image builder. #}
+{% load custom_filters %}
+<div class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral overflow-hidden">
+    <div class="card-body p-0">
+        {# Header #}
+        <div class="flex items-center justify-between px-3 pt-3 md:px-5 md:pt-5 lg:px-7 lg:pt-5">
+            <h2 class="card-title text-base lg:text-lg font-bold flex items-center gap-2">
+                {% include 'partials/icons/trophy_cup.html' with color='var(--color-trophy-platinum)' size='w-5 h-5' %}
+                Platinum Grid
+            </h2>
+        </div>
+
+        {# Two-column layout: icon mosaic left, CTA right #}
+        <div class="flex flex-col md:flex-row gap-4 p-3 md:p-5 lg:px-7 lg:pb-7">
+            {# Icon mosaic with gradient fade #}
+            <div class="relative flex-1 min-w-0">
+                <div class="grid grid-cols-4 gap-1.5">
+                    {% for i in data.preview_icons %}
+                        <div class="aspect-square rounded-lg overflow-hidden border border-base-content/10 shadow-sm">
+                            {% if i %}
+                                <img src="{{ i }}" class="w-full h-full object-cover" loading="lazy" />
+                            {% else %}
+                                <div class="w-full h-full bg-base-300/50"></div>
+                            {% endif %}
+                        </div>
+                    {% endfor %}
+                </div>
+                {# Gradient fade overlay to hint there's more #}
+                <div class="absolute inset-0 bg-gradient-to-t from-base-200/90 via-transparent to-transparent pointer-events-none rounded-lg"></div>
+                {# Plat count overlay at bottom #}
+                <div class="absolute bottom-2 left-0 right-0 text-center pointer-events-none">
+                    <span class="text-2xl md:text-3xl font-black text-trophy-platinum drop-shadow-lg">{{ data.plat_count }}</span>
+                    <span class="text-xs font-bold text-base-content/60 block">platinums earned</span>
+                </div>
+            </div>
+
+            {# CTA content #}
+            <div class="flex flex-col justify-center items-center md:items-start text-center md:text-left md:flex-1">
+                <p class="text-base md:text-lg font-bold mb-1">
+                    Your collection, one image
+                </p>
+                <p class="text-xs md:text-sm text-base-content/50 mb-4 max-w-xs">
+                    Pick your platinums, choose a theme from 100+ options, and generate a shareable grid image.
+                </p>
+                <a href="{{ data.grid_url }}" class="btn btn-sm md:btn-md btn-primary gap-1.5">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/>
+                        <rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>
+                    </svg>
+                    Build Your Grid
+                </a>
+            </div>
+        </div>
+    </div>
+</div>

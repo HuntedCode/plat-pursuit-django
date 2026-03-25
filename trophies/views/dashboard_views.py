@@ -53,11 +53,9 @@ class DashboardView(StaffRequiredMixin, ProfileHotbarMixin, TemplateView):
         # Split tabs into system (default) and custom for separate tab bars
         custom_tabs = [t for t in tabs if t.get('is_custom')]
 
-        # Theme picker for premium settings module
-        available_themes = []
-        if is_premium:
-            from trophies.themes import get_available_themes_for_grid
-            available_themes = get_available_themes_for_grid(include_game_art=False, grouped=True)
+        # Theme picker for share card modules (available to all users)
+        from trophies.themes import get_available_themes_for_grid
+        available_themes = get_available_themes_for_grid(include_game_art=False, grouped=True)
 
         # Pre-render premium module previews for free users
         preview_html = {}
