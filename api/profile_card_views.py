@@ -363,6 +363,93 @@ class SetDisplayedBadgeView(APIView):
         return Response({'status': 'ok'})
 
 
+class ToggleShowcaseBadgeView(APIView):
+    """
+    POST /api/v1/badges/showcase/
+
+    Toggle a badge in/out of the profile showcase (max 3, premium only).
+    Send {"badge_id": <id>} to toggle.
+    Returns the current showcase state.
+    """
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [SessionAuthentication, TokenAuthentication]
+
+    def post(self, request):
+        from trophies.models import UserBadge, ProfileBadgeShowcase
+        from trophies.services.dashboard_service import invalidate_dashboard_cache
+
+        from trophies.services.dashboard_service import get_effective_premium
+
+        profile = getattr(request.user, 'profile', None)
+        if not profile:
+            return Response({'error': 'No profile linked.'}, status=http_status.HTTP_400_BAD_REQUEST)
+
+        if not get_effective_premium(request):
+            return Response({'error': 'Premium subscription required.'}, status=http_status.HTTP_403_FORBIDDEN)
+
+        badge_id = request.data.get('badge_id')
+        try:
+            badge_id = int(badge_id)
+        except (ValueError, TypeError):
+            return Response({'error': 'Invalid badge_id.'}, status=http_status.HTTP_400_BAD_REQUEST)
+
+        # Verify earned + has custom artwork
+        ub = (
+            UserBadge.objects
+            .filter(profile=profile, badge_id=badge_id)
+            .select_related('badge', 'badge__base_badge')
+            .first()
+        )
+        if not ub:
+            return Response({'error': 'Badge not earned.'}, status=http_status.HTTP_404_NOT_FOUND)
+
+        try:
+            layers = ub.badge.get_badge_layers()
+            if not layers.get('has_custom_image'):
+                return Response({'error': 'Badge must have custom artwork.'}, status=http_status.HTTP_400_BAD_REQUEST)
+        except Exception:
+            return Response({'error': 'Unable to verify badge artwork.'}, status=http_status.HTTP_400_BAD_REQUEST)
+
+        # Toggle within a transaction to prevent race conditions
+        from django.db import transaction
+        with transaction.atomic():
+            existing = ProfileBadgeShowcase.objects.filter(profile=profile, badge_id=badge_id)
+            if existing.exists():
+                existing.delete()
+                # Reorder remaining to close gaps
+                remaining = list(
+                    ProfileBadgeShowcase.objects.filter(profile=profile)
+                    .select_for_update()
+                    .order_by('display_order')
+                )
+                for i, item in enumerate(remaining, 1):
+                    if item.display_order != i:
+                        item.display_order = i
+                        item.save(update_fields=['display_order'])
+                action = 'removed'
+            else:
+                try:
+                    ProfileBadgeShowcase.objects.create(profile=profile, badge_id=badge_id)
+                    action = 'added'
+                except ValueError:
+                    return Response(
+                        {'error': 'Maximum 5 showcase badges allowed.'},
+                        status=http_status.HTTP_400_BAD_REQUEST,
+                    )
+
+        try:
+            invalidate_dashboard_cache(profile.pk)
+        except Exception:
+            pass
+
+        showcase_ids = list(
+            ProfileBadgeShowcase.objects.filter(profile=profile)
+            .order_by('display_order')
+            .values_list('badge_id', flat=True)
+        )
+        return Response({'status': 'ok', 'action': action, 'showcase_badge_ids': showcase_ids})
+
+
 # ---------------------------------------------------------------------------
 # Public forum signature serving (no auth)
 # ---------------------------------------------------------------------------

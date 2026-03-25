@@ -1423,6 +1423,42 @@ class UserBadge(models.Model):
     def __str__(self):
         return f"{self.profile.psn_username} - {self.badge.name}"
 
+class ProfileBadgeShowcase(models.Model):
+    """
+    Premium feature: up to 3 badge series showcased on a user's public profile.
+    Separate from UserBadge.is_displayed (which controls the share card badge).
+    """
+    profile = models.ForeignKey(Profile, on_delete=models.CASCADE, related_name='badge_showcase')
+    badge = models.ForeignKey(Badge, on_delete=models.CASCADE, related_name='showcased_by')
+    display_order = models.PositiveSmallIntegerField(default=0, help_text="Position in the showcase (1-5), auto-assigned on creation")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ['profile', 'badge']
+        ordering = ['display_order', 'created_at']
+        indexes = [
+            models.Index(fields=['profile', 'display_order'], name='showcase_profile_order_idx'),
+        ]
+
+    def save(self, *args, **kwargs):
+        if not self.pk:
+            from django.db import transaction
+            with transaction.atomic():
+                count = ProfileBadgeShowcase.objects.select_for_update().filter(
+                    profile=self.profile
+                ).count()
+                if count >= 5:
+                    raise ValueError("Maximum 5 showcase badges allowed.")
+                if not self.display_order or self.display_order < 1:
+                    self.display_order = count + 1
+                super().save(*args, **kwargs)
+        else:
+            super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.profile.psn_username} showcase #{self.display_order}: {self.badge.name}"
+
+
 class UserBadgeProgress(models.Model):
     profile = models.ForeignKey(Profile, on_delete=models.CASCADE, related_name='badge_progress')
     badge = models.ForeignKey(Badge, on_delete=models.CASCADE, related_name='progress_for')

@@ -243,6 +243,48 @@ class ProfileDetailView(ProfileHotbarMixin, DetailView):
         trophy_case = trophy_case + [None] * (max_trophies - len(trophy_case))
         return trophy_case
 
+    def _build_badge_showcase(self, profile):
+        """
+        Build badge showcase data for the profile carousel (premium feature).
+
+        Returns:
+            list[dict]: Showcase badge data, or empty list
+        """
+        if not profile.user_is_premium:
+            return []
+
+        from trophies.models import ProfileBadgeShowcase
+        showcase_entries = (
+            ProfileBadgeShowcase.objects
+            .filter(profile=profile)
+            .select_related('badge', 'badge__base_badge', 'badge__most_recent_concept')
+            .order_by('display_order')
+        )
+
+        badges = []
+        tier_names = {1: 'Bronze', 2: 'Silver', 3: 'Gold', 4: 'Platinum'}
+        for entry in showcase_entries:
+            badge = entry.badge
+            try:
+                layers = badge.get_badge_layers()
+            except Exception:
+                continue
+            if not layers.get('has_custom_image'):
+                continue
+            concept = badge.most_recent_concept
+            bg_url = concept.bg_url if concept else ''
+            badges.append({
+                    'layers': layers,
+                    'name': badge.effective_display_series or badge.series_slug,
+                    'tier': badge.tier,
+                    'tier_name': tier_names.get(badge.tier, ''),
+                    'series_slug': badge.series_slug,
+                    'bg_url': bg_url or '',
+                })
+        # Pad to 5 with None for placeholder rendering
+        badges += [None] * (5 - len(badges))
+        return badges
+
     def _build_timeline(self, profile):
         """
         Build timeline events for profile header.
@@ -585,10 +627,13 @@ class ProfileDetailView(ProfileHotbarMixin, DetailView):
             'recent_plat__trophy__game', 'rarest_plat__trophy__game'
         ).get(id=profile.id)
 
-        # Build shared context (header stats, trophy case, and timeline)
+        # Build shared context (header stats, trophy case, badge showcase, and timeline)
         context['header_stats'] = self._build_header_stats(profile)
         context['trophy_case'] = self._build_trophy_case(profile)
         context['trophy_case_count'] = len(context['trophy_case'])
+        showcase_badges = self._build_badge_showcase(profile)
+        context['profile_showcase_badges'] = showcase_badges
+        context['has_showcase_badges'] = any(b for b in showcase_badges)
         if profile.psn_history_public:
             context['timeline_events'] = self._build_timeline(profile)
 

@@ -1271,10 +1271,21 @@ def provide_badge_showcase(profile, settings=None):
     if not displayed_badge and badge_list:
         displayed_badge = badge_list[0]  # Already sorted by -tier, -earned_at
 
+    # Fetch profile showcase selections (premium feature)
+    from trophies.models import ProfileBadgeShowcase
+    showcase_ids = list(
+        ProfileBadgeShowcase.objects.filter(profile=profile)
+        .order_by('display_order')
+        .values_list('badge_id', flat=True)
+    )
+
     return {
         'displayed_badge': displayed_badge,
         'badges': badge_list,
         'total_badges': len(badge_list),
+        'showcase_badge_ids': showcase_ids,
+        'showcase_count': len(showcase_ids),
+        'is_premium': profile.user_is_premium,
     }
 
 
@@ -4313,7 +4324,7 @@ DASHBOARD_MODULES = [
         'default_order': 10,
         'default_settings': {},
         'configurable_settings': [],
-        'cache_ttl': 600,
+        'cache_ttl': 0,
         'default_size': 'medium',
         'allowed_sizes': ['small', 'medium', 'large'],
     },

@@ -74,6 +74,10 @@ class DashboardModuleDataView(StaffRequiredAPIMixin, View):
         if data is None:
             return JsonResponse({'error': 'Failed to load module data.'}, status=500)
 
+        # Override is_premium with effective premium (respects staff preview toggle)
+        if 'is_premium' in data:
+            data['is_premium'] = is_premium
+
         try:
             html = render_to_string(mod['template'], {
                 'data': data,
