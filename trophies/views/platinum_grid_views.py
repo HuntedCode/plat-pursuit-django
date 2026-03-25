@@ -54,7 +54,7 @@ class PlatinumGridView(StaffRequiredMixin, ProfileHotbarMixin, TemplateView):
         platinums = (
             EarnedTrophy.objects
             .filter(profile=profile, earned=True, trophy__trophy_type='platinum')
-            .select_related('trophy', 'trophy__game')
+            .select_related('trophy', 'trophy__game', 'trophy__game__concept')
             .order_by(F('earned_date_time').desc(nulls_last=True))
         )
 
@@ -70,6 +70,8 @@ class PlatinumGridView(StaffRequiredMixin, ProfileHotbarMixin, TemplateView):
         for et in platinums:
             trophy = et.trophy
             game = trophy.game
+            concept = game.concept
+            family_id = concept.family_id if concept else None
             platinum_data.append({
                 'id': et.id,
                 'game_name': game.title_name,
@@ -79,6 +81,8 @@ class PlatinumGridView(StaffRequiredMixin, ProfileHotbarMixin, TemplateView):
                 'psn_earn_rate': float(trophy.trophy_earn_rate or 0),
                 'is_shovelware': game.shovelware_status in ('auto_flagged', 'manually_flagged'),
                 'is_hidden': game.id in hidden_game_ids,
+                'family_id': family_id,
+                'platforms': game.title_platform or [],
             })
 
         # Escape </script> sequences for safe embedding in <script> tags
