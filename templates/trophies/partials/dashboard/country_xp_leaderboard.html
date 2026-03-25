@@ -23,15 +23,15 @@
         {% elif data.has_stats %}
             {# Stats grid #}
             <div class="grid grid-cols-3 gap-1.5 md:gap-2 lg:gap-3 mb-4">
-                <div class="bg-base-300/50 rounded-lg p-2 lg:p-3 text-center">
+                <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-2 lg:p-3 text-center">
                     <div class="text-lg lg:text-2xl font-black text-primary">{% if data.user_rank %}#{{ data.user_rank }}{% else %}-{% endif %}</div>
                     <div class="text-xs text-base-content/50 font-medium">Country Rank</div>
                 </div>
-                <div class="bg-base-300/50 rounded-lg p-2 lg:p-3 text-center">
+                <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-2 lg:p-3 text-center">
                     <div class="text-lg lg:text-2xl font-black text-base-content">{{ data.total_participants }}</div>
                     <div class="text-xs text-base-content/50 font-medium">Hunters</div>
                 </div>
-                <div class="bg-base-300/50 rounded-lg p-2 lg:p-3 text-center">
+                <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-2 lg:p-3 text-center">
                     <div class="text-lg lg:text-2xl font-black text-accent">{{ data.total_xp_formatted }}</div>
                     <div class="text-xs text-base-content/50 font-medium">Your XP</div>
                 </div>
@@ -44,7 +44,7 @@
                         {% if data.show_gap and forloop.counter == 4 %}
                             <div class="text-center text-base-content/30 text-xs py-0.5">...</div>
                         {% endif %}
-                        <div class="flex items-center gap-2 p-2 rounded-lg {% if entry.is_self %}bg-accent/10 border border-accent/30{% else %}bg-base-300/20{% endif %}">
+                        <div class="flex items-center gap-2 p-2 rounded-lg {% if entry.is_self %}bg-accent/10 border border-accent/30{% else %}bg-white/[0.03] border border-base-content/5{% endif %}">
                             <span class="text-xs font-bold w-6 text-center text-base-content/50">#{{ entry.rank }}</span>
                             <div class="w-6 h-6 rounded-full overflow-hidden shrink-0 ring-1 {% if entry.is_self %}ring-accent{% else %}ring-base-300{% endif %}">
                                 {% if entry.avatar_url %}

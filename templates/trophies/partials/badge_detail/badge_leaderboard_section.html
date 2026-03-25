@@ -7,7 +7,7 @@
 
         {% if target_profile %}
         <div class="grid grid-cols-2 md:grid-cols-4 gap-1.5 mb-3">
-            <div class="border border-base-content/5 rounded-lg p-2 text-center">
+            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-2 text-center">
                 {% if stats.user_lb_rank %}
                     <div class="text-sm md:text-base font-bold text-info">#{{ stats.user_lb_rank }}</div>
                 {% else %}
@@ -15,11 +15,11 @@
                 {% endif %}
                 <div class="text-[0.5rem] md:text-[0.55rem] text-base-content/40 uppercase font-medium leading-none">Earners Rank</div>
             </div>
-            <div class="border border-base-content/5 rounded-lg p-2 text-center">
+            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-2 text-center">
                 <div class="text-sm md:text-base font-bold text-accent">{{ stats.total_earners_count|intcomma }}</div>
                 <div class="text-[0.5rem] md:text-[0.55rem] text-base-content/40 uppercase font-medium leading-none">Total Earners</div>
             </div>
-            <div class="border border-base-content/5 rounded-lg p-2 text-center">
+            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-2 text-center">
                 {% if stats.user_lb_progress_rank %}
                     <div class="text-sm md:text-base font-bold text-secondary">#{{ stats.user_lb_progress_rank }}</div>
                 {% else %}
@@ -27,18 +27,18 @@
                 {% endif %}
                 <div class="text-[0.5rem] md:text-[0.55rem] text-base-content/40 uppercase font-medium leading-none">Progress Rank</div>
             </div>
-            <div class="border border-base-content/5 rounded-lg p-2 text-center">
+            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-2 text-center">
                 <div class="text-sm md:text-base font-bold text-primary">{{ stats.total_progressers_count|intcomma }}</div>
                 <div class="text-[0.5rem] md:text-[0.55rem] text-base-content/40 uppercase font-medium leading-none">Progressers</div>
             </div>
         </div>
         {% else %}
         <div class="grid grid-cols-2 gap-1.5 mb-3">
-            <div class="border border-base-content/5 rounded-lg p-2 text-center">
+            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-2 text-center">
                 <div class="text-sm md:text-base font-bold text-info">{{ stats.total_earners_count|intcomma }}</div>
                 <div class="text-[0.5rem] md:text-[0.55rem] text-base-content/40 uppercase font-medium leading-none">Total Earners</div>
             </div>
-            <div class="border border-base-content/5 rounded-lg p-2 text-center">
+            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-2 text-center">
                 <div class="text-sm md:text-base font-bold text-accent">{{ stats.total_progressers_count|intcomma }}</div>
                 <div class="text-[0.5rem] md:text-[0.55rem] text-base-content/40 uppercase font-medium leading-none">Progressers</div>
             </div>

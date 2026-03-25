@@ -16,7 +16,7 @@
             <div class="grid grid-cols-1 md:grid-cols-2 gap-2 lg:gap-3">
                 {% for trophy in data.trophies %}
                     {% with rarity=trophy.earn_rate|rarity_color_hex %}
-                    <a href="{% url 'game_detail' trophy.np_communication_id %}" class="p-2 rounded-lg bg-base-300/40 hover:bg-base-300/60 transition-colors group">
+                    <a href="{% url 'game_detail' trophy.np_communication_id %}" class="p-2 rounded-lg bg-white/[0.03] border border-base-content/5 hover:bg-white/[0.06] transition-colors group">
                         {# Top row: both icons + trophy name + rarity #}
                         <div class="flex items-start gap-2 mb-1.5">
                             {# Trophy icon #}

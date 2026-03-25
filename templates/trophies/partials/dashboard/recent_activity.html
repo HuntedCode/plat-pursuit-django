@@ -42,7 +42,7 @@
 
                     {% elif event.type == 'trophy_group' %}
                         {# Grouped trophy earns for a game on the same day #}
-                        <div class="flex items-center gap-2 md:gap-3 p-2 rounded-lg bg-base-300/40 hover:bg-base-300/60 transition-colors group relative">
+                        <div class="flex items-center gap-2 md:gap-3 p-2 rounded-lg bg-white/[0.03] border border-base-content/5 hover:bg-white/[0.06] transition-colors group relative">
                             {% if event.np_communication_id %}
                                 <a href="/games/{{ event.np_communication_id }}/" class="absolute inset-0 z-10" aria-label="{{ event.game_name }}" title="{{ event.game_name }}"></a>
                             {% endif %}

@@ -46,7 +46,7 @@
                         <div class="flex items-center gap-2 p-2 rounded-lg
                             {% if slot.state == 'completed' %}bg-success/10 border border-success/30
                             {% elif slot.state == 'assigned' %}bg-secondary/10 border border-secondary/30
-                            {% else %}bg-base-300/20 border border-base-300/40{% endif %}">
+                            {% else %}bg-white/[0.03] border border-base-content/5{% endif %}">
                             {% if slot.icon_url %}
                                 <div class="w-8 h-8 rounded-lg overflow-hidden shrink-0 ring-1 {% if slot.state == 'completed' %}ring-success{% else %}ring-secondary{% endif %}">
                                     <img src="{{ slot.icon_url }}" alt="{{ slot.concept_title }}" class="w-full h-full object-cover" loading="lazy" />

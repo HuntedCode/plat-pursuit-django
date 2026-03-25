@@ -66,7 +66,7 @@
                                     </div>
                                     {% for cell in row.cells %}
                                         {% if cell.in_year %}
-                                            <div class="rounded-sm {% if cell.level == 0 %}bg-base-300/40{% elif cell.level == 1 %}bg-primary/30{% elif cell.level == 2 %}bg-primary/50{% elif cell.level == 3 %}bg-primary/70{% else %}bg-primary{% endif %}"
+                                            <div class="rounded-sm {% if cell.level == 0 %}bg-white/[0.03] border border-base-content/5{% elif cell.level == 1 %}bg-primary/30{% elif cell.level == 2 %}bg-primary/50{% elif cell.level == 3 %}bg-primary/70{% else %}bg-primary{% endif %}"
                                                  style="flex: 1; aspect-ratio: 1; min-width: 6px;"
                                                  title="{{ cell.date }}: {{ cell.count }} troph{{ cell.count|pluralize:"y,ies" }}"></div>
                                         {% else %}
@@ -80,7 +80,7 @@
                     {# Legend #}
                     <div class="flex items-center justify-end gap-1 mt-2">
                         <span class="text-[0.55rem] text-base-content/40">Less</span>
-                        <div class="w-2.5 h-2.5 rounded-sm bg-base-300/40"></div>
+                        <div class="w-2.5 h-2.5 rounded-sm bg-white/[0.03] border border-base-content/5"></div>
                         <div class="w-2.5 h-2.5 rounded-sm bg-primary/30"></div>
                         <div class="w-2.5 h-2.5 rounded-sm bg-primary/50"></div>
                         <div class="w-2.5 h-2.5 rounded-sm bg-primary/70"></div>

@@ -21,15 +21,15 @@
         {% if data.has_reviews %}
             {# Stats bar #}
             <div class="grid grid-cols-3 gap-1.5 md:gap-2 mb-3">
-                <div class="bg-base-300/50 rounded-lg p-2 text-center">
+                <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-2 text-center">
                     <div class="text-sm lg:text-base font-black text-info">{{ data.total_helpful }}</div>
                     <div class="text-xs text-base-content/50">Helpful</div>
                 </div>
-                <div class="bg-base-300/50 rounded-lg p-2 text-center">
+                <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-2 text-center">
                     <div class="text-sm lg:text-base font-black text-base-content">{{ data.total_funny }}</div>
                     <div class="text-xs text-base-content/50">Funny</div>
                 </div>
-                <div class="bg-base-300/50 rounded-lg p-2 text-center">
+                <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-2 text-center">
                     <div class="text-sm lg:text-base font-black text-base-content">{{ data.total_replies }}</div>
                     <div class="text-xs text-base-content/50">Replies</div>
                 </div>
@@ -45,7 +45,7 @@
                 </div>
                 <div class="space-y-2">
                     {% for vote in data.recent_engagement %}
-                        <a href="{% url 'review_hub' vote.concept_slug %}" class="flex items-center gap-2 md:gap-3 p-2 rounded-lg bg-base-300/40 hover:bg-base-300/60 transition-colors group">
+                        <a href="{% url 'review_hub' vote.concept_slug %}" class="flex items-center gap-2 md:gap-3 p-2 rounded-lg bg-white/[0.03] border border-base-content/5 hover:bg-white/[0.06] transition-colors group">
                             <div class="w-8 h-8 lg:w-10 lg:h-10 rounded-lg overflow-hidden shrink-0 ring-1 ring-base-300">
                                 {% if vote.icon_url %}
                                     <img src="{{ vote.icon_url }}" alt="{{ vote.game_name }}" class="w-full h-full object-cover" loading="lazy" />

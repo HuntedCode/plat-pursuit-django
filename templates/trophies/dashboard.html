@@ -91,7 +91,7 @@
 
 {# ─── Custom Tab Bar (premium user-created tabs, rendered below system bar) #}
 {% if custom_tabs %}
-<div id="dashboard-custom-tabs" class="max-w-4xl mx-auto mt-1 flex gap-1 p-1 bg-base-300/30 rounded-lg border border-base-300/50" role="tablist">
+<div id="dashboard-custom-tabs" class="max-w-4xl mx-auto mt-1 flex gap-1 p-1 bg-white/[0.03] rounded-lg border border-base-content/5" role="tablist">
     {% for tab in custom_tabs %}
         <button role="tab"
                 id="tab-btn-{{ tab.slug }}"

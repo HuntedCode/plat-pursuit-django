@@ -52,7 +52,7 @@
                         <div class="w-10 h-10 lg:w-11 lg:h-11 rounded-lg relative overflow-hidden
                             {% if slot.state == 'completed' %}bg-success/15 border border-success/30
                             {% elif slot.state == 'assigned' %}bg-accent/15 border border-accent/30
-                            {% else %}bg-base-300/40{% endif %}"
+                            {% else %}bg-white/[0.03] border border-base-content/5{% endif %}"
                             {% if slot.game_name %}title="{{ slot.letter }}: {{ slot.game_name }}"{% endif %}>
                             {% if slot.icon_url %}
                                 <img src="{{ slot.icon_url }}" alt="{{ slot.game_name }}" class="w-full h-full object-cover" loading="lazy" />

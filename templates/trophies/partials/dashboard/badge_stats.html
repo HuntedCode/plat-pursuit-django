@@ -51,7 +51,7 @@
             {# Highlights: rarest + oldest #}
             <div class="space-y-2">
                 {% if data.rarest_badge %}
-                    <a href="{% url 'badge_detail' data.rarest_badge.series_slug %}" class="flex items-center gap-2 md:gap-3 p-2 rounded-lg bg-base-300/40 hover:bg-base-300/60 transition-colors group">
+                    <a href="{% url 'badge_detail' data.rarest_badge.series_slug %}" class="flex items-center gap-2 md:gap-3 p-2 rounded-lg bg-white/[0.03] border border-base-content/5 hover:bg-white/[0.06] transition-colors group">
                         <figure class="w-9 h-9 lg:w-10 lg:h-10 shrink-0">
                             {% include 'partials/badge.html' with layers=data.rarest_badge.layers %}
                         </figure>
@@ -67,7 +67,7 @@
                 {% endif %}
 
                 {% if data.oldest_badge %}
-                    <a href="{% url 'badge_detail' data.oldest_badge.series_slug %}" class="flex items-center gap-2 md:gap-3 p-2 rounded-lg bg-base-300/40 hover:bg-base-300/60 transition-colors group">
+                    <a href="{% url 'badge_detail' data.oldest_badge.series_slug %}" class="flex items-center gap-2 md:gap-3 p-2 rounded-lg bg-white/[0.03] border border-base-content/5 hover:bg-white/[0.06] transition-colors group">
                         <figure class="w-9 h-9 lg:w-10 lg:h-10 shrink-0">
                             {% include 'partials/badge.html' with layers=data.oldest_badge.layers %}
                         </figure>
