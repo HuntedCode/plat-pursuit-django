@@ -10,23 +10,23 @@
          data-csrf="{{ csrf_token }}"
          data-sync-status="{{ hotbar.sync_status }}"
          data-seconds="{{ hotbar.seconds_to_next_sync }}">
-        <div class="px-3 py-2 xl:px-6 xl:py-2">
-            <div class="flex flex-row items-center justify-between gap-2 xl:gap-4">
+        <div class="px-2 py-1.5 md:px-3 md:py-2 xl:px-6 xl:py-2">
+            <div class="flex flex-row items-center justify-between gap-2 md:gap-3 xl:gap-4">
                 <!-- Left: Profile info -->
-                <div class="flex flex-row items-center gap-2 xl:gap-3 min-w-0">
+                <div class="flex flex-row items-center gap-1.5 md:gap-2 xl:gap-3 min-w-0">
                     {% if hotbar.profile %}
                         <a href="{% url 'profile_detail' hotbar.profile.psn_username %}" class="avatar shrink-0">
-                            <div class="w-5 sm:w-7 xl:w-8 rounded-full ring-1 sm:ring-2 ring-primary hover:scale-105 transition-transform">
+                            <div class="w-5 md:w-7 xl:w-8 rounded-full ring-1 md:ring-2 ring-primary hover:scale-105 transition-transform">
                                 <img src="{{ hotbar.profile.avatar_url|default:'/static/default-avatar.png' }}" alt="Profile Avatar" />
                             </div>
                         </a>
                         <a href="{% url 'profile_detail' hotbar.profile.psn_username %}" class="flex items-center gap-2 min-w-0">
-                            <span id="sync-user" class="text-xs xl:text-sm font-bold truncate">{{ hotbar.profile.display_psn_username }}</span>
+                            <span id="sync-user" class="text-xs md:text-sm font-bold truncate">{{ hotbar.profile.display_psn_username }}</span>
                             <div aria-live="polite" aria-atomic="true" class="sr-only" id="sync-status-announcement"></div>
-                            <span id="sync-badge" class="badge badge-xs xl:badge-sm {% if hotbar.sync_status == 'synced' %}badge-success{% elif hotbar.sync_status == 'syncing' %}badge-warning{% else %}badge-error{% endif %} font-bold shrink-0" role="status">{{ hotbar.sync_status|sync_status_display }}</span>
+                            <span id="sync-badge" class="badge badge-xs md:badge-sm {% if hotbar.sync_status == 'synced' %}badge-success{% elif hotbar.sync_status == 'syncing' %}badge-warning{% else %}badge-error{% endif %} font-bold shrink-0" role="status">{{ hotbar.sync_status|sync_status_display }}</span>
                         </a>
                         <div id="sync-progress-div" class="flex items-center gap-1 {% if not hotbar.sync_status == 'syncing' %}hidden{% endif %}">
-                            <progress id="sync-progress-bar" class="progress progress-primary w-16 xl:w-24 h-2" value="{{ hotbar.progress_percentage|floatformat:0|default:0 }}" max="100"></progress>
+                            <progress id="sync-progress-bar" class="progress progress-primary w-14 md:w-16 xl:w-24 h-2" value="{{ hotbar.progress_percentage|floatformat:0|default:0 }}" max="100"></progress>
                             <span id="sync-progress-percent" class="text-xs text-base-content/70">{{ hotbar.progress_percentage|floatformat:0|default:0 }}%</span>
                             <span id="sync-queue-position" class="text-xs text-base-content/50 {% if not hotbar.queue_position or hotbar.queue_position == 0 %}hidden{% endif %}">~{{ hotbar.queue_position|default:0 }} ahead</span>
                             <span class="loading loading-spinner loading-sm"></span>
@@ -54,7 +54,7 @@
                 <div class="hidden md:flex items-center shrink-0">
                     <form id="sync-form" method="post" action="{% url 'search_sync_profile' %}" class="flex items-center gap-2" data-form-type="other">
                         {% csrf_token %}
-                        <input id="add-sync-input" type="search" name="psn_username" placeholder="PSN Username" class="input input-accent input-xs xl:input-sm w-36 xl:w-48" autocomplete="off" data-form-type="other" data-lpignore="true" readonly onfocus="this.removeAttribute('readonly')" required />
+                        <input id="add-sync-input" type="search" name="psn_username" placeholder="PSN Username" class="input input-accent input-xs md:input-sm w-32 md:w-36 xl:w-48" autocomplete="off" data-form-type="other" data-lpignore="true" readonly onfocus="this.removeAttribute('readonly')" required />
                         <button id="add-sync-btn" type="submit" class="btn btn-accent btn-xs border border-base-300" aria-label="Sync new profile">Sync</button>
                         <a href="" id="add-sync-anchor" class="btn btn-success btn-xs border border-base-300 hidden" aria-label="Visit synced profile">Visit</a>
                         <span id="add-sync-load" class="loading loading-spinner loading-sm hidden" role="status" aria-label="Syncing profile"></span>
