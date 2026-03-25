@@ -1,302 +1,278 @@
 {% extends 'base.html' %}
 {% load static %}
 
-{% block title %}User Settings{% endblock %}
+{% block title %}Settings{% endblock %}
 {% block robots %}noindex, nofollow{% endblock %}
+
 {% block content %}
-<div class="container mx-auto p-4 max-w-2xl">
-    <div class="card bg-base-100 shadow-xl">
-        <div class="card-body">
-            <h2 class="text-3xl text-base-content font-semibold text-center italic">Settings</h2>
-            <div class="divider divider-vertical m-0 p-0"></div>
+<div class="max-w-3xl mx-auto">
+    {% include 'partials/breadcrumb.html' with items=breadcrumb %}
 
-            {% if messages %}
-                {% for message in messages %}
-                    <div class="alert {% if message.tags == 'error' %}alert-error{% elif message.tags == 'success' %}alert-success{% else %}alert-info{% endif %} mb-4" role="alert">
-                        {{ message }}
-                    </div>
-                {% endfor %}
-            {% endif %}
+    {# Page Header #}
+    <div class="card bg-base-200/70 border-2 border-base-300 border-l-4 border-l-primary shadow-md shadow-neutral mb-3">
+        <div class="card-body p-3 md:p-4">
+            <div class="flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 md:w-6 md:h-6 text-primary shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+                <h1 class="text-lg md:text-xl lg:text-2xl font-bold">Settings</h1>
+            </div>
+        </div>
+    </div>
 
-            <!-- User Settings Section -->
-            <h3 class="text-2xl text-base-content font-semibold italic mb-2">User Settings</h3>
-            <div class="flex flex-col border-4 border-base-300 shadow-lg shadow-neutral rounded-box p-4 w-7/8 mx-auto">
-                <h3 class="text-xl font-semibold mb-2 italic">Regional Info</h3>
-                <form method="post" class="space-y-4 w-7/8 mx-auto" id="user-settings-form">
-                    {% csrf_token %}
-                    <input type="hidden" name="action" value="update_user">
-                    <div class="form-control">
-                        <label class="label" for="{{ user_form.user_timezone.id_for_label }}">Timezone</label>
-                        <div class="flex items-center gap-2">
-                            <div class="flex-1">{{ user_form.user_timezone }}</div>
-                            <button type="button" class="btn btn-ghost btn-sm gap-1" id="detect-timezone-btn" title="Detect timezone from browser">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
-                                Detect
-                            </button>
-                        </div>
-                        {% if user_form.user_timezone.errors %}
-                            <div class="alert alert-error mt-1">{{ user_form.user_timezone.errors }}</div>
-                        {% endif %}
-                    </div>
-                    <div class="form-control">
-                        <label class="label" for="{{ user_form.default_region.id_for_label }}">Default Region</label>
-                        {{ user_form.default_region }}
-                        {% if user_form.default_region.errors %}
-                            <div class="alert alert-error mt-1">{{ user_form.default_region.errors }}</div>
-                        {% endif %}
-                    </div>
-                    <div class="form-control mb-4">
-                        <label class="label" for="{{ user_form.use_24hr_clock.id_for_label }}">Use 24-Hour Clock Format</label>
-                        <br />
-                        {{ user_form.use_24hr_clock }}
-                        <p class="text-center text-secondary font-bold pr-1 italic mt-1">
-                            Example: 24-hour shows "23:00", 12-hour shows "11:00 PM"
-                        </p>
-                        {% if user_form.use_24hr_clock.errors %}
-                            <div class="alert alert-error mt-1" role="alert">{{ user_form.use_24hr_clock.errors }}</div>
-                        {% endif %}
-                    </div>
-                    <button type="submit" class="btn btn-primary w-full" id="user-settings-save-btn" disabled>Save User Settings</button>
-                </form>
+    {# Messages #}
+    {% if messages %}
+    <div class="mb-3 space-y-2">
+        {% for message in messages %}
+        <div class="alert {% if message.tags == 'error' %}alert-error{% elif message.tags == 'success' %}alert-success{% else %}alert-info{% endif %} text-sm" role="alert">
+            {{ message }}
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
 
-                <!-- Password Change Section -->
-                <h3 class="text-xl font-semibold mt-6 mb-2 italic">Change Password</h3>
-                <div class="flex flex-col items-center w-full">
-                    <form method="post" class="space-y-4">
-                        {% csrf_token %}
-                        <input type="hidden" name="action" value="change_password">
-                        <div class="flex flex-col form-control items-center">
-                            <label class="text-sm text-base-content/70 self-start" for="id_old_password">Old Password</label>
-                            <input type="password" name="old_password" id="id_old_password" class="input input-primary w-full" placeholder="Old Password" autocomplete="current-password" required>
-                        </div>
-                        <div class="form-control">
-                            <label class="text-base text-base-content/70 self-start" for="id_new_password1">New Password</label>
-                            <input type="password" name="new_password1" id="id_new_password1" class="input input-accent w-full" placeholder="New Password" autocomplete="new-password" required>
-                        </div>
-                        <div class="form-control">
-                            <label class="text-base text-base-content/70 self-start" for="id_new_password2">Confirm New Password</label>
-                            <input type="password" name="new_password2" id="id_new_password2" class="input input-accent w-full" placeholder="Confirm New Password" autocomplete="new-password" required>
-                        </div>
-                        <button type="submit" class="btn btn-primary w-full">Change Password</button>
-                    </form>
+    {# ═══ Regional Settings ═══ #}
+    <div class="card bg-base-200/70 border-2 border-base-300 shadow-md shadow-neutral mb-3">
+        <div class="card-body p-3 md:p-4">
+            <h2 class="text-sm md:text-base font-bold flex items-center gap-2 mb-3">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-info" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+                Regional Settings
+            </h2>
+            <form method="post" class="space-y-3" id="user-settings-form">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="update_user">
+
+                <div class="form-control">
+                    <label class="text-xs font-semibold text-base-content/60 mb-1" for="{{ user_form.user_timezone.id_for_label }}">Timezone</label>
+                    <div class="flex items-center gap-2">
+                        <div class="flex-1">{{ user_form.user_timezone }}</div>
+                        <button type="button" class="btn btn-ghost btn-xs md:btn-sm gap-1" id="detect-timezone-btn" title="Detect from browser">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+                            <span class="hidden md:inline">Detect</span>
+                        </button>
+                    </div>
+                    {% if user_form.user_timezone.errors %}<div class="text-xs text-error mt-1">{{ user_form.user_timezone.errors }}</div>{% endif %}
                 </div>
+
+                <div class="form-control">
+                    <label class="text-xs font-semibold text-base-content/60 mb-1" for="{{ user_form.default_region.id_for_label }}">Default Region</label>
+                    {{ user_form.default_region }}
+                    {% if user_form.default_region.errors %}<div class="text-xs text-error mt-1">{{ user_form.default_region.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-control">
+                    <label class="flex items-center gap-2 cursor-pointer">
+                        {{ user_form.use_24hr_clock }}
+                        <span class="text-sm">Use 24-hour clock</span>
+                    </label>
+                    <p class="text-xs text-base-content/40 mt-1 ml-7">Example: 23:00 instead of 11:00 PM</p>
+                    {% if user_form.use_24hr_clock.errors %}<div class="text-xs text-error mt-1">{{ user_form.use_24hr_clock.errors }}</div>{% endif %}
+                </div>
+
+                <button type="submit" class="btn btn-primary btn-sm w-full" id="user-settings-save-btn" disabled>Save Regional Settings</button>
+            </form>
+        </div>
+    </div>
+
+    {% if profile %}
+    {# ═══ Profile Settings (PSN identity + game visibility) ═══ #}
+    <div class="card bg-base-200/70 border-2 border-base-300 shadow-md shadow-neutral mb-3">
+        <div class="card-body p-3 md:p-4">
+            <h2 class="text-sm md:text-base font-bold flex items-center gap-2 mb-3">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                Profile Settings
+            </h2>
+
+            {# PSN Identity + Unlink #}
+            <div class="flex items-center gap-3 p-2 rounded-lg bg-base-300/30 mb-3">
+                <div class="w-8 h-8 rounded-full overflow-hidden ring-2 ring-primary shrink-0">
+                    <img src="{{ profile.avatar_url|default:'/static/default-avatar.png' }}" alt="" class="w-full h-full object-cover" loading="lazy" />
+                </div>
+                <div class="flex-1 min-w-0">
+                    <span class="text-sm font-bold">{{ profile.display_psn_username }}</span>
+                    <p class="text-xs text-base-content/40">Last sync: {{ profile.last_synced|date:"M j, Y" }}</p>
+                </div>
+                <button type="button" onclick="document.getElementById('unlink-modal').showModal()" class="btn btn-ghost btn-xs text-error gap-1 shrink-0">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                    Unlink
+                </button>
             </div>
 
-            <!-- Title Settings -->
-            {% if profile %}
-                <div class="divider divider-vertical m-0 mt-2 p-0"></div>
-                <h3 class="text-2xl text-base-content font-semibold italic mb-2">Title</h3>
-                <div class="flex flex-col border-4 border-base-300 shadow-lg shadow-neutral rounded-box p-4 w-7/8 mx-auto items-center gap-3">
-                    {% if profile.displayed_title %}
-                        <p class="text-lg {% if profile.user_is_premium %}legendary-title{% else %}text-base-content/70{% endif %} italic pr-1">{{ profile.displayed_title }}</p>
-                    {% else %}
-                        <p class="text-base-content/50 italic">No title equipped</p>
-                    {% endif %}
-                    <a href="{% url 'my_titles' %}" class="btn btn-secondary">Manage Titles</a>
-                    <p class="text-center text-accent font-bold pr-1 italic text-sm">Earn Badges and Milestones to unlock more titles!</p>
-                    {% if profile.user_is_premium %}
-                        <p class="text-center text-xs text-base-content/50">As a Premium subscriber, your title is displayed with legendary styling.</p>
-                    {% endif %}
-                </div>
-            {% endif %}
+            {# Game Visibility #}
+            <form method="post" class="space-y-3" id="profile-settings-form">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="update_profile">
 
-            <!-- Premium Settings (background & theme) -->
-            {% if profile %}
-                <div class="divider divider-vertical m-0 mt-2 p-0"></div>
-                <h3 class="text-2xl text-base-content font-semibold italic mb-2">Premium Settings</h3>
-                <div class="flex flex-col border-4 border-base-300 shadow-lg shadow-neutral rounded-box p-4 w-7/8 mx-auto">
-                    {% if not profile.user_is_premium %}
-                        <div class="alert alert-info mb-6" role="alert">
-                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="stroke-current shrink-0 w-6 h-6" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-                            <span>Upgrade to premium to unlock these settings!</span>
-                        </div>
-                    {% endif %}
+                <label class="flex items-center gap-2 cursor-pointer">
+                    {{ profile_form.hide_hiddens }}
+                    <div>
+                        <span class="text-sm font-semibold">Hide hidden/deleted games</span>
+                        <p class="text-xs text-base-content/40">Remove hidden or deleted games from your profile view.</p>
+                    </div>
+                </label>
 
-                    {% if premium_form %}
-                        <h3 class="text-xl font-semibold mb-2 italic">Profile Customization</h3>
-                        <form method="post" class="w-7/8 mx-auto" id="premium-settings-form">
+                <label class="flex items-center gap-2 cursor-pointer">
+                    {{ profile_form.hide_zeros }}
+                    <div>
+                        <span class="text-sm font-semibold">Hide zero-progress games</span>
+                        <p class="text-xs text-base-content/40">Hide games where you haven't earned any trophies yet.</p>
+                    </div>
+                </label>
+
+                <button type="submit" class="btn btn-primary btn-sm w-full" id="profile-settings-save-btn" disabled>Save Profile Settings</button>
+            </form>
+
+            {# Unlink Modal #}
+            <dialog id="unlink-modal" class="modal">
+                <div class="modal-box max-w-sm bg-base-200 border-2 border-error">
+                    <h3 class="font-bold text-base text-error">Unlink PSN Profile?</h3>
+                    <p class="text-sm text-base-content/60 mt-2">This will disconnect your PSN account. You can relink later, but some features may be restricted.</p>
+                    <div class="modal-action">
+                        <form method="dialog"><button class="btn btn-ghost btn-sm">Cancel</button></form>
+                        <form method="post">
                             {% csrf_token %}
-                            <input type="hidden" name="action" value="update_premium">
-                            <div class="form-control mb-2">
-                                <label class="label" for="settings-bg-input">Profile Background</label>
-                                <div id="settings-bg-picker-container" class="{% if not profile.user_is_premium %}opacity-50 pointer-events-none{% endif %}"></div>
-                                <input type="hidden" name="selected_background" id="settings-bg-input" value="{{ profile.selected_background_id|default:'' }}">
-                            </div>
-                            <p class="text-center text-accent font-bold pr-1 italic mb-4">Earn Plats to unlock more backgrounds!</p>
-
-                            <!-- Site Theme Section -->
-                            <div class="form-control mb-4">
-                                <label class="label">
-                                    <span class="label-text text-lg font-semibold">Site Theme</span>
-                                </label>
-                                <p class="text-sm text-base-content/70 mb-3">Select a gradient theme for your site-wide background. This appears on pages without a game background.</p>
-
-                                <!-- Theme Grid Preview -->
-                                <div class="mb-3 {% if not profile.user_is_premium %}opacity-50 pointer-events-none{% endif %}">
-                                    {% include 'partials/color_grid.html' with grid_id='theme-grid' selected_theme=profile.selected_theme available_themes=available_themes grouped=True %}
-                                </div>
-
-                                <!-- Hidden select for form submission -->
-                                <div class="hidden">
-                                    {{ premium_form.selected_theme }}
-                                </div>
-
-                                <!-- Selected theme display -->
-                                <div class="flex items-center gap-2 text-sm">
-                                    <span class="text-base-content/70">Selected:</span>
-                                    <span id="selected-theme-name" class="font-semibold">
-                                        {% if selected_theme_name %}{{ selected_theme_name }}{% else %}None{% endif %}
-                                    </span>
-                                </div>
-
-                                {% if premium_form.selected_theme.errors %}
-                                    <div class="alert alert-error mt-1">{{ premium_form.selected_theme.errors }}</div>
-                                {% endif %}
-                            </div>
-
-                            <!-- Live Preview -->
-                            <div class="form-control mb-4">
-                                <label class="label">
-                                    <span class="label-text">Preview</span>
-                                </label>
-                                <div id="theme-preview-container" class="h-24 rounded-lg border border-base-300 flex items-center justify-center overflow-hidden"
-                                     style="background: {% if selected_theme_css %}{{ selected_theme_css }}{% else %}linear-gradient(to bottom right, #2a2e34, #32363d, #2a2e34){% endif %}">
-                                    <span class="text-white font-bold text-lg drop-shadow-lg">{{ profile.display_psn_username }}</span>
-                                </div>
-                            </div>
-
-                            <button type="submit" class="btn btn-secondary w-full" id="premium-settings-save-btn" {% if not profile.user_is_premium %}disabled{% endif %}>Save Premium Settings</button>
+                            <input type="hidden" name="action" value="unlink_profile">
+                            <button type="submit" class="btn btn-error btn-sm">Unlink</button>
                         </form>
+                    </div>
+                </div>
+                <form method="dialog" class="modal-backdrop"><button>close</button></form>
+            </dialog>
+        </div>
+    </div>
+
+    {# ═══ Site Theme (Premium) ═══ #}
+    <div class="card bg-base-200/70 border-2 border-base-300 shadow-md shadow-neutral mb-3">
+        <div class="card-body p-3 md:p-4">
+            <div class="flex items-center justify-between mb-2">
+                <h2 class="text-sm md:text-base font-bold flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-secondary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+                    Site Theme
+                    {% if not profile.user_is_premium %}
+                        <span class="badge badge-xs badge-warning gap-0.5 ml-1">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-2.5 h-2.5" viewBox="0 0 24 24" fill="currentColor"><path d="M5 16L3 5l5.5 5L12 4l3.5 6L21 5l-2 11H5z"/></svg>
+                            Premium
+                        </span>
                     {% endif %}
+                </h2>
+                {% if selected_theme_name %}
+                <span class="text-xs text-base-content/50">Current: <span id="selected-theme-name" class="font-semibold">{{ selected_theme_name }}</span></span>
+                {% else %}
+                <span id="selected-theme-name" class="text-xs text-base-content/40 italic">No theme selected</span>
+                {% endif %}
+            </div>
+
+            {# Preview #}
+            <div id="theme-preview-container" class="h-12 md:h-16 rounded-lg border border-base-content/10 flex items-center justify-center overflow-hidden mb-3"
+                 style="background: {% if selected_theme_css %}{{ selected_theme_css }}{% else %}linear-gradient(to bottom right, #2a2e34, #32363d, #2a2e34){% endif %}">
+                <span class="text-white font-bold text-sm drop-shadow-lg">{{ profile.display_psn_username }}</span>
+            </div>
+
+            {% if not profile.user_is_premium %}
+            <div class="bg-warning/10 border border-warning/30 rounded-lg p-2.5 flex items-center gap-3">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-warning shrink-0" viewBox="0 0 24 24" fill="currentColor"><path d="M5 16L3 5l5.5 5L12 4l3.5 6L21 5l-2 11H5z"/></svg>
+                <div class="flex-1">
+                    <p class="text-xs text-base-content/50">Upgrade to Premium to customize your site theme.</p>
                 </div>
-                    
-                <div class="divider divider-vertical m-0 mt-2 p-0"></div>
-                <h3 class="text-2xl text-base-content font-semibold italic mb-2">Profile Settings</h3>
-                <div class="flex flex-col border-4 border-base-300 shadow-lg shadow-neutral rounded-box p-4 w-7/8 mx-auto">
-                    <div class="flex flex-row justify-center">
-                        <div class="avatar mr-4">
-                            <div class="w-8 rounded-full ring-2 ring-primary">
-                                <img src="{{ profile.avatar_url|default:'/static/default-avatar.png' }}" alt="{{ profile.display_psn_username }}'s avatar" loading="lazy" decoding="async" />
-                            </div>
-                        </div>
-                        <div class="flex flex-row items-center gap-3">
-                            <span id="sync-user" class="text-base font-bold">{{ profile.display_psn_username }}</span>
-                            <div class="divider divider-horizontal m-0 p-0"></div>
-                            <span class="text-base font-bold">Last Sync: {{ profile.last_synced|date }}</span>
-                            
-                        </div>
-                    </div>
-                    
-                    <label for="unlink-modal" class="btn btn-error w-full mt-4">Unlink PSN Profile</label>
-
-                    <div class="divider divider-vertical w-full"></div>
-
-                    <h3 class="text-xl font-semibold mb-2 italic">Hide Games From Profile</h3>
-                    <form method="post" class="w-7/8 mx-auto" id="profile-settings-form">
-                        {% csrf_token %}
-                        <input type="hidden" name="action" value="update_profile">
-                        <div class="form-control mb-2" disabled>
-                            <label class="label" for="{{ profile_form.hide_hiddens.id_for_label }}">Hide Hidden/Deleted Games</label>
-                            <br />
-                            {{ profile_form.hide_hiddens }}
-                            {% if profile_form.hide_hiddens.errors %}
-                                <div class="alert alert-error mt-1">{{ profile_form.hide_hiddens.errors }}</div>
-                            {% endif %}
-                        </div>
-                        <p class="text-center text-secondary font-bold pr-1 italic mb-4">Set to true to hide hidden/deleted games from your profile.</p>
-
-                        <div class="form-control mb-2" disabled>
-                            <label class="label" for="{{ profile_form.hide_zeros.id_for_label }}">Hide Zero Progress Games</label>
-                            <br />
-                            {{ profile_form.hide_zeros }}
-                            {% if profile_form.hide_zeros.errors %}
-                                <div class="alert alert-error mt-1">{{ profile_form.hide_zeros.errors }}</div>
-                            {% endif %}
-                        </div>
-                        <p class="text-center text-secondary font-bold pr-1 italic mb-4">Set to true to hide games you haven't earned a trophy in yet.</p>
-
-                        <button type="submit" class="btn btn-primary w-full" id="profile-settings-save-btn" disabled>Save Profile Settings</button>
-                    </form>
-                    
-                    <input type="checkbox" id="unlink-modal" class="modal-toggle" />
-                    <div class="modal backdrop-blur-lg" role="dialog" aria-modal="true" aria-labelledby="unlink-modal-title">
-                        <div class="modal-box border-4 border-error shadow-lg shadow-error">
-                            <h3 id="unlink-modal-title" class="text-xl text-base-content font-bold italic">Confirm Unlink</h3>
-                            <p class="py-4">Are you sure? This will unlink your PSN profile and may restrict site features. You can relink later.</p>
-                            <div class="modal-action">
-                                <form method="post">
-                                    {% csrf_token %}
-                                    <input type="hidden" name="action" value="unlink_profile">
-                                    <button type="submit" class="btn btn-error">Yes, Unlink</button>
-                                </form>
-                                <label for="unlink-modal" class="btn">Cancel</label>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                <!-- Email Preferences -->
-                <div class="divider divider-vertical m-0 mt-2 p-0"></div>
-                <h3 class="text-2xl text-base-content font-semibold italic mb-2">Email Preferences</h3>
-                <div class="flex flex-col border-4 border-base-300 shadow-lg shadow-neutral rounded-box p-4 w-7/8 mx-auto items-center gap-3">
-                    <p class="text-base-content/70 text-center">Control which emails you receive from PlatPursuit, including badge notifications, milestone alerts, weekly digests, and admin announcements.</p>
-                    <a href="{% url 'email_preferences_redirect' %}" class="btn btn-secondary gap-2">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                        </svg>
-                        Manage Email Preferences
-                    </a>
-                </div>
+                <a href="{% url 'subscribe' %}" class="btn btn-warning btn-xs shrink-0">Upgrade</a>
+            </div>
             {% else %}
-                <p class="mt-6">No PSN profile linked. <a href="{% url 'link_psn' %}" class="link link-primary">Link now</a>.</p>
+            {% if premium_form %}
+            <form method="post" id="premium-settings-form">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="update_premium">
+                <input type="hidden" name="selected_background" id="settings-bg-input" value="{{ profile.selected_background_id|default:'' }}">
+
+                {# Collapsible theme grid #}
+                <div class="collapse collapse-arrow bg-base-300/30 rounded-lg border border-base-content/5">
+                    <input type="checkbox" />
+                    <div class="collapse-title py-2 min-h-0 text-xs md:text-sm font-semibold text-base-content/60">
+                        Browse 100+ themes
+                    </div>
+                    <div class="collapse-content">
+                        {% include 'partials/color_grid.html' with grid_id='theme-grid' selected_theme=profile.selected_theme available_themes=available_themes grouped=True %}
+                    </div>
+                </div>
+
+                <div class="hidden">{{ premium_form.selected_theme }}</div>
+
+                <button type="submit" class="btn btn-secondary btn-sm w-full mt-3" id="premium-settings-save-btn" disabled>Save Theme</button>
+            </form>
+            {% endif %}
             {% endif %}
         </div>
     </div>
+
+    {# ═══ Password ═══ #}
+    <div class="card bg-base-200/70 border-2 border-base-300 shadow-md shadow-neutral mb-3">
+        <div class="card-body p-3 md:p-4">
+            <h2 class="text-sm md:text-base font-bold flex items-center gap-2 mb-3">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-error" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                Change Password
+            </h2>
+            <form method="post" class="space-y-3">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="change_password">
+                <div class="form-control">
+                    <label class="text-xs font-semibold text-base-content/60 mb-1" for="id_old_password">Current Password</label>
+                    <input type="password" name="old_password" id="id_old_password" class="input input-bordered input-sm w-full" autocomplete="current-password" required>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div class="form-control">
+                        <label class="text-xs font-semibold text-base-content/60 mb-1" for="id_new_password1">New Password</label>
+                        <input type="password" name="new_password1" id="id_new_password1" class="input input-bordered input-sm w-full" autocomplete="new-password" required>
+                    </div>
+                    <div class="form-control">
+                        <label class="text-xs font-semibold text-base-content/60 mb-1" for="id_new_password2">Confirm Password</label>
+                        <input type="password" name="new_password2" id="id_new_password2" class="input input-bordered input-sm w-full" autocomplete="new-password" required>
+                    </div>
+                </div>
+                <button type="submit" class="btn btn-primary btn-sm w-full">Change Password</button>
+            </form>
+        </div>
+    </div>
+
+    {# ═══ Email Preferences ═══ #}
+    <div class="card bg-base-200/70 border-2 border-base-300 shadow-md shadow-neutral mb-3">
+        <div class="card-body p-3 md:p-4">
+            <div class="flex items-center justify-between">
+                <h2 class="text-sm md:text-base font-bold flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+                    Email Preferences
+                </h2>
+                <a href="{% url 'email_preferences_redirect' %}" class="btn btn-ghost btn-xs gap-1">
+                    Manage
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+                </a>
+            </div>
+            <p class="text-xs text-base-content/40 mt-1 pr-1">Control badge notifications, milestone alerts, weekly digests, and announcements.</p>
+        </div>
+    </div>
+
+    {% else %}
+    {# No profile linked #}
+    <div class="card bg-base-200/70 border-2 border-base-300 shadow-md shadow-neutral mb-3">
+        <div class="card-body p-3 md:p-4 text-center">
+            <p class="text-base-content/60">No PSN profile linked.</p>
+            <a href="{% url 'link_psn' %}" class="btn btn-primary btn-sm mt-2">Link PSN Account</a>
+        </div>
+    </div>
+    {% endif %}
 </div>
 {% endblock %}
 
 {% block js_scripts %}
 <script src="{% static 'js/game-background-picker.js' %}"></script>
-<script>
-    const initialBgData = {{ initial_background_json|safe }};
-</script>
+<script>const initialBgData = {{ initial_background_json|safe }};</script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    // ==========================================
-    // Game Background Picker
-    // ==========================================
     const isPremium = {% if profile and profile.user_is_premium %}true{% else %}false{% endif %};
 
-    if (typeof GameBackgroundPicker !== 'undefined') {
-        const bgPicker = new GameBackgroundPicker('settings-bg-picker-container', {
-            initialValue: initialBgData,
-            disabled: !isPremium,
-            onSelect: function(concept) {
-                const input = document.getElementById('settings-bg-input');
-                if (input) {
-                    input.value = concept.concept_id;
-                    input.dispatchEvent(new Event('change', { bubbles: true }));
-                }
-            },
-            onClear: function() {
-                const input = document.getElementById('settings-bg-input');
-                if (input) {
-                    input.value = '';
-                    input.dispatchEvent(new Event('change', { bubbles: true }));
-                }
-            }
-        });
-    }
-
-    // ==========================================
     // Theme Grid Handler
-    // ==========================================
     const themeGrid = document.getElementById('theme-grid');
     const themeSelect = document.getElementById('selected-theme-select');
     const previewContainer = document.getElementById('theme-preview-container');
     const selectedThemeName = document.getElementById('selected-theme-name');
 
     if (themeGrid && themeSelect) {
-        // Handle theme button clicks
         themeGrid.addEventListener('click', function(e) {
             const btn = e.target.closest('.theme-preview-btn');
             if (!btn) return;
@@ -304,7 +280,6 @@ document.addEventListener('DOMContentLoaded', function() {
             const themeKey = btn.dataset.themeKey;
             const themeName = btn.dataset.themeName;
 
-            // Update visual selection
             themeGrid.querySelectorAll('.theme-preview-btn').forEach(b => {
                 b.classList.remove('border-primary', 'ring-2', 'ring-primary');
                 b.classList.add('border-base-300');
@@ -312,38 +287,21 @@ document.addEventListener('DOMContentLoaded', function() {
             btn.classList.remove('border-base-300');
             btn.classList.add('border-primary', 'ring-2', 'ring-primary');
 
-            // Update hidden select and trigger change event for save button activation
             themeSelect.value = themeKey;
             themeSelect.dispatchEvent(new Event('change', { bubbles: true }));
 
-            // Update preview box
-            if (previewContainer) {
-                previewContainer.style.background = btn.style.background;
-            }
+            if (previewContainer) previewContainer.style.background = btn.style.background;
+            if (selectedThemeName) selectedThemeName.textContent = themeName || 'Default';
 
-            // Update selected name display
-            if (selectedThemeName) {
-                selectedThemeName.textContent = themeName || 'Default';
-            }
-
-            // Live preview: Update the actual page background
-            const bgStyle = btn.style.background;
-            if (bgStyle) {
-                document.body.style.background = bgStyle;
-                document.body.style.backgroundAttachment = 'fixed';
-            }
+            document.body.style.background = btn.style.background;
+            document.body.style.backgroundAttachment = 'fixed';
         });
     }
 
-    // ==========================================
-    // Unsaved Changes Warning & Save Button Activation
-    // ==========================================
-    // Track these forms (password form intentionally excluded)
-    const isPremiumUser = {% if profile and profile.user_is_premium %}true{% else %}false{% endif %};
+    // Unsaved Changes & Save Button Activation
     const trackedForms = [
         { formId: 'user-settings-form', saveBtn: 'user-settings-save-btn', canSave: true },
-        { formId: 'title-settings-form', saveBtn: 'title-settings-save-btn', canSave: true },
-        { formId: 'premium-settings-form', saveBtn: 'premium-settings-save-btn', canSave: isPremiumUser },
+        { formId: 'premium-settings-form', saveBtn: 'premium-settings-save-btn', canSave: isPremium },
         { formId: 'profile-settings-form', saveBtn: 'profile-settings-save-btn', canSave: true }
     ];
     const originalValues = {};
@@ -352,19 +310,11 @@ document.addEventListener('DOMContentLoaded', function() {
         trackedForms.forEach(({ formId }) => {
             const form = document.getElementById(formId);
             if (!form) return;
-
             form.querySelectorAll('input, select, textarea').forEach(el => {
-                // Skip action hidden inputs and password fields
-                if (el.type === 'hidden' && el.name === 'action') return;
-                if (el.type === 'hidden' && el.name === 'csrfmiddlewaretoken') return;
+                if (el.type === 'hidden' && (el.name === 'action' || el.name === 'csrfmiddlewaretoken')) return;
                 if (el.type === 'password') return;
-
                 const key = `${formId}:${el.name || el.id}`;
-                if (el.type === 'checkbox') {
-                    originalValues[key] = el.checked;
-                } else {
-                    originalValues[key] = el.value;
-                }
+                originalValues[key] = el.type === 'checkbox' ? el.checked : el.value;
             });
         });
     }
@@ -372,92 +322,61 @@ document.addEventListener('DOMContentLoaded', function() {
     function formHasChanges(formId) {
         const form = document.getElementById(formId);
         if (!form) return false;
-
-        const elements = form.querySelectorAll('input, select, textarea');
-        for (const el of elements) {
-            // Skip action hidden inputs and password fields
-            if (el.type === 'hidden' && el.name === 'action') continue;
-            if (el.type === 'hidden' && el.name === 'csrfmiddlewaretoken') continue;
+        for (const el of form.querySelectorAll('input, select, textarea')) {
+            if (el.type === 'hidden' && (el.name === 'action' || el.name === 'csrfmiddlewaretoken')) continue;
             if (el.type === 'password') continue;
-
             const key = `${formId}:${el.name || el.id}`;
-            const currentValue = el.type === 'checkbox' ? el.checked : el.value;
-
-            if (originalValues[key] !== currentValue) {
-                return true;
-            }
+            const current = el.type === 'checkbox' ? el.checked : el.value;
+            if (originalValues[key] !== current) return true;
         }
         return false;
-    }
-
-    function hasUnsavedChanges() {
-        return trackedForms.some(({ formId }) => formHasChanges(formId));
     }
 
     function updateSaveButtons() {
         trackedForms.forEach(({ formId, saveBtn, canSave }) => {
             const btn = document.getElementById(saveBtn);
-            if (!btn) return;
-
-            // Only enable if form has changes AND user has permission
-            const hasChanges = formHasChanges(formId);
-            btn.disabled = !hasChanges || !canSave;
+            if (btn) btn.disabled = !formHasChanges(formId) || !canSave;
         });
     }
 
-    // Attach change listeners to all tracked form elements
-    function setupChangeListeners() {
-        trackedForms.forEach(({ formId }) => {
-            const form = document.getElementById(formId);
-            if (!form) return;
-
-            form.querySelectorAll('input, select, textarea').forEach(el => {
-                // Skip action hidden inputs
-                if (el.type === 'hidden' && el.name === 'action') return;
-                if (el.type === 'hidden' && el.name === 'csrfmiddlewaretoken') return;
-
-                el.addEventListener('change', updateSaveButtons);
-                el.addEventListener('input', updateSaveButtons);
-            });
+    trackedForms.forEach(({ formId }) => {
+        const form = document.getElementById(formId);
+        if (!form) return;
+        form.querySelectorAll('input, select, textarea').forEach(el => {
+            if (el.type === 'hidden' && (el.name === 'action' || el.name === 'csrfmiddlewaretoken')) return;
+            el.addEventListener('change', updateSaveButtons);
+            el.addEventListener('input', updateSaveButtons);
         });
-    }
+    });
 
-    // Initialize unsaved changes tracking
     captureOriginalState();
-    setupChangeListeners();
-    updateSaveButtons();  // Set initial button states
+    updateSaveButtons();
 
     PlatPursuit.UnsavedChangesManager.init({
-        hasUnsavedChanges: hasUnsavedChanges,
-        showSaveButton: false  // POST forms, no API save
+        hasUnsavedChanges: function() { return trackedForms.some(({ formId }) => formHasChanges(formId)); },
+        showSaveButton: false
     });
 });
-</script>
-<script>
-    PlatPursuit.ZoomScaler.init();
 
-    // Detect timezone from browser
-    document.getElementById('detect-timezone-btn')?.addEventListener('click', function() {
-        try {
-            const detected = Intl.DateTimeFormat().resolvedOptions().timeZone;
-            if (!detected) {
-                PlatPursuit.ToastManager.error('Could not detect timezone from browser.');
-                return;
+// Detect timezone from browser
+document.getElementById('detect-timezone-btn')?.addEventListener('click', function() {
+    try {
+        const detected = Intl.DateTimeFormat().resolvedOptions().timeZone;
+        if (!detected) { PlatPursuit.ToastManager.error('Could not detect timezone.'); return; }
+        const select = document.getElementById('id_user_timezone');
+        if (select) {
+            const option = [...select.options].find(o => o.value === detected);
+            if (option) {
+                select.value = detected;
+                select.dispatchEvent(new Event('change', { bubbles: true }));
+                PlatPursuit.ToastManager.success('Timezone detected: ' + detected);
+            } else {
+                PlatPursuit.ToastManager.warning('Detected timezone (' + detected + ') not in list.');
             }
-            const select = document.getElementById('id_user_timezone');
-            if (select) {
-                const option = [...select.options].find(o => o.value === detected);
-                if (option) {
-                    select.value = detected;
-                    select.dispatchEvent(new Event('change', { bubbles: true }));
-                    PlatPursuit.ToastManager.success('Timezone detected: ' + detected + '. Save to apply.');
-                } else {
-                    PlatPursuit.ToastManager.warning('Detected timezone (' + detected + ') not found in the list.');
-                }
-            }
-        } catch (e) {
-            PlatPursuit.ToastManager.error('Could not detect timezone.');
         }
-    });
+    } catch (e) {
+        PlatPursuit.ToastManager.error('Could not detect timezone.');
+    }
+});
 </script>
 {% endblock %}
