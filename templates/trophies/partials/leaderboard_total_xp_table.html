@@ -1,66 +1,86 @@
 {% load static custom_filters query_tags humanize %}
 <div class="flex flex-col justify-start gap-2">
     <div class="flex items-center gap-2">
-        <h2 class="text-lg italic font-bold">XP Leaderboard</h2>
+        <h2 class="text-base md:text-lg italic font-bold">XP Leaderboard</h2>
         <div class="tooltip tooltip-right" data-tip="Updates in real-time as XP is earned">
-            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-base-content/50 cursor-help" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>
-            </svg>
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-base-content/50 cursor-help" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
         </div>
     </div>
 
     {% if lb_total_xp_page_obj.object_list %}
         {% include 'partials/leaderboard_pagination.html' with page_obj=lb_total_xp_page_obj paginator=lb_total_xp_paginator page_param='lb_total_xp_page' user_page=lb_total_xp_user_page user_rank=lb_total_xp_user_rank rank_prefix='1' %}
 
-        <div class="w-full overflow-x-auto">
-            <table class="table table-zebra bg-base-100/80 border-4 border-base-300 shadow-lg shadow-neutral rounded-box w-full">
+        {# Desktop table #}
+        <div class="hidden md:block w-full overflow-x-auto">
+            <table class="table table-zebra bg-base-200/70 border-2 border-base-300 shadow-md shadow-neutral rounded-lg w-full">
                 <thead>
-                    <tr class="bg-base-200/50 border-b-2 border-base-300">
-                        <th class="text-xs text-base-content/50 italic font-bold uppercase tracking-wide w-12"></th>
-                        <th class="text-xs text-base-content/50 italic font-bold uppercase tracking-wide">User</th>
-                        <th class="text-xs text-base-content/50 italic font-bold uppercase tracking-wide">Total XP</th>
-                        <th class="text-xs text-base-content/50 italic font-bold uppercase tracking-wide">Total Badges</th>
+                    <tr class="bg-base-300/30 border-b border-base-content/5">
+                        <th class="text-[0.55rem] text-base-content/40 italic font-bold uppercase tracking-wide w-12"></th>
+                        <th class="text-[0.55rem] text-base-content/40 italic font-bold uppercase tracking-wide">User</th>
+                        <th class="text-[0.55rem] text-base-content/40 italic font-bold uppercase tracking-wide">Total XP</th>
+                        <th class="text-[0.55rem] text-base-content/40 italic font-bold uppercase tracking-wide">Total Badges</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for entry in lb_total_xp_page_obj %}
-                        <tr id="1-rank-{{ entry.rank }}" class="{% if request.user.is_authenticated and request.user.profile.display_psn_username == entry.psn_username %}bg-success/15{% endif %}{% if entry.rank == 1 %} border-l-6 border-warning bg-warning/5 shadow-sm shadow-warning/20{% elif entry.rank == 2 %} border-l-4 border-base-content/30 bg-base-content/5{% elif entry.rank == 3 %} border-l-4 border-accent bg-accent/5{% endif %} h-15 hover:bg-base-200/50 transition-colors duration-200">
-                            <td class="text-center">
-                                {% include 'trophies/partials/leaderboard_rank_cell.html' with rank=entry.rank %}
-                            </td>
-                            <td class="text-sm lg:text-base">
-                                {% include 'trophies/partials/leaderboard_user_cell.html' with entry=entry %}
-                            </td>
-                            <td class="text-sm lg:text-base">
-                                <div class="flex items-center gap-1">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-secondary shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                                        <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
-                                    </svg>
-                                    <span>{{ entry.total_xp|intcomma }}</span>
-                                </div>
-                            </td>
-                            <td class="text-sm lg:text-base">
-                                <div class="flex items-center gap-1">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-success shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                                        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline>
-                                    </svg>
-                                    <span>{{ entry.total_badges|intcomma }}</span>
-                                </div>
-                            </td>
-                        </tr>
+                    <tr id="1-rank-{{ entry.rank }}" class="{% if request.user.is_authenticated and request.user.profile.display_psn_username == entry.psn_username %}bg-success/15{% endif %}{% if entry.rank == 1 %} border-l-4 border-l-warning bg-warning/5{% elif entry.rank == 2 %} border-l-4 border-l-base-content/30 bg-base-content/5{% elif entry.rank == 3 %} border-l-4 border-l-accent bg-accent/5{% endif %} hover:bg-base-300/30 transition-colors">
+                        <td class="text-center">{% include 'trophies/partials/leaderboard_rank_cell.html' with rank=entry.rank %}</td>
+                        <td class="text-sm">{% include 'trophies/partials/leaderboard_user_cell.html' with entry=entry %}</td>
+                        <td class="text-sm">
+                            <div class="flex items-center gap-1">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-secondary shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+                                <span>{{ entry.total_xp|intcomma }}</span>
+                            </div>
+                        </td>
+                        <td class="text-sm">
+                            <div class="flex items-center gap-1">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-success shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+                                <span>{{ entry.total_badges|intcomma }}</span>
+                            </div>
+                        </td>
+                    </tr>
                     {% endfor %}
                 </tbody>
             </table>
         </div>
 
+        {# Mobile card list #}
+        <div class="md:hidden flex flex-col gap-1.5">
+            {% for entry in lb_total_xp_page_obj %}
+            <a href="{% url 'profile_detail' entry.psn_username %}"
+               class="flex items-center gap-2 p-2 rounded-lg transition-colors
+                      {% if request.user.is_authenticated and request.user.profile.display_psn_username == entry.psn_username %}bg-success/15
+                      {% elif entry.rank == 1 %}bg-warning/5 border-l-4 border-l-warning
+                      {% elif entry.rank == 2 %}bg-base-content/5 border-l-4 border-l-base-content/30
+                      {% elif entry.rank == 3 %}bg-accent/5 border-l-4 border-l-accent
+                      {% else %}hover:bg-base-300/30{% endif %}">
+                <div class="w-8 text-center shrink-0">{% include 'trophies/partials/leaderboard_rank_cell.html' with rank=entry.rank %}</div>
+                <div class="w-6 h-6 rounded-full overflow-hidden ring-1 {% if entry.is_premium %}ring-warning{% else %}ring-primary{% endif %} shrink-0">
+                    <img src="{{ entry.avatar_url }}" alt="" class="w-full h-full object-cover" loading="lazy" />
+                </div>
+                <div class="flex-1 min-w-0">
+                    <div class="flex items-center gap-1">
+                        <span class="text-xs font-semibold {% if entry.is_premium %}legendary-title{% endif %} italic line-clamp-1 pr-1">{{ entry.psn_username }}</span>
+                        <span class="text-xs shrink-0">{{ entry.flag }}</span>
+                    </div>
+                    {% if entry.displayed_title %}
+                    <span class="text-[0.55rem] text-accent italic line-clamp-1">{{ entry.displayed_title }}</span>
+                    {% endif %}
+                </div>
+                <div class="flex flex-col items-end shrink-0">
+                    <span class="text-xs font-bold text-secondary">{{ entry.total_xp|intcomma }} XP</span>
+                    <span class="text-[0.55rem] text-base-content/40">{{ entry.total_badges }} badges</span>
+                </div>
+            </a>
+            {% endfor %}
+        </div>
+
         {% include 'partials/leaderboard_pagination.html' with page_obj=lb_total_xp_page_obj paginator=lb_total_xp_paginator page_param='lb_total_xp_page' user_page=lb_total_xp_user_page user_rank=lb_total_xp_user_rank rank_prefix='1' %}
     {% else %}
-        <div class="bg-base-100/50 rounded-box border-2 border-base-300 border-dashed text-center py-8 px-6">
-            <svg xmlns="http://www.w3.org/2000/svg" class="w-12 h-12 mx-auto text-base-content/30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
-            </svg>
-            <p class="text-base-content/50 font-bold mt-3 italic pr-1">No XP earned across any series yet.</p>
-            <p class="text-base-content/50 text-sm italic pr-1">The grind starts here.</p>
+        <div class="bg-base-200/50 rounded-lg border-2 border-dashed border-base-300 text-center py-8 px-4">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-10 h-10 mx-auto text-base-content/20 mb-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+            <p class="text-base-content/50 font-bold italic pr-1">No XP earned across any series yet.</p>
+            <p class="text-base-content/40 text-xs italic pr-1">The grind starts here.</p>
         </div>
     {% endif %}
 </div>
