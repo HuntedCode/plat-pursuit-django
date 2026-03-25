@@ -9,27 +9,27 @@
                 Your Badge Stats
             </h4>
             <div class="grid grid-cols-3 md:grid-cols-6 gap-1.5">
-                <div class="bg-base-300/20 rounded-lg p-2 text-center">
+                <div class="border border-base-content/5 rounded-lg p-2 text-center">
                     <div class="text-base md:text-lg font-bold text-secondary">{{ user_badge_stats.total_xp|intcomma }}</div>
                     <div class="text-[0.55rem] md:text-xs text-base-content/40 font-medium uppercase">Total XP</div>
                 </div>
-                <div class="bg-base-300/20 rounded-lg p-2 text-center">
+                <div class="border border-base-content/5 rounded-lg p-2 text-center">
                     <div class="text-base md:text-lg font-bold text-success">{{ user_badge_stats.total_badges_earned }}</div>
                     <div class="text-[0.55rem] md:text-xs text-base-content/40 font-medium uppercase">Tiers Earned</div>
                 </div>
-                <div class="bg-base-300/20 rounded-lg p-2 text-center">
+                <div class="border border-base-content/5 rounded-lg p-2 text-center">
                     <div class="text-base md:text-lg font-bold text-warning">{{ user_badge_stats.stages_platted }}/{{ user_badge_stats.plat_eligible_stages }}</div>
                     <div class="text-[0.55rem] md:text-xs text-base-content/40 font-medium uppercase">Stages Plat</div>
                 </div>
-                <div class="bg-base-300/20 rounded-lg p-2 text-center">
+                <div class="border border-base-content/5 rounded-lg p-2 text-center">
                     <div class="text-base md:text-lg font-bold text-info">{{ user_badge_stats.stages_completed }}/{{ user_badge_stats.total_stages }}</div>
                     <div class="text-[0.55rem] md:text-xs text-base-content/40 font-medium uppercase">Stages 100%</div>
                 </div>
-                <div class="bg-base-300/20 rounded-lg p-2 text-center">
+                <div class="border border-base-content/5 rounded-lg p-2 text-center">
                     <div class="text-base md:text-lg font-bold text-accent">{{ user_badge_stats.series_completed }}/{{ user_badge_stats.total_series }}</div>
                     <div class="text-[0.55rem] md:text-xs text-base-content/40 font-medium uppercase">Unique</div>
                 </div>
-                <div class="bg-base-300/20 rounded-lg p-2 text-center">
+                <div class="border border-base-content/5 rounded-lg p-2 text-center">
                     <div class="text-base md:text-lg font-bold text-primary">{{ user_badge_stats.completion_pct }}%</div>
                     <div class="text-[0.55rem] md:text-xs text-base-content/40 font-medium uppercase">Complete</div>
                 </div>

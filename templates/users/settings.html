@@ -71,7 +71,7 @@
             </h2>
 
             {# PSN Identity + Unlink #}
-            <div class="flex items-center gap-3 p-2 rounded-lg bg-base-300/30 mb-3">
+            <div class="flex items-center gap-3 p-2 rounded-lg bg-white/[0.03] border border-base-content/5 mb-3">
                 <div class="w-8 h-8 rounded-full overflow-hidden ring-2 ring-primary shrink-0">
                     <img src="{{ profile.avatar_url|default:'/static/default-avatar.png' }}" alt="" class="w-full h-full object-cover" loading="lazy" />
                 </div>
@@ -171,7 +171,7 @@
                 <input type="hidden" name="selected_background" id="settings-bg-input" value="{{ profile.selected_background_id|default:'' }}">
 
                 {# Collapsible theme grid #}
-                <div class="collapse collapse-arrow bg-base-300/30 rounded-lg border border-base-content/5">
+                <div class="collapse collapse-arrow bg-white/[0.03] rounded-lg border border-base-content/5">
                     <input type="checkbox" />
                     <div class="collapse-title py-2 min-h-0 text-xs md:text-sm font-semibold text-base-content/60">
                         Browse 100+ themes

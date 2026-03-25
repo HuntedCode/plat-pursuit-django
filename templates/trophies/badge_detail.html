@@ -89,7 +89,7 @@
                                                class="flex items-center gap-2 py-1 px-1.5 rounded transition-colors group
                                                       {% if pgame and pgame.progress == 100 %}bg-success/10 hover:bg-success/15
                                                       {% elif pgame and pgame.earned_trophies.platinum == 1 %}bg-warning/10 hover:bg-warning/15
-                                                      {% else %}hover:bg-base-300/30{% endif %}">
+                                                      {% else %}hover:bg-white/[0.04]{% endif %}">
                                                 {# Completion indicator #}
                                                 {% if pgame and pgame.progress == 100 %}
                                                     <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-success shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"></polyline></svg>

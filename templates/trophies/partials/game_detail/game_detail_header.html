@@ -172,19 +172,19 @@
 
                 {# Trophy counts #}
                 <div class="grid grid-cols-4 gap-1 mt-2">
-                    <div class="bg-base-300/40 rounded-lg p-1.5 md:p-2 text-center">
+                    <div class="border border-base-content/5 rounded-lg p-1.5 md:p-2 text-center">
                         <div class="text-sm md:text-base font-black"><span class="text-primary">{{ profile_trophy_totals.bronze|default:0 }}</span><span class="text-base-content/40 font-normal">/</span><span style="color: var(--color-trophy-bronze)">{{ game.defined_trophies.bronze }}</span></div>
                         <div class="text-[0.55rem] text-base-content/40 font-medium leading-none">BRZ</div>
                     </div>
-                    <div class="bg-base-300/40 rounded-lg p-1.5 md:p-2 text-center">
+                    <div class="border border-base-content/5 rounded-lg p-1.5 md:p-2 text-center">
                         <div class="text-sm md:text-base font-black"><span class="text-primary">{{ profile_trophy_totals.silver|default:0 }}</span><span class="text-base-content/40 font-normal">/</span><span style="color: var(--color-trophy-silver)">{{ game.defined_trophies.silver }}</span></div>
                         <div class="text-[0.55rem] text-base-content/40 font-medium leading-none">SLV</div>
                     </div>
-                    <div class="bg-base-300/40 rounded-lg p-1.5 md:p-2 text-center">
+                    <div class="border border-base-content/5 rounded-lg p-1.5 md:p-2 text-center">
                         <div class="text-sm md:text-base font-black"><span class="text-primary">{{ profile_trophy_totals.gold|default:0 }}</span><span class="text-base-content/40 font-normal">/</span><span style="color: var(--color-trophy-gold)">{{ game.defined_trophies.gold }}</span></div>
                         <div class="text-[0.55rem] text-base-content/40 font-medium leading-none">GLD</div>
                     </div>
-                    <div class="bg-base-300/40 rounded-lg p-1.5 md:p-2 text-center">
+                    <div class="border border-base-content/5 rounded-lg p-1.5 md:p-2 text-center">
                         <div class="text-sm md:text-base font-black"><span class="text-primary">{{ profile_trophy_totals.platinum|default:0 }}</span><span class="text-base-content/40 font-normal">/</span><span style="color: var(--color-trophy-platinum)">{{ game.defined_trophies.platinum }}</span></div>
                         <div class="text-[0.55rem] text-base-content/40 font-medium leading-none">PLT</div>
                     </div>
@@ -193,19 +193,19 @@
                 {# Personal stats #}
                 {% if profile_progress %}
                 <div class="grid grid-cols-2 md:grid-cols-4 gap-1 mt-1">
-                    <div class="bg-base-300/40 rounded-lg p-1.5 md:p-2 text-center">
+                    <div class="border border-base-content/5 rounded-lg p-1.5 md:p-2 text-center">
                         <div class="text-sm md:text-base font-bold {% if profile_progress.progress >= 100 %}text-primary{% elif profile_progress.progress >= 75 %}text-success{% elif profile_progress.progress >= 50 %}text-warning{% elif profile_progress.progress > 0 %}text-accent{% endif %}">{{ profile_progress.progress|floatformat:1|default:0 }}%</div>
                         <div class="text-[0.55rem] md:text-xs text-base-content/40 uppercase font-medium">Completion</div>
                     </div>
-                    <div class="bg-base-300/40 rounded-lg p-1.5 md:p-2 text-center">
+                    <div class="border border-base-content/5 rounded-lg p-1.5 md:p-2 text-center">
                         <div class="text-sm md:text-base font-bold text-accent">{{ profile_progress.play_count|intcomma|default:0 }}</div>
                         <div class="text-[0.55rem] md:text-xs text-base-content/40 uppercase font-medium">Play Count</div>
                     </div>
-                    <div class="bg-base-300/40 rounded-lg p-1.5 md:p-2 text-center">
+                    <div class="border border-base-content/5 rounded-lg p-1.5 md:p-2 text-center">
                         <div class="text-sm md:text-base font-bold text-info">{{ profile_progress.play_duration|timedelta_hours|default:'-' }}</div>
                         <div class="text-[0.55rem] md:text-xs text-base-content/40 uppercase font-medium">Play Duration</div>
                     </div>
-                    <div class="bg-base-300/40 rounded-lg p-1.5 md:p-2 text-center">
+                    <div class="border border-base-content/5 rounded-lg p-1.5 md:p-2 text-center">
                         <div class="text-sm md:text-base font-bold text-base-content/80">{{ profile_progress.last_played|date:"M j, Y"|default:'-' }}</div>
                         <div class="text-[0.55rem] md:text-xs text-base-content/40 uppercase font-medium">Last Played</div>
                     </div>
@@ -226,14 +226,14 @@
                     {% if other_versions or badges %}
                     <div class="flex flex-row lg:flex-col gap-1.5 lg:w-40 xl:w-48 flex-shrink-0">
                         {% if other_versions %}
-                        <div class="bg-base-300/40 rounded-lg p-2 md:p-3 text-center cursor-pointer hover:bg-base-300/60 transition-colors flex-1 lg:flex-initial"
+                        <div class="border border-base-content/5 rounded-lg p-2 md:p-3 text-center cursor-pointer hover:bg-white/[0.04] transition-colors flex-1 lg:flex-initial"
                              onclick="document.getElementById('versions-modal').showModal()" role="button" aria-label="View all versions">
                             <div class="text-base md:text-lg font-bold text-error">{{ other_versions|length }}</div>
                             <div class="text-[0.55rem] md:text-xs text-base-content/40 uppercase font-medium">Versions</div>
                         </div>
                         {% endif %}
                         {% if badges %}
-                        <div class="bg-base-300/40 rounded-lg p-2 md:p-3 text-center cursor-pointer hover:bg-base-300/60 transition-colors flex-1 lg:flex-initial"
+                        <div class="border border-base-content/5 rounded-lg p-2 md:p-3 text-center cursor-pointer hover:bg-white/[0.04] transition-colors flex-1 lg:flex-initial"
                              onclick="document.getElementById('badges-modal').showModal()" role="button" aria-label="View all badges">
                             <div class="text-base md:text-lg font-bold text-warning">{{ badges|length }}</div>
                             <div class="text-[0.55rem] md:text-xs text-base-content/40 uppercase font-medium">Badges</div>
@@ -243,32 +243,32 @@
                     {% endif %}
                     <div class="flex-1 min-w-0">
                         <div class="grid grid-cols-2 md:grid-cols-3 gap-1.5 md:gap-2">
-                            <div class="bg-base-300/40 rounded-lg p-2 md:p-3 text-center cursor-pointer hover:bg-base-300/60 transition-colors"
+                            <div class="border border-base-content/5 rounded-lg p-2 md:p-3 text-center cursor-pointer hover:bg-white/[0.04] transition-colors"
                                  role="button" aria-label="View all players" onclick="window.GamePlayersModal && window.GamePlayersModal.open('total')">
                                 <div class="text-base md:text-lg lg:text-xl font-bold text-secondary">{{ game_stats.total_players|intcomma }}</div>
                                 <div class="text-[0.55rem] md:text-xs text-base-content/40 uppercase font-medium">Total Players</div>
                             </div>
-                            <div class="bg-base-300/40 rounded-lg p-2 md:p-3 text-center cursor-pointer hover:bg-base-300/60 transition-colors"
+                            <div class="border border-base-content/5 rounded-lg p-2 md:p-3 text-center cursor-pointer hover:bg-white/[0.04] transition-colors"
                                  role="button" aria-label="View monthly players" onclick="window.GamePlayersModal && window.GamePlayersModal.open('monthly')">
                                 <div class="text-base md:text-lg lg:text-xl font-bold text-accent">{{ game_stats.monthly_players|intcomma }}</div>
                                 <div class="text-[0.55rem] md:text-xs text-base-content/40 uppercase font-medium">Monthly Players</div>
                             </div>
-                            <div class="bg-base-300/40 rounded-lg p-2 md:p-3 text-center cursor-pointer hover:bg-base-300/60 transition-colors"
+                            <div class="border border-base-content/5 rounded-lg p-2 md:p-3 text-center cursor-pointer hover:bg-white/[0.04] transition-colors"
                                  role="button" aria-label="View trophies earned" onclick="window.GamePlayersModal && window.GamePlayersModal.open('trophies')">
                                 <div class="text-base md:text-lg lg:text-xl font-bold text-warning">{{ game_stats.total_earns|intcomma }}</div>
                                 <div class="text-[0.55rem] md:text-xs text-base-content/40 uppercase font-medium">Trophies Earned</div>
                             </div>
-                            <div class="bg-base-300/40 rounded-lg p-2 md:p-3 text-center cursor-pointer hover:bg-base-300/60 transition-colors"
+                            <div class="border border-base-content/5 rounded-lg p-2 md:p-3 text-center cursor-pointer hover:bg-white/[0.04] transition-colors"
                                  role="button" aria-label="View platinum earners" onclick="window.GamePlayersModal && window.GamePlayersModal.open('plats')">
                                 <div class="text-base md:text-lg lg:text-xl font-bold text-primary">{{ game_stats.plats_earned|intcomma }}</div>
                                 <div class="text-[0.55rem] md:text-xs text-base-content/40 uppercase font-medium">Plats Earned</div>
                             </div>
-                            <div class="bg-base-300/40 rounded-lg p-2 md:p-3 text-center cursor-pointer hover:bg-base-300/60 transition-colors"
+                            <div class="border border-base-content/5 rounded-lg p-2 md:p-3 text-center cursor-pointer hover:bg-white/[0.04] transition-colors"
                                  role="button" aria-label="View completionists" onclick="window.GamePlayersModal && window.GamePlayersModal.open('completes')">
                                 <div class="text-base md:text-lg lg:text-xl font-bold text-info">{{ game_stats.completes|intcomma }}</div>
                                 <div class="text-[0.55rem] md:text-xs text-base-content/40 uppercase font-medium">100% Earns</div>
                             </div>
-                            <div class="bg-base-300/40 rounded-lg p-2 md:p-3 text-center cursor-pointer hover:bg-base-300/60 transition-colors"
+                            <div class="border border-base-content/5 rounded-lg p-2 md:p-3 text-center cursor-pointer hover:bg-white/[0.04] transition-colors"
                                  role="button" aria-label="View average completion" onclick="window.GamePlayersModal && window.GamePlayersModal.open('avg')">
                                 <div class="text-base md:text-lg lg:text-xl font-bold text-success">{{ game_stats.avg_progress|floatformat:1 }}%</div>
                                 <div class="text-[0.55rem] md:text-xs text-base-content/40 uppercase font-medium">Avg. Completion</div>
@@ -281,19 +281,19 @@
                 {% if not profile %}
                 <div class="border-t border-base-content/10 mt-2 pt-2">
                     <div class="grid grid-cols-4 gap-0.5 text-center">
-                        <div class="bg-base-300/40 rounded-lg p-1.5">
+                        <div class="border border-base-content/5 rounded-lg p-1.5">
                             <div class="text-sm font-black" style="color: var(--color-trophy-bronze)">{{ game.defined_trophies.bronze }}</div>
                             <div class="text-[0.55rem] text-base-content/40 font-medium leading-none">BRZ</div>
                         </div>
-                        <div class="bg-base-300/40 rounded-lg p-1.5">
+                        <div class="border border-base-content/5 rounded-lg p-1.5">
                             <div class="text-sm font-black" style="color: var(--color-trophy-silver)">{{ game.defined_trophies.silver }}</div>
                             <div class="text-[0.55rem] text-base-content/40 font-medium leading-none">SLV</div>
                         </div>
-                        <div class="bg-base-300/40 rounded-lg p-1.5">
+                        <div class="border border-base-content/5 rounded-lg p-1.5">
                             <div class="text-sm font-black" style="color: var(--color-trophy-gold)">{{ game.defined_trophies.gold }}</div>
                             <div class="text-[0.55rem] text-base-content/40 font-medium leading-none">GLD</div>
                         </div>
-                        <div class="bg-base-300/40 rounded-lg p-1.5">
+                        <div class="border border-base-content/5 rounded-lg p-1.5">
                             <div class="text-sm font-black" style="color: var(--color-trophy-platinum)">{{ game.defined_trophies.platinum }}</div>
                             <div class="text-[0.55rem] text-base-content/40 font-medium leading-none">PLT</div>
                         </div>
@@ -330,7 +330,7 @@
         <div class="flex flex-col gap-2 max-h-[60vh] overflow-y-auto">
             {% for version in other_versions %}
                 <a href="{% if url_psn_username %}{% url 'game_detail_with_profile' version.np_communication_id url_psn_username %}{% else %}{% url 'game_detail' version.np_communication_id %}{% endif %}"
-                   class="flex gap-3 items-center p-2 rounded-lg bg-base-300/40 hover:bg-base-300/60 transition-colors" aria-label="View {{ version.title_name }}">
+                   class="flex gap-3 items-center p-2 rounded-lg bg-white/[0.03] border border-base-content/5 hover:bg-white/[0.06] transition-colors" aria-label="View {{ version.title_name }}">
                     <figure class="w-10 h-10 flex-shrink-0 rounded overflow-hidden ring-1 ring-base-300">
                         <img src="{{ version.title_icon_url }}" alt="{{ version.title_name }} icon" loading="lazy" decoding="async" class="w-full h-full object-cover" />
                     </figure>
@@ -385,7 +385,7 @@
         <div class="flex flex-col gap-2 max-h-[60vh] overflow-y-auto">
             {% for badge in badges %}
                 <a href="{% if profile %}{% url 'badge_detail_with_profile' badge.series_slug profile.psn_username %}{% else %}{% url 'badge_detail' badge.series_slug %}{% endif %}"
-                   class="flex gap-3 items-center p-2 rounded-lg bg-base-300/40 hover:bg-base-300/60 transition-colors" aria-label="View {{ badge.display_series }} badge">
+                   class="flex gap-3 items-center p-2 rounded-lg bg-white/[0.03] border border-base-content/5 hover:bg-white/[0.06] transition-colors" aria-label="View {{ badge.display_series }} badge">
                     <figure class="w-10 h-10 flex-shrink-0" aria-hidden="true">
                         {% include 'partials/badge.html' with layers=badge.get_badge_layers %}
                     </figure>

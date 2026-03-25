@@ -1,6 +1,6 @@
 {% load static custom_filters %}
 <div class="flex items-center gap-2 md:gap-3 p-2 md:p-3 rounded-lg transition-colors cursor-pointer focus:ring-2 focus:ring-primary focus:outline-none
-            {% if data.stage_completion_state == 'complete' %}bg-success/10 hover:bg-success/15{% else %}bg-base-300/30 hover:bg-base-300/50{% endif %}"
+            {% if data.stage_completion_state == 'complete' %}bg-success/10 border border-success/10 hover:bg-success/15{% else %}bg-white/[0.03] border border-base-content/5 hover:bg-white/[0.06]{% endif %}"
      data-stage-toggle="{{ stage.stage_number }}"
      data-stage-complete="{% if data.stage_completion_state == 'complete' %}true{% else %}false{% endif %}"
      role="button" aria-expanded="true" tabindex="0">

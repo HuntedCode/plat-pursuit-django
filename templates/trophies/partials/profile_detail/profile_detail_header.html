@@ -102,7 +102,7 @@
             <div class="border-t border-base-content/10 mt-2 pt-2">
                 <div class="grid grid-cols-5 md:grid-cols-9 gap-1">
                     {# Overview stats #}
-                    <div class="bg-base-300/40 rounded-lg p-1.5 text-center">
+                    <div class="border border-base-content/5 rounded-lg p-1.5 text-center">
                         {% if profile.psn_history_public %}
                             <div class="text-sm md:text-base font-bold text-accent">{{ header_stats.total_games|intcomma }}</div>
                         {% else %}
@@ -110,7 +110,7 @@
                         {% endif %}
                         <div class="text-[0.5rem] md:text-[0.55rem] text-base-content/40 uppercase font-medium leading-none">Games</div>
                     </div>
-                    <div class="bg-base-300/40 rounded-lg p-1.5 text-center">
+                    <div class="border border-base-content/5 rounded-lg p-1.5 text-center">
                         {% if profile.psn_history_public %}
                             <div class="text-sm md:text-base font-bold text-secondary">{{ header_stats.total_completions|intcomma }}</div>
                         {% else %}
@@ -118,7 +118,7 @@
                         {% endif %}
                         <div class="text-[0.5rem] md:text-[0.55rem] text-base-content/40 uppercase font-medium leading-none">100%</div>
                     </div>
-                    <div class="bg-base-300/40 rounded-lg p-1.5 text-center">
+                    <div class="border border-base-content/5 rounded-lg p-1.5 text-center">
                         {% if profile.psn_history_public and profile.sync_status != 'syncing' %}
                             <div class="text-sm md:text-base font-bold text-success">{{ header_stats.average_completion|floatformat:1 }}%</div>
                         {% elif profile.sync_status == 'syncing' %}
@@ -128,7 +128,7 @@
                         {% endif %}
                         <div class="text-[0.5rem] md:text-[0.55rem] text-base-content/40 uppercase font-medium leading-none">Avg</div>
                     </div>
-                    <div class="bg-base-300/40 rounded-lg p-1.5 text-center">
+                    <div class="border border-base-content/5 rounded-lg p-1.5 text-center">
                         {% if profile.psn_history_public and profile.sync_status != 'syncing' %}
                             <div class="text-sm md:text-base font-bold text-primary">{{ header_stats.total_earned_trophies|intcomma }}</div>
                         {% elif profile.sync_status == 'syncing' %}
@@ -138,7 +138,7 @@
                         {% endif %}
                         <div class="text-[0.5rem] md:text-[0.55rem] text-base-content/40 uppercase font-medium leading-none">Earned</div>
                     </div>
-                    <div class="bg-base-300/40 rounded-lg p-1.5 text-center">
+                    <div class="border border-base-content/5 rounded-lg p-1.5 text-center">
                         {% if profile.psn_history_public and profile.sync_status != 'syncing' %}
                             <div class="text-sm md:text-base font-bold text-error">{{ header_stats.total_unearned_trophies|intcomma }}</div>
                         {% elif profile.sync_status == 'syncing' %}
@@ -150,19 +150,19 @@
                     </div>
                     {# Trophy type breakdown (md:+ inline, extends the row) #}
                     {% if profile.psn_history_public %}
-                    <div class="bg-base-300/40 rounded-lg p-1.5 text-center hidden md:block">
+                    <div class="border border-base-content/5 rounded-lg p-1.5 text-center hidden md:block">
                         <div class="text-sm md:text-base font-black" style="color: var(--color-trophy-bronze)">{{ profile.total_bronzes|intcomma }}</div>
                         <div class="text-[0.5rem] md:text-[0.55rem] text-base-content/40 font-medium leading-none">BRZ</div>
                     </div>
-                    <div class="bg-base-300/40 rounded-lg p-1.5 text-center hidden md:block">
+                    <div class="border border-base-content/5 rounded-lg p-1.5 text-center hidden md:block">
                         <div class="text-sm md:text-base font-black" style="color: var(--color-trophy-silver)">{{ profile.total_silvers|intcomma }}</div>
                         <div class="text-[0.5rem] md:text-[0.55rem] text-base-content/40 font-medium leading-none">SLV</div>
                     </div>
-                    <div class="bg-base-300/40 rounded-lg p-1.5 text-center hidden md:block">
+                    <div class="border border-base-content/5 rounded-lg p-1.5 text-center hidden md:block">
                         <div class="text-sm md:text-base font-black" style="color: var(--color-trophy-gold)">{{ profile.total_golds|intcomma }}</div>
                         <div class="text-[0.5rem] md:text-[0.55rem] text-base-content/40 font-medium leading-none">GLD</div>
                     </div>
-                    <div class="bg-base-300/40 rounded-lg p-1.5 text-center hidden md:block">
+                    <div class="border border-base-content/5 rounded-lg p-1.5 text-center hidden md:block">
                         <div class="text-sm md:text-base font-black" style="color: var(--color-trophy-platinum)">{{ profile.total_plats|intcomma }}</div>
                         <div class="text-[0.5rem] md:text-[0.55rem] text-base-content/40 font-medium leading-none">PLT</div>
                     </div>
@@ -171,19 +171,19 @@
                 {# Mobile trophy breakdown (separate row under the 5-col grid) #}
                 {% if profile.psn_history_public %}
                 <div class="grid grid-cols-4 gap-1 mt-1 md:hidden">
-                    <div class="bg-base-300/40 rounded-lg p-1 text-center">
+                    <div class="border border-base-content/5 rounded-lg p-1 text-center">
                         <div class="text-xs font-black" style="color: var(--color-trophy-bronze)">{{ profile.total_bronzes|intcomma }}</div>
                         <div class="text-[0.5rem] text-base-content/40 font-medium leading-none">BRZ</div>
                     </div>
-                    <div class="bg-base-300/40 rounded-lg p-1 text-center">
+                    <div class="border border-base-content/5 rounded-lg p-1 text-center">
                         <div class="text-xs font-black" style="color: var(--color-trophy-silver)">{{ profile.total_silvers|intcomma }}</div>
                         <div class="text-[0.5rem] text-base-content/40 font-medium leading-none">SLV</div>
                     </div>
-                    <div class="bg-base-300/40 rounded-lg p-1 text-center">
+                    <div class="border border-base-content/5 rounded-lg p-1 text-center">
                         <div class="text-xs font-black" style="color: var(--color-trophy-gold)">{{ profile.total_golds|intcomma }}</div>
                         <div class="text-[0.5rem] text-base-content/40 font-medium leading-none">GLD</div>
                     </div>
-                    <div class="bg-base-300/40 rounded-lg p-1 text-center">
+                    <div class="border border-base-content/5 rounded-lg p-1 text-center">
                         <div class="text-xs font-black" style="color: var(--color-trophy-platinum)">{{ profile.total_plats|intcomma }}</div>
                         <div class="text-[0.5rem] text-base-content/40 font-medium leading-none">PLT</div>
                     </div>
@@ -203,7 +203,7 @@
                     {% with header_stats.recent_platinum as plat %}
                     {% if profile.sync_status != 'syncing' and plat and plat.game %}
                         <a href="{% url 'game_detail' plat.game.np_communication_id %}"
-                           class="flex items-center gap-2 p-1.5 rounded-lg bg-base-300/30 hover:bg-base-300/50 transition-colors group">
+                           class="flex items-center gap-2 p-1.5 rounded-lg bg-white/[0.03] border border-base-content/5 hover:bg-white/[0.06] transition-colors group">
                             <div class="w-9 h-9 rounded-md overflow-hidden ring-1 ring-primary shrink-0">
                                 <img src="{{ plat.game.title_image|default:plat.game.title_icon_url }}" class="w-full h-full object-cover" loading="lazy" />
                             </div>
@@ -230,7 +230,7 @@
                     {% with header_stats.rarest_platinum as plat %}
                     {% if profile.sync_status != 'syncing' and plat and plat.game %}
                         <a href="{% url 'game_detail' plat.game.np_communication_id %}"
-                           class="flex items-center gap-2 p-1.5 rounded-lg bg-base-300/30 hover:bg-base-300/50 transition-colors group">
+                           class="flex items-center gap-2 p-1.5 rounded-lg bg-white/[0.03] border border-base-content/5 hover:bg-white/[0.06] transition-colors group">
                             <div class="w-9 h-9 rounded-md overflow-hidden ring-1 ring-accent shrink-0">
                                 <img src="{{ plat.game.title_image|default:plat.game.title_icon_url }}" class="w-full h-full object-cover" loading="lazy" />
                             </div>
@@ -257,7 +257,7 @@
                     {% with header_stats.fastest_platinum as plat %}
                     {% if plat and plat.game %}
                         <a href="{% url 'game_detail' plat.game.np_communication_id %}"
-                           class="flex items-center gap-2 p-1.5 rounded-lg bg-base-300/30 hover:bg-base-300/50 transition-colors group">
+                           class="flex items-center gap-2 p-1.5 rounded-lg bg-white/[0.03] border border-base-content/5 hover:bg-white/[0.06] transition-colors group">
                             <div class="w-9 h-9 rounded-md overflow-hidden ring-1 ring-success shrink-0">
                                 <img src="{{ plat.game.title_image|default:plat.game.title_icon_url }}" class="w-full h-full object-cover" loading="lazy" />
                             </div>
@@ -284,7 +284,7 @@
                     {% with header_stats.milestone_platinum as plat %}
                     {% if plat and plat.game %}
                         <a href="{% url 'game_detail' plat.game.np_communication_id %}"
-                           class="flex items-center gap-2 p-1.5 rounded-lg bg-base-300/30 hover:bg-base-300/50 transition-colors group">
+                           class="flex items-center gap-2 p-1.5 rounded-lg bg-white/[0.03] border border-base-content/5 hover:bg-white/[0.06] transition-colors group">
                             <div class="w-9 h-9 rounded-md overflow-hidden ring-1 ring-warning shrink-0">
                                 <img src="{{ plat.game.title_image|default:plat.game.title_icon_url }}" class="w-full h-full object-cover" loading="lazy" />
                             </div>
@@ -373,7 +373,7 @@
                     {% if item %}
                         {% with item.earned_trophy.trophy as trophy %}
                         <a href="{% url 'game_detail_with_profile' trophy.game.np_communication_id profile.psn_username %}"
-                           class="bg-base-300/30 rounded-lg p-1.5 hover:bg-base-300/50 transition-colors cursor-pointer group">
+                           class="bg-white/[0.03] border border-base-content/5 rounded-lg p-1.5 hover:bg-white/[0.06] transition-colors cursor-pointer group">
                             <div class="hover-3d">
                                 <figure class="w-full rounded-md overflow-hidden ring-1 ring-base-300 group-hover:ring-primary transition-all">
                                     <img src="{{ trophy.trophy_icon_url }}" class="w-full aspect-square object-cover" loading="lazy" />

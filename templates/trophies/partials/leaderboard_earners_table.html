@@ -1,7 +1,6 @@
 {% load static custom_filters query_tags humanize %}
 <div class="flex flex-col justify-start gap-2">
-    <div class="flex items-center gap-2">
-        <h2 class="text-base md:text-lg italic font-bold">Earners Leaderboard</h2>
+    <div class="flex items-center gap-2"        <h2 class="text-base md:text-lg italic font-bold">Earners Leaderboard</h2>
         <div class="tooltip tooltip-right" data-tip="Updates in real-time as badges are earned">
             <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-base-content/50 cursor-help" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
         </div>
@@ -14,8 +13,8 @@
         <div class="hidden md:block w-full overflow-x-auto">
             <table class="table table-zebra bg-base-200/70 border-2 border-base-300 shadow-md shadow-neutral rounded-lg w-full">
                 <thead>
-                    <tr class="bg-base-300/30 border-b border-base-content/5">
-                        <th class="text-[0.55rem] text-base-content/40 italic font-bold uppercase tracking-wide w-12"></th>
+                      <tr class="bg-white/[0.03] border-b border-base-content/5">
+                      <th class="text-[0.55rem] text-base-content/40 italic font-bold uppercase tracking-wide w-12"></th>
                         <th class="text-[0.55rem] text-base-content/40 italic font-bold uppercase tracking-wide">User</th>
                         <th class="text-[0.55rem] text-base-content/40 italic font-bold uppercase tracking-wide">Tier</th>
                         <th class="text-[0.55rem] text-base-content/40 italic font-bold uppercase tracking-wide">Earned Date</th>
@@ -23,7 +22,7 @@
                 </thead>
                 <tbody>
                     {% for entry in lb_earners_page_obj %}
-                    <tr id="1-rank-{{ entry.rank }}" class="{% if request.user.is_authenticated and request.user.profile.display_psn_username == entry.psn_username %}bg-success/15{% endif %}{% if entry.rank == 1 %} border-l-4 border-l-warning bg-warning/5{% elif entry.rank == 2 %} border-l-4 border-l-base-content/30 bg-base-content/5{% elif entry.rank == 3 %} border-l-4 border-l-accent bg-accent/5{% endif %} hover:bg-base-300/30 transition-colors">
+                      <tr id="1-rank-{{ entry.rank }}" class="{% if request.user.is_authenticated and request.user.profile.display_psn_username == entry.psn_username %}bg-success/15{% endif %}{% if entry.rank == 1 %} border-l-4 border-l-warning bg-warning/5{% elif entry.rank == 2 %} border-l-4 border-l-base-content/30 bg-base-content/5{% elif entry.rank == 3 %} border-l-4 border-l-accent bg-accent/5{% endif %} hover:bg-white/[0.04] transition-colors">
                         <td class="text-center">{% include 'trophies/partials/leaderboard_rank_cell.html' with rank=entry.rank %}</td>
                         <td class="text-sm">{% include 'trophies/partials/leaderboard_user_cell.html' with entry=entry %}</td>
                         <td>
@@ -49,8 +48,8 @@
                       {% elif entry.rank == 1 %}bg-warning/5 border-l-4 border-l-warning
                       {% elif entry.rank == 2 %}bg-base-content/5 border-l-4 border-l-base-content/30
                       {% elif entry.rank == 3 %}bg-accent/5 border-l-4 border-l-accent
-                      {% else %}hover:bg-base-300/30{% endif %}">
-                <div class="w-8 text-center shrink-0">{% include 'trophies/partials/leaderboard_rank_cell.html' with rank=entry.rank %}</div>
+                      {% else %}hover:bg-white/[0.04]{% endif %}">
+              <div class="w-8 text-center shrink-0">{% include 'trophies/partials/leaderboard_rank_cell.html' with rank=entry.rank %}</div>
                 <div class="w-6 h-6 rounded-full overflow-hidden ring-1 {% if entry.is_premium %}ring-warning{% else %}ring-primary{% endif %} shrink-0">
                     <img src="{{ entry.avatar_url }}" alt="" class="w-full h-full object-cover" loading="lazy" />
                 </div>
@@ -76,6 +75,7 @@
             <svg xmlns="http://www.w3.org/2000/svg" class="w-10 h-10 mx-auto text-base-content/20 mb-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"></path><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"></path><path d="M4 22h16"></path><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"></path></svg>
             <p class="text-base-content/50 font-bold italic pr-1">No earners yet.</p>
             <p class="text-base-content/40 text-xs italic pr-1">Be the first to claim this badge and top the board.</p>
+Be the first to claim this badge and top the board.</p>
         </div>
     {% endif %}
 </div>

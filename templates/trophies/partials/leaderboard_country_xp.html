@@ -63,7 +63,7 @@
         <div class="hidden md:block w-full overflow-x-auto">
             <table class="table table-zebra bg-base-200/70 border-2 border-base-300 shadow-md shadow-neutral rounded-lg w-full">
                 <thead>
-                    <tr class="bg-base-300/30 border-b border-base-content/5">
+                    <tr class="bg-white/[0.03] border-b border-base-content/5">
                         <th class="text-[0.55rem] text-base-content/40 italic font-bold uppercase tracking-wide w-12"></th>
                         <th class="text-[0.55rem] text-base-content/40 italic font-bold uppercase tracking-wide">User</th>
                         <th class="text-[0.55rem] text-base-content/40 italic font-bold uppercase tracking-wide">Total XP</th>
@@ -72,7 +72,7 @@
                 </thead>
                 <tbody>
                     {% for entry in lb_country_xp_page_obj %}
-                    <tr id="c-rank-{{ entry.rank }}" class="{% if request.user.is_authenticated and request.user.profile.display_psn_username == entry.psn_username %}bg-success/15{% endif %}{% if entry.rank == 1 %} border-l-4 border-l-warning bg-warning/5{% elif entry.rank == 2 %} border-l-4 border-l-base-content/30 bg-base-content/5{% elif entry.rank == 3 %} border-l-4 border-l-accent bg-accent/5{% endif %} hover:bg-base-300/30 transition-colors">
+                    <tr id="c-rank-{{ entry.rank }}" class="{% if request.user.is_authenticated and request.user.profile.display_psn_username == entry.psn_username %}bg-success/15{% endif %}{% if entry.rank == 1 %} border-l-4 border-l-warning bg-warning/5{% elif entry.rank == 2 %} border-l-4 border-l-base-content/30 bg-base-content/5{% elif entry.rank == 3 %} border-l-4 border-l-accent bg-accent/5{% endif %} hover:bg-white/[0.04] transition-colors">
                         <td class="text-center">{% include 'trophies/partials/leaderboard_rank_cell.html' with rank=entry.rank %}</td>
                         <td class="text-sm">{% include 'trophies/partials/leaderboard_user_cell.html' with entry=entry %}</td>
                         <td class="text-sm">
@@ -102,7 +102,7 @@
                       {% elif entry.rank == 1 %}bg-warning/5 border-l-4 border-l-warning
                       {% elif entry.rank == 2 %}bg-base-content/5 border-l-4 border-l-base-content/30
                       {% elif entry.rank == 3 %}bg-accent/5 border-l-4 border-l-accent
-                      {% else %}hover:bg-base-300/30{% endif %}">
+                      {% else %}hover:bg-white/[0.04]{% endif %}">
                 <div class="w-8 text-center shrink-0">{% include 'trophies/partials/leaderboard_rank_cell.html' with rank=entry.rank %}</div>
                 <div class="w-6 h-6 rounded-full overflow-hidden ring-1 {% if entry.is_premium %}ring-warning{% else %}ring-primary{% endif %} shrink-0">
                     <img src="{{ entry.avatar_url }}" alt="" class="w-full h-full object-cover" loading="lazy" />

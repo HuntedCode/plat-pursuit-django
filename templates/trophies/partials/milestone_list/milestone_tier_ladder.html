@@ -51,7 +51,7 @@
         {# ── Tier Card ────────────────────────────────────────────────── #}
         <div class="flex-1 mb-2">
             <div class="card border-2 transition-all duration-300
-                        {% if tier.state == 'earned' %}bg-base-200 border-success/50 hover:border-success hover:shadow-success/30 hover:shadow-md{% elif tier.state == 'active' %}bg-base-200 border-primary/50 hover:border-primary hover:shadow-primary/30 hover:shadow-md{% elif tier.state == 'preview' %}bg-base-200 border-base-300 hover:border-primary hover:shadow-primary/20 hover:shadow-md{% else %}bg-base-300/30 border-base-300/50{% endif %}">
+                        {% if tier.state == 'earned' %}bg-base-200 border-success/50 hover:border-success hover:shadow-success/30 hover:shadow-md{% elif tier.state == 'active' %}bg-base-200 border-primary/50 hover:border-primary hover:shadow-primary/30 hover:shadow-md{% elif tier.state == 'preview' %}bg-base-200 border-base-300 hover:border-primary hover:shadow-primary/20 hover:shadow-md{% else %}bg-white/[0.02] border-base-content/5{% endif %}">
                 <div class="card-body p-2 md:p-3 gap-1">
                     {# Top row: Image + Name + Target badge #}
                     <div class="flex items-center gap-2 md:gap-3">
