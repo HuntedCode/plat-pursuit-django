@@ -61,8 +61,8 @@
             </svg>
         {% endif %}
 
-        <span class="hidden lg:inline">{{ tab.name }}</span>
-        <span class="lg:hidden text-xs">{{ tab.name }}</span>
+        <span class="hidden md:inline">{{ tab.name }}</span>
+        <span class="md:hidden text-xs">{{ tab.name }}</span>
 
         {% if tab.slug != 'overview' %}
             {% if tab.is_feats_of_strength %}
@@ -80,7 +80,7 @@
 
     {# ── Tab Content Panel ─────────────────────────────────────────────── #}
     <div id="{{ tab.slug }}-panel"
-         class="tab-content bg-base-100/90 border-2 border-base-300 shadow-md shadow-neutral p-4 lg:p-6"
+         class="tab-content bg-base-200/70 border-2 border-base-300 shadow-md shadow-neutral p-3 md:p-4 lg:p-6"
          role="tabpanel" aria-labelledby="{{ tab.slug }}-tab">
         {% if current_cat == tab.slug %}
             {% if tab.slug == 'overview' %}

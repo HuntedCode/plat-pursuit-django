@@ -1,11 +1,11 @@
 {% load humanize %}
 
 {# ─── Category Header ─────────────────────────────────────────────────── #}
-<h2 class="text-xl lg:text-2xl font-bold italic mb-4">{{ category_name }}</h2>
+<h2 class="text-base md:text-xl lg:text-2xl font-bold italic mb-3">{{ category_name }}</h2>
 
 {% if not user.is_authenticated %}
     <div class="card bg-base-200 border-2 border-base-300 shadow-md mb-6">
-        <div class="card-body p-4 text-center">
+        <div class="card-body p-3 md:p-4 text-center">
             <p class="text-base-content/70">
                 <a href="{% url 'account_login' %}" class="btn btn-primary btn-sm">Log in</a>
                 to track your milestone progress and see your current tier.
@@ -32,7 +32,7 @@
 
 {# ─── One-Off Cards ───────────────────────────────────────────────────── #}
 {% if category_data.oneoff_cards %}
-    <div class="grid grid-cols-2 lg:grid-cols-3 gap-3 lg:gap-4">
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 md:gap-3">
         {% for item in category_data.oneoff_cards %}
             {% include 'trophies/partials/milestone_list/milestone_oneoff_card.html' with item=item %}
         {% endfor %}
