@@ -132,7 +132,7 @@ def _build_grid_context(request, profile, icon_ids, icon_type, cols, theme_key):
         if icon_type == 'trophy':
             img_url = et.trophy.trophy_icon_url or ''
         else:
-            img_url = et.trophy.game.title_image or et.trophy.game.title_icon_url or ''
+            img_url = et.trophy.game.title_icon_url or et.trophy.game.title_image or ''
         # Cache external images as same-origin temp files
         cached_url = ShareImageCache.fetch_and_cache(img_url) if img_url else ''
         icons.append({

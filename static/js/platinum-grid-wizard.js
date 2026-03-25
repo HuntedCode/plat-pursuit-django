@@ -233,6 +233,56 @@
         updateCounter();
     });
 
+    // Remove cross-gen duplicates: for each GameFamily, keep the newest platform version
+    const PLATFORM_PRIORITY = { 'PS5': 5, 'PS4': 4, 'PS3': 3, 'PS Vita': 2, 'PSP': 1 };
+
+    function bestPlatformScore(platforms) {
+        if (!platforms || !platforms.length) return 0;
+        return Math.max(...platforms.map(p => PLATFORM_PRIORITY[p] || 0));
+    }
+
+    $('#btn-remove-dupes')?.addEventListener('click', () => {
+        const items = getFilteredPlatinums();
+        // Group selected items by family_id
+        const families = {};
+        for (const p of items) {
+            if (!state.selected.has(p.id) || !p.family_id) continue;
+            if (!families[p.family_id]) families[p.family_id] = [];
+            families[p.family_id].push(p);
+        }
+
+        let removed = 0;
+        for (const [familyId, members] of Object.entries(families)) {
+            if (members.length <= 1) continue;
+            // Sort by platform priority descending, then by earned date descending (newest first)
+            members.sort((a, b) => {
+                const platDiff = bestPlatformScore(b.platforms) - bestPlatformScore(a.platforms);
+                if (platDiff !== 0) return platDiff;
+                return (b.earned_date || '').localeCompare(a.earned_date || '');
+            });
+            // Keep the first (best), uncheck the rest
+            for (let i = 1; i < members.length; i++) {
+                const dupeId = members[i].id;
+                if (state.selected.has(dupeId)) {
+                    state.selected.delete(dupeId);
+                    const cb = checklistContainer.querySelector(`input[data-plat-id="${dupeId}"]`);
+                    if (cb) {
+                        cb.checked = false;
+                        cb.closest('.checklist-row')?.classList.remove('bg-base-300/30', 'border-primary/20');
+                    }
+                    removed++;
+                }
+            }
+        }
+
+        updateCounter();
+        if (removed > 0) {
+            PlatPursuit.ToastManager?.show(`Removed ${removed} cross-gen duplicate${removed !== 1 ? 's' : ''}.`, 'success');
+        } else {
+            PlatPursuit.ToastManager?.show('No duplicates found in selection.', 'info');
+        }
+    });
+
     // ── Preview & Download (Step 3) ────────────────────
     function getSelectedIdsString() {
         // Preserve the filtered/sorted order
