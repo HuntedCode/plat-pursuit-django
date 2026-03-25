@@ -445,14 +445,25 @@ class BadgeDetailView(ProfileHotbarMixin, DetailView):
             for game in games:
                 community_ratings[game] = RatingService.get_cached_community_averages(game.concept)
 
+            all_game_entries = [{
+                'game': game,
+                'profile_game': profile_games.get(game.id),
+                'community_ratings': community_ratings.get(game),
+                'has_guide': bool(game.concept.guide_slug),
+            } for game in games]
+
+            unobtainable = [g for g in all_game_entries if not g['game'].is_obtainable or g['game'].is_delisted]
+            unobtainable_completed = sum(
+                1 for g in unobtainable
+                if g['profile_game'] and (g['profile_game'].progress == 100 or g['profile_game'].has_plat)
+            )
+
             structured_data.append({
                 'stage': stage,
-                'games': [{
-                    'game': game,
-                    'profile_game': profile_games.get(game.id),
-                    'community_ratings': community_ratings.get(game),
-                    'has_guide': bool(game.concept.guide_slug),
-                } for game in games],
+                'games': all_game_entries,
+                'obtainable_games': [g for g in all_game_entries if g['game'].is_obtainable and not g['game'].is_delisted],
+                'unobtainable_games': unobtainable,
+                'unobtainable_completed': unobtainable_completed,
             })
 
         all_badges = Badge.objects.by_series(badge.series_slug)

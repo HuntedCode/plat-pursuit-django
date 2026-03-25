@@ -60,15 +60,88 @@
                     {% include 'trophies/partials/badge_detail/badge_stage_stats.html' %}
                     <div class="transition-[grid-template-rows] duration-300 ease-in-out grid" data-stage-games="{{ stage.stage_number }}" style="grid-template-rows: 1fr;">
                         <div class="overflow-hidden">
-                            <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2 p-1">
-                                {% for games in data.games %}
-                                {% with games.game as game %}
-                                {% with games.profile_game as pgame %}
-                                {% with games.community_ratings as ratings %}
-                                    {% include 'trophies/partials/badge_detail/badge_detail_items.html' %}
-                                {% endwith %}{% endwith %}{% endwith %}
-                                {% endfor %}
-                            </div>
+                            {% if data.obtainable_games %}
+                                {# Unobtainable/delisted games: compact collapsible list (only when obtainable games exist) #}
+                                {% with data.unobtainable_games as unobtainable %}
+                                {% if unobtainable %}
+                                <div class="collapse collapse-arrow {% if data.unobtainable_completed == unobtainable|length %}bg-success/5 border border-success/20{% else %}bg-error/5 border border-error/20{% endif %} rounded-lg mb-2 mx-1">
+                                    <input type="checkbox" />
+                                    <div class="collapse-title py-1.5 min-h-0 flex items-center gap-1.5">
+                                        {% if data.unobtainable_completed == unobtainable|length %}
+                                            <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-success/60 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                                            <span class="text-xs font-semibold text-success/60">{{ unobtainable|length }} Unobtainable/Delisted Title{{ unobtainable|length|pluralize }}</span>
+                                            <span class="badge badge-xs badge-success">All Complete</span>
+                                        {% elif data.unobtainable_completed > 0 %}
+                                            <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-warning/60 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2"></polygon><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+                                            <span class="text-xs font-semibold text-base-content/50">{{ unobtainable|length }} Unobtainable/Delisted Title{{ unobtainable|length|pluralize }}</span>
+                                            <span class="badge badge-xs badge-warning">{{ data.unobtainable_completed }}/{{ unobtainable|length }}</span>
+                                        {% else %}
+                                            <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-error/60 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2"></polygon><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+                                            <span class="text-xs font-semibold text-error/60">{{ unobtainable|length }} Unobtainable/Delisted Title{{ unobtainable|length|pluralize }}</span>
+                                        {% endif %}
+                                    </div>
+                                    <div class="collapse-content px-2">
+                                        <div class="flex flex-col gap-1">
+                                            {% for games in unobtainable %}
+                                            {% with games.game as game %}
+                                            {% with games.profile_game as pgame %}
+                                            <a href="{% if profile %}{% url 'game_detail_with_profile' game.np_communication_id profile.psn_username %}{% else %}{% url 'game_detail' game.np_communication_id %}{% endif %}"
+                                               class="flex items-center gap-2 py-1 px-1.5 rounded transition-colors group
+                                                      {% if pgame and pgame.progress == 100 %}bg-success/10 hover:bg-success/15
+                                                      {% elif pgame and pgame.earned_trophies.platinum == 1 %}bg-warning/10 hover:bg-warning/15
+                                                      {% else %}hover:bg-base-300/30{% endif %}">
+                                                {# Completion indicator #}
+                                                {% if pgame and pgame.progress == 100 %}
+                                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-success shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                                                {% elif pgame and pgame.earned_trophies.platinum == 1 %}
+                                                    {% include 'partials/icons/trophy_cup.html' with color='var(--color-warning)' size='w-3.5 h-3.5 shrink-0' %}
+                                                {% else %}
+                                                    <div class="w-3.5 h-3.5 rounded-full border border-base-content/15 shrink-0"></div>
+                                                {% endif %}
+                                                <div class="w-6 h-6 rounded overflow-hidden shrink-0 {% if not pgame or pgame.progress == 0 %}opacity-40{% endif %}">
+                                                    <img src="{{ game.title_image|default:game.title_icon_url }}" alt="" class="w-full h-full object-cover" loading="lazy" />
+                                                </div>
+                                                <span class="text-xs line-clamp-1 pr-1 flex-1 italic
+                                                             {% if pgame and pgame.progress == 100 %}text-success/70 group-hover:text-success
+                                                             {% elif pgame and pgame.earned_trophies.platinum == 1 %}text-warning/70 group-hover:text-warning
+                                                             {% else %}text-base-content/40 group-hover:text-base-content/60{% endif %}">{{ game.title_name }}</span>
+                                                {% for platform in game.title_platform reversed %}
+                                                    <span class="badge badge-xs badge-ghost font-bold border border-{{ platform|platform_color_str }} rounded-box text-base-content/30">{{ platform }}</span>
+                                                {% endfor %}
+                                                {% if pgame and pgame.progress %}
+                                                    <span class="text-[0.55rem] font-bold {% if pgame.progress == 100 %}text-success{% elif pgame.earned_trophies.platinum == 1 %}text-warning{% else %}text-base-content/30{% endif %}">{{ pgame.progress }}%</span>
+                                                {% endif %}
+                                            </a>
+                                            {% endwith %}{% endwith %}
+                                            {% endfor %}
+                                        </div>
+                                    </div>
+                                </div>
+                                {% endif %}
+                                {% endwith %}
+
+                                {# Obtainable games: visual grid cards #}
+                                <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2 p-1">
+                                    {% for games in data.obtainable_games %}
+                                    {% with games.game as game %}
+                                    {% with games.profile_game as pgame %}
+                                    {% with games.community_ratings as ratings %}
+                                        {% include 'trophies/partials/badge_detail/badge_detail_items.html' %}
+                                    {% endwith %}{% endwith %}{% endwith %}
+                                    {% endfor %}
+                                </div>
+                            {% else %}
+                                {# All games are unobtainable/delisted: show them in the grid #}
+                                <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2 p-1">
+                                    {% for games in data.games %}
+                                    {% with games.game as game %}
+                                    {% with games.profile_game as pgame %}
+                                    {% with games.community_ratings as ratings %}
+                                        {% include 'trophies/partials/badge_detail/badge_detail_items.html' %}
+                                    {% endwith %}{% endwith %}{% endwith %}
+                                    {% endfor %}
+                                </div>
+                            {% endif %}
                         </div>
                     </div>
                 </div>
