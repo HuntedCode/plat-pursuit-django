@@ -713,9 +713,10 @@ class BadgeDetailView(ProfileHotbarMixin, DetailView):
         context['completion'] = badge_completion
         context['badge_requirements'] = badge_requirements
         context['is_earned'] = is_earned
+        context['highest_tier_earned'] = highest_tier_earned
 
         if badge.most_recent_concept:
-            context['image_urls'] = {'bg_url': badge.most_recent_concept.bg_url, 'recent_concept_icon_url': badge.most_recent_concept.concept_icon_url}
+            context['image_urls'] = {'bg_url': '', 'recent_concept_icon_url': badge.most_recent_concept.concept_icon_url}
             context['recent_concept_name'] = badge.most_recent_concept.unified_title
         else:
             context['image_urls'] = {'bg_url': '', 'recent_concept_icon_url': ''}
@@ -824,7 +825,7 @@ class BadgeLeaderboardsView(ProfileHotbarMixin, DetailView):
 
         context['badge'] = badge
         if badge.most_recent_concept:
-            context['image_urls'] = {'bg_url': badge.most_recent_concept.bg_url, 'recent_concept_icon_url': badge.most_recent_concept.concept_icon_url}
+            context['image_urls'] = {'bg_url': '', 'recent_concept_icon_url': badge.most_recent_concept.concept_icon_url}
         else:
             context['image_urls'] = {'bg_url': '', 'recent_concept_icon_url': ''}
         context['breadcrumb'] = [
