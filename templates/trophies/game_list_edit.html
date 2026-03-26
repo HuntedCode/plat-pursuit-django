@@ -5,17 +5,17 @@
 
 {% block content %}
 {# Section 1: Header #}
-<section class="shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 w-full p-0 lg:p-4">
+<section class="shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 w-full p-3 md:p-4">
     {% include 'partials/breadcrumb.html' with items=breadcrumb %}
 
-    <div class="card bg-base-100 border-4 border-base-300 shadow-md shadow-neutral">
+    <div class="card bg-base-100 border-2 border-base-300 shadow-md shadow-neutral">
         <div class="card-body">
             <div class="flex flex-row items-center justify-between gap-3">
                 <div class="flex-1 w-full">
                     <div>
                         <input type="text"
                                id="list-name"
-                               class="input input-ghost text-2xl lg:text-3xl font-bold w-full p-0 h-auto focus:bg-base-200 focus:px-3 transition-all"
+                               class="input input-ghost text-lg md:text-base md:text-lg lg:text-xl font-bold w-full p-0 h-auto focus:bg-base-200 focus:px-3 transition-all"
                                value="{{ game_list.name }}"
                                maxlength="200"
                                placeholder="Enter list name..."
@@ -71,8 +71,8 @@
 </section>
 
 {# Section 2: Settings Panel (hidden by default) #}
-<section id="list-settings-collapse" class="hidden shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 w-full p-0 lg:p-4 mt-6">
-    <div class="card bg-base-100 border-4 border-base-300 shadow-md shadow-neutral">
+<section id="list-settings-collapse" class="hidden shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 w-full p-3 md:p-4 mt-6">
+    <div class="card bg-base-100 border-2 border-base-300 shadow-md shadow-neutral">
         <div class="card-body">
             <div class="flex items-center justify-between mb-3">
                 <h2 class="text-lg font-bold">List Settings</h2>
@@ -168,8 +168,8 @@
 </section>
 
 {# Section 3: Add Games #}
-<section class="shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 w-full p-0 lg:p-4 mt-6">
-    <div class="card bg-base-100 border-4 border-base-300 shadow-md shadow-neutral">
+<section class="shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 w-full p-3 md:p-4 mt-6">
+    <div class="card bg-base-100 border-2 border-base-300 shadow-md shadow-neutral">
         <div class="card-body">
             <div class="flex items-center justify-between mb-2">
                 <h2 class="text-lg font-bold">Add Games</h2>
@@ -261,7 +261,7 @@
 </section>
 
 {# Section 4: Games in List #}
-<section class="shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 w-full p-0 lg:p-4 mt-6">
+<section class="shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 w-full p-3 md:p-4 mt-6">
     <div class="p-4">
         <div class="flex items-center justify-between mb-4">
             <h2 class="text-lg font-bold">Games in List</h2>
@@ -353,7 +353,6 @@
 {% endblock %}
 
 {% block js_scripts %}
-<script>PlatPursuit.ZoomScaler.init();</script>
 <script src="{% static 'js/game-lists.js' %}"></script>
 <script>
     document.addEventListener('DOMContentLoaded', () => {

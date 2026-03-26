@@ -7,11 +7,11 @@
     {% include 'partials/breadcrumb.html' with items=breadcrumb %}
 
     {# List Header #}
-    <div class="card bg-base-100 border-4 border-base-300 shadow-md shadow-neutral">
+    <div class="card bg-base-100 border-2 border-base-300 shadow-md shadow-neutral">
         <div class="card-body p-4 lg:p-6">
             <div class="flex flex-row items-start justify-between gap-4">
                 <div class="flex-1 min-w-0">
-                    <h1 class="text-2xl lg:text-3xl font-bold break-words">{{ game_list.name }}</h1>
+                    <h1 class="text-lg md:text-base md:text-lg lg:text-xl font-bold break-words">{{ game_list.name }}</h1>
                     {% if game_list.description %}
                         <p class="text-base-content/70 mt-2">{{ game_list.description }}</p>
                     {% endif %}
@@ -134,7 +134,6 @@
 {% endblock %}
 
 {% block js_scripts %}
-<script>PlatPursuit.ZoomScaler.init();</script>
 <script src="{% static 'js/game-lists.js' %}"></script>
 <script>
     document.addEventListener('DOMContentLoaded', () => {
