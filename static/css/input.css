@@ -161,6 +161,16 @@
     @apply shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 p-0 lg:p-4;
   }
 
+  /* Guide edit: ensure content is not hidden behind sticky toolbar */
+  #checklist-edit-container {
+    padding-bottom: 4rem;
+  }
+
+  /* Guide edit: details chevron rotation */
+  details[open] .details-chevron {
+    transform: rotate(180deg);
+  }
+
   /* Panel container - sidebars, filter panels, split panes */
   .panel-container {
     @apply bg-base-200 rounded-lg shadow-md border-2 border-base-300;

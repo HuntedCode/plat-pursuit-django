@@ -10,6 +10,82 @@
     const API_BASE = '/api/v1';
 
     // ==========================================
+    // Save Status Indicator
+    // ==========================================
+
+    const SaveStatus = {
+        _headerEl: null,
+        _headerIcon: null,
+        _headerText: null,
+        _toolbarDot: null,
+        _toolbarText: null,
+        _timeout: null,
+
+        init() {
+            this._headerEl = document.getElementById('save-status-indicator');
+            this._headerIcon = document.getElementById('save-status-icon');
+            this._headerText = document.getElementById('save-status-text');
+            this._toolbarDot = document.querySelector('.toolbar-status-dot');
+            this._toolbarText = document.querySelector('.toolbar-status-text');
+        },
+
+        setSaving() {
+            if (this._timeout) clearTimeout(this._timeout);
+            this._setHeader(
+                '<span class="loading loading-spinner loading-xs"></span>',
+                'Saving...', 'text-base-content/60'
+            );
+            this._setToolbar('bg-warning animate-pulse', 'Saving...');
+        },
+
+        setSaved() {
+            if (this._timeout) clearTimeout(this._timeout);
+            this._setHeader(
+                '<svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>',
+                'Saved', 'text-success/70'
+            );
+            this._setToolbar('bg-success', 'Saved');
+            this._timeout = setTimeout(() => {
+                if (this._headerEl) this._headerEl.classList.add('opacity-50');
+            }, 5000);
+        },
+
+        setUnsaved() {
+            if (this._timeout) clearTimeout(this._timeout);
+            this._setHeader(
+                '<svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"/></svg>',
+                'Unsaved', 'text-warning/70'
+            );
+            this._setToolbar('bg-warning', 'Unsaved');
+        },
+
+        setError(msg) {
+            if (this._timeout) clearTimeout(this._timeout);
+            this._setHeader(
+                '<svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>',
+                msg || 'Error', 'text-error/70'
+            );
+            this._setToolbar('bg-error', msg || 'Error');
+        },
+
+        _setHeader(iconHtml, text, colorClass) {
+            if (!this._headerEl) return;
+            this._headerEl.classList.remove('opacity-50', 'text-success/70', 'text-warning/70', 'text-error/70', 'text-base-content/60');
+            this._headerEl.classList.add(colorClass);
+            if (this._headerIcon) this._headerIcon.outerHTML = iconHtml;
+            this._headerIcon = this._headerEl.querySelector('svg, span.loading');
+            if (this._headerText) this._headerText.textContent = text;
+        },
+
+        _setToolbar(dotClass, text) {
+            if (this._toolbarDot) {
+                this._toolbarDot.className = 'toolbar-status-dot w-2 h-2 rounded-full transition-colors ' + dotClass;
+            }
+            if (this._toolbarText) this._toolbarText.textContent = text;
+        }
+    };
+
+    // ==========================================
     // Form State Preservation
     // ==========================================
     // Saves unsaved form data before page reloads so users don't lose work
@@ -1155,6 +1231,24 @@
         const checklistId = container.dataset.checklistId;
         const isPublished = container.dataset.isPublished === 'true';
 
+        // Save status indicator
+        SaveStatus.init();
+
+        // Title sync: keep header display in sync with title input
+        const titleInput = document.getElementById('checklist-title');
+        const headerDisplay = document.getElementById('header-title-display');
+        if (titleInput && headerDisplay) {
+            titleInput.addEventListener('input', () => {
+                headerDisplay.textContent = titleInput.value.trim() || 'Untitled Guide';
+            });
+        }
+
+        // Mark unsaved on any input change (debounced)
+        const markUnsaved = PlatPursuit.debounce(() => SaveStatus.setUnsaved(), 300);
+        document.getElementById('checklist-edit-container')?.addEventListener('input', (e) => {
+            if (e.target.matches('input, textarea, select')) markUnsaved();
+        });
+
         // Save checklist button
         initSaveChecklist(checklistId);
 
@@ -1205,15 +1299,16 @@
     }
 
     function initKeyboardShortcuts() {
-        // Intercept Ctrl/Cmd+S to show "Saved" message instead of browser save
+        // Intercept Ctrl/Cmd+S to trigger Save All
         document.addEventListener('keydown', (e) => {
             if ((e.ctrlKey || e.metaKey) && e.key === 's') {
                 e.preventDefault();
-                if (!window.PlatPursuit?.ToastManager) {
-                    console.error('ToastManager not available');
-                    return;
+                const saveBtn = document.getElementById('save-checklist-btn');
+                if (saveBtn) {
+                    saveBtn.click();
+                } else {
+                    PlatPursuit.ToastManager?.success('Saved', 2000);
                 }
-                PlatPursuit.ToastManager.success('Saved', 2000);
             }
         });
     }
@@ -1364,10 +1459,10 @@
 
     function initPublishButtons(checklistId) {
         const publishBtn = document.getElementById('publish-checklist-btn');
+        const toolbarPublishBtn = document.getElementById('toolbar-publish-btn');
         const unpublishBtn = document.getElementById('unpublish-checklist-btn');
 
-        if (publishBtn) {
-            publishBtn.addEventListener('click', async function() {
+        const publishHandler = async function() {
                 // Show confirmation dialog before publishing
                 const confirmed = confirm(
                     `Ready to publish?\n\n` +
@@ -1395,8 +1490,10 @@
                 } finally {
                     this.classList.remove('loading');
                 }
-            });
-        }
+        };
+
+        if (publishBtn) publishBtn.addEventListener('click', publishHandler);
+        if (toolbarPublishBtn) toolbarPublishBtn.addEventListener('click', publishHandler);
 
         if (unpublishBtn) {
             unpublishBtn.addEventListener('click', async function() {
@@ -1620,7 +1717,28 @@
     }
 
     function initDragAndDrop(checklistId) {
-        // Sections now use arrow buttons - no drag needed for sections
+        // Section drag-to-reorder (desktop, via drag handles)
+        const sectionsContainer = document.getElementById('sections-container');
+        if (sectionsContainer && typeof PlatPursuit.DragReorderManager !== 'undefined') {
+            new PlatPursuit.DragReorderManager({
+                container: sectionsContainer,
+                itemSelector: '.checklist-section',
+                handleSelector: '.section-drag-handle',
+                onReorder: async (itemId, newPosition, allItemIds) => {
+                    try {
+                        SaveStatus.setSaving();
+                        await apiRequest(`${API_BASE}/checklists/${checklistId}/sections/reorder/`, 'POST', {
+                            ids: allItemIds.map(id => parseInt(id))
+                        });
+                        SaveStatus.setSaved();
+                        PlatPursuit.ToastManager.success('Sections reordered', 1500);
+                    } catch (error) {
+                        SaveStatus.setError('Failed to reorder');
+                        PlatPursuit.ToastManager.error('Failed to reorder sections');
+                    }
+                }
+            });
+        }
 
         // Initialize drag-and-drop for items within each section
         // Note: This works even on hidden containers - the drag events will fire when sections are expanded
@@ -1729,21 +1847,16 @@
                 const newTitle = titleInput.value.trim();
                 if (newTitle && newTitle !== originalValues.title) {
                     try {
+                        SaveStatus.setSaving();
                         await PlatPursuit.API.patch(`${API_BASE}/checklists/${checklistId}/`, {
                             title: newTitle
                         });
                         originalValues.title = newTitle;
-                        if (!window.PlatPursuit?.ToastManager) {
-                            console.error('ToastManager not available');
-                        } else {
-                            PlatPursuit.ToastManager.success('Saved', 2000);
-                        }
+                        SaveStatus.setSaved();
                     } catch (error) {
                         console.error('Failed to save checklist title:', error);
-                        if (window.PlatPursuit?.ToastManager) {
-                            PlatPursuit.ToastManager.error('Failed to save title');
-                        }
-                        titleInput.value = originalValues.title; // Revert on error
+                        SaveStatus.setError('Failed to save title');
+                        titleInput.value = originalValues.title;
                     }
                 }
             });
@@ -1756,21 +1869,16 @@
                 const newDesc = descInput.value.trim();
                 if (newDesc !== originalValues.description) {
                     try {
+                        SaveStatus.setSaving();
                         await PlatPursuit.API.patch(`${API_BASE}/checklists/${checklistId}/`, {
                             description: newDesc
                         });
                         originalValues.description = newDesc;
-                        if (!window.PlatPursuit?.ToastManager) {
-                            console.error('ToastManager not available');
-                        } else {
-                            PlatPursuit.ToastManager.success('Saved', 2000);
-                        }
+                        SaveStatus.setSaved();
                     } catch (error) {
                         console.error('Failed to save checklist description:', error);
-                        if (window.PlatPursuit?.ToastManager) {
-                            PlatPursuit.ToastManager.error('Failed to save description');
-                        }
-                        descInput.value = originalValues.description; // Revert on error
+                        SaveStatus.setError('Failed to save description');
+                        descInput.value = originalValues.description;
                     }
                 }
             });
@@ -1788,21 +1896,16 @@
 
                 if (newTitle && newTitle !== originalTitle) {
                     try {
+                        SaveStatus.setSaving();
                         await PlatPursuit.API.patch(`${API_BASE}/checklists/${checklistId}/sections/${sectionId}/`, {
                             subtitle: newTitle
                         });
                         e.target.dataset.originalValue = newTitle;
-                        if (!window.PlatPursuit?.ToastManager) {
-                            console.error('ToastManager not available');
-                        } else {
-                            PlatPursuit.ToastManager.success('Saved', 2000);
-                        }
+                        SaveStatus.setSaved();
                     } catch (error) {
                         console.error('Failed to save section title:', error);
-                        if (window.PlatPursuit?.ToastManager) {
-                            PlatPursuit.ToastManager.error('Failed to save');
-                        }
-                        e.target.value = originalTitle; // Revert on error
+                        SaveStatus.setError('Failed to save');
+                        e.target.value = originalTitle;
                     }
                 }
             }
@@ -1820,21 +1923,16 @@
 
                 if (newDesc !== originalDesc) {
                     try {
+                        SaveStatus.setSaving();
                         await PlatPursuit.API.patch(`${API_BASE}/checklists/${checklistId}/sections/${sectionId}/`, {
                             description: newDesc
                         });
                         e.target.dataset.originalValue = newDesc;
-                        if (!window.PlatPursuit?.ToastManager) {
-                            console.error('ToastManager not available');
-                        } else {
-                            PlatPursuit.ToastManager.success('Saved', 2000);
-                        }
+                        SaveStatus.setSaved();
                     } catch (error) {
                         console.error('Failed to save section description:', error);
-                        if (window.PlatPursuit?.ToastManager) {
-                            PlatPursuit.ToastManager.error('Failed to save');
-                        }
-                        e.target.value = originalDesc; // Revert on error
+                        SaveStatus.setError('Failed to save');
+                        e.target.value = originalDesc;
                     }
                 }
             }
@@ -2172,6 +2270,9 @@
                     if (counter) counter.textContent = '0';
 
                     PlatPursuit.ToastManager.show('Item added!', 'success');
+                    SaveStatus.setSaved();
+                    // Notify inline creator to collapse
+                    document.dispatchEvent(new CustomEvent('checklist-item-added', { detail: { sectionId } }));
                 } catch (error) {
                     PlatPursuit.ToastManager.show(error.message || 'Failed to add item', 'error');
                 } finally {
@@ -3673,6 +3774,8 @@
             );
 
             PlatPursuit.ToastManager.show('Trophy added successfully', 'success');
+            SaveStatus.setSaved();
+            document.dispatchEvent(new CustomEvent('checklist-item-added', { detail: { sectionId } }));
             modal.close();
 
             // Get trophy data from modal cache
@@ -4809,6 +4912,93 @@
         });
     }
 
+    /**
+     * Initialize inline creator toggle/cancel/pill UI.
+     * Wires the new pill buttons and toggle to the existing unified item creator select + input.
+     */
+    function initInlineCreatorUI() {
+        // Toggle: show/hide inline creator form
+        document.addEventListener('click', (e) => {
+            const toggleBtn = e.target.closest('.inline-creator-toggle');
+            if (!toggleBtn) return;
+
+            const creator = toggleBtn.closest('.inline-item-creator');
+            if (!creator) return;
+
+            const form = creator.querySelector('.inline-creator-form');
+            if (form) {
+                toggleBtn.classList.add('hidden');
+                form.classList.remove('hidden');
+                const textInput = form.querySelector('input[type="text"]');
+                if (textInput) textInput.focus();
+            }
+        });
+
+        // Cancel: collapse back to toggle button
+        document.addEventListener('click', (e) => {
+            const cancelBtn = e.target.closest('.inline-creator-cancel');
+            if (!cancelBtn) return;
+
+            const creator = cancelBtn.closest('.inline-item-creator');
+            if (!creator) return;
+
+            const form = creator.querySelector('.inline-creator-form');
+            const toggleBtn = creator.querySelector('.inline-creator-toggle');
+            if (form) form.classList.add('hidden');
+            if (toggleBtn) toggleBtn.classList.remove('hidden');
+        });
+
+        // Type pills: sync with hidden select and update input area
+        document.addEventListener('click', (e) => {
+            const pill = e.target.closest('.creator-type-pill');
+            if (!pill) return;
+
+            const sectionId = pill.dataset.sectionId;
+            const type = pill.dataset.type;
+            const creator = pill.closest('.inline-item-creator');
+            if (!creator) return;
+
+            // Update pill active states
+            creator.querySelectorAll('.creator-type-pill').forEach(p => {
+                p.classList.remove('btn-primary');
+                p.classList.add('btn-ghost', 'border', 'border-base-300');
+            });
+            pill.classList.remove('btn-ghost', 'border', 'border-base-300');
+            pill.classList.add('btn-primary');
+
+            // Sync hidden select (triggers existing handleItemTypeChange logic)
+            const select = document.getElementById(`item-type-select-${sectionId}`);
+            if (select) {
+                select.value = type;
+                select.dispatchEvent(new Event('change'));
+            }
+        });
+
+        // After successful item add, collapse back
+        document.addEventListener('checklist-item-added', (e) => {
+            const sectionId = e.detail?.sectionId;
+            if (!sectionId) return;
+            const creator = document.querySelector(`.inline-item-creator[data-section-id="${sectionId}"]`);
+            if (!creator) return;
+
+            const form = creator.querySelector('.inline-creator-form');
+            const toggleBtn = creator.querySelector('.inline-creator-toggle');
+            if (form) form.classList.add('hidden');
+            if (toggleBtn) toggleBtn.classList.remove('hidden');
+
+            // Reset pills to "Item" default
+            creator.querySelectorAll('.creator-type-pill').forEach(p => {
+                p.classList.remove('btn-primary');
+                p.classList.add('btn-ghost', 'border', 'border-base-300');
+            });
+            const defaultPill = creator.querySelector('.creator-type-pill[data-type="item"]');
+            if (defaultPill) {
+                defaultPill.classList.remove('btn-ghost', 'border', 'border-base-300');
+                defaultPill.classList.add('btn-primary');
+            }
+        });
+    }
+
     // ==========================================
     // Check All / Uncheck All
     // ==========================================
@@ -5014,6 +5204,8 @@
         initBulkCheckButtons();
         // Unified Item Creator
         initUnifiedItemCreator();
+        // Inline creator toggle/cancel/pill UI
+        initInlineCreatorUI();
         // Character counters with color coding
         initCharacterCounters();
         // Form validation

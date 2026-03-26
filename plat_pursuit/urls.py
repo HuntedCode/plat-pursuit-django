@@ -73,7 +73,7 @@ urlpatterns = [
     path('leaderboard/badges/', OverallBadgeLeaderboardsView.as_view(), name='overall_badge_leaderboards'),
     path('leaderboard/badges/<str:series_slug>/', BadgeLeaderboardsView.as_view(), name='badge_leaderboards' ),
 
-    # Guide URLs - redirected to homepage during redesign (will be reintroduced later)
+    # Guide URLs - edit is live, others redirected during redesign
     path('guides/', RedirectView.as_view(pattern_name='home', permanent=False), name='guides_browse'),
     path('guides/<int:guide_id>/', RedirectView.as_view(pattern_name='home', permanent=False), name='guide_detail'),
     path('guides/<int:guide_id>/edit/', RedirectView.as_view(pattern_name='home', permanent=False), name='guide_edit'),

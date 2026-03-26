@@ -11,214 +11,231 @@
 
     {% include 'partials/breadcrumb.html' with items=breadcrumb %}
 
-    {# Header Card #}
-    <div class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral mb-3">
+    {# ═══ Card 1: Page Header (compact) ═══ #}
+    <div id="page-header-card" class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral mb-3">
         <div class="card-body p-3 md:p-4">
-                <div class="flex flex-col lg:flex-row justify-between items-start gap-4">
-                    <div class="flex-1 w-full">
-                        <div class="flex items-center gap-2 mb-4">
-                            <span class="badge {% if checklist.status == 'draft' %}badge-warning{% else %}badge-success{% endif %}">
-                                {{ checklist.status|title }}
-                            </span>
-                            <span class="text-sm text-base-content/60">Editing Guide</span>
-                        </div>
-
-                        {# Title Input #}
-                        <div class="form-control w-full">
-                            <label class="label flex-wrap gap-y-0">
-                                <span class="label-text font-semibold">Title</span>
-                                <span class="label-text-alt text-base-content/50">
-                                    <span class="char-count" data-target="checklist-title">{{ checklist.title|length }}</span>/200
-                                </span>
-                            </label>
-                            <input type="text"
-                                   id="checklist-title"
-                                   class="input input-bordered w-full text-xl font-bold char-count-input"
-                                   value="{{ checklist.title }}"
-                                   maxlength="200"
-                                   placeholder="Enter guide title...">
-                        </div>
-
-                        {# Description Input #}
-                        <div class="form-control w-full mt-4">
-                            <label class="label flex-wrap gap-y-0">
-                                <span class="label-text font-semibold">Description (optional)</span>
-                                <span class="label-text-alt text-base-content/50">
-                                    <span class="char-count" data-target="checklist-description">{{ checklist.description|default:''|length }}</span>/2000
-                                </span>
-                            </label>
-                            <textarea id="checklist-description"
-                                      class="textarea textarea-bordered w-full char-count-input"
-                                      rows="3"
-                                      maxlength="2000"
-                                      placeholder="Describe what this guide covers...">{{ checklist.description|default:'' }}</textarea>
-                        </div>
-
-                        {# Game Selection #}
-                        <div class="form-control w-full mt-4">
-                            <label class="label flex-wrap gap-y-0">
-                                <span class="label-text font-semibold">Selected Game</span>
-                                {% if checklist.is_published %}
-                                <span class="label-text-alt text-warning">Cannot change after publishing</span>
-                                {% else %}
-                                <span class="label-text-alt text-base-content/50">Choose which game this guide is for</span>
-                                {% endif %}
-                            </label>
-                            {% if checklist.is_published %}
-                                {# Display only - locked #}
-                                <div class="input input-bordered w-full bg-base-300 flex items-center gap-2">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-warning" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
-                                    </svg>
-                                    {% if checklist.selected_game %}
-                                        <span>{{ checklist.selected_game.title_name }} ({{ checklist.selected_game.platforms_display }} | {{ checklist.selected_game.regions_display }}) - {{ checklist.selected_game.trophy_count_summary }}</span>
-                                    {% else %}
-                                        <span class="text-base-content/50">No game selected</span>
-                                    {% endif %}
-                                </div>
-                            {% else %}
-                                {# Editable dropdown #}
-                                <select id="checklist-game-selector"
-                                        class="select select-bordered w-full text-ellipsis"
-                                        data-checklist-id="{{ checklist.id }}">
-                                    <option value="">Choose a game...</option>
-                                    {% for game in concept_games %}
-                                    <option value="{{ game.id }}"
-                                            {% if checklist.selected_game and checklist.selected_game.id == game.id %}selected{% endif %}>
-                                        {{ game.title_name }} ({{ game.platforms_display }} | {{ game.regions_display }}) - {{ game.trophy_count_summary }}
-                                    </option>
-                                    {% endfor %}
-                                </select>
-                                <div class="label py-1">
-                                    <span class="label-text-alt text-wrap">Locked after publishing</span>
-                                </div>
-                            {% endif %}
-                        </div>
-
-                        {# Checklist Thumbnail Upload #}
-                        <div class="form-control w-full mt-4">
-                            <label class="label flex-wrap gap-y-0">
-                                <span class="label-text font-semibold">Guide Thumbnail (optional)</span>
-                                <span class="label-text-alt text-base-content/50">Max 5MB</span>
-                            </label>
-
-                            {# Preview - shown above input on all screens #}
-                            <figure id="checklist-thumbnail-preview"
-                                    class="w-full max-w-xs aspect-video bg-base-300 rounded-lg overflow-hidden mb-3 {% if not checklist.thumbnail %}hidden{% endif %}">
-                                <img src="{% if checklist.thumbnail %}{{ checklist.thumbnail.url }}{% endif %}"
-                                     alt="Thumbnail preview"
-                                     class="w-full h-full object-cover">
-                            </figure>
-
-                            {# File Input and Remove Button #}
-                            <div class="flex flex-row items-center gap-2">
-                                <input type="file"
-                                       id="checklist-thumbnail-input"
-                                       class="file-input file-input-bordered file-input-md flex-1 min-w-0"
-                                       accept="image/jpeg,image/png,image/webp,image/gif"
-                                       data-checklist-id="{{ checklist.id }}">
-                                {% if checklist.thumbnail %}
-                                <button id="remove-checklist-thumbnail-btn"
-                                        class="btn btn-ghost btn-sm text-error shrink-0"
-                                        data-checklist-id="{{ checklist.id }}"
-                                        title="Remove thumbnail">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
-                                    </svg>
-                                </button>
-                                {% endif %}
-                            </div>
-                            <div class="label py-1">
-                                <span class="label-text-alt">Recommended: 1280x720px (16:9)</span>
-                            </div>
-                        </div>
-                    </div>
-
-                    {# Action Buttons #}
-                    <div class="flex flex-col gap-2 lg:min-w-48">
-                        <a href="{% url 'guide_detail' checklist.id %}" class="btn btn-ghost">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
+            <div class="flex items-center justify-between gap-3">
+                <div class="flex items-center gap-2 flex-wrap flex-1 min-w-0">
+                    <span class="badge badge-sm {% if checklist.status == 'draft' %}badge-warning{% else %}badge-success{% endif %} font-bold">
+                        {{ checklist.status|title }}
+                    </span>
+                    <h1 id="header-title-display" class="text-lg md:text-xl font-bold line-clamp-1 pr-1">{{ checklist.title|default:"Untitled Guide" }}</h1>
+                    <span id="save-status-indicator" class="flex items-center gap-1 text-xs text-success/70 ml-auto shrink-0">
+                        <svg id="save-status-icon" xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+                        <span id="save-status-text">Saved</span>
+                    </span>
+                </div>
+                <div class="flex items-center gap-1.5 shrink-0">
+                    <a href="{% url 'guide_detail' checklist.id %}" class="btn btn-sm btn-ghost border border-base-300 gap-1">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
+                        </svg>
+                        <span class="hidden md:inline">Preview</span>
+                    </a>
+                    {% if checklist.status == 'draft' %}
+                        <button id="publish-checklist-btn" class="btn btn-sm btn-success gap-1">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
                             </svg>
-                            Preview
-                        </a>
-                        {% if checklist.status == 'draft' %}
-                            <button id="publish-checklist-btn" class="btn btn-success">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                                </svg>
-                                Publish
-                            </button>
-                        {% else %}
-                            <button id="unpublish-checklist-btn" class="btn btn-warning">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"/>
-                                </svg>
-                                Unpublish
-                            </button>
-                        {% endif %}
-                        <button id="delete-checklist-btn" class="btn btn-error btn-outline">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                            <span class="hidden md:inline">Publish</span>
+                        </button>
+                    {% else %}
+                        <button id="unpublish-checklist-btn" class="btn btn-sm btn-warning gap-1">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"/>
                             </svg>
-                            Delete
+                            <span class="hidden md:inline">Unpublish</span>
                         </button>
-                    </div>
+                    {% endif %}
+                    <button id="delete-checklist-btn" class="btn btn-sm btn-error btn-outline gap-1">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                        </svg>
+                        <span class="hidden md:inline">Delete</span>
+                    </button>
                 </div>
-
-                {# Publishing Requirements Checklist #}
-                {% if checklist.status == 'draft' %}
-                <div id="publish-requirements" class="alert alert-info mt-4">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                    </svg>
-                    <div class="flex-1">
-                        <h3 class="font-bold">Publishing Requirements</h3>
-                        <ul class="text-sm space-y-1 mt-2">
-                            <li class="flex items-center gap-2">
-                                <span id="req-title-icon" class="{% if checklist.title %}text-success{% else %}text-error{% endif %}">
-                                    {% if checklist.title %}✓{% else %}✗{% endif %}
-                                </span>
-                                <span id="req-title-text" class="{% if checklist.title %}line-through opacity-50{% endif %}">Title filled out</span>
-                            </li>
-                            <li class="flex items-center gap-2">
-                                <span id="req-sections-icon" class="{% if checklist.sections.count > 0 %}text-success{% else %}text-error{% endif %}">
-                                    {% if checklist.sections.count > 0 %}✓{% else %}✗{% endif %}
-                                </span>
-                                <span id="req-sections-text" class="{% if checklist.sections.count > 0 %}line-through opacity-50{% endif %}">At least 1 section</span>
-                            </li>
-                            <li class="flex items-center gap-2">
-                                <span id="req-items-icon" class="text-error">✗</span>
-                                <span id="req-items-text">All sections have items</span>
-                            </li>
-                        </ul>
-                        <button id="show-missing-btn" class="btn btn-sm btn-outline mt-3" onclick="highlightMissingRequirements()">
-                            Show Me What's Missing
-                        </button>
-                    </div>
-                </div>
-                {% endif %}
-
-                {# Published Checklist Lock Warning #}
-                {% if checklist.is_published %}
-                <div class="alert alert-info mt-4 border-2 border-warning/50">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-warning" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
-                    </svg>
-                    <div>
-                        <div class="flex items-center gap-2 mb-1">
-                            <span class="text-lg">📌</span>
-                            <span class="font-bold text-lg">This checklist is published</span>
-                        </div>
-                        <p class="text-sm"><strong>Structure is locked.</strong> You can still edit titles and descriptions to fix typos, but you cannot add, delete, or reorder sections/items.</p>
-                        <p class="text-xs text-base-content/70 mt-1">Unpublish first to make structural changes.</p>
-                    </div>
-                </div>
-                {% endif %}
             </div>
         </div>
     </div>
+
+    {# ═══ Published Lock Banner ═══ #}
+    {% if checklist.is_published %}
+    <div class="card bg-warning/10 border-2 border-warning/30 shadow-lg shadow-neutral mb-3">
+        <div class="card-body p-3 md:p-4 flex-row items-center gap-3">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 text-warning shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+            </svg>
+            <div>
+                <h3 class="font-bold text-sm text-warning">Structure Locked</h3>
+                <p class="text-xs text-base-content/60">You can edit titles and descriptions, but cannot change sections or items. Unpublish first to make structural changes.</p>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    {# ═══ Card 2: Guide Details (collapsible) ═══ #}
+    <div class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral mb-3">
+        <details {% if checklist.status == 'draft' %}open{% endif %}>
+            <summary class="card-body p-3 md:p-4 cursor-pointer list-none">
+                <div class="flex items-center justify-between">
+                    <h2 class="text-sm md:text-base font-bold flex items-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+                        </svg>
+                        Guide Details
+                    </h2>
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-base-content/40 transition-transform details-chevron" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/>
+                    </svg>
+                </div>
+            </summary>
+            <div class="px-3 pb-3 md:px-5 md:pb-5 lg:px-7 lg:pb-7 pt-0 border-t border-base-content/10">
+                {# Title Input #}
+                <div class="form-control w-full mt-3">
+                    <label class="label flex-wrap gap-y-0">
+                        <span class="label-text font-semibold">Title</span>
+                        <span class="label-text-alt text-base-content/50">
+                            <span class="char-count" data-target="checklist-title">{{ checklist.title|length }}</span>/200
+                        </span>
+                    </label>
+                    <input type="text"
+                           id="checklist-title"
+                           class="input input-bordered w-full text-lg md:text-xl font-bold char-count-input"
+                           value="{{ checklist.title }}"
+                           maxlength="200"
+                           placeholder="Enter guide title...">
+                </div>
+
+                {# Description Input #}
+                <div class="form-control w-full mt-4">
+                    <label class="label flex-wrap gap-y-0">
+                        <span class="label-text font-semibold">Description (optional)</span>
+                        <span class="label-text-alt text-base-content/50">
+                            <span class="char-count" data-target="checklist-description">{{ checklist.description|default:''|length }}</span>/2000
+                        </span>
+                    </label>
+                    <textarea id="checklist-description"
+                              class="textarea textarea-bordered w-full char-count-input"
+                              rows="3"
+                              maxlength="2000"
+                              placeholder="Describe what this guide covers...">{{ checklist.description|default:'' }}</textarea>
+                </div>
+
+                {# Game Selection #}
+                <div class="form-control w-full mt-4">
+                    <label class="label flex-wrap gap-y-0">
+                        <span class="label-text font-semibold">Selected Game</span>
+                        {% if checklist.is_published %}
+                        <span class="label-text-alt text-warning">Cannot change after publishing</span>
+                        {% else %}
+                        <span class="label-text-alt text-base-content/50">Choose which game this guide is for</span>
+                        {% endif %}
+                    </label>
+                    {% if checklist.is_published %}
+                        <div class="input input-bordered w-full bg-base-300/30 flex items-center gap-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-warning shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+                            </svg>
+                            {% if checklist.selected_game %}
+                                <span class="text-sm">{{ checklist.selected_game.title_name }} ({{ checklist.selected_game.platforms_display }} | {{ checklist.selected_game.regions_display }}) - {{ checklist.selected_game.trophy_count_summary }}</span>
+                            {% else %}
+                                <span class="text-base-content/50 text-sm">No game selected</span>
+                            {% endif %}
+                        </div>
+                    {% else %}
+                        <select id="checklist-game-selector"
+                                class="select select-bordered w-full text-ellipsis"
+                                data-checklist-id="{{ checklist.id }}">
+                            <option value="">Choose a game...</option>
+                            {% for game in concept_games %}
+                            <option value="{{ game.id }}"
+                                    {% if checklist.selected_game and checklist.selected_game.id == game.id %}selected{% endif %}>
+                                {{ game.title_name }} ({{ game.platforms_display }} | {{ game.regions_display }}) - {{ game.trophy_count_summary }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                        <div class="label py-1">
+                            <span class="label-text-alt text-wrap">Locked after publishing</span>
+                        </div>
+                    {% endif %}
+                </div>
+
+                {# Checklist Thumbnail Upload #}
+                <div class="form-control w-full mt-4">
+                    <label class="label flex-wrap gap-y-0">
+                        <span class="label-text font-semibold">Guide Thumbnail (optional)</span>
+                        <span class="label-text-alt text-base-content/50">Max 5MB</span>
+                    </label>
+
+                    <figure id="checklist-thumbnail-preview"
+                            class="w-full max-w-xs aspect-video bg-base-300 rounded-lg overflow-hidden mb-3 {% if not checklist.thumbnail %}hidden{% endif %}">
+                        <img src="{% if checklist.thumbnail %}{{ checklist.thumbnail.url }}{% endif %}"
+                             alt="Thumbnail preview"
+                             class="w-full h-full object-cover">
+                    </figure>
+
+                    <div class="flex flex-row items-center gap-2">
+                        <input type="file"
+                               id="checklist-thumbnail-input"
+                               class="file-input file-input-bordered file-input-sm md:file-input-md flex-1 min-w-0"
+                               accept="image/jpeg,image/png,image/webp,image/gif"
+                               data-checklist-id="{{ checklist.id }}">
+                        {% if checklist.thumbnail %}
+                        <button id="remove-checklist-thumbnail-btn"
+                                class="btn btn-ghost btn-sm text-error shrink-0"
+                                data-checklist-id="{{ checklist.id }}"
+                                title="Remove thumbnail">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+                            </svg>
+                        </button>
+                        {% endif %}
+                    </div>
+                    <div class="label py-1">
+                        <span class="label-text-alt text-xs text-base-content/40">Recommended: 1280x720px (16:9)</span>
+                    </div>
+                </div>
+            </div>
+        </details>
+    </div>
+
+    {# ═══ Card 3: Publishing Requirements (draft only) ═══ #}
+    {% if checklist.status == 'draft' %}
+    <div class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral mb-3">
+        <div class="card-body p-3 md:p-4">
+            <div id="publish-requirements" class="flex items-start gap-3">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-info shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                </svg>
+                <div class="flex-1">
+                    <h3 class="text-sm font-bold">Publishing Requirements</h3>
+                    <ul class="text-xs space-y-1 mt-2">
+                        <li class="flex items-center gap-2">
+                            <span id="req-title-icon" class="{% if checklist.title %}text-success{% else %}text-error{% endif %}">
+                                {% if checklist.title %}✓{% else %}✗{% endif %}
+                            </span>
+                            <span id="req-title-text" class="{% if checklist.title %}line-through opacity-50{% endif %}">Title filled out</span>
+                        </li>
+                        <li class="flex items-center gap-2">
+                            <span id="req-sections-icon" class="{% if checklist.sections.count > 0 %}text-success{% else %}text-error{% endif %}">
+                                {% if checklist.sections.count > 0 %}✓{% else %}✗{% endif %}
+                            </span>
+                            <span id="req-sections-text" class="{% if checklist.sections.count > 0 %}line-through opacity-50{% endif %}">At least 1 section</span>
+                        </li>
+                        <li class="flex items-center gap-2">
+                            <span id="req-items-icon" class="text-error">✗</span>
+                            <span id="req-items-text">All sections have items</span>
+                        </li>
+                    </ul>
+                    <button id="show-missing-btn" class="btn btn-xs btn-outline mt-2" onclick="highlightMissingRequirements()">
+                        Show Me What's Missing
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
 
     {# Collapse/Expand All Controls - Only for unpublished with sections #}
     {% if not checklist.is_published and checklist.sections.count > 0 %}
@@ -253,12 +270,31 @@
         {% endif %}
 
         {% for section in checklist.sections.all %}
-            <div class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral mb-3 checklist-section"
+            <div class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral mb-3 checklist-section {% if checklist.is_published %}opacity-80{% endif %}"
                  data-section-id="{{ section.id }}"
+                 data-item-id="{{ section.id }}"
                  data-section-order="{{ section.order }}">
                 <div class="card-body p-3 md:p-5 lg:p-7">
                         {# Section Header #}
                         <div class="flex items-start gap-3">
+                            {# Section Drag Handle (desktop only, draft only) #}
+                            {% if not checklist.is_published %}
+                            <div class="section-drag-handle text-base-content/30 hover:text-primary cursor-grab active:cursor-grabbing hidden lg:flex items-center pt-1 shrink-0"
+                                 aria-label="Drag to reorder section" title="Drag to reorder">
+                                <svg class="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
+                                    <circle cx="9" cy="4" r="1.5"/><circle cx="15" cy="4" r="1.5"/>
+                                    <circle cx="9" cy="9" r="1.5"/><circle cx="15" cy="9" r="1.5"/>
+                                    <circle cx="9" cy="14" r="1.5"/><circle cx="15" cy="14" r="1.5"/>
+                                    <circle cx="9" cy="19" r="1.5"/><circle cx="15" cy="19" r="1.5"/>
+                                </svg>
+                            </div>
+                            {% elif checklist.is_published %}
+                            <div class="flex items-center text-base-content/20 pt-1 shrink-0">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+                                </svg>
+                            </div>
+                            {% endif %}
                             {# Section Content #}
                             <div class="flex-1 w-full">
                                 <div class="flex flex-col lg:flex-row justify-between items-start gap-4">
@@ -362,7 +398,7 @@
                         </div>
 
                         {# Items List #}
-                        <div class="mt-4 border-t border-base-300 pt-4">
+                        <div class="mt-4 border-t border-base-content/10 pt-4">
                             <div class="flex justify-between items-center mb-3">
                                 <h3 class="font-semibold">Items</h3>
                                 <div class="flex items-center gap-2">
@@ -480,7 +516,7 @@
                                         {% endif %}
                                         {% endwith %}
                                     {% else %}
-                                        <div class="flex items-center gap-2 p-2 {% if item.item_type == 'sub_header' %}bg-base-300/50 border-l-4 border-secondary{% else %}bg-base-200{% endif %} rounded-lg"
+                                        <div class="flex items-center gap-2 p-2 rounded-lg checklist-item-edit"
                                              data-item-id="{{ item.id }}"
                                              data-item-type="{{ item.item_type|default:'item' }}">
                                             {% if item.item_type == 'sub_header' %}
@@ -500,7 +536,7 @@
                                     {# Editable display for draft checklists #}
                                     {% if item.item_type == 'image' %}
                                         {# Inline Image Display - Editable #}
-                                        <div class="checklist-image-item my-4 p-3 bg-secondary/5 border-2 border-secondary/20 rounded-lg hover:bg-secondary/10 transition-colors"
+                                        <div class="checklist-image-item my-2 p-3 rounded-lg transition-colors"
                                              data-item-id="{{ item.id }}"
                                              data-item-order="{{ item.order }}"
                                              data-item-type="image"
@@ -553,7 +589,7 @@
 
                                     {% elif item.item_type == 'text_area' %}
                                         {# Text Area Display - Editable #}
-                                        <div class="checklist-text-area-edit my-4 p-3 bg-info/5 border-2 border-info/20 rounded-lg hover:bg-info/10 transition-colors"
+                                        <div class="checklist-text-area-edit my-2 p-3 rounded-lg transition-colors"
                                              data-item-id="{{ item.id }}"
                                              data-item-order="{{ item.order }}"
                                              data-item-type="text_area"
@@ -627,7 +663,7 @@
                                         {# Trophy Item Display - Editable #}
                                         {% with trophy=trophy_map|dict_get:item.trophy_id %}
                                         {% if trophy %}
-                                        <div class="checklist-trophy-item-edit my-2 p-3 bg-warning/5 border-2 border-warning/20 rounded-lg hover:bg-warning/10 transition-colors"
+                                        <div class="checklist-trophy-item-edit my-2 p-3 rounded-lg transition-colors"
                                              data-item-id="{{ item.id }}"
                                              data-item-order="{{ item.order }}"
                                              data-item-type="trophy"
@@ -683,7 +719,7 @@
                                         {% endwith %}
 
                                     {% else %}
-                                        <div class="flex items-center gap-2 p-2 {% if item.item_type == 'sub_header' %}bg-base-300/50 border-l-4 border-secondary{% else %}bg-base-200{% endif %} rounded-lg checklist-item-edit hover:bg-base-300 transition-colors"
+                                        <div class="flex items-center gap-2 p-2 rounded-lg checklist-item-edit hover:bg-white/[0.04] transition-colors"
                                              data-item-id="{{ item.id }}"
                                              data-item-order="{{ item.order }}"
                                              data-item-type="{{ item.item_type|default:'item' }}"
@@ -735,53 +771,74 @@
                                 {% endfor %}
                             </div>
 
-                            {# UNIFIED ITEM CREATOR - Hidden for published checklists #}
+                            {# INLINE ITEM CREATOR - Hidden for published checklists #}
                             {% if not checklist.is_published %}
-                            <div id="item-creator-{{ section.id }}" class="mt-4 bg-base-200/50 rounded-lg p-4 border border-base-300">
-                                {# Type Selector #}
-                                <div class="flex flex-row items-center gap-3 mb-3">
-                                    <label class="label-text font-semibold shrink-0">Item Type:</label>
-                                    <select id="item-type-select-{{ section.id }}"
-                                            class="select select-bordered select-sm flex-1 max-w-xs unified-item-type-select"
-                                            data-section-id="{{ section.id }}">
-                                        <option value="item" selected>📋 Regular Item</option>
-                                        <option value="sub_header">📌 Sub-Header</option>
-                                        <option value="trophy">🏆 Trophy</option>
-                                        <option value="image">🖼️ Inline Image</option>
-                                        <option value="text_area">📝 Text Area (Markdown)</option>
-                                    </select>
-                                </div>
+                            <div id="item-creator-{{ section.id }}" class="mt-3 inline-item-creator" data-section-id="{{ section.id }}">
+                                {# Collapsed: Add button #}
+                                <button type="button"
+                                        class="btn btn-ghost btn-sm btn-block border border-dashed border-base-content/15
+                                               hover:border-primary/50 hover:bg-primary/5 gap-2 inline-creator-toggle"
+                                        data-section-id="{{ section.id }}">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/>
+                                    </svg>
+                                    Add item
+                                </button>
 
-                                {# Dynamic Input Area #}
-                                <div id="item-input-area-{{ section.id }}" class="mb-3">
-                                    {# Default: Regular Item input #}
-                                    <div class="form-control">
-                                        <input type="text"
-                                               id="item-text-{{ section.id }}"
-                                               class="input input-bordered w-full"
-                                               placeholder="Item text..."
-                                               maxlength="500">
-                                        <label class="label">
-                                            <span class="label-text-alt" id="char-counter-{{ section.id }}">0 / 500</span>
-                                        </label>
+                                {# Expanded: Compact inline creator #}
+                                <div class="inline-creator-form hidden mt-2 p-3 bg-white/[0.03] border border-base-content/5 rounded-lg"
+                                     data-section-id="{{ section.id }}">
+                                    {# Type pills #}
+                                    <div class="flex flex-wrap gap-1.5 mb-3">
+                                        <button type="button" class="btn btn-xs btn-primary creator-type-pill" data-type="item" data-section-id="{{ section.id }}">Item</button>
+                                        <button type="button" class="btn btn-xs btn-ghost border border-base-300 creator-type-pill" data-type="sub_header" data-section-id="{{ section.id }}">Sub-header</button>
+                                        <button type="button" class="btn btn-xs btn-ghost border border-base-300 creator-type-pill" data-type="trophy" data-section-id="{{ section.id }}">Trophy</button>
+                                        <button type="button" class="btn btn-xs btn-ghost border border-base-300 creator-type-pill" data-type="image" data-section-id="{{ section.id }}">Image</button>
+                                        <button type="button" class="btn btn-xs btn-ghost border border-base-300 creator-type-pill" data-type="text_area" data-section-id="{{ section.id }}">Text</button>
                                     </div>
-                                </div>
 
-                                {# Add Button #}
-                                <div class="flex justify-end">
-                                    <button id="add-item-btn-{{ section.id }}"
-                                            class="btn btn-primary btn-sm gap-2 unified-add-item-btn"
+                                    {# Hidden select for JS compatibility #}
+                                    <select id="item-type-select-{{ section.id }}"
+                                            class="hidden unified-item-type-select"
                                             data-section-id="{{ section.id }}">
-                                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
-                                        </svg>
-                                        Add Item
-                                    </button>
+                                        <option value="item" selected>Regular Item</option>
+                                        <option value="sub_header">Sub-Header</option>
+                                        <option value="trophy">Trophy</option>
+                                        <option value="image">Inline Image</option>
+                                        <option value="text_area">Text Area</option>
+                                    </select>
+
+                                    {# Dynamic Input Area #}
+                                    <div id="item-input-area-{{ section.id }}" class="mb-3">
+                                        <div class="form-control">
+                                            <input type="text"
+                                                   id="item-text-{{ section.id }}"
+                                                   class="input input-bordered input-sm w-full"
+                                                   placeholder="Item text..."
+                                                   maxlength="500">
+                                            <label class="label py-0.5">
+                                                <span class="label-text-alt text-xs" id="char-counter-{{ section.id }}">0 / 500</span>
+                                            </label>
+                                        </div>
+                                    </div>
+
+                                    {# Add + Cancel #}
+                                    <div class="flex justify-end gap-2">
+                                        <button type="button" class="btn btn-ghost btn-xs inline-creator-cancel" data-section-id="{{ section.id }}">Cancel</button>
+                                        <button id="add-item-btn-{{ section.id }}"
+                                                class="btn btn-primary btn-xs gap-1 unified-add-item-btn"
+                                                data-section-id="{{ section.id }}">
+                                            <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                                <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/>
+                                            </svg>
+                                            Add
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
 
                             {# Bulk Upload (Collapsible) #}
-                            <div class="collapse collapse-arrow bg-base-200/30 mt-3 border border-base-300/50 rounded-lg">
+                            <div class="collapse collapse-arrow bg-white/[0.03] mt-3 border border-base-content/5 rounded-lg">
                                 <input type="checkbox" id="bulk-toggle-{{ section.id }}" class="peer" />
                                 <div class="collapse-title text-sm font-medium flex items-center gap-2 min-h-0 py-3">
                                     <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-warning" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -821,7 +878,7 @@
                                         </div>
 
                                         {# Preview area #}
-                                        <div class="bulk-preview hidden mt-3 p-3 bg-base-200 rounded-lg border border-base-300">
+                                        <div class="bulk-preview hidden mt-3 p-3 bg-white/[0.03] rounded-lg border border-base-content/5">
                                             <div class="flex justify-between items-center mb-2">
                                                 <span class="text-sm font-semibold">Preview</span>
                                                 <span class="text-xs text-base-content/60 bulk-preview-count"></span>
@@ -860,6 +917,7 @@
     </div>
     {% endif %}
 </div>
+</div>{# /checklist-edit-container #}
 
 {# Delete Confirmation Modal #}
 <dialog id="delete-confirm-modal" class="modal">
@@ -881,7 +939,7 @@
 
 {# Item Template (hidden, for JS cloning) #}
 <template id="item-template">
-    <div class="flex items-center gap-2 p-2 bg-base-200 rounded-lg checklist-item-edit"
+    <div class="flex items-center gap-2 p-2 rounded-lg checklist-item-edit"
          data-item-id=""
          data-item-order=""
          data-item-type="item">
@@ -1034,6 +1092,44 @@ Use fire attacks</pre>
         <button>close</button>
     </form>
 </dialog>
+
+{# ═══ Sticky Action Toolbar ═══ #}
+{% if not checklist.is_deleted %}
+<div id="sticky-action-toolbar"
+     class="fixed bottom-0 left-0 right-0 z-40 bg-base-200/95 backdrop-blur-sm
+            border-t-2 border-base-300 shadow-[0_-4px_20px_rgba(0,0,0,0.3)]
+            px-3 py-2 md:px-6 transition-transform duration-300">
+    <div class="max-w-5xl mx-auto flex items-center justify-between gap-3">
+        <span class="flex items-center gap-1.5 text-xs text-base-content/50">
+            <span class="toolbar-status-dot w-2 h-2 rounded-full bg-success"></span>
+            <span class="toolbar-status-text hidden sm:inline">Saved</span>
+        </span>
+        <div class="flex items-center gap-2">
+            <button id="save-checklist-btn" class="btn btn-ghost btn-sm gap-1">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"/>
+                </svg>
+                <span class="hidden md:inline">Save All</span>
+            </button>
+            <a href="{% url 'guide_detail' checklist.id %}" class="btn btn-ghost btn-sm gap-1 hidden md:inline-flex">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
+                </svg>
+                Preview
+            </a>
+            {% if checklist.status == 'draft' %}
+            <button id="toolbar-publish-btn" class="btn btn-success btn-sm gap-1">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                </svg>
+                <span class="hidden md:inline">Publish</span>
+            </button>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endif %}
 {% endblock %}
 
 {% block js_scripts %}

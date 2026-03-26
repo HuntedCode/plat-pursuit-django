@@ -360,10 +360,6 @@ class ChecklistEditView(LoginRequiredMixin, ProfileHotbarMixin, DetailView):
         breadcrumb.append({'text': 'Edit'})
         context['breadcrumb'] = breadcrumb
 
-        # Set background image from concept if available
-        if checklist.concept and checklist.concept.bg_url:
-            context['image_urls'] = {'bg_url': checklist.concept.bg_url}
-
         track_page_view('guide_edit', checklist.id, self.request)
         return context
 
