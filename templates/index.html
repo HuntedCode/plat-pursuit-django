@@ -25,8 +25,8 @@
         {% include 'partials/index/featured-games.html' with items=featuredGames %}
 
         <!-- Lower Content Grid -->
-        <div class="grid grid-cols-3 gap-6">
-            <div class="col-span-2 space-y-8">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div class="md:col-span-2 space-y-8">
                 {% include 'partials/index/latest-badges.html' with items=latestBadges %}
                 {# Checklists showcase hidden during redesign #}
                 {% include 'partials/index/playing-now.html' with items=playingNow %}
@@ -43,7 +43,4 @@
 {% endblock %}
 
 {% block js_scripts %}
-<script>
-    PlatPursuit.ZoomScaler.init();
-</script>
 {% endblock %}

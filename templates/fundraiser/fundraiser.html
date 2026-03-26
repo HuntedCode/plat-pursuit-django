@@ -19,7 +19,7 @@
 
     {# ─── Ended Celebration Banner ────────────────────────────────────── #}
     {% if is_ended and not is_staff_preview %}
-        <div class="card bg-base-100 border-4 border-success shadow-success/20 shadow-lg">
+        <div class="card bg-base-100 border-2 border-success shadow-success/20 shadow-lg">
             <div class="card-body text-center space-y-2 py-5">
                 <h2 class="text-2xl lg:text-3xl font-bold italic text-success">Mission Accomplished!</h2>
                 <p class="text-base-content/70 italic text-sm lg:text-base max-w-2xl mx-auto">
@@ -47,10 +47,10 @@
     {% endif %}
 
     {# ─── Hero Section ────────────────────────────────────────────────── #}
-    <section class="card bg-base-100 border-4 border-base-300 shadow-lg shadow-neutral transition-all duration-300 hover:border-primary hover:shadow-primary">
+    <section class="card bg-base-100 border-2 border-base-300 shadow-lg shadow-neutral transition-all duration-300 hover:border-primary hover:shadow-primary">
         <div class="card-body text-center py-6 lg:py-8">
             <div class="max-w-3xl mx-auto space-y-3">
-                <h1 class="text-3xl lg:text-5xl font-bold italic pr-1">
+                <h1 class="text-xl md:text-3xl lg:text-5xl font-bold italic pr-1">
                     {{ fundraiser.name }}
                 </h1>
                 <p class="text-base-content/60 italic text-sm lg:text-base">
@@ -63,14 +63,14 @@
                 {% endif %}
                 {% if is_live and user.is_authenticated %}
                     <div class="pt-2">
-                        <button type="button" id="hero-donate-cta" class="btn btn-primary btn-lg shadow-primary/30 shadow-md hover:shadow-primary/50 hover:shadow-lg transition-all duration-300">
+                        <button type="button" id="hero-donate-cta" class="btn btn-primary btn-sm md:btn-md lg:btn-lg shadow-primary/30 shadow-md hover:shadow-primary/50 hover:shadow-lg transition-all duration-300">
                             <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
                             Support the Cause
                         </button>
                     </div>
                 {% elif is_live and not user.is_authenticated %}
                     <div class="pt-2">
-                        <a href="{% url 'account_signup' %}?next={% url 'fundraiser' fundraiser.slug %}" class="btn btn-primary btn-lg shadow-primary/30 shadow-md hover:shadow-primary/50 hover:shadow-lg transition-all duration-300">
+                        <a href="{% url 'account_signup' %}?next={% url 'fundraiser' fundraiser.slug %}" class="btn btn-primary btn-sm md:btn-md lg:btn-lg shadow-primary/30 shadow-md hover:shadow-primary/50 hover:shadow-lg transition-all duration-300">
                             <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
                             Join the Hunt
                         </a>
@@ -81,8 +81,8 @@
     </section>
 
     {# ─── Campaign Stats (social proof) ───────────────────────────────── #}
-    <div class="card bg-base-100 border-4 border-base-300 shadow-md shadow-neutral">
-        <div class="stats stats-horizontal w-full">
+    <div class="card bg-base-100 border-2 border-base-300 shadow-md shadow-neutral">
+        <div class="stats stats-vertical md:stats-horizontal w-full">
             <div class="stat place-items-center">
                 <div class="stat-figure text-success">
                     <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" x2="12" y1="2" y2="22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
@@ -138,7 +138,7 @@
 
     {# ─── My Contributions (for authenticated users) ──────────────────── #}
     {% if has_contributions %}
-        <section class="card bg-base-100 border-4 border-primary/30 shadow-lg shadow-neutral"
+        <section class="card bg-base-100 border-2 border-primary/30 shadow-lg shadow-neutral"
                  data-donation-ids="{{ donation_ids_with_picks }}">
             <div class="card-body space-y-4">
                 <div class="flex items-center justify-between flex-wrap gap-2">
@@ -150,7 +150,7 @@
                 </div>
 
                 {# ── Donation Summary ────────────────────────────── #}
-                <div class="grid grid-cols-3 gap-3">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
                     <div class="bg-base-200/80 rounded-lg p-3 text-center space-y-1">
                         <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 mx-auto text-success" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" x2="12" y1="2" y2="22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
                         <div class="text-lg font-bold text-success">${{ total_donated|floatformat:0 }}</div>
@@ -264,7 +264,7 @@
 
     {# ─── Donation Form ───────────────────────────────────────────────── #}
     {% if is_live and user.is_authenticated %}
-        <section class="card bg-base-100 border-4 border-base-300 shadow-lg shadow-neutral">
+        <section class="card bg-base-100 border-2 border-base-300 shadow-lg shadow-neutral">
             <div class="card-body space-y-6">
                 <div>
                     <h2 class="card-title text-xl lg:text-2xl italic">Make a Donation</h2>
@@ -280,11 +280,11 @@
                     {# Amount Selection #}
                     <div class="bg-base-200/60 rounded-xl p-4 space-y-4">
                         <label class="text-sm font-semibold">Donation Amount (USD)</label>
-                        <div class="grid grid-cols-4 gap-3">
-                            <button type="button" class="btn btn-outline btn-lg amount-preset transition-all duration-200" data-amount="5">$5</button>
-                            <button type="button" class="btn btn-outline btn-lg amount-preset transition-all duration-200" data-amount="10">$10</button>
-                            <button type="button" class="btn btn-outline btn-lg amount-preset transition-all duration-200" data-amount="25">$25</button>
-                            <button type="button" class="btn btn-outline btn-lg amount-preset transition-all duration-200" data-amount="50">$50</button>
+                        <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+                            <button type="button" class="btn btn-outline btn-md md:btn-lg amount-preset transition-all duration-200" data-amount="5">$5</button>
+                            <button type="button" class="btn btn-outline btn-md md:btn-lg amount-preset transition-all duration-200" data-amount="10">$10</button>
+                            <button type="button" class="btn btn-outline btn-md md:btn-lg amount-preset transition-all duration-200" data-amount="25">$25</button>
+                            <button type="button" class="btn btn-outline btn-md md:btn-lg amount-preset transition-all duration-200" data-amount="50">$50</button>
                         </div>
                         <div class="flex items-center gap-2">
                             <span class="text-lg font-bold">$</span>
@@ -334,7 +334,7 @@
                     </div>
 
                     {# Submit #}
-                    <button type="button" id="donate-btn" class="btn btn-primary btn-lg btn-block hover:shadow-primary/30 hover:shadow-lg transition-all duration-300" disabled>
+                    <button type="button" id="donate-btn" class="btn btn-primary btn-md md:btn-lg btn-block hover:shadow-primary/30 hover:shadow-lg transition-all duration-300" disabled>
                         <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
                         <span id="donate-btn-text">Donate</span>
                     </button>
@@ -343,7 +343,7 @@
         </section>
     {% elif is_live and not user.is_authenticated %}
         {# ── Unauthenticated CTA ──────────────────────────────────────── #}
-        <section class="card bg-base-100 border-4 border-base-300 shadow-md shadow-neutral">
+        <section class="card bg-base-100 border-2 border-base-300 shadow-md shadow-neutral">
             <div class="card-body text-center space-y-3">
                 <h2 class="card-title text-xl lg:text-2xl justify-center italic">Join the Hunt</h2>
                 <p class="text-base-content/70 text-sm">Create a PlatPursuit account to donate and claim badge artwork.</p>
@@ -449,7 +449,6 @@
 <script>
     document.addEventListener('DOMContentLoaded', function() {
         PlatPursuit.FundraiserPage.init();
-        PlatPursuit.ZoomScaler.init();
     });
 </script>
 {% endblock %}
