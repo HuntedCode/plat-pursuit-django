@@ -147,6 +147,9 @@
                     Create Guide
                 </button>
             </div>
+
+            {# Guidelines Agreement Modal - needed here since comments.js is not loaded on game detail #}
+            {% include 'partials/guidelines_agreement_modal.html' %}
             {% else %}
             {# Guidelines Agreed - Normal CTA #}
             <div class="mt-6 p-4 bg-base-100 border-2 border-base-300 rounded-box flex flex-row items-center justify-between gap-4" id="create-checklist-cta">
@@ -184,29 +187,27 @@
     </div>
 
     <script>
-    // Checklist guidelines handling
+    // Checklist guidelines handling (self-contained, no comments.js dependency)
     (function() {
-        const showGuidelinesBtn = document.getElementById('show-guidelines-btn');
-        const showGuidelinesBtnEmpty = document.getElementById('show-guidelines-btn-empty');
         const modal = document.getElementById('guidelines-agreement-modal');
         const guidelinesBanner = document.getElementById('checklist-guidelines-banner');
         const createCTA = document.getElementById('create-checklist-cta');
+        const showGuidelinesBtn = document.getElementById('show-guidelines-btn');
+        const showGuidelinesBtnEmpty = document.getElementById('show-guidelines-btn-empty');
+        const agreeCheckbox = document.getElementById('agree-to-guidelines');
         const confirmBtn = document.getElementById('confirm-guidelines-btn');
 
+        if (!modal) return; // No modal means user already agreed or is not authenticated
+
         function enableChecklistCreation() {
-            // Hide the guidelines banner
             if (guidelinesBanner) {
                 guidelinesBanner.style.display = 'none';
             }
 
-            // Enable the create checklist button
             if (createCTA) {
-                // Remove opacity and enable button
                 createCTA.classList.remove('opacity-50');
-
                 const disabledBtn = createCTA.querySelector('.btn-disabled');
                 if (disabledBtn) {
-                    // Replace disabled button with active link
                     const newBtn = document.createElement('a');
                     newBtn.href = '{% url "guide_create" game.concept.id game.np_communication_id %}';
                     newBtn.className = 'btn btn-secondary';
@@ -219,75 +220,54 @@
                     disabledBtn.parentNode.replaceChild(newBtn, disabledBtn);
                 }
             }
-
-            // Update hasAgreedToGuidelines if it exists (from comments.js)
-            if (typeof hasAgreedToGuidelines !== 'undefined') {
-                hasAgreedToGuidelines = true;
-            }
         }
 
-        // Listen for successful guidelines agreement
-        // We'll listen for the modal closing after the confirm button is clicked
-        let checklistPending = false;
+        // Wire up checkbox to enable/disable confirm button
+        if (agreeCheckbox && confirmBtn) {
+            agreeCheckbox.addEventListener('change', function() {
+                confirmBtn.disabled = !this.checked;
+            });
+        }
 
-        // Handle "Review Guidelines" button click
-        if (showGuidelinesBtn) {
-            showGuidelinesBtn.addEventListener('click', function() {
-                checklistPending = true;
-                if (modal) {
-                    modal.showModal();
+        // Define confirmGuidelines for the modal's onclick handler
+        window.confirmGuidelines = async function() {
+            if (!agreeCheckbox || !agreeCheckbox.checked) return;
+            try {
+                const data = await PlatPursuit.API.post('/api/v1/guidelines/agree/', {});
+                if (data.success) {
+                    modal.close();
+                    agreeCheckbox.checked = false;
+                    confirmBtn.disabled = true;
+                    enableChecklistCreation();
                 }
-            });
-        }
-
-        // Handle "Create Checklist" button in empty state
-        if (showGuidelinesBtnEmpty) {
-            showGuidelinesBtnEmpty.addEventListener('click', function() {
-                checklistPending = true;
-                if (modal) {
-                    modal.showModal();
-                }
-            });
-        }
-
-        // Monitor for when the modal closes after agreement
-        if (modal && confirmBtn) {
-            // Create a MutationObserver to watch for when the modal closes
-            const observer = new MutationObserver(function(mutations) {
-                mutations.forEach(function(mutation) {
-                    if (mutation.attributeName === 'open') {
-                        // Modal was closed
-                        if (!modal.hasAttribute('open') && checklistPending) {
-                            // Check if the user agreed
-                            const commentSection = document.getElementById('comment-section');
-                            if (commentSection) {
-                                const agreed = commentSection.dataset.guidelinesAgreed === 'true';
-                                if (agreed || (typeof hasAgreedToGuidelines !== 'undefined' && hasAgreedToGuidelines)) {
-                                    enableChecklistCreation();
-                                    checklistPending = false;
-                                }
-                            }
-                        }
-                    }
-                });
-            });
-
-            observer.observe(modal, { attributes: true });
-        }
-
-        // Also hook into the confirmGuidelines function's success
-        // Store original callback if it exists
-        const originalCallback = window.pendingCommentSubmission;
-
-        // Override it to call our function
-        window.pendingCommentSubmission = function() {
-            if (checklistPending) {
-                enableChecklistCreation();
-                checklistPending = false;
-            } else if (originalCallback && typeof originalCallback === 'function') {
-                originalCallback();
+            } catch (error) {
+                console.error('Error agreeing to guidelines:', error);
+                const errData = await error.response?.json().catch(() => null);
+                PlatPursuit.ToastManager.show(errData?.error || 'An error occurred. Please try again.', 'error');
             }
         };
+
+        // Button click handlers
+        if (showGuidelinesBtn) {
+            showGuidelinesBtn.addEventListener('click', function() { modal.showModal(); });
+        }
+        if (showGuidelinesBtnEmpty) {
+            showGuidelinesBtnEmpty.addEventListener('click', function() { modal.showModal(); });
+        }
+
+        // Auto-open modal when redirected with #show-guidelines hash
+        if (window.location.hash === '#show-guidelines') {
+            document.addEventListener('DOMContentLoaded', function() {
+                // Expand the guides section (triggers checklist.js toggle + load)
+                const toggleBtn = document.getElementById('checklist-toggle');
+                if (toggleBtn) {
+                    toggleBtn.click();
+                }
+                modal.showModal();
+                // Clean up the hash so it doesn't re-trigger on refresh
+                history.replaceState(null, '', window.location.pathname + window.location.search);
+            });
+        }
     })();
     </script>
 </section>
