@@ -268,16 +268,19 @@
 {% endblock %}
 
 {% block content %}
-<div class="max-w-4xl mx-auto py-8">
-    <!-- Header -->
-    <div class="text-center mb-8">
-        <h1 class="text-3xl font-bold text-primary mb-2">Monthly Recap</h1>
-        <p class="text-base-content/70">{{ month_name }} {{ year }}</p>
+<div class="max-w-4xl mx-auto py-2">
+    {# Header #}
+    <div class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral mb-3">
+        <div class="card-body p-3 md:p-4 items-center text-center">
+            <h1 class="text-lg md:text-xl lg:text-2xl font-bold">Monthly Recap</h1>
+            <p class="text-xs md:text-sm text-base-content/50 italic pr-1">{{ month_name }} {{ year }}</p>
+        </div>
     </div>
 
-    <!-- Month Selector Calendar (Premium Feature) -->
+    {# Month Selector Calendar (Premium Feature) #}
     {% if calendar_data.years %}
-    <div class="card bg-base-200 shadow-xl p-6 mb-6" id="month-calendar-card">
+    <div class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral mb-3" id="month-calendar-card">
+        <div class="card-body p-3 md:p-5 lg:p-7">
         <!-- Section Header -->
         <div class="flex items-center justify-between mb-4">
             <h3 class="text-lg font-semibold">Select a Month</h3>
@@ -351,20 +354,19 @@
             {% endfor %}
         </div>
 
-        <!-- Premium Upsell (non-premium users only) -->
+        {# Premium Upsell (non-premium users only) #}
         {% if not is_premium %}
-        <div class="mt-4 p-3 bg-base-300 rounded-lg">
-            <p class="text-sm text-base-content/70 mb-2">
+        <div class="mt-4 p-3 bg-white/[0.03] border border-base-content/5 rounded-lg">
+            <p class="text-xs text-base-content/50 mb-2">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 inline mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
                 <strong>Last month is free!</strong> Upgrade to Premium to view your full recap history!
             </p>
-            <a href="{% url 'subscribe' %}" class="btn btn-sm btn-primary">
-                Upgrade to Premium
-            </a>
+            <a href="{% url 'subscribe' %}" class="btn btn-xs btn-primary">Upgrade to Premium</a>
         </div>
         {% endif %}
+        </div>{# /card-body #}
     </div>
     {% endif %}
 
@@ -373,9 +375,9 @@
     <!-- Recap data for JS -->
     <script id="recap-data" type="application/json">{{ recap_json|safe }}</script>
 
-    <!-- Main Recap Container -->
+    {# Main Recap Container #}
     <div id="recap-container"
-         class="recap-container card bg-base-200 shadow-xl"
+         class="recap-container card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral"
          data-year="{{ year }}"
          data-month="{{ month }}">
 
@@ -409,22 +411,22 @@
         </div>
     </div>
 
-    <!-- Share Section (hidden until summary slide) -->
-    <div id="share-section" class="share-section mt-8 card bg-base-200 shadow-xl p-6">
+    {# Share Section (hidden until summary slide) #}
+    <div id="share-section" class="share-section mt-3 card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral p-3 md:p-5 lg:p-7">
         <h2 class="text-xl font-bold text-center mb-4">Share Your Recap</h2>
         <div id="share-content">
             <!-- Populated by JS when recap loads -->
         </div>
     </div>
 
-    <!-- Month Picker (for premium users with history) -->
+    {# Month Picker (for premium users with history) #}
     {% if available_months|length > 1 %}
-    <div class="mt-8 card bg-base-200 shadow-xl p-6">
+    <div class="mt-3 card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral p-3 md:p-5 lg:p-7">
         <h3 class="text-lg font-semibold mb-4">View Previous Recaps</h3>
         <div class="flex flex-wrap gap-2">
             {% for m in available_months %}
             <a href="/recap/{{ m.year }}/{{ m.month }}/"
-               class="btn btn-sm {% if m.year == year and m.month == month %}btn-primary{% else %}btn-ghost{% endif %}">
+               class="btn btn-sm {% if m.year == year and m.month == month %}btn-primary{% else %}btn-ghost border border-base-300{% endif %}">
                 {{ m.short_month_name }} {{ m.year }}
                 {% if m.is_premium_required and not is_premium %}
                 <span class="badge badge-warning badge-xs ml-1">PRO</span>
@@ -436,8 +438,8 @@
     {% endif %}
 </div>
 
-<!-- No Activity State (month exists but no trophies earned) -->
-<div id="no-activity-state" class="{% if not no_activity %}hidden{% endif %} max-w-md mx-auto py-16 text-center">
+{# No Activity State (month exists but no trophies earned) #}
+<div id="no-activity-state" class="{% if not no_activity %}hidden{% endif %} max-w-md mx-auto py-8 md:py-16 text-center">
     <div class="text-6xl mb-4">📭</div>
     <h2 class="text-xl font-bold mb-2">No Activity This Month</h2>
     <p class="text-base-content/70 mb-4">
@@ -452,8 +454,8 @@
     </div>
 </div>
 
-<!-- Error State (hidden by default) -->
-<div id="error-state" class="hidden max-w-md mx-auto py-16 text-center">
+{# Error State (hidden by default) #}
+<div id="error-state" class="hidden max-w-md mx-auto py-8 md:py-16 text-center">
     <div class="text-6xl mb-4">:(</div>
     <h2 class="text-xl font-bold mb-2">Couldn't Load Your Recap</h2>
     <p class="text-base-content/70 mb-4" id="error-message">Something went wrong.</p>
@@ -477,7 +479,6 @@
 <script src="{% static 'js/month-selector.js' %}"></script>
 
 <script>
-    PlatPursuit.ZoomScaler.init();
     document.addEventListener('DOMContentLoaded', function() {
         // Initialize month selector calendar
         {% if calendar_data.years %}
