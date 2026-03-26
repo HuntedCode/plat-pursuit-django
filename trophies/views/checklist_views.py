@@ -508,14 +508,6 @@ class MyShareablesView(LoginRequiredMixin, ProfileHotbarMixin, TemplateView):
         context['total_platinums'] = earned_platinums.count()
         context['shovelware_count'] = shovelware_count
 
-        # Active tab (for future extensibility)
-        context['active_tab'] = self.request.GET.get('tab', 'platinum_images')
-
-        # Profile card settings for the sig management UI
-        from trophies.models import ProfileCardSettings
-        card_settings, _ = ProfileCardSettings.objects.get_or_create(profile=profile)
-        context['card_settings'] = card_settings
-
         # Add available themes for color grid modal (include game art for platinum cards)
         from trophies.themes import get_available_themes_for_grid
         context['available_themes'] = get_available_themes_for_grid(include_game_art=True, grouped=True)
