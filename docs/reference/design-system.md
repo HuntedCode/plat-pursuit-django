@@ -123,10 +123,10 @@ Dashboard-style labels for groups within a card:
 
 ### Stat Cells (number + label)
 
-Used for trophy counts, stats grids, tier breakdowns.
+Used for trophy counts, stats grids, tier breakdowns. Uses the **theme-safe contrast** pattern so cells remain visible on both light and dark themes.
 
 ```html
-<div class="bg-base-300/50 rounded-lg p-1.5 md:p-3 text-center">
+<div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-1.5 md:p-3 text-center">
     <div class="text-lg md:text-xl lg:text-2xl font-black text-primary">42</div>
     <div class="text-xs text-base-content/50 font-medium">Label</div>
 </div>
@@ -135,7 +135,7 @@ Used for trophy counts, stats grids, tier breakdowns.
 For smaller stat cells (summary rows):
 
 ```html
-<div class="flex flex-col items-center gap-0.5 p-1 md:p-2 rounded-lg bg-base-300/40">
+<div class="flex flex-col items-center gap-0.5 p-1 md:p-2 rounded-lg bg-white/[0.03] border border-base-content/5">
     <span class="font-bold text-sm lg:text-base">99</span>
     <span class="text-xs text-base-content/50">Label</span>
 </div>
@@ -146,7 +146,7 @@ For smaller stat cells (summary rows):
 Used in premium analytics modules where multiple stat groups sit side by side.
 
 ```html
-<div class="bg-base-300/40 rounded-lg p-2 md:p-3 lg:p-4">
+<div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-2 md:p-3 lg:p-4">
     <!-- Panel content -->
 </div>
 ```
@@ -156,7 +156,7 @@ Used in premium analytics modules where multiple stat groups sit side by side.
 Used for game lists, badge lists, activity feeds, leaderboard entries.
 
 ```html
-<div class="flex items-center gap-2 md:gap-3 p-2 rounded-lg bg-base-300/40 hover:bg-base-300/60 transition-colors">
+<div class="flex items-center gap-2 md:gap-3 p-2 rounded-lg bg-white/[0.03] border border-base-content/5 hover:bg-white/[0.06] transition-colors">
     <!-- Icon (shrink-0) -->
     <div class="flex-1 min-w-0">
         <!-- Text content with line-clamp-1 pr-1 -->
@@ -215,7 +215,7 @@ Compact card for search, sort, and filter controls. Collapsible drawer for secon
         </div>
 
         <!-- Collapsible filters -->
-        <details class="collapse collapse-arrow bg-base-300/30 rounded-lg mt-2 border border-base-content/10">
+        <details class="collapse collapse-arrow bg-white/[0.03] rounded-lg mt-2 border border-base-content/10">
             <summary class="collapse-title min-h-0 py-2 px-3 text-sm font-semibold text-base-content/60">
                 Filters
             </summary>
@@ -299,7 +299,7 @@ For game cards, badge cards, and similar grid items. Miniature versions of dashb
             transition-all duration-300 hover:shadow-lg hover:shadow-{color}/30 hover:border-{color}
             group p-1 md:p-1.5">
     <!-- Image -->
-    <figure class="relative aspect-square bg-base-300/40 rounded-lg overflow-hidden">
+    <figure class="relative aspect-square bg-white/[0.03] border border-base-content/5 rounded-lg overflow-hidden">
         <img class="w-full h-full object-cover" />
     </figure>
 
@@ -309,7 +309,7 @@ For game cards, badge cards, and similar grid items. Miniature versions of dashb
         <!-- Badges, tags -->
 
         <!-- Stats panel (pushed to bottom) -->
-        <div class="bg-base-300/40 rounded-lg p-1 md:p-1.5 mt-auto">
+        <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-1 md:p-1.5 mt-auto">
             <!-- Stat rows separated by border-t border-base-content/10 -->
         </div>
     </div>
@@ -329,12 +329,51 @@ For list view variants of browse pages.
         <div class="flex flex-col md:flex-row md:items-center gap-2 md:gap-4">
             <!-- Image + Title (always horizontal, flex-1 min-w-0) -->
             <!-- Stats section (stacks below on mobile, inline on tablet+) -->
-            <!--   Mobile: bg-base-300/30 rounded-lg p-1.5 -->
-            <!--   Tablet+: md:bg-transparent md:rounded-none md:p-0 -->
+            <!--   Mobile: bg-white/[0.03] border border-base-content/5 rounded-lg p-1.5 -->
+            <!--   Tablet+: md:bg-transparent md:border-0 md:rounded-none md:p-0 -->
         </div>
     </div>
 </div>
 ```
+
+### Premium CTA Cards
+
+Used when a feature is limited for free users (game lists, badge showcase, custom themes). Responsive column-to-row layout with star icon, feature checklist, and upgrade button.
+
+```html
+<div class="card bg-base-200/90 border-2 border-primary/20 shadow-lg shadow-neutral">
+    <div class="card-body p-3 md:p-5">
+        <div class="flex flex-col md:flex-row items-center gap-3 md:gap-4">
+            <div class="text-primary shrink-0">
+                <svg class="w-8 h-8 md:w-10 md:h-10"><!-- star icon --></svg>
+            </div>
+            <div class="flex-1 text-center md:text-left">
+                <h3 class="font-bold text-base md:text-lg">Headline</h3>
+                <p class="text-xs text-base-content/50 mb-2">Supporting text.</p>
+                <div class="flex flex-wrap justify-center md:justify-start gap-x-4 gap-y-1 text-xs md:text-sm text-base-content/60">
+                    <span class="flex items-center gap-1">
+                        <svg class="w-3.5 h-3.5 text-success shrink-0"><!-- checkmark --></svg>
+                        Feature
+                    </span>
+                    <!-- More features... -->
+                </div>
+            </div>
+            <a href="..." class="btn btn-sm md:btn-md btn-primary shrink-0">Upgrade to Premium</a>
+        </div>
+    </div>
+</div>
+```
+
+Key details: `border-primary/20` (not `border-base-300`) for the accent. Content centers on mobile, left-aligns on tablet+. Button shrinks to `btn-sm` on mobile.
+
+### Navbar/Footer Theme Seam
+
+The navbar and footer use a `border-primary/30` border to create a visual connection between the themed page content and the neutral navigation frame. Without this, there is a jarring disconnect when using gradient or colored themes.
+
+- **Navbar**: `border-b-2 border-primary/30` on the bottom edge
+- **Footer**: `border-t-2 border-primary/30` on the top edge
+
+This is applied globally and requires no per-page configuration.
 
 ### Empty States
 
@@ -354,21 +393,43 @@ Wrap in a card for consistency with surrounding content.
 
 ## Color and Contrast Tokens
 
+### Theme-Safe Inner Elements
+
+All inner elements (stat cells, panels, list rows, image containers) use the **theme-safe contrast** pattern. This ensures visibility across both light and dark themes, including gradient-background themes where `bg-base-300/*` backgrounds became invisible.
+
+| Purpose | Class | Notes |
+|---------|-------|-------|
+| Stat cell / inner panel | `bg-white/[0.03] border border-base-content/5` | Theme-safe: visible on all themes |
+| Interactive row hover | `hover:bg-white/[0.06]` | Subtle hover lift for clickable inner rows |
+| Table header | `bg-white/[0.03] border-b border-base-content/5` | Bottom-border-only variant for table headers |
+
+**Why not `bg-base-300/*`?** On dark gradient themes (e.g., deep navy, charcoal), `bg-base-300/30|40|50` blends directly into the background and becomes invisible. `bg-white/[0.03]` creates a consistent, subtle lift regardless of theme. The `border-base-content/5` border adds definition without being heavy.
+
+> **Exception: artwork overlay pages** (game detail, badge detail) still use `bg-base-300/35` and `hover:bg-base-300/50` for inner cells. These pages have variable game art backgrounds, and the white overlay pattern looks wrong against bright artwork. See the "Cards over game artwork backgrounds" variant in Card Anatomy above.
+
+### Card and Page-Level Tokens
+
 | Purpose | Class | Notes |
 |---------|-------|-------|
 | Card background | `bg-base-200/90` | Slightly transparent, defined against page bg |
-| Inner cell background | `bg-base-300/50` | Stat cells, day cells |
-| Inner panel/row background | `bg-base-300/40` | List items, analytics panels |
-| Mobile stats panel | `bg-base-300/30` | Subtle panel for collapsed mobile stats |
-| Internal dividers | `border-base-content/10` | Visible in dark themes (content-based, not bg-based) |
 | Card outer border | `border-2 border-base-300` | Thicker, uses background scale (intentional) |
 | Card shadow (default) | `shadow-md shadow-neutral` | Browse cards, list items |
 | Card shadow (emphasis) | `shadow-lg shadow-neutral` | Content modules, page headers |
+| Card stacking gap | `mb-3` | Between sequential cards on a page |
 | Hover glow | `hover:shadow-lg hover:shadow-{color}/30` | Colored glow on browse cards |
+| Premium CTA border | `border-2 border-primary/20` | Accent border for premium upsell cards |
+| Navbar/footer seam | `border-primary/30` | `border-b-2` on navbar, `border-t-2` on footer |
+
+### Text and Divider Tokens
+
+| Purpose | Class | Notes |
+|---------|-------|-------|
+| Internal dividers | `border-base-content/10` | Visible in dark themes (content-based, not bg-based) |
 | Muted text | `text-base-content/50` | Labels, secondary info |
 | Very muted text | `text-base-content/40` | Timestamps, hints |
 | Ghost text | `text-base-content/30` | Tertiary info, placeholders |
 | Dot separator | `text-base-content/15` or `text-base-content/20` | Between inline stat groups |
+| Pipe separator | `text-base-content/15` | Vertical bar between metadata items |
 
 ### Divider Pattern
 
@@ -526,6 +587,8 @@ These are **page-specific** decisions, not site-wide tokens:
 
 ## Gotchas and Pitfalls
 
+- **Theme-safe contrast is mandatory**: Never use `bg-base-300/30|40|50` for inner elements on normal pages. These become invisible on dark gradient themes. Always use `bg-white/[0.03] border border-base-content/5`. The only exception is artwork overlay pages (game detail, badge detail) which use `bg-base-300/35` because the white pattern looks wrong against bright game art.
+- **Legacy `bg-base-300/*` remnants**: Some older pages (recap slides, platinum grid, checklist editor) still use `bg-base-300/50`. These should be migrated to the theme-safe pattern when those pages are redesigned. Do not copy the old pattern into new work.
 - **Italic text clipping**: Always add `pr-1` when combining `line-clamp-*` with `italic`. The italic glyph slant gets clipped by line-clamp's overflow hidden.
 - **`sr-only` vs `hidden` for form inputs**: Toggle-button checkboxes must use `sr-only` (invisible but still submits). `hidden` applies `display: none` which prevents form submission entirely.
 - **ZoomScaler coexistence**: During the redesign, some pages still use `ZoomScaler.init()`. The zoom wrapper divs in `base.html` are inert without `.zoom-active`, so redesigned and legacy pages coexist safely.
@@ -534,6 +597,7 @@ These are **page-specific** decisions, not site-wide tokens:
 - **Touch targets**: Interactive elements should be at least 44px on all sizes. DaisyUI `btn-xs` and `toggle-sm` are smaller but acceptable for secondary controls.
 - **Hover glow vs scale**: Prefer colored shadow glow (`hover:shadow-lg hover:shadow-{color}/30`) over `hover:scale-105`. Scale causes layout shifts and feels heavy at tight grid gaps.
 - **Container class at 640px**: Tailwind's `.container` snaps to `max-width: 640px` at the `sm` breakpoint, which can cause a visual jump. On pages still using ZoomScaler, the zoom CSS overrides this. On redesigned pages, the effect is minimal since content is typically narrower than 640px on phones.
+- **Card stacking**: Use `mb-3` between sequential cards on a page. Do not use `mt-6` or larger margins from the old `<section>` wrapper pattern.
 
 ## Related Docs
 

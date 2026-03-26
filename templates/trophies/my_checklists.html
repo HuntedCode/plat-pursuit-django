@@ -4,20 +4,19 @@
 {% block robots %}noindex, nofollow{% endblock %}
 
 {% block content %}
-<section class="shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 w-full p-0 lg:p-4">
-    {% include 'partials/breadcrumb.html' with items=breadcrumb %}
+{% include 'partials/breadcrumb.html' with items=breadcrumb %}
 
-    <div class="card bg-base-100 border-4 border-base-300 shadow-md shadow-neutral">
-        <div class="card-body">
-            <h1 class="text-2xl lg:text-3xl font-bold">My Guides</h1>
-            <p class="text-base-content/70">Manage your guides and track progress on others.</p>
-        </div>
+<div class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral mb-3">
+    <div class="card-body p-3 md:p-4">
+        <h1 class="text-2xl lg:text-3xl font-bold">My Guides</h1>
+        <p class="text-base-content/70">Manage your guides and track progress on others.</p>
     </div>
-</section>
+</div>
 
 {# Tabs #}
-<section class="shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 w-full p-0 lg:p-4 mt-6">
-    <div class="tabs tabs-boxed bg-base-100 p-2">
+<div class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral mb-3">
+    <div class="card-body p-3 md:p-5 lg:p-7">
+    <div class="tabs tabs-boxed bg-base-200/90 p-2">
         <a href="?tab=drafts" class="tab tab-lg {% if active_tab == 'drafts' %}tab-active{% endif %}">
             My Drafts
             {% if drafts %}
@@ -46,7 +45,7 @@
                 <div class="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 p-4">
                     {% for checklist in drafts %}
                         <a href="{% url 'guide_edit' checklist.id %}"
-                           class="card bg-base-200 border-2 border-warning/30 rounded-2xl shadow-lg shadow-neutral transition-all duration-300 hover:shadow-xl hover:border-warning hover:scale-[1.02] cursor-pointer group">
+                           class="card bg-base-200 border-2 border-warning/30 rounded-2xl shadow-lg shadow-neutral transition-all duration-300 hover:shadow-lg hover:shadow-primary/30 hover:border-warning cursor-pointer group">
 
                             <!-- Image Section (if thumbnail exists) -->
                             {% if checklist.thumbnail %}
@@ -54,7 +53,7 @@
                                 <img
                                     src="{{ checklist.thumbnail.url }}"
                                     alt="{{ checklist.title }}"
-                                    class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                                    class="w-full h-full object-cover"
                                     loading="lazy"
                                 />
                                 <div class="absolute top-2 left-2">
@@ -127,14 +126,14 @@
                                     <img
                                         src="{{ checklist.thumbnail.url }}"
                                         alt="{{ checklist.title }}"
-                                        class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                                        class="w-full h-full object-cover"
                                         loading="lazy"
                                     />
                                 {% elif game %}
                                     <img
                                         src="{{ game.image_url }}"
                                         alt="{{ game.title_name }}"
-                                        class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                                        class="w-full h-full object-cover"
                                         loading="lazy"
                                     />
                                 {% else %}
@@ -228,7 +227,7 @@
                     {% for progress in in_progress %}
                         {% with progress.checklist as checklist %}
                         <a href="{% url 'guide_detail' checklist.id %}"
-                           class="card bg-base-200 border-2 border-base-300 rounded-2xl shadow-lg shadow-neutral transition-all duration-300 hover:shadow-xl hover:border-secondary hover:scale-[1.02] cursor-pointer group">
+                           class="card bg-base-200 border-2 border-base-300 rounded-2xl shadow-lg shadow-neutral transition-all duration-300 hover:shadow-lg hover:shadow-primary/30 hover:border-secondary cursor-pointer group">
 
                             <!-- Image Section -->
                             {% with checklist.selected_game|default:checklist.concept.games.first as game %}
@@ -237,14 +236,14 @@
                                     <img
                                         src="{{ checklist.thumbnail.url }}"
                                         alt="{{ checklist.title }}"
-                                        class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                                        class="w-full h-full object-cover"
                                         loading="lazy"
                                     />
                                 {% elif game %}
                                     <img
                                         src="{{ game.image_url }}"
                                         alt="{{ game.title_name }}"
-                                        class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                                        class="w-full h-full object-cover"
                                         loading="lazy"
                                     />
                                 {% else %}
@@ -317,9 +316,9 @@
             {% endif %}
         {% endif %}
     </div>
-</section>
+    </div>
+</div>
 {% endblock %}
 
 {% block js_scripts %}
-<script>PlatPursuit.ZoomScaler.init();</script>
 {% endblock %}

@@ -5,40 +5,38 @@
 {% block robots %}noindex, nofollow{% endblock %}
 
 {% block content %}
-<section class="shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 w-full p-3 md:p-4">
-    {% include 'partials/breadcrumb.html' with items=breadcrumb %}
+{% include 'partials/breadcrumb.html' with items=breadcrumb %}
 
-    <div class="card bg-base-100 border-2 border-base-300 shadow-md shadow-neutral">
-        <div class="card-body">
-            <h1 class="text-base md:text-lg lg:text-xl font-bold">{{ challenge.name }}: Setup Wizard</h1>
-            <p class="text-sm text-base-content/70">Pick a game for each genre. Skip any you're unsure about. You can always come back!</p>
+<div class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral mb-3">
+    <div class="card-body p-3 md:p-4">
+        <h1 class="text-base md:text-lg lg:text-xl font-bold">{{ challenge.name }}: Setup Wizard</h1>
+        <p class="text-sm text-base-content/70">Pick a game for each genre. Skip any you're unsure about. You can always come back!</p>
 
-            {# Progress bar: genre buttons #}
-            <div id="genre-progress-bar" class="flex flex-wrap gap-1 mt-3">
-                {% for slot in slots %}
-                <button class="genre-slot-btn px-2 h-7 md:h-8 rounded text-[0.65rem] lg:text-xs font-bold flex items-center justify-center cursor-pointer transition-all border-2
-                               {% if slot.is_completed %}bg-success text-success-content border-success
-                               {% elif slot.concept %}bg-primary/20 text-primary border-primary/40
-                               {% else %}bg-base-200 text-base-content/40 border-base-300 hover:border-primary/40{% endif %}"
-                        data-genre="{{ slot.genre }}">
-                    {{ slot.genre_display }}
-                </button>
-                {% endfor %}
-            </div>
+        {# Progress bar: genre buttons #}
+        <div id="genre-progress-bar" class="flex flex-wrap gap-1 mt-3">
+            {% for slot in slots %}
+            <button class="genre-slot-btn px-2 h-7 md:h-8 rounded text-[0.65rem] lg:text-xs font-bold flex items-center justify-center cursor-pointer transition-all border-2
+                           {% if slot.is_completed %}bg-success text-success-content border-success
+                           {% elif slot.concept %}bg-primary/20 text-primary border-primary/40
+                           {% else %}bg-base-200 text-base-content/40 border-base-300 hover:border-primary/40{% endif %}"
+                    data-genre="{{ slot.genre }}">
+                {{ slot.genre_display }}
+            </button>
+            {% endfor %}
+        </div>
 
-            {# Stats #}
-            <div class="flex items-center gap-4 mt-2 text-xs text-base-content/50">
-                <span id="genre-filled-count">{{ challenge.filled_count }}/{{ challenge.total_items }} filled</span>
-                <span id="genre-completed-count">{{ challenge.completed_count }}/{{ challenge.total_items }} completed</span>
-                <span id="genre-subgenre-count">{{ platted_subgenre_count }}/{{ subgenre_total }} subgenres</span>
-            </div>
+        {# Stats #}
+        <div class="flex items-center gap-4 mt-2 text-xs text-base-content/50">
+            <span id="genre-filled-count">{{ challenge.filled_count }}/{{ challenge.total_items }} filled</span>
+            <span id="genre-completed-count">{{ challenge.completed_count }}/{{ challenge.total_items }} completed</span>
+            <span id="genre-subgenre-count">{{ platted_subgenre_count }}/{{ subgenre_total }} subgenres</span>
         </div>
     </div>
-</section>
+</div>
 
 {# Current Genre + Search #}
-<section class="shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 w-full p-3 md:p-4 mt-6">
-    <div class="p-4">
+<div class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral mb-3">
+    <div class="card-body p-3 md:p-5 lg:p-7">
         {# Current genre display #}
         <div class="text-center mb-4">
             <div id="current-genre-display" class="text-4xl lg:text-6xl font-black text-primary">Action</div>
@@ -103,7 +101,7 @@
                     <option value="plat_earners">Most Plats Earned</option>
                 </select>
             </div>
-            <div class="bg-base-200 rounded-lg p-3 text-xs text-base-content/60 space-y-1 mb-2">
+            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-3 text-xs text-base-content/60 space-y-1 mb-2">
                 <p class="font-semibold text-base-content/70">Challenge Rules</p>
                 <ul class="list-disc list-inside space-y-0.5">
                     <li>PS4/PS5 only. PSN data is limited to modern platforms, so each pick needs at least one PS4 or PS5 version</li>
@@ -146,12 +144,12 @@
             <p>No games found. Try different filters or a different search term.</p>
         </div>
     </div>
-</section>
+</div>
 
 {# Subgenre Bonus Tracker (collapsible) #}
-<section class="shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 w-full p-3 md:p-4 mt-6">
-    <div class="p-4">
-        <div class="collapse collapse-arrow bg-base-100 border-2 border-base-300">
+<div class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral mb-3">
+    <div class="card-body p-3 md:p-5 lg:p-7">
+        <div class="collapse collapse-arrow bg-base-200/90 border-2 border-base-300">
             <input type="checkbox" id="subgenre-tracker-toggle" />
             <div class="collapse-title text-base font-bold">
                 Subgenre Bonus Tracker: <span id="subgenre-tracker-count" class="text-primary">{{ platted_subgenre_count }}/{{ subgenre_total }}</span>
@@ -164,7 +162,7 @@
             </div>
         </div>
     </div>
-</section>
+</div>
 {% endblock %}
 
 {% block js_scripts %}

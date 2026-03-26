@@ -9,12 +9,11 @@
      data-concept-id="{{ checklist.concept.id }}"
      data-is-published="{% if checklist.is_published %}true{% else %}false{% endif %}">
 
-    <section class="shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 w-full p-0 lg:p-4">
-        {% include 'partials/breadcrumb.html' with items=breadcrumb %}
+    {% include 'partials/breadcrumb.html' with items=breadcrumb %}
 
-        {# Header Card #}
-        <div class="card bg-base-100 border-4 border-base-300 shadow-md shadow-neutral">
-            <div class="card-body">
+    {# Header Card #}
+    <div class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral mb-3">
+        <div class="card-body p-3 md:p-4">
                 <div class="flex flex-col lg:flex-row justify-between items-start gap-4">
                     <div class="flex-1 w-full">
                         <div class="flex items-center gap-2 mb-4">
@@ -219,11 +218,11 @@
                 {% endif %}
             </div>
         </div>
-    </section>
+    </div>
 
     {# Collapse/Expand All Controls - Only for unpublished with sections #}
     {% if not checklist.is_published and checklist.sections.count > 0 %}
-    <div class="flex justify-end gap-2 mt-6 px-4">
+    <div class="flex justify-end gap-2 mb-3 px-4">
         <button id="collapse-all-btn" class="btn btn-ghost btn-sm">
             <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 transition-transform duration-200" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="transform: rotate(-90deg);">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
@@ -254,11 +253,10 @@
         {% endif %}
 
         {% for section in checklist.sections.all %}
-            <section class="shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 w-full p-0 lg:p-4 mt-6 checklist-section"
-                     data-section-id="{{ section.id }}"
-                     data-section-order="{{ section.order }}">
-                <div class="card bg-base-100 border-4 border-base-300 shadow-md shadow-neutral">
-                    <div class="card-body">
+            <div class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral mb-3 checklist-section"
+                 data-section-id="{{ section.id }}"
+                 data-section-order="{{ section.order }}">
+                <div class="card-body p-3 md:p-5 lg:p-7">
                         {# Section Header #}
                         <div class="flex items-start gap-3">
                             {# Section Content #}
@@ -845,21 +843,21 @@
                             </div>{# End section-items-content wrapper #}
                         </div>
                     </div>
-                </div>
-            </section>
         {% endfor %}
     </div>
 
     {# Add Section Button - Hidden for published checklists #}
     {% if not checklist.is_published %}
-    <section class="shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 border-dashed w-full p-4 mt-6">
-        <button id="add-section-btn" class="btn btn-secondary btn-block">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
-            </svg>
-            Add New Section
-        </button>
-    </section>
+    <div class="card bg-base-200/90 border-2 border-base-300 border-dashed shadow-lg shadow-neutral mb-3">
+        <div class="card-body p-3 md:p-5 lg:p-7">
+            <button id="add-section-btn" class="btn btn-secondary btn-block">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                </svg>
+                Add New Section
+            </button>
+        </div>
+    </div>
     {% endif %}
 </div>
 
@@ -1039,6 +1037,5 @@ Use fire attacks</pre>
 {% endblock %}
 
 {% block js_scripts %}
-    <script>PlatPursuit.ZoomScaler.init();</script>
     <script src="{% static 'js/checklist.js' %}"></script>
 {% endblock %}
