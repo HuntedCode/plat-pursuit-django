@@ -4,52 +4,54 @@
 {% block title %}Review Hub{% endblock %}
 
 {% block content %}
-{# ─── Header ─────────────────────────────────────────────────────────── #}
-<section class="section-container w-full">
-    {% include 'partials/breadcrumb.html' with items=breadcrumb %}
+{% include 'partials/breadcrumb.html' with items=breadcrumb %}
 
-    <div class="card bg-base-100 border-4 border-base-300 shadow-md shadow-neutral">
-        <div class="card-body">
-            <div class="flex flex-row items-center justify-between gap-4">
-                <div>
-                    <h1 class="text-2xl lg:text-3xl font-bold">Review Hub</h1>
-                    <p class="text-base-content/70">
-                        Discover what the community thinks. Read reviews, find hidden gems, and share your own takes.
-                    </p>
+{# Page Header #}
+<div class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral mb-3">
+    <div class="card-body p-3 md:p-4">
+        <div class="flex items-center justify-between gap-3">
+            <div class="min-w-0">
+                <div class="flex items-center gap-2 flex-wrap">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 md:w-6 md:h-6 text-primary shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
+                    </svg>
+                    <h1 class="text-lg md:text-xl lg:text-2xl font-bold">Review Hub</h1>
                 </div>
-                {% if user.is_authenticated and user.profile %}
-                    <a href="{% url 'rate_my_games' %}" class="btn btn-primary btn-md shrink-0">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
-                        </svg>
-                        Rate My Games
-                    </a>
-                {% endif %}
+                <p class="text-xs md:text-sm text-base-content/50 mt-0.5 italic pr-1">
+                    Discover what the community thinks. Read reviews, find hidden gems, and share your own takes.
+                </p>
             </div>
-
+            {% if user.is_authenticated and user.profile %}
+                <a href="{% url 'rate_my_games' %}" class="btn btn-sm md:btn-md btn-primary gap-1 shrink-0">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+                    </svg>
+                    <span class="hidden md:inline">Rate My Games</span>
+                </a>
+            {% endif %}
         </div>
     </div>
-</section>
+</div>
 
-{# ─── Game Search ─────────────────────────────────────────────────────── #}
-<div class="card bg-base-100 border-2 border-base-300 shadow-sm mt-4">
-    <div class="card-body p-4">
-        <div class="flex items-center gap-3 mb-2">
-            <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-primary shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+{# Game Search #}
+<div class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral mb-3">
+    <div class="card-body p-3 md:p-4">
+        <div class="flex items-center gap-2 mb-2">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-primary shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                 <circle cx="11" cy="11" r="8"></circle>
                 <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
             </svg>
-            <h2 class="text-lg font-bold">Find a Game</h2>
-            <span class="text-sm text-base-content/50 hidden lg:inline">Search by title to jump straight to its reviews and ratings.</span>
+            <h2 class="text-sm md:text-base font-bold">Find a Game</h2>
+            <span class="text-xs text-base-content/40 hidden lg:inline">Search by title to jump straight to its reviews and ratings.</span>
         </div>
         <div class="relative">
-            <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 absolute left-3 top-1/2 -translate-y-1/2 text-base-content/40 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-base-content/40 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                 <circle cx="11" cy="11" r="8"></circle>
                 <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
             </svg>
             <input type="text"
                    id="review-search-input"
-                   class="input input-bordered input-lg w-full pl-10 pr-10 focus:outline-none focus:ring-2 focus:ring-primary"
+                   class="input input-bordered input-sm md:input-md w-full pl-9 md:pl-10 pr-10"
                    placeholder="Search for a game..."
                    autocomplete="off" />
             <span id="review-search-loading" class="loading loading-spinner loading-sm absolute right-3 top-1/2 -translate-y-1/2 hidden"></span>
@@ -58,88 +60,87 @@
     </div>
 </div>
 
-{# ─── Stats Banner ────────────────────────────────────────────────────── #}
+{# Stats Banner #}
 {% if stats %}
-<div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mt-4">
-    <div class="stat bg-base-100 border-2 border-base-300 rounded-box p-4 text-center">
-        <div class="stat-title text-xs text-base-content/50">Total Reviews</div>
-        <div class="stat-value text-xl lg:text-2xl text-primary">{{ stats.total_reviews|intcomma }}</div>
+<div class="grid grid-cols-2 lg:grid-cols-4 gap-1.5 md:gap-2 mb-3">
+    <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-2 md:p-3 text-center">
+        <div class="text-lg md:text-xl lg:text-2xl font-black text-primary">{{ stats.total_reviews|intcomma }}</div>
+        <div class="text-xs text-base-content/50 font-medium">Total Reviews</div>
     </div>
-    <div class="stat bg-base-100 border-2 border-base-300 rounded-box p-4 text-center">
-        <div class="stat-title text-xs text-base-content/50">Total Ratings</div>
-        <div class="stat-value text-xl lg:text-2xl text-accent">{{ stats.total_ratings|intcomma }}</div>
+    <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-2 md:p-3 text-center">
+        <div class="text-lg md:text-xl lg:text-2xl font-black text-accent">{{ stats.total_ratings|intcomma }}</div>
+        <div class="text-xs text-base-content/50 font-medium">Total Ratings</div>
     </div>
-    <div class="stat bg-base-100 border-2 border-base-300 rounded-box p-4 text-center">
-        <div class="stat-title text-xs text-base-content/50">Active Reviewers</div>
-        <div class="stat-value text-xl lg:text-2xl text-secondary">{{ stats.unique_reviewers|intcomma }}</div>
+    <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-2 md:p-3 text-center">
+        <div class="text-lg md:text-xl lg:text-2xl font-black text-secondary">{{ stats.unique_reviewers|intcomma }}</div>
+        <div class="text-xs text-base-content/50 font-medium">Active Reviewers</div>
     </div>
-    <div class="stat bg-base-100 border-2 border-base-300 rounded-box p-4 text-center">
-        <div class="stat-title text-xs text-base-content/50">Helpful Votes</div>
-        <div class="stat-value text-xl lg:text-2xl text-success">{{ stats.total_helpful_votes|intcomma }}</div>
+    <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-2 md:p-3 text-center">
+        <div class="text-lg md:text-xl lg:text-2xl font-black text-success">{{ stats.total_helpful_votes|intcomma }}</div>
+        <div class="text-xs text-base-content/50 font-medium">Helpful Votes</div>
     </div>
 </div>
 {% endif %}
 
-{# ─── CTA Card (authenticated, has unrated/unreviewed games) ─────────── #}
+{# CTA Card (authenticated, has unrated/unreviewed games) #}
 {% if unrated_count > 0 or unreviewed_count > 0 %}
-<div class="card bg-gradient-to-r from-primary/10 to-accent/10 border-2 border-primary/30 shadow-sm mt-4">
-    <div class="card-body p-4 flex flex-col md:flex-row items-center gap-4">
-        <div class="shrink-0">
-            <svg xmlns="http://www.w3.org/2000/svg" class="w-10 h-10 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+<div class="card bg-base-200/90 border-2 border-primary/20 shadow-lg shadow-neutral mb-3">
+    <div class="card-body p-3 md:p-4 flex flex-col md:flex-row items-center gap-3 md:gap-4">
+        <div class="shrink-0 text-primary">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"/>
             </svg>
         </div>
-        <div class="flex-1">
+        <div class="flex-1 text-center md:text-left">
             {% if unrated_count > 0 %}
-            <p class="font-bold text-base-content">
+            <p class="font-bold text-sm">
                 You have <span class="text-primary">{{ unrated_count }}</span> platinum{{ unrated_count|pluralize }} waiting to be rated!
             </p>
             {% endif %}
             {% if unreviewed_count > 0 %}
-            <p class="font-bold text-base-content{% if unrated_count > 0 %} mt-1{% endif %}">
+            <p class="font-bold text-sm{% if unrated_count > 0 %} mt-1{% endif %}">
                 <span class="text-accent">{{ unreviewed_count }}</span> platinum{{ unreviewed_count|pluralize }} {{ unreviewed_count|pluralize:"is,are" }} waiting for your review.
             </p>
             {% endif %}
-            <p class="text-sm text-base-content/60 mt-1">Help the community by sharing your thoughts on the games you've conquered.</p>
+            <p class="text-xs text-base-content/50 mt-1">Help the community by sharing your thoughts on the games you've conquered.</p>
         </div>
-        <a href="{% url 'rate_my_games' %}" class="btn btn-primary btn-sm shrink-0">Rate My Games</a>
+        <a href="{% url 'rate_my_games' %}" class="btn btn-sm btn-primary shrink-0">Rate My Games</a>
     </div>
 </div>
 {% endif %}
 
-{# ─── Main Content ────────────────────────────────────────────────────── #}
-<div class="flex flex-col md:flex-col lg:flex-row gap-4 mt-4 items-start">
+{# Main Content: Sidebar + Feed #}
+<div class="flex flex-col lg:flex-row gap-3 items-start">
 
-    {# ── Sidebar ──────────────────────────────────────────────────────── #}
-    <aside class="w-full md:w-full lg:w-1/3 flex flex-col gap-4">
+    {# Sidebar #}
+    <aside class="w-full lg:w-1/3 flex flex-col gap-3">
 
         {# Most Reviewed Games #}
-        <div class="card bg-base-100 border-2 border-base-300 shadow-sm">
-            <div class="card-body p-4">
-                <h2 class="text-lg font-bold flex items-center gap-2">
+        <div class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral">
+            <div class="card-body p-3 md:p-5 lg:p-7">
+                <h2 class="card-title text-base lg:text-lg font-bold flex items-center gap-2">
                     <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-accent" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/>
                     </svg>
                     Most Reviewed
                 </h2>
-                <div class="divider divider-vertical m-0 p-0"></div>
                 {% if most_reviewed %}
-                <ul class="flex flex-col gap-2">
+                <ul class="flex flex-col gap-1 mt-2">
                     {% for game in most_reviewed %}
                     <li>
-                        <a href="{% url 'review_hub' game.slug %}" class="flex items-center gap-3 p-2 rounded-lg hover:bg-base-200 transition-colors group">
-                            <div class="shrink-0 w-10 h-10 rounded-lg overflow-hidden border border-base-300">
+                        <a href="{% url 'review_hub' game.slug %}" class="flex items-center gap-2 md:gap-3 p-2 rounded-lg bg-white/[0.03] border border-base-content/5 hover:bg-white/[0.06] transition-colors group">
+                            <div class="shrink-0 w-8 h-8 md:w-10 md:h-10 rounded-lg overflow-hidden border border-base-content/5">
                                 {% if game.concept_icon_url %}
                                     <img src="{{ game.concept_icon_url }}" alt="{{ game.unified_title }}" class="w-full h-full object-cover" loading="lazy" />
                                 {% else %}
                                     <div class="w-full h-full bg-base-300 flex items-center justify-center">
-                                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-base-content/30" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-base-content/30" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
                                     </div>
                                 {% endif %}
                             </div>
                             <div class="flex-1 min-w-0">
-                                <p class="text-sm font-bold text-base-content line-clamp-1 pr-1 group-hover:text-primary transition-colors">{{ game.unified_title }}</p>
-                                <div class="flex items-center gap-2 text-xs text-base-content/50">
+                                <p class="text-xs md:text-sm font-bold text-base-content line-clamp-1 pr-1 group-hover:text-primary transition-colors">{{ game.unified_title }}</p>
+                                <div class="flex items-center gap-2 text-xs text-base-content/40">
                                     <span>{{ game.review_count }} review{{ game.review_count|pluralize }}</span>
                                     {% if game.recommendation_pct > 0 %}
                                     <span class="text-success">{{ game.recommendation_pct }}% rec.</span>
@@ -151,80 +152,83 @@
                     {% endfor %}
                 </ul>
                 {% else %}
-                <p class="text-sm text-base-content/50 italic py-4 text-center pr-1">No reviews yet. Be the first!</p>
+                <p class="text-sm text-base-content/40 italic py-4 text-center pr-1">No reviews yet. Be the first!</p>
                 {% endif %}
             </div>
         </div>
 
-        {# Trending Reviews (server-rendered, always shown with fallback) #}
-        <div class="card bg-base-100 border-2 border-base-300 shadow-sm">
-            <div class="card-body p-4">
-                <h2 class="text-lg font-bold flex items-center gap-2">
+        {# Trending Reviews #}
+        <div class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral">
+            <div class="card-body p-3 md:p-5 lg:p-7">
+                <h2 class="card-title text-base lg:text-lg font-bold flex items-center gap-2">
                     <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-warning" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M17.657 18.657A8 8 0 016.343 7.343S7 9 9 10c0-2 .5-5 2.986-7C14 5 16.09 5.777 17.656 7.343A7.975 7.975 0 0120 13a7.975 7.975 0 01-2.343 5.657z"/>
                         <path stroke-linecap="round" stroke-linejoin="round" d="M9.879 16.121A3 3 0 1012.015 11L11 14H9c0 .768.293 1.536.879 2.121z"/>
                     </svg>
                     Trending This Week
                 </h2>
-                <div class="divider divider-vertical m-0 p-0"></div>
                 {% if trending_reviews %}
-                <ul class="flex flex-col gap-3">
+                <ul class="flex flex-col gap-2 mt-2">
                     {% for review in trending_reviews %}
-                    <li class="border border-base-300 rounded-box p-3">
-                        <div class="flex items-center gap-2 mb-2">
-                            <a href="{% url 'review_hub' review.concept.slug %}" class="flex items-center gap-2 min-w-0">
+                    <li class="bg-white/[0.03] border border-base-content/5 rounded-lg p-2 md:p-3">
+                        <div class="flex items-center gap-2 mb-1.5">
+                            <a href="{% url 'review_hub' review.concept.slug %}" class="flex items-center gap-1.5 min-w-0">
                                 {% if review.concept.concept_icon_url %}
-                                    <img src="{{ review.concept.concept_icon_url }}" alt="{{ review.concept.unified_title }}" class="w-6 h-6 rounded object-cover shrink-0" loading="lazy" />
+                                    <img src="{{ review.concept.concept_icon_url }}" alt="{{ review.concept.unified_title }}" class="w-5 h-5 rounded object-cover shrink-0" loading="lazy" />
                                 {% endif %}
                                 <span class="text-xs font-bold text-primary line-clamp-1 pr-1 hover:underline">{{ review.concept.unified_title }}</span>
                             </a>
                         </div>
                         <div class="flex items-center gap-2 mb-1">
                             {% if review.recommended %}
-                                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-success shrink-0" viewBox="0 0 24 24" fill="currentColor"><path d="M2 21h4V9H2v12zm22-11c0-1.1-.9-2-2-2h-6.31l.95-4.57.03-.32c0-.41-.17-.79-.44-1.06L15.17 1 7.59 8.59C7.22 8.95 7 9.45 7 10v10c0 1.1.9 2 2 2h9c.83 0 1.54-.5 1.84-1.22l3.02-7.05c.09-.23.14-.47.14-.73v-2z"/></svg>
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-success shrink-0" viewBox="0 0 24 24" fill="currentColor"><path d="M2 21h4V9H2v12zm22-11c0-1.1-.9-2-2-2h-6.31l.95-4.57.03-.32c0-.41-.17-.79-.44-1.06L15.17 1 7.59 8.59C7.22 8.95 7 9.45 7 10v10c0 1.1.9 2 2 2h9c.83 0 1.54-.5 1.84-1.22l3.02-7.05c.09-.23.14-.47.14-.73v-2z"/></svg>
                             {% else %}
-                                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-error shrink-0" viewBox="0 0 24 24" fill="currentColor"><path d="M15 3H6c-.83 0-1.54.5-1.84 1.22l-3.02 7.05c-.09.23-.14.47-.14.73v2c0 1.1.9 2 2 2h6.31l-.95 4.57-.03.32c0 .41.17.79.44 1.06L9.83 23l7.58-7.59c.36-.36.59-.86.59-1.41V5c0-1.1-.9-2-2-2zm4 0v12h4V3h-4z"/></svg>
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-error shrink-0" viewBox="0 0 24 24" fill="currentColor"><path d="M15 3H6c-.83 0-1.54.5-1.84 1.22l-3.02 7.05c-.09.23-.14.47-.14.73v2c0 1.1.9 2 2 2h6.31l-.95 4.57-.03.32c0 .41.17.79.44 1.06L9.83 23l7.58-7.59c.36-.36.59-.86.59-1.41V5c0-1.1-.9-2-2-2zm4 0v12h4V3h-4z"/></svg>
                             {% endif %}
                             <a href="/profiles/{{ review.profile.psn_username }}/" class="text-xs font-bold text-primary hover:underline">{{ review.profile.display_psn_username }}</a>
-                            <span class="text-xs text-base-content/40 ml-auto flex items-center gap-1">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M2 21h4V9H2v12zm22-11c0-1.1-.9-2-2-2h-6.31l.95-4.57.03-.32c0-.41-.17-.79-.44-1.06L15.17 1 7.59 8.59C7.22 8.95 7 9.45 7 10v10c0 1.1.9 2 2 2h9c.83 0 1.54-.5 1.84-1.22l3.02-7.05c.09-.23.14-.47.14-.73v-2z"/></svg>
+                            <span class="text-xs text-base-content/30 ml-auto flex items-center gap-1">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" viewBox="0 0 24 24" fill="currentColor"><path d="M2 21h4V9H2v12zm22-11c0-1.1-.9-2-2-2h-6.31l.95-4.57.03-.32c0-.41-.17-.79-.44-1.06L15.17 1 7.59 8.59C7.22 8.95 7 9.45 7 10v10c0 1.1.9 2 2 2h9c.83 0 1.54-.5 1.84-1.22l3.02-7.05c.09-.23.14-.47.14-.73v-2z"/></svg>
                                 {{ review.helpful_count }}
                             </span>
                         </div>
-                        <p class="text-sm text-base-content/80 line-clamp-3 pr-1 italic">{{ review.body|truncatewords:40 }}</p>
+                        <p class="text-xs text-base-content/60 line-clamp-3 pr-1 italic">{{ review.body|truncatewords:40 }}</p>
                     </li>
                     {% endfor %}
                 </ul>
                 {% else %}
-                <p class="text-sm text-base-content/50 italic py-4 text-center pr-1">No trending reviews this week yet. Write a review and get helpful votes to appear here!</p>
+                <p class="text-sm text-base-content/40 italic py-4 text-center pr-1">No trending reviews this week yet.</p>
                 {% endif %}
             </div>
         </div>
     </aside>
 
-    {# ── Main Feed ────────────────────────────────────────────────────── #}
-    <main class="w-full md:w-full lg:w-2/3 flex flex-col gap-4">
+    {# Main Feed #}
+    <main class="w-full lg:w-2/3 flex flex-col gap-3">
 
         {# Sort Controls #}
         <div class="flex items-center gap-2">
-            <h2 id="landing-feed-title" class="text-lg font-bold flex-1">Recent Reviews</h2>
-            <button class="btn btn-sm btn-primary landing-sort-btn" data-sort="newest">Newest</button>
-            <button class="btn btn-sm btn-ghost border border-base-300 landing-sort-btn" data-sort="helpful">Most Helpful</button>
+            <h2 id="landing-feed-title" class="text-sm md:text-base font-bold flex-1">Recent Reviews</h2>
+            <button class="btn btn-xs md:btn-sm btn-primary landing-sort-btn" data-sort="newest">Newest</button>
+            <button class="btn btn-xs md:btn-sm btn-ghost border border-base-300 landing-sort-btn" data-sort="helpful">Most Helpful</button>
         </div>
 
         {# Review Feed (populated by JS) #}
-        <div id="landing-review-feed" class="flex flex-col gap-4"></div>
+        <div id="landing-review-feed" class="flex flex-col gap-3"></div>
 
         {# Empty State #}
-        <div id="landing-feed-empty" class="hidden text-center py-16 px-4">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 mx-auto text-base-content/30" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
-            </svg>
-            <p class="text-base-content/60 mt-4 mb-2 text-lg font-semibold">No reviews yet</p>
-            <p class="text-base-content/50 mb-6">Be the first to share your thoughts on a game you've platinumed.</p>
-            {% if user.is_authenticated and user.profile %}
-                <a href="{% url 'rate_my_games' %}" class="btn btn-primary">Write Your First Review</a>
-            {% endif %}
+        <div id="landing-feed-empty" class="hidden">
+            <div class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral">
+                <div class="card-body items-center text-center py-12 md:py-16">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 md:h-16 md:w-16 text-base-content/30" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
+                    </svg>
+                    <p class="text-base-content/60 mt-3 mb-1 text-base md:text-lg font-semibold">No reviews yet</p>
+                    <p class="text-base-content/40 text-xs md:text-sm">Be the first to share your thoughts on a game you've platinumed.</p>
+                    {% if user.is_authenticated and user.profile %}
+                        <a href="{% url 'rate_my_games' %}" class="btn btn-sm btn-primary mt-4">Write Your First Review</a>
+                    {% endif %}
+                </div>
+            </div>
         </div>
 
         {# Loading Indicator #}
@@ -242,7 +246,6 @@
 <script src="{% static 'js/review-hub-landing.js' %}"></script>
 <script>
     document.addEventListener('DOMContentLoaded', function() {
-        PlatPursuit.ZoomScaler.init();
         PlatPursuit.ReviewHubLanding.init({
             isAuthenticated: {{ user.is_authenticated|yesno:'true,false' }},
             profileId: {{ user.profile.id|default:'null' }},
