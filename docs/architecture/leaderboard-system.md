@@ -32,7 +32,7 @@ The XP leaderboard benefits from `ProfileGamification` denormalization: XP total
 
 | Type | Redis Key | Score Formula | Update Trigger |
 |------|-----------|---------------|----------------|
-| Earners | `lb:earners:{slug}:scores` | `tier * 10^12 + (10^12 - earned_at_unix)` | UserBadge post_save/post_delete signal |
+| Earners | `lb:earners:{slug}:scores` | `tier * 10^12 + (10^12 - earned_at_unix)` | UserBadge post_save/post_delete signal + sync-complete (bulk exit) |
 | Progress | `lb:progress:{slug}:scores` | `plats * 10^9 + golds * 10^6 + silvers * 10^3 + bronzes` | Sync-complete (bulk_gamification_update exit) |
 | Community XP | `lb:community_xp:{slug}` | N/A (scalar, INCRBY delta) | `update_profile_gamification()` delta + cron reconciliation |
 
@@ -58,7 +58,7 @@ Country leaderboards use the same composite score as the global XP leaderboard b
 
 **XP Leaderboard + Country XP + Community XP**: Signal fires on UserBadgeProgress/UserBadge change -> `update_profile_gamification()` -> `update_xp_entry()` writes to global sorted set + `update_country_xp_entry()` writes to per-country sorted set (if profile has country_code) + `update_community_xp_deltas()` applies per-series XP deltas via INCRBY. During bulk sync, writes are pipelined via `bulk_gamification_update()`.
 
-**Earners Leaderboard**: Signal fires on UserBadge post_save/post_delete -> `_update_earner_leaderboard_on_badge_change()` finds highest tier -> ZADD or ZREM.
+**Earners Leaderboard**: Signal fires on UserBadge post_save/post_delete -> `_update_earner_leaderboard_on_badge_change()` finds highest tier -> ZADD or ZREM. During bulk sync, earner updates are also applied at `bulk_gamification_update()` exit via `update_earner_leaderboards_for_profile()`, which finds the highest tier per series for the profile and writes all entries in a single pipeline.
 
 **Progress Leaderboard**: After `bulk_gamification_update()` exits -> `update_progress_leaderboards_for_profile()` computes per-profile trophy counts for affected series -> ZADD/ZREM per series + global.
 
@@ -115,7 +115,7 @@ Redis sorted set scores are 64-bit IEEE 754 doubles, representing integers exact
 
 - **New series need explicit rebuild**: Incremental updates only catch new events. When a badge series is created, existing trophy data won't appear in the progress sorted set until a rebuild runs. `refresh_badge_series` does this automatically.
 
-- **Bulk pipeline scope**: During `bulk_gamification_update()`, XP and community XP sorted set writes are collected into a Redis pipeline and executed together. Progress leaderboard updates run after the pipeline executes (they have their own pipeline internally).
+- **Bulk pipeline scope**: During `bulk_gamification_update()`, XP and community XP sorted set writes are collected into a Redis pipeline and executed together. Earner and progress leaderboard updates run after the pipeline executes (they each create their own pipeline internally).
 
 - **Display data staleness**: Username, avatar, and premium status are stored in Redis hashes and refreshed during gamification updates. Changes outside of sync (e.g., admin edits) won't reflect until the next cron reconciliation.
 

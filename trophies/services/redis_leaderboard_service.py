@@ -604,6 +604,42 @@ def compute_profile_progress_global(profile):
     )
 
 
+def update_earner_leaderboards_for_profile(profile):
+    """
+    Update earner leaderboard entries for a profile across all series
+    they have earned badges in.
+
+    Called at sync-complete time after bulk_gamification_update() exits,
+    since individual signal handlers skip earner updates during bulk mode.
+    """
+    from trophies.models import UserBadge
+
+    if not profile.is_linked:
+        return
+
+    # Get the highest tier badge per series (ordered by tier desc, earned_at asc)
+    user_badges = UserBadge.objects.filter(
+        profile=profile
+    ).select_related('badge').order_by('badge__series_slug', '-badge__tier', 'earned_at')
+
+    # Group by series_slug, keeping only the first (highest tier, earliest earned) per series
+    best_per_series = {}
+    for ub in user_badges:
+        slug = ub.badge.series_slug
+        if slug and slug not in best_per_series:
+            best_per_series[slug] = ub
+
+    if not best_per_series:
+        return
+
+    pipe = redis_client.pipeline()
+    for slug, ub in best_per_series.items():
+        update_earner_entry(slug, profile, ub.badge.tier, ub.earned_at, pipeline=pipe)
+    pipe.execute()
+
+    logger.debug(f"Updated earner leaderboards for {profile.display_psn_username} across {len(best_per_series)} series")
+
+
 def update_progress_leaderboards_for_profile(profile):
     """
     Recompute and update progress leaderboard entries for a profile across all
