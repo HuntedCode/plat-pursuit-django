@@ -374,13 +374,17 @@ def bulk_gamification_update():
         except Exception as e:
             logger.error(f"Failed to execute leaderboard pipeline: {e}")
 
-        # Update progress leaderboards for affected profiles (after gamification is current)
+        # Update earner + progress leaderboards for affected profiles (after gamification is current)
         for profile in profiles_to_update:
             try:
-                from trophies.services.redis_leaderboard_service import update_progress_leaderboards_for_profile
+                from trophies.services.redis_leaderboard_service import (
+                    update_earner_leaderboards_for_profile,
+                    update_progress_leaderboards_for_profile,
+                )
+                update_earner_leaderboards_for_profile(profile)
                 update_progress_leaderboards_for_profile(profile)
             except Exception as e:
-                logger.error(f"Failed to update progress leaderboards for {profile.psn_username}: {e}")
+                logger.error(f"Failed to update leaderboards for {profile.psn_username}: {e}")
 
 
 def is_bulk_update_active() -> bool:
