@@ -1,0 +1,118 @@
+{% load humanize %}
+{# Section 4: Streaks & Consistency #}
+<div class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral mb-3">
+    <div class="card-body p-3 md:p-5 lg:p-7">
+        <h2 class="card-title text-base lg:text-lg font-bold flex items-center gap-2 mb-3">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-primary shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M17.657 18.657A8 8 0 016.343 7.343S7 9 9 10c0-2 .5-5 2.986-7C14 5 16.09 5.777 17.656 7.343A7.975 7.975 0 0120 13a7.975 7.975 0 01-2.343 5.657z"/>
+                <path stroke-linecap="round" stroke-linejoin="round" d="M9.879 16.121A3 3 0 1012.015 11L11 14H9c0 .768.293 1.536.879 2.121z"/>
+            </svg>
+            Streaks & Consistency
+        </h2>
+
+        {% if data.empty %}
+        <p class="text-sm text-base-content/50">No trophy data yet.</p>
+        {% else %}
+
+        {# Streak highlights #}
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-1.5 md:gap-2 lg:gap-3 mb-4">
+            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-1.5 md:p-3 text-center">
+                <div class="text-lg md:text-xl lg:text-2xl font-black text-primary">{{ data.longest_streak }}</div>
+                <div class="text-xs text-base-content/50 font-medium">Longest Streak</div>
+                {% if data.longest_streak_start %}
+                <div class="text-[0.6rem] text-base-content/30 mt-0.5">{{ data.longest_streak_start|date:"M j" }} - {{ data.longest_streak_end|date:"M j, Y" }}</div>
+                {% endif %}
+            </div>
+            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-1.5 md:p-3 text-center">
+                <div class="text-lg md:text-xl lg:text-2xl font-black {% if data.current_streak > 0 %}text-success{% else %}text-base-content/50{% endif %}">{{ data.current_streak }}</div>
+                <div class="text-xs text-base-content/50 font-medium">Current Streak</div>
+            </div>
+            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-1.5 md:p-3 text-center">
+                <div class="text-lg md:text-xl lg:text-2xl font-black text-primary">{{ data.plat_streak }}</div>
+                <div class="text-xs text-base-content/50 font-medium">Longest Plat Streak</div>
+            </div>
+            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-1.5 md:p-3 text-center">
+                <div class="text-lg md:text-xl lg:text-2xl font-black text-error/70">{{ data.longest_drought }}</div>
+                <div class="text-xs text-base-content/50 font-medium">Longest Drought</div>
+            </div>
+        </div>
+
+        {# Activity stats #}
+        <h4 class="text-xs font-semibold text-base-content/60 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
+            </svg>
+            Activity
+        </h4>
+        <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-1.5 md:gap-2 mb-4">
+            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-1.5 md:p-3 text-center">
+                <div class="text-sm md:text-base font-bold text-primary">{{ data.total_active_days|intcomma }}</div>
+                <div class="text-xs text-base-content/50">Active Days</div>
+            </div>
+            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-1.5 md:p-3 text-center">
+                <div class="text-sm md:text-base font-bold text-primary">{{ data.active_ratio }}%</div>
+                <div class="text-xs text-base-content/50">Active Ratio</div>
+            </div>
+            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-1.5 md:p-3 text-center">
+                <div class="text-sm md:text-base font-bold text-primary">{{ data.avg_per_active_day }}</div>
+                <div class="text-xs text-base-content/50">Trophies / Active Day</div>
+            </div>
+            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-1.5 md:p-3 text-center">
+                <div class="text-sm md:text-base font-bold {% if data.days_since_last == 0 %}text-success{% else %}text-primary{% endif %}">{{ data.days_since_last }}</div>
+                <div class="text-xs text-base-content/50">Days Since Last</div>
+            </div>
+            {% if data.days_since_last_plat is not None %}
+            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-1.5 md:p-3 text-center">
+                <div class="text-sm md:text-base font-bold text-primary">{{ data.days_since_last_plat }}</div>
+                <div class="text-xs text-base-content/50">Days Since Last Plat</div>
+            </div>
+            {% endif %}
+            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-1.5 md:p-3 text-center">
+                <div class="text-sm md:text-base font-bold text-primary">{{ data.months_with_activity }}</div>
+                <div class="text-xs text-base-content/50">Active Months</div>
+            </div>
+            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-1.5 md:p-3 text-center">
+                <div class="text-sm md:text-base font-bold text-primary">{{ data.months_with_plat }}</div>
+                <div class="text-xs text-base-content/50">Months w/ Plat</div>
+            </div>
+            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-1.5 md:p-3 text-center">
+                <div class="text-sm md:text-base font-bold text-primary">{{ data.monthly_streak }}</div>
+                <div class="text-xs text-base-content/50">Monthly Streak</div>
+            </div>
+        </div>
+
+        {# Year records #}
+        {% if data.most_active_year or data.best_calendar_month %}
+        <h4 class="text-xs font-semibold text-base-content/60 uppercase tracking-wider mb-2">Yearly Highlights</h4>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-1.5 md:gap-2">
+            {% if data.most_active_year %}
+            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-2 md:p-3 text-center">
+                <div class="text-sm font-bold text-primary">{{ data.most_active_year.year }}</div>
+                <div class="text-xs text-base-content/50">Most Active Year</div>
+                <div class="text-[0.6rem] text-base-content/30">{{ data.most_active_year.count|intcomma }} trophies</div>
+            </div>
+            {% endif %}
+            {% if data.quietest_year %}
+            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-2 md:p-3 text-center">
+                <div class="text-sm font-bold text-base-content/60">{{ data.quietest_year.year }}</div>
+                <div class="text-xs text-base-content/50">Quietest Year</div>
+                <div class="text-[0.6rem] text-base-content/30">{{ data.quietest_year.count|intcomma }} trophies</div>
+            </div>
+            {% endif %}
+            {% if data.best_calendar_month %}
+            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-2 md:p-3 text-center">
+                <div class="text-sm font-bold text-primary">{{ data.best_calendar_month.month }}</div>
+                <div class="text-xs text-base-content/50">Best Month (All-Time)</div>
+                <div class="text-[0.6rem] text-base-content/30">{{ data.best_calendar_month.total|intcomma }} total trophies</div>
+            </div>
+            {% endif %}
+        </div>
+        {% endif %}
+
+        {% if data.observation %}
+        <p class="text-xs text-base-content/40 italic pr-1 mt-3">{{ data.observation }}</p>
+        {% endif %}
+
+        {% endif %}
+    </div>
+</div>

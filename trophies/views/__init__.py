@@ -29,6 +29,7 @@ from .dashboard_views import DashboardView
 from .title_views import MyTitlesView
 from .platinum_grid_views import PlatinumGridView
 from .roadmap_views import RoadmapEditorView
+from .stats_views import MyStatsView
 
 __all__ = [
     # Game views
@@ -65,4 +66,6 @@ __all__ = [
     'PlatinumGridView',
     # Roadmap views
     'RoadmapEditorView',
+    # Stats views
+    'MyStatsView',
 ]

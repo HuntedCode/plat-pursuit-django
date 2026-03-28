@@ -1477,6 +1477,9 @@ class TokenKeeper:
             from trophies.services.timeline_service import invalidate_timeline_cache
             invalidate_timeline_cache(profile_id)
 
+            from trophies.services.stats_service import invalidate_stats_cache
+            invalidate_stats_cache(profile_id)
+
             # Re-render forum signature if enabled (SVG only: fast, no Playwright)
             try:
                 from trophies.models import ProfileCardSettings
