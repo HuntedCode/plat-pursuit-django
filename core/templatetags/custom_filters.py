@@ -406,3 +406,40 @@ def gradient_themes_json():
     from trophies.themes import get_themes_for_js
 
     return mark_safe(json.dumps(get_themes_for_js()))
+
+
+@register.filter
+def youtube_embed_url(url):
+    """Convert a YouTube URL to an embeddable URL.
+
+    Handles:
+        - https://www.youtube.com/watch?v=VIDEO_ID
+        - https://youtu.be/VIDEO_ID
+        - https://youtu.be/VIDEO_ID?si=SHARE_TOKEN
+        - https://www.youtube.com/embed/VIDEO_ID (already embed)
+        - https://www.youtube.com/live/VIDEO_ID
+        - https://www.youtube.com/shorts/VIDEO_ID
+
+    Returns the embed URL or empty string if not parseable.
+    """
+    import re
+    if not url:
+        return ''
+    url = url.strip()
+    # Already an embed URL - extract just the video ID to normalize
+    match = re.search(r'/embed/([a-zA-Z0-9_-]{11})', url)
+    if match:
+        return f'https://www.youtube-nocookie.com/embed/{match.group(1)}'
+    # Standard watch URL: ?v=ID or &v=ID
+    match = re.search(r'[?&]v=([a-zA-Z0-9_-]{11})', url)
+    if match:
+        return f'https://www.youtube-nocookie.com/embed/{match.group(1)}'
+    # Short URL: youtu.be/ID (possibly with ?si= or other params)
+    match = re.search(r'youtu\.be/([a-zA-Z0-9_-]{11})', url)
+    if match:
+        return f'https://www.youtube-nocookie.com/embed/{match.group(1)}'
+    # /live/ID or /shorts/ID
+    match = re.search(r'youtube\.com/(?:live|shorts)/([a-zA-Z0-9_-]{11})', url)
+    if match:
+        return f'https://www.youtube-nocookie.com/embed/{match.group(1)}'
+    return ''

@@ -21,7 +21,7 @@ from trophies.util_modules.constants import (
 )
 from trophies.managers import (
     ProfileManager, GameManager, ProfileGameManager,
-    BadgeManager, MilestoneManager, CommentManager, ChecklistManager
+    BadgeManager, MilestoneManager, CommentManager, ChecklistManager,
 )
 import re
 
@@ -788,6 +788,28 @@ class Concept(models.Model):
             if ctg.trophy_group_id not in existing_ctg_ids:
                 ctg.concept = self
                 ctg.save(update_fields=['concept'])
+
+        # Roadmap: move if target has none, re-point tabs to target's CTGs
+        try:
+            source_roadmap = other.roadmap
+        except Roadmap.DoesNotExist:
+            source_roadmap = None
+
+        if source_roadmap:
+            if not Roadmap.objects.filter(concept=self).exists():
+                source_roadmap.concept = self
+                source_roadmap.save(update_fields=['concept'])
+                # Re-point tabs to target concept's CTGs (source CTG duplicates will cascade-delete)
+                target_ctgs = {
+                    ctg.trophy_group_id: ctg
+                    for ctg in self.concept_trophy_groups.all()
+                }
+                for tab in source_roadmap.tabs.select_related('concept_trophy_group').all():
+                    target_ctg = target_ctgs.get(tab.concept_trophy_group.trophy_group_id)
+                    if target_ctg and target_ctg != tab.concept_trophy_group:
+                        tab.concept_trophy_group = target_ctg
+                        tab.save(update_fields=['concept_trophy_group'])
+            # else: target already has a roadmap; source's cascades with concept deletion
 
         # Reviews: re-point non-duplicate (keyed by profile + concept_trophy_group)
         existing_review_keys = set(
@@ -3572,3 +3594,128 @@ class ProfileCardSettings(models.Model):
         """Generate a new public sig token, invalidating old embed URLs."""
         self.public_sig_token = uuid.uuid4()
         self.save(update_fields=['public_sig_token'])
+
+
+# ---------- Roadmap System ----------
+
+class Roadmap(models.Model):
+    """Staff-authored game guide/roadmap, one per Concept.
+
+    Contains ordered steps, general tips, trophy guides, and optional
+    YouTube embeds, organized into tabs per ConceptTrophyGroup (base game + DLCs).
+    """
+    concept = models.OneToOneField(
+        Concept, on_delete=models.CASCADE, related_name='roadmap'
+    )
+    created_by = models.ForeignKey(
+        Profile, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='authored_roadmaps'
+    )
+    status = models.CharField(
+        max_length=20, default='draft',
+        choices=[('draft', 'Draft'), ('published', 'Published')]
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=['status'], name='roadmap_status_idx'),
+        ]
+
+    def __str__(self):
+        return f"Roadmap: {self.concept.unified_title}"
+
+    @property
+    def is_published(self):
+        return self.status == 'published'
+
+    @property
+    def is_draft(self):
+        return self.status == 'draft'
+
+
+class RoadmapTab(models.Model):
+    """One tab per ConceptTrophyGroup within a roadmap (base game + each DLC).
+
+    Stores per-tab content: general tips prose and optional YouTube embed URL.
+    Steps and trophy guides are child models.
+    """
+    roadmap = models.ForeignKey(
+        Roadmap, on_delete=models.CASCADE, related_name='tabs'
+    )
+    concept_trophy_group = models.ForeignKey(
+        ConceptTrophyGroup, on_delete=models.CASCADE, related_name='roadmap_tabs'
+    )
+    general_tips = models.TextField(blank=True)
+    youtube_url = models.URLField(blank=True)
+
+    class Meta:
+        unique_together = ['roadmap', 'concept_trophy_group']
+        ordering = ['concept_trophy_group__sort_order', 'concept_trophy_group__trophy_group_id']
+
+    def __str__(self):
+        return f"Tab: {self.concept_trophy_group.display_name} ({self.roadmap})"
+
+
+class RoadmapStep(models.Model):
+    """An ordered high-level stage/step within a roadmap tab.
+
+    Examples: 'Complete first playthrough', 'Clean up collectibles'.
+    Each step can have associated trophies via RoadmapStepTrophy.
+    """
+    tab = models.ForeignKey(
+        RoadmapTab, on_delete=models.CASCADE, related_name='steps'
+    )
+    title = models.CharField(max_length=200)
+    description = models.TextField(blank=True)
+    youtube_url = models.URLField(blank=True)
+    order = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        ordering = ['order']
+
+    def __str__(self):
+        return f"Step {self.order}: {self.title}"
+
+
+class RoadmapStepTrophy(models.Model):
+    """Associates a trophy with a roadmap step by PSN trophy_id.
+
+    Uses trophy_id (IntegerField) instead of FK to Trophy because trophies
+    belong to Game, not Concept, and a Concept can span multiple game stacks.
+    trophy_id values are consistent across stacks within a concept.
+    """
+    step = models.ForeignKey(
+        RoadmapStep, on_delete=models.CASCADE, related_name='step_trophies'
+    )
+    trophy_id = models.IntegerField()
+    order = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        unique_together = ['step', 'trophy_id']
+        ordering = ['order']
+
+    def __str__(self):
+        return f"StepTrophy: step={self.step_id}, trophy_id={self.trophy_id}"
+
+
+class TrophyGuide(models.Model):
+    """Per-trophy guide text within a roadmap tab.
+
+    Every trophy in a trophy group can have its own mini guide section
+    with tips and walkthrough text.
+    """
+    tab = models.ForeignKey(
+        RoadmapTab, on_delete=models.CASCADE, related_name='trophy_guides'
+    )
+    trophy_id = models.IntegerField()
+    body = models.TextField()
+    order = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        unique_together = ['tab', 'trophy_id']
+        ordering = ['order']
+
+    def __str__(self):
+        return f"TrophyGuide: tab={self.tab_id}, trophy_id={self.trophy_id}"

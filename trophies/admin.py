@@ -4,7 +4,7 @@ from django.db import transaction
 from django.db.models import Count, F, IntegerField, Q, Value
 from django.db.models.functions import Cast, Coalesce
 from datetime import timedelta
-from .models import Profile, Game, Trophy, EarnedTrophy, ProfileGame, APIAuditLog, FeaturedGame, FeaturedProfile, Concept, TitleID, TrophyGroup, ConceptTrophyGroup, UserTrophySelection, UserConceptRating, Badge, UserBadge, UserBadgeProgress, ProfileBadgeShowcase, FeaturedGuide, Stage, PublisherBlacklist, Title, UserTitle, Milestone, UserMilestone, UserMilestoneProgress, Comment, CommentVote, CommentReport, ModerationLog, BannedWord, Checklist, ChecklistSection, ChecklistItem, ChecklistVote, UserChecklistProgress, ChecklistReport, ProfileGamification, StatType, StageStatValue, MonthlyRecap, GameList, GameListItem, GameListLike, Challenge, AZChallengeSlot, GameFamily, GameFamilyProposal, Review, ReviewVote, ReviewReply, ReviewReport, ReviewModerationLog, DashboardConfig, StageCompletionEvent
+from .models import Profile, Game, Trophy, EarnedTrophy, ProfileGame, APIAuditLog, FeaturedGame, FeaturedProfile, Concept, TitleID, TrophyGroup, ConceptTrophyGroup, UserTrophySelection, UserConceptRating, Badge, UserBadge, UserBadgeProgress, ProfileBadgeShowcase, FeaturedGuide, Stage, PublisherBlacklist, Title, UserTitle, Milestone, UserMilestone, UserMilestoneProgress, Comment, CommentVote, CommentReport, ModerationLog, BannedWord, ProfileGamification, StatType, StageStatValue, MonthlyRecap, GameList, GameListItem, GameListLike, Challenge, AZChallengeSlot, GameFamily, GameFamilyProposal, Review, ReviewVote, ReviewReply, ReviewReport, ReviewModerationLog, DashboardConfig, StageCompletionEvent, Roadmap, RoadmapTab, RoadmapStep, RoadmapStepTrophy, TrophyGuide
 
 
 # Register your models here.
@@ -1145,257 +1145,76 @@ class BannedWordAdmin(admin.ModelAdmin):
         cache.delete('banned_words:active')
 
 
-# ---------- Checklist Admin ----------
-
-@admin.register(Checklist)
-class ChecklistAdmin(admin.ModelAdmin):
-    """Admin interface for checklist moderation."""
-    list_display = [
-        'id',
-        'title',
-        'profile',
-        'concept',
-        'status',
-        'upvote_count',
-        'progress_save_count',
-        'total_items_display',
-        'is_deleted',
-        'created_at',
-    ]
-    list_select_related = ('profile', 'concept')
-    list_filter = [
-        'status',
-        'is_deleted',
-        'created_at',
-    ]
-    search_fields = [
-        'title',
-        'description',
-        'profile__psn_username',
-        'concept__unified_title',
-    ]
-    raw_id_fields = ['profile', 'concept']
-    readonly_fields = [
-        'created_at',
-        'updated_at',
-        'published_at',
-        'deleted_at',
-        'upvote_count',
-        'progress_save_count',
-    ]
-    ordering = ['-created_at']
-    date_hierarchy = 'created_at'
-    actions = ['soft_delete_checklists', 'restore_checklists']
-
-    def get_queryset(self, request):
-        qs = super().get_queryset(request)
-        return qs.annotate(
-            _total_items=Count(
-                'sections__items',
-                filter=Q(sections__items__item_type__in=['item', 'trophy'])
-            )
-        )
-
-    def total_items_display(self, obj):
-        return obj._total_items
-    total_items_display.short_description = 'Items'
-    total_items_display.admin_order_field = '_total_items'
-
-    @admin.action(description='Soft delete selected checklists')
-    def soft_delete_checklists(self, request, queryset):
-        count = 0
-        for checklist in queryset.filter(is_deleted=False):
-            checklist.soft_delete()
-            count += 1
-        messages.success(request, f"Soft-deleted {count} checklist(s).")
-
-    @admin.action(description='Restore soft-deleted checklists')
-    def restore_checklists(self, request, queryset):
-        count = queryset.filter(is_deleted=True).update(is_deleted=False, deleted_at=None)
-        messages.success(request, f"Restored {count} checklist(s).")
+# Checklist admin registrations removed during roadmap migration (DB tables retained)
 
 
-@admin.register(ChecklistSection)
-class ChecklistSectionAdmin(admin.ModelAdmin):
-    """Admin interface for checklist sections."""
-    list_display = [
-        'id',
-        'subtitle',
-        'checklist',
-        'order',
-        'item_count_display',
-    ]
-    list_filter = [
-        'created_at',
-    ]
-    search_fields = [
-        'subtitle',
-        'checklist__title',
-    ]
-    raw_id_fields = ['checklist']
-    ordering = ['checklist', 'order']
+# ---------- Roadmap Admin ----------
 
-    def get_queryset(self, request):
-        qs = super().get_queryset(request)
-        return qs.annotate(
-            _item_count=Count(
-                'items',
-                filter=Q(items__item_type__in=['item', 'trophy'])
-            )
-        )
-
-    def item_count_display(self, obj):
-        return obj._item_count
-    item_count_display.short_description = 'Items'
-    item_count_display.admin_order_field = '_item_count'
+class RoadmapStepInline(admin.TabularInline):
+    model = RoadmapStep
+    extra = 0
+    ordering = ['order']
 
 
-@admin.register(ChecklistItem)
-class ChecklistItemAdmin(admin.ModelAdmin):
-    """Admin interface for checklist items."""
-    list_display = [
-        'id',
-        'text_preview',
-        'section',
-        'trophy_id',
-        'order',
-    ]
-    list_select_related = ('section',)
-    list_filter = [
-        'created_at',
-    ]
-    search_fields = [
-        'text',
-        'section__subtitle',
-        'section__checklist__title',
-    ]
-    raw_id_fields = ['section']
-    ordering = ['section', 'order']
-
-    def text_preview(self, obj):
-        return obj.text[:50] + '...' if len(obj.text) > 50 else obj.text
-    text_preview.short_description = 'Text'
+class RoadmapTabInline(admin.TabularInline):
+    model = RoadmapTab
+    extra = 0
+    show_change_link = True
 
 
-@admin.register(ChecklistVote)
-class ChecklistVoteAdmin(admin.ModelAdmin):
-    """Admin interface for checklist votes (read-only tracking)."""
-    list_display = [
-        'id',
-        'checklist',
-        'profile',
-        'created_at',
-    ]
-    list_select_related = ('checklist', 'profile')
-    list_filter = [
-        'created_at',
-    ]
-    search_fields = [
-        'profile__psn_username',
-        'checklist__title',
-    ]
-    raw_id_fields = ['checklist', 'profile']
-    readonly_fields = ['created_at']
-    ordering = ['-created_at']
+@admin.register(Roadmap)
+class RoadmapAdmin(admin.ModelAdmin):
+    list_display = ['id', 'concept', 'status', 'created_by', 'created_at', 'updated_at']
+    list_select_related = ('concept', 'created_by')
+    list_filter = ['status']
+    search_fields = ['concept__unified_title']
+    raw_id_fields = ['concept', 'created_by']
+    readonly_fields = ['created_at', 'updated_at']
+    inlines = [RoadmapTabInline]
 
 
-@admin.register(UserChecklistProgress)
-class UserChecklistProgressAdmin(admin.ModelAdmin):
-    """Admin interface for user checklist progress (read-only tracking)."""
-    list_display = [
-        'id',
-        'profile',
-        'checklist',
-        'items_completed',
-        'total_items',
-        'progress_percentage_display',
-        'last_activity',
-    ]
-    list_select_related = ('profile', 'checklist')
-    list_filter = [
-        'last_activity',
-    ]
-    search_fields = [
-        'profile__psn_username',
-        'checklist__title',
-    ]
-    raw_id_fields = ['profile', 'checklist']
-    readonly_fields = [
-        'created_at',
-        'updated_at',
-        'last_activity',
-        'completed_items',
-    ]
-    ordering = ['-last_activity']
+@admin.register(RoadmapTab)
+class RoadmapTabAdmin(admin.ModelAdmin):
+    list_display = ['id', 'roadmap', 'concept_trophy_group', 'has_tips', 'has_youtube']
+    list_select_related = ('roadmap__concept', 'concept_trophy_group')
+    raw_id_fields = ['roadmap', 'concept_trophy_group']
+    inlines = [RoadmapStepInline]
 
-    def progress_percentage_display(self, obj):
-        return f"{obj.progress_percentage:.1f}%"
-    progress_percentage_display.short_description = 'Progress'
+    def has_tips(self, obj):
+        return bool(obj.general_tips)
+    has_tips.boolean = True
+    has_tips.short_description = 'Tips'
+
+    def has_youtube(self, obj):
+        return bool(obj.youtube_url)
+    has_youtube.boolean = True
+    has_youtube.short_description = 'YouTube'
 
 
-@admin.register(ChecklistReport)
-class ChecklistReportAdmin(admin.ModelAdmin):
-    """Admin interface for checklist report moderation queue."""
-    list_display = [
-        'id',
-        'checklist',
-        'reporter',
-        'reason',
-        'status',
-        'created_at',
-        'reviewed_by',
-    ]
-    list_select_related = ('checklist', 'reporter', 'reviewed_by')
-    list_filter = [
-        'status',
-        'reason',
-        'created_at',
-    ]
-    search_fields = [
-        'checklist__title',
-        'reporter__psn_username',
-        'details',
-        'admin_notes',
-    ]
-    raw_id_fields = ['checklist', 'reporter', 'reviewed_by']
-    readonly_fields = ['created_at', 'reviewed_at']
-    ordering = ['-created_at']
-    date_hierarchy = 'created_at'
-    actions = ['mark_as_reviewed', 'mark_as_dismissed', 'take_action_and_delete']
+@admin.register(RoadmapStep)
+class RoadmapStepAdmin(admin.ModelAdmin):
+    list_display = ['id', 'title', 'tab', 'order']
+    list_select_related = ('tab__roadmap__concept',)
+    search_fields = ['title']
+    raw_id_fields = ['tab']
 
-    @admin.action(description='Mark selected reports as reviewed')
-    def mark_as_reviewed(self, request, queryset):
-        from django.utils import timezone
-        count = queryset.filter(status='pending').update(
-            status='reviewed',
-            reviewed_at=timezone.now(),
-            reviewed_by=request.user
-        )
-        messages.success(request, f"Marked {count} report(s) as reviewed.")
 
-    @admin.action(description='Dismiss selected reports')
-    def mark_as_dismissed(self, request, queryset):
-        from django.utils import timezone
-        count = queryset.filter(status='pending').update(
-            status='dismissed',
-            reviewed_at=timezone.now(),
-            reviewed_by=request.user
-        )
-        messages.success(request, f"Dismissed {count} report(s).")
+@admin.register(RoadmapStepTrophy)
+class RoadmapStepTrophyAdmin(admin.ModelAdmin):
+    list_display = ['id', 'step', 'trophy_id', 'order']
+    list_select_related = ('step',)
+    raw_id_fields = ['step']
 
-    @admin.action(description='Take action: Soft-delete checklist and mark report')
-    def take_action_and_delete(self, request, queryset):
-        from django.utils import timezone
-        count = 0
-        for report in queryset.filter(status='pending'):
-            if not report.checklist.is_deleted:
-                report.checklist.soft_delete()
-            report.status = 'action_taken'
-            report.reviewed_at = timezone.now()
-            report.reviewed_by = request.user
-            report.save(update_fields=['status', 'reviewed_at', 'reviewed_by'])
-            count += 1
-        messages.success(request, f"Took action on {count} report(s).")
+
+@admin.register(TrophyGuide)
+class TrophyGuideAdmin(admin.ModelAdmin):
+    list_display = ['id', 'tab', 'trophy_id', 'body_preview']
+    list_select_related = ('tab__roadmap__concept',)
+    raw_id_fields = ['tab']
+
+    def body_preview(self, obj):
+        return obj.body[:80] + '...' if len(obj.body) > 80 else obj.body
+    body_preview.short_description = 'Body'
 
 
 # ---------- Gamification Admin ----------

@@ -1,7 +1,7 @@
 from django.utils import timezone
 from django.urls import reverse
 from datetime import timedelta
-from trophies.models import Badge, Checklist, Concept
+from trophies.models import Badge, Concept
 
 
 def get_whats_new(limit=8):
@@ -10,7 +10,6 @@ def get_whats_new(limit=8):
 
     Item types:
     - new_badge: Recently created badge series (tier=1)
-    - new_checklist: Recently published checklists
     - new_guide: Concepts that have guides, sorted by release date
     """
     now = timezone.now()
@@ -32,25 +31,6 @@ def get_whats_new(limit=8):
             'subtitle': badge.effective_display_series or badge.series_slug,
             'url': reverse('badge_detail', args=[badge.series_slug]),
             'timestamp': badge.created_at.isoformat(),
-        })
-
-    # Recently published checklists
-    new_checklists = (
-        Checklist.objects.filter(
-            status='published',
-            is_deleted=False,
-            published_at__gte=two_weeks_ago,
-        )
-        .select_related('profile', 'concept')
-        .order_by('-published_at')[:3]
-    )
-    for cl in new_checklists:
-        items.append({
-            'type': 'new_checklist',
-            'title': cl.title,
-            'subtitle': f"By {cl.profile.display_psn_username}",
-            'url': reverse('guide_detail', args=[cl.id]),
-            'timestamp': cl.published_at.isoformat() if cl.published_at else cl.created_at.isoformat(),
         })
 
     # New guides (concepts with guide_slug, by guide creation date)

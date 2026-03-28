@@ -1,0 +1,274 @@
+{% load static custom_filters markdown_filters humanize %}
+{# Renders roadmap content for a single tab. Expects: tab (RoadmapTab), roadmap, roadmap_trophies, profile_earned, game, roadmap_preview_mode #}
+
+{% with steps=tab.steps.all %}
+{% with has_content=steps|length %}
+
+{# ── Roadmap CTA (collapsed by default) ── #}
+<div class="roadmap-cta mt-4" data-tab-id="{{ tab.id }}">
+    <button class="roadmap-expand-btn w-full group text-left">
+        <div class="bg-gradient-to-r from-primary/10 via-primary/5 to-transparent rounded-lg p-3 md:p-4">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 md:w-12 md:h-12 rounded-xl bg-primary/15 border-2 border-primary/25 flex items-center justify-center shrink-0 group-hover:bg-primary/20 group-hover:border-primary/40 transition-all duration-300">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 md:w-6 md:h-6 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"/></svg>
+                </div>
+                <div class="flex-1 min-w-0">
+                    <div class="flex items-center gap-2 mb-0.5">
+                        <span class="text-sm md:text-base font-bold text-base-content">Trophy Roadmap</span>
+                        {% if roadmap_preview_mode %}<span class="badge badge-xs badge-warning">Preview</span>{% endif %}
+                    </div>
+                    <p class="text-xs text-base-content/50">
+                        {% with guides=tab.trophy_guides.all %}
+                        {{ steps|length }} step{{ steps|length|pluralize }}{% if guides %}, {{ guides|length }} trophy guide{{ guides|length|pluralize }}{% endif %}{% if tab.youtube_url %}, video walkthrough{% endif %}.
+                        {% endwith %}
+                    </p>
+                </div>
+                <div class="flex items-center gap-2 shrink-0">
+                    {% if request.user.is_staff %}
+                        <a href="{% url 'roadmap_edit' game.np_communication_id %}" class="btn btn-xs btn-ghost border border-base-300 gap-1 z-10" onclick="event.stopPropagation();">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+                            <span class="hidden md:inline">Edit</span>
+                        </a>
+                    {% endif %}
+                    <span class="btn btn-xs btn-primary gap-1 pointer-events-none shadow-md shadow-primary/20">
+                        <span class="hidden md:inline">View Roadmap</span>
+                        <span class="md:hidden">View</span>
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 group-hover:translate-y-0.5 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+                    </span>
+                </div>
+            </div>
+        </div>
+    </button>
+</div>
+
+{# ── Expanded Roadmap Content (hidden by default) ── #}
+<div class="roadmap-content hidden mt-4" data-tab-id="{{ tab.id }}">
+
+    {% if roadmap_preview_mode %}
+    <div class="alert alert-warning mb-4 text-sm py-2">
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+        <span>Preview Mode: This roadmap is <strong>{{ roadmap.status }}</strong> and only visible to staff.</span>
+    </div>
+    {% endif %}
+
+    <div class="flex items-center justify-between mb-4">
+        <h5 class="text-xs font-semibold text-base-content/60 uppercase tracking-wider flex items-center gap-1.5">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"/></svg>
+            Roadmap
+        </h5>
+        <button class="roadmap-collapse-btn btn btn-xs btn-ghost border border-base-300 gap-1" data-tab-id="{{ tab.id }}">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 15l7-7 7 7"/></svg>
+            Collapse
+        </button>
+    </div>
+
+    {% if steps %}
+    {# ══ Steps ══ #}
+    <div class="mb-6">
+        <div class="flex items-center gap-2 mb-3">
+            <h5 class="text-xs font-semibold text-base-content/50 uppercase tracking-wider flex items-center gap-1.5">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+                Walkthrough
+            </h5>
+            <span class="text-[0.6rem] text-base-content/30 font-medium">{{ steps|length }} step{{ steps|length|pluralize }}</span>
+        </div>
+        <div class="space-y-3">
+            {% for step in steps %}
+            <details open class="group roadmap-step-details border-l-4 border-l-primary/30">
+                <summary class="flex items-center gap-2.5 pl-4 md:pl-5 py-1 cursor-pointer list-none [&::-webkit-details-marker]:hidden select-none">
+                    <span class="text-primary font-black text-lg md:text-xl leading-none">{{ forloop.counter }}</span>
+                    <h3 class="text-base md:text-lg font-bold text-base-content/90 flex-1">{{ step.title }}</h3>
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 shrink-0 text-base-content/25 transition-transform duration-200 group-open:rotate-180" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+                </summary>
+                <div class="pl-4 md:pl-5 mt-1 pb-1">
+                    {% if step.description %}
+                        <div class="text-sm md:text-base text-base-content/75 leading-relaxed max-w-none
+                                    [&_p]:mb-3 [&_p:last-child]:mb-0
+                                    [&_ul]:my-2 [&_ul]:ml-4 [&_ul]:list-disc [&_ul]:space-y-1
+                                    [&_ol]:my-2 [&_ol]:ml-4 [&_ol]:list-decimal [&_ol]:space-y-1
+                                    [&_strong]:text-base-content/90 [&_strong]:font-semibold
+                                    [&_a]:text-primary [&_a]:underline [&_a]:decoration-primary/30 hover:[&_a]:decoration-primary
+                                    [&_blockquote]:border-l-4 [&_blockquote]:border-warning/30 [&_blockquote]:pl-4 [&_blockquote]:py-1 [&_blockquote]:my-3 [&_blockquote]:italic [&_blockquote]:text-base-content/60
+                                    [&_code]:bg-base-300/40 [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:rounded [&_code]:text-sm [&_code]:font-mono">{{ step.description|render_markdown }}</div>
+                    {% endif %}
+                    {% with step_trophies=step.step_trophies.all %}
+                    {% if step_trophies %}
+                        <div class="mt-3 pt-3 border-t border-base-content/5 grid grid-cols-1 lg:grid-cols-2 gap-2">
+                            {% for st in step_trophies %}
+                                {% with trophy=roadmap_trophies|get_item:st.trophy_id earned_data=profile_earned|get_item:st.trophy_id %}
+                                {% if trophy %}
+                                <a href="#trophy-guide-{{ st.trophy_id }}" class="roadmap-trophy-link flex items-start gap-2.5 rounded-lg p-2 cursor-pointer hover:bg-white/[0.04] transition-colors {% if earned_data.earned %}bg-success/5 border border-success/15{% else %}bg-white/[0.02]{% endif %}">
+                                    <div class="relative shrink-0">
+                                        <img src="{{ trophy.trophy_icon_url }}" alt="{{ trophy.trophy_name }}" class="w-9 h-9 md:w-10 md:h-10 rounded object-cover {% if not earned_data.earned %}opacity-60 grayscale-[30%]{% endif %}">
+                                        {% if earned_data.earned %}
+                                        <div class="absolute -bottom-0.5 -right-0.5 w-4 h-4 bg-success rounded-full flex items-center justify-center ring-2 ring-base-200">
+                                            <svg xmlns="http://www.w3.org/2000/svg" class="w-2.5 h-2.5 text-success-content" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+                                        </div>
+                                        {% endif %}
+                                    </div>
+                                    <div class="flex-1 min-w-0">
+                                        <div class="flex items-center gap-1.5 flex-wrap">
+                                            <span class="text-sm font-semibold {% if not earned_data.earned %}text-base-content/60{% endif %}">{{ trophy.trophy_name }}</span>
+                                            <span class="badge badge-xs {% if trophy.trophy_type == 'platinum' %}badge-info{% elif trophy.trophy_type == 'gold' %}badge-warning{% elif trophy.trophy_type == 'silver' %}badge-ghost{% else %}badge-accent{% endif %}">{{ trophy.trophy_type|title }}</span>
+                                        </div>
+                                        {% if trophy.trophy_detail %}
+                                        <p class="text-xs text-base-content/50 mt-0.5 line-clamp-2 pr-1 italic">{{ trophy.trophy_detail }}</p>
+                                        {% endif %}
+                                    </div>
+                                </a>
+                                {% endif %}
+                                {% endwith %}
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+                    {% endwith %}
+                    {% if step.youtube_url %}
+                    <details class="group mt-3 rounded-lg border border-base-content/5 bg-white/[0.03] overflow-hidden">
+                        <summary class="flex items-center gap-2 p-2 cursor-pointer hover:bg-white/[0.02] transition-colors list-none [&::-webkit-details-marker]:hidden select-none text-xs">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-error shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/><path stroke-linecap="round" stroke-linejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                            <span class="font-medium text-base-content/50">Video Guide</span>
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 shrink-0 text-base-content/25 ml-auto transition-transform duration-200 group-open:rotate-180" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+                        </summary>
+                        <div class="px-2 pb-2">
+                            <div class="aspect-video rounded-lg overflow-hidden border border-base-content/5 bg-black/20">
+                                {% with embed_url=step.youtube_url|youtube_embed_url %}
+                                {% if embed_url %}
+                                    <iframe src="{{ embed_url }}" class="w-full h-full" frameborder="0" referrerpolicy="origin" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen loading="lazy"></iframe>
+                                {% else %}
+                                    <a href="{{ step.youtube_url }}" target="_blank" rel="noopener noreferrer" class="flex items-center justify-center gap-2 w-full h-full bg-white/[0.03] text-base-content/60 hover:text-error transition-colors">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/><path stroke-linecap="round" stroke-linejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                                        <span class="text-sm font-medium">Watch on YouTube</span>
+                                    </a>
+                                {% endif %}
+                                {% endwith %}
+                            </div>
+                        </div>
+                    </details>
+                    {% endif %}
+                </div>
+            </details>
+            {% if not forloop.last %}
+            <div class="border-b border-base-content/5"></div>
+            {% endif %}
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    {% if tab.general_tips %}
+    {# ══ General Tips ══ #}
+    <div class="rounded-lg border border-base-content/5 border-l-4 border-l-warning/30 bg-white/[0.03] p-4 md:p-5 mb-6">
+        <h5 class="text-xs font-semibold text-base-content/50 uppercase tracking-wider mb-3 flex items-center gap-1.5">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-warning" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/></svg>
+            General Tips
+        </h5>
+        <div class="text-sm md:text-base text-base-content/75 leading-relaxed max-w-none
+                    [&_p]:mb-3 [&_p:last-child]:mb-0 [&_ul]:my-2 [&_ul]:ml-4 [&_ul]:list-disc [&_ul]:space-y-1
+                    [&_ol]:my-2 [&_ol]:ml-4 [&_ol]:list-decimal [&_ol]:space-y-1
+                    [&_strong]:text-base-content/90 [&_strong]:font-semibold
+                    [&_a]:text-primary [&_a]:underline [&_a]:decoration-primary/30 hover:[&_a]:decoration-primary
+                    [&_blockquote]:border-l-4 [&_blockquote]:border-warning/30 [&_blockquote]:pl-4 [&_blockquote]:py-1 [&_blockquote]:my-3 [&_blockquote]:italic [&_blockquote]:text-base-content/60
+                    [&_code]:bg-base-300/40 [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:rounded [&_code]:text-sm [&_code]:font-mono">{{ tab.general_tips|render_markdown }}</div>
+    </div>
+    {% endif %}
+
+    {% if tab.youtube_url %}
+    {# ══ YouTube Embed ══ #}
+    <details class="group mb-6 rounded-lg border border-base-content/5 bg-white/[0.03] overflow-hidden" open>
+        <summary class="flex items-center gap-2 p-3 cursor-pointer hover:bg-white/[0.02] transition-colors list-none [&::-webkit-details-marker]:hidden select-none">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-error shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/><path stroke-linecap="round" stroke-linejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+            <h5 class="text-xs font-semibold text-base-content/50 uppercase tracking-wider">Video Guide</h5>
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 shrink-0 text-base-content/25 ml-auto transition-transform duration-200 group-open:rotate-180" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+        </summary>
+        <div class="px-3 pb-3">
+            <div class="aspect-video rounded-lg overflow-hidden border border-base-content/5 bg-black/20">
+                {% with embed_url=tab.youtube_url|youtube_embed_url %}
+                {% if embed_url %}
+                    <iframe src="{{ embed_url }}" class="w-full h-full" frameborder="0" referrerpolicy="origin" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen loading="lazy"></iframe>
+                {% else %}
+                    <a href="{{ tab.youtube_url }}" target="_blank" rel="noopener noreferrer" class="flex items-center justify-center gap-2 w-full h-full bg-white/[0.03] text-base-content/60 hover:text-error transition-colors">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/><path stroke-linecap="round" stroke-linejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                        <span class="text-sm font-medium">Watch on YouTube</span>
+                    </a>
+                {% endif %}
+                {% endwith %}
+            </div>
+        </div>
+    </details>
+    {% endif %}
+
+    {% with guides=tab.trophy_guides.all %}
+    {% if guides %}
+    {# ══ Trophy Guides ══ #}
+    <div class="trophy-guides-display-section">
+        <div class="flex items-center flex-wrap gap-2 mb-2">
+            <h5 class="text-xs font-semibold text-base-content/50 uppercase tracking-wider flex items-center gap-1.5">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3 text-accent" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"/></svg>
+                Trophy Guides
+            </h5>
+            <span class="text-[0.6rem] text-base-content/30 font-medium">{{ guides|length }} troph{{ guides|length|pluralize:"y,ies" }}</span>
+            <div class="flex items-center gap-1.5 ml-auto">
+                <select class="trophy-guide-sort select select-bordered select-xs text-xs w-auto">
+                    <option value="default">Default Order</option>
+                    <option value="type">Trophy Type</option>
+                    <option value="rarity">Rarity</option>
+                    <option value="earned">Earned First</option>
+                    <option value="unearned">Unearned First</option>
+                </select>
+                <label class="trophy-guide-earned-filter flex items-center gap-1 cursor-pointer text-xs text-base-content/50 hover:text-base-content/70">
+                    <input type="checkbox" class="checkbox checkbox-xs">
+                    <span class="hidden md:inline">Hide earned</span>
+                    <span class="md:hidden">Hide</span>
+                </label>
+            </div>
+        </div>
+        <div class="trophy-guides-list space-y-2">
+            {% for guide in guides %}
+                {% with trophy=roadmap_trophies|get_item:guide.trophy_id earned_data=profile_earned|get_item:guide.trophy_id %}
+                <details id="trophy-guide-{{ guide.trophy_id }}"
+                        data-order="{{ guide.trophy_id }}"
+                        data-type="{% if trophy %}{{ trophy.trophy_type }}{% endif %}"
+                        data-rarity="{% if trophy %}{{ trophy.trophy_earn_rate }}{% else %}100{% endif %}"
+                        data-earned="{% if earned_data.earned %}1{% else %}0{% endif %}"
+                        class="trophy-guide-item group rounded-lg border overflow-hidden {% if earned_data.earned %}border-success/20 border-l-4 border-l-success/50 bg-success/[0.03]{% else %}border-base-content/5 bg-white/[0.03]{% endif %}">
+                    <summary class="flex items-center gap-3 p-3 cursor-pointer hover:bg-white/[0.02] transition-colors list-none [&::-webkit-details-marker]:hidden">
+                        {% if trophy %}
+                        <div class="relative shrink-0">
+                            <img src="{{ trophy.trophy_icon_url }}" alt="{{ trophy.trophy_name }}" class="w-8 h-8 md:w-9 md:h-9 rounded object-cover border border-base-content/10 {% if not earned_data.earned %}opacity-60 grayscale-[30%]{% endif %}">
+                            {% if earned_data.earned %}
+                            <div class="absolute -bottom-0.5 -right-0.5 w-4 h-4 bg-success rounded-full flex items-center justify-center ring-2 ring-base-200">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-2.5 h-2.5 text-success-content" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+                            </div>
+                            {% endif %}
+                        </div>
+                        <div class="flex-1 min-w-0 flex items-center gap-2">
+                            <span class="text-sm font-semibold truncate {% if not earned_data.earned %}text-base-content/60{% endif %}">{{ trophy.trophy_name }}</span>
+                            <span class="badge badge-xs shrink-0 {% if trophy.trophy_type == 'platinum' %}badge-info{% elif trophy.trophy_type == 'gold' %}badge-warning{% elif trophy.trophy_type == 'silver' %}badge-ghost{% else %}badge-accent{% endif %}">{{ trophy.trophy_type|title }}</span>
+                        </div>
+                        {% else %}
+                        <div class="w-8 h-8 md:w-9 md:h-9 rounded bg-base-300/30 shrink-0"></div>
+                        <div class="flex-1 min-w-0">
+                            <span class="text-sm font-semibold">Trophy #{{ guide.trophy_id }}</span>
+                        </div>
+                        {% endif %}
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 shrink-0 text-base-content/30 transition-transform duration-200 group-open:rotate-180" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+                    </summary>
+                    <div class="px-3 pb-3 pt-0 ml-11 md:ml-12 border-t border-base-content/5">
+                        <div class="text-sm md:text-base text-base-content/75 leading-relaxed pt-3 max-w-none
+                                    [&_p]:mb-3 [&_p:last-child]:mb-0 [&_ul]:my-2 [&_ul]:ml-4 [&_ul]:list-disc [&_ul]:space-y-1
+                                    [&_ol]:my-2 [&_ol]:ml-4 [&_ol]:list-decimal [&_ol]:space-y-1
+                                    [&_strong]:text-base-content/90 [&_strong]:font-semibold
+                                    [&_a]:text-primary [&_a]:underline [&_a]:decoration-primary/30 hover:[&_a]:decoration-primary
+                                    [&_code]:bg-base-300/40 [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:rounded [&_code]:text-sm [&_code]:font-mono">{{ guide.body|render_markdown }}</div>
+                    </div>
+                </details>
+                {% endwith %}
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+    {% endwith %}
+
+</div>
+{% endwith %}
+{% endwith %}

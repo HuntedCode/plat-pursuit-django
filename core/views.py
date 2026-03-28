@@ -27,8 +27,7 @@ class IndexView(ProfileHotbarMixin, TemplateView):
     PLAYING_NOW_TIMEOUT = 86400
     FEATURED_BADGES_KEY = 'featured_badges'
     FEATURED_BADGES_TIMEOUT = 86400
-    FEATURED_CHECKLISTS_KEY = 'featured_checklists'
-    FEATURED_CHECKLISTS_TIMEOUT = 86400
+    # Featured checklists removed (roadmap migration)
     WHATS_NEW_KEY = 'whats_new'
     WHATS_NEW_TIMEOUT = 3600
 
@@ -91,15 +90,6 @@ class IndexView(ProfileHotbarMixin, TemplateView):
             prev_key = f"{self.FEATURED_BADGES_KEY}_{prev_day.date().isoformat()}"
             featured_badges = cache.get(prev_key)
         context['featuredBadges'] = featured_badges
-
-        # Featured checklists - cache resets daily at midnight UTC (cron)
-        featured_checklists_key = f"{self.FEATURED_CHECKLISTS_KEY}_{today_utc}"
-        featured_checklists = cache.get(featured_checklists_key)
-        if featured_checklists is None:
-            prev_day = now_utc - timedelta(days=1)
-            prev_key = f"{self.FEATURED_CHECKLISTS_KEY}_{prev_day.date().isoformat()}"
-            featured_checklists = cache.get(prev_key)
-        context['featuredChecklists'] = featured_checklists
 
         # What's New - cache resets hourly at top of the hour UTC (cron)
         whats_new_key = f"{self.WHATS_NEW_KEY}_{today_utc}_{now_utc.hour:02d}"

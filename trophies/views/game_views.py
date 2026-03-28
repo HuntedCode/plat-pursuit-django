@@ -18,7 +18,7 @@ from django.views.generic import ListView, DetailView
 from urllib.parse import urlencode
 from trophies.mixins import ProfileHotbarMixin
 from ..constants import CACHE_TIMEOUT_IMAGES
-from ..models import Game, Trophy, Profile, EarnedTrophy, ProfileGame, TrophyGroup, Badge, Concept, FeaturedGuide, Stage, Checklist, UserConceptRating
+from ..models import Game, Trophy, Profile, EarnedTrophy, ProfileGame, TrophyGroup, Badge, Concept, FeaturedGuide, Stage, UserConceptRating
 from ..forms import GameSearchForm, GameDetailForm, GuideSearchForm
 from trophies.util_modules.constants import MODERN_PLATFORMS, ALL_PLATFORMS
 
@@ -611,16 +611,28 @@ class GameDetailView(ProfileHotbarMixin, DetailView):
 
         context = {}
 
-        # Community averages
+        # Community averages (base game, for backward compat)
         context['community_averages'] = RatingService.get_cached_community_averages(game.concept)
 
-        # Review and recommendation data (base game group)
+        # Per-CTG community data for tabbed display
         from trophies.models import ConceptTrophyGroup, Review
         from trophies.services.review_service import ReviewService
 
-        base_ctg = ConceptTrophyGroup.objects.filter(
-            concept=game.concept, trophy_group_id='default'
-        ).only('id', 'trophy_group_id').first()
+        ctgs = list(
+            ConceptTrophyGroup.objects.filter(concept=game.concept)
+            .order_by('sort_order', 'trophy_group_id')
+        )
+        context['concept_trophy_groups'] = ctgs
+
+        community_tabs = []
+        for ctg in ctgs:
+            community_tabs.append({
+                'ctg': ctg,
+                'averages': RatingService.get_cached_community_averages_for_group(game.concept, ctg),
+            })
+        context['community_tabs'] = community_tabs
+
+        base_ctg = next((c for c in ctgs if c.trophy_group_id == 'default'), None)
         if base_ctg:
             context['recommendation_stats'] = ReviewService.get_recommendation_stats(
                 game.concept, base_ctg
@@ -782,21 +794,44 @@ class GameDetailView(ProfileHotbarMixin, DetailView):
         concept_context = self._build_concept_context(game)
         context.update(concept_context)
 
-        # Add checklist count for the concept (for initial badge display)
+        # Roadmap data for game detail page
+        roadmap_preview = (
+            self.request.GET.get('preview') == 'true'
+            and user.is_authenticated
+            and user.is_staff
+        )
+        context['roadmap_preview_mode'] = roadmap_preview
         if game.concept:
-            context['checklist_count'] = Checklist.objects.active().published().filter(concept=game.concept).count()
-            # Check if user has draft checklists for this concept
-            if user.is_authenticated and hasattr(user, 'profile') and user.profile:
-                context['user_draft_checklists'] = Checklist.objects.active().filter(
-                    concept=game.concept,
-                    profile=user.profile,
-                    status='draft'
-                )
+            from trophies.services.roadmap_service import RoadmapService
+            if roadmap_preview:
+                roadmap = RoadmapService.get_roadmap_for_preview(game.concept)
             else:
-                context['user_draft_checklists'] = []
+                roadmap = RoadmapService.get_roadmap_for_display(game.concept)
+            context['roadmap'] = roadmap
+            if roadmap:
+                # Map CTG ID -> roadmap tab for template lookup
+                context['roadmap_tabs_by_ctg'] = {
+                    tab.concept_trophy_group_id: tab
+                    for tab in roadmap.tabs.all()
+                }
+                roadmap_trophy_ids = set()
+                for tab in roadmap.tabs.all():
+                    for step in tab.steps.all():
+                        for st in step.step_trophies.all():
+                            roadmap_trophy_ids.add(st.trophy_id)
+                    for tg in tab.trophy_guides.all():
+                        roadmap_trophy_ids.add(tg.trophy_id)
+                context['roadmap_trophies'] = {
+                    t.trophy_id: t
+                    for t in game.trophies.filter(trophy_id__in=roadmap_trophy_ids)
+                } if roadmap_trophy_ids else {}
+            else:
+                context['roadmap_trophies'] = {}
+                context['roadmap_tabs_by_ctg'] = {}
         else:
-            context['checklist_count'] = 0
-            context['user_draft_checklists'] = []
+            context['roadmap'] = None
+            context['roadmap_trophies'] = {}
+            context['roadmap_tabs_by_ctg'] = {}
 
         # Build user rating context (if earned platinum)
         rating_context = self._build_rating_context(user, game)

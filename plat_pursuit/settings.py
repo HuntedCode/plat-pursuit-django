@@ -157,6 +157,9 @@ CONTENT_SECURITY_POLICY = {
             "https://googleads.g.doubleclick.net",     # AdSense iframes
             "https://tpc.googlesyndication.com",       # AdSense iframes
             "https://www.google.com",                  # AdSense iframes
+            "https://www.youtube.com",                 # Roadmap video guides
+            "https://www.youtube-nocookie.com",        # Roadmap video guides (privacy-enhanced)
+            "https://youtube.com",                     # Roadmap video guides
         ],
         "connect-src": [
             "'self'",

@@ -14,13 +14,17 @@
             {% include 'trophies/partials/game_detail/game_detail_header.html' %}
         </section>
 
+    {# ── Community: Ratings + Roadmap (shared DLC tabs) ── #}
     <div class="mt-4">
-        {% include 'trophies/partials/game_detail/community_section.html' %}
+        {% include 'trophies/partials/game_detail/community_tabs_section.html' %}
+    </div>
+
+    {# ── Reviews (separate, links to Review Hub) ── #}
+    <div class="mt-3">
+        {% include 'trophies/partials/game_detail/reviews_section.html' %}
     </div>
 
     {% include 'partials/ad_unit.html' with ad_slot="8393162469" %}
-
-    {# Checklist/Guides section hidden during redesign #}
 
     {% if trophies_syncing %}
         <div class="mt-4">
