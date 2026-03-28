@@ -1,5 +1,6 @@
 {% load humanize %}
 {# Reusable ratings grid. Expects `averages` variable (dict or None). #}
+<div class="mb-4">
 {% if averages %}
     <div class="grid grid-cols-2 md:grid-cols-5 gap-1.5">
         <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-2 text-center">
@@ -28,6 +29,7 @@
             <progress class="progress progress-xs {% if averages.avg_rating < 2 %}progress-error{% elif averages.avg_rating < 4 %}progress-warning{% else %}progress-success{% endif %} mt-1" value="{{ averages.avg_rating }}" max="5"></progress>
         </div>
     </div>
+    <p class="text-xs text-base-content/50 text-center italic mt-2">Based on {{ averages.count|intcomma }} community rating{{ averages.count|pluralize }}.</p>
 {% else %}
     <div class="grid grid-cols-2 md:grid-cols-5 gap-1.5">
         <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-2 text-center">
@@ -58,3 +60,4 @@
     </div>
     <p class="text-xs text-base-content/50 text-center italic mt-2">No community ratings yet. Be the first to rate!</p>
 {% endif %}
+</div>
