@@ -1,0 +1,64 @@
+{% load custom_filters humanize %}
+{# All premium stat sections - rendered inline or via AJAX #}
+
+{# Section 2: Personal Records #}
+{% with records_data=premium_stats.records %}
+    {% include 'trophies/partials/stats/personal_records.html' %}
+{% endwith %}
+
+{# Section 3: Rarity Profile #}
+{% with data=premium_stats.rarity %}
+    {% if not data.empty %}
+        {% include 'trophies/partials/stats/rarity_profile.html' %}
+    {% endif %}
+{% endwith %}
+
+{# Section 4: Streaks & Consistency #}
+{% with data=premium_stats.streaks %}
+    {% include 'trophies/partials/stats/streaks.html' %}
+{% endwith %}
+
+{# Section 5: Time Patterns #}
+{% with data=premium_stats.time_patterns %}
+    {% include 'trophies/partials/stats/time_patterns.html' %}
+{% endwith %}
+
+{# Section 6: Platform Breakdown #}
+{% with data=premium_stats.platforms %}
+    {% include 'trophies/partials/stats/platform_breakdown.html' %}
+{% endwith %}
+
+{# Section 7: Genre Breakdown #}
+{% with data=premium_stats.genres %}
+    {% include 'trophies/partials/stats/genre_breakdown.html' %}
+{% endwith %}
+
+{# Section 8: Game Library #}
+{% with data=premium_stats.library %}
+    {% include 'trophies/partials/stats/game_library.html' %}
+{% endwith %}
+
+{# Section 9: Badge & XP Stats #}
+{% with data=premium_stats.badges %}
+    {% include 'trophies/partials/stats/badge_stats.html' %}
+{% endwith %}
+
+{# Section 10: Challenge Progress #}
+{% with data=premium_stats.challenges %}
+    {% include 'trophies/partials/stats/challenge_progress.html' %}
+{% endwith %}
+
+{# Section 11: Community Contributions #}
+{% with data=premium_stats.community %}
+    {% include 'trophies/partials/stats/community_stats.html' %}
+{% endwith %}
+
+{# Monthly Recap Mining #}
+{% with data=premium_stats.recaps %}
+    {% include 'trophies/partials/stats/recap_stats.html' %}
+{% endwith %}
+
+{# Section 12: Milestones #}
+{% with data=premium_stats.milestones %}
+    {% include 'trophies/partials/stats/milestones_showcase.html' %}
+{% endwith %}

@@ -289,3 +289,36 @@ class DashboardPreviewToggleView(StaffRequiredAPIMixin, View):
             'status': 'ok',
             'preview_premium': request.session['dashboard_preview_premium'],
         })
+
+
+class StatsPageDataView(StaffRequiredAPIMixin, View):
+    """
+    GET /api/v1/stats/premium/
+
+    Returns rendered HTML for all premium stats sections.
+    Called via AJAX after the page shell loads to overlay the intro animation
+    on top of actual computation time.
+    """
+
+    def get(self, request):
+        from trophies.services.stats_service import get_premium_stats
+
+        profile = request.user.profile
+        is_premium = get_effective_premium(request)
+
+        if not is_premium:
+            return JsonResponse({'error': 'Premium required.'}, status=403)
+
+        premium_stats = get_premium_stats(profile)
+
+        try:
+            html = render_to_string(
+                'trophies/partials/stats/premium_sections.html',
+                {'premium_stats': premium_stats},
+                request=request,
+            )
+        except Exception:
+            logger.exception("Failed to render stats page premium sections")
+            return JsonResponse({'error': 'Failed to render stats.'}, status=500)
+
+        return JsonResponse({'html': html})

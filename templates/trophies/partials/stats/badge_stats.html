@@ -1,0 +1,121 @@
+{% load humanize %}
+{# Section 9: Badge & XP Stats #}
+<div class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral mb-3">
+    <div class="card-body p-3 md:p-5 lg:p-7">
+        <h2 class="card-title text-base lg:text-lg font-bold flex items-center gap-2 mb-3">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-primary shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"/>
+            </svg>
+            Badge & XP Stats
+        </h2>
+
+        {# Top-line stats #}
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-1.5 md:gap-2 lg:gap-3 mb-4">
+            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-1.5 md:p-3 text-center">
+                <div class="text-lg md:text-xl lg:text-2xl font-black text-primary">{{ data.total_xp|intcomma }}</div>
+                <div class="text-xs text-base-content/50 font-medium">Total XP</div>
+            </div>
+            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-1.5 md:p-3 text-center">
+                <div class="text-lg md:text-xl lg:text-2xl font-black text-primary">{{ data.total_badges }}</div>
+                <div class="text-xs text-base-content/50 font-medium">Badges Earned</div>
+            </div>
+            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-1.5 md:p-3 text-center">
+                <div class="text-lg md:text-xl lg:text-2xl font-black text-primary">{{ data.unique_series }}</div>
+                <div class="text-xs text-base-content/50 font-medium">Unique Series</div>
+            </div>
+            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-1.5 md:p-3 text-center">
+                <div class="text-lg md:text-xl lg:text-2xl font-black text-primary">{{ data.total_stages }}</div>
+                <div class="text-xs text-base-content/50 font-medium">Stages Complete</div>
+            </div>
+        </div>
+
+        {# Tier breakdown #}
+        {% if data.tier_breakdown %}
+        <h4 class="text-xs font-semibold text-base-content/60 uppercase tracking-wider mb-2">Badge Tier Breakdown</h4>
+        <div class="grid grid-cols-4 gap-1.5 md:gap-2 mb-4">
+            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-1 md:p-2 text-center">
+                <span class="font-bold text-sm text-amber-700">{{ data.tier_breakdown.Bronze|default:"0" }}</span>
+                <div class="text-xs text-base-content/50">Bronze</div>
+            </div>
+            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-1 md:p-2 text-center">
+                <span class="font-bold text-sm text-slate-400">{{ data.tier_breakdown.Silver|default:"0" }}</span>
+                <div class="text-xs text-base-content/50">Silver</div>
+            </div>
+            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-1 md:p-2 text-center">
+                <span class="font-bold text-sm text-yellow-500">{{ data.tier_breakdown.Gold|default:"0" }}</span>
+                <div class="text-xs text-base-content/50">Gold</div>
+            </div>
+            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-1 md:p-2 text-center">
+                <span class="font-bold text-sm text-blue-300">{{ data.tier_breakdown.Platinum|default:"0" }}</span>
+                <div class="text-xs text-base-content/50">Platinum</div>
+            </div>
+        </div>
+        {% endif %}
+
+        {# Additional stats #}
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-1.5 md:gap-2 mb-4">
+            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-1.5 md:p-3 text-center">
+                <div class="text-sm md:text-base font-bold text-primary">{{ data.avg_xp_per_badge }}</div>
+                <div class="text-xs text-base-content/50">Avg XP / Badge</div>
+            </div>
+            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-1.5 md:p-3 text-center">
+                <div class="text-sm md:text-base font-bold text-primary">{{ data.series_completed }}</div>
+                <div class="text-xs text-base-content/50">Series Completed</div>
+            </div>
+            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-1.5 md:p-3 text-center">
+                <div class="text-sm md:text-base font-bold text-primary">{{ data.badge_velocity }}</div>
+                <div class="text-xs text-base-content/50">Badges / Month</div>
+            </div>
+            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-1.5 md:p-3 text-center">
+                <div class="text-sm md:text-base font-bold text-primary">{{ data.recent_badges_count_90d }}</div>
+                <div class="text-xs text-base-content/50">Badges (90 Days)</div>
+            </div>
+        </div>
+
+        {# Top series by XP #}
+        {% if data.top_series %}
+        <h4 class="text-xs font-semibold text-base-content/60 uppercase tracking-wider mb-2">Top Series by XP</h4>
+        <div class="space-y-1">
+            {% for series in data.top_series %}
+            <div class="flex items-center gap-2 px-2 py-1.5 rounded bg-white/[0.03] border border-base-content/5">
+                <span class="text-xs font-semibold text-primary mr-1">#{{ forloop.counter }}</span>
+                <span class="text-sm font-medium flex-1">{{ series.series }}</span>
+                <span class="text-sm font-bold text-primary">{{ series.xp|intcomma }} XP</span>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        {# Recent badge / highest badge #}
+        {% if data.recent_badge or data.highest_badge %}
+        <div class="border-t border-base-content/10 pt-3 mt-3">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-1.5 md:gap-2">
+                {% if data.highest_badge %}
+                <div class="flex items-center gap-2 p-2 rounded-lg bg-white/[0.03] border border-base-content/5">
+                    {% if data.highest_badge.image %}
+                    <img class="w-10 h-10 object-contain shrink-0" src="{{ data.highest_badge.image }}" alt="" loading="lazy">
+                    {% endif %}
+                    <div class="flex-1 min-w-0">
+                        <div class="text-xs text-base-content/50">Highest Tier Badge</div>
+                        <div class="text-sm font-bold line-clamp-1">{{ data.highest_badge.name }}</div>
+                        <div class="text-xs text-base-content/40">{{ data.highest_badge.tier }} · {{ data.highest_badge.series }}</div>
+                    </div>
+                </div>
+                {% endif %}
+                {% if data.recent_badge %}
+                <div class="flex items-center gap-2 p-2 rounded-lg bg-white/[0.03] border border-base-content/5">
+                    {% if data.recent_badge.image %}
+                    <img class="w-10 h-10 object-contain shrink-0" src="{{ data.recent_badge.image }}" alt="" loading="lazy">
+                    {% endif %}
+                    <div class="flex-1 min-w-0">
+                        <div class="text-xs text-base-content/50">Most Recent Badge</div>
+                        <div class="text-sm font-bold line-clamp-1">{{ data.recent_badge.name }}</div>
+                        <div class="text-xs text-base-content/40">{{ data.recent_badge.earned_at|date:"M j, Y" }}</div>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
