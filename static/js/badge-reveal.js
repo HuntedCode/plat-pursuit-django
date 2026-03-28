@@ -73,6 +73,14 @@
             var existingModal = document.getElementById('pick-next-game-modal');
             if (existingModal) existingModal.remove();
 
+            // Replace the spin button to strip stale event listeners from
+            // previous ReelSpinner instances (each .bind() call adds a new one)
+            var oldBtn = document.getElementById('badge-reveal-spin-btn');
+            if (oldBtn) {
+                var freshBtn = oldBtn.cloneNode(true);
+                oldBtn.parentNode.replaceChild(freshBtn, oldBtn);
+            }
+
             // Create new spinner with active pool
             this._spinner = new PlatPursuit.ReelSpinner({
                 slots: activePool,
