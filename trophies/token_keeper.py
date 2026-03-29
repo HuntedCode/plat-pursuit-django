@@ -1896,7 +1896,7 @@ class TokenKeeper:
                     concept.check_and_mark_regional()
 
                     # IGDB enrichment for newly created concepts (best-effort)
-                    if concept_created and not concept.concept_id.startswith('PP_'):
+                    if concept_created and not str(concept.concept_id).startswith('PP_'):
                         try:
                             from trophies.services.igdb_service import IGDBService
                             IGDBService.enrich_concept(concept)
