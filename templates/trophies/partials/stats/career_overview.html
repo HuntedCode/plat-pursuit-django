@@ -50,12 +50,20 @@
                 <div class="text-xs text-base-content/50 font-medium">Unearned</div>
             </div>
             <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-1.5 md:p-3 text-center">
+                <div class="text-lg md:text-xl lg:text-2xl font-black text-primary">{{ career.overall_earn_rate }}%</div>
+                <div class="text-xs text-base-content/50 font-medium">Earn Rate</div>
+            </div>
+            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-1.5 md:p-3 text-center">
                 <div class="text-lg md:text-xl lg:text-2xl font-black text-primary">{{ career.total_games|intcomma }}</div>
                 <div class="text-xs text-base-content/50 font-medium">Games Played</div>
             </div>
             <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-1.5 md:p-3 text-center">
                 <div class="text-lg md:text-xl lg:text-2xl font-black text-success">{{ career.total_completes|intcomma }}</div>
                 <div class="text-xs text-base-content/50 font-medium">100% Complete</div>
+            </div>
+            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-1.5 md:p-3 text-center">
+                <div class="text-lg md:text-xl lg:text-2xl font-black text-warning">{{ career.backlog|intcomma }}</div>
+                <div class="text-xs text-base-content/50 font-medium">Backlog</div>
             </div>
         </div>
 
@@ -90,12 +98,17 @@
                 <div class="text-xs text-base-content/50 font-medium">Plats / Month</div>
             </div>
             <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-1.5 md:p-3 text-center">
-                <div class="text-sm md:text-base lg:text-lg font-bold text-primary">{{ career.account_age_years }}y</div>
-                <div class="text-xs text-base-content/50 font-medium">Account Age</div>
+                <div class="text-sm md:text-base lg:text-lg font-bold text-primary">{{ career.career_years }}y</div>
+                <div class="text-xs text-base-content/50 font-medium">Career Length</div>
             </div>
             <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-1.5 md:p-3 text-center">
                 <div class="text-sm md:text-base lg:text-lg font-bold text-primary">Lv. {{ career.trophy_level }}</div>
                 <div class="text-xs text-base-content/50 font-medium">PSN Level</div>
+                {% if career.level_progress > 0 %}
+                <div class="mt-1 bg-base-content/5 rounded-full h-1.5 mx-2">
+                    <div class="bg-primary rounded-full h-1.5" style="width: {{ career.level_progress }}%"></div>
+                </div>
+                {% endif %}
             </div>
         </div>
 

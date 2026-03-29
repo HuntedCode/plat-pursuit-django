@@ -35,17 +35,49 @@
             {% endfor %}
         </div>
 
-        <div class="grid grid-cols-2 gap-1.5 md:gap-2">
+        {# Highlights #}
+        <h4 class="text-xs font-semibold text-base-content/60 uppercase tracking-wider mb-2">Highlights</h4>
+        <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-1.5 md:gap-2 mb-4">
+            {% if data.first_platform %}
             <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-1.5 md:p-3 text-center">
-                <div class="text-sm md:text-base font-bold text-primary">{{ data.cross_gen }}</div>
-                <div class="text-xs text-base-content/50">Cross-Gen Games</div>
+                <div class="text-sm md:text-base font-bold text-primary">{{ data.first_platform }}</div>
+                <div class="text-xs text-base-content/50">First Platform</div>
             </div>
+            {% endif %}
             {% if data.most_recent %}
             <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-1.5 md:p-3 text-center">
                 <div class="text-sm md:text-base font-bold text-primary">{{ data.most_recent }}</div>
-                <div class="text-xs text-base-content/50">Most Recent Platform</div>
+                <div class="text-xs text-base-content/50">Most Recent</div>
             </div>
             {% endif %}
+            {% if data.most_plats_platform %}
+            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-1.5 md:p-3 text-center">
+                <div class="text-sm md:text-base font-bold text-blue-300">{{ data.most_plats_platform }}</div>
+                <div class="text-xs text-base-content/50">Most Platinums</div>
+            </div>
+            {% endif %}
+            {% if data.best_completion_platform %}
+            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-1.5 md:p-3 text-center">
+                <div class="text-sm md:text-base font-bold text-success">{{ data.best_completion_platform.name }}</div>
+                <div class="text-xs text-base-content/50">Best Completion</div>
+                <div class="text-[0.6rem] text-base-content/30">{{ data.best_completion_platform.avg }}% avg</div>
+            </div>
+            {% endif %}
+            {% if data.best_tpg_platform %}
+            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-1.5 md:p-3 text-center">
+                <div class="text-sm md:text-base font-bold text-primary">{{ data.best_tpg_platform.name }}</div>
+                <div class="text-xs text-base-content/50">Most Trophies / Game</div>
+                <div class="text-[0.6rem] text-base-content/30">{{ data.best_tpg_platform.rate }} avg</div>
+            </div>
+            {% endif %}
+            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-1.5 md:p-3 text-center">
+                <div class="text-sm md:text-base font-bold text-primary">{{ data.cross_gen }}</div>
+                <div class="text-xs text-base-content/50">Cross-Gen</div>
+            </div>
+            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-1.5 md:p-3 text-center">
+                <div class="text-sm md:text-base font-bold text-base-content/60">{{ data.single_platform }}</div>
+                <div class="text-xs text-base-content/50">Single Platform</div>
+            </div>
         </div>
         {% else %}
         <p class="text-sm text-base-content/50">No platform data available.</p>

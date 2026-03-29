@@ -313,7 +313,9 @@ class StatsPageDataView(StaffRequiredAPIMixin, View):
         if not is_premium:
             return JsonResponse({'error': 'Premium required.'}, status=403)
 
-        premium_stats = get_premium_stats(profile)
+        exclude_shovelware = request.GET.get('exclude_shovelware') == '1'
+        exclude_hidden = request.GET.get('exclude_hidden') == '1'
+        premium_stats = get_premium_stats(profile, exclude_shovelware, exclude_hidden)
 
         try:
             html = render_to_string(

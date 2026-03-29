@@ -49,7 +49,7 @@
                 </svg>
                 Playtime
             </h4>
-            <div class="grid grid-cols-2 gap-1.5 md:gap-2">
+            <div class="grid grid-cols-2 md:grid-cols-3 gap-1.5 md:gap-2 mb-3">
                 {% if records_data.total_playtime %}
                 <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-1.5 md:p-3 text-center">
                     <div class="text-sm md:text-base lg:text-lg font-bold text-primary">{{ records_data.total_playtime }}</div>
@@ -60,6 +60,99 @@
                 <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-1.5 md:p-3 text-center">
                     <div class="text-sm md:text-base lg:text-lg font-bold text-primary">{{ records_data.avg_playtime }}</div>
                     <div class="text-xs text-base-content/50 font-medium">Avg / Game</div>
+                </div>
+                {% endif %}
+                {% if records_data.trophies_per_hour %}
+                <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-1.5 md:p-3 text-center">
+                    <div class="text-sm md:text-base lg:text-lg font-bold text-primary">{{ records_data.trophies_per_hour }}</div>
+                    <div class="text-xs text-base-content/50 font-medium">Trophies / Hour</div>
+                </div>
+                {% endif %}
+                {% if records_data.avg_playtime_per_plat %}
+                <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-1.5 md:p-3 text-center">
+                    <div class="text-sm md:text-base lg:text-lg font-bold text-primary">{{ records_data.avg_playtime_per_plat }}</div>
+                    <div class="text-xs text-base-content/50 font-medium">Avg / Platinum</div>
+                </div>
+                {% endif %}
+                {% if records_data.avg_session %}
+                <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-1.5 md:p-3 text-center">
+                    <div class="text-sm md:text-base lg:text-lg font-bold text-primary">{{ records_data.avg_session }}</div>
+                    <div class="text-xs text-base-content/50 font-medium">Avg Session</div>
+                </div>
+                {% endif %}
+            </div>
+
+            {# Playtime record rows #}
+            <div class="space-y-1.5">
+                {% if records_data.most_efficient %}
+                <div class="flex items-center gap-2 md:gap-3 p-2 rounded-lg bg-white/[0.03] border border-base-content/5">
+                    {% if records_data.most_efficient.icon %}
+                    <div class="w-10 h-10 md:w-12 md:h-12 rounded-lg overflow-hidden shrink-0 bg-base-content/5">
+                        <img class="w-full h-full object-cover" src="{{ records_data.most_efficient.icon }}" alt="" loading="lazy">
+                    </div>
+                    {% endif %}
+                    <div class="flex-1 min-w-0">
+                        <div class="text-sm font-bold line-clamp-1">Most Efficient Game</div>
+                        <div class="text-xs text-base-content/50 line-clamp-1">{{ records_data.most_efficient.name }}</div>
+                    </div>
+                    <div class="text-right shrink-0">
+                        <div class="text-sm md:text-base font-bold text-success">{{ records_data.most_efficient.rate }}/hr</div>
+                        <div class="text-xs text-base-content/40">{{ records_data.most_efficient.trophies }} in {{ records_data.most_efficient.playtime }}</div>
+                    </div>
+                </div>
+                {% endif %}
+
+                {% if records_data.biggest_sink %}
+                <div class="flex items-center gap-2 md:gap-3 p-2 rounded-lg bg-white/[0.03] border border-base-content/5">
+                    {% if records_data.biggest_sink.icon %}
+                    <div class="w-10 h-10 md:w-12 md:h-12 rounded-lg overflow-hidden shrink-0 bg-base-content/5">
+                        <img class="w-full h-full object-cover" src="{{ records_data.biggest_sink.icon }}" alt="" loading="lazy">
+                    </div>
+                    {% endif %}
+                    <div class="flex-1 min-w-0">
+                        <div class="text-sm font-bold line-clamp-1">Biggest Time Sink</div>
+                        <div class="text-xs text-base-content/50 line-clamp-1">{{ records_data.biggest_sink.name }}</div>
+                    </div>
+                    <div class="text-right shrink-0">
+                        <div class="text-sm md:text-base font-bold text-warning">{{ records_data.biggest_sink.rate }}/hr</div>
+                        <div class="text-xs text-base-content/40">{{ records_data.biggest_sink.trophies }} in {{ records_data.biggest_sink.playtime }}</div>
+                    </div>
+                </div>
+                {% endif %}
+
+                {% if records_data.longest_no_plat %}
+                <div class="flex items-center gap-2 md:gap-3 p-2 rounded-lg bg-white/[0.03] border border-base-content/5">
+                    {% if records_data.longest_no_plat.icon %}
+                    <div class="w-10 h-10 md:w-12 md:h-12 rounded-lg overflow-hidden shrink-0 bg-base-content/5">
+                        <img class="w-full h-full object-cover" src="{{ records_data.longest_no_plat.icon }}" alt="" loading="lazy">
+                    </div>
+                    {% endif %}
+                    <div class="flex-1 min-w-0">
+                        <div class="text-sm font-bold line-clamp-1">Most Playtime Without Plat/100%</div>
+                        <div class="text-xs text-base-content/50 line-clamp-1">{{ records_data.longest_no_plat.name }}</div>
+                    </div>
+                    <div class="text-right shrink-0">
+                        <div class="text-sm md:text-base font-bold text-primary">{{ records_data.longest_no_plat.playtime }}</div>
+                        <div class="text-xs text-base-content/40">{{ records_data.longest_no_plat.progress }}% complete</div>
+                    </div>
+                </div>
+                {% endif %}
+
+                {% if records_data.longest_commitment %}
+                <div class="flex items-center gap-2 md:gap-3 p-2 rounded-lg bg-white/[0.03] border border-base-content/5">
+                    {% if records_data.longest_commitment.icon %}
+                    <div class="w-10 h-10 md:w-12 md:h-12 rounded-lg overflow-hidden shrink-0 bg-base-content/5">
+                        <img class="w-full h-full object-cover" src="{{ records_data.longest_commitment.icon }}" alt="" loading="lazy">
+                    </div>
+                    {% endif %}
+                    <div class="flex-1 min-w-0">
+                        <div class="text-sm font-bold line-clamp-1">Longest Commitment</div>
+                        <div class="text-xs text-base-content/50 line-clamp-1">{{ records_data.longest_commitment.name }}</div>
+                    </div>
+                    <div class="text-right shrink-0">
+                        <div class="text-sm md:text-base font-bold text-primary">{{ records_data.longest_commitment.span }}</div>
+                        <div class="text-xs text-base-content/40">first to last play</div>
+                    </div>
                 </div>
                 {% endif %}
             </div>

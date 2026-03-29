@@ -32,9 +32,19 @@
                 <div class="text-xs text-base-content/50 font-medium">Longest Plat Streak</div>
             </div>
             <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-1.5 md:p-3 text-center">
+                <div class="text-lg md:text-xl lg:text-2xl font-black {% if data.current_plat_streak > 0 %}text-success{% else %}text-base-content/50{% endif %}">{{ data.current_plat_streak }}</div>
+                <div class="text-xs text-base-content/50 font-medium">Current Plat Streak</div>
+            </div>
+            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-1.5 md:p-3 text-center">
                 <div class="text-lg md:text-xl lg:text-2xl font-black text-error/70">{{ data.longest_drought }}</div>
                 <div class="text-xs text-base-content/50 font-medium">Longest Drought</div>
             </div>
+            {% if data.plat_drought > 0 %}
+            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-1.5 md:p-3 text-center">
+                <div class="text-lg md:text-xl lg:text-2xl font-black text-error/50">{{ data.plat_drought }}</div>
+                <div class="text-xs text-base-content/50 font-medium">Longest Plat Drought</div>
+            </div>
+            {% endif %}
         </div>
 
         {# Activity stats #}
@@ -50,12 +60,20 @@
                 <div class="text-xs text-base-content/50">Active Days</div>
             </div>
             <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-1.5 md:p-3 text-center">
+                <div class="text-sm md:text-base font-bold text-base-content/40">{{ data.inactive_days|intcomma }}</div>
+                <div class="text-xs text-base-content/50">Inactive Days</div>
+            </div>
+            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-1.5 md:p-3 text-center">
                 <div class="text-sm md:text-base font-bold text-primary">{{ data.active_ratio }}%</div>
                 <div class="text-xs text-base-content/50">Active Ratio</div>
             </div>
             <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-1.5 md:p-3 text-center">
                 <div class="text-sm md:text-base font-bold text-primary">{{ data.avg_per_active_day }}</div>
                 <div class="text-xs text-base-content/50">Trophies / Active Day</div>
+            </div>
+            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-1.5 md:p-3 text-center">
+                <div class="text-sm md:text-base font-bold text-primary">{{ data.avg_per_month }}</div>
+                <div class="text-xs text-base-content/50">Trophies / Month</div>
             </div>
             <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-1.5 md:p-3 text-center">
                 <div class="text-sm md:text-base font-bold {% if data.days_since_last == 0 %}text-success{% else %}text-primary{% endif %}">{{ data.days_since_last }}</div>
@@ -104,6 +122,13 @@
                 <div class="text-sm font-bold text-primary">{{ data.best_calendar_month.month }}</div>
                 <div class="text-xs text-base-content/50">Best Month (All-Time)</div>
                 <div class="text-[0.6rem] text-base-content/30">{{ data.best_calendar_month.total|intcomma }} total trophies</div>
+            </div>
+            {% endif %}
+            {% if data.best_mom_improvement %}
+            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-2 md:p-3 text-center">
+                <div class="text-sm font-bold text-success">+{{ data.best_mom_improvement.delta|intcomma }}</div>
+                <div class="text-xs text-base-content/50">Best Comeback</div>
+                <div class="text-[0.6rem] text-base-content/30">{{ data.best_mom_improvement.month }}</div>
             </div>
             {% endif %}
         </div>

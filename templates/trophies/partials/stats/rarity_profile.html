@@ -9,8 +9,9 @@
             Rarity Profile
         </h2>
 
-        {# Tier distribution with bars #}
+        {# PSN Rarity tier distribution #}
         {% if data.tiers %}
+        <h4 class="text-xs font-semibold text-base-content/60 uppercase tracking-wider mb-2">PSN Rarity</h4>
         <div class="space-y-1.5 mb-4">
             {% for tier in data.tiers %}
             <div class="flex items-center gap-2 p-2 rounded-lg bg-white/[0.03] border border-base-content/5">
@@ -26,11 +27,33 @@
         </div>
         {% endif %}
 
-        {# Average earn rates #}
-        <div class="grid grid-cols-2 md:grid-cols-3 gap-1.5 md:gap-2 mb-4">
+        {# PP Rarity tier distribution #}
+        {% if data.pp_tiers %}
+        <h4 class="text-xs font-semibold text-base-content/60 uppercase tracking-wider mb-2">PlatPursuit Rarity</h4>
+        <div class="space-y-1.5 mb-4">
+            {% for tier in data.pp_tiers %}
+            <div class="flex items-center gap-2 p-2 rounded-lg bg-white/[0.03] border border-base-content/5">
+                <span class="text-xs font-semibold w-20 md:w-28 shrink-0">{{ tier.name }}</span>
+                <span class="text-[0.6rem] text-base-content/30 w-12 shrink-0">{{ tier.threshold }}</span>
+                <div class="flex-1 bg-base-content/5 rounded-full h-2.5">
+                    <div class="bg-accent rounded-full h-2.5 transition-all" style="width: {{ tier.pct }}%"></div>
+                </div>
+                <span class="text-xs font-bold w-14 text-right shrink-0">{{ tier.count|intcomma }}</span>
+                <span class="text-[0.6rem] text-base-content/40 w-10 text-right shrink-0">{{ tier.pct }}%</span>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        {# Average earn rates: PSN vs PP side by side #}
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-1.5 md:gap-2 mb-4">
             <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-1.5 md:p-3 text-center">
                 <div class="text-sm md:text-base font-bold text-primary">{{ data.avg_earn_rate }}%</div>
-                <div class="text-xs text-base-content/50 font-medium">Avg Earn Rate</div>
+                <div class="text-xs text-base-content/50 font-medium">Avg PSN Rate</div>
+            </div>
+            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-1.5 md:p-3 text-center">
+                <div class="text-sm md:text-base font-bold text-accent">{{ data.pp_avg_earn_rate }}%</div>
+                <div class="text-xs text-base-content/50 font-medium">Avg PP Rate</div>
             </div>
             <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-1.5 md:p-3 text-center">
                 <div class="text-sm md:text-base font-bold text-primary">{{ data.avg_plat_rate }}%</div>
@@ -118,6 +141,23 @@
                 </div>
             </div>
             {% endif %}
+            {% if data.rarest_plat %}
+            <div class="flex items-center gap-2 md:gap-3 p-2 rounded-lg bg-white/[0.03] border border-base-content/5">
+                {% if data.rarest_plat.game_icon %}
+                <div class="w-10 h-10 md:w-12 md:h-12 rounded-lg overflow-hidden shrink-0 bg-base-content/5">
+                    <img class="w-full h-full object-cover" src="{{ data.rarest_plat.game_icon }}" alt="" loading="lazy">
+                </div>
+                {% endif %}
+                <div class="flex-1 min-w-0">
+                    <div class="text-sm font-bold line-clamp-1">Rarest Platinum</div>
+                    <div class="text-xs text-base-content/50 line-clamp-1">{{ data.rarest_plat.name }} · {{ data.rarest_plat.game_name }}</div>
+                </div>
+                <div class="text-right shrink-0">
+                    <div class="text-sm font-bold text-primary">{{ data.rarest_plat.earn_rate }}%</div>
+                    <div class="text-xs text-base-content/40">PSN rate</div>
+                </div>
+            </div>
+            {% endif %}
             {% if data.most_common_plat %}
             <div class="flex items-center gap-2 md:gap-3 p-2 rounded-lg bg-white/[0.03] border border-base-content/5">
                 {% if data.most_common_plat.game_icon %}
@@ -131,7 +171,24 @@
                 </div>
                 <div class="text-right shrink-0">
                     <div class="text-sm font-bold text-primary">{{ data.most_common_plat.earn_rate }}%</div>
-                    <div class="text-xs text-base-content/40">earn rate</div>
+                    <div class="text-xs text-base-content/40">PSN rate</div>
+                </div>
+            </div>
+            {% endif %}
+            {% if data.rarest_pp %}
+            <div class="flex items-center gap-2 md:gap-3 p-2 rounded-lg bg-white/[0.03] border border-base-content/5">
+                {% if data.rarest_pp.game_icon %}
+                <div class="w-10 h-10 md:w-12 md:h-12 rounded-lg overflow-hidden shrink-0 bg-base-content/5">
+                    <img class="w-full h-full object-cover" src="{{ data.rarest_pp.game_icon }}" alt="" loading="lazy">
+                </div>
+                {% endif %}
+                <div class="flex-1 min-w-0">
+                    <div class="text-sm font-bold line-clamp-1">Rarest on PlatPursuit</div>
+                    <div class="text-xs text-base-content/50 line-clamp-1">{{ data.rarest_pp.name }} · {{ data.rarest_pp.game_name }}</div>
+                </div>
+                <div class="text-right shrink-0">
+                    <div class="text-sm font-bold text-accent">{{ data.rarest_pp.earn_rate }}%</div>
+                    <div class="text-xs text-base-content/40">PP rate</div>
                 </div>
             </div>
             {% endif %}
@@ -150,10 +207,10 @@
                 </div>
                 {% endif %}
                 <div class="flex-1 min-w-0">
-                    <div class="text-xs text-base-content/50">Hardest Game</div>
+                    <div class="text-xs text-base-content/50">Hardest Game <span class="text-base-content/30">(by avg earn rate)</span></div>
                     <div class="text-sm font-bold line-clamp-1">{{ data.hardest_game.name }}</div>
                 </div>
-                <div class="text-sm font-bold text-error shrink-0">{{ data.hardest_game.avg_rate }}%</div>
+                <div class="text-sm font-bold text-error shrink-0">{{ data.hardest_game.avg_rate }}% avg</div>
             </div>
             {% endif %}
             {% if data.easiest_game %}
@@ -164,10 +221,10 @@
                 </div>
                 {% endif %}
                 <div class="flex-1 min-w-0">
-                    <div class="text-xs text-base-content/50">Easiest Game</div>
+                    <div class="text-xs text-base-content/50">Easiest Game <span class="text-base-content/30">(by avg earn rate)</span></div>
                     <div class="text-sm font-bold line-clamp-1">{{ data.easiest_game.name }}</div>
                 </div>
-                <div class="text-sm font-bold text-success shrink-0">{{ data.easiest_game.avg_rate }}%</div>
+                <div class="text-sm font-bold text-success shrink-0">{{ data.easiest_game.avg_rate }}% avg</div>
             </div>
             {% endif %}
         </div>
