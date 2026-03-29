@@ -113,6 +113,7 @@ const CSRFToken = {
      */
     get() {
         return document.querySelector('[name=csrfmiddlewaretoken]')?.value ||
+               document.querySelector('meta[name="csrf-token"]')?.content ||
                document.cookie.split('; ').find(row => row.startsWith('csrftoken='))?.split('=')[1] || '';
     },
 

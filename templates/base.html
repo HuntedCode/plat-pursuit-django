@@ -41,6 +41,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Poppins:wght@400;600;700&display=swap" rel="stylesheet">
     {% jsonld_organization %}
     {% if breadcrumb %}{% jsonld_breadcrumbs breadcrumb request %}{% endif %}
+    <meta name="csrf-token" content="{{ csrf_token }}">
     {% block extra_head %}{% endblock %}
   </head>
   <body class="bg-base-100 text-base-content{% if ADSENSE_ENABLED %} has-mobile-ad{% endif %}" {% if user.is_authenticated %}data-authenticated="true"{% endif %} {% if image_urls.bg_url %}style="background-image: url('{{ image_urls.bg_url }}'); background-size: cover; background-position: center; background-attachment: fixed;"{% elif user_theme_style %}style="{{ user_theme_style }}"{% endif %}>
