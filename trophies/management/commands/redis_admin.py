@@ -66,6 +66,13 @@ class Command(BaseCommand):
             help='Move sync_trophies jobs from low_priority to bulk_priority for profiles exceeding the bulk threshold.'
         )
         group.add_argument(
+            '--flush-stats',
+            type=int,
+            nargs='?',
+            const=0,
+            help='Flush My Stats page caches. Pass a profile ID to flush one profile, or omit to flush all.'
+        )
+        group.add_argument(
             '--clear-psn-outage',
             action='store_true',
             help='Clear the PSN outage circuit breaker flag and 5xx timestamp tracking.'
@@ -97,6 +104,8 @@ class Command(BaseCommand):
             self._handle_set_bulk_threshold(options['set_bulk_threshold'])
         elif options['move_whale_jobs']:
             self._handle_move_whale_jobs()
+        elif options['flush_stats'] is not None:
+            self._handle_flush_stats(options['flush_stats'])
         elif options['clear_psn_outage']:
             self._handle_clear_psn_outage()
 
@@ -412,6 +421,36 @@ class Command(BaseCommand):
             self.stdout.write(self.style.SUCCESS(f"Done! Moved {total_moved} total jobs to bulk_priority."))
         except Exception as e:
             logger.exception(f"Error during whale job migration: {e}")
+            self.stdout.write(self.style.ERROR(f"Error: {e}"))
+
+    def _handle_flush_stats(self, profile_id: int):
+        """Flush My Stats page caches. 0 = all profiles, otherwise specific profile."""
+        from django.conf import settings
+        cache_config = settings.CACHES['default']
+        prefix = f"{cache_config['KEY_PREFIX']}:1:"
+
+        try:
+            if profile_id > 0:
+                # Flush all 4 filter combos for this profile
+                keys = [f'{prefix}stats_page:{profile_id}:{sw}:{hid}' for sw in (0, 1) for hid in (0, 1)]
+                deleted = 0
+                for key in keys:
+                    deleted += redis_client.delete(key)
+                self.stdout.write(self.style.SUCCESS(
+                    f"Flushed {deleted} stats cache key(s) for profile {profile_id}."
+                ))
+            else:
+                # Flush all stats_page keys across all profiles (non-blocking scan)
+                pattern = f'{prefix}stats_page:*'
+                deleted = 0
+                for key in redis_client.scan_iter(match=pattern, count=100):
+                    redis_client.delete(key)
+                    deleted += 1
+                self.stdout.write(self.style.SUCCESS(
+                    f"Flushed {deleted} stats cache key(s) across all profiles."
+                ))
+        except Exception as e:
+            logger.exception(f"Error during stats flush: {e}")
             self.stdout.write(self.style.ERROR(f"Error: {e}"))
 
     def _handle_clear_psn_outage(self):
