@@ -194,7 +194,10 @@ def invalidate_stats_cache(profile_id):
 
 def _compute_all_premium_stats(profile, exclude_shovelware=False, exclude_hidden=False):
     """Compute every premium section together for efficient query batching."""
-    from trophies.models import EarnedTrophy, ProfileGame, ProfileGamification
+    from trophies.models import (
+        EarnedTrophy, ProfileGame, ProfileGamification,
+        IGDBMatch, ConceptCompany,
+    )
 
     # Build game filter Q for queries that join through game
     game_filter_q = _build_game_filter_q(exclude_shovelware, exclude_hidden)
@@ -213,17 +216,36 @@ def _compute_all_premium_stats(profile, exclude_shovelware=False, exclude_hidden
         pg_qs = pg_qs.filter(game_filter_q)
     profile_games = list(pg_qs)
 
+    # Shared fetch 3: IGDB data for concepts in the user's library
+    concept_ids = {pg.game.concept_id for pg in profile_games if pg.game and pg.game.concept_id}
+    igdb_lookup = {}
+    if concept_ids:
+        igdb_lookup = {
+            m.concept_id: m for m in
+            IGDBMatch.objects.filter(concept_id__in=concept_ids)
+            .only('concept_id', 'game_category', 'game_engine_name',
+                  'franchise_names', 'time_to_beat_completely',
+                  'igdb_first_release_date', 'raw_response')
+        }
+
+    # Shared fetch 4: developer data for concepts
+    dev_lookup = defaultdict(list)
+    if concept_ids:
+        for cc in (ConceptCompany.objects.filter(concept_id__in=concept_ids, is_developer=True)
+                   .select_related('company')):
+            dev_lookup[cc.concept_id].append(cc.company)
+
     gamification = ProfileGamification.objects.filter(profile=profile).first()
     user_tz = _get_user_timezone(profile)
 
     return {
-        'records': _compute_personal_records(profile, earned_timestamps, user_tz, exclude_shovelware, exclude_hidden),
+        'records': _compute_personal_records(profile, earned_timestamps, user_tz, exclude_shovelware, exclude_hidden, igdb_lookup),
         'rarity': _compute_rarity_profile(profile),
         'streaks': _compute_streaks(earned_timestamps, user_tz),
         'time_patterns': _compute_time_patterns(earned_timestamps, user_tz),
         'platforms': _compute_platform_breakdown(profile_games),
-        'genres': _compute_genre_breakdown(profile_games),
-        'library': _compute_game_library(profile_games),
+        'genres': _compute_genre_breakdown(profile_games, dev_lookup),
+        'library': _compute_game_library(profile_games, igdb_lookup),
         'badges': _compute_badge_stats(profile, gamification),
         'challenges': _compute_challenge_progress(profile),
         'community': _compute_community_stats(profile),
@@ -241,7 +263,8 @@ def _compute_all_premium_stats(profile, exclude_shovelware=False, exclude_hidden
 # ---------------------------------------------------------------------------
 
 def _compute_personal_records(profile, earned_timestamps, user_tz,
-                              exclude_shovelware=False, exclude_hidden=False):
+                              exclude_shovelware=False, exclude_hidden=False,
+                              igdb_lookup=None):
     from trophies.models import EarnedTrophy, ProfileGame, MonthlyRecap, Game
 
     items = []
@@ -400,6 +423,31 @@ def _compute_personal_records(profile, earned_timestamps, user_tz,
                 items.append(_record('Fastest 100%', _format_duration(time_to_100[fastest_gid]), gname, gicon))
             except Game.DoesNotExist:
                 pass
+
+    # Oldest game platted by IGDB release date (single query)
+    if igdb_lookup and plat_game_ids:
+        plat_pgs = list(
+            pg_base.filter(game_id__in=plat_game_ids)
+            .select_related('game__concept')
+        )
+        oldest_plat_release = None
+        oldest_plat_date = None
+        for pg in plat_pgs:
+            cid = pg.game.concept_id if pg.game else None
+            if not cid:
+                continue
+            igdb = igdb_lookup.get(cid)
+            if igdb and igdb.igdb_first_release_date:
+                if oldest_plat_date is None or igdb.igdb_first_release_date < oldest_plat_date:
+                    oldest_plat_date = igdb.igdb_first_release_date
+                    name, icon = _game_context(pg.game)
+                    oldest_plat_release = _record(
+                        'Oldest Game Platted',
+                        name, f'Released {oldest_plat_date.strftime("%b %d, %Y")}',
+                        icon,
+                    )
+        if oldest_plat_release:
+            items.append(oldest_plat_release)
 
     # --- Stats derived from shared timestamps (no extra queries) ---
 
@@ -1097,20 +1145,31 @@ def _compute_platform_breakdown(profile_games):
 # Section: Genre Breakdown
 # ---------------------------------------------------------------------------
 
-def _compute_genre_breakdown(profile_games):
+def _compute_genre_breakdown(profile_games, dev_lookup=None):
     from trophies.util_modules.constants import GENRE_DISPLAY_NAMES
 
-    from trophies.models import ConceptCompany
+    # Indie threshold: company_size 1-3 (up to 50 employees)
+    INDIE_MAX_SIZE = 3
 
-    genres = defaultdict(lambda: {'games': 0, 'plats': 0, 'total_progress': 0, 'total_earn_rate': 0, 'earn_rate_count': 0})
+    genres = defaultdict(lambda: {'games': 0, 'plats': 0, 'total_progress': 0})
+    themes = defaultdict(lambda: {'games': 0, 'plats': 0})
     publishers = defaultdict(lambda: {'games': 0, 'plats': 0})
     developers = defaultdict(lambda: {'games': 0, 'plats': 0})
+    dev_countries = Counter()  # ISO numeric code -> count
+    dev_founding_years = []  # (year, company_name) tuples
+    seen_companies = set()  # avoid counting same company twice
+    indie_count = 0
+    aaa_count = 0
+    indie_plats = 0
+    aaa_plats = 0
 
-    # Build concept_id -> has_plat lookup for developer stats
-    concept_plat_map = {}
     for pg in profile_games:
         concept = pg.game.concept if pg.game else None
-        genre_list = concept.genres if concept and concept.genres else []
+        # Prefer IGDB genres, fall back to PSN genres
+        igdb_genres = concept.igdb_genres if concept and concept.igdb_genres else []
+        psn_genres = concept.genres if concept and concept.genres else []
+        genre_list = igdb_genres or psn_genres
+        theme_list = concept.igdb_themes if concept and concept.igdb_themes else []
         publisher = concept.publisher_name if concept and concept.publisher_name else None
 
         for genre in genre_list:
@@ -1119,31 +1178,53 @@ def _compute_genre_breakdown(profile_games):
                 genres[genre]['plats'] += 1
             genres[genre]['total_progress'] += pg.progress or 0
 
+        for theme in theme_list:
+            themes[theme]['games'] += 1
+            if pg.has_plat:
+                themes[theme]['plats'] += 1
+
         if publisher:
             publishers[publisher]['games'] += 1
             if pg.has_plat:
                 publishers[publisher]['plats'] += 1
 
-        if concept:
-            concept_plat_map[concept.id] = pg.has_plat
-
-    # Bulk query developer data (single query, no N+1)
-    if concept_plat_map:
-        dev_entries = (
-            ConceptCompany.objects
-            .filter(concept_id__in=concept_plat_map.keys(), is_developer=True)
-            .select_related('company')
-        )
-        for cc in dev_entries:
-            developers[cc.company.name]['games'] += 1
-            if concept_plat_map.get(cc.concept_id):
-                developers[cc.company.name]['plats'] += 1
+        # Developer stats from pre-fetched lookup + indie/AAA classification
+        if concept and dev_lookup:
+            devs = dev_lookup.get(concept.id, [])
+            for company in devs:
+                developers[company.name]['games'] += 1
+                if pg.has_plat:
+                    developers[company.name]['plats'] += 1
+                # Track country and founding year (once per company)
+                if company.id not in seen_companies:
+                    seen_companies.add(company.id)
+                    if company.country:
+                        dev_countries[company.country] += 1
+                    if company.start_date:
+                        dev_founding_years.append((company.start_date.year, company.name))
+            # Classify by largest developer's company_size
+            if devs:
+                max_size = max((c.company_size or 0) for c in devs)
+                if 0 < max_size <= INDIE_MAX_SIZE:
+                    indie_count += 1
+                    if pg.has_plat:
+                        indie_plats += 1
+                elif max_size > INDIE_MAX_SIZE:
+                    aaa_count += 1
+                    if pg.has_plat:
+                        aaa_plats += 1
 
     # Sort genres by plats desc
     sorted_genres = sorted(genres.items(), key=lambda x: x[1]['plats'], reverse=True)
     genre_items = []
     for name, data in sorted_genres:
-        display = GENRE_DISPLAY_NAMES.get(name, name.replace('_', ' ').title())
+        # IGDB genres are already human-readable; PSN genres are UPPER_CASE
+        if name in GENRE_DISPLAY_NAMES:
+            display = GENRE_DISPLAY_NAMES[name]
+        elif name.isupper():
+            display = name.replace('_', ' ').title()
+        else:
+            display = name  # IGDB genre, already formatted
         game_count = data['games'] or 1
         genre_items.append({
             'name': display,
@@ -1180,15 +1261,41 @@ def _compute_genre_breakdown(profile_games):
         elif genres_with_plats >= 10:
             observation = f"Genre explorer: you've earned platinums across {genres_with_plats} different genres"
 
+    # Theme items (sorted by games desc)
+    sorted_themes = sorted(themes.items(), key=lambda x: x[1]['games'], reverse=True)
+    theme_items = [
+        {'name': name.replace('_', ' ').title(), 'games': data['games'], 'plats': data['plats']}
+        for name, data in sorted_themes
+    ]
+
+    # Indie vs AAA stats
+    total_classified = indie_count + aaa_count
+    indie_data = None
+    if total_classified > 0:
+        indie_data = {
+            'indie_games': indie_count,
+            'aaa_games': aaa_count,
+            'indie_plats': indie_plats,
+            'aaa_plats': aaa_plats,
+            'indie_pct': round(indie_count / total_classified * 100, 1),
+            'threshold_label': '50 or fewer employees (IGDB data, may not be complete)',
+        }
+
     return {
         'items': genre_items[:15],  # Top 15 genres
         'favorite': favorite,
         'unique_genres': unique_genres,
         'genres_with_plats': genres_with_plats,
+        'theme_items': theme_items[:15],  # Top 15 themes
+        'unique_themes': len(theme_items),
         'top_publishers': top_publishers,
         'unique_publishers': unique_publishers,
         'top_developers': top_developers,
         'unique_developers': unique_developers,
+        'indie': indie_data,
+        'dev_countries': _format_dev_countries(dev_countries),
+        'unique_dev_countries': len(dev_countries),
+        'dev_studios': _format_dev_founding(dev_founding_years),
         'observation': observation,
     }
 
@@ -1197,8 +1304,10 @@ def _compute_genre_breakdown(profile_games):
 # Section: Game Library Analysis
 # ---------------------------------------------------------------------------
 
-def _compute_game_library(profile_games):
+def _compute_game_library(profile_games, igdb_lookup=None):
     from trophies.models import UserConceptRating
+
+    igdb_lookup = igdb_lookup or {}
 
     almost_there = 0
     one_trophy = 0
@@ -1206,7 +1315,28 @@ def _compute_game_library(profile_games):
     delisted = 0
     online_trophies = 0
     has_dlc = 0
+    dlc_completed = 0
     family_ids = set()
+    engine_counts = Counter()
+    franchise_counts = Counter()
+    franchise_plats = Counter()
+    category_counts = Counter()
+    ttb_values = []  # time_to_beat_completely in seconds
+    playtime_vs_estimate = []  # (actual_seconds, estimate_seconds) for comparison
+    release_to_play_gaps = []  # timedelta gaps between release and first play
+    # Completion tiers
+    tier_0_25 = 0
+    tier_25_50 = 0
+    tier_50_75 = 0
+    tier_75_100 = 0
+    tier_100 = 0
+    # Abandoned game stats
+    abandoned_trophy_counts = []  # earned counts for stale, unfinished games
+    # Tier 2 (from raw_response)
+    game_mode_counts = Counter()
+    perspective_counts = Counter()
+    keyword_counts = Counter()
+    igdb_ratings = []  # (user_rating, critic_rating, concept_id) for scored games
     region_counts = Counter()
     concept_ids = set()
 
@@ -1231,10 +1361,73 @@ def _compute_game_library(profile_games):
             online_trophies += 1
         if game and game.has_trophy_groups:
             has_dlc += 1
+            if (pg.progress or 0) == 100:
+                dlc_completed += 1
         if concept and concept.family_id:
             family_ids.add(concept.family_id)
         if concept:
             concept_ids.add(concept.id)
+
+        # Completion tier distribution
+        progress = pg.progress or 0
+        if progress == 100:
+            tier_100 += 1
+        elif progress >= 75:
+            tier_75_100 += 1
+        elif progress >= 50:
+            tier_50_75 += 1
+        elif progress >= 25:
+            tier_25_50 += 1
+        else:
+            tier_0_25 += 1
+
+        # Abandoned games: unfinished + no activity in 6+ months
+        if progress < 100 and pg.most_recent_trophy_date and pg.earned_trophies_count > 0:
+            months_since = (timezone.now() - pg.most_recent_trophy_date).days / 30.44
+            if months_since >= 6:
+                abandoned_trophy_counts.append(pg.earned_trophies_count)
+
+        # IGDB enrichment
+        if concept:
+            igdb = igdb_lookup.get(concept.id)
+            if igdb:
+                if igdb.game_engine_name:
+                    engine_counts[igdb.game_engine_name] += 1
+                if igdb.franchise_names:
+                    for fname in igdb.franchise_names:
+                        franchise_counts[fname] += 1
+                        if pg.has_plat:
+                            franchise_plats[fname] += 1
+                if igdb.game_category is not None:
+                    cat_label = dict(igdb.GAME_CATEGORY_CHOICES).get(igdb.game_category, 'Other')
+                    category_counts[cat_label] += 1
+                if igdb.time_to_beat_completely:
+                    ttb_values.append(igdb.time_to_beat_completely)
+                    # Compare actual playtime vs IGDB estimate
+                    if pg.play_duration:
+                        actual_secs = pg.play_duration.total_seconds()
+                        if actual_secs > 0:
+                            playtime_vs_estimate.append((actual_secs, igdb.time_to_beat_completely))
+                # Release-to-play gap
+                if igdb.igdb_first_release_date and pg.first_played_date_time:
+                    gap = pg.first_played_date_time - igdb.igdb_first_release_date
+                    if gap.total_seconds() > 0:
+                        release_to_play_gaps.append(gap)
+                # Tier 2: parse from raw_response
+                raw = igdb.raw_response or {}
+                for gm in raw.get('game_modes', []):
+                    if gm.get('name'):
+                        game_mode_counts[gm['name']] += 1
+                for pp in raw.get('player_perspectives', []):
+                    if pp.get('name'):
+                        perspective_counts[pp['name']] += 1
+                for kw in raw.get('keywords', []):
+                    if kw.get('name'):
+                        keyword_counts[kw['name']] += 1
+                user_rating = raw.get('rating')
+                critic_rating = raw.get('aggregated_rating')
+                if user_rating or critic_rating:
+                    igdb_ratings.append((user_rating, critic_rating, concept.id))
 
         # Regions: only count by specific region if the game is regional
         if game:
@@ -1270,6 +1463,27 @@ def _compute_game_library(profile_games):
     # Community ratings for games in the user's library
     community = _compute_library_community_ratings(concept_ids)
 
+    # IGDB aggregates
+    top_engines = [{'name': e, 'count': c} for e, c in engine_counts.most_common(5)]
+    top_franchises = [
+        {'name': f, 'games': franchise_counts[f], 'plats': franchise_plats.get(f, 0)}
+        for f, _ in franchise_counts.most_common(5)
+    ]
+    category_items = [{'name': c, 'count': n} for c, n in category_counts.most_common()]
+
+    # Time-to-beat summary
+    ttb_data = None
+    if ttb_values:
+        avg_ttb = sum(ttb_values) / len(ttb_values)
+        total_ttb = sum(ttb_values)
+        ttb_data = {
+            'games_with_data': len(ttb_values),
+            'avg_hours': round(avg_ttb / 3600, 1),
+            'total_hours': round(total_ttb / 3600),
+            'shortest_hours': round(min(ttb_values) / 3600, 1),
+            'longest_hours': round(max(ttb_values) / 3600, 1),
+        }
+
     return {
         'almost_there': almost_there,
         'one_trophy': one_trophy,
@@ -1283,6 +1497,25 @@ def _compute_game_library(profile_games):
         'newest_by_release': newest_by_release,
         'oldest_by_release': oldest_by_release,
         'community': community,
+        'top_engines': top_engines,
+        'unique_engines': len(engine_counts),
+        'top_franchises': top_franchises,
+        'unique_franchises': len(franchise_counts),
+        'category_items': category_items,
+        'ttb': ttb_data,
+        'playtime_vs_estimate': _compute_playtime_comparison(playtime_vs_estimate),
+        'release_to_play': _compute_release_gap(release_to_play_gaps),
+        'game_modes': [{'name': n, 'count': c} for n, c in game_mode_counts.most_common()],
+        'perspectives': [{'name': n, 'count': c} for n, c in perspective_counts.most_common()],
+        'top_keywords': [{'name': n, 'count': c} for n, c in keyword_counts.most_common(20)],
+        'unique_keywords': len(keyword_counts),
+        'igdb_scores': _compute_igdb_scores(igdb_ratings),
+        'completion_tiers': _build_completion_tiers(tier_0_25, tier_25_50, tier_50_75, tier_75_100, tier_100),
+        'dlc_completed': dlc_completed,
+        'abandoned': {
+            'count': len(abandoned_trophy_counts),
+            'avg_trophies': round(sum(abandoned_trophy_counts) / len(abandoned_trophy_counts), 1) if abandoned_trophy_counts else 0,
+        } if abandoned_trophy_counts else None,
     }
 
 
@@ -1739,6 +1972,117 @@ def _get_milestone_required(milestone, month_map, days_per_month):
     # Fall back to criteria_details target for types like calendar_months_total
     target = (milestone.criteria_details or {}).get('target', 0)
     return target if target and target > 0 else 0
+
+
+def _build_completion_tiers(*counts):
+    """Build completion tier list with percentages."""
+    names = ['0 - 24%', '25 - 49%', '50 - 74%', '75 - 99%', '100%']
+    total = sum(counts) or 1
+    return [
+        {'name': names[i], 'count': counts[i], 'pct': round(counts[i] / total * 100, 1)}
+        for i in range(len(names))
+    ]
+
+
+def _compute_igdb_scores(ratings):
+    """Compute average IGDB user and critic scores across the library."""
+    if not ratings:
+        return None
+    user_scores = [r[0] for r in ratings if r[0] is not None]
+    critic_scores = [r[1] for r in ratings if r[1] is not None]
+    return {
+        'avg_user': round(sum(user_scores) / len(user_scores), 1) if user_scores else None,
+        'avg_critic': round(sum(critic_scores) / len(critic_scores), 1) if critic_scores else None,
+        'user_count': len(user_scores),
+        'critic_count': len(critic_scores),
+    }
+
+
+def _compute_playtime_comparison(pairs):
+    """Compare actual playtime vs IGDB estimates. Returns ratio and summary."""
+    if not pairs:
+        return None
+    total_actual = sum(a for a, _ in pairs)
+    total_estimate = sum(e for _, e in pairs)
+    if total_estimate == 0:
+        return None
+    ratio = total_actual / total_estimate
+    if ratio < 1:
+        label = f'{round((1 - ratio) * 100)}% faster than IGDB estimates'
+    elif ratio > 1:
+        label = f'{round((ratio - 1) * 100)}% slower than IGDB estimates'
+    else:
+        label = 'Right on pace with IGDB estimates'
+    return {
+        'games_compared': len(pairs),
+        'ratio': round(ratio, 2),
+        'label': label,
+        'actual_hours': round(total_actual / 3600),
+        'estimate_hours': round(total_estimate / 3600),
+    }
+
+
+def _compute_release_gap(gaps):
+    """Compute average time between game release and first play."""
+    if not gaps:
+        return None
+    avg_days = sum(g.days for g in gaps) / len(gaps)
+    if avg_days >= 365:
+        avg_display = f'{round(avg_days / 365.25, 1)} years'
+    elif avg_days >= 30:
+        avg_display = f'{round(avg_days / 30.44, 1)} months'
+    else:
+        avg_display = f'{round(avg_days)} days'
+    shortest = min(gaps)
+    longest = max(gaps)
+    return {
+        'games_counted': len(gaps),
+        'avg_display': avg_display,
+        'avg_days': round(avg_days),
+        'shortest_days': shortest.days,
+        'longest_days': longest.days,
+    }
+
+
+def _format_dev_countries(country_counter):
+    """Convert ISO 3166-1 numeric country codes to display names with counts."""
+    # Common gaming industry countries (ISO 3166-1 numeric)
+    COUNTRY_NAMES = {
+        36: 'Australia', 40: 'Austria', 56: 'Belgium', 76: 'Brazil',
+        124: 'Canada', 156: 'China', 203: 'Czechia', 208: 'Denmark',
+        246: 'Finland', 250: 'France', 276: 'Germany', 300: 'Greece',
+        344: 'Hong Kong', 348: 'Hungary', 356: 'India', 360: 'Indonesia',
+        372: 'Ireland', 376: 'Israel', 380: 'Italy', 392: 'Japan',
+        410: 'South Korea', 458: 'Malaysia', 484: 'Mexico', 528: 'Netherlands',
+        554: 'New Zealand', 578: 'Norway', 616: 'Poland', 620: 'Portugal',
+        642: 'Romania', 643: 'Russia', 702: 'Singapore', 710: 'South Africa',
+        724: 'Spain', 752: 'Sweden', 756: 'Switzerland', 158: 'Taiwan',
+        764: 'Thailand', 792: 'Turkey', 804: 'Ukraine',
+        826: 'United Kingdom', 840: 'United States', 704: 'Vietnam',
+    }
+    if not country_counter:
+        return []
+    items = []
+    for code, count in country_counter.most_common(10):
+        name = COUNTRY_NAMES.get(code, f'Country {code}')
+        items.append({'name': name, 'count': count})
+    return items
+
+
+def _format_dev_founding(founding_years):
+    """Build oldest/newest studio stats from (year, name) tuples."""
+    if not founding_years:
+        return None
+    sorted_years = sorted(founding_years, key=lambda x: x[0])
+    oldest = sorted_years[0]
+    newest = sorted_years[-1]
+    return {
+        'oldest_year': oldest[0],
+        'oldest_name': oldest[1],
+        'newest_year': newest[0],
+        'newest_name': newest[1],
+        'total_with_dates': len(founding_years),
+    }
 
 
 def _build_game_filter_q(exclude_shovelware, exclude_hidden):

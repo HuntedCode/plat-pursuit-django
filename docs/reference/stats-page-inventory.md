@@ -52,6 +52,7 @@
 | Most Platinums in a Month | Count + month/year (from MonthlyRecap) |
 | Most Prolific Month | Total trophies + month/year |
 | First 100% Completion | First game completed to 100% + date |
+| Oldest Game Platted | Oldest game by IGDB release date that user has platted |
 | Fastest 100% | First trophy to last trophy on a 100% game (shortest) |
 
 ### Playtime Sub-Section
@@ -162,7 +163,15 @@
 | Genres Platted | Genres with at least one platinum |
 | Publishers | Unique publisher count |
 | Genre Rows (top 15) | Per-genre: plats, games, avg progress |
+| Top Developers (top 3) | Developer name, plat count, game count (from IGDB) |
 | Top Publishers (top 3) | Publisher name, plat count, game count |
+| IGDB Themes (top 15) | Theme tags with game counts (from IGDB, e.g., "Open World", "Horror") |
+| Unique Themes | Total unique theme count |
+| Indie Games / Plats | Count of games/plats from indie developers (company_size 1-3, 50 or fewer employees) |
+| AAA Games / Plats | Count of games/plats from larger studios |
+| Developer Countries (top 10) | Studios' countries of origin with counts (from IGDB) |
+| Oldest Studio | Earliest-founded developer in library (from IGDB) |
+| Newest Studio | Most recently founded developer in library (from IGDB) |
 | Observation | Contextual text (genre specialist, genre explorer) |
 
 ---
@@ -179,6 +188,10 @@
 | Online Trophies | Games with online trophies |
 | Delisted | Delisted games |
 | Game Families | Unique game families |
+| Completion Distribution | Progress tier bars: 0-24%, 25-49%, 50-74%, 75-99%, 100% with counts |
+| DLC 100%'d | Games with DLC where player reached 100% (of total with DLC) |
+| Abandoned Games | Games with 6+ months inactivity and < 100% |
+| Avg Before Abandoning | Average trophies earned in abandoned games |
 
 ### Notable Games
 | Stat | Description |
@@ -191,6 +204,26 @@
 | Stat | Description |
 |------|-------------|
 | Region Counts | Global vs regional (NA, EU, JP, etc.) |
+
+### IGDB Enrichment
+| Stat | Description |
+|------|-------------|
+| Time to 100% Avg | Average estimated completion time across games with IGDB data |
+| Time to 100% Total | Sum of estimated completion times |
+| Time to 100% Shortest/Longest | Extremes of estimated completion times |
+| Top Engines (top 5) | Game engines with counts (from IGDB) |
+| Unique Engines | Total distinct game engines |
+| Top Franchises (top 5) | Franchise name, game count, plat count (from IGDB) |
+| Unique Franchises | Total distinct franchises |
+| Game Types | Category breakdown: Main Game, DLC, Remake, Remaster, etc. (from IGDB) |
+| Playtime vs IGDB Estimate | Ratio comparison: actual playtime vs community completion estimate |
+| Release-to-Play Gap | Average, shortest, and longest time between game release and first play (from IGDB) |
+| Game Modes | Breakdown: Single player, Multiplayer, Co-operative, etc. (IGDB Tier 2) |
+| Player Perspectives | Breakdown: First person, Third person, Bird view, etc. (IGDB Tier 2) |
+| IGDB User Score | Average IGDB community rating across library (0-100) |
+| IGDB Critic Score | Average critic/aggregated rating across library (0-100) |
+| Top Keywords (top 20) | Most common game tags with counts (IGDB Tier 2, e.g., "open world", "crafting") |
+| Unique Keywords | Total distinct keyword count |
 
 ### Community Ratings Crossover
 | Stat | Description |

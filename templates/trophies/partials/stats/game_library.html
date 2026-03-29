@@ -41,6 +41,49 @@
             </div>
         </div>
 
+        {# Completion tier distribution #}
+        {% if data.completion_tiers %}
+        <h4 class="text-xs font-semibold text-base-content/60 uppercase tracking-wider mb-2">Completion Distribution</h4>
+        <div class="space-y-1.5 mb-4">
+            {% for tier in data.completion_tiers %}
+            <div class="flex items-center gap-2 p-2 rounded-lg bg-white/[0.03] border border-base-content/5">
+                <span class="text-xs font-semibold w-16 shrink-0">{{ tier.name }}</span>
+                <div class="flex-1 bg-base-content/5 rounded-full h-2.5">
+                    <div class="{% if tier.name == '100%' %}bg-success{% else %}bg-primary{% endif %} rounded-full h-2.5 transition-all" style="width: {{ tier.pct }}%"></div>
+                </div>
+                <span class="text-xs font-bold w-10 text-right shrink-0">{{ tier.count }}</span>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        {# DLC completion + abandoned games #}
+        {% if data.dlc_completed or data.abandoned %}
+        <div class="grid grid-cols-2 md:grid-cols-3 gap-1.5 md:gap-2 mb-4">
+            {% if data.has_dlc %}
+            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-1.5 md:p-3 text-center">
+                <div class="text-sm md:text-base font-bold text-success">{{ data.dlc_completed }}</div>
+                <div class="text-xs text-base-content/50">DLC 100%'d</div>
+                <div class="text-[0.6rem] text-base-content/30">of {{ data.has_dlc }} with DLC</div>
+            </div>
+            {% endif %}
+            {% if data.abandoned %}
+            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-1.5 md:p-3 text-center">
+                <div class="text-sm md:text-base font-bold text-base-content/50">{{ data.abandoned.count }}</div>
+                <div class="text-xs text-base-content/50">Abandoned</div>
+                <div class="text-[0.6rem] text-base-content/30">6+ months inactive</div>
+            </div>
+            {% if data.abandoned.avg_trophies > 0 %}
+            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-1.5 md:p-3 text-center">
+                <div class="text-sm md:text-base font-bold text-base-content/50">{{ data.abandoned.avg_trophies }}</div>
+                <div class="text-xs text-base-content/50">Avg Before Abandoning</div>
+                <div class="text-[0.6rem] text-base-content/30">trophies earned</div>
+            </div>
+            {% endif %}
+            {% endif %}
+        </div>
+        {% endif %}
+
         {# Notable games #}
         {% if data.oldest_unfinished or data.newest_by_release or data.oldest_by_release %}
         <h4 class="text-xs font-semibold text-base-content/60 uppercase tracking-wider mb-2">Notable Games</h4>
@@ -103,6 +146,183 @@
                 <div class="text-xs text-base-content/50">{{ region.name }}</div>
             </div>
             {% endfor %}
+        </div>
+        {% endif %}
+
+        {# Time-to-beat estimates (from IGDB) #}
+        {% if data.ttb %}
+        <div class="border-t border-base-content/10 pt-3 mt-3">
+            <h4 class="text-xs font-semibold text-base-content/60 uppercase tracking-wider mb-2">Estimated Time to 100% <span class="text-base-content/30 font-normal normal-case">(IGDB, {{ data.ttb.games_with_data }} games)</span></h4>
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-1.5 md:gap-2">
+                <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-1.5 md:p-3 text-center">
+                    <div class="text-sm md:text-base font-bold text-primary">{{ data.ttb.avg_hours }}h</div>
+                    <div class="text-xs text-base-content/50">Avg per Game</div>
+                </div>
+                <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-1.5 md:p-3 text-center">
+                    <div class="text-sm md:text-base font-bold text-primary">{{ data.ttb.total_hours|intcomma }}h</div>
+                    <div class="text-xs text-base-content/50">Total Estimated</div>
+                </div>
+                <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-1.5 md:p-3 text-center">
+                    <div class="text-sm md:text-base font-bold text-success">{{ data.ttb.shortest_hours }}h</div>
+                    <div class="text-xs text-base-content/50">Shortest</div>
+                </div>
+                <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-1.5 md:p-3 text-center">
+                    <div class="text-sm md:text-base font-bold text-warning">{{ data.ttb.longest_hours }}h</div>
+                    <div class="text-xs text-base-content/50">Longest</div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        {# Playtime vs IGDB estimate comparison #}
+        {% if data.playtime_vs_estimate %}
+        <div class="border-t border-base-content/10 pt-3 mt-3">
+            <h4 class="text-xs font-semibold text-base-content/60 uppercase tracking-wider mb-2">Your Pace vs IGDB Estimates</h4>
+            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-3 text-center mb-2">
+                <div class="text-base md:text-lg font-bold {% if data.playtime_vs_estimate.ratio < 1 %}text-success{% elif data.playtime_vs_estimate.ratio > 1.2 %}text-warning{% else %}text-primary{% endif %}">
+                    {{ data.playtime_vs_estimate.label }}
+                </div>
+                <div class="text-xs text-base-content/40 mt-1">
+                    {{ data.playtime_vs_estimate.actual_hours|intcomma }}h actual vs {{ data.playtime_vs_estimate.estimate_hours|intcomma }}h estimated ({{ data.playtime_vs_estimate.games_compared }} games)
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        {# Game engines (from IGDB) #}
+        {% if data.top_engines %}
+        <div class="border-t border-base-content/10 pt-3 mt-3">
+            <h4 class="text-xs font-semibold text-base-content/60 uppercase tracking-wider mb-2">Game Engines <span class="text-base-content/30 font-normal normal-case">({{ data.unique_engines }} total)</span></h4>
+            <div class="flex flex-wrap gap-1.5">
+                {% for engine in data.top_engines %}
+                <div class="bg-white/[0.03] border border-base-content/5 rounded-lg px-2.5 py-1.5 text-center">
+                    <span class="text-xs font-bold text-primary">{{ engine.name }}</span>
+                    <span class="text-[0.6rem] text-base-content/40 ml-1">{{ engine.count }}</span>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+
+        {# Top franchises (from IGDB) #}
+        {% if data.top_franchises %}
+        <div class="border-t border-base-content/10 pt-3 mt-3">
+            <h4 class="text-xs font-semibold text-base-content/60 uppercase tracking-wider mb-2">Top Franchises <span class="text-base-content/30 font-normal normal-case">({{ data.unique_franchises }} total)</span></h4>
+            <div class="space-y-1.5">
+                {% for f in data.top_franchises %}
+                <div class="flex items-center gap-2 p-2 rounded-lg bg-white/[0.03] border border-base-content/5">
+                    <span class="text-xs font-semibold text-primary mr-1">#{{ forloop.counter }}</span>
+                    <span class="text-sm font-medium flex-1">{{ f.name }}</span>
+                    <span class="text-xs text-base-content/50">{{ f.games }} game{{ f.games|pluralize }}</span>
+                    <span class="text-sm font-bold text-blue-300 shrink-0">{{ f.plats }} plat{{ f.plats|pluralize }}</span>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+
+        {# Game categories (from IGDB) #}
+        {% if data.category_items %}
+        <div class="border-t border-base-content/10 pt-3 mt-3">
+            <h4 class="text-xs font-semibold text-base-content/60 uppercase tracking-wider mb-2">Game Types</h4>
+            <div class="flex flex-wrap gap-1.5">
+                {% for cat in data.category_items %}
+                <div class="bg-white/[0.03] border border-base-content/5 rounded-lg px-2.5 py-1.5 text-center">
+                    <span class="text-xs font-bold text-primary">{{ cat.name }}</span>
+                    <span class="text-[0.6rem] text-base-content/40 ml-1">{{ cat.count }}</span>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+
+        {# Release-to-play gap #}
+        {% if data.release_to_play %}
+        <div class="border-t border-base-content/10 pt-3 mt-3">
+            <h4 class="text-xs font-semibold text-base-content/60 uppercase tracking-wider mb-2">Time from Release to First Play</h4>
+            <div class="grid grid-cols-3 gap-1.5 md:gap-2">
+                <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-1.5 md:p-3 text-center">
+                    <div class="text-sm md:text-base font-bold text-primary">{{ data.release_to_play.avg_display }}</div>
+                    <div class="text-xs text-base-content/50">Average Gap</div>
+                </div>
+                <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-1.5 md:p-3 text-center">
+                    <div class="text-sm md:text-base font-bold text-success">{{ data.release_to_play.shortest_days }}d</div>
+                    <div class="text-xs text-base-content/50">Quickest Pickup</div>
+                </div>
+                <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-1.5 md:p-3 text-center">
+                    <div class="text-sm md:text-base font-bold text-base-content/60">{{ data.release_to_play.longest_days|intcomma }}d</div>
+                    <div class="text-xs text-base-content/50">Longest Wait</div>
+                </div>
+            </div>
+            <p class="text-[0.6rem] text-base-content/30 mt-1.5">Based on {{ data.release_to_play.games_counted }} games with IGDB release dates</p>
+        </div>
+        {% endif %}
+
+        {# Game modes (from IGDB) #}
+        {% if data.game_modes %}
+        <div class="border-t border-base-content/10 pt-3 mt-3">
+            <h4 class="text-xs font-semibold text-base-content/60 uppercase tracking-wider mb-2">Game Modes <span class="text-base-content/30 font-normal normal-case">(IGDB)</span></h4>
+            <div class="flex flex-wrap gap-1.5">
+                {% for mode in data.game_modes %}
+                <div class="bg-white/[0.03] border border-base-content/5 rounded-lg px-2.5 py-1.5 text-center">
+                    <span class="text-xs font-bold text-primary">{{ mode.name }}</span>
+                    <span class="text-[0.6rem] text-base-content/40 ml-1">{{ mode.count }}</span>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+
+        {# Player perspectives (from IGDB) #}
+        {% if data.perspectives %}
+        <div class="border-t border-base-content/10 pt-3 mt-3">
+            <h4 class="text-xs font-semibold text-base-content/60 uppercase tracking-wider mb-2">Player Perspectives <span class="text-base-content/30 font-normal normal-case">(IGDB)</span></h4>
+            <div class="flex flex-wrap gap-1.5">
+                {% for p in data.perspectives %}
+                <div class="bg-white/[0.03] border border-base-content/5 rounded-lg px-2.5 py-1.5 text-center">
+                    <span class="text-xs font-bold text-primary">{{ p.name }}</span>
+                    <span class="text-[0.6rem] text-base-content/40 ml-1">{{ p.count }}</span>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+
+        {# IGDB Scores #}
+        {% if data.igdb_scores %}
+        <div class="border-t border-base-content/10 pt-3 mt-3">
+            <h4 class="text-xs font-semibold text-base-content/60 uppercase tracking-wider mb-2">IGDB Scores <span class="text-base-content/30 font-normal normal-case">(library average)</span></h4>
+            <div class="grid grid-cols-2 gap-1.5 md:gap-2">
+                {% if data.igdb_scores.avg_user %}
+                <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-1.5 md:p-3 text-center">
+                    <div class="text-sm md:text-base font-bold text-primary">{{ data.igdb_scores.avg_user }}/100</div>
+                    <div class="text-xs text-base-content/50">Avg User Score</div>
+                    <div class="text-[0.6rem] text-base-content/30">{{ data.igdb_scores.user_count }} games scored</div>
+                </div>
+                {% endif %}
+                {% if data.igdb_scores.avg_critic %}
+                <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-1.5 md:p-3 text-center">
+                    <div class="text-sm md:text-base font-bold text-primary">{{ data.igdb_scores.avg_critic }}/100</div>
+                    <div class="text-xs text-base-content/50">Avg Critic Score</div>
+                    <div class="text-[0.6rem] text-base-content/30">{{ data.igdb_scores.critic_count }} games scored</div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+
+        {# Top Keywords (from IGDB) #}
+        {% if data.top_keywords %}
+        <div class="border-t border-base-content/10 pt-3 mt-3">
+            <h4 class="text-xs font-semibold text-base-content/60 uppercase tracking-wider mb-2">Keywords <span class="text-base-content/30 font-normal normal-case">({{ data.unique_keywords }} total, IGDB)</span></h4>
+            <div class="flex flex-wrap gap-1.5">
+                {% for kw in data.top_keywords %}
+                <div class="bg-white/[0.03] border border-base-content/5 rounded-lg px-2.5 py-1.5 text-center">
+                    <span class="text-xs font-bold text-base-content/70">{{ kw.name }}</span>
+                    <span class="text-[0.6rem] text-base-content/40 ml-1">{{ kw.count }}</span>
+                </div>
+                {% endfor %}
+            </div>
         </div>
         {% endif %}
 
