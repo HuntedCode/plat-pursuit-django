@@ -11,7 +11,7 @@ from datetime import timedelta
 
 import pytz
 from django.core.cache import cache
-from django.db.models import Avg, Count, Q, Sum
+from django.db.models import Avg, Count, Max, Min, Q, Sum
 from django.db.models.functions import Coalesce
 from django.utils import timezone
 
@@ -25,14 +25,29 @@ STATS_CACHE_TTL = 14400  # 4 hours
 # ---------------------------------------------------------------------------
 
 def get_career_overview(profile):
-    """Free section: all denormalized Profile fields, 0 extra queries."""
+    """Free section: denormalized Profile fields + 1 query for first trophy date."""
+    from trophies.models import EarnedTrophy
+
     total = profile.total_trophies or 0
+    unearned = profile.total_unearned or 0
     games = profile.total_games or 0
     plats = profile.total_plats or 0
     completes = profile.total_completes or 0
+    total_possible = total + unearned
     now = timezone.now()
-    account_age = (now - profile.created_at).days if profile.created_at else 0
-    account_months = account_age / 30.44 if account_age > 0 else 0
+
+    # Career age based on first trophy earned (not PP account creation)
+    first_trophy_date = (
+        EarnedTrophy.objects.filter(
+            profile=profile, earned=True, earned_date_time__isnull=False,
+        )
+        .order_by('earned_date_time')
+        .values_list('earned_date_time', flat=True)
+        .first()
+    )
+    career_start = first_trophy_date or profile.created_at
+    career_days = (now - career_start).days if career_start else 0
+    career_months = career_days / 30.44 if career_days > 0 else 0
 
     return {
         'total_trophies': total,
@@ -44,18 +59,21 @@ def get_career_overview(profile):
         'silver_pct': round(profile.total_silvers / total * 100, 1) if total else 0,
         'gold_pct': round(profile.total_golds / total * 100, 1) if total else 0,
         'plat_pct': round(plats / total * 100, 1) if total else 0,
-        'total_unearned': profile.total_unearned or 0,
+        'total_unearned': unearned,
+        'overall_earn_rate': round(total / total_possible * 100, 1) if total_possible else 0,
         'total_games': games,
         'total_completes': completes,
+        'backlog': games - completes,
         'avg_progress': round(profile.avg_progress or 0, 1),
         'completion_rate': round(completes / games * 100, 1) if games else 0,
         'platinum_rate': round(plats / games * 100, 1) if games else 0,
         'trophies_per_game': round(total / games, 1) if games else 0,
-        'trophies_per_day': round(total / account_age, 2) if account_age else 0,
-        'plats_per_month': round(plats / account_months, 2) if account_months else 0,
-        'account_age_days': account_age,
-        'account_age_years': round(account_age / 365.25, 1) if account_age else 0,
+        'trophies_per_day': round(total / career_days, 2) if career_days else 0,
+        'plats_per_month': round(plats / career_months, 2) if career_months else 0,
+        'career_days': career_days,
+        'career_years': round(career_days / 365.25, 1) if career_days else 0,
         'trophy_level': profile.trophy_level or 0,
+        'level_progress': profile.progress or 0,
         'tier': profile.tier or 0,
         'is_plus': profile.is_plus,
         'hidden_games': profile.total_hiddens or 0,
@@ -109,7 +127,7 @@ def get_teaser_records(profile):
             'date': first_plat.earned_date_time,
         })
 
-    # Fastest platinum
+    # Shortest playtime (platinum game)
     fastest = (
         ProfileGame.objects.filter(
             profile=profile, has_plat=True, play_duration__isnull=False,
@@ -121,7 +139,7 @@ def get_teaser_records(profile):
     if fastest and fastest.play_duration:
         name, icon = _game_context(fastest.game)
         records.append({
-            'label': 'Fastest Platinum',
+            'label': 'Shortest Playtime (Plat)',
             'value': _format_duration(fastest.play_duration),
             'subtitle': name,
             'icon': icon,
@@ -148,14 +166,14 @@ def get_teaser_records(profile):
     return records
 
 
-def get_premium_stats(profile):
-    """Full premium stats dict, cached for 4 hours."""
-    cache_key = f'stats_page:{profile.id}'
+def get_premium_stats(profile, exclude_shovelware=False, exclude_hidden=False):
+    """Full premium stats dict, cached for 4 hours per filter combo."""
+    cache_key = f'stats_page:{profile.id}:{int(exclude_shovelware)}:{int(exclude_hidden)}'
     cached = cache.get(cache_key)
     if cached is not None:
         return cached
 
-    data = _compute_all_premium_stats(profile)
+    data = _compute_all_premium_stats(profile, exclude_shovelware, exclude_hidden)
     try:
         cache.set(cache_key, data, STATS_CACHE_TTL)
     except Exception:
@@ -164,36 +182,42 @@ def get_premium_stats(profile):
 
 
 def invalidate_stats_cache(profile_id):
-    """Clear cached stats. Called after sync completion."""
-    cache.delete(f'stats_page:{profile_id}')
+    """Clear all cached stats combos. Called after sync completion."""
+    for sw in (0, 1):
+        for hid in (0, 1):
+            cache.delete(f'stats_page:{profile_id}:{sw}:{hid}')
 
 
 # ---------------------------------------------------------------------------
 # Orchestrator
 # ---------------------------------------------------------------------------
 
-def _compute_all_premium_stats(profile):
+def _compute_all_premium_stats(profile, exclude_shovelware=False, exclude_hidden=False):
     """Compute every premium section together for efficient query batching."""
     from trophies.models import EarnedTrophy, ProfileGame, ProfileGamification
 
+    # Build game filter Q for queries that join through game
+    game_filter_q = _build_game_filter_q(exclude_shovelware, exclude_hidden)
+
     # Shared fetch 1: all earned timestamps + trophy type (for streaks, time, records)
+    # Not filtered by shovelware/hidden: a trophy is a trophy regardless of game status
     earned_timestamps = list(
         EarnedTrophy.objects.filter(
             profile=profile, earned=True, earned_date_time__isnull=False,
         ).values_list('earned_date_time', 'trophy__trophy_type')
     )
 
-    # Shared fetch 2: profile games with game+concept (for platform, genre, library)
-    profile_games = list(
-        ProfileGame.objects.filter(profile=profile)
-        .select_related('game__concept')
-    )
+    # Shared fetch 2: profile games with game+concept (filtered by toggles)
+    pg_qs = ProfileGame.objects.filter(profile=profile).select_related('game__concept')
+    if game_filter_q:
+        pg_qs = pg_qs.filter(game_filter_q)
+    profile_games = list(pg_qs)
 
     gamification = ProfileGamification.objects.filter(profile=profile).first()
     user_tz = _get_user_timezone(profile)
 
     return {
-        'records': _compute_personal_records(profile, earned_timestamps, user_tz),
+        'records': _compute_personal_records(profile, earned_timestamps, user_tz, exclude_shovelware, exclude_hidden),
         'rarity': _compute_rarity_profile(profile),
         'streaks': _compute_streaks(earned_timestamps, user_tz),
         'time_patterns': _compute_time_patterns(earned_timestamps, user_tz),
@@ -205,6 +229,10 @@ def _compute_all_premium_stats(profile):
         'community': _compute_community_stats(profile),
         'recaps': _compute_recap_stats(profile),
         'milestones': _compute_milestones(profile),
+        'filters': {
+            'exclude_shovelware': exclude_shovelware,
+            'exclude_hidden': exclude_hidden,
+        },
     }
 
 
@@ -212,32 +240,32 @@ def _compute_all_premium_stats(profile):
 # Section: Personal Records
 # ---------------------------------------------------------------------------
 
-def _compute_personal_records(profile, earned_timestamps, user_tz):
-    from trophies.models import EarnedTrophy, ProfileGame, MonthlyRecap
+def _compute_personal_records(profile, earned_timestamps, user_tz,
+                              exclude_shovelware=False, exclude_hidden=False):
+    from trophies.models import EarnedTrophy, ProfileGame, MonthlyRecap, Game
 
     items = []
+
+    # Base querysets with optional filters applied using correct FK paths
+    et_base = EarnedTrophy.objects.filter(profile=profile, earned=True, earned_date_time__isnull=False)
+    pg_base = ProfileGame.objects.filter(profile=profile)
+    if exclude_shovelware:
+        et_base = et_base.exclude(trophy__game__shovelware_status__in=['auto_flagged', 'manually_flagged'])
+        pg_base = pg_base.exclude(game__shovelware_status__in=['auto_flagged', 'manually_flagged'])
+    if exclude_hidden:
+        pg_base = pg_base.filter(user_hidden=False)
 
     # --- Queries for record rows with game context ---
 
     # First trophy ever
-    first = (
-        EarnedTrophy.objects.filter(
-            profile=profile, earned=True, earned_date_time__isnull=False,
-        )
-        .select_related('trophy__game__concept')
-        .order_by('earned_date_time')
-        .first()
-    )
+    first = et_base.select_related('trophy__game__concept').order_by('earned_date_time').first()
     if first:
         name, icon = _game_context(first.trophy.game)
         items.append(_record('First Trophy Ever', first.trophy.trophy_name, name, icon, first.earned_date_time))
 
     # First platinum
     first_plat = (
-        EarnedTrophy.objects.filter(
-            profile=profile, earned=True, trophy__trophy_type='platinum',
-            earned_date_time__isnull=False,
-        )
+        et_base.filter(trophy__trophy_type='platinum')
         .select_related('trophy__game__concept')
         .order_by('earned_date_time')
         .first()
@@ -248,10 +276,7 @@ def _compute_personal_records(profile, earned_timestamps, user_tz):
 
     # Most recent platinum
     recent_plat = (
-        EarnedTrophy.objects.filter(
-            profile=profile, earned=True, trophy__trophy_type='platinum',
-            earned_date_time__isnull=False,
-        )
+        et_base.filter(trophy__trophy_type='platinum')
         .select_related('trophy__game__concept')
         .order_by('-earned_date_time')
         .first()
@@ -260,12 +285,42 @@ def _compute_personal_records(profile, earned_timestamps, user_tz):
         name, icon = _game_context(recent_plat.trophy.game)
         items.append(_record('Most Recent Platinum', name, None, icon, recent_plat.earned_date_time))
 
-    # Fastest / slowest platinum by play_duration
-    for label, ordering in [('Fastest Platinum', 'play_duration'), ('Slowest Platinum', '-play_duration')]:
+    # Quickest / longest platinum (first trophy to plat date per game)
+    plat_game_ids = list(pg_base.filter(has_plat=True).values_list('game_id', flat=True))
+    if plat_game_ids:
+        first_per_game = dict(
+            et_base.filter(trophy__game_id__in=plat_game_ids)
+            .values('trophy__game_id')
+            .annotate(first=Min('earned_date_time'))
+            .values_list('trophy__game_id', 'first')
+        )
+        plat_per_game = dict(
+            et_base.filter(trophy__trophy_type='platinum', trophy__game_id__in=plat_game_ids)
+            .values('trophy__game_id')
+            .annotate(plat=Min('earned_date_time'))
+            .values_list('trophy__game_id', 'plat')
+        )
+        time_to_plat = {}
+        for gid in plat_game_ids:
+            f = first_per_game.get(gid)
+            p = plat_per_game.get(gid)
+            if f and p and p >= f:
+                time_to_plat[gid] = p - f
+
+        if time_to_plat:
+            for label, selector in [('Quickest Platinum', min), ('Longest Platinum Journey', max)]:
+                gid = selector(time_to_plat, key=time_to_plat.get)
+                try:
+                    game = Game.objects.select_related('concept').get(id=gid)
+                    gname, gicon = _game_context(game)
+                    items.append(_record(label, _format_duration(time_to_plat[gid]), gname, gicon))
+                except Game.DoesNotExist:
+                    pass
+
+    # Playtime records (labeled clearly as total playtime, not time-to-plat)
+    for label, ordering in [('Shortest Playtime (Platinum)', 'play_duration'), ('Longest Playtime (Platinum)', '-play_duration')]:
         pg = (
-            ProfileGame.objects.filter(
-                profile=profile, has_plat=True, play_duration__isnull=False,
-            )
+            pg_base.filter(has_plat=True, play_duration__isnull=False)
             .select_related('game__concept')
             .order_by(ordering)
             .first()
@@ -277,7 +332,7 @@ def _compute_personal_records(profile, earned_timestamps, user_tz):
     # Most trophies in one game / fewest (where > 0)
     for label, ordering in [('Most Trophies in One Game', '-earned_trophies_count'), ('Fewest Trophies in a Game', 'earned_trophies_count')]:
         pg = (
-            ProfileGame.objects.filter(profile=profile, earned_trophies_count__gt=0)
+            pg_base.filter(earned_trophies_count__gt=0)
             .select_related('game__concept')
             .order_by(ordering)
             .first()
@@ -287,12 +342,7 @@ def _compute_personal_records(profile, earned_timestamps, user_tz):
             items.append(_record(label, str(pg.earned_trophies_count), name, icon))
 
     # Most played game (play_count)
-    most_played = (
-        ProfileGame.objects.filter(profile=profile, play_count__gt=0)
-        .select_related('game__concept')
-        .order_by('-play_count')
-        .first()
-    )
+    most_played = pg_base.filter(play_count__gt=0).select_related('game__concept').order_by('-play_count').first()
     if most_played:
         name, icon = _game_context(most_played.game)
         detail = f'{most_played.play_count} play session{"s" if most_played.play_count != 1 else ""}'
@@ -300,9 +350,7 @@ def _compute_personal_records(profile, earned_timestamps, user_tz):
 
     # First game played
     first_game = (
-        ProfileGame.objects.filter(
-            profile=profile, first_played_date_time__isnull=False,
-        )
+        pg_base.filter(first_played_date_time__isnull=False)
         .select_related('game__concept')
         .order_by('first_played_date_time')
         .first()
@@ -311,21 +359,73 @@ def _compute_personal_records(profile, earned_timestamps, user_tz):
         name, icon = _game_context(first_game.game)
         items.append(_record('First Game Played', name, None, icon, first_game.first_played_date_time))
 
+    # First 100% completion
+    first_complete = (
+        pg_base.filter(progress=100, most_recent_trophy_date__isnull=False)
+        .select_related('game__concept')
+        .order_by('most_recent_trophy_date')
+        .first()
+    )
+    if first_complete:
+        name, icon = _game_context(first_complete.game)
+        items.append(_record('First 100% Completion', name, None, icon, first_complete.most_recent_trophy_date))
+
+    # Fastest 100% (first trophy to last trophy on a 100% game)
+    complete_game_ids = list(pg_base.filter(progress=100).values_list('game_id', flat=True))
+    if complete_game_ids:
+        first_per_complete = dict(
+            et_base.filter(trophy__game_id__in=complete_game_ids)
+            .values('trophy__game_id')
+            .annotate(first=Min('earned_date_time'))
+            .values_list('trophy__game_id', 'first')
+        )
+        last_per_complete = dict(
+            et_base.filter(trophy__game_id__in=complete_game_ids)
+            .values('trophy__game_id')
+            .annotate(last=Max('earned_date_time'))
+            .values_list('trophy__game_id', 'last')
+        )
+        time_to_100 = {}
+        for gid in complete_game_ids:
+            f = first_per_complete.get(gid)
+            l = last_per_complete.get(gid)
+            if f and l and l >= f:
+                time_to_100[gid] = l - f
+
+        if time_to_100:
+            fastest_gid = min(time_to_100, key=time_to_100.get)
+            try:
+                game = Game.objects.select_related('concept').get(id=fastest_gid)
+                gname, gicon = _game_context(game)
+                items.append(_record('Fastest 100%', _format_duration(time_to_100[fastest_gid]), gname, gicon))
+            except Game.DoesNotExist:
+                pass
+
     # --- Stats derived from shared timestamps (no extra queries) ---
 
     daily_counts = Counter()
-    plat_dates = []
+    plat_dates = []       # date objects for day-level stats
+    plat_datetimes = []   # full datetimes for precise gap calculation
     for dt, trophy_type in earned_timestamps:
         local_dt = dt.astimezone(user_tz)
         daily_counts[local_dt.date()] += 1
         if trophy_type == 'platinum':
             plat_dates.append(local_dt.date())
+            plat_datetimes.append(local_dt)
     plat_dates.sort()
+    plat_datetimes.sort()
 
     # Best day
     if daily_counts:
         best_date, best_count = daily_counts.most_common(1)[0]
         items.append(_record('Most Trophies in a Day', str(best_count), None, None, best_date))
+
+    # Most platinums in a day
+    if plat_dates:
+        plat_daily = Counter(plat_dates)
+        best_plat_date, best_plat_count = plat_daily.most_common(1)[0]
+        if best_plat_count > 1:
+            items.append(_record('Most Platinums in a Day', str(best_plat_count), None, None, best_plat_date))
 
     # Best week (7-day sliding window)
     best_week_count, best_week_start = _best_week(daily_counts)
@@ -334,22 +434,20 @@ def _compute_personal_records(profile, earned_timestamps, user_tz):
         week_range = f'{best_week_start.strftime("%b %d")} - {end.strftime("%b %d, %Y")}'
         items.append(_record('Best Week', str(best_week_count), week_range, None))
 
-    # Plat gap stats
-    if len(plat_dates) >= 2:
-        gaps = [(plat_dates[i + 1] - plat_dates[i]).days for i in range(len(plat_dates) - 1)]
+    # Plat gap stats (using full datetimes for precision)
+    if len(plat_datetimes) >= 2:
+        gaps = [(plat_datetimes[i + 1] - plat_datetimes[i]) for i in range(len(plat_datetimes) - 1)]
         shortest_idx = gaps.index(min(gaps))
         longest_idx = gaps.index(max(gaps))
-        shortest = gaps[shortest_idx]
-        longest = gaps[longest_idx]
         items.append(_record(
             'Shortest Gap Between Plats',
-            f'{shortest} day{"s" if shortest != 1 else ""}',
-            None, None, plat_dates[shortest_idx + 1],
+            _format_duration(gaps[shortest_idx]),
+            None, None, plat_datetimes[shortest_idx + 1],
         ))
         items.append(_record(
             'Longest Platinum Drought',
-            f'{longest} day{"s" if longest != 1 else ""}',
-            None, None, plat_dates[longest_idx],
+            _format_duration(gaps[longest_idx]),
+            None, None, plat_datetimes[longest_idx],
         ))
 
     # --- MonthlyRecap records ---
@@ -383,9 +481,10 @@ def _compute_personal_records(profile, earned_timestamps, user_tz):
 
     # --- Playtime aggregates ---
     playtime_agg = (
-        ProfileGame.objects.filter(profile=profile, play_duration__isnull=False)
+        pg_base.filter(play_duration__isnull=False)
         .aggregate(
             total=Sum('play_duration'),
+            total_trophies=Sum('earned_trophies_count'),
             count=Count('id'),
         )
     )
@@ -396,10 +495,115 @@ def _compute_personal_records(profile, earned_timestamps, user_tz):
     if total_playtime and playtime_count > 0:
         avg_playtime_str = _format_duration(total_playtime / playtime_count)
 
+    # Trophies per playtime hour
+    trophies_per_hour = None
+    if total_playtime and playtime_agg['total_trophies']:
+        total_hours = total_playtime.total_seconds() / 3600
+        if total_hours > 0:
+            trophies_per_hour = round(playtime_agg['total_trophies'] / total_hours, 2)
+
+    # Longest playtime without earning platinum or 100%
+    longest_no_plat = (
+        pg_base.filter(has_plat=False, play_duration__isnull=False, progress__lt=100)
+        .select_related('game__concept')
+        .order_by('-play_duration')
+        .first()
+    )
+    longest_no_plat_data = None
+    if longest_no_plat and longest_no_plat.play_duration:
+        name, icon = _game_context(longest_no_plat.game)
+        longest_no_plat_data = {
+            'name': name,
+            'icon': icon,
+            'playtime': _format_duration(longest_no_plat.play_duration),
+            'progress': longest_no_plat.progress or 0,
+        }
+
+    # Most efficient game (highest trophies per hour, min 1 trophy)
+    most_efficient = None
+    biggest_sink = None
+    games_with_playtime = list(
+        pg_base.filter(play_duration__isnull=False, earned_trophies_count__gt=0)
+        .select_related('game__concept')
+    )
+    if games_with_playtime:
+        def _trophies_per_hr(pg):
+            hours = pg.play_duration.total_seconds() / 3600
+            return pg.earned_trophies_count / hours if hours > 0 else 0
+
+        best = max(games_with_playtime, key=_trophies_per_hr)
+        worst = min(games_with_playtime, key=_trophies_per_hr)
+        best_rate = _trophies_per_hr(best)
+        worst_rate = _trophies_per_hr(worst)
+
+        if best_rate > 0:
+            name, icon = _game_context(best.game)
+            most_efficient = {
+                'name': name, 'icon': icon,
+                'rate': round(best_rate, 1),
+                'trophies': best.earned_trophies_count,
+                'playtime': _format_duration(best.play_duration),
+            }
+        if worst_rate < best_rate:
+            name, icon = _game_context(worst.game)
+            biggest_sink = {
+                'name': name, 'icon': icon,
+                'rate': round(worst_rate, 2),
+                'trophies': worst.earned_trophies_count,
+                'playtime': _format_duration(worst.play_duration),
+            }
+
+    # Longest commitment (biggest span between first and last played)
+    longest_commitment = None
+    commitment_candidates = (
+        pg_base.filter(
+            first_played_date_time__isnull=False,
+            last_played_date_time__isnull=False,
+        )
+        .select_related('game__concept')
+    )
+    best_span = timedelta(0)
+    for pg in commitment_candidates:
+        span = pg.last_played_date_time - pg.first_played_date_time
+        if span > best_span:
+            best_span = span
+            name, icon = _game_context(pg.game)
+            longest_commitment = {
+                'name': name, 'icon': icon,
+                'span': _format_duration(span),
+                'first': pg.first_played_date_time,
+                'last': pg.last_played_date_time,
+            }
+
+    # Average playtime per platinum
+    avg_playtime_per_plat = None
+    plat_playtime = (
+        pg_base.filter(has_plat=True, play_duration__isnull=False)
+        .aggregate(total=Sum('play_duration'), count=Count('id'))
+    )
+    if plat_playtime['total'] and plat_playtime['count']:
+        avg_playtime_per_plat = _format_duration(plat_playtime['total'] / plat_playtime['count'])
+
+    # Average session length (total playtime / total play sessions)
+    avg_session = None
+    total_sessions = (
+        pg_base.filter(play_count__gt=0)
+        .aggregate(sessions=Sum('play_count'))
+    )['sessions'] or 0
+    if total_playtime and total_sessions > 0:
+        avg_session = _format_duration(total_playtime / total_sessions)
+
     return {
         'items': items,
         'total_playtime': total_playtime_str,
         'avg_playtime': avg_playtime_str,
+        'trophies_per_hour': trophies_per_hour,
+        'longest_no_plat': longest_no_plat_data,
+        'most_efficient': most_efficient,
+        'biggest_sink': biggest_sink,
+        'longest_commitment': longest_commitment,
+        'avg_playtime_per_plat': avg_playtime_per_plat,
+        'avg_session': avg_session,
     }
 
 
@@ -414,7 +618,7 @@ def _compute_rarity_profile(profile):
         profile=profile, earned=True, trophy__trophy_earn_rate__isnull=False,
     )
 
-    # Single aggregate for all tier counts + averages
+    # Single aggregate for all PSN tier counts + averages
     agg = base_qs.aggregate(
         ultra_rare=Count('id', filter=Q(trophy__trophy_earn_rate__lt=5)),
         very_rare=Count('id', filter=Q(trophy__trophy_earn_rate__gte=5, trophy__trophy_earn_rate__lt=10)),
@@ -432,10 +636,31 @@ def _compute_rarity_profile(profile):
 
     total = agg['total'] or 1
 
-    # Notable trophies
+    # PP rarity (earn_rate field is a 0.0-1.0 ratio, not a percentage)
+    pp_qs = EarnedTrophy.objects.filter(
+        profile=profile, earned=True, trophy__earn_rate__isnull=False, trophy__earn_rate__gt=0,
+    )
+    pp_agg = pp_qs.aggregate(
+        pp_ultra_rare=Count('id', filter=Q(trophy__earn_rate__lt=0.05)),
+        pp_very_rare=Count('id', filter=Q(trophy__earn_rate__gte=0.05, trophy__earn_rate__lt=0.10)),
+        pp_rare=Count('id', filter=Q(trophy__earn_rate__gte=0.10, trophy__earn_rate__lt=0.20)),
+        pp_uncommon=Count('id', filter=Q(trophy__earn_rate__gte=0.20, trophy__earn_rate__lt=0.50)),
+        pp_common=Count('id', filter=Q(trophy__earn_rate__gte=0.50)),
+        pp_total=Count('id'),
+        pp_avg_rate=Avg('trophy__earn_rate'),
+    )
+    pp_total = pp_agg['pp_total'] or 1
+
+    # Notable trophies (PSN rarity)
     rarest = base_qs.select_related('trophy__game__concept').order_by('trophy__trophy_earn_rate').first()
     rarest_non_plat = (
         base_qs.exclude(trophy__trophy_type='platinum')
+        .select_related('trophy__game__concept')
+        .order_by('trophy__trophy_earn_rate')
+        .first()
+    )
+    rarest_plat = (
+        base_qs.filter(trophy__trophy_type='platinum')
         .select_related('trophy__game__concept')
         .order_by('trophy__trophy_earn_rate')
         .first()
@@ -445,6 +670,13 @@ def _compute_rarity_profile(profile):
         base_qs.filter(trophy__trophy_type='platinum')
         .select_related('trophy__game__concept')
         .order_by('-trophy__trophy_earn_rate')
+        .first()
+    )
+
+    # Rarest trophy by PP rate (may differ from PSN rarest)
+    rarest_pp = (
+        pp_qs.select_related('trophy__game__concept')
+        .order_by('trophy__earn_rate')
         .first()
     )
 
@@ -458,8 +690,8 @@ def _compute_rarity_profile(profile):
     hardest_game = _fetch_game_difficulty(game_difficulty[0] if game_difficulty else None)
     easiest_game = _fetch_game_difficulty(game_difficulty[-1] if game_difficulty else None)
 
-    # Tier list for template
-    tier_list = [
+    # PSN tier list
+    psn_tiers = [
         {'name': 'Ultra Rare', 'threshold': '< 5%', 'count': agg['ultra_rare'], 'pct': round(agg['ultra_rare'] / total * 100, 1)},
         {'name': 'Very Rare', 'threshold': '5 - 10%', 'count': agg['very_rare'], 'pct': round(agg['very_rare'] / total * 100, 1)},
         {'name': 'Rare', 'threshold': '10 - 20%', 'count': agg['rare'], 'pct': round(agg['rare'] / total * 100, 1)},
@@ -467,20 +699,50 @@ def _compute_rarity_profile(profile):
         {'name': 'Common', 'threshold': '> 50%', 'count': agg['common'], 'pct': round(agg['common'] / total * 100, 1)},
     ]
 
+    # PP tier list
+    pp_tiers = [
+        {'name': 'Ultra Rare', 'threshold': '< 5%', 'count': pp_agg['pp_ultra_rare'], 'pct': round(pp_agg['pp_ultra_rare'] / pp_total * 100, 1)},
+        {'name': 'Very Rare', 'threshold': '5 - 10%', 'count': pp_agg['pp_very_rare'], 'pct': round(pp_agg['pp_very_rare'] / pp_total * 100, 1)},
+        {'name': 'Rare', 'threshold': '10 - 20%', 'count': pp_agg['pp_rare'], 'pct': round(pp_agg['pp_rare'] / pp_total * 100, 1)},
+        {'name': 'Uncommon', 'threshold': '20 - 50%', 'count': pp_agg['pp_uncommon'], 'pct': round(pp_agg['pp_uncommon'] / pp_total * 100, 1)},
+        {'name': 'Common', 'threshold': '> 50%', 'count': pp_agg['pp_common'], 'pct': round(pp_agg['pp_common'] / pp_total * 100, 1)},
+    ]
+
     # Observation
     ultra_pct = agg['ultra_rare'] / total * 100
     avg_rate = agg['avg_rate'] or 0
+    pp_avg_pct = (pp_agg['pp_avg_rate'] or 0) * 100  # convert decimal to percentage
     observation = None
     if ultra_pct > 15:
-        observation = f'Rarity hunter: {round(ultra_pct)}% of your trophies are Ultra Rare'
+        observation = f'Rarity hunter: {round(ultra_pct)}% of your trophies are Ultra Rare on PSN'
+    elif avg_rate and pp_avg_pct and abs(avg_rate - pp_avg_pct) > 10:
+        observation = f'Your trophies average {round(avg_rate, 1)}% on PSN but {round(pp_avg_pct, 1)}% among PlatPursuit hunters'
     elif avg_rate and avg_rate < 20:
         observation = f'Your average trophy has a {round(avg_rate, 1)}% earn rate, rarer than most'
 
+    # Build PP rarest trophy context using PP earn_rate field
+    rarest_pp_ctx = None
+    if rarest_pp:
+        trophy = rarest_pp.trophy
+        game = trophy.game
+        game_name, game_icon = _game_context(game)
+        rarest_pp_ctx = {
+            'name': trophy.trophy_name,
+            'icon': trophy.trophy_icon_url,
+            'type': trophy.trophy_type,
+            'earn_rate': round((trophy.earn_rate or 0) * 100, 2),
+            'game_name': game_name,
+            'game_icon': game_icon,
+            'date': rarest_pp.earned_date_time,
+        }
+
     return {
-        'tiers': tier_list,
+        'tiers': psn_tiers,
+        'pp_tiers': pp_tiers,
         'sub_1_count': agg['sub_1'],
         'avg_earn_rate': round(agg['avg_rate'] or 0, 1),
         'avg_plat_rate': round(agg['avg_plat_rate'] or 0, 1),
+        'pp_avg_earn_rate': round(pp_avg_pct, 1),
         'avg_by_type': {
             'bronze': round(agg['avg_bronze_rate'] or 0, 1),
             'silver': round(agg['avg_silver_rate'] or 0, 1),
@@ -488,7 +750,9 @@ def _compute_rarity_profile(profile):
             'platinum': round(agg['avg_plat_rate'] or 0, 1),
         },
         'rarest': _trophy_context(rarest),
+        'rarest_plat': _trophy_context(rarest_plat),
         'rarest_non_plat': _trophy_context(rarest_non_plat),
+        'rarest_pp': rarest_pp_ctx,
         'most_common': _trophy_context(most_common),
         'most_common_plat': _trophy_context(most_common_plat),
         'hardest_game': hardest_game,
@@ -528,7 +792,9 @@ def _compute_streaks(earned_timestamps, user_tz):
     longest_len, longest_start, longest_end = _longest_streak(sorted_dates)
     current = _current_streak(sorted_dates, today)
     plat_longest, plat_start, plat_end = _longest_streak(sorted_plat_dates)
+    current_plat = _current_streak(sorted_plat_dates, today)
     drought_len, drought_after, drought_before = _longest_drought(sorted_dates)
+    plat_drought_len, plat_drought_after, plat_drought_before = _longest_drought(sorted_plat_dates)
 
     # Activity stats
     total_active = len(all_dates)
@@ -569,6 +835,30 @@ def _compute_streaks(earned_timestamps, user_tz):
             'total': historical_months[best_m],
         }
 
+    # Derived: inactive days, avg per month
+    inactive_days = total_span - total_active
+    career_months = total_span / 30.44
+    avg_per_month = round(len(earned_timestamps) / career_months, 1) if career_months > 0 else 0
+
+    # Best month-over-month improvement
+    best_mom = None
+    sorted_month_keys = sorted(monthly_counts.keys())
+    if len(sorted_month_keys) >= 2:
+        best_delta = 0
+        best_mom_month = None
+        for i in range(1, len(sorted_month_keys)):
+            prev_key = sorted_month_keys[i - 1]
+            curr_key = sorted_month_keys[i]
+            delta = monthly_counts[curr_key] - monthly_counts[prev_key]
+            if delta > best_delta:
+                best_delta = delta
+                best_mom_month = curr_key
+        if best_delta > 0 and best_mom_month:
+            best_mom = {
+                'month': f'{calendar.month_name[best_mom_month[1]]} {best_mom_month[0]}',
+                'delta': best_delta,
+            }
+
     # Observation
     observation = None
     if current > 7:
@@ -584,20 +874,27 @@ def _compute_streaks(earned_timestamps, user_tz):
         'plat_streak': plat_longest,
         'plat_streak_start': plat_start,
         'plat_streak_end': plat_end,
+        'current_plat_streak': current_plat,
         'longest_drought': drought_len,
         'drought_after': drought_after,
         'drought_before': drought_before,
+        'plat_drought': plat_drought_len,
+        'plat_drought_after': plat_drought_after,
+        'plat_drought_before': plat_drought_before,
         'total_active_days': total_active,
+        'inactive_days': inactive_days,
         'active_ratio': active_ratio,
         'days_since_last': days_since_last,
         'days_since_last_plat': days_since_last_plat,
         'avg_per_active_day': avg_per_active,
+        'avg_per_month': avg_per_month,
         'months_with_activity': months_with_activity,
         'months_with_plat': months_with_plat,
         'monthly_streak': monthly_streak,
         'most_active_year': most_active_year,
         'quietest_year': quietest_year,
         'best_calendar_month': best_cal_month,
+        'best_mom_improvement': best_mom,
         'observation': observation,
     }
 
@@ -731,18 +1028,24 @@ def _compute_platform_breakdown(profile_games):
     items = []
     for name, data in sorted_platforms:
         game_count = data['games'] or 1
+        trophies_per_game = round(data['trophies'] / game_count, 1)
         items.append({
             'name': name,
             'trophies': data['trophies'],
             'games': data['games'],
             'plats': data['plats'],
             'avg_progress': round(data['total_progress'] / game_count, 1),
+            'trophies_per_game': trophies_per_game,
         })
 
     # Cross-gen count (games on multiple platforms)
     cross_gen = sum(
         1 for pg in profile_games
         if pg.game and pg.game.title_platform and len(pg.game.title_platform) > 1
+    )
+    single_platform = sum(
+        1 for pg in profile_games
+        if pg.game and pg.game.title_platform and len(pg.game.title_platform) == 1
     )
 
     # Most recent platform
@@ -754,10 +1057,39 @@ def _compute_platform_breakdown(profile_games):
                 latest_date = pg.last_played_date_time
                 recent = pg.game.title_platform[0]
 
+    # First platform played
+    first_platform = None
+    earliest_date = None
+    for pg in profile_games:
+        if pg.game and pg.game.title_platform and pg.first_played_date_time:
+            if earliest_date is None or pg.first_played_date_time < earliest_date:
+                earliest_date = pg.first_played_date_time
+                first_platform = pg.game.title_platform[0]
+
+    # Highlight winners (from items already computed)
+    most_plats_platform = None
+    best_completion_platform = None
+    best_tpg_platform = None
+    if items:
+        by_plats = max(items, key=lambda x: x['plats'])
+        if by_plats['plats'] > 0:
+            most_plats_platform = by_plats['name']
+        by_completion = max(items, key=lambda x: x['avg_progress'])
+        if by_completion['avg_progress'] > 0:
+            best_completion_platform = {'name': by_completion['name'], 'avg': by_completion['avg_progress']}
+        by_tpg = max(items, key=lambda x: x['trophies_per_game'])
+        if by_tpg['trophies_per_game'] > 0:
+            best_tpg_platform = {'name': by_tpg['name'], 'rate': by_tpg['trophies_per_game']}
+
     return {
         'items': items,
         'cross_gen': cross_gen,
+        'single_platform': single_platform,
         'most_recent': recent,
+        'first_platform': first_platform,
+        'most_plats_platform': most_plats_platform,
+        'best_completion_platform': best_completion_platform,
+        'best_tpg_platform': best_tpg_platform,
     }
 
 
@@ -1380,6 +1712,17 @@ def _get_milestone_required(milestone, month_map, days_per_month):
     # Fall back to criteria_details target for types like calendar_months_total
     target = (milestone.criteria_details or {}).get('target', 0)
     return target if target and target > 0 else 0
+
+
+def _build_game_filter_q(exclude_shovelware, exclude_hidden):
+    """Build a Q object for filtering ProfileGame querysets by toggle state."""
+    filters = Q()
+    if exclude_shovelware:
+        filters &= ~Q(game__shovelware_status__in=['auto_flagged', 'manually_flagged'])
+    if exclude_hidden:
+        filters &= Q(user_hidden=False)
+    return filters if filters != Q() else None
+
 
 
 def _get_user_timezone(profile):
