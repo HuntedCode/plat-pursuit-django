@@ -7,7 +7,7 @@ logger = logging.getLogger('psn_api')
 
 class GameSearchForm(forms.Form):
     query = forms.CharField(required=False, label='Search by name')
-    platform = forms.MultipleChoiceField(choices=[('PS5', 'PS5'), ('PS4', 'PS4'), ('PS3', 'PS3'), ('PSVITA', 'PSVita'), ('PSVR', 'PSVR')], required=False, initial=['PS5', 'PS4'], label='Platforms')
+    platform = forms.MultipleChoiceField(choices=[('PS5', 'PS5'), ('PS4', 'PS4'), ('PS3', 'PS3'), ('PSVITA', 'PSVita'), ('PSVR', 'PSVR'), ('PSVR2', 'PSVR2')], required=False, initial=['PS5', 'PS4'], label='Platforms')
     regions = forms.MultipleChoiceField(choices=[('global', 'Global'), ('NA', 'NA'), ('EU', 'EU'), ('JP', 'JP'), ('AS', 'AS'), ('KR', 'KR'), ('CN', 'CN')], required=False, label='Regions')
     letter = forms.ChoiceField(
         choices=[('', 'All'), ('0-9', '0-9')] + [(letter, letter) for letter in 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'],
@@ -32,7 +32,7 @@ class GameSearchForm(forms.Form):
 
 class TrophySearchForm(forms.Form):
     query = forms.CharField(required=False, label='Search by name')
-    platform = forms.MultipleChoiceField(choices=[('PS5', 'PS5'), ('PS4', 'PS4'), ('PS3', 'PS3'), ('PSVITA', 'PSVita'), ('PSVR', 'PSVR')], required=False, label='Platforms')
+    platform = forms.MultipleChoiceField(choices=[('PS5', 'PS5'), ('PS4', 'PS4'), ('PS3', 'PS3'), ('PSVITA', 'PSVita'), ('PSVR', 'PSVR'), ('PSVR2', 'PSVR2')], required=False, label='Platforms')
     type = forms.MultipleChoiceField(choices=[('bronze', 'Bronze'), ('silver', 'Silver'), ('gold', 'Gold'), ('platinum', 'Platinum')], required=False, label='Types')
     region = forms.MultipleChoiceField(choices=[('global', 'Global'), ('NA', 'NA'), ('EU', 'EU'), ('JP', 'JP'), ('AS', 'AS'), ('KR', 'KR'), ('CN', 'CN')], required=False, label='Regions')
     psn_rarity = forms.MultipleChoiceField(choices=[('0', 'Ultra Rare'), ('1', 'Very Rare'), ('2', 'Rare'), ('3', 'Common')], required=False, label='PSN Rarity')
@@ -79,7 +79,7 @@ class ProfileSearchForm(forms.Form):
 
 class ProfileGamesForm(forms.Form):
     query = forms.CharField(required=False, label='Search by name')
-    platform = forms.MultipleChoiceField(choices=[('PS5', 'PS5'), ('PS4', 'PS4'), ('PS3', 'PS3'), ('PSVITA', 'PSVita'), ('PSVR', 'PSVR')], required=False, label='Platforms')
+    platform = forms.MultipleChoiceField(choices=[('PS5', 'PS5'), ('PS4', 'PS4'), ('PS3', 'PS3'), ('PSVITA', 'PSVita'), ('PSVR', 'PSVR'), ('PSVR2', 'PSVR2')], required=False, label='Platforms')
     plat_status = forms.ChoiceField(
         choices=[
             ('all', 'All Games'),
@@ -111,7 +111,7 @@ class ProfileGamesForm(forms.Form):
 
 class ProfileTrophiesForm(forms.Form):
     query = forms.CharField(required=False, label='Search by name')
-    platform = forms.MultipleChoiceField(choices=[('PS5', 'PS5'), ('PS4', 'PS4'), ('PS3', 'PS3'), ('PSVITA', 'PSVita'), ('PSVR', 'PSVR')], required=False, label='Platforms')
+    platform = forms.MultipleChoiceField(choices=[('PS5', 'PS5'), ('PS4', 'PS4'), ('PS3', 'PS3'), ('PSVITA', 'PSVita'), ('PSVR', 'PSVR'), ('PSVR2', 'PSVR2')], required=False, label='Platforms')
     type = forms.ChoiceField(choices=[('', 'All'),('bronze', 'Bronze'), ('silver', 'Silver'), ('gold', 'Gold'), ('platinum', 'Platinum')], required=False, label='Type')
 
 class ProfileBadgesForm(forms.Form):

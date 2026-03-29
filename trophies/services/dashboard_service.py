@@ -1855,7 +1855,7 @@ def _build_platform_radar_data(profile, year):
 
     PLATFORM_LABELS = {
         'PS5': 'PS5', 'PS4': 'PS4', 'PS3': 'PS3',
-        'PSVITA': 'PS Vita', 'PSVR': 'PS VR',
+        'PSVITA': 'PS Vita', 'PSVR': 'PS VR', 'PSVR2': 'PS VR2',
     }
 
     earned_qs = EarnedTrophy.objects.filter(
