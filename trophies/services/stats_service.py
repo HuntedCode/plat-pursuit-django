@@ -1100,9 +1100,14 @@ def _compute_platform_breakdown(profile_games):
 def _compute_genre_breakdown(profile_games):
     from trophies.util_modules.constants import GENRE_DISPLAY_NAMES
 
+    from trophies.models import ConceptCompany
+
     genres = defaultdict(lambda: {'games': 0, 'plats': 0, 'total_progress': 0, 'total_earn_rate': 0, 'earn_rate_count': 0})
     publishers = defaultdict(lambda: {'games': 0, 'plats': 0})
+    developers = defaultdict(lambda: {'games': 0, 'plats': 0})
 
+    # Build concept_id -> has_plat lookup for developer stats
+    concept_plat_map = {}
     for pg in profile_games:
         concept = pg.game.concept if pg.game else None
         genre_list = concept.genres if concept and concept.genres else []
@@ -1118,6 +1123,21 @@ def _compute_genre_breakdown(profile_games):
             publishers[publisher]['games'] += 1
             if pg.has_plat:
                 publishers[publisher]['plats'] += 1
+
+        if concept:
+            concept_plat_map[concept.id] = pg.has_plat
+
+    # Bulk query developer data (single query, no N+1)
+    if concept_plat_map:
+        dev_entries = (
+            ConceptCompany.objects
+            .filter(concept_id__in=concept_plat_map.keys(), is_developer=True)
+            .select_related('company')
+        )
+        for cc in dev_entries:
+            developers[cc.company.name]['games'] += 1
+            if concept_plat_map.get(cc.concept_id):
+                developers[cc.company.name]['plats'] += 1
 
     # Sort genres by plats desc
     sorted_genres = sorted(genres.items(), key=lambda x: x[1]['plats'], reverse=True)
@@ -1142,6 +1162,11 @@ def _compute_genre_breakdown(profile_games):
     top_publishers = [{'name': name, 'plats': data['plats'], 'games': data['games']} for name, data in sorted_pubs]
     unique_publishers = len(publishers)
 
+    # Top developers by plats (from IGDB data)
+    sorted_devs = sorted(developers.items(), key=lambda x: x[1]['plats'], reverse=True)[:3]
+    top_developers = [{'name': name, 'plats': data['plats'], 'games': data['games']} for name, data in sorted_devs]
+    unique_developers = len(developers)
+
     # Genre diversity (unique genres with platinums)
     genres_with_plats = sum(1 for g in genre_items if g['plats'] > 0)
 
@@ -1162,6 +1187,8 @@ def _compute_genre_breakdown(profile_games):
         'genres_with_plats': genres_with_plats,
         'top_publishers': top_publishers,
         'unique_publishers': unique_publishers,
+        'top_developers': top_developers,
+        'unique_developers': unique_developers,
         'observation': observation,
     }
 

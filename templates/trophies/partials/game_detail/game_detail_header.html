@@ -36,15 +36,25 @@
                     <div aria-hidden="true"></div>
                 </div>
 
-                {# Publisher + release date #}
+                {# Developer / Publisher / Release date / Time to beat #}
                 {% if game.concept %}
                     <div class="flex flex-col justify-center items-center gap-1 w-3/4 text-xs text-base-content/60">
+                        {% for cc in game.concept.concept_companies.all %}
+                            {% if cc.is_developer %}
+                                <p class="line-clamp-1 pr-1">Developer: <span class="italic font-medium text-accent">{{ cc.company.name }}</span></p>
+                            {% endif %}
+                        {% endfor %}
                         {% if game.concept.publisher_name %}
                             <p class="line-clamp-1 pr-1">Publisher: <span class="italic font-medium text-accent">{{ game.concept.publisher_name }}</span></p>
                         {% endif %}
                         {% if game.concept.release_date %}
                             <p class="line-clamp-1 pr-1">Released: <time datetime="{{ game.concept.release_date|date:'Y-m-d' }}" class="italic font-medium text-primary/80">{{ game.concept.release_date|date }}</time></p>
                         {% endif %}
+                        {% with igdb=game.concept.igdb_match %}
+                            {% if igdb.completion_time_display %}
+                                <p class="line-clamp-1 pr-1">Est. Completion: <span class="italic font-medium text-primary/80">{{ igdb.completion_time_display }}</span></p>
+                            {% endif %}
+                        {% endwith %}
                     </div>
                 {% endif %}
             </div>

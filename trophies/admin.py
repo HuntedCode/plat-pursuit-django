@@ -4,7 +4,7 @@ from django.db import transaction
 from django.db.models import Count, F, IntegerField, Q, Value
 from django.db.models.functions import Cast, Coalesce
 from datetime import timedelta
-from .models import Profile, Game, Trophy, EarnedTrophy, ProfileGame, APIAuditLog, FeaturedGame, FeaturedProfile, Concept, TitleID, TrophyGroup, ConceptTrophyGroup, UserTrophySelection, UserConceptRating, Badge, UserBadge, UserBadgeProgress, ProfileBadgeShowcase, FeaturedGuide, Stage, PublisherBlacklist, Title, UserTitle, Milestone, UserMilestone, UserMilestoneProgress, Comment, CommentVote, CommentReport, ModerationLog, BannedWord, ProfileGamification, StatType, StageStatValue, MonthlyRecap, GameList, GameListItem, GameListLike, Challenge, AZChallengeSlot, GameFamily, GameFamilyProposal, Review, ReviewVote, ReviewReply, ReviewReport, ReviewModerationLog, DashboardConfig, StageCompletionEvent, Roadmap, RoadmapTab, RoadmapStep, RoadmapStepTrophy, TrophyGuide
+from .models import Profile, Game, Trophy, EarnedTrophy, ProfileGame, APIAuditLog, FeaturedGame, FeaturedProfile, Concept, TitleID, TrophyGroup, ConceptTrophyGroup, UserTrophySelection, UserConceptRating, Badge, UserBadge, UserBadgeProgress, ProfileBadgeShowcase, FeaturedGuide, Stage, PublisherBlacklist, Title, UserTitle, Milestone, UserMilestone, UserMilestoneProgress, Comment, CommentVote, CommentReport, ModerationLog, BannedWord, ProfileGamification, StatType, StageStatValue, MonthlyRecap, GameList, GameListItem, GameListLike, Challenge, AZChallengeSlot, GameFamily, GameFamilyProposal, Review, ReviewVote, ReviewReply, ReviewReport, ReviewModerationLog, DashboardConfig, StageCompletionEvent, Roadmap, RoadmapTab, RoadmapStep, RoadmapStepTrophy, TrophyGuide, Company, ConceptCompany, IGDBMatch
 
 
 # Register your models here.
@@ -302,7 +302,7 @@ class GameAdmin(admin.ModelAdmin):
         ),
     )
     readonly_fields = ('shovelware_updated_at',)
-    actions = ['toggle_is_regional', 'add_psvr_platform', 'mark_concepts_stale', 'copy_concept_icon', 'lock_concept', 'unlock_concept', 'mark_as_shovelware', 'clear_shovelware_flag', 'reset_shovelware_auto', 'mark_unobtainable', 'mark_obtainable', 'mark_has_online_trophies', 'mark_no_online_trophies']
+    actions = ['toggle_is_regional', 'add_psvr_platform', 'add_psvr2_platform', 'mark_concepts_stale', 'copy_concept_icon', 'lock_concept', 'unlock_concept', 'mark_as_shovelware', 'clear_shovelware_flag', 'reset_shovelware_auto', 'mark_unobtainable', 'mark_obtainable', 'mark_has_online_trophies', 'mark_no_online_trophies']
     autocomplete_fields=['concept']
 
     @admin.action(description="Toggle is_regional for selected games")
@@ -327,7 +327,21 @@ class GameAdmin(admin.ModelAdmin):
         if updated_count:
             messages.success(request, f"Added 'PSVR' to {updated_count} game(s).")
         else:
-            messages.info(request,  'No changes made. "PSVR" already present in selected games.')
+            messages.info(request, 'No changes made. "PSVR" already present in selected games.')
+
+    @admin.action(description='Add "PSVR2" to platforms for selected games')
+    def add_psvr2_platform(self, request, queryset):
+        updated_count = 0
+        with transaction.atomic():
+            for game in queryset:
+                if 'PSVR2' not in game.title_platform:
+                    game.title_platform.append('PSVR2')
+                    game.save(update_fields=['title_platform'])
+                    updated_count += 1
+        if updated_count:
+            messages.success(request, f"Added 'PSVR2' to {updated_count} game(s).")
+        else:
+            messages.info(request, 'No changes made. "PSVR2" already present in selected games.')
 
     @admin.action(description="Mark concepts as stale for selected games")
     def mark_concepts_stale(self, request, queryset):
@@ -581,11 +595,22 @@ class TitleIDAdmin(admin.ModelAdmin):
     search_fields = ('title_id',)
     list_filter = ('region', 'platform')
 
+class ConceptCompanyInline(admin.TabularInline):
+    model = ConceptCompany
+    extra = 0
+    readonly_fields = ('company', 'is_developer', 'is_publisher', 'is_porting', 'is_supporting')
+    can_delete = False
+
+    def has_add_permission(self, request, obj=None):
+        return False
+
+
 @admin.register(Concept)
 class ConceptAdmin(admin.ModelAdmin):
     list_display = ('id', 'concept_id', 'unified_title', 'release_date', 'publisher_name', 'genres')
     search_fields = ('concept_id', 'unified_title')
     actions = ['duplicate_concept', 'lock_games', 'unlock_games']
+    inlines = [ConceptCompanyInline]
 
     @admin.action(description="Lock concept on all games using selected concepts")
     def lock_games(self, request, queryset):
@@ -2028,3 +2053,115 @@ class DashboardConfigAdmin(admin.ModelAdmin):
     def hidden_count(self, obj):
         return len(obj.hidden_modules) if obj.hidden_modules else 0
     hidden_count.short_description = 'Hidden'
+
+
+# ---------------------------------------------------------------------------
+# IGDB Integration Admin
+# ---------------------------------------------------------------------------
+
+class CompanyConceptInline(admin.TabularInline):
+    model = ConceptCompany
+    extra = 0
+    readonly_fields = ('concept', 'is_developer', 'is_publisher', 'is_porting', 'is_supporting')
+    can_delete = False
+
+    def has_add_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(Company)
+class CompanyAdmin(admin.ModelAdmin):
+    list_display = ('name', 'igdb_id', 'country_display', 'parent', 'company_size_display', 'concept_count')
+    list_filter = ('company_size',)
+    search_fields = ('name', 'slug')
+    raw_id_fields = ('parent', 'changed_company')
+    readonly_fields = ('igdb_id', 'created_at', 'updated_at')
+    inlines = [CompanyConceptInline]
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).annotate(
+            _concept_count=Count('company_concepts')
+        )
+
+    def concept_count(self, obj):
+        return obj._concept_count
+    concept_count.short_description = 'Games'
+    concept_count.admin_order_field = '_concept_count'
+
+    def country_display(self, obj):
+        return obj.country or '-'
+    country_display.short_description = 'Country'
+    country_display.admin_order_field = 'country'
+
+    def company_size_display(self, obj):
+        return obj.get_company_size_display() if obj.company_size else '-'
+    company_size_display.short_description = 'Size'
+
+
+@admin.register(IGDBMatch)
+class IGDBMatchAdmin(admin.ModelAdmin):
+    list_display = (
+        'concept_title', 'igdb_name', 'confidence_display',
+        'status', 'match_method', 'game_category_display', 'last_synced_at',
+    )
+    list_filter = ('status', 'match_method', 'game_category')
+    search_fields = ('concept__unified_title', 'igdb_name')
+    raw_id_fields = ('concept',)
+    readonly_fields = (
+        'igdb_id', 'match_confidence', 'match_method', 'raw_response',
+        'created_at', 'updated_at', 'last_synced_at',
+    )
+    actions = ['approve_selected', 'reject_selected', 'rematch_selected']
+
+    def concept_title(self, obj):
+        return obj.concept.unified_title
+    concept_title.short_description = 'PSN Title'
+    concept_title.admin_order_field = 'concept__unified_title'
+
+    def confidence_display(self, obj):
+        pct = f'{obj.match_confidence:.0%}'
+        if obj.match_confidence >= 0.85:
+            return f'{pct}'
+        elif obj.match_confidence >= 0.50:
+            return f'{pct}'
+        return f'{pct}'
+    confidence_display.short_description = 'Confidence'
+    confidence_display.admin_order_field = 'match_confidence'
+
+    def game_category_display(self, obj):
+        return obj.get_game_category_display() if obj.game_category is not None else '-'
+    game_category_display.short_description = 'Category'
+
+    @admin.action(description='Approve selected matches')
+    def approve_selected(self, request, queryset):
+        from trophies.services.igdb_service import IGDBService
+        count = 0
+        for match in queryset.filter(status='pending_review'):
+            IGDBService.approve_match(match)
+            count += 1
+        messages.success(request, f'Approved {count} match(es) and applied enrichment.')
+
+    @admin.action(description='Reject selected matches')
+    def reject_selected(self, request, queryset):
+        from trophies.services.igdb_service import IGDBService
+        count = 0
+        for match in queryset.exclude(status='rejected'):
+            IGDBService.reject_match(match)
+            count += 1
+        messages.success(request, f'Rejected {count} match(es).')
+
+    @admin.action(description='Re-match selected (delete and re-run)')
+    def rematch_selected(self, request, queryset):
+        from trophies.services.igdb_service import IGDBService
+        count = 0
+        errors = 0
+        for match in queryset:
+            try:
+                IGDBService.rematch_concept(match.concept)
+                count += 1
+            except Exception as e:
+                errors += 1
+        msg = f'Re-matched {count} concept(s).'
+        if errors:
+            msg += f' {errors} error(s) occurred.'
+        messages.success(request, msg)

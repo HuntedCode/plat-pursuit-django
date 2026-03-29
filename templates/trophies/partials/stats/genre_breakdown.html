@@ -29,6 +29,12 @@
                 <div class="text-sm md:text-base font-bold text-primary">{{ data.unique_publishers|intcomma }}</div>
                 <div class="text-xs text-base-content/50">Publishers</div>
             </div>
+            {% if data.unique_developers %}
+            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-1.5 md:p-3 text-center">
+                <div class="text-sm md:text-base font-bold text-primary">{{ data.unique_developers|intcomma }}</div>
+                <div class="text-xs text-base-content/50">Developers</div>
+            </div>
+            {% endif %}
         </div>
 
         {# Genre list #}
@@ -52,6 +58,23 @@
                         <div class="text-[0.6rem] text-base-content/40 hidden md:block">Avg</div>
                     </div>
                 </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        {# Top developers #}
+        {% if data.top_developers %}
+        <h4 class="text-xs font-semibold text-base-content/60 uppercase tracking-wider mb-2">Top Developers by Platinums</h4>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-1.5 md:gap-2 mb-4">
+            {% for dev in data.top_developers %}
+            <div class="flex items-center gap-2 p-2 rounded-lg bg-white/[0.03] border border-base-content/5">
+                <span class="text-xs font-semibold text-primary mr-1">#{{ forloop.counter }}</span>
+                <div class="flex-1 min-w-0">
+                    <div class="text-sm font-bold line-clamp-1">{{ dev.name }}</div>
+                    <div class="text-xs text-base-content/50">{{ dev.games }} game{{ dev.games|pluralize }}</div>
+                </div>
+                <div class="text-sm font-bold text-blue-300 shrink-0">{{ dev.plats }}</div>
             </div>
             {% endfor %}
         </div>
