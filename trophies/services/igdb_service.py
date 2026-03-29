@@ -1,0 +1,1400 @@
+import logging
+import re
+import time
+import unicodedata
+from datetime import datetime, timezone as dt_timezone
+from difflib import SequenceMatcher
+
+import requests
+from django.conf import settings
+from django.core.cache import cache
+from django.db import IntegrityError
+
+from trophies.models import Company, ConceptCompany, IGDBMatch
+from trophies.util_modules.cache import redis_client
+
+logger = logging.getLogger('psn_api')
+
+# PlayStation platform IDs in IGDB
+PS_PLATFORM_IDS = (7, 8, 9, 38, 46, 48, 165, 167, 390)
+PS_PLATFORM_FILTER = ','.join(str(p) for p in PS_PLATFORM_IDS)
+
+# IGDB platform ID -> human-readable name (PlayStation + common others)
+IGDB_PLATFORM_NAMES = {
+    7: 'PS1', 8: 'PS2', 9: 'PS3', 38: 'PSP', 46: 'Vita',
+    48: 'PS4', 165: 'PSVR', 167: 'PS5', 390: 'PSVR2',
+    6: 'PC', 14: 'Mac', 3: 'Linux',
+    49: 'Xbox One', 169: 'Xbox Series',
+    130: 'Switch', 41: 'Wii U',
+    34: 'Android', 39: 'iOS',
+}
+
+# IGDB external game category for PlayStation Store
+PLAYSTATION_STORE_CATEGORY = 36
+
+# Website category mapping for external_urls
+WEBSITE_CATEGORIES = {
+    1: 'official',
+    2: 'wikia',
+    3: 'wikipedia',
+    4: 'facebook',
+    5: 'twitter',
+    6: 'twitch',
+    8: 'instagram',
+    9: 'youtube',
+    13: 'steam',
+    14: 'reddit',
+    15: 'itch',
+    16: 'epicgames',
+    17: 'gog',
+    18: 'discord',
+}
+
+# Fields we request from IGDB for each game
+GAME_FIELDS = (
+    'name, slug, summary, storyline, url, category, status, '
+    'first_release_date, rating, aggregated_rating, '
+    'cover.image_id, '
+    'genres.name, genres.slug, '
+    'themes.name, themes.slug, '
+    'keywords.name, keywords.slug, '
+    'game_modes.name, player_perspectives.name, '
+    'game_engines.name, '
+    'involved_companies.company.name, '
+    'involved_companies.company.slug, '
+    'involved_companies.company.description, '
+    'involved_companies.company.country, '
+    'involved_companies.company.logo.image_id, '
+    'involved_companies.company.parent.id, '
+    'involved_companies.company.parent.name, '
+    'involved_companies.company.parent.slug, '
+    'involved_companies.company.company_size, '
+    'involved_companies.company.start_date, '
+    'involved_companies.company.change_date, '
+    'involved_companies.company.changed_company_id, '
+    'involved_companies.developer, '
+    'involved_companies.publisher, '
+    'involved_companies.porting, '
+    'involved_companies.supporting, '
+    'franchises.name, collections.name, '
+    'alternative_names.name, alternative_names.comment, '
+    'external_games.uid, external_games.category, '
+    'websites.url, websites.category, '
+    'platforms, '
+    'release_dates.date, release_dates.platform, release_dates.region, '
+    'similar_games'
+)
+
+
+# Pattern to detect likely DLC/addon entries by name
+_DLC_NAME_RE = re.compile(
+    r' - .+(?:'
+    r'Skins?\b|Skins?\s+Pack|'
+    r'Pack\b|'
+    r'DLC\b|'
+    r'Season\s+Pass|'
+    r'Steelbook|'
+    r'Costumes?\b|Outfits?\b|'
+    r'Weapons?\b|Items?\b|'
+    r'Maps?\b|Levels?\b|'
+    r'Bonus\b|Pre-Order\b'
+    r')',
+    re.IGNORECASE,
+)
+
+
+class IGDBService:
+    """Service for matching PlatPursuit Concepts to IGDB game entries
+    and enriching them with developer, genre, theme, and metadata."""
+
+    REDIS_TOKEN_KEY = 'igdb_access_token'
+    REDIS_RATE_KEY = 'igdb_rate_limit'
+    TOKEN_URL = 'https://id.twitch.tv/oauth2/token'
+    API_BASE = 'https://api.igdb.com/v4'
+
+    # Max requests per second across all workers
+    MAX_REQUESTS_PER_SECOND = 3  # Conservative (IGDB allows 4)
+
+    # -----------------------------------------------------------------------
+    # Auth
+    # -----------------------------------------------------------------------
+
+    @classmethod
+    def _get_access_token(cls):
+        """Get IGDB access token, using cached version if available."""
+        token = cache.get(cls.REDIS_TOKEN_KEY)
+        if token:
+            return token
+
+        client_id = settings.IGDB_CLIENT_ID
+        client_secret = settings.IGDB_CLIENT_SECRET
+        if not client_id or not client_secret:
+            raise ValueError('IGDB_CLIENT_ID and IGDB_CLIENT_SECRET must be set in environment')
+
+        response = requests.post(cls.TOKEN_URL, params={
+            'client_id': client_id,
+            'client_secret': client_secret,
+            'grant_type': 'client_credentials',
+        }, timeout=15)
+        response.raise_for_status()
+        data = response.json()
+
+        token = data['access_token']
+        expires_in = data.get('expires_in', 5000000)
+        # Cache with a 1-hour buffer before actual expiry
+        cache.set(cls.REDIS_TOKEN_KEY, token, timeout=max(expires_in - 3600, 3600))
+        return token
+
+    # -----------------------------------------------------------------------
+    # Low-level API
+    # -----------------------------------------------------------------------
+
+    @classmethod
+    def _rate_limit(cls):
+        """Distributed rate limiter using Redis sliding window.
+
+        Ensures all workers collectively stay under the IGDB rate limit.
+        Uses a Redis sorted set with timestamps to track requests across
+        all 24 token_keeper workers.
+        """
+        max_wait = 5.0  # seconds
+        waited = 0.0
+
+        while waited < max_wait:
+            now = time.time()
+            window_start = now - 1.0  # 1-second sliding window
+
+            pipe = redis_client.pipeline()
+            # Remove expired entries
+            pipe.zremrangebyscore(cls.REDIS_RATE_KEY, 0, window_start)
+            # Count requests in current window
+            pipe.zcard(cls.REDIS_RATE_KEY)
+            results = pipe.execute()
+            count = results[1]
+
+            if count < cls.MAX_REQUESTS_PER_SECOND:
+                # Slot available, record this request
+                redis_client.zadd(cls.REDIS_RATE_KEY, {f'{now}:{id(cls)}': now})
+                redis_client.expire(cls.REDIS_RATE_KEY, 5)
+                return
+
+            # No slot available, wait and retry
+            time.sleep(0.1)
+            waited += 0.1
+
+        # Timed out waiting, proceed anyway (better than blocking forever)
+        logger.warning('IGDB rate limiter timed out after %.1fs, proceeding', max_wait)
+
+    @classmethod
+    def _request(cls, endpoint, query):
+        """Make an authenticated request to the IGDB API.
+
+        Args:
+            endpoint: API endpoint (e.g. 'games', 'external_games')
+            query: Apicalypse query string
+
+        Returns:
+            list: Parsed JSON response (list of results)
+        """
+        cls._rate_limit()
+        token = cls._get_access_token()
+        url = f'{cls.API_BASE}/{endpoint}'
+        headers = {
+            'Client-ID': settings.IGDB_CLIENT_ID,
+            'Authorization': f'Bearer {token}',
+        }
+        response = requests.post(url, data=query, headers=headers, timeout=30)
+
+        if response.status_code == 429:
+            logger.warning('IGDB rate limit hit, waiting 1 second...')
+            time.sleep(1)
+            cls._rate_limit()
+            response = requests.post(url, data=query, headers=headers, timeout=30)
+            if response.status_code == 429:
+                logger.error('IGDB still rate limited after retry')
+
+        if not response.ok:
+            logger.error(
+                'IGDB API error %s for %s: %s',
+                response.status_code, endpoint, response.text[:500],
+            )
+        response.raise_for_status()
+        return response.json()
+
+    # -----------------------------------------------------------------------
+    # Search
+    # -----------------------------------------------------------------------
+
+    @classmethod
+    def search_game(cls, title, limit=10, platform_filter=True):
+        """Search IGDB for a game by title.
+
+        Args:
+            title: Game title to search for
+            limit: Max results
+            platform_filter: If True, restrict to PlayStation platforms
+
+        Returns:
+            list: IGDB game objects with full Tier 1 field expansion
+        """
+        cleaned = cls._clean_title_for_search(title)
+        where = f'where platforms = ({PS_PLATFORM_FILTER}); ' if platform_filter else ''
+        query = (
+            f'search "{cleaned}"; '
+            f'fields {GAME_FIELDS}; '
+            f'{where}'
+            f'limit {limit};'
+        )
+        return cls._request('games', query)
+
+    @classmethod
+    def search_by_exact_name(cls, title, limit=10):
+        """Query IGDB games by exact name match using where clauses.
+
+        Unlike the search endpoint (which uses relevance ranking and buries
+        base games under DLC), this tries a strict equality match first,
+        then falls back to a wildcard sorted by name length.
+
+        Returns:
+            list: IGDB game objects, deduplicated, shortest names first
+        """
+        seen_ids = set()
+        combined = []
+
+        # Prepare a lightly escaped version that preserves colons (unlike _clean_title_for_search)
+        # IGDB's where clause needs the actual name characters
+        lightly_cleaned = title.strip()
+        for ch in ('"', '\\'):
+            lightly_cleaned = lightly_cleaned.replace(ch, '')
+        lightly_cleaned = lightly_cleaned.lower()
+
+        # First: strict case-insensitive equality with PS platform filter
+        query_exact = (
+            f'fields {GAME_FIELDS}; '
+            f'where name ~ "{lightly_cleaned}" & platforms = ({PS_PLATFORM_FILTER}); '
+            f'limit 5;'
+        )
+        try:
+            exact = cls._request('games', query_exact)
+            for r in exact:
+                if r['id'] not in seen_ids:
+                    seen_ids.add(r['id'])
+                    combined.append(r)
+        except Exception:
+            pass
+
+        # Second: wildcard match with PS platform filter, shortest names first
+        query_wild = (
+            f'fields {GAME_FIELDS}; '
+            f'where name ~ *"{lightly_cleaned}"* & platforms = ({PS_PLATFORM_FILTER}); '
+            f'sort name asc; '
+            f'limit {limit};'
+        )
+        try:
+            wild = cls._request('games', query_wild)
+            wild.sort(key=lambda r: len(r.get('name', '')))
+            for r in wild:
+                if r['id'] not in seen_ids:
+                    seen_ids.add(r['id'])
+                    combined.append(r)
+        except Exception:
+            pass
+
+        return combined[:limit]
+
+    @classmethod
+    def search_by_external_id(cls, psn_ids):
+        """Search IGDB external_games for PlayStation Store IDs.
+
+        Args:
+            psn_ids: List of PSN IDs (concept_id, title_ids) to search for
+
+        Returns:
+            list: IGDB game IDs that matched, or empty list
+        """
+        if not psn_ids:
+            return []
+
+        uid_filter = ','.join(f'"{uid}"' for uid in psn_ids)
+        query = (
+            f'fields game; '
+            f'where category = {PLAYSTATION_STORE_CATEGORY} & uid = ({uid_filter}); '
+            f'limit 10;'
+        )
+        results = cls._request('external_games', query)
+        game_ids = list({r['game'] for r in results if 'game' in r})
+        if not game_ids:
+            return []
+
+        # Fetch full game details for matched IDs
+        id_filter = ','.join(str(gid) for gid in game_ids)
+        detail_query = (
+            f'fields {GAME_FIELDS}; '
+            f'where id = ({id_filter}); '
+            f'limit {len(game_ids)};'
+        )
+        return cls._request('games', detail_query)
+
+    @classmethod
+    def search_by_alternative_name(cls, title, limit=5):
+        """Search IGDB alternative_names for regional/alternate titles.
+
+        Catches games like "Kurushi" (EU) -> "Intelligent Qube" (US/IGDB),
+        or "Sly Raccoon" (EU) -> "Sly Cooper and the Thievius Raccoonus".
+
+        Returns:
+            list: IGDB game objects with full Tier 1 field expansion
+        """
+        cleaned = cls._clean_title_for_search(title)
+        # Query alternative_names where the name matches, get the game IDs
+        query = (
+            f'fields game; '
+            f'where name ~ *"{cleaned}"*; '
+            f'limit {limit};'
+        )
+        results = cls._request('alternative_names', query)
+        game_ids = list({r['game'] for r in results if 'game' in r})
+        if not game_ids:
+            return []
+
+        # Fetch full game details
+        id_filter = ','.join(str(gid) for gid in game_ids)
+        detail_query = (
+            f'fields {GAME_FIELDS}; '
+            f'where id = ({id_filter}); '
+            f'limit {len(game_ids)};'
+        )
+        return cls._request('games', detail_query)
+
+    @classmethod
+    def get_game_details(cls, igdb_id):
+        """Fetch full game details by IGDB ID.
+
+        Returns:
+            dict or None: Full IGDB game object, or None if not found
+        """
+        query = (
+            f'fields {GAME_FIELDS}; '
+            f'where id = {igdb_id}; '
+            f'limit 1;'
+        )
+        results = cls._request('games', query)
+        return results[0] if results else None
+
+    @classmethod
+    def _fetch_time_to_beat(cls, igdb_id):
+        """Fetch time-to-beat data from the separate IGDB endpoint.
+
+        Returns:
+            dict: {hastily, normally, completely} in seconds, or empty dict
+        """
+        try:
+            query = (
+                f'fields hastily, normally, completely; '
+                f'where game_id = {igdb_id}; '
+                f'limit 1;'
+            )
+            results = cls._request('game_time_to_beats', query)
+            return results[0] if results else {}
+        except Exception:
+            logger.debug(f'No time-to-beat data for IGDB game {igdb_id}')
+            return {}
+
+    # -----------------------------------------------------------------------
+    # Matching
+    # -----------------------------------------------------------------------
+
+    @classmethod
+    def match_concept(cls, concept):
+        """Try to match a Concept to an IGDB game entry.
+
+        Tries in order: family sibling match, external ID, exact name, fuzzy name.
+
+        Returns:
+            tuple: (igdb_data, confidence, method) or None if no match found
+        """
+        # Strategy 0: Check if a family sibling already has a match
+        sibling_match = cls._find_family_sibling_match(concept)
+        if sibling_match:
+            return sibling_match
+
+        # Build list of PSN IDs to try for external matching
+        psn_ids = []
+        if concept.concept_id and not concept.concept_id.startswith('PP_'):
+            psn_ids.append(concept.concept_id)
+        psn_ids.extend(concept.title_ids or [])
+
+        # Strategy 1: External ID match
+        if psn_ids:
+            try:
+                results = cls.search_by_external_id(psn_ids)
+                if results:
+                    best = cls._pick_best_match(concept, results, 'external_id')
+                    if best:
+                        return best
+            except Exception:
+                logger.exception(f'IGDB external ID search failed for concept {concept.concept_id}')
+
+        title = concept.unified_title
+        if not title:
+            return None
+
+        # Strategy 2: Fuzzy search (PlayStation-filtered) - handles 90%+ of games
+        try:
+            results = cls.search_game(title)
+        except Exception:
+            logger.exception(f'IGDB name search failed for "{title}"')
+            return None
+
+        if results:
+            cls._log_search_results(title, 'PS-filtered', concept, results)
+            best = cls._pick_best_non_dlc(concept, results)
+            if best:
+                return best
+
+        # Strategy 3: Exact name query (catches base games buried under DLC in fuzzy search)
+        try:
+            results = cls.search_by_exact_name(title)
+        except Exception:
+            logger.exception(f'IGDB exact name query failed for "{title}"')
+            results = []
+
+        if results:
+            cls._log_search_results(title, 'exact-name-query', concept, results)
+            best = cls._pick_best_non_dlc(concept, results)
+            if best:
+                return best
+        else:
+            logger.info(f'IGDB exact name query for "{title}": 0 results')
+
+        # Strategy 4: Fuzzy search unfiltered (catches PC-first games that came to PS later)
+        try:
+            results = cls.search_game(title, platform_filter=False)
+        except Exception:
+            logger.exception(f'IGDB unfiltered search failed for "{title}"')
+            return None
+
+        if results:
+            cls._log_search_results(title, 'unfiltered', concept, results)
+            best = cls._pick_best_non_dlc(concept, results)
+            if best:
+                igdb_data, confidence, match_method = best
+                return (igdb_data, max(confidence - 0.05, settings.IGDB_REVIEW_THRESHOLD), match_method)
+        else:
+            logger.info(f'IGDB unfiltered search for "{title}": 0 results')
+
+        # Strategy 5: Search alternative names (catches regional title differences, e.g. "Sly Raccoon")
+        try:
+            results = cls.search_by_alternative_name(title)
+        except Exception:
+            logger.exception(f'IGDB alt-name search failed for "{title}"')
+            return None
+
+        if results:
+            cls._log_search_results(title, 'alt-name', concept, results)
+            best = cls._pick_best_non_dlc(concept, results)
+            if best:
+                return best
+        else:
+            logger.info(f'IGDB alt-name search for "{title}": 0 results')
+
+        # Strategy 6: Truncated title search (series name before colon/dash)
+        # "Sly 3: Honour Among Thieves" -> search "Sly 3"
+        truncated = cls._extract_series_prefix(title)
+        if truncated and truncated != cls._clean_title_for_search(title):
+            try:
+                results = cls.search_game(truncated)
+            except Exception:
+                logger.exception(f'IGDB truncated search failed for "{truncated}"')
+                return None
+
+            if results:
+                cls._log_search_results(title, f'truncated ("{truncated}")', concept, results)
+                best = cls._pick_best_non_dlc(concept, results)
+                if best:
+                    # Cap at pending_review since this is a loose match
+                    igdb_data, confidence, match_method = best
+                    capped = min(confidence, settings.IGDB_AUTO_ACCEPT_THRESHOLD - 0.01)
+                    return (igdb_data, capped, match_method)
+            else:
+                logger.info(f'IGDB truncated search for "{truncated}": 0 results')
+
+        return None
+
+    @classmethod
+    def _log_search_results(cls, title, search_type, concept, results):
+        """Log all IGDB search results with their confidence scores."""
+        lines = [f'IGDB {search_type} search for "{title}": {len(results)} result(s)']
+        for r in results:
+            score = cls._calculate_confidence(concept, r, 'fuzzy_name')
+            cat = r.get('category', '?')
+            lines.append(f'  - "{r.get("name")}" (cat={cat}, score={score:.0%})')
+        logger.info('\n'.join(lines))
+
+    @classmethod
+    def _find_family_sibling_match(cls, concept):
+        """Check if any family sibling already has an accepted IGDB match.
+
+        If a sibling (e.g. the NA version) is already matched, reuse its
+        IGDB data for this concept (e.g. the Asian version). This avoids
+        failed searches for titles in other languages.
+
+        Returns:
+            tuple: (igdb_data, confidence, method) using sibling's raw_response, or None
+        """
+        if not concept.family_id:
+            return None
+
+        sibling_match = (
+            IGDBMatch.objects
+            .filter(
+                concept__family_id=concept.family_id,
+                status__in=('auto_accepted', 'accepted'),
+            )
+            .exclude(concept=concept)
+            .select_related('concept')
+            .first()
+        )
+
+        if not sibling_match or not sibling_match.raw_response:
+            return None
+
+        # Verify the sibling's IGDB game is actually the same game, not just
+        # a different game that happens to be in the same family.
+        # Compare our title against the IGDB game name (not the sibling's PSN title).
+        igdb_name = sibling_match.raw_response.get('name', '')
+        similarity = cls._fuzzy_title_match(concept.unified_title, igdb_name)
+        if similarity < 0.50:
+            logger.debug(
+                f'IGDB family sibling skip: "{concept.unified_title}" too dissimilar from '
+                f'IGDB name "{igdb_name}" ({similarity:.0%}). Falling through to normal search.'
+            )
+            return None
+
+        logger.info(
+            f'IGDB family match: "{concept.unified_title}" inheriting from '
+            f'sibling "{sibling_match.concept.unified_title}" (IGDB #{sibling_match.igdb_id})'
+        )
+        return (sibling_match.raw_response, 0.95, 'external_id')
+
+    @classmethod
+    def _pick_best_non_dlc(cls, concept, results):
+        """Try to pick the best match, preferring non-DLC results.
+
+        First tries all results with DLC filtered out. If that yields nothing,
+        tries again with DLC included (some PSN "games" are legitimately DLC
+        with their own trophy lists).
+        """
+        # Filter out likely DLC entries
+        non_dlc = [r for r in results if not _DLC_NAME_RE.search(r.get('name', ''))]
+
+        if non_dlc:
+            for method in ('exact_name', 'fuzzy_name'):
+                best = cls._pick_best_match(concept, non_dlc, method)
+                if best:
+                    return best
+
+        # Fall back to all results (DLC included) if no non-DLC match found
+        for method in ('exact_name', 'fuzzy_name'):
+            best = cls._pick_best_match(concept, results, method)
+            if best:
+                return best
+
+        return None
+
+    @classmethod
+    def _pick_best_match(cls, concept, results, method):
+        """Score all results and return the best match above threshold.
+
+        Returns:
+            tuple: (igdb_data, confidence, method) or None
+        """
+        scored = []
+        for game in results:
+            confidence = cls._calculate_confidence(concept, game, method)
+            if confidence >= settings.IGDB_REVIEW_THRESHOLD:
+                scored.append((game, confidence))
+
+        if not scored:
+            return None
+
+        scored.sort(key=lambda x: x[1], reverse=True)
+
+        # Ambiguity penalty: if top two are within 0.10, reduce confidence
+        best_game, best_confidence = scored[0]
+        if len(scored) > 1 and (best_confidence - scored[1][1]) < 0.10:
+            best_confidence -= 0.10
+            if best_confidence < settings.IGDB_REVIEW_THRESHOLD:
+                return None
+
+        return (best_game, best_confidence, method)
+
+    @classmethod
+    def _calculate_confidence(cls, concept, igdb_game, method):
+        """Calculate match confidence between a Concept and an IGDB game.
+
+        Returns:
+            float: Confidence score between 0.0 and 1.0
+        """
+        igdb_name = igdb_game.get('name', '')
+
+        # Normalize titles for comparison
+        psn_norm = cls._normalize_title(concept.unified_title)
+        igdb_norm = cls._normalize_title(igdb_name)
+
+        # Check against primary name AND all alternative names (regional titles, etc.)
+        best_ratio = cls._fuzzy_title_match(concept.unified_title, igdb_name)
+        best_name = igdb_name
+        for alt in igdb_game.get('alternative_names', []):
+            alt_name = alt.get('name', '')
+            if not alt_name:
+                continue
+            alt_ratio = cls._fuzzy_title_match(concept.unified_title, alt_name)
+            if alt_ratio > best_ratio:
+                best_ratio = alt_ratio
+                best_name = alt_name
+
+        # Containment check using the best-matching name
+        best_norm = cls._normalize_title(best_name)
+        is_contained = (
+            len(psn_norm) > 5
+            and (psn_norm in best_norm or best_norm in psn_norm)
+        )
+        # Also check against primary IGDB name for containment
+        if not is_contained:
+            is_contained = (
+                len(psn_norm) > 5
+                and (psn_norm in igdb_norm or igdb_norm in psn_norm)
+            )
+
+        # Base score by method
+        if method == 'external_id':
+            base = 0.95
+        elif method == 'manual':
+            return 1.0
+        else:
+            ratio = best_ratio
+
+            if method == 'exact_name':
+                if ratio >= 0.98 or (is_contained and (igdb_norm == psn_norm or best_norm == psn_norm)):
+                    base = 0.85
+                else:
+                    return 0.0
+            else:  # fuzzy_name
+                if ratio >= 0.90:
+                    base = 0.70
+                elif ratio >= 0.80:
+                    base = 0.55
+                elif is_contained:
+                    base = 0.55
+                else:
+                    return 0.0
+
+            # Boost main games over DLC/bundles/skins when names are similar
+            category = igdb_game.get('category', 0)
+            if category == 0 and is_contained:
+                base += 0.10
+
+        # Modifier: release year proximity
+        if concept.release_date and igdb_game.get('first_release_date'):
+            try:
+                igdb_year = datetime.fromtimestamp(
+                    igdb_game['first_release_date'], tz=dt_timezone.utc
+                ).year
+                concept_year = concept.release_date.year
+                if abs(igdb_year - concept_year) <= 1:
+                    base += 0.05
+            except (ValueError, OSError):
+                pass
+
+        # Modifier: publisher name match
+        if concept.publisher_name and igdb_game.get('involved_companies'):
+            for ic in igdb_game['involved_companies']:
+                company = ic.get('company', {})
+                if ic.get('publisher') and company.get('name'):
+                    pub_ratio = cls._fuzzy_title_match(
+                        concept.publisher_name.lower(),
+                        company['name'].lower()
+                    )
+                    if pub_ratio >= 0.80:
+                        base += 0.05
+                        break
+
+        # Modifier: non-main game penalty (DLC/bundles score lower)
+        category = igdb_game.get('category', 0)
+        if category != 0:
+            base -= 0.15
+
+        return max(0.0, min(1.0, base))
+
+    @classmethod
+    def _fuzzy_title_match(cls, title1, title2):
+        """Calculate string similarity between two titles.
+
+        Normalizes both titles before comparison to handle case differences,
+        platform suffixes, and unicode characters.
+        """
+        if not title1 or not title2:
+            return 0.0
+        t1 = cls._normalize_title(title1)
+        t2 = cls._normalize_title(title2)
+        if t1 == t2:
+            return 1.0
+        return SequenceMatcher(None, t1, t2).ratio()
+
+    # Regex to strip platform suffixes from PSN titles
+    _PLATFORM_SUFFIX_RE = re.compile(
+        r'\s*[\-–—]?\s*\(?\s*'
+        r'(?:PS[345]|PS4\s*&\s*PS5|PlayStation\s*[345V]|PSVR2?|PS\s*Vita)'
+        r'\s*\)?\s*$',
+        re.IGNORECASE,
+    )
+
+    # Regex to strip edition/version suffixes that IGDB won't have
+    _EDITION_SUFFIX_RE = re.compile(
+        r'\s*[\-–—]?\s*\(?\s*(?:Digital\s+Edition|Deluxe\s+Edition|Gold\s+Edition|'
+        r'Game\s+of\s+the\s+Year\s+Edition|GOTY\s+Edition|'
+        r'Platinum\s+Edition|Complete\s+Edition|Standard\s+Edition|'
+        r'Remastered|HD\s+Remaster|Director.s\s+Cut)\s*\)?\s*$',
+        re.IGNORECASE,
+    )
+
+    # Regex to strip trailing year in parentheses: "Alone in the Dark 2 (1996)"
+    _YEAR_SUFFIX_RE = re.compile(r'\s*\(\d{4}\)\s*$')
+
+    # Brand prefixes that IGDB typically doesn't include
+    _BRAND_PREFIX_RE = re.compile(
+        r'^(?:Disney[•·]?Pixar\s+|Disney\s+|Marvel.s\s+|LEGO\s+)',
+        re.IGNORECASE,
+    )
+
+    @classmethod
+    def _extract_series_prefix(cls, title):
+        """Extract the series name before the first colon or dash separator.
+
+        "Sly 3: Honour Among Thieves" -> "sly 3"
+        "Assassin's Creed - Discovery Tour" -> "assassin's creed"
+        "The Last of Us Part II" -> None (no separator)
+
+        Returns cleaned prefix suitable for IGDB search, or None if no separator found.
+        """
+        # Split on separators BEFORE stripping special chars
+        for sep in (':', ' - ', ' – ', ' — '):
+            if sep in title:
+                prefix = title.split(sep)[0].strip()
+                if len(prefix) >= 3:
+                    return cls._clean_title_for_search(prefix)
+        return None
+
+    @classmethod
+    def _normalize_title(cls, text):
+        """Normalize a game title for comparison (not for search queries).
+
+        Lowercases, strips platform/edition/year suffixes, normalizes unicode.
+        Used for confidence scoring, not for IGDB API queries.
+        """
+        # Normalize unicode (smart quotes, bullets, accents)
+        text = unicodedata.normalize('NFKD', text)
+        # Remove non-ASCII combining marks but keep base letters
+        text = ''.join(c for c in text if not unicodedata.combining(c))
+        text = text.lower().strip()
+        # Strip suffixes
+        text = cls._PLATFORM_SUFFIX_RE.sub('', text)
+        text = cls._EDITION_SUFFIX_RE.sub('', text)
+        text = cls._YEAR_SUFFIX_RE.sub('', text)
+        # Strip brand prefixes
+        text = cls._BRAND_PREFIX_RE.sub('', text)
+        # Collapse whitespace
+        text = re.sub(r'\s+', ' ', text).strip()
+        return text
+
+    @classmethod
+    def _clean_title_for_search(cls, text):
+        """Clean a title for use in IGDB Apicalypse search queries.
+
+        Strips platform suffixes, Apicalypse-breaking characters, and
+        unicode noise. IGDB search is fuzzy so this improves match rates.
+        """
+        # Normalize unicode
+        text = unicodedata.normalize('NFKD', text)
+        text = ''.join(c for c in text if not unicodedata.combining(c))
+        # Strip suffixes
+        text = cls._PLATFORM_SUFFIX_RE.sub('', text)
+        text = cls._EDITION_SUFFIX_RE.sub('', text)
+        text = cls._YEAR_SUFFIX_RE.sub('', text)
+        # Strip brand prefixes
+        text = cls._BRAND_PREFIX_RE.sub('', text)
+        # Remove characters that break Apicalypse parsing
+        for ch in (':', ';', '"', '\\', '(', ')', '{', '}', '[', ']', '•', '™', '®', '©'):
+            text = text.replace(ch, '')
+        # Lowercase: IGDB search handles all-caps poorly
+        text = text.lower()
+        # Collapse whitespace
+        text = re.sub(r'\s+', ' ', text).strip()
+        return text
+
+    # -----------------------------------------------------------------------
+    # Processing
+    # -----------------------------------------------------------------------
+
+    @classmethod
+    def process_match(cls, concept, igdb_data, confidence, method):
+        """Create or update an IGDBMatch record and apply enrichment if auto-accepted.
+
+        Returns:
+            IGDBMatch: The created/updated match record
+        """
+        if confidence >= settings.IGDB_AUTO_ACCEPT_THRESHOLD:
+            status = 'auto_accepted'
+        else:
+            status = 'pending_review'
+
+        igdb_id = igdb_data['id']
+
+        # Check if another Concept already owns this IGDB game.
+        # This happens when PS4/PS5 versions are separate Concepts but one IGDB entry.
+        existing = (
+            IGDBMatch.objects
+            .filter(igdb_id=igdb_id)
+            .exclude(concept=concept)
+            .select_related('concept')
+            .first()
+        )
+        if existing:
+            other_concept = existing.concept
+            logger.info(
+                f'IGDB game {igdb_id} already matched to concept {other_concept.concept_id} '
+                f'("{other_concept.unified_title}"). Sharing enrichment with '
+                f'"{concept.unified_title}" instead of creating duplicate.'
+            )
+
+            # Flag if these concepts should be in the same family but aren't
+            if not concept.family_id or concept.family_id != other_concept.family_id:
+                logger.warning(
+                    f'IGDB family mismatch: concepts {concept.concept_id} '
+                    f'("{concept.unified_title}") and {other_concept.concept_id} '
+                    f'("{other_concept.unified_title}") share IGDB game {igdb_id} '
+                    f'but are not in the same GameFamily. Creating proposal.'
+                )
+                cls._create_family_proposal(concept, other_concept, igdb_id, igdb_data)
+
+            # Apply enrichment (companies, genres, themes, VR platforms)
+            # without creating a duplicate IGDBMatch row
+            cls._create_concept_companies(concept, igdb_data.get('involved_companies', []))
+            cls._update_concept_fields(concept, igdb_data)
+            cls._apply_vr_platforms(concept, igdb_data)
+            return existing
+
+        # Fetch time-to-beat from separate endpoint
+        ttb = cls._fetch_time_to_beat(igdb_id)
+        igdb_data['_time_to_beat'] = ttb
+
+        parsed = cls._parse_game_data(igdb_data)
+
+        igdb_match, created = IGDBMatch.objects.update_or_create(
+            concept=concept,
+            defaults={
+                'igdb_id': igdb_data['id'],
+                'igdb_name': igdb_data.get('name', ''),
+                'igdb_slug': igdb_data.get('slug', ''),
+                'match_confidence': confidence,
+                'match_method': method,
+                'status': status,
+                'raw_response': igdb_data,
+                'game_category': parsed['game_category'],
+                'igdb_summary': parsed['summary'],
+                'igdb_storyline': parsed['storyline'],
+                'time_to_beat_hastily': parsed['time_to_beat_hastily'],
+                'time_to_beat_normally': parsed['time_to_beat_normally'],
+                'time_to_beat_completely': parsed['time_to_beat_completely'],
+                'igdb_first_release_date': parsed['first_release_date'],
+                'game_engine_name': parsed['game_engine_name'],
+                'igdb_cover_image_id': parsed['cover_image_id'],
+                'franchise_names': parsed['franchise_names'],
+                'similar_game_igdb_ids': parsed['similar_game_igdb_ids'],
+                'external_urls': parsed['external_urls'],
+                'last_synced_at': datetime.now(dt_timezone.utc),
+            },
+        )
+
+        if status in ('auto_accepted', 'accepted'):
+            cls._apply_enrichment(igdb_match, igdb_data)
+
+        return igdb_match
+
+    # IGDB platform ID -> PlatPursuit title_platform string
+    IGDB_VR_PLATFORMS = {
+        165: 'PSVR',
+        390: 'PSVR2',
+    }
+
+    @classmethod
+    def _apply_enrichment(cls, igdb_match, igdb_data=None):
+        """Apply IGDB enrichment data to the Concept and create Company/ConceptCompany records.
+
+        Called on auto_accepted matches and when admin approves pending matches.
+        """
+        if igdb_data is None:
+            igdb_data = igdb_match.raw_response
+
+        concept = igdb_match.concept
+
+        # Create/update Company records and ConceptCompany entries
+        cls._create_concept_companies(concept, igdb_data.get('involved_companies', []))
+
+        # Update Concept fields
+        cls._update_concept_fields(concept, igdb_data)
+
+        # Add VR platforms to Games that are missing them
+        cls._apply_vr_platforms(concept, igdb_data)
+
+    @classmethod
+    def _create_concept_companies(cls, concept, involved_companies):
+        """Create Company and ConceptCompany records from IGDB involved_companies data."""
+        if not involved_companies:
+            return
+
+        for ic in involved_companies:
+            company_data = ic.get('company')
+            if not company_data or not isinstance(company_data, dict) or 'name' not in company_data:
+                continue
+
+            company = cls._get_or_create_company(company_data)
+            if not company:
+                continue
+
+            try:
+                ConceptCompany.objects.update_or_create(
+                    concept=concept,
+                    company=company,
+                    defaults={
+                        'is_developer': ic.get('developer', False),
+                        'is_publisher': ic.get('publisher', False),
+                        'is_porting': ic.get('porting', False),
+                        'is_supporting': ic.get('supporting', False),
+                    },
+                )
+            except IntegrityError:
+                logger.warning(f'Duplicate ConceptCompany for concept={concept.pk}, company={company.pk}')
+
+    @classmethod
+    def _get_or_create_company(cls, company_data):
+        """Get or create a Company record from IGDB company data.
+
+        Handles the parent company relationship and merger chain.
+
+        Returns:
+            Company or None
+        """
+        igdb_id = company_data.get('id')
+        if not igdb_id:
+            return None
+
+        # Handle parent company first (if expanded in response)
+        parent = None
+        parent_data = company_data.get('parent')
+        if isinstance(parent_data, dict) and parent_data.get('id'):
+            parent, _ = Company.objects.get_or_create(
+                igdb_id=parent_data['id'],
+                defaults={
+                    'name': parent_data.get('name', f'Company {parent_data["id"]}'),
+                    'slug': parent_data.get('slug', f'company-{parent_data["id"]}'),
+                },
+            )
+
+        # Parse start_date from IGDB timestamp
+        start_date = None
+        raw_start = company_data.get('start_date')
+        if raw_start is not None:
+            try:
+                start_date = datetime.fromtimestamp(raw_start, tz=dt_timezone.utc).date()
+            except (ValueError, OSError):
+                pass
+
+        # Parse change_date
+        change_date = None
+        raw_change = company_data.get('change_date')
+        if raw_change is not None:
+            try:
+                change_date = datetime.fromtimestamp(raw_change, tz=dt_timezone.utc).date()
+            except (ValueError, OSError):
+                pass
+
+        # Logo image ID
+        logo_image_id = ''
+        logo_data = company_data.get('logo')
+        if isinstance(logo_data, dict):
+            logo_image_id = logo_data.get('image_id', '')
+
+        defaults = {
+            'name': company_data.get('name', f'Company {igdb_id}'),
+            'slug': company_data.get('slug', f'company-{igdb_id}'),
+            'description': company_data.get('description', ''),
+            'country': company_data.get('country'),
+            'logo_image_id': logo_image_id,
+            'company_size': company_data.get('company_size'),
+            'start_date': start_date,
+            'change_date': change_date,
+        }
+
+        if parent:
+            defaults['parent'] = parent
+
+        # Handle changed_company_id (merger/rename pointer)
+        changed_id = company_data.get('changed_company_id')
+        if changed_id:
+            changed_company = Company.objects.filter(igdb_id=changed_id).first()
+            if changed_company:
+                defaults['changed_company'] = changed_company
+
+        company, created = Company.objects.update_or_create(
+            igdb_id=igdb_id,
+            defaults=defaults,
+        )
+        return company
+
+    @classmethod
+    def _update_concept_fields(cls, concept, igdb_data):
+        """Update Concept's IGDB genre and theme fields from parsed data."""
+        genres = [g.get('name', '') for g in igdb_data.get('genres', []) if g.get('name')]
+        themes = [t.get('name', '') for t in igdb_data.get('themes', []) if t.get('name')]
+
+        update_fields = []
+        if genres and genres != concept.igdb_genres:
+            concept.igdb_genres = genres
+            update_fields.append('igdb_genres')
+        if themes and themes != concept.igdb_themes:
+            concept.igdb_themes = themes
+            update_fields.append('igdb_themes')
+
+        if update_fields:
+            concept.save(update_fields=update_fields)
+
+    @classmethod
+    def _apply_vr_platforms(cls, concept, igdb_data):
+        """Add PSVR/PSVR2 to Game.title_platform for games IGDB identifies as VR.
+
+        Sony does not provide VR platform info, so we fill the gap from IGDB.
+        Only adds platforms, never removes.
+        """
+        igdb_platforms = igdb_data.get('platforms', [])
+        if not igdb_platforms:
+            return
+
+        # Determine which VR platform strings to add
+        vr_platforms_to_add = []
+        for pid in igdb_platforms:
+            # platforms can be ints (IDs) or dicts with 'id' key
+            platform_id = pid if isinstance(pid, int) else pid.get('id') if isinstance(pid, dict) else None
+            if platform_id in cls.IGDB_VR_PLATFORMS:
+                vr_platforms_to_add.append(cls.IGDB_VR_PLATFORMS[platform_id])
+
+        if not vr_platforms_to_add:
+            return
+
+        from trophies.models import Game
+        for game in concept.games.all():
+            added = False
+            for vr_platform in vr_platforms_to_add:
+                if vr_platform not in (game.title_platform or []):
+                    if game.title_platform is None:
+                        game.title_platform = []
+                    game.title_platform.append(vr_platform)
+                    added = True
+            if added:
+                game.save(update_fields=['title_platform'])
+                logger.info(
+                    f'Added VR platform(s) {vr_platforms_to_add} to game '
+                    f'{game.np_communication_id} "{game.title_name}"'
+                )
+
+    @classmethod
+    def _create_family_proposal(cls, concept_a, concept_b, igdb_id, igdb_data):
+        """Create a GameFamilyProposal when two Concepts share an IGDB game but aren't in the same family."""
+        from trophies.models import GameFamilyProposal
+
+        # Check if a proposal already exists for these two concepts
+        existing = GameFamilyProposal.objects.filter(
+            status='pending',
+            concepts=concept_a,
+        ).filter(concepts=concept_b).exists()
+        if existing:
+            return
+
+        igdb_name = igdb_data.get('name', f'IGDB #{igdb_id}')
+        proposal = GameFamilyProposal.objects.create(
+            proposed_name=igdb_name,
+            confidence=0.95,
+            match_reason=f'Both concepts matched to the same IGDB game: "{igdb_name}" (ID {igdb_id})',
+            match_signals={
+                'source': 'igdb_duplicate_match',
+                'igdb_id': igdb_id,
+                'igdb_name': igdb_name,
+                'concept_a': concept_a.concept_id,
+                'concept_b': concept_b.concept_id,
+            },
+        )
+        proposal.concepts.add(concept_a, concept_b)
+        logger.info(
+            f'Created GameFamilyProposal #{proposal.pk} for "{concept_a.unified_title}" '
+            f'and "{concept_b.unified_title}" (IGDB #{igdb_id})'
+        )
+
+    @classmethod
+    def _parse_game_data(cls, igdb_data):
+        """Extract Tier 1 structured data from a raw IGDB game response.
+
+        Returns:
+            dict: Parsed fields ready for IGDBMatch creation
+        """
+        # Time to beat (fetched separately, injected as _time_to_beat)
+        ttb_data = igdb_data.get('_time_to_beat', {})
+
+        # First release date
+        first_release = None
+        raw_date = igdb_data.get('first_release_date')
+        if raw_date:
+            try:
+                first_release = datetime.fromtimestamp(raw_date, tz=dt_timezone.utc)
+            except (ValueError, OSError):
+                pass
+
+        # Game engine
+        engines = igdb_data.get('game_engines', [])
+        engine_name = engines[0].get('name', '') if engines else ''
+
+        # Cover image
+        cover = igdb_data.get('cover', {}) or {}
+        cover_image_id = cover.get('image_id', '')
+
+        # Franchise names (from both franchises and collections)
+        franchise_names = []
+        for f in igdb_data.get('franchises', []):
+            name = f.get('name', '')
+            if name:
+                franchise_names.append(name)
+        for c in igdb_data.get('collections', []):
+            name = c.get('name', '')
+            if name and name not in franchise_names:
+                franchise_names.append(name)
+
+        # Similar game IDs
+        similar_ids = []
+        for sg in igdb_data.get('similar_games', []):
+            if isinstance(sg, int):
+                similar_ids.append(sg)
+            elif isinstance(sg, dict) and sg.get('id'):
+                similar_ids.append(sg['id'])
+
+        # External URLs from websites
+        external_urls = {}
+        for w in igdb_data.get('websites', []):
+            cat = w.get('category') or w.get('type')
+            url = w.get('url', '')
+            if cat and url:
+                key = WEBSITE_CATEGORIES.get(cat)
+                if key:
+                    external_urls[key] = url
+
+        return {
+            'game_category': igdb_data.get('category'),
+            'summary': igdb_data.get('summary', ''),
+            'storyline': igdb_data.get('storyline', ''),
+            'time_to_beat_hastily': ttb_data.get('hastily'),
+            'time_to_beat_normally': ttb_data.get('normally'),
+            'time_to_beat_completely': ttb_data.get('completely'),
+            'first_release_date': first_release,
+            'game_engine_name': engine_name,
+            'cover_image_id': cover_image_id,
+            'franchise_names': franchise_names,
+            'similar_game_igdb_ids': similar_ids,
+            'external_urls': external_urls,
+        }
+
+    # -----------------------------------------------------------------------
+    # Batch operations
+    # -----------------------------------------------------------------------
+
+    @classmethod
+    def enrich_concept(cls, concept, propagate=True):
+        """Match and enrich a single Concept from IGDB.
+
+        Args:
+            concept: The Concept to enrich
+            propagate: If True, propagate enrichment to family siblings
+
+        Returns:
+            IGDBMatch or None: The match record if successful
+        """
+        result = cls.match_concept(concept)
+        if not result:
+            return None
+
+        igdb_data, confidence, method = result
+        igdb_match = cls.process_match(concept, igdb_data, confidence, method)
+
+        # Propagate to family siblings if this match was accepted
+        if propagate and igdb_match and igdb_match.status in ('auto_accepted', 'accepted'):
+            cls.propagate_to_family(igdb_match)
+
+        return igdb_match
+
+    @classmethod
+    def enrich_batch(cls, concepts, progress_callback=None):
+        """Match and enrich a batch of Concepts from IGDB.
+
+        Args:
+            concepts: Queryset or list of Concept objects
+            progress_callback: Optional callable(processed, total, result_type)
+
+        Returns:
+            dict: Summary counts {auto_accepted, pending_review, not_found, errors}
+        """
+        summary = {
+            'auto_accepted': 0,
+            'pending_review': 0,
+            'not_found': 0,
+            'errors': 0,
+        }
+        total = len(concepts) if hasattr(concepts, '__len__') else concepts.count()
+
+        for i, concept in enumerate(concepts):
+            try:
+                igdb_match = cls.enrich_concept(concept)
+                if igdb_match:
+                    summary[igdb_match.status] = summary.get(igdb_match.status, 0) + 1
+                    result_type = igdb_match.status
+                else:
+                    summary['not_found'] += 1
+                    result_type = 'not_found'
+            except Exception:
+                logger.exception(f'IGDB enrichment failed for concept {concept.concept_id}')
+                summary['errors'] += 1
+                result_type = 'error'
+
+            if progress_callback:
+                progress_callback(i + 1, total, result_type)
+
+        return summary
+
+    @classmethod
+    def refresh_match(cls, igdb_match):
+        """Re-fetch IGDB data for an existing match and update all parsed fields.
+
+        Skips the search/matching step entirely since we already have the igdb_id.
+        Updates raw_response, all Tier 1 fields, Company records, and Concept fields.
+
+        Returns:
+            IGDBMatch: The updated match record, or None if fetch failed
+        """
+        igdb_data = cls.get_game_details(igdb_match.igdb_id)
+        if not igdb_data:
+            logger.warning(f'IGDB refresh: game {igdb_match.igdb_id} no longer found')
+            return None
+
+        # Fetch time-to-beat separately
+        ttb = cls._fetch_time_to_beat(igdb_match.igdb_id)
+        igdb_data['_time_to_beat'] = ttb
+
+        parsed = cls._parse_game_data(igdb_data)
+
+        igdb_match.raw_response = igdb_data
+        igdb_match.igdb_name = igdb_data.get('name', igdb_match.igdb_name)
+        igdb_match.igdb_slug = igdb_data.get('slug', igdb_match.igdb_slug)
+        igdb_match.game_category = parsed['game_category']
+        igdb_match.igdb_summary = parsed['summary']
+        igdb_match.igdb_storyline = parsed['storyline']
+        igdb_match.time_to_beat_hastily = parsed['time_to_beat_hastily']
+        igdb_match.time_to_beat_normally = parsed['time_to_beat_normally']
+        igdb_match.time_to_beat_completely = parsed['time_to_beat_completely']
+        igdb_match.igdb_first_release_date = parsed['first_release_date']
+        igdb_match.game_engine_name = parsed['game_engine_name']
+        igdb_match.igdb_cover_image_id = parsed['cover_image_id']
+        igdb_match.franchise_names = parsed['franchise_names']
+        igdb_match.similar_game_igdb_ids = parsed['similar_game_igdb_ids']
+        igdb_match.external_urls = parsed['external_urls']
+        igdb_match.last_synced_at = datetime.now(dt_timezone.utc)
+        igdb_match.save()
+
+        # Re-apply enrichment (updates companies + concept fields)
+        cls._apply_enrichment(igdb_match, igdb_data)
+
+        # Propagate refreshed data to family siblings
+        cls.propagate_to_family(igdb_match)
+
+        return igdb_match
+
+    @classmethod
+    def approve_match(cls, igdb_match):
+        """Approve a pending IGDBMatch and apply enrichment.
+
+        Called from admin actions when reviewing pending matches.
+        """
+        if igdb_match.status == 'pending_review':
+            igdb_match.status = 'accepted'
+            igdb_match.save(update_fields=['status'])
+            cls._apply_enrichment(igdb_match)
+            cls.propagate_to_family(igdb_match)
+
+    @classmethod
+    def reject_match(cls, igdb_match):
+        """Reject an IGDBMatch."""
+        igdb_match.status = 'rejected'
+        igdb_match.save(update_fields=['status'])
+
+    @classmethod
+    def rematch_concept(cls, concept):
+        """Delete existing match and re-run matching for a concept.
+
+        ConceptCompany records are preserved; _apply_enrichment will
+        update_or_create them from the new IGDB response.
+
+        Returns:
+            IGDBMatch or None
+        """
+        IGDBMatch.objects.filter(concept=concept).delete()
+        return cls.enrich_concept(concept)
+
+    @classmethod
+    def propagate_to_family(cls, igdb_match):
+        """Propagate IGDB enrichment to family siblings that lack their own match.
+
+        When a concept in a family gets enriched, its siblings (e.g. regional
+        variants) should inherit the same data. Each sibling gets its own
+        IGDBMatch record pointing to the same igdb_id, plus its own
+        ConceptCompany entries and genre/theme fields.
+
+        Returns:
+            int: Number of siblings enriched
+        """
+        concept = igdb_match.concept
+        if not concept.family_id:
+            return 0
+
+        from trophies.models import Concept
+        siblings = (
+            Concept.objects
+            .filter(family_id=concept.family_id)
+            .exclude(pk=concept.pk)
+            .exclude(igdb_match__isnull=False)  # Skip siblings that already have a match
+        )
+
+        count = 0
+        igdb_data = igdb_match.raw_response
+        if not igdb_data:
+            return 0
+
+        for sibling in siblings:
+            try:
+                cls.process_match(sibling, igdb_data, 0.95, 'external_id')
+                logger.info(
+                    f'IGDB family propagation: enriched "{sibling.unified_title}" '
+                    f'from sibling "{concept.unified_title}"'
+                )
+                count += 1
+            except Exception:
+                logger.exception(
+                    f'IGDB family propagation failed for "{sibling.unified_title}"'
+                )
+
+        return count

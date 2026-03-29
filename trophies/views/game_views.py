@@ -151,6 +151,11 @@ class GameDetailView(ProfileHotbarMixin, DetailView):
     slug_url_kwarg = 'np_communication_id'
     context_object_name = 'game'
 
+    def get_queryset(self):
+        return super().get_queryset().select_related('concept', 'concept__igdb_match').prefetch_related(
+            'concept__concept_companies__company',
+        )
+
     def _get_target_profile(self):
         """
         Get the target profile from URL parameter or authenticated user.

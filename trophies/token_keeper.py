@@ -1875,7 +1875,7 @@ class TokenKeeper:
                 details = game_title.get_details()[0]
                 error_code = details.get('errorCode', None)
                 if error_code is None:
-                    concept, _ = PsnApiService.create_concept_from_details(details)
+                    concept, concept_created = PsnApiService.create_concept_from_details(details)
 
                     release_date = details.get('defaultProduct', {}).get('releaseDate', None)
                     if release_date is None:
@@ -1894,6 +1894,15 @@ class TokenKeeper:
                         game.add_region(title_id.region)
                     concept.add_title_id(title_id.title_id)
                     concept.check_and_mark_regional()
+
+                    # IGDB enrichment for newly created concepts (best-effort)
+                    if concept_created and not concept.concept_id.startswith('PP_'):
+                        try:
+                            from trophies.services.igdb_service import IGDBService
+                            IGDBService.enrich_concept(concept)
+                        except Exception:
+                            logger.exception(f"IGDB enrichment failed for concept {concept.concept_id}")
+
                     profile.increment_sync_progress()
                     logger.info(f"Title ID {title_id.title_id} - {concept.unified_title} sync'd successfully!")
                 else:

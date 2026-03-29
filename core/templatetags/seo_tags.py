@@ -122,6 +122,8 @@ def jsonld_game(game, concept, request):
             'PS4': 'PlayStation 4',
             'PS3': 'PlayStation 3',
             'PSVITA': 'PlayStation Vita',
+            'PSVR': 'PlayStation VR',
+            'PSVR2': 'PlayStation VR2',
         }
         data["gamePlatform"] = [
             platform_map.get(p, p) for p in game.title_platform
@@ -135,11 +137,38 @@ def jsonld_game(game, concept, request):
                 "name": concept.publisher_name,
             }
 
-        if concept.genres:
-            data["genre"] = concept.genres
+        # Developer(s) as author
+        try:
+            developers = [
+                cc.company.name
+                for cc in concept.concept_companies.all()
+                if cc.is_developer
+            ]
+            if developers:
+                data["author"] = [
+                    {"@type": "Organization", "name": name}
+                    for name in developers
+                ]
+        except Exception:
+            pass
+
+        # Prefer IGDB genres, fall back to PSN genres
+        genres = concept.igdb_genres or concept.genres
+        if genres:
+            data["genre"] = genres
 
         if concept.release_date:
             data["datePublished"] = concept.release_date.strftime('%Y-%m-%d')
+
+        # Time to complete (from IGDB match)
+        try:
+            igdb_match = concept.igdb_match
+            if igdb_match and igdb_match.time_to_beat_completely:
+                hours = igdb_match.time_to_beat_completely // 3600
+                minutes = (igdb_match.time_to_beat_completely % 3600) // 60
+                data["timeRequired"] = f"PT{hours}H{minutes}M"
+        except Exception:
+            pass
 
     return _render_jsonld(data)
 

@@ -689,6 +689,8 @@ class Concept(models.Model):
     media = models.JSONField(default=dict, blank=True)
     bg_url = models.URLField(null=True, blank=True)
     concept_icon_url = models.URLField(null=True, blank=True)
+    igdb_genres = models.JSONField(default=list, blank=True)
+    igdb_themes = models.JSONField(default=list, blank=True)
     guide_slug = models.CharField(max_length=50, blank=True, null=True)
     guide_created_at = models.DateTimeField(null=True, blank=True)
     slug = models.SlugField(max_length=300, unique=True, blank=True, null=True)
@@ -833,6 +835,30 @@ class Concept(models.Model):
 
         # StageCompletionEvent concept references
         StageCompletionEvent.objects.filter(concept=other).update(concept=self)
+
+        # ConceptCompany: move to target, merge roles on duplicates
+        existing_ccs = {
+            cc.company_id: cc for cc in self.concept_companies.all()
+        }
+        for cc in other.concept_companies.all():
+            if cc.company_id in existing_ccs:
+                existing = existing_ccs[cc.company_id]
+                existing.is_developer = existing.is_developer or cc.is_developer
+                existing.is_publisher = existing.is_publisher or cc.is_publisher
+                existing.is_porting = existing.is_porting or cc.is_porting
+                existing.is_supporting = existing.is_supporting or cc.is_supporting
+                existing.save(update_fields=[
+                    'is_developer', 'is_publisher', 'is_porting', 'is_supporting',
+                ])
+            else:
+                cc.concept = self
+                cc.save(update_fields=['concept'])
+
+        # IGDBMatch: move to target if target lacks one, otherwise discard source's
+        if hasattr(other, 'igdb_match'):
+            if not hasattr(self, 'igdb_match'):
+                other.igdb_match.concept = self
+                other.igdb_match.save(update_fields=['concept'])
 
         # Merge title_ids
         for tid in other.title_ids:
@@ -3535,3 +3561,357 @@ class ProfileCardSettings(models.Model):
         """Generate a new public sig token, invalidating old embed URLs."""
         self.public_sig_token = uuid.uuid4()
         self.save(update_fields=['public_sig_token'])
+
+
+# ---------- Roadmap System ----------
+
+class Roadmap(models.Model):
+    """Staff-authored game guide/roadmap, one per Concept.
+
+    Contains ordered steps, general tips, trophy guides, and optional
+    YouTube embeds, organized into tabs per ConceptTrophyGroup (base game + DLCs).
+    """
+    concept = models.OneToOneField(
+        Concept, on_delete=models.CASCADE, related_name='roadmap'
+    )
+    created_by = models.ForeignKey(
+        Profile, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='authored_roadmaps'
+    )
+    status = models.CharField(
+        max_length=20, default='draft',
+        choices=[('draft', 'Draft'), ('published', 'Published')]
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=['status'], name='roadmap_status_idx'),
+        ]
+
+    def __str__(self):
+        return f"Roadmap: {self.concept.unified_title}"
+
+    @property
+    def is_published(self):
+        return self.status == 'published'
+
+    @property
+    def is_draft(self):
+        return self.status == 'draft'
+
+
+class RoadmapTab(models.Model):
+    """One tab per ConceptTrophyGroup within a roadmap (base game + each DLC).
+
+    Stores per-tab content: general tips prose and optional YouTube embed URL.
+    Steps and trophy guides are child models.
+    """
+    roadmap = models.ForeignKey(
+        Roadmap, on_delete=models.CASCADE, related_name='tabs'
+    )
+    concept_trophy_group = models.ForeignKey(
+        ConceptTrophyGroup, on_delete=models.CASCADE, related_name='roadmap_tabs'
+    )
+    general_tips = models.TextField(blank=True)
+    youtube_url = models.URLField(blank=True)
+
+    class Meta:
+        unique_together = ['roadmap', 'concept_trophy_group']
+        ordering = ['concept_trophy_group__sort_order', 'concept_trophy_group__trophy_group_id']
+
+    def __str__(self):
+        return f"Tab: {self.concept_trophy_group.display_name} ({self.roadmap})"
+
+
+class RoadmapStep(models.Model):
+    """An ordered high-level stage/step within a roadmap tab.
+
+    Examples: 'Complete first playthrough', 'Clean up collectibles'.
+    Each step can have associated trophies via RoadmapStepTrophy.
+    """
+    tab = models.ForeignKey(
+        RoadmapTab, on_delete=models.CASCADE, related_name='steps'
+    )
+    title = models.CharField(max_length=200)
+    description = models.TextField(blank=True)
+    youtube_url = models.URLField(blank=True)
+    order = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        ordering = ['order']
+
+    def __str__(self):
+        return f"Step {self.order}: {self.title}"
+
+
+class RoadmapStepTrophy(models.Model):
+    """Associates a trophy with a roadmap step by PSN trophy_id.
+
+    Uses trophy_id (IntegerField) instead of FK to Trophy because trophies
+    belong to Game, not Concept, and a Concept can span multiple game stacks.
+    trophy_id values are consistent across stacks within a concept.
+    """
+    step = models.ForeignKey(
+        RoadmapStep, on_delete=models.CASCADE, related_name='step_trophies'
+    )
+    trophy_id = models.IntegerField()
+    order = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        unique_together = ['step', 'trophy_id']
+        ordering = ['order']
+
+    def __str__(self):
+        return f"StepTrophy: step={self.step_id}, trophy_id={self.trophy_id}"
+
+
+class TrophyGuide(models.Model):
+    """Per-trophy guide text within a roadmap tab.
+
+    Every trophy in a trophy group can have its own mini guide section
+    with tips and walkthrough text.
+    """
+    tab = models.ForeignKey(
+        RoadmapTab, on_delete=models.CASCADE, related_name='trophy_guides'
+    )
+    trophy_id = models.IntegerField()
+    body = models.TextField()
+    order = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        unique_together = ['tab', 'trophy_id']
+        ordering = ['order']
+
+    def __str__(self):
+        return f"TrophyGuide: tab={self.tab_id}, trophy_id={self.trophy_id}"
+
+
+# ---------------------------------------------------------------------------
+# IGDB Integration Models
+# ---------------------------------------------------------------------------
+
+class Company(models.Model):
+    """Normalized game company from IGDB (developer, publisher, porter).
+
+    One record per real-world company. Linked to Concepts via the
+    ConceptCompany through table, which tracks per-game roles.
+    """
+    COMPANY_SIZE_CHOICES = [
+        (1, '1'),
+        (2, '2-10'),
+        (3, '11-50'),
+        (4, '51-200'),
+        (5, '201-500'),
+        (6, '501-1000'),
+        (7, '1001-5000'),
+        (8, '5001-10000'),
+        (9, '10001+'),
+    ]
+
+    igdb_id = models.IntegerField(unique=True, db_index=True)
+    name = models.CharField(max_length=255)
+    slug = models.SlugField(max_length=255)
+    description = models.TextField(blank=True)
+    country = models.IntegerField(null=True, blank=True, help_text='ISO 3166-1 numeric code')
+    logo_image_id = models.CharField(max_length=100, blank=True, help_text='IGDB image hash')
+    parent = models.ForeignKey(
+        'self', null=True, blank=True, on_delete=models.SET_NULL, related_name='subsidiaries'
+    )
+    company_size = models.IntegerField(
+        null=True, blank=True, choices=COMPANY_SIZE_CHOICES
+    )
+    start_date = models.DateField(null=True, blank=True, help_text='Founding date')
+    changed_company = models.ForeignKey(
+        'self', null=True, blank=True, on_delete=models.SET_NULL,
+        related_name='previous_identities',
+        help_text='Points to new company after merger/rename'
+    )
+    change_date = models.DateField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name_plural = 'companies'
+        ordering = ['name']
+        indexes = [
+            models.Index(fields=['name'], name='company_name_idx'),
+            models.Index(fields=['igdb_id'], name='company_igdb_id_idx'),
+        ]
+
+    def logo_url(self, size='logo_med'):
+        if not self.logo_image_id:
+            return None
+        return f'https://images.igdb.com/igdb/image/upload/t_{size}/{self.logo_image_id}.png'
+
+    @property
+    def is_active(self):
+        return self.changed_company is None
+
+    @property
+    def current_company(self):
+        """Follow the merger/rename chain to find the current company identity."""
+        company = self
+        seen = {self.pk}
+        while company.changed_company_id is not None:
+            if company.changed_company_id in seen:
+                break
+            seen.add(company.changed_company_id)
+            company = company.changed_company
+        return company
+
+    def __str__(self):
+        return self.name
+
+
+class ConceptCompany(models.Model):
+    """Links a Concept to a Company with role flags (developer, publisher, etc.).
+
+    One entry per (concept, company) pair. Multiple roles can be true
+    simultaneously (e.g. a studio that both developed and published a game).
+    """
+    concept = models.ForeignKey(
+        Concept, on_delete=models.CASCADE, related_name='concept_companies'
+    )
+    company = models.ForeignKey(
+        Company, on_delete=models.CASCADE, related_name='company_concepts'
+    )
+    is_developer = models.BooleanField(default=False)
+    is_publisher = models.BooleanField(default=False)
+    is_porting = models.BooleanField(default=False)
+    is_supporting = models.BooleanField(default=False)
+
+    class Meta:
+        verbose_name_plural = 'concept companies'
+        unique_together = ['concept', 'company']
+        indexes = [
+            models.Index(fields=['concept'], name='conceptcompany_concept_idx'),
+            models.Index(fields=['company'], name='conceptcompany_company_idx'),
+            models.Index(fields=['is_developer'], name='conceptcompany_dev_idx'),
+            models.Index(fields=['is_publisher'], name='conceptcompany_pub_idx'),
+        ]
+
+    def __str__(self):
+        roles = []
+        if self.is_developer:
+            roles.append('Dev')
+        if self.is_publisher:
+            roles.append('Pub')
+        if self.is_porting:
+            roles.append('Port')
+        if self.is_supporting:
+            roles.append('Support')
+        return f"{self.company.name} ({', '.join(roles or ['No role'])}) - {self.concept}"
+
+
+class IGDBMatch(models.Model):
+    """Tracks the match between a PlatPursuit Concept and an IGDB game entry.
+
+    Stores matching metadata (confidence, method, status), parsed Tier 1
+    data (summary, time-to-beat, engine, franchises), and the full raw
+    IGDB response for future Tier 2 parsing without re-querying.
+    """
+    MATCH_METHOD_CHOICES = [
+        ('external_id', 'External ID'),
+        ('exact_name', 'Exact Name'),
+        ('fuzzy_name', 'Fuzzy Name'),
+        ('manual', 'Manual'),
+    ]
+
+    STATUS_CHOICES = [
+        ('auto_accepted', 'Auto-Accepted'),
+        ('pending_review', 'Pending Review'),
+        ('accepted', 'Accepted'),
+        ('rejected', 'Rejected'),
+    ]
+
+    GAME_CATEGORY_CHOICES = [
+        (0, 'Main Game'),
+        (1, 'DLC/Addon'),
+        (2, 'Expansion'),
+        (3, 'Bundle'),
+        (4, 'Standalone Expansion'),
+        (5, 'Mod'),
+        (6, 'Episode'),
+        (7, 'Season'),
+        (8, 'Remake'),
+        (9, 'Remaster'),
+        (10, 'Expanded Game'),
+        (11, 'Port'),
+        (12, 'Fork'),
+        (13, 'Pack'),
+        (14, 'Update'),
+    ]
+
+    concept = models.OneToOneField(
+        Concept, on_delete=models.CASCADE, related_name='igdb_match'
+    )
+    igdb_id = models.IntegerField(unique=True, db_index=True)
+    igdb_name = models.CharField(max_length=500)
+    igdb_slug = models.CharField(max_length=300, blank=True)
+
+    # Matching metadata
+    match_confidence = models.FloatField(help_text='0.0 to 1.0')
+    match_method = models.CharField(max_length=20, choices=MATCH_METHOD_CHOICES)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, db_index=True)
+
+    # Raw IGDB response for Tier 2 parsing later
+    raw_response = models.JSONField(default=dict, blank=True)
+
+    # Parsed Tier 1 data
+    game_category = models.IntegerField(
+        null=True, blank=True, choices=GAME_CATEGORY_CHOICES
+    )
+    igdb_summary = models.TextField(blank=True)
+    igdb_storyline = models.TextField(blank=True)
+    time_to_beat_hastily = models.IntegerField(
+        null=True, blank=True, help_text='Speedrun time in seconds'
+    )
+    time_to_beat_normally = models.IntegerField(
+        null=True, blank=True, help_text='Average playthrough in seconds'
+    )
+    time_to_beat_completely = models.IntegerField(
+        null=True, blank=True, help_text='100%% completion time in seconds (platinum estimate)'
+    )
+    igdb_first_release_date = models.DateTimeField(null=True, blank=True)
+    game_engine_name = models.CharField(max_length=100, blank=True)
+    igdb_cover_image_id = models.CharField(max_length=100, blank=True)
+    franchise_names = models.JSONField(
+        default=list, blank=True, help_text='Franchise/collection names for GameFamily suggestions'
+    )
+    similar_game_igdb_ids = models.JSONField(
+        default=list, blank=True, help_text='IGDB IDs of similar games for future recommendations'
+    )
+    external_urls = models.JSONField(
+        default=dict, blank=True, help_text='External links: {steam: url, wikipedia: url, ...}'
+    )
+
+    # Sync tracking
+    last_synced_at = models.DateTimeField(auto_now_add=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'IGDB match'
+        verbose_name_plural = 'IGDB matches'
+        indexes = [
+            models.Index(fields=['igdb_id'], name='igdbmatch_igdb_id_idx'),
+            models.Index(fields=['status'], name='igdbmatch_status_idx'),
+            models.Index(fields=['match_confidence'], name='igdbmatch_confidence_idx'),
+        ]
+
+    @property
+    def completion_time_display(self):
+        """Human-readable completion time estimate."""
+        seconds = self.time_to_beat_completely
+        if not seconds:
+            return None
+        hours = seconds / 3600
+        if hours >= 1:
+            return f'{hours:.0f}h' if hours == int(hours) else f'{hours:.1f}h'
+        minutes = seconds / 60
+        return f'{minutes:.0f}m'
+
+    def __str__(self):
+        return f"{self.concept} -> {self.igdb_name} ({self.get_status_display()}, {self.match_confidence:.0%})"

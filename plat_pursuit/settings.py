@@ -54,6 +54,12 @@ else:
 PAYPAL_WEBHOOK_ID = os.getenv(f"PAYPAL_{PAYPAL_MODE.upper()}_WEBHOOK_ID")
 PAYPAL_API_BASE = 'https://api-m.paypal.com' if PAYPAL_MODE == 'live' else 'https://api-m.sandbox.paypal.com'
 
+# IGDB (Twitch/Amazon) Game Database
+IGDB_CLIENT_ID = os.getenv('IGDB_CLIENT_ID')
+IGDB_CLIENT_SECRET = os.getenv('IGDB_CLIENT_SECRET')
+IGDB_AUTO_ACCEPT_THRESHOLD = 0.85
+IGDB_REVIEW_THRESHOLD = 0.50
+
 # Discord Bot Integration
 BOT_API_URL = os.getenv('BOT_API_URL', 'http://127.0.0.1:5000')
 BOT_API_KEY = os.getenv('BOT_API_KEY')
