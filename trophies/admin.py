@@ -595,6 +595,18 @@ class TitleIDAdmin(admin.ModelAdmin):
     search_fields = ('title_id',)
     list_filter = ('region', 'platform')
 
+class ConceptGameInline(admin.TabularInline):
+    model = Game
+    extra = 0
+    fields = ('np_communication_id', 'title_name', 'title_platform', 'region', 'shovelware_status')
+    readonly_fields = ('np_communication_id', 'title_name', 'title_platform', 'region', 'shovelware_status')
+    can_delete = False
+    show_change_link = True
+
+    def has_add_permission(self, request, obj=None):
+        return False
+
+
 class ConceptCompanyInline(admin.TabularInline):
     model = ConceptCompany
     extra = 0
@@ -610,7 +622,7 @@ class ConceptAdmin(admin.ModelAdmin):
     list_display = ('id', 'concept_id', 'unified_title', 'release_date', 'publisher_name', 'genres')
     search_fields = ('concept_id', 'unified_title')
     actions = ['duplicate_concept', 'lock_games', 'unlock_games']
-    inlines = [ConceptCompanyInline]
+    inlines = [ConceptGameInline, ConceptCompanyInline]
 
     @admin.action(description="Lock concept on all games using selected concepts")
     def lock_games(self, request, queryset):
