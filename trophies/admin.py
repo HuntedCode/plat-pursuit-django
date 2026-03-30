@@ -2110,13 +2110,72 @@ class CompanyAdmin(admin.ModelAdmin):
     company_size_display.short_description = 'Size'
 
 
+class PlatformCoverageFilter(SimpleListFilter):
+    """Filter IGDBMatches by whether the concept's most modern platform is covered by IGDB."""
+    title = 'platform coverage'
+    parameter_name = 'platform_coverage'
+
+    # Priority order: most modern first
+    PLATFORM_PRIORITY = [
+        ('PSVR2', 390), ('PSVR', 165), ('PS5', 167), ('PS4', 48),
+        ('PS3', 9), ('PSVITA', 46), ('PSP', 38), ('PS2', 8), ('PS1', 7),
+    ]
+
+    def lookups(self, request, model_admin):
+        return [
+            ('covered', 'Top platform covered by IGDB'),
+            ('missing', 'Top platform NOT in IGDB'),
+        ]
+
+    def queryset(self, request, queryset):
+        if self.value() not in ('covered', 'missing'):
+            return queryset
+
+        covered_ids = []
+        missing_ids = []
+
+        for match in queryset.select_related('concept').prefetch_related('concept__games'):
+            # Find the concept's most modern platform
+            concept_platforms = set()
+            for game in match.concept.games.all():
+                for p in (game.title_platform or []):
+                    concept_platforms.add(p)
+
+            top_platform_igdb_id = None
+            for plat_name, igdb_id in self.PLATFORM_PRIORITY:
+                if plat_name in concept_platforms:
+                    top_platform_igdb_id = igdb_id
+                    break
+
+            if top_platform_igdb_id is None:
+                missing_ids.append(match.pk)
+                continue
+
+            # Check if IGDB response includes that platform
+            igdb_platforms = match.raw_response.get('platforms', []) if match.raw_response else []
+            igdb_plat_ids = set()
+            for p in igdb_platforms:
+                pid = p if isinstance(p, int) else p.get('id') if isinstance(p, dict) else None
+                if pid:
+                    igdb_plat_ids.add(pid)
+
+            if top_platform_igdb_id in igdb_plat_ids:
+                covered_ids.append(match.pk)
+            else:
+                missing_ids.append(match.pk)
+
+        if self.value() == 'covered':
+            return queryset.filter(pk__in=covered_ids)
+        return queryset.filter(pk__in=missing_ids)
+
+
 @admin.register(IGDBMatch)
 class IGDBMatchAdmin(admin.ModelAdmin):
     list_display = (
         'concept_title', 'psn_platforms', 'igdb_name', 'igdb_platforms_display',
         'confidence_display', 'status', 'match_method', 'game_category_display',
     )
-    list_filter = ('status', 'match_method', 'game_category')
+    list_filter = ('status', 'match_method', 'game_category', PlatformCoverageFilter)
     search_fields = ('concept__unified_title', 'igdb_name')
     raw_id_fields = ('concept',)
     readonly_fields = (
