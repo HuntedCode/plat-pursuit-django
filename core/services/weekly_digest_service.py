@@ -66,6 +66,8 @@ class WeeklyDigestService:
             earned=True,
             earned_date_time__gte=week_start,
             earned_date_time__lt=week_end,
+        ).exclude(
+            trophy__game__shovelware_status__in=['auto_flagged', 'manually_flagged'],
         ).aggregate(
             total=Count('id'),
             bronze=Count('id', filter=Q(trophy__trophy_type='bronze')),
@@ -214,6 +216,8 @@ class WeeklyDigestService:
             earned=True,
             earned_date_time__gte=week_start,
             earned_date_time__lt=week_end,
+        ).exclude(
+            trophy__game__shovelware_status__in=['auto_flagged', 'manually_flagged'],
         ).aggregate(
             total_trophies=Count('id'),
             total_platinums=Count('id', filter=Q(trophy__trophy_type='platinum')),
@@ -224,6 +228,8 @@ class WeeklyDigestService:
             earned=True,
             earned_date_time__gte=week_start,
             earned_date_time__lt=week_end,
+        ).exclude(
+            trophy__game__shovelware_status__in=['auto_flagged', 'manually_flagged'],
         ).values('profile_id').distinct().count()
 
         # ── Total reviews this week ──
