@@ -153,6 +153,7 @@ CONTENT_SECURITY_POLICY = {
             "https://*.playstation.net",               # PSN avatars (legacy CDN)
             "http://*.playstation.net",                # PSN avatars (some stored as http)
             "https://*.s3.amazonaws.com",              # S3 media uploads
+            "https://*.sonyentertainmentnetwork.com",  # PSN content rating images
             "https://pagead2.googlesyndication.com",   # AdSense ad images
             "https://tpc.googlesyndication.com",       # AdSense
             "https://www.google.com",                  # AdSense
