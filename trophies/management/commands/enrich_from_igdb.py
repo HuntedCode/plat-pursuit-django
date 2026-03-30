@@ -110,6 +110,13 @@ class Command(BaseCommand):
             self.stdout.write(self.style.WARNING(
                 f'--- [{i + 1}/{total}] {concept.concept_id} "{concept.unified_title}" ---'
             ))
+            # Show concept's platforms for comparison
+            concept_platforms = set()
+            for game in concept.games.all():
+                for p in (game.title_platform or []):
+                    concept_platforms.add(p)
+            self.stdout.write(f'  PSN platforms: {", ".join(sorted(concept_platforms)) or "unknown"}')
+
             self.stdout.write(
                 f'  Current match: IGDB #{match.igdb_id} "{match.igdb_name}" '
                 f'({match.match_method}, {match.match_confidence:.0%})'

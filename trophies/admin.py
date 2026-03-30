@@ -2113,8 +2113,8 @@ class CompanyAdmin(admin.ModelAdmin):
 @admin.register(IGDBMatch)
 class IGDBMatchAdmin(admin.ModelAdmin):
     list_display = (
-        'concept_title', 'igdb_name', 'confidence_display',
-        'status', 'match_method', 'game_category_display', 'last_synced_at',
+        'concept_title', 'psn_platforms', 'igdb_name', 'igdb_platforms_display',
+        'confidence_display', 'status', 'match_method', 'game_category_display',
     )
     list_filter = ('status', 'match_method', 'game_category')
     search_fields = ('concept__unified_title', 'igdb_name')
@@ -2143,6 +2143,28 @@ class IGDBMatchAdmin(admin.ModelAdmin):
     def game_category_display(self, obj):
         return obj.get_game_category_display() if obj.game_category is not None else '-'
     game_category_display.short_description = 'Category'
+
+    def psn_platforms(self, obj):
+        platforms = set()
+        for game in obj.concept.games.all():
+            for p in (game.title_platform or []):
+                platforms.add(p)
+        return ', '.join(sorted(platforms)) or '-'
+    psn_platforms.short_description = 'PSN Platforms'
+
+    def igdb_platforms_display(self, obj):
+        from trophies.services.igdb_service import IGDB_PLATFORM_NAMES, PS_PLATFORM_IDS
+        igdb_platforms = obj.raw_response.get('platforms', []) if obj.raw_response else []
+        names = []
+        for p in igdb_platforms:
+            pid = p if isinstance(p, int) else p.get('id') if isinstance(p, dict) else None
+            if pid in PS_PLATFORM_IDS:
+                names.append(IGDB_PLATFORM_NAMES.get(pid, str(pid)))
+        return ', '.join(names) or 'None'
+    igdb_platforms_display.short_description = 'IGDB PS Platforms'
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related('concept').prefetch_related('concept__games')
 
     @admin.action(description='Approve selected matches')
     def approve_selected(self, request, queryset):

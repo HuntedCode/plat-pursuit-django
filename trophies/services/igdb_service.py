@@ -29,6 +29,12 @@ IGDB_PLATFORM_NAMES = {
     34: 'Android', 39: 'iOS',
 }
 
+# PlatPursuit platform string -> IGDB platform ID (reverse of IGDB_PLATFORM_NAMES)
+PLAT_TO_IGDB_ID = {
+    'PS1': 7, 'PS2': 8, 'PS3': 9, 'PSP': 38, 'PSVITA': 46,
+    'PS4': 48, 'PSVR': 165, 'PS5': 167, 'PSVR2': 390,
+}
+
 # IGDB external game category for PlayStation Store
 PLAYSTATION_STORE_CATEGORY = 36
 
@@ -413,11 +419,6 @@ class IGDBService:
         Returns:
             tuple: (igdb_data, confidence, method) or None if no match found
         """
-        # Strategy 0: Check if a family sibling already has a match
-        sibling_match = cls._find_family_sibling_match(concept)
-        if sibling_match:
-            return sibling_match
-
         # Build list of PSN IDs to try for external matching
         psn_ids = []
         if concept.concept_id and not concept.concept_id.startswith('PP_'):
@@ -530,52 +531,6 @@ class IGDBService:
             cat = r.get('category', '?')
             lines.append(f'  - "{r.get("name")}" (cat={cat}, score={score:.0%})')
         logger.info('\n'.join(lines))
-
-    @classmethod
-    def _find_family_sibling_match(cls, concept):
-        """Check if any family sibling already has an accepted IGDB match.
-
-        If a sibling (e.g. the NA version) is already matched, reuse its
-        IGDB data for this concept (e.g. the Asian version). This avoids
-        failed searches for titles in other languages.
-
-        Returns:
-            tuple: (igdb_data, confidence, method) using sibling's raw_response, or None
-        """
-        if not concept.family_id:
-            return None
-
-        sibling_match = (
-            IGDBMatch.objects
-            .filter(
-                concept__family_id=concept.family_id,
-                status__in=('auto_accepted', 'accepted'),
-            )
-            .exclude(concept=concept)
-            .select_related('concept')
-            .first()
-        )
-
-        if not sibling_match or not sibling_match.raw_response:
-            return None
-
-        # Verify the sibling's IGDB game is actually the same game, not just
-        # a different game that happens to be in the same family.
-        # Compare our title against the IGDB game name (not the sibling's PSN title).
-        igdb_name = sibling_match.raw_response.get('name', '')
-        similarity = cls._fuzzy_title_match(concept.unified_title, igdb_name)
-        if similarity < 0.50:
-            logger.debug(
-                f'IGDB family sibling skip: "{concept.unified_title}" too dissimilar from '
-                f'IGDB name "{igdb_name}" ({similarity:.0%}). Falling through to normal search.'
-            )
-            return None
-
-        logger.info(
-            f'IGDB family match: "{concept.unified_title}" inheriting from '
-            f'sibling "{sibling_match.concept.unified_title}" (IGDB #{sibling_match.igdb_id})'
-        )
-        return (sibling_match.raw_response, 0.95, 'external_id')
 
     @classmethod
     def _pick_best_non_dlc(cls, concept, results):
@@ -720,6 +675,37 @@ class IGDBService:
                         base += 0.05
                         break
 
+        # Modifier: platform overlap (direct match required for auto-accept)
+        igdb_platforms = igdb_game.get('platforms', [])
+        if igdb_platforms:
+            igdb_plat_ids = set()
+            for p in igdb_platforms:
+                pid = p if isinstance(p, int) else p.get('id') if isinstance(p, dict) else None
+                if pid:
+                    igdb_plat_ids.add(pid)
+
+            # Get concept's PlayStation platforms from its games
+            concept_plat_ids = set()
+            try:
+                for game in concept.games.all():
+                    for plat_str in (game.title_platform or []):
+                        igdb_id_for_plat = PLAT_TO_IGDB_ID.get(plat_str)
+                        if igdb_id_for_plat:
+                            concept_plat_ids.add(igdb_id_for_plat)
+            except Exception:
+                pass
+
+            if concept_plat_ids:
+                overlap = concept_plat_ids & igdb_plat_ids
+                if overlap:
+                    base += 0.05
+                else:
+                    # No direct platform overlap: cap at pending_review
+                    base = min(base, settings.IGDB_AUTO_ACCEPT_THRESHOLD - 0.01)
+                    if not igdb_plat_ids & set(PS_PLATFORM_IDS):
+                        # No PS platforms at all on IGDB
+                        base -= 0.10
+
         # Modifier: non-main game penalty (DLC/bundles score lower)
         category = igdb_game.get('category', 0)
         if category != 0:
@@ -851,8 +837,7 @@ class IGDBService:
 
         igdb_id = igdb_data['id']
 
-        # Check if another Concept already owns this IGDB game.
-        # This happens when PS4/PS5 versions are separate Concepts but one IGDB entry.
+        # Flag if another Concept already has this IGDB game and they're not in the same family
         existing = (
             IGDBMatch.objects
             .filter(igdb_id=igdb_id)
@@ -862,28 +847,12 @@ class IGDBService:
         )
         if existing:
             other_concept = existing.concept
-            logger.info(
-                f'IGDB game {igdb_id} already matched to concept {other_concept.concept_id} '
-                f'("{other_concept.unified_title}"). Sharing enrichment with '
-                f'"{concept.unified_title}" instead of creating duplicate.'
-            )
-
-            # Flag if these concepts should be in the same family but aren't
             if not concept.family_id or concept.family_id != other_concept.family_id:
-                logger.warning(
-                    f'IGDB family mismatch: concepts {concept.concept_id} '
-                    f'("{concept.unified_title}") and {other_concept.concept_id} '
-                    f'("{other_concept.unified_title}") share IGDB game {igdb_id} '
-                    f'but are not in the same GameFamily. Creating proposal.'
+                logger.info(
+                    f'IGDB game {igdb_id} also matched to concept {other_concept.concept_id} '
+                    f'("{other_concept.unified_title}"). Creating family proposal.'
                 )
                 cls._create_family_proposal(concept, other_concept, igdb_id, igdb_data)
-
-            # Apply enrichment (companies, genres, themes, VR platforms)
-            # without creating a duplicate IGDBMatch row
-            cls._create_concept_companies(concept, igdb_data.get('involved_companies', []))
-            cls._update_concept_fields(concept, igdb_data)
-            cls._apply_vr_platforms(concept, igdb_data)
-            return existing
 
         # Fetch time-to-beat from separate endpoint
         ttb = cls._fetch_time_to_beat(igdb_id)
@@ -1216,12 +1185,8 @@ class IGDBService:
     # -----------------------------------------------------------------------
 
     @classmethod
-    def enrich_concept(cls, concept, propagate=True):
+    def enrich_concept(cls, concept):
         """Match and enrich a single Concept from IGDB.
-
-        Args:
-            concept: The Concept to enrich
-            propagate: If True, propagate enrichment to family siblings
 
         Returns:
             IGDBMatch or None: The match record if successful
@@ -1231,13 +1196,7 @@ class IGDBService:
             return None
 
         igdb_data, confidence, method = result
-        igdb_match = cls.process_match(concept, igdb_data, confidence, method)
-
-        # Propagate to family siblings if this match was accepted
-        if propagate and igdb_match and igdb_match.status in ('auto_accepted', 'accepted'):
-            cls.propagate_to_family(igdb_match)
-
-        return igdb_match
+        return cls.process_match(concept, igdb_data, confidence, method)
 
     @classmethod
     def enrich_batch(cls, concepts, progress_callback=None):
@@ -1319,9 +1278,6 @@ class IGDBService:
         # Re-apply enrichment (updates companies + concept fields)
         cls._apply_enrichment(igdb_match, igdb_data)
 
-        # Propagate refreshed data to family siblings
-        cls.propagate_to_family(igdb_match)
-
         return igdb_match
 
     @classmethod
@@ -1334,7 +1290,6 @@ class IGDBService:
             igdb_match.status = 'accepted'
             igdb_match.save(update_fields=['status'])
             cls._apply_enrichment(igdb_match)
-            cls.propagate_to_family(igdb_match)
 
     @classmethod
     def reject_match(cls, igdb_match):
@@ -1355,46 +1310,3 @@ class IGDBService:
         IGDBMatch.objects.filter(concept=concept).delete()
         return cls.enrich_concept(concept)
 
-    @classmethod
-    def propagate_to_family(cls, igdb_match):
-        """Propagate IGDB enrichment to family siblings that lack their own match.
-
-        When a concept in a family gets enriched, its siblings (e.g. regional
-        variants) should inherit the same data. Each sibling gets its own
-        IGDBMatch record pointing to the same igdb_id, plus its own
-        ConceptCompany entries and genre/theme fields.
-
-        Returns:
-            int: Number of siblings enriched
-        """
-        concept = igdb_match.concept
-        if not concept.family_id:
-            return 0
-
-        from trophies.models import Concept
-        siblings = (
-            Concept.objects
-            .filter(family_id=concept.family_id)
-            .exclude(pk=concept.pk)
-            .exclude(igdb_match__isnull=False)  # Skip siblings that already have a match
-        )
-
-        count = 0
-        igdb_data = igdb_match.raw_response
-        if not igdb_data:
-            return 0
-
-        for sibling in siblings:
-            try:
-                cls.process_match(sibling, igdb_data, 0.95, 'external_id')
-                logger.info(
-                    f'IGDB family propagation: enriched "{sibling.unified_title}" '
-                    f'from sibling "{concept.unified_title}"'
-                )
-                count += 1
-            except Exception:
-                logger.exception(
-                    f'IGDB family propagation failed for "{sibling.unified_title}"'
-                )
-
-        return count

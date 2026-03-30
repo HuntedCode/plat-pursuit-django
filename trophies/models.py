@@ -3906,7 +3906,7 @@ class IGDBMatch(models.Model):
     concept = models.OneToOneField(
         Concept, on_delete=models.CASCADE, related_name='igdb_match'
     )
-    igdb_id = models.IntegerField(unique=True, db_index=True)
+    igdb_id = models.IntegerField(db_index=True)
     igdb_name = models.CharField(max_length=500)
     igdb_slug = models.CharField(max_length=300, blank=True)
 
