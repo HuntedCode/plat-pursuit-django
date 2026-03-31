@@ -506,8 +506,6 @@ class Command(BaseCommand):
             matched_ids = IGDBMatch.objects.values_list('concept_id', flat=True)
             concepts = Concept.objects.exclude(id__in=matched_ids)
 
-        # Filter out PP_ stub concepts (no real PSN data to match against)
-        concepts = concepts.exclude(concept_id__startswith='PP_')
 
         total = concepts.count()
         if total == 0:
