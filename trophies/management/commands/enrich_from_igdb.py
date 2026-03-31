@@ -126,14 +126,31 @@ class Command(BaseCommand):
             for game in concept.games.all():
                 for p in (game.title_platform or []):
                     concept_platforms.add(p)
-            self.stdout.write(f'  PSN platforms: {", ".join(sorted(concept_platforms)) or "unknown"}')
+            self.stdout.write(f'  PSN platforms:  {", ".join(sorted(concept_platforms)) or "unknown"}')
+            self.stdout.write(f'  PSN publisher:  {concept.publisher_name or "unknown"}')
             self.stdout.write(
-                f'  Current match: IGDB #{match.igdb_id} "{match.igdb_name}" '
+                f'  Current match:  IGDB #{match.igdb_id} "{match.igdb_name}" '
                 f'({match.match_method}, {match.match_confidence:.0%})'
             )
 
+            # Show IGDB dev/publisher from raw response
+            igdb_companies = match.raw_response.get('involved_companies', []) if match.raw_response else []
+            igdb_devs = []
+            igdb_pubs = []
+            for ic in igdb_companies:
+                company = ic.get('company', {})
+                name = company.get('name', '') if isinstance(company, dict) else ''
+                if not name:
+                    continue
+                if ic.get('developer'):
+                    igdb_devs.append(name)
+                if ic.get('publisher'):
+                    igdb_pubs.append(name)
+            self.stdout.write(f'  IGDB developer: {", ".join(igdb_devs) or "unknown"}')
+            self.stdout.write(f'  IGDB publisher: {", ".join(igdb_pubs) or "unknown"}')
+
             # Show IGDB platforms for current match
-            self.stdout.write(f'  IGDB match:    {self._format_game_result(match.raw_response or {}, current_igdb_id=match.igdb_id).strip()}')
+            self.stdout.write(f'  IGDB entry:     {self._format_game_result(match.raw_response or {}, current_igdb_id=match.igdb_id).strip()}')
             self.stdout.write('')
 
             # Interactive loop for this match
