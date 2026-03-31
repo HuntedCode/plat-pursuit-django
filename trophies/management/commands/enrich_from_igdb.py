@@ -106,7 +106,7 @@ class Command(BaseCommand):
             return
 
         self.stdout.write(f'{total} pending match(es) to review.\n')
-        self.stdout.write('Commands: [a]pprove  [r]eject  [s]earch <query>  [m]anual <igdb_id>  [n]ext (skip)  [q]uit\n')
+        self.stdout.write('Commands: [a]pprove  [r]eject  [s]earch <query>  [sa]earch all <query>  [m]anual <igdb_id>  [n]ext  [q]uit\n')
 
         approved = 0
         rejected = 0
@@ -206,21 +206,38 @@ class Command(BaseCommand):
                     self._print_review_summary(approved, rejected, reassigned, skipped)
                     return
 
-                elif action.startswith('s ') or action.startswith('s\t'):
-                    query = action[2:].strip()
+                elif action.startswith('sa ') or action.startswith('sa\t'):
+                    # Search all platforms (no PlayStation filter)
+                    query = action[3:].strip()
                     if not query:
-                        self.stdout.write('  Usage: s <search query>')
+                        self.stdout.write('  Usage: sa <search query>')
                         continue
-                    self.stdout.write(f'  Searching IGDB for "{query}"...')
-                    results = IGDBService.search_game(query, limit=10, platform_filter=True)
+                    self.stdout.write(f'  Searching IGDB (all platforms) for "{query}"...')
+                    results = IGDBService.search_game(query, limit=10, platform_filter=False)
                     exact = IGDBService.search_by_exact_name(query, limit=10)
-                    # Deduplicate
                     seen = {r['id'] for r in (results or [])}
                     extra = [r for r in (exact or []) if r['id'] not in seen]
                     all_results = (results or []) + extra
                     if all_results:
                         for r in all_results:
-                            self.stdout.write(self._format_game_result(r, current_igdb_id=match.igdb_id))
+                            self.stdout.write(self._format_game_result(r, current_igdb_id=match.igdb_id if isinstance(match, IGDBMatch) else None))
+                    else:
+                        self.stdout.write('  No results found.')
+
+                elif action.startswith('s ') or action.startswith('s\t'):
+                    query = action[2:].strip()
+                    if not query:
+                        self.stdout.write('  Usage: s <search query>')
+                        continue
+                    self.stdout.write(f'  Searching IGDB (PlayStation) for "{query}"...')
+                    results = IGDBService.search_game(query, limit=10, platform_filter=True)
+                    exact = IGDBService.search_by_exact_name(query, limit=10)
+                    seen = {r['id'] for r in (results or [])}
+                    extra = [r for r in (exact or []) if r['id'] not in seen]
+                    all_results = (results or []) + extra
+                    if all_results:
+                        for r in all_results:
+                            self.stdout.write(self._format_game_result(r, current_igdb_id=match.igdb_id if isinstance(match, IGDBMatch) else None))
                     else:
                         self.stdout.write('  No results found.')
 
@@ -235,18 +252,43 @@ class Command(BaseCommand):
                     if not igdb_data:
                         self.stdout.write(self.style.ERROR(f'  IGDB #{new_igdb_id} not found.'))
                         continue
-                    self.stdout.write(f'  Found: "{igdb_data.get("name")}"')
-                    # Delete old match and create new one
-                    match.delete()
-                    new_match = IGDBService.process_match(concept, igdb_data, 1.0, 'manual')
-                    self.stdout.write(self.style.SUCCESS(
-                        f'  Reassigned to IGDB #{new_igdb_id} "{igdb_data.get("name")}" [{new_match.status}]'
-                    ))
-                    reassigned += 1
-                    break
+
+                    # Show details for confirmation
+                    self.stdout.write(f'  Name:      "{igdb_data.get("name")}"')
+                    self.stdout.write(f'  Entry:     {self._format_game_result(igdb_data).strip()}')
+                    ic_devs = []
+                    ic_pubs = []
+                    for ic in igdb_data.get('involved_companies', []):
+                        co = ic.get('company', {})
+                        name = co.get('name', '') if isinstance(co, dict) else ''
+                        if name and ic.get('developer'):
+                            ic_devs.append(name)
+                        if name and ic.get('publisher'):
+                            ic_pubs.append(name)
+                    self.stdout.write(f'  Developer: {", ".join(ic_devs) or "unknown"}')
+                    self.stdout.write(f'  Publisher: {", ".join(ic_pubs) or "unknown"}')
+
+                    try:
+                        confirm = input('  Assign this match? [y/n] > ').strip().lower()
+                    except (EOFError, KeyboardInterrupt):
+                        self.stdout.write('\n')
+                        self._print_review_summary(approved, rejected, reassigned, skipped)
+                        return
+
+                    if confirm == 'y':
+                        if isinstance(match, IGDBMatch):
+                            match.delete()
+                        new_match = IGDBService.process_match(concept, igdb_data, 1.0, 'manual')
+                        self.stdout.write(self.style.SUCCESS(
+                            f'  Assigned IGDB #{new_igdb_id} "{igdb_data.get("name")}" [{new_match.status}]'
+                        ))
+                        reassigned += 1
+                        break
+                    else:
+                        self.stdout.write('  Cancelled.')
 
                 else:
-                    self.stdout.write('  Commands: [a]pprove  [r]eject  [s]earch <query>  [m]anual <igdb_id>  [n]ext  [q]uit')
+                    self.stdout.write('  Commands: [a]pprove  [r]eject  [s]earch <query>  [sa] search all <query>  [m]anual <igdb_id>  [n]ext  [q]uit')
 
             idx += 1
             self.stdout.write('')
