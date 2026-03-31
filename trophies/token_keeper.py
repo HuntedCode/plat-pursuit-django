@@ -1197,13 +1197,16 @@ class TokenKeeper:
                                 game, _, _ = PsnApiService.create_or_update_game(title)
                                 _game_by_np[title.np_communication_id] = game
                                 _earned_by_game[game.id] = 0
-                                if game.concept is None:
-                                    try:
-                                        default_concept = Concept.create_default_concept(game)
-                                        game.add_concept(default_concept)
-                                        logger.info(f"Health check: created default concept for {game.title_name}")
-                                    except Exception:
-                                        logger.exception(f"Health check: failed to create default concept for {game.title_name}")
+
+                        # Catch any game without a concept (new or existing legacy games
+                        # that slipped through prior syncs without concept assignment)
+                        if game.concept is None:
+                            try:
+                                default_concept = Concept.create_default_concept(game)
+                                game.add_concept(default_concept)
+                                logger.info(f"Health check: created default concept for {game.title_name}")
+                            except Exception:
+                                logger.exception(f"Health check: failed to create default concept for {game.title_name}")
 
                         tracked_total = _earned_by_game.get(game.id, 0)
 
@@ -1623,10 +1626,23 @@ class TokenKeeper:
             games_by_comm_id[title.np_communication_id] = game
             profile_game, _ = PsnApiService.create_or_update_profile_game(profile, game, title)
             touched_profilegame_ids.append(profile_game.id)
+            has_modern_platform = False
             for platform in game.title_platform:
                 if platform in TITLE_STATS_SUPPORTED_PLATFORMS:
                     num_title_stats += 1
+                    has_modern_platform = True
                     break
+
+            # Legacy-only platform games (PS3, PSVITA, PSVR, PSVR2) never enter the
+            # sync_title_stats → sync_title_id pipeline, so they need a default concept
+            # assigned here to avoid remaining concept-less indefinitely.
+            if not has_modern_platform and game.concept is None:
+                try:
+                    default_concept = Concept.create_default_concept(game)
+                    game.add_concept(default_concept)
+                    logger.info(f"Created default concept for legacy platform game {game.title_name} ({game.np_communication_id})")
+                except Exception:
+                    logger.exception(f"Failed to create default concept for legacy platform game {game.title_name} ({game.np_communication_id})")
             title_defined_trophies_total = title.defined_trophies.bronze + title.defined_trophies.silver + title.defined_trophies.gold + title.defined_trophies.platinum
 
             # Check if this game needs trophy groups synced
@@ -1896,7 +1912,7 @@ class TokenKeeper:
                     concept.check_and_mark_regional()
 
                     # IGDB enrichment for newly created concepts (best-effort)
-                    if concept_created and not str(concept.concept_id).startswith('PP_'):
+                    if concept_created:
                         try:
                             from trophies.services.igdb_service import IGDBService
                             IGDBService.enrich_concept(concept)
