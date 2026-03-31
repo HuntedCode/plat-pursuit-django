@@ -1147,6 +1147,7 @@ class TokenKeeper:
                 current_tracked_games = list(ProfileGame.objects.filter(profile=profile))
                 games_to_unhide = []
                 games_needing_groups = []
+                games_needing_concepts = []
                 page_size = 400
                 limit = page_size
                 offset = 0
@@ -1198,16 +1199,21 @@ class TokenKeeper:
                                 _game_by_np[title.np_communication_id] = game
                                 _earned_by_game[game.id] = 0
 
-                        # Catch any game without a concept (new or existing legacy games
-                        # that slipped through prior syncs without concept assignment)
+                        # Track concept-less games for resolution after the loop.
+                        # Modern platform games get queued through sync_title_stats
+                        # for proper concept resolution. Legacy-only games get stubs.
                         if game.concept is None:
-                            try:
-                                default_concept = Concept.create_default_concept(game)
-                                game.add_concept(default_concept)
-                                self._try_igdb_enrich(default_concept)
-                                logger.info(f"Health check: created default concept for {game.title_name}")
-                            except Exception:
-                                logger.exception(f"Health check: failed to create default concept for {game.title_name}")
+                            has_modern = any(p in TITLE_STATS_SUPPORTED_PLATFORMS for p in game.title_platform)
+                            if has_modern:
+                                games_needing_concepts.append(game)
+                            else:
+                                try:
+                                    default_concept = Concept.create_default_concept(game)
+                                    game.add_concept(default_concept)
+                                    self._try_igdb_enrich(default_concept)
+                                    logger.info(f"Health check: created default concept for legacy game {game.title_name}")
+                                except Exception:
+                                    logger.exception(f"Health check: failed to create default concept for {game.title_name}")
 
                         tracked_total = _earned_by_game.get(game.id, 0)
 
@@ -1274,8 +1280,9 @@ class TokenKeeper:
 
                 has_trophy_mismatch = has_mismatch and len(trophy_titles_to_be_updated) > 0
                 has_missing_groups = len(games_needing_groups) > 0
+                has_missing_concepts = len(games_needing_concepts) > 0
 
-                if has_trophy_mismatch or has_missing_groups:
+                if has_trophy_mismatch or has_missing_groups or has_missing_concepts:
                     if has_trophy_mismatch:
                         logger.info(
                             f"Health check for profile {profile_id}: {len(trophy_titles_to_be_updated)} games need re-sync"
@@ -1283,6 +1290,10 @@ class TokenKeeper:
                     if has_missing_groups:
                         logger.warning(
                             f"Health check for profile {profile_id}: {len(games_needing_groups)} game(s) missing TrophyGroup records"
+                        )
+                    if has_missing_concepts:
+                        logger.info(
+                            f"Health check for profile {profile_id}: {len(games_needing_concepts)} PS4/PS5 game(s) missing concepts, queuing sync_title_stats"
                         )
 
                     # Re-enter syncing state with progress tracking
@@ -1313,6 +1324,15 @@ class TokenKeeper:
                         platform = game.title_platform[0] if not game.title_platform[0] == 'PSPC' else game.title_platform[1]
                         if PSNManager.assign_sync_trophies(profile.id, game.np_communication_id, platform, priority_override='low_priority'):
                             queued_count += 2  # sync_trophies = 2 progress ticks
+
+                    # Queue sync_title_stats to resolve proper concepts for PS4/PS5 games.
+                    # Games without title_ids won't be matched by update_profile_game_with_title_stats,
+                    # so they naturally flow into remaining_title_stats -> sync_title_id.
+                    # A single is_last=True job auto-paginates through all results.
+                    if has_missing_concepts:
+                        args = [20, 0, 20, True, False]
+                        PSNManager.assign_job('sync_title_stats', args, profile.id)
+
                     profile.add_to_sync_target(queued_count)
 
                     # Early return: skip badge/milestone/challenge checks.
