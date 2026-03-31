@@ -93,7 +93,7 @@ def _get_canonical_name(concepts, precomputed=None):
     most games as canonical. Strips platform suffixes since families are
     cross-platform by nature.
     """
-    real = [c for c in concepts if not c.concept_id.startswith('PP_')]
+    real = [c for c in concepts if not str(c.concept_id).startswith('PP_')]
     pool = real if real else list(concepts)
     if precomputed:
         best = max(pool, key=lambda c: precomputed['concept_game_count'].get(c.id, 0))
