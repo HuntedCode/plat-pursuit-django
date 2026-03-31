@@ -211,6 +211,15 @@ class IGDBService:
         }
         response = requests.post(url, data=query, headers=headers, timeout=30)
 
+        # Stale token: clear cache and retry once with a fresh token
+        if response.status_code == 401:
+            logger.warning('IGDB 401 for %s, refreshing access token and retrying', endpoint)
+            cache.delete(cls.REDIS_TOKEN_KEY)
+            token = cls._get_access_token()
+            headers['Authorization'] = f'Bearer {token}'
+            cls._rate_limit()
+            response = requests.post(url, data=query, headers=headers, timeout=30)
+
         if response.status_code == 429:
             logger.warning('IGDB rate limit hit, waiting 1 second...')
             time.sleep(1)
