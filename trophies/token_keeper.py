@@ -1204,6 +1204,7 @@ class TokenKeeper:
                             try:
                                 default_concept = Concept.create_default_concept(game)
                                 game.add_concept(default_concept)
+                                self._try_igdb_enrich(default_concept)
                                 logger.info(f"Health check: created default concept for {game.title_name}")
                             except Exception:
                                 logger.exception(f"Health check: failed to create default concept for {game.title_name}")
@@ -1640,6 +1641,7 @@ class TokenKeeper:
                 try:
                     default_concept = Concept.create_default_concept(game)
                     game.add_concept(default_concept)
+                    self._try_igdb_enrich(default_concept)
                     logger.info(f"Created default concept for legacy platform game {game.title_name} ({game.np_communication_id})")
                 except Exception:
                     logger.exception(f"Failed to create default concept for legacy platform game {game.title_name} ({game.np_communication_id})")
@@ -1913,11 +1915,7 @@ class TokenKeeper:
 
                     # IGDB enrichment for newly created concepts (best-effort)
                     if concept_created:
-                        try:
-                            from trophies.services.igdb_service import IGDBService
-                            IGDBService.enrich_concept(concept)
-                        except Exception:
-                            logger.exception(f"IGDB enrichment failed for concept {concept.concept_id}")
+                        self._try_igdb_enrich(concept)
 
                     profile.increment_sync_progress()
                     logger.info(f"Title ID {title_id.title_id} - {concept.unified_title} sync'd successfully!")
@@ -1934,6 +1932,7 @@ class TokenKeeper:
                             logger.warning(f"Concept for {title_id.title_id} returned an error code.")
                         default_concept = Concept.create_default_concept(game)
                         game.add_concept(default_concept)
+                        self._try_igdb_enrich(default_concept)
                         logger.info(f"Created default concept for {game.title_name}")
                     logger.info(f"Title ID {title_id.title_id} sync'd successfully!")
             else:
@@ -1949,6 +1948,7 @@ class TokenKeeper:
                             logger.info(f"Game {game.title_name} detected as Asian regional.")
                         default_concept = Concept.create_default_concept(game)
                         game.add_concept(default_concept)
+                        self._try_igdb_enrich(default_concept)
                         logger.info(f"Created default concept for {game.title_name} (game_title was None)")
                     except Exception:
                         logger.exception(f"Failed to create default concept for {game.title_name} (Title ID {title_id.title_id})")
@@ -1963,9 +1963,18 @@ class TokenKeeper:
                 if game.concept is None:
                     default_concept = Concept.create_default_concept(game)
                     game.add_concept(default_concept)
+                    self._try_igdb_enrich(default_concept)
                     logger.info(f"Exception recovery: created default concept for {game.title_name} (Title ID {title_id.title_id})")
             except Exception as recovery_err:
                 logger.exception(f"Exception recovery also failed for {game.title_name} (Title ID {title_id.title_id}): {recovery_err}")
+
+    def _try_igdb_enrich(self, concept):
+        """Best-effort IGDB enrichment for a newly created concept."""
+        try:
+            from trophies.services.igdb_service import IGDBService
+            IGDBService.enrich_concept(concept)
+        except Exception:
+            logger.exception(f"IGDB enrichment failed for concept {concept.concept_id}")
 
     def _extract_media(self, details: dict) -> list[dict]:
         """Extract and combine unique media (images/videos) from JSON, deduped by URL per type."""
