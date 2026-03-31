@@ -421,7 +421,7 @@ class IGDBService:
         """
         # Build list of PSN IDs to try for external matching
         psn_ids = []
-        if concept.concept_id and not concept.concept_id.startswith('PP_'):
+        if concept.concept_id and not str(concept.concept_id).startswith('PP_'):
             psn_ids.append(concept.concept_id)
         psn_ids.extend(concept.title_ids or [])
 

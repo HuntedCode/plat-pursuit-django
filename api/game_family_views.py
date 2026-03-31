@@ -58,7 +58,7 @@ def _bulk_serialize_concepts(concepts):
             'id': concept.id,
             'concept_id': concept.concept_id,
             'unified_title': concept.unified_title,
-            'is_stub': concept.concept_id.startswith('PP_'),
+            'is_stub': str(concept.concept_id).startswith('PP_'),
             'platforms': sorted(platforms),
             'regions': sorted(regions),
             'trophy_counts': dict(trophy_type_counts.get(concept.id, {})),

@@ -290,7 +290,7 @@ class PsnApiService:
 
                 if game.concept_lock:
                     continue
-                if game.concept and not game.concept.concept_id.startswith('PP_'):
+                if game.concept and not str(game.concept.concept_id).startswith('PP_'):
                     if game.concept_stale:
                         logger.info(f"Game {game} marked as concept_stale. Queuing for concept refresh.")
                         needs_refresh = True

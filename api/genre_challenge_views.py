@@ -365,7 +365,7 @@ class GenreSlotAssignAPIView(APIView):
                 )
 
             # Reject PP_ stubs (no genre data)
-            if concept.concept_id.startswith('PP_'):
+            if str(concept.concept_id).startswith('PP_'):
                 return Response(
                     {'error': 'This game is not eligible.'},
                     status=status.HTTP_400_BAD_REQUEST,
@@ -918,7 +918,7 @@ class GenreBonusAddAPIView(APIView):
                 )
 
             # Reject PP_ stubs
-            if concept.concept_id.startswith('PP_'):
+            if str(concept.concept_id).startswith('PP_'):
                 return Response(
                     {'error': 'This game is not eligible.'},
                     status=status.HTTP_400_BAD_REQUEST,
