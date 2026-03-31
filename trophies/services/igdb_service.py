@@ -668,7 +668,7 @@ class IGDBService:
                 concept_year = concept.release_date.year
                 if abs(igdb_year - concept_year) <= 1:
                     base += 0.05
-            except (ValueError, OSError):
+            except (ValueError, OSError, AttributeError):
                 pass
 
         # Modifier: publisher name match
