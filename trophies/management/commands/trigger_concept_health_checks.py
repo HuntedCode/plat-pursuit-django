@@ -65,12 +65,13 @@ class Command(BaseCommand):
             self.stdout.write("No profiles found owning these games.")
             return
 
-        profiles = Profile.objects.filter(id__in=needed_profile_ids).select_related('user')
+        profiles = Profile.objects.filter(id__in=needed_profile_ids)
 
         self.stdout.write(f"\n{profiles.count()} profile(s) need sync_title_stats:")
         for profile in profiles:
             game_count = len(games_per_profile.get(profile.id, []))
-            self.stdout.write(f"  {profile.user.username} (ID: {profile.id}) - {game_count} concept-less game(s)")
+            username = profile.psn_username
+            self.stdout.write(f"  {username} (ID: {profile.id}) - {game_count} concept-less game(s)")
 
         if dry_run:
             self.stdout.write("\n[DRY RUN] No jobs queued.")
@@ -79,8 +80,9 @@ class Command(BaseCommand):
         queued = 0
         skipped = 0
         for profile in profiles:
+            username = profile.psn_username
             if profile.sync_status == 'syncing':
-                self.stdout.write(f"  Skipping {profile.user.username} (already syncing)")
+                self.stdout.write(f"  Skipping {username} (already syncing)")
                 skipped += 1
                 continue
 
@@ -94,7 +96,7 @@ class Command(BaseCommand):
                 'sync_title_stats', args=args, profile_id=profile.id,
             )
             queued += 1
-            self.stdout.write(f"  Queued sync_title_stats for {profile.user.username}")
+            self.stdout.write(f"  Queued sync_title_stats for {username}")
 
         self.stdout.write(self.style.SUCCESS(
             f"\nDone. Queued: {queued}, Skipped (already syncing): {skipped}"
