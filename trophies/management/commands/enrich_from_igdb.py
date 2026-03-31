@@ -87,57 +87,162 @@ class Command(BaseCommand):
     # -------------------------------------------------------------------
 
     # -------------------------------------------------------------------
-    # Review mode: show pending matches with alternatives
+    # Review mode: interactive review queue
     # -------------------------------------------------------------------
 
     def _handle_review(self, options):
-        matches = IGDBMatch.objects.filter(
-            status='pending_review',
-        ).select_related('concept')
+        matches = list(
+            IGDBMatch.objects.filter(
+                status='pending_review',
+            ).select_related('concept').prefetch_related('concept__games')
+        )
 
         if options.get('concept_id'):
-            matches = matches.filter(concept__concept_id=options['concept_id'])
+            matches = [m for m in matches if m.concept.concept_id == options['concept_id']]
 
-        total = matches.count()
+        total = len(matches)
         if total == 0:
             self.stdout.write('No pending matches to review.')
             return
 
-        self.stdout.write(f'Reviewing {total} pending match(es)...\n')
+        self.stdout.write(f'{total} pending match(es) to review.\n')
+        self.stdout.write('Commands: [a]pprove  [r]eject  [s]earch <query>  [m]anual <igdb_id>  [n]ext (skip)  [q]uit\n')
 
-        for i, match in enumerate(matches):
+        approved = 0
+        rejected = 0
+        reassigned = 0
+        skipped = 0
+        idx = 0
+
+        while idx < len(matches):
+            match = matches[idx]
             concept = match.concept
+
+            # Display current match
             self.stdout.write(self.style.WARNING(
-                f'--- [{i + 1}/{total}] {concept.concept_id} "{concept.unified_title}" ---'
+                f'--- [{idx + 1}/{total}] {concept.concept_id} "{concept.unified_title}" ---'
             ))
-            # Show concept's platforms for comparison
             concept_platforms = set()
             for game in concept.games.all():
                 for p in (game.title_platform or []):
                     concept_platforms.add(p)
             self.stdout.write(f'  PSN platforms: {", ".join(sorted(concept_platforms)) or "unknown"}')
-
             self.stdout.write(
                 f'  Current match: IGDB #{match.igdb_id} "{match.igdb_name}" '
                 f'({match.match_method}, {match.match_confidence:.0%})'
             )
 
-            # Search IGDB for alternatives
-            results = IGDBService.search_game(concept.unified_title, limit=10, platform_filter=True)
-            if not results:
-                results = IGDBService.search_game(concept.unified_title, limit=10, platform_filter=False)
-
-            if results:
-                self.stdout.write(f'  Alternatives:')
-                for r in results:
-                    self.stdout.write(self._format_game_result(r, current_igdb_id=match.igdb_id))
-            else:
-                self.stdout.write('  No alternatives found on IGDB.')
-
-            self.stdout.write(
-                f'  To reassign: --concept-id {concept.concept_id} --manual <IGDB_ID>'
-            )
+            # Show IGDB platforms for current match
+            self.stdout.write(f'  IGDB match:    {self._format_game_result(match.raw_response or {}, current_igdb_id=match.igdb_id).strip()}')
             self.stdout.write('')
+
+            # Interactive loop for this match
+            while True:
+                try:
+                    action = input('  > ').strip().lower()
+                except (EOFError, KeyboardInterrupt):
+                    self.stdout.write('\n')
+                    self._print_review_summary(approved, rejected, reassigned, skipped)
+                    return
+
+                if not action:
+                    continue
+
+                if action == 'a':
+                    IGDBService.approve_match(match)
+                    self.stdout.write(self.style.SUCCESS('  Approved.'))
+                    approved += 1
+                    break
+
+                elif action == 'r':
+                    old_igdb_id = match.igdb_id
+                    match.delete()
+                    self.stdout.write('  Rejected. Re-matching...')
+                    new_match = IGDBService.enrich_concept(concept)
+                    if new_match and new_match.igdb_id != old_igdb_id:
+                        self.stdout.write(
+                            f'  New match: IGDB #{new_match.igdb_id} "{new_match.igdb_name}" '
+                            f'({new_match.match_method}, {new_match.match_confidence:.0%}) [{new_match.status}]'
+                        )
+                        if new_match.status == 'pending_review':
+                            self.stdout.write('  New match is also pending. Decide now:')
+                            # Replace current match and let the loop continue
+                            matches[idx] = new_match
+                            continue
+                        else:
+                            self.stdout.write(self.style.SUCCESS('  Auto-accepted.'))
+                    elif new_match and new_match.igdb_id == old_igdb_id:
+                        self.stdout.write('  Re-match found the same game. Use [s]earch + [m]anual to assign a different one, or [n]ext to skip.')
+                        matches[idx] = new_match
+                        continue
+                    else:
+                        self.stdout.write('  No alternative match found.')
+                    rejected += 1
+                    break
+
+                elif action == 'n':
+                    self.stdout.write('  Skipped.')
+                    skipped += 1
+                    break
+
+                elif action == 'q':
+                    self._print_review_summary(approved, rejected, reassigned, skipped)
+                    return
+
+                elif action.startswith('s ') or action.startswith('s\t'):
+                    query = action[2:].strip()
+                    if not query:
+                        self.stdout.write('  Usage: s <search query>')
+                        continue
+                    self.stdout.write(f'  Searching IGDB for "{query}"...')
+                    results = IGDBService.search_game(query, limit=10, platform_filter=True)
+                    exact = IGDBService.search_by_exact_name(query, limit=10)
+                    # Deduplicate
+                    seen = {r['id'] for r in (results or [])}
+                    extra = [r for r in (exact or []) if r['id'] not in seen]
+                    all_results = (results or []) + extra
+                    if all_results:
+                        for r in all_results:
+                            self.stdout.write(self._format_game_result(r, current_igdb_id=match.igdb_id))
+                    else:
+                        self.stdout.write('  No results found.')
+
+                elif action.startswith('m ') or action.startswith('m\t'):
+                    try:
+                        new_igdb_id = int(action[2:].strip())
+                    except ValueError:
+                        self.stdout.write('  Usage: m <igdb_id> (number)')
+                        continue
+                    self.stdout.write(f'  Fetching IGDB #{new_igdb_id}...')
+                    igdb_data = IGDBService.get_game_details(new_igdb_id)
+                    if not igdb_data:
+                        self.stdout.write(self.style.ERROR(f'  IGDB #{new_igdb_id} not found.'))
+                        continue
+                    self.stdout.write(f'  Found: "{igdb_data.get("name")}"')
+                    # Delete old match and create new one
+                    match.delete()
+                    new_match = IGDBService.process_match(concept, igdb_data, 1.0, 'manual')
+                    self.stdout.write(self.style.SUCCESS(
+                        f'  Reassigned to IGDB #{new_igdb_id} "{igdb_data.get("name")}" [{new_match.status}]'
+                    ))
+                    reassigned += 1
+                    break
+
+                else:
+                    self.stdout.write('  Commands: [a]pprove  [r]eject  [s]earch <query>  [m]anual <igdb_id>  [n]ext  [q]uit')
+
+            idx += 1
+            self.stdout.write('')
+
+        self._print_review_summary(approved, rejected, reassigned, skipped)
+
+    def _print_review_summary(self, approved, rejected, reassigned, skipped):
+        self.stdout.write('')
+        self.stdout.write(self.style.SUCCESS('Review Complete'))
+        self.stdout.write(f'  Approved:    {approved}')
+        self.stdout.write(f'  Rejected:    {rejected}')
+        self.stdout.write(f'  Reassigned:  {reassigned}')
+        self.stdout.write(f'  Skipped:     {skipped}')
 
     # -------------------------------------------------------------------
     # Search mode: search IGDB and display results

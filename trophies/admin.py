@@ -2234,14 +2234,13 @@ class IGDBMatchAdmin(admin.ModelAdmin):
             count += 1
         messages.success(request, f'Approved {count} match(es) and applied enrichment.')
 
-    @admin.action(description='Reject selected matches')
+    @admin.action(description='Reject and delete selected matches')
     def reject_selected(self, request, queryset):
         from trophies.services.igdb_service import IGDBService
-        count = 0
-        for match in queryset.exclude(status='rejected'):
+        count = queryset.count()
+        for match in queryset:
             IGDBService.reject_match(match)
-            count += 1
-        messages.success(request, f'Rejected {count} match(es).')
+        messages.success(request, f'Deleted {count} match(es). Run --missing to re-match them.')
 
     @admin.action(description='Re-match selected (delete and re-run)')
     def rematch_selected(self, request, queryset):

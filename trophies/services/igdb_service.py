@@ -1078,6 +1078,22 @@ class IGDBService:
                 )
 
     @classmethod
+    def _check_family_proposals(cls, igdb_match):
+        """Check if other concepts share this IGDB game and create family proposals if needed."""
+        existing_matches = (
+            IGDBMatch.objects
+            .filter(igdb_id=igdb_match.igdb_id)
+            .exclude(concept=igdb_match.concept)
+            .select_related('concept')
+        )
+        for other_match in existing_matches:
+            if not igdb_match.concept.family_id or igdb_match.concept.family_id != other_match.concept.family_id:
+                cls._create_family_proposal(
+                    igdb_match.concept, other_match.concept,
+                    igdb_match.igdb_id, igdb_match.raw_response or {},
+                )
+
+    @classmethod
     def _create_family_proposal(cls, concept_a, concept_b, igdb_id, igdb_data):
         """Create a GameFamilyProposal when two Concepts share an IGDB game but aren't in the same family."""
         from trophies.models import GameFamilyProposal
@@ -1293,9 +1309,11 @@ class IGDBService:
 
     @classmethod
     def reject_match(cls, igdb_match):
-        """Reject an IGDBMatch."""
-        igdb_match.status = 'rejected'
-        igdb_match.save(update_fields=['status'])
+        """Reject an IGDBMatch by deleting it.
+
+        The concept becomes unmatched and eligible for --missing runs.
+        """
+        igdb_match.delete()
 
     @classmethod
     def rematch_concept(cls, concept):
