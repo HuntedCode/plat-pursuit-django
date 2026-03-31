@@ -896,6 +896,17 @@ class Concept(models.Model):
     
     def update_release_date(self, date):
         if date:
+            from django.utils.dateparse import parse_datetime, parse_date
+            if isinstance(date, str):
+                parsed = parse_datetime(date) or parse_date(date)
+                if parsed is None:
+                    logger.warning(f"Could not parse release_date '{date}' for concept {self.concept_id}")
+                    return
+                if not hasattr(parsed, 'hour'):
+                    # parse_date returns a date, convert to datetime
+                    from datetime import datetime, timezone as dt_tz
+                    parsed = datetime.combine(parsed, datetime.min.time(), tzinfo=dt_tz.utc)
+                date = parsed
             self.release_date = date
             self.save(update_fields=['release_date'])
     
