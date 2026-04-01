@@ -2,7 +2,7 @@ import re
 
 from django.core.management.base import BaseCommand
 
-from trophies.models import Concept, IGDBMatch
+from trophies.models import Concept, IGDBMatch, Stage
 from trophies.services.igdb_service import IGDBService, IGDB_PLATFORM_NAMES
 
 
@@ -60,7 +60,15 @@ class Command(BaseCommand):
         )
         parser.add_argument(
             '--review', action='store_true',
-            help='Show pending matches with alternative IGDB candidates for review',
+            help='Interactive review queue for pending matches',
+        )
+        parser.add_argument(
+            '--unmatched', action='store_true',
+            help='Interactive queue for concepts with no IGDB match',
+        )
+        parser.add_argument(
+            '--badge', action='store_true',
+            help='Filter --review or --unmatched to only concepts used in badges',
         )
 
     def handle(self, *args, **options):
@@ -76,6 +84,8 @@ class Command(BaseCommand):
             return self._handle_search(options)
         if options['review']:
             return self._handle_review(options)
+        if options['unmatched']:
+            return self._handle_unmatched(options)
         if options['manual']:
             return self._handle_manual(options)
         if options['refresh']:
@@ -90,12 +100,23 @@ class Command(BaseCommand):
     # Review mode: interactive review queue
     # -------------------------------------------------------------------
 
-    def _handle_review(self, options):
-        matches = list(
-            IGDBMatch.objects.filter(
-                status='pending_review',
-            ).select_related('concept').prefetch_related('concept__games')
+    def _get_badge_concept_ids(self):
+        """Get all concept IDs used in any badge stage."""
+        return set(
+            Stage.objects.values_list('concepts__id', flat=True)
+            .exclude(concepts__id=None)
         )
+
+    def _handle_review(self, options):
+        qs = IGDBMatch.objects.filter(
+            status='pending_review',
+        ).select_related('concept').prefetch_related('concept__games')
+
+        if options.get('badge'):
+            badge_concept_ids = self._get_badge_concept_ids()
+            qs = qs.filter(concept_id__in=badge_concept_ids)
+
+        matches = list(qs)
 
         if options.get('concept_id'):
             matches = [m for m in matches if m.concept.concept_id == options['concept_id']]
@@ -302,6 +323,161 @@ class Command(BaseCommand):
         self.stdout.write(f'  Rejected:    {rejected}')
         self.stdout.write(f'  Reassigned:  {reassigned}')
         self.stdout.write(f'  Skipped:     {skipped}')
+
+    # -------------------------------------------------------------------
+    # Unmatched mode: interactive queue for concepts with no match
+    # -------------------------------------------------------------------
+
+    def _handle_unmatched(self, options):
+        matched_ids = IGDBMatch.objects.values_list('concept_id', flat=True)
+        qs = Concept.objects.exclude(id__in=matched_ids).prefetch_related('games')
+
+        if options.get('badge'):
+            badge_concept_ids = self._get_badge_concept_ids()
+            qs = qs.filter(id__in=badge_concept_ids)
+
+        concepts = list(qs)
+
+        if options.get('concept_id'):
+            concepts = [c for c in concepts if c.concept_id == options['concept_id']]
+
+        total = len(concepts)
+        if total == 0:
+            self.stdout.write('No unmatched concepts.')
+            return
+
+        self.stdout.write(f'{total} unmatched concept(s).')
+        self.stdout.write('Commands: [s]earch <query>  [sa]earch all <query>  [m]anual <igdb_id>  [n]ext  [q]uit\n')
+
+        assigned = 0
+        skipped = 0
+        idx = 0
+
+        while idx < len(concepts):
+            concept = concepts[idx]
+
+            concept_platforms = set()
+            for game in concept.games.all():
+                for p in (game.title_platform or []):
+                    concept_platforms.add(p)
+
+            self.stdout.write(self.style.WARNING(
+                f'--- [{idx + 1}/{total}] {concept.concept_id} "{concept.unified_title}" ---'
+            ))
+            self.stdout.write(f'  PSN platforms:  {", ".join(sorted(concept_platforms)) or "unknown"}')
+            self.stdout.write(f'  PSN publisher:  {concept.publisher_name or "unknown"}')
+            self.stdout.write('')
+
+            while True:
+                try:
+                    action = input('  > ').strip().lower()
+                except (EOFError, KeyboardInterrupt):
+                    self.stdout.write('\n')
+                    self._print_unmatched_summary(assigned, skipped)
+                    return
+
+                if not action:
+                    continue
+
+                if action == 'n':
+                    self.stdout.write('  Skipped.')
+                    skipped += 1
+                    break
+
+                elif action == 'q':
+                    self._print_unmatched_summary(assigned, skipped)
+                    return
+
+                elif action.startswith('sa ') or action.startswith('sa\t'):
+                    query = action[3:].strip()
+                    if not query:
+                        self.stdout.write('  Usage: sa <search query>')
+                        continue
+                    self.stdout.write(f'  Searching IGDB (all platforms) for "{query}"...')
+                    results = IGDBService.search_game(query, limit=10, platform_filter=False)
+                    exact = IGDBService.search_by_exact_name(query, limit=10)
+                    seen = {r['id'] for r in (results or [])}
+                    extra = [r for r in (exact or []) if r['id'] not in seen]
+                    all_results = (results or []) + extra
+                    if all_results:
+                        for r in all_results:
+                            self.stdout.write(self._format_game_result(r))
+                    else:
+                        self.stdout.write('  No results found.')
+
+                elif action.startswith('s ') or action.startswith('s\t'):
+                    query = action[2:].strip()
+                    if not query:
+                        self.stdout.write('  Usage: s <search query>')
+                        continue
+                    self.stdout.write(f'  Searching IGDB (PlayStation) for "{query}"...')
+                    results = IGDBService.search_game(query, limit=10, platform_filter=True)
+                    exact = IGDBService.search_by_exact_name(query, limit=10)
+                    seen = {r['id'] for r in (results or [])}
+                    extra = [r for r in (exact or []) if r['id'] not in seen]
+                    all_results = (results or []) + extra
+                    if all_results:
+                        for r in all_results:
+                            self.stdout.write(self._format_game_result(r))
+                    else:
+                        self.stdout.write('  No results found.')
+
+                elif action.startswith('m ') or action.startswith('m\t'):
+                    try:
+                        new_igdb_id = int(action[2:].strip())
+                    except ValueError:
+                        self.stdout.write('  Usage: m <igdb_id> (number)')
+                        continue
+                    self.stdout.write(f'  Fetching IGDB #{new_igdb_id}...')
+                    igdb_data = IGDBService.get_game_details(new_igdb_id)
+                    if not igdb_data:
+                        self.stdout.write(self.style.ERROR(f'  IGDB #{new_igdb_id} not found.'))
+                        continue
+
+                    self.stdout.write(f'  Name:      "{igdb_data.get("name")}"')
+                    self.stdout.write(f'  Entry:     {self._format_game_result(igdb_data).strip()}')
+                    ic_devs = []
+                    ic_pubs = []
+                    for ic in igdb_data.get('involved_companies', []):
+                        co = ic.get('company', {})
+                        name = co.get('name', '') if isinstance(co, dict) else ''
+                        if name and ic.get('developer'):
+                            ic_devs.append(name)
+                        if name and ic.get('publisher'):
+                            ic_pubs.append(name)
+                    self.stdout.write(f'  Developer: {", ".join(ic_devs) or "unknown"}')
+                    self.stdout.write(f'  Publisher: {", ".join(ic_pubs) or "unknown"}')
+
+                    try:
+                        confirm = input('  Assign this match? [y/n] > ').strip().lower()
+                    except (EOFError, KeyboardInterrupt):
+                        self.stdout.write('\n')
+                        self._print_unmatched_summary(assigned, skipped)
+                        return
+
+                    if confirm == 'y':
+                        new_match = IGDBService.process_match(concept, igdb_data, 1.0, 'manual')
+                        self.stdout.write(self.style.SUCCESS(
+                            f'  Assigned IGDB #{new_igdb_id} "{igdb_data.get("name")}" [{new_match.status}]'
+                        ))
+                        assigned += 1
+                        break
+                    else:
+                        self.stdout.write('  Cancelled.')
+
+                else:
+                    self.stdout.write('  Commands: [s]earch <query>  [sa] search all <query>  [m]anual <igdb_id>  [n]ext  [q]uit')
+
+            idx += 1
+            self.stdout.write('')
+
+        self._print_unmatched_summary(assigned, skipped)
+
+    def _print_unmatched_summary(self, assigned, skipped):
+        self.stdout.write('')
+        self.stdout.write(self.style.SUCCESS('Unmatched Review Complete'))
+        self.stdout.write(f'  Assigned:  {assigned}')
+        self.stdout.write(f'  Skipped:   {skipped}')
 
     # -------------------------------------------------------------------
     # Search mode: search IGDB and display results
