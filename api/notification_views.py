@@ -896,12 +896,13 @@ class NotificationRatingView(APIView):
         # Get user's profile
         profile = getattr(request.user, 'profile', None)
 
-        # Check for existing rating
+        # Check for existing base game rating
         existing_rating = None
         if profile:
             existing_rating = UserConceptRating.objects.filter(
                 profile=profile,
-                concept=concept
+                concept=concept,
+                concept_trophy_group__isnull=True,
             ).first()
 
         # Get community averages
@@ -959,9 +960,10 @@ class NotificationRatingView(APIView):
                 status=http_status.HTTP_400_BAD_REQUEST
             )
 
-        from trophies.models import Concept, UserConceptRating
+        from trophies.models import Concept, ConceptTrophyGroup, UserConceptRating
         from trophies.forms import UserConceptRatingForm
         from trophies.services.rating_service import RatingService
+        from trophies.services.concept_trophy_group_service import ConceptTrophyGroupService
 
         try:
             concept = Concept.objects.get(id=concept_id)
@@ -978,10 +980,26 @@ class NotificationRatingView(APIView):
                 status=http_status.HTTP_400_BAD_REQUEST
             )
 
-        # Get or create rating
+        # Resolve default trophy group for access control and cache invalidation
+        ctg = ConceptTrophyGroup.objects.filter(
+            concept=concept, trophy_group_id='default',
+        ).first()
+        if not ctg:
+            return Response(
+                {'error': 'No trophy data available for this game.'},
+                status=http_status.HTTP_400_BAD_REQUEST
+            )
+
+        # Access control: must have earned the platinum
+        can, reason = ConceptTrophyGroupService.can_rate_group(profile, concept, ctg)
+        if not can:
+            return Response({'error': reason}, status=http_status.HTTP_403_FORBIDDEN)
+
+        # Look up existing base game rating (concept_trophy_group=None for backward compat)
         existing_rating = UserConceptRating.objects.filter(
             profile=profile,
-            concept=concept
+            concept=concept,
+            concept_trophy_group__isnull=True,
         ).first()
 
         form = UserConceptRatingForm(request.data, instance=existing_rating)
@@ -990,10 +1008,12 @@ class NotificationRatingView(APIView):
             rating = form.save(commit=False)
             rating.profile = profile
             rating.concept = concept
+            rating.concept_trophy_group = None
             rating.save()
 
-            # Invalidate cache
+            # Invalidate caches
             RatingService.invalidate_cache(concept)
+            RatingService.invalidate_group_cache(concept, ctg)
 
             # Get updated averages
             updated_averages = RatingService.get_community_averages(concept)

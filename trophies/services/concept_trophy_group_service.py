@@ -318,28 +318,29 @@ class ConceptTrophyGroupService:
             return False, "You must be logged in to write a review."
         if not profile.is_linked:
             return False, "You must link a PSN profile to write a review."
-        if not profile.guidelines_agreed:
-            return False, "You must agree to the community guidelines before writing a review."
 
+        # Check game ownership before guidelines so the user sees the real
+        # barrier first (e.g. "game not on trophy list") instead of being
+        # asked to agree to guidelines for a game they can't review anyway.
         if concept_trophy_group.trophy_group_id == 'default':
-            # Base game: must have any ProfileGame for this concept
             has_game = ProfileGame.objects.filter(
                 profile=profile,
                 game__concept=concept,
             ).exists()
-            if has_game:
-                return True, None
-            return False, "This game must be on your trophy list to write a review."
+            if not has_game:
+                return False, "This game must be on your trophy list to write a review."
+        else:
+            group_id = concept_trophy_group.trophy_group_id
+            has_earned = EarnedTrophy.objects.filter(
+                profile=profile,
+                trophy__game__concept=concept,
+                trophy__trophy_group_id=group_id,
+                earned=True,
+            ).exists()
+            if not has_earned:
+                return False, "Earn at least one trophy in this DLC to write a review."
 
-        # DLC: must have 1+ earned trophy in that group
-        group_id = concept_trophy_group.trophy_group_id
-        has_earned = EarnedTrophy.objects.filter(
-            profile=profile,
-            trophy__game__concept=concept,
-            trophy__trophy_group_id=group_id,
-            earned=True,
-        ).exists()
+        if not profile.guidelines_agreed:
+            return False, "You must agree to the community guidelines before writing a review."
 
-        if has_earned:
-            return True, None
-        return False, "Earn at least one trophy in this DLC to write a review."
+        return True, None

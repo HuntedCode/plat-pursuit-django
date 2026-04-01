@@ -200,6 +200,11 @@ class ReviewHubDetailView(ProfileHotbarMixin, BackgroundContextMixin, DetailView
             )
             context['can_review'] = can_review
             context['can_review_reason'] = can_review_reason
+            # True only when guidelines are the sole remaining barrier
+            context['needs_guidelines'] = (
+                not can_review and not profile.guidelines_agreed
+                and can_review_reason == "You must agree to the community guidelines before writing a review."
+            )
 
             # Can rate?
             can_rate, can_rate_reason = (

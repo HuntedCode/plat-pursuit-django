@@ -41,6 +41,16 @@ PlatPursuit.ReviewHub = {
         // Expose confirmGuidelines globally for the modal onclick
         window.confirmGuidelines = () => this.confirmGuidelines();
 
+        // Clear stale pending action if user dismisses guidelines modal without agreeing
+        const guidelinesModal = document.getElementById('guidelines-agreement-modal');
+        if (guidelinesModal) {
+            guidelinesModal.addEventListener('close', () => {
+                if (!this.guidelinesAgreed && this._pendingAction) {
+                    this._pendingAction = null;
+                }
+            });
+        }
+
         this.initReviewFeed();
         this.initSortButtons();
         this.initReviewForm();
@@ -973,11 +983,28 @@ PlatPursuit.ReviewHub = {
                 }
             } catch (error) {
                 const errData = await error.response?.json().catch(() => null);
-                PlatPursuit.ToastManager.error(errData?.error || 'Failed to submit rating.');
+                PlatPursuit.ToastManager.error(
+                    this._extractErrorMessage(errData, 'Failed to submit rating.')
+                );
             } finally {
                 if (submitBtn) submitBtn.disabled = false;
             }
         });
+    },
+
+    // ------------------------------------------------------------------ //
+    //  Error Helpers
+    // ------------------------------------------------------------------ //
+
+    _extractErrorMessage(errData, fallback) {
+        if (!errData) return fallback;
+        if (errData.error) return errData.error;
+        // Form validation errors come as {errors: {field: [messages]}}
+        if (errData.errors && typeof errData.errors === 'object') {
+            const firstField = Object.values(errData.errors)[0];
+            if (Array.isArray(firstField) && firstField.length) return firstField[0];
+        }
+        return fallback;
     },
 
     // ------------------------------------------------------------------ //

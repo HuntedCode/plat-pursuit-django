@@ -48,16 +48,12 @@ class ReviewService:
         """
         from trophies.models import Review
 
-        # Access check
+        # Access check (includes guidelines_agreed verification)
         can, reason = ConceptTrophyGroupService.can_review_group(
             profile, concept, concept_trophy_group,
         )
         if not can:
             return None, reason
-
-        # Guidelines agreement check
-        if not profile.guidelines_agreed:
-            return None, "You must agree to the community guidelines before posting a review."
 
         # Validate body length (raw text, stripped whitespace)
         stripped = body.strip() if body else ''

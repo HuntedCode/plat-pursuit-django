@@ -47,6 +47,16 @@ PlatPursuit.RateMyGames = {
         // Expose confirmGuidelines globally for the modal onclick
         window.confirmGuidelines = () => this.confirmGuidelines();
 
+        // Clear stale pending action if user dismisses guidelines modal without agreeing
+        const guidelinesModal = document.getElementById('guidelines-agreement-modal');
+        if (guidelinesModal) {
+            guidelinesModal.addEventListener('close', () => {
+                if (!this.guidelinesAgreed && this._pendingAction) {
+                    this._pendingAction = null;
+                }
+            });
+        }
+
         this.initFilterButtons();
         this.initQueueTabs();
         this.initRecommendButtons();
@@ -975,7 +985,7 @@ PlatPursuit.RateMyGames = {
             let didReview = false;
 
             try {
-                // Always submit rating (create or update)
+                // Rating never requires guidelines: submit it first
                 const payload = this.getRatingPayload();
                 if (payload) {
                     await PlatPursuit.API.post(
@@ -987,7 +997,7 @@ PlatPursuit.RateMyGames = {
 
                 // Handle review: create new or update existing
                 if (this.isEditingReview && game.existing_review && hasValidReview) {
-                    // Update existing review via PUT
+                    // Update existing review via PUT (no guidelines needed for edits)
                     await PlatPursuit.API.put(
                         `/api/v1/reviews/${game.existing_review.id}/`,
                         { body: bodyText, recommended: this.recommended },
@@ -995,8 +1005,35 @@ PlatPursuit.RateMyGames = {
                     game.existing_review.body = bodyText;
                     game.existing_review.recommended = this.recommended;
                     didReview = true;
-                } else if (!game.has_review && this.recommended !== null && bodyText.length >= 50) {
-                    // Create new review
+                } else if (willCreateReview) {
+                    if (!this.guidelinesAgreed) {
+                        // Rating saved; prompt for guidelines before creating the review.
+                        // If user dismisses the modal, rating is still saved.
+                        const rateWord = game.has_rating ? 'updated' : 'rated';
+                        PlatPursuit.ToastManager.success(
+                            `${game.unified_title} ${rateWord}! Agree to guidelines to also post your review.`
+                        );
+                        if (submitBtn) submitBtn.disabled = false;
+                        this.checkGuidelines(async () => {
+                            if (submitBtn) submitBtn.disabled = true;
+                            try {
+                                await PlatPursuit.API.post(
+                                    `/api/v1/reviews/${game.concept_id}/group/${game.trophy_group_id}/create/`,
+                                    { body: bodyText, recommended: this.recommended },
+                                );
+                                PlatPursuit.ToastManager.success(`${game.unified_title} reviewed!`);
+                                this.advance();
+                            } catch (err) {
+                                const errData = await err.response?.json().catch(() => null);
+                                PlatPursuit.ToastManager.error(
+                                    this._extractErrorMessage(errData, 'Failed to submit review.')
+                                );
+                                if (submitBtn) submitBtn.disabled = false;
+                            }
+                        });
+                        return;
+                    }
+                    // Guidelines already agreed: submit review directly
                     await PlatPursuit.API.post(
                         `/api/v1/reviews/${game.concept_id}/group/${game.trophy_group_id}/create/`,
                         { body: bodyText, recommended: this.recommended },
@@ -1018,16 +1055,15 @@ PlatPursuit.RateMyGames = {
 
             } catch (error) {
                 const errData = await error.response?.json().catch(() => null);
-                PlatPursuit.ToastManager.error(errData?.error || 'Failed to submit. Please try again.');
+                PlatPursuit.ToastManager.error(
+                    this._extractErrorMessage(errData, 'Failed to submit. Please try again.')
+                );
                 if (submitBtn) submitBtn.disabled = false;
             }
         };
 
-        if (willCreateReview) {
-            this.checkGuidelines(doSubmit);
-        } else {
-            doSubmit();
-        }
+        // Always call doSubmit directly; guidelines are checked inside for reviews only
+        doSubmit();
     },
 
     submitReviewOnly() {
@@ -1092,7 +1128,9 @@ PlatPursuit.RateMyGames = {
                 }
             } catch (error) {
                 const errData = await error.response?.json().catch(() => null);
-                PlatPursuit.ToastManager.error(errData?.error || 'Failed to submit review. Please try again.');
+                PlatPursuit.ToastManager.error(
+                    this._extractErrorMessage(errData, 'Failed to submit review. Please try again.')
+                );
                 if (reviewBtn) reviewBtn.disabled = false;
             }
         };
@@ -1103,6 +1141,21 @@ PlatPursuit.RateMyGames = {
         } else {
             doReviewSubmit();
         }
+    },
+
+    // ------------------------------------------------------------------ //
+    //  Error Helpers
+    // ------------------------------------------------------------------ //
+
+    _extractErrorMessage(errData, fallback) {
+        if (!errData) return fallback;
+        if (errData.error) return errData.error;
+        // Form validation errors come as {errors: {field: [messages]}}
+        if (errData.errors && typeof errData.errors === 'object') {
+            const firstField = Object.values(errData.errors)[0];
+            if (Array.isArray(firstField) && firstField.length) return firstField[0];
+        }
+        return fallback;
     },
 
     // ------------------------------------------------------------------ //
