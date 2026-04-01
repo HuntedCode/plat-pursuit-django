@@ -69,15 +69,24 @@ def _get_concept_and_group(concept_id, group_id_str):
             status=status.HTTP_403_FORBIDDEN,
         )
 
-    try:
-        ctg = ConceptTrophyGroup.objects.get(
-            concept=concept, trophy_group_id=group_id_str,
+    if group_id_str == 'default':
+        # Auto-create the base game group if it doesn't exist yet (may not
+        # have been synced). Matches ConceptTrophyGroupService.ensure_base_group().
+        ctg, _ = ConceptTrophyGroup.objects.get_or_create(
+            concept=concept,
+            trophy_group_id='default',
+            defaults={'display_name': 'Base Game', 'sort_order': 0},
         )
-    except ConceptTrophyGroup.DoesNotExist:
-        return None, None, Response(
-            {'error': 'Trophy group not found.'},
-            status=status.HTTP_404_NOT_FOUND,
-        )
+    else:
+        try:
+            ctg = ConceptTrophyGroup.objects.get(
+                concept=concept, trophy_group_id=group_id_str,
+            )
+        except ConceptTrophyGroup.DoesNotExist:
+            return None, None, Response(
+                {'error': 'Trophy group not found.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
 
     return concept, ctg, None
 
