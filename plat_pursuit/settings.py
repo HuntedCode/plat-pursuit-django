@@ -116,7 +116,10 @@ SECURE_HSTS_PRELOAD = True
 SECURE_CONTENT_TYPE_NOSNIFF = True     # X-Content-Type-Options: nosniff
 X_FRAME_OPTIONS = 'DENY'               # Prevent framing entirely
 CSRF_COOKIE_SECURE = True
+CSRF_COOKIE_HTTPONLY = True            # Safari ITP drops non-HttpOnly cookies more aggressively
+CSRF_COOKIE_SAMESITE = 'Lax'
 SESSION_COOKIE_SECURE = True
+SESSION_COOKIE_SAMESITE = 'Lax'
 
 # ─── Content Security Policy (django-csp) ────────────────────────────────────
 # Pragmatic CSP: allows inline scripts/styles (needed for template <script>
