@@ -445,19 +445,7 @@ class ShareImageManager {
             return;
         }
 
-        const promptId = this.getTrackingId();
-        const shouldPrompt = !this.ratingData.hasRating
-            && this.ratingData.conceptId
-            && !this.ratingData.isShovelware
-            && !ShareImageManager._promptedIds.has(promptId);
-
-        if (shouldPrompt) {
-            ShareImageManager._promptedIds.add(promptId);
-            this._showRatingPrompt(format);
-            return;
-        }
-
-        await this._doGenerateAndDownload(format);
+        this._proceedAfterThemeCheck(format);
     }
 
     /**
@@ -466,8 +454,8 @@ class ShareImageManager {
     _showThemeNudge(format) {
         const modal = document.getElementById('theme-nudge-modal');
         if (!modal) {
-            // No modal in DOM, proceed with download
-            this._doGenerateAndDownload(format);
+            // No modal in DOM, proceed to rating check / download
+            this._proceedAfterThemeCheck(format);
             return;
         }
 
@@ -489,10 +477,29 @@ class ShareImageManager {
 
         newContinue?.addEventListener('click', () => {
             modal.close();
-            this._doGenerateAndDownload(format);
+            this._proceedAfterThemeCheck(format);
         });
 
         modal.showModal();
+    }
+
+    /**
+     * Continue download flow after theme check, running the rating prompt if needed.
+     */
+    _proceedAfterThemeCheck(format) {
+        const promptId = this.getTrackingId();
+        const shouldPrompt = !this.ratingData.hasRating
+            && this.ratingData.conceptId
+            && !this.ratingData.isShovelware
+            && !ShareImageManager._promptedIds.has(promptId);
+
+        if (shouldPrompt) {
+            ShareImageManager._promptedIds.add(promptId);
+            this._showRatingPrompt(format);
+            return;
+        }
+
+        this._doGenerateAndDownload(format);
     }
 
     /**
@@ -637,7 +644,7 @@ class ShareImageManager {
                 submitBtn.disabled = true;
             }
 
-            await PlatPursuit.API.post(
+            const data = await PlatPursuit.API.post(
                 `/api/v1/reviews/${this.ratingData.conceptId}/group/default/rate/`,
                 payload
             );
@@ -645,7 +652,12 @@ class ShareImageManager {
             // Mark as rated so future downloads skip the prompt
             this.ratingData.hasRating = true;
 
-            PlatPursuit.ToastManager.success('Rating submitted! Refreshing your card...');
+            // Update the game detail page's community ratings grid if present
+            if (data.community_averages) {
+                this._updatePageCommunityRatings(data.community_averages);
+            }
+
+            PlatPursuit.ToastManager.success(data.message || 'Rating submitted! Refreshing your card...');
             modal?.close();
 
             // Refresh preview so the card shows the new rating pills
@@ -657,8 +669,9 @@ class ShareImageManager {
             console.error('Rating submission failed:', error);
             let errData = null;
             try { errData = await error.response?.json?.(); } catch { /* ignore parse errors */ }
-            const msg = errData?.error || 'Failed to submit rating. You can skip and download without it.';
-            PlatPursuit.ToastManager.error(msg);
+            PlatPursuit.ToastManager.error(
+                this._extractErrorMessage(errData, 'Failed to submit rating. You can skip and download without it.')
+            );
         } finally {
             if (submitBtn) {
                 submitBtn.classList.remove('loading');
@@ -755,6 +768,105 @@ class ShareImageManager {
         a.click();
         document.body.removeChild(a);
         URL.revokeObjectURL(downloadUrl);
+    }
+
+    /**
+     * Update the game detail page's community ratings grid after a share card rating.
+     * Uses data-stat attributes added to ratings_grid.html. No-op if the grid isn't on the page.
+     */
+    _updatePageCommunityRatings(avg) {
+        if (!avg) return;
+
+        // Target the first (base game) community tab panel
+        const panel = document.querySelector('.community-tab-panel');
+        if (!panel) return;
+
+        const grid = panel.querySelector('[data-ratings-grid]');
+        if (!grid) return;
+
+        const colorThresholds = {
+            difficulty:  [[4, 'text-success'], [8, 'text-warning'], [Infinity, 'text-error']],
+            grindiness:  [[4, 'text-success'], [8, 'text-warning'], [Infinity, 'text-error']],
+            hours:       [[25, 'text-success'], [75, 'text-warning'], [100, 'text-accent'], [Infinity, 'text-error']],
+            fun:         [[4, 'text-error'], [8, 'text-warning'], [Infinity, 'text-success']],
+            overall:     [[2, 'text-error'], [4, 'text-warning'], [Infinity, 'text-success']],
+        };
+        const barThresholds = {
+            difficulty:  [[4, 'progress-success'], [8, 'progress-warning'], [Infinity, 'progress-error']],
+            grindiness:  [[4, 'progress-success'], [8, 'progress-warning'], [Infinity, 'progress-error']],
+            hours:       [[25, 'progress-success'], [75, 'progress-warning'], [100, 'progress-accent'], [Infinity, 'progress-error']],
+            fun:         [[4, 'progress-error'], [8, 'progress-warning'], [Infinity, 'progress-success']],
+            overall:     [[2, 'progress-error'], [4, 'progress-warning'], [Infinity, 'progress-success']],
+        };
+
+        const statData = {
+            difficulty: avg.avg_difficulty,
+            grindiness: avg.avg_grindiness,
+            hours: avg.avg_hours,
+            fun: avg.avg_fun,
+            overall: avg.avg_rating,
+        };
+
+        const suffixHtml = {
+            hours: '<span class="text-[0.6rem] text-base-content/40 font-normal">h</span>',
+            overall: '<span class="text-[0.6rem] text-base-content/40 font-normal">/5</span>',
+        };
+
+        const formatValue = (key, val) => {
+            if (key === 'hours') return Math.round(val).toLocaleString();
+            return val.toFixed(1);
+        };
+
+        const pickClass = (val, thresholds) => {
+            for (const [max, cls] of thresholds) {
+                if (val < max) return cls;
+            }
+            return thresholds[thresholds.length - 1][1];
+        };
+
+        for (const [key, val] of Object.entries(statData)) {
+            if (val == null) continue;
+            const card = grid.querySelector(`[data-stat="${key}"]`);
+            if (!card) continue;
+
+            const valEl = card.querySelector('[data-stat-value]');
+            if (valEl) {
+                const formatted = formatValue(key, val);
+                const suffix = suffixHtml[key] || '';
+                valEl.innerHTML = formatted + suffix;
+                valEl.className = valEl.className
+                    .replace(/text-(success|warning|error|accent)/g, '')
+                    .replace(/text-base-content\/20/g, '');
+                valEl.classList.add(pickClass(val, colorThresholds[key]));
+            }
+
+            const bar = card.querySelector('progress');
+            if (bar) {
+                bar.value = val;
+                bar.className = bar.className.replace(/progress-(success|warning|error|accent)/g, '');
+                bar.classList.add(pickClass(val, barThresholds[key]));
+            }
+        }
+
+        // Update count text
+        const countEl = panel.querySelector('[data-ratings-count]');
+        if (countEl && avg.count != null) {
+            countEl.textContent = `Based on ${avg.count.toLocaleString()} community rating${avg.count === 1 ? '' : 's'}.`;
+        }
+    }
+
+    /**
+     * Extract a human-readable error message from an API error response.
+     * Handles both {error: "msg"} and {errors: {field: ["msg"]}} formats.
+     */
+    _extractErrorMessage(errData, fallback) {
+        if (!errData) return fallback;
+        if (errData.error) return errData.error;
+        if (errData.errors && typeof errData.errors === 'object') {
+            const firstField = Object.values(errData.errors)[0];
+            if (Array.isArray(firstField) && firstField.length) return firstField[0];
+        }
+        return fallback;
     }
 
     /**

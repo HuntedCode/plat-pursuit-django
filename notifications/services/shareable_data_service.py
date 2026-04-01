@@ -129,7 +129,10 @@ class ShareableDataService:
     @classmethod
     def get_user_rating_for_game(cls, profile, game):
         """
-        Get user's personal rating for a game's concept.
+        Get user's base-game rating for a game's concept.
+
+        Filters to concept_trophy_group=NULL (base game) to match the
+        convention used by RatingService and GroupRatingView.
 
         Args:
             profile: Profile instance
@@ -143,7 +146,8 @@ class ShareableDataService:
 
         rating = UserConceptRating.objects.filter(
             profile=profile,
-            concept=game.concept
+            concept=game.concept,
+            concept_trophy_group__isnull=True,
         ).first()
 
         if not rating:
