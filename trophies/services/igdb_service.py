@@ -568,15 +568,40 @@ class IGDBService:
 
     @classmethod
     def _pick_best_match(cls, concept, results, method):
-        """Score all results and return the best match above threshold.
+        """Score all results and return the best match with platform overlap.
+
+        Requires at least one PlayStation platform in common between the
+        concept's games and the IGDB result. No confidence floor: any
+        match with platform overlap is surfaced for review.
 
         Returns:
             tuple: (igdb_data, confidence, method) or None
         """
+        # Get concept's platform IDs for filtering
+        concept_plat_ids = set()
+        try:
+            for game in concept.games.all():
+                for plat_str in (game.title_platform or []):
+                    igdb_id_for_plat = PLAT_TO_IGDB_ID.get(plat_str)
+                    if igdb_id_for_plat:
+                        concept_plat_ids.add(igdb_id_for_plat)
+        except Exception:
+            pass
+
         scored = []
         for game in results:
+            # Require platform overlap (skip VR-only check)
+            if concept_plat_ids:
+                igdb_plat_ids = set()
+                for p in game.get('platforms', []):
+                    pid = p if isinstance(p, int) else p.get('id') if isinstance(p, dict) else None
+                    if pid:
+                        igdb_plat_ids.add(pid)
+                if not (concept_plat_ids & igdb_plat_ids):
+                    continue
+
             confidence = cls._calculate_confidence(concept, game, method)
-            if confidence >= settings.IGDB_REVIEW_THRESHOLD:
+            if confidence > 0:
                 scored.append((game, confidence))
 
         if not scored:
@@ -588,10 +613,8 @@ class IGDBService:
         best_game, best_confidence = scored[0]
         if len(scored) > 1 and (best_confidence - scored[1][1]) < 0.10:
             best_confidence -= 0.10
-            if best_confidence < settings.IGDB_REVIEW_THRESHOLD:
-                return None
 
-        return (best_game, best_confidence, method)
+        return (best_game, max(best_confidence, 0.01), method)
 
     @classmethod
     def _calculate_confidence(cls, concept, igdb_game, method):
@@ -684,36 +707,8 @@ class IGDBService:
                         base += 0.05
                         break
 
-        # Modifier: platform overlap (direct match required for auto-accept)
-        igdb_platforms = igdb_game.get('platforms', [])
-        if igdb_platforms:
-            igdb_plat_ids = set()
-            for p in igdb_platforms:
-                pid = p if isinstance(p, int) else p.get('id') if isinstance(p, dict) else None
-                if pid:
-                    igdb_plat_ids.add(pid)
-
-            # Get concept's PlayStation platforms from its games
-            concept_plat_ids = set()
-            try:
-                for game in concept.games.all():
-                    for plat_str in (game.title_platform or []):
-                        igdb_id_for_plat = PLAT_TO_IGDB_ID.get(plat_str)
-                        if igdb_id_for_plat:
-                            concept_plat_ids.add(igdb_id_for_plat)
-            except Exception:
-                pass
-
-            if concept_plat_ids:
-                overlap = concept_plat_ids & igdb_plat_ids
-                if overlap:
-                    base += 0.05
-                else:
-                    # No direct platform overlap: cap at pending_review
-                    base = min(base, settings.IGDB_AUTO_ACCEPT_THRESHOLD - 0.01)
-                    if not igdb_plat_ids & set(PS_PLATFORM_IDS):
-                        # No PS platforms at all on IGDB
-                        base -= 0.10
+        # Platform overlap is enforced by _pick_best_match (hard requirement).
+        # No additional modifier needed here.
 
         # Modifier: non-main game penalty (DLC/bundles score lower)
         category = igdb_game.get('category', 0)
