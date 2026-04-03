@@ -488,6 +488,7 @@ class Game(models.Model):
     is_obtainable= models.BooleanField(default=True)
     is_delisted = models.BooleanField(default=False)
     has_online_trophies = models.BooleanField(default=False)
+    has_buggy_trophies = models.BooleanField(default=False)
 
     objects = GameManager()
 
@@ -503,6 +504,7 @@ class Game(models.Model):
             models.Index(fields=['is_delisted'], name='game_delisted_idx'),
             models.Index(fields=['is_regional'], name='game_regional_idx'),
             models.Index(fields=['has_online_trophies'], name='game_online_trophies_idx'),
+            models.Index(fields=['has_buggy_trophies'], name='game_buggy_trophies_idx'),
         ]
     
     def save(self, *args, **kwargs):
@@ -3985,3 +3987,56 @@ class IGDBMatch(models.Model):
 
     def __str__(self):
         return f"{self.concept} -> {self.igdb_name} ({self.get_status_display()}, {self.match_confidence:.0%})"
+
+
+class GameFlag(models.Model):
+    """Community flag for game data quality issues. Reviewed by staff in Django admin."""
+
+    FLAG_TYPES = [
+        ('delisted', 'Game has been delisted'),
+        ('not_delisted', 'Game is NOT delisted'),
+        ('unobtainable', 'Trophies are unobtainable'),
+        ('obtainable', 'Trophies ARE obtainable'),
+        ('is_shovelware', 'Game is shovelware'),
+        ('not_shovelware', 'Game is NOT shovelware'),
+        ('missing_vr', 'Game supports VR but is not tagged'),
+        ('has_online_trophies', 'Game has online-required trophies'),
+        ('no_online_trophies', 'Game does NOT have online trophies'),
+        ('has_buggy_trophies', 'Game has buggy/broken trophies'),
+        ('buggy_trophies_resolved', 'Buggy trophies have been fixed'),
+        ('region_incorrect', 'Regional info is incorrect'),
+    ]
+
+    FLAG_STATUS = [
+        ('pending', 'Pending Review'),
+        ('approved', 'Approved'),
+        ('dismissed', 'Dismissed'),
+    ]
+
+    game = models.ForeignKey(
+        Game, on_delete=models.CASCADE, related_name='flags'
+    )
+    reporter = models.ForeignKey(
+        'Profile', on_delete=models.CASCADE, related_name='submitted_game_flags'
+    )
+    flag_type = models.CharField(max_length=30, choices=FLAG_TYPES)
+    details = models.TextField(max_length=500, blank=True, help_text='Optional context for the flag.')
+    status = models.CharField(max_length=20, choices=FLAG_STATUS, default='pending')
+    created_at = models.DateTimeField(auto_now_add=True)
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    reviewed_by = models.ForeignKey(
+        CustomUser, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='reviewed_game_flags'
+    )
+    admin_notes = models.TextField(blank=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=['status', '-created_at'], name='gameflag_status_idx'),
+            models.Index(fields=['game'], name='gameflag_game_idx'),
+            models.Index(fields=['reporter'], name='gameflag_reporter_idx'),
+            models.Index(fields=['flag_type'], name='gameflag_type_idx'),
+        ]
+
+    def __str__(self):
+        return f"{self.get_flag_type_display()} on {self.game.title_name} by {self.reporter.psn_username}"

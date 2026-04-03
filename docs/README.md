@@ -42,6 +42,7 @@ Self-contained feature documentation. Read the relevant doc when working on that
 | [Checklist System](features/checklist-system.md) | Checklist CRUD, sections, items, voting, sharing |
 | [Challenge Systems](features/challenge-systems.md) | A-Z, Calendar, and Genre platinum challenges |
 | [Comment System](features/comment-system.md) | Comments, voting, moderation |
+| [Community Flags](features/community-flags.md) | User-submitted game data quality flags (delisted, shovelware, VR, buggy trophies) |
 | [Community Hub](features/community-hub.md) | Reviews, ratings, concept trophy groups |
 | [Dashboard](features/dashboard.md) | Module registry, customization, drag reorder |
 | [Easter Eggs](features/easter-eggs.md) | Hidden milestones, titles, and the claim API |

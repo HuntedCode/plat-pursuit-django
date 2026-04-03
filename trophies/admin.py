@@ -4,7 +4,7 @@ from django.db import transaction
 from django.db.models import Count, F, IntegerField, Q, Value
 from django.db.models.functions import Cast, Coalesce
 from datetime import timedelta
-from .models import Profile, Game, Trophy, EarnedTrophy, ProfileGame, APIAuditLog, FeaturedGame, FeaturedProfile, Concept, TitleID, TrophyGroup, ConceptTrophyGroup, UserTrophySelection, UserConceptRating, Badge, UserBadge, UserBadgeProgress, ProfileBadgeShowcase, FeaturedGuide, Stage, PublisherBlacklist, Title, UserTitle, Milestone, UserMilestone, UserMilestoneProgress, Comment, CommentVote, CommentReport, ModerationLog, BannedWord, ProfileGamification, StatType, StageStatValue, MonthlyRecap, GameList, GameListItem, GameListLike, Challenge, AZChallengeSlot, GameFamily, GameFamilyProposal, Review, ReviewVote, ReviewReply, ReviewReport, ReviewModerationLog, DashboardConfig, StageCompletionEvent, Roadmap, RoadmapTab, RoadmapStep, RoadmapStepTrophy, TrophyGuide, Company, ConceptCompany, IGDBMatch
+from .models import Profile, Game, Trophy, EarnedTrophy, ProfileGame, APIAuditLog, FeaturedGame, FeaturedProfile, Concept, TitleID, TrophyGroup, ConceptTrophyGroup, UserTrophySelection, UserConceptRating, Badge, UserBadge, UserBadgeProgress, ProfileBadgeShowcase, FeaturedGuide, Stage, PublisherBlacklist, Title, UserTitle, Milestone, UserMilestone, UserMilestoneProgress, Comment, CommentVote, CommentReport, ModerationLog, BannedWord, ProfileGamification, StatType, StageStatValue, MonthlyRecap, GameList, GameListItem, GameListLike, Challenge, AZChallengeSlot, GameFamily, GameFamilyProposal, Review, ReviewVote, ReviewReply, ReviewReport, ReviewModerationLog, DashboardConfig, StageCompletionEvent, Roadmap, RoadmapTab, RoadmapStep, RoadmapStepTrophy, TrophyGuide, Company, ConceptCompany, IGDBMatch, GameFlag
 
 
 # Register your models here.
@@ -259,9 +259,10 @@ class GameAdmin(admin.ModelAdmin):
         "shovelware_lock",
         "is_delisted",
         "has_online_trophies",
+        "has_buggy_trophies",
     )
     list_select_related = ('concept',)
-    list_filter = ("has_trophy_groups", "is_regional", RegionListFilter, 'concept_lock', 'concept_stale', 'shovelware_status', 'shovelware_lock', 'is_delisted', 'is_obtainable', "has_online_trophies")
+    list_filter = ("has_trophy_groups", "is_regional", RegionListFilter, 'concept_lock', 'concept_stale', 'shovelware_status', 'shovelware_lock', 'is_delisted', 'is_obtainable', "has_online_trophies", "has_buggy_trophies")
     search_fields = ("title_name", "np_communication_id")
     ordering = ("title_name",)
     fieldsets = (
@@ -285,6 +286,7 @@ class GameAdmin(admin.ModelAdmin):
                     "is_obtainable",
                     "is_delisted",
                     "has_online_trophies",
+                    "has_buggy_trophies",
                 )
             },
         ),
@@ -302,7 +304,7 @@ class GameAdmin(admin.ModelAdmin):
         ),
     )
     readonly_fields = ('shovelware_updated_at',)
-    actions = ['toggle_is_regional', 'add_psvr_platform', 'add_psvr2_platform', 'mark_concepts_stale', 'copy_concept_icon', 'lock_concept', 'unlock_concept', 'mark_as_shovelware', 'clear_shovelware_flag', 'reset_shovelware_auto', 'mark_unobtainable', 'mark_obtainable', 'mark_has_online_trophies', 'mark_no_online_trophies']
+    actions = ['toggle_is_regional', 'add_psvr_platform', 'add_psvr2_platform', 'mark_concepts_stale', 'copy_concept_icon', 'lock_concept', 'unlock_concept', 'mark_as_shovelware', 'clear_shovelware_flag', 'reset_shovelware_auto', 'mark_unobtainable', 'mark_obtainable', 'mark_has_online_trophies', 'mark_no_online_trophies', 'mark_has_buggy_trophies', 'mark_no_buggy_trophies']
     autocomplete_fields=['concept']
 
     @admin.action(description="Toggle is_regional for selected games")
@@ -424,6 +426,16 @@ class GameAdmin(admin.ModelAdmin):
     def mark_no_online_trophies(self, request, queryset):
         updated = queryset.filter(has_online_trophies=True).update(has_online_trophies=False)
         messages.success(request, f"Marked {updated} game(s) as not having online trophies.")
+
+    @admin.action(description="Mark as having buggy trophies")
+    def mark_has_buggy_trophies(self, request, queryset):
+        updated = queryset.filter(has_buggy_trophies=False).update(has_buggy_trophies=True)
+        messages.success(request, f"Marked {updated} game(s) as having buggy trophies.")
+
+    @admin.action(description="Mark as no buggy trophies")
+    def mark_no_buggy_trophies(self, request, queryset):
+        updated = queryset.filter(has_buggy_trophies=True).update(has_buggy_trophies=False)
+        messages.success(request, f"Marked {updated} game(s) as not having buggy trophies.")
 
     def save_model(self, request, obj, form, change):
         if change and 'concept' in form.changed_data:
@@ -2257,3 +2269,72 @@ class IGDBMatchAdmin(admin.ModelAdmin):
         if errors:
             msg += f' {errors} error(s) occurred.'
         messages.success(request, msg)
+
+
+class GameFlagStatusFilter(SimpleListFilter):
+    title = 'Status'
+    parameter_name = 'status'
+
+    def lookups(self, request, model_admin):
+        return GameFlag.FLAG_STATUS
+
+    def queryset(self, request, queryset):
+        if self.value():
+            return queryset.filter(status=self.value())
+        return queryset
+
+
+@admin.register(GameFlag)
+class GameFlagAdmin(admin.ModelAdmin):
+    list_display = [
+        'id', 'game_name', 'flag_type', 'reporter_psn', 'status',
+        'details_preview', 'created_at', 'reviewed_by',
+    ]
+    list_select_related = ('game', 'reporter', 'reviewed_by')
+    list_filter = [GameFlagStatusFilter, 'flag_type', 'created_at']
+    search_fields = ['game__title_name', 'reporter__psn_username', 'details', 'admin_notes']
+    raw_id_fields = ['game', 'reporter', 'reviewed_by']
+    readonly_fields = ['created_at', 'reviewed_at']
+    ordering = ['-created_at']
+    date_hierarchy = 'created_at'
+    actions = ['approve_selected', 'dismiss_selected']
+
+    fieldsets = (
+        ('Flag Info', {'fields': ('game', 'reporter', 'flag_type', 'details')}),
+        ('Status', {'fields': ('status', 'reviewed_at', 'reviewed_by', 'admin_notes')}),
+        ('Timestamps', {'fields': ('created_at',)}),
+    )
+
+    def game_name(self, obj):
+        return obj.game.title_name
+    game_name.short_description = 'Game'
+
+    def reporter_psn(self, obj):
+        return obj.reporter.psn_username
+    reporter_psn.short_description = 'Reporter'
+
+    def details_preview(self, obj):
+        if not obj.details:
+            return '-'
+        return obj.details[:80] + ('...' if len(obj.details) > 80 else '')
+    details_preview.short_description = 'Details'
+
+    @admin.action(description='Approve selected flags (apply game changes)')
+    def approve_selected(self, request, queryset):
+        from trophies.services.game_flag_service import GameFlagService
+        count = 0
+        with transaction.atomic():
+            for flag in queryset.filter(status='pending'):
+                GameFlagService.approve_flag(flag, request.user)
+                count += 1
+        messages.success(request, f'Approved {count} flag(s) and applied game changes.')
+
+    @admin.action(description='Dismiss selected flags')
+    def dismiss_selected(self, request, queryset):
+        from trophies.services.game_flag_service import GameFlagService
+        count = 0
+        with transaction.atomic():
+            for flag in queryset.filter(status='pending'):
+                GameFlagService.dismiss_flag(flag, request.user)
+                count += 1
+        messages.success(request, f'Dismissed {count} flag(s).')

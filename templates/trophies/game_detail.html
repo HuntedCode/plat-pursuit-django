@@ -165,4 +165,7 @@
         document.addEventListener('DOMContentLoaded', () => GameListQuickAdd.init());
     </script>
     {% endif %}
+    {% if user.is_authenticated and user.profile and user.profile.is_linked %}
+    <script src="{% static 'js/game-flag.js' %}"></script>
+    {% endif %}
 {% endblock %}

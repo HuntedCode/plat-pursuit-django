@@ -65,6 +65,7 @@ from .dashboard_views import DashboardModuleDataView, DashboardConfigUpdateView,
 from .title_views import EquipTitleAPIView
 from .user_settings_views import UpdateTimezoneAPIView, UpdateQuickSettingsAPIView
 from .game_player_views import GamePlayersAPIView
+from .game_flag_views import GameFlagView
 from .mobile_profile_views import MobileProfileView, MobileMyProfileView
 from .mobile_psn_views import MobilePSNGenerateCodeView, MobilePSNVerifyView, MobilePSNStatusView
 from .mobile_sync_views import MobileSyncStatusView, MobileTriggerSyncView
@@ -211,6 +212,9 @@ urlpatterns = [
 
     # Game players
     path('games/<str:np_communication_id>/players/', GamePlayersAPIView.as_view(), name='game-players'),
+
+    # Game flags (community data quality reports)
+    path('games/<int:game_id>/flag/', GameFlagView.as_view(), name='game-flag'),
 
     # A-Z Challenge endpoints (static paths before <int:> to avoid URL conflicts)
     path('challenges/az/', AZChallengeCreateAPIView.as_view(), name='az-challenge-create'),

@@ -120,6 +120,67 @@
                         {% endif %}
                     </div>
                 </div>
+                {# ── Status indicators ── #}
+                <div class="border-t border-base-content/10 pt-2 mt-1">
+                    <h4 class="text-xs font-semibold text-base-content/60 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z"/>
+                        </svg>
+                        Game Status
+                    </h4>
+                    <div class="flex flex-row flex-wrap gap-1.5">
+                        {% if game.is_delisted %}
+                        <div class="tooltip" data-tip="This game has been removed from the PlayStation Store.">
+                            <div class="badge badge-xs md:badge-sm badge-error font-bold gap-0.5">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"/>
+                                </svg>
+                                Delisted
+                            </div>
+                        </div>
+                        {% endif %}
+                        {% if not game.is_obtainable %}
+                        <div class="tooltip" data-tip="Trophies in this game can no longer be earned (e.g. server shutdown).">
+                            <div class="badge badge-xs md:badge-sm badge-error font-bold gap-0.5">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"/>
+                                </svg>
+                                Unobtainable
+                            </div>
+                        </div>
+                        {% endif %}
+                        {% if game.has_online_trophies %}
+                        <div class="tooltip" data-tip="This game has trophies that require an online connection.">
+                            <div class="badge badge-xs md:badge-sm badge-info font-bold gap-0.5">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M8.288 15.038a5.25 5.25 0 017.424 0M5.106 11.856c3.807-3.808 9.98-3.808 13.788 0M1.924 8.674c5.565-5.565 14.587-5.565 20.152 0M12 18.75h.007v.008H12v-.008z"/>
+                                </svg>
+                                Online Trophies
+                            </div>
+                        </div>
+                        {% endif %}
+                        {% if game.has_buggy_trophies %}
+                        <div class="tooltip" data-tip="This game has trophies that are known to be buggy or broken.">
+                            <div class="badge badge-xs md:badge-sm badge-warning font-bold gap-0.5">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 12.75c1.148 0 2.278.08 3.383.237 1.037.146 1.866.966 1.866 2.013 0 3.728-2.35 6.75-5.25 6.75S6.75 18.728 6.75 15c0-1.046.83-1.867 1.866-2.013A24.204 24.204 0 0112 12.75zm0 0c2.883 0 5.647.508 8.207 1.44a23.91 23.91 0 01-1.152-6.135l-.003-.067a3.75 3.75 0 00-1.624-2.932l-.588-.412A3.75 3.75 0 0014.772 4H9.228a3.75 3.75 0 00-2.068.624l-.588.412a3.75 3.75 0 00-1.624 2.932l-.003.067a23.91 23.91 0 01-1.152 6.135A23.403 23.403 0 0112 12.75z"/>
+                                </svg>
+                                Buggy Trophies
+                            </div>
+                        </div>
+                        {% endif %}
+                        {% if not game.is_delisted and game.is_obtainable and not game.has_online_trophies and not game.has_buggy_trophies %}
+                        <div class="tooltip" data-tip="No known issues with this game.">
+                            <div class="badge badge-xs md:badge-sm badge-success font-bold gap-0.5">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                                </svg>
+                                No Known Issues
+                            </div>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
                 {% if user.is_authenticated and user.profile %}
                 <div class="flex justify-end gap-1.5 border-t border-base-content/10 pt-2 mt-1">
                     {% if earned_trophy_id %}
@@ -147,6 +208,17 @@
                             Add to List
                         </button>
                     </div>
+                    {% if user.profile.is_linked %}
+                    <button id="game-flag-btn"
+                            class="btn btn-xs md:btn-sm gap-1 btn-ghost border border-base-300"
+                            aria-label="Flag Game"
+                            data-game-id="{{ game.id }}">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M3 21v-4m0 0V5a2 2 0 012-2h6.5l1 1H21l-3 6 3 6h-8.5l-1-1H5a2 2 0 00-2 2zm9-13.5V9"/>
+                        </svg>
+                        Flag
+                    </button>
+                    {% endif %}
                 </div>
                 {% endif %}
             </div>
