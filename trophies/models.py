@@ -3973,17 +3973,70 @@ class IGDBMatch(models.Model):
             models.Index(fields=['match_confidence'], name='igdbmatch_confidence_idx'),
         ]
 
-    @property
-    def completion_time_display(self):
-        """Human-readable completion time estimate."""
-        seconds = self.time_to_beat_completely
+    @staticmethod
+    def _format_seconds(seconds):
+        """Format a duration in seconds to a human-readable string like '42h' or '30m'."""
         if not seconds:
             return None
         hours = seconds / 3600
         if hours >= 1:
-            return f'{hours:.0f}h' if hours == int(hours) else f'{hours:.1f}h'
+            return f'{hours:.0f}h' if hours % 1 == 0 else f'{hours:.1f}h'
         minutes = seconds / 60
         return f'{minutes:.0f}m'
+
+    @property
+    def completion_time_display(self):
+        """Human-readable 100% completion time estimate."""
+        return self._format_seconds(self.time_to_beat_completely)
+
+    @property
+    def speedrun_time_display(self):
+        """Human-readable speedrun time estimate."""
+        return self._format_seconds(self.time_to_beat_hastily)
+
+    @property
+    def normal_time_display(self):
+        """Human-readable average playthrough time estimate."""
+        return self._format_seconds(self.time_to_beat_normally)
+
+    @property
+    def has_time_to_beat(self):
+        """True if any time-to-beat data exists."""
+        return bool(
+            self.time_to_beat_hastily
+            or self.time_to_beat_normally
+            or self.time_to_beat_completely
+        )
+
+    @property
+    def is_trusted(self):
+        """True if the match has been accepted (manually or automatically)."""
+        return self.status in ('accepted', 'auto_accepted')
+
+    EXTERNAL_LINK_META = [
+        ('official', 'Official Site'),
+        ('wikipedia', 'Wikipedia'),
+        ('steam', 'Steam'),
+        ('reddit', 'Reddit'),
+        ('discord', 'Discord'),
+        ('youtube', 'YouTube'),
+        ('twitch', 'Twitch'),
+        ('epicgames', 'Epic Games'),
+        ('gog', 'GOG'),
+        ('itch', 'itch.io'),
+    ]
+
+    @property
+    def notable_external_urls(self):
+        """Curated list of external links as {'key', 'label', 'url'} dicts."""
+        if not self.external_urls:
+            return []
+        result = []
+        for key, label in self.EXTERNAL_LINK_META:
+            url = self.external_urls.get(key)
+            if url:
+                result.append({'key': key, 'label': label, 'url': url})
+        return result
 
     def __str__(self):
         return f"{self.concept} -> {self.igdb_name} ({self.get_status_display()}, {self.match_confidence:.0%})"

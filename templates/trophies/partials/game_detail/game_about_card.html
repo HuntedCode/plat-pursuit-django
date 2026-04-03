@@ -1,0 +1,161 @@
+{% if game.concept %}
+{% with igdb=game.concept.igdb_match %}
+{% if igdb and igdb.is_trusted %}
+
+{# Check if there's any data worth showing #}
+{% if igdb.igdb_summary or game.concept.igdb_genres or game.concept.igdb_themes or igdb.has_time_to_beat or igdb.game_engine_name or igdb.franchise_names or igdb.notable_external_urls %}
+
+<div class="card bg-base-200/70 border-2 border-base-300 shadow-md shadow-neutral">
+    <div class="card-body p-3 md:p-4">
+
+        {# ── Card Header ── #}
+        <h4 class="text-xs font-semibold text-base-content/60 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25"/>
+            </svg>
+            About This Game
+        </h4>
+
+        {# ── Section A: Summary ── #}
+        {% if igdb.igdb_summary %}
+        <div class="mb-2">
+            <p id="game-summary-text" class="text-xs md:text-sm text-base-content/70 leading-relaxed line-clamp-3">{{ igdb.igdb_summary }}</p>
+            <button id="game-summary-toggle"
+                    onclick="const t=document.getElementById('game-summary-text');t.classList.toggle('line-clamp-3');this.textContent=t.classList.contains('line-clamp-3')?'Read more':'Show less'"
+                    class="text-xs text-primary hover:text-primary/80 font-medium mt-1 cursor-pointer hidden">Read more</button>
+        </div>
+        {% endif %}
+
+        {# ── Section B: Genres & Themes ── #}
+        {% if game.concept.igdb_genres or game.concept.igdb_themes %}
+        <div class="border-t border-base-content/10 pt-2 mt-1">
+            <div class="flex flex-wrap gap-1">
+                {% for genre in game.concept.igdb_genres %}
+                    <span class="badge badge-xs md:badge-sm badge-primary badge-outline font-medium">{{ genre }}</span>
+                {% endfor %}
+                {% for theme in game.concept.igdb_themes %}
+                    <span class="badge badge-xs md:badge-sm badge-secondary badge-outline font-medium">{{ theme }}</span>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+
+        {# ── Section C: Time to Beat ── #}
+        {% if igdb.has_time_to_beat %}
+        <div class="border-t border-base-content/10 pt-2 mt-1">
+            <h4 class="text-xs font-semibold text-base-content/60 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                </svg>
+                Time to Beat
+            </h4>
+            <div class="grid grid-cols-3 gap-1.5 md:gap-2">
+                <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-1.5 md:p-2 text-center">
+                    <div class="text-sm md:text-base font-bold {% if igdb.speedrun_time_display %}text-info{% else %}text-base-content/30{% endif %}">{{ igdb.speedrun_time_display|default:"--" }}</div>
+                    <div class="text-[0.55rem] md:text-xs text-base-content/40 uppercase font-medium">Speedrun</div>
+                </div>
+                <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-1.5 md:p-2 text-center">
+                    <div class="text-sm md:text-base font-bold {% if igdb.normal_time_display %}text-accent{% else %}text-base-content/30{% endif %}">{{ igdb.normal_time_display|default:"--" }}</div>
+                    <div class="text-[0.55rem] md:text-xs text-base-content/40 uppercase font-medium">Normal</div>
+                </div>
+                <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-1.5 md:p-2 text-center">
+                    <div class="text-sm md:text-base font-bold {% if igdb.completion_time_display %}text-primary{% else %}text-base-content/30{% endif %}">{{ igdb.completion_time_display|default:"--" }}</div>
+                    <div class="text-[0.55rem] md:text-xs text-base-content/40 uppercase font-medium">Completionist</div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        {# ── Section D: Quick Facts ── #}
+        {% if igdb.game_engine_name or igdb.franchise_names %}
+        <div class="border-t border-base-content/10 pt-2 mt-1">
+            <h4 class="text-xs font-semibold text-base-content/60 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z"/>
+                </svg>
+                Quick Facts
+            </h4>
+            <div class="flex flex-col gap-1">
+                {% if igdb.game_engine_name %}
+                <div class="flex items-center gap-1.5 text-xs">
+                    <span class="text-base-content/50 shrink-0">Engine:</span>
+                    <span class="font-medium text-base-content/80 line-clamp-1 pr-1">{{ igdb.game_engine_name }}</span>
+                </div>
+                {% endif %}
+                {% if igdb.franchise_names %}
+                <div class="flex items-center gap-1.5 text-xs">
+                    <span class="text-base-content/50 shrink-0">Franchise:</span>
+                    <span class="font-medium text-base-content/80 line-clamp-1 pr-1">{{ igdb.franchise_names|join:", " }}</span>
+                </div>
+                {% endif %}
+                {% for cc in game.concept.concept_companies.all %}
+                    {% if cc.is_porting %}
+                    <div class="flex items-center gap-1.5 text-xs">
+                        <span class="text-base-content/50 shrink-0">Ported by:</span>
+                        <span class="font-medium text-base-content/80 line-clamp-1 pr-1">{{ cc.company.name }}</span>
+                    </div>
+                    {% endif %}
+                    {% if cc.is_supporting %}
+                    <div class="flex items-center gap-1.5 text-xs">
+                        <span class="text-base-content/50 shrink-0">Additional Dev:</span>
+                        <span class="font-medium text-base-content/80 line-clamp-1 pr-1">{{ cc.company.name }}</span>
+                    </div>
+                    {% endif %}
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+
+        {# ── Section E: External Links ── #}
+        {% if igdb.notable_external_urls %}
+        <div class="border-t border-base-content/10 pt-2 mt-1">
+            <h4 class="text-xs font-semibold text-base-content/60 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m9.86-2.04a4.5 4.5 0 00-1.242-7.244l-4.5-4.5a4.5 4.5 0 00-6.364 6.364L4.34 8.798" transform="translate(1.5, 1.5) scale(0.875)"/>
+                </svg>
+                External Links
+            </h4>
+            <div class="flex flex-wrap gap-1.5">
+                {% for link in igdb.notable_external_urls %}
+                <a href="{{ link.url }}" target="_blank" rel="noopener noreferrer"
+                   class="btn btn-xs btn-ghost border border-base-content/10 gap-1 hover:border-primary/30 hover:text-primary transition-colors">
+                    {% if link.key == "official" %}
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 21a9.004 9.004 0 008.716-6.747M12 21a9.004 9.004 0 01-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3m0 0a8.997 8.997 0 017.843 4.582M12 3a8.997 8.997 0 00-7.843 4.582m15.686 0A11.953 11.953 0 0112 10.5c-2.998 0-5.74-1.1-7.843-2.918m15.686 0A8.959 8.959 0 0121 12c0 .778-.099 1.533-.284 2.253m0 0A17.919 17.919 0 0112 16.5c-3.162 0-6.133-.815-8.716-2.247m0 0A9.015 9.015 0 013 12c0-1.605.42-3.113 1.157-4.418"/></svg>
+                    {% elif link.key == "wikipedia" %}
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25"/></svg>
+                    {% elif link.key == "steam" or link.key == "epicgames" or link.key == "gog" or link.key == "itch" %}
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 10.5V6a3.75 3.75 0 10-7.5 0v4.5m11.356-1.993l1.263 12c.07.665-.45 1.243-1.119 1.243H4.25a1.125 1.125 0 01-1.12-1.243l1.264-12A1.125 1.125 0 015.513 7.5h12.974c.576 0 1.059.435 1.119 1.007zM8.625 10.5a.375.375 0 11-.75 0 .375.375 0 01.75 0zm7.5 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z"/></svg>
+                    {% elif link.key == "reddit" or link.key == "discord" %}
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M20.25 8.511c.884.284 1.5 1.128 1.5 2.097v4.286c0 1.136-.847 2.1-1.98 2.193-.34.027-.68.052-1.02.072v3.091l-3-3c-1.354 0-2.694-.055-4.02-.163a2.115 2.115 0 01-.825-.242m9.345-8.334a2.126 2.126 0 00-.476-.095 48.64 48.64 0 00-8.048 0c-1.131.094-1.976 1.057-1.976 2.192v4.286c0 .837.46 1.58 1.155 1.951m9.345-8.334V6.637c0-1.621-1.152-3.026-2.76-3.235A48.455 48.455 0 0011.25 3c-2.115 0-4.198.137-6.24.402-1.608.209-2.76 1.614-2.76 3.235v6.226c0 1.621 1.152 3.026 2.76 3.235.577.075 1.157.14 1.74.194V21l4.155-4.155"/></svg>
+                    {% elif link.key == "youtube" or link.key == "twitch" %}
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.348a1.125 1.125 0 010 1.971l-11.54 6.347a1.125 1.125 0 01-1.667-.985V5.653z"/></svg>
+                    {% else %}
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25"/></svg>
+                    {% endif %}
+                    {{ link.label }}
+                </a>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+
+    </div>
+</div>
+
+{# Show "Read more" button only if summary overflows #}
+{% if igdb.igdb_summary %}
+<script>
+(function() {
+    const el = document.getElementById('game-summary-text');
+    const btn = document.getElementById('game-summary-toggle');
+    if (el && btn && el.scrollHeight > el.clientHeight) {
+        btn.classList.remove('hidden');
+    }
+})();
+</script>
+{% endif %}
+
+{% endif %}{# end data check #}
+{% endif %}{# end igdb trusted #}
+{% endwith %}
+{% endif %}{# end concept check #}

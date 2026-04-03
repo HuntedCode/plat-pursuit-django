@@ -408,6 +408,7 @@ document.addEventListener('DOMContentLoaded', () => {
         } else {
             collapseHotbar();
         }
+        document.dispatchEvent(new CustomEvent('hotbar:toggle', { detail: { hidden: !hidden } }));
     }
 
     // Initialize toggle state immediately (no animation)
