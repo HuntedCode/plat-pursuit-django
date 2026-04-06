@@ -186,6 +186,7 @@
 | Untouched | Games with 0 trophies |
 | Games w/ DLC | Games with DLC trophy groups |
 | Online Trophies | Games with online trophies |
+| Buggy Trophies | Games with known buggy/broken trophies |
 | Delisted | Delisted games |
 | Game Families | Unique game families |
 | Completion Distribution | Progress tier bars: 0-24%, 25-49%, 50-74%, 75-99%, 100% with counts |
@@ -299,6 +300,8 @@
 | Avg Grindiness | Average grindiness given (1-10) |
 | Avg Fun | Average fun rating given (1-10) |
 | Avg Overall | Average overall rating given (1-5) |
+| Flags Submitted | Total game flags submitted by user |
+| Flags Approved | Flags that were approved by staff |
 
 ---
 

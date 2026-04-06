@@ -196,7 +196,7 @@ def _compute_all_premium_stats(profile, exclude_shovelware=False, exclude_hidden
     """Compute every premium section together for efficient query batching."""
     from trophies.models import (
         EarnedTrophy, ProfileGame, ProfileGamification,
-        IGDBMatch, ConceptCompany,
+        IGDBMatch, ConceptCompany, ConceptGenre, ConceptTheme, ConceptEngine,
     )
 
     # Build game filter Q for queries that join through game
@@ -223,17 +223,34 @@ def _compute_all_premium_stats(profile, exclude_shovelware=False, exclude_hidden
         igdb_lookup = {
             m.concept_id: m for m in
             IGDBMatch.objects.filter(concept_id__in=concept_ids)
-            .only('concept_id', 'game_category', 'game_engine_name',
-                  'franchise_names', 'time_to_beat_completely',
-                  'igdb_first_release_date', 'raw_response')
+            .only('concept_id', 'game_category', 'franchise_names',
+                  'time_to_beat_completely', 'igdb_first_release_date',
+                  'raw_response')
         }
 
-    # Shared fetch 4: developer data for concepts
+    # Shared fetch 4: developer + publisher data for concepts
     dev_lookup = defaultdict(list)
+    pub_lookup = defaultdict(list)  # concept_id -> [company_name, ...]
     if concept_ids:
-        for cc in (ConceptCompany.objects.filter(concept_id__in=concept_ids, is_developer=True)
+        for cc in (ConceptCompany.objects.filter(concept_id__in=concept_ids)
+                   .filter(Q(is_developer=True) | Q(is_publisher=True))
                    .select_related('company')):
-            dev_lookup[cc.concept_id].append(cc.company)
+            if cc.is_developer:
+                dev_lookup[cc.concept_id].append(cc.company)
+            if cc.is_publisher:
+                pub_lookup[cc.concept_id].append(cc.company.name)
+
+    # Shared fetch 5: normalized genre/theme/engine lookups (M2M)
+    genre_lookup = defaultdict(list)   # concept_id -> [genre_name, ...]
+    theme_lookup = defaultdict(list)   # concept_id -> [theme_name, ...]
+    engine_lookup = defaultdict(list)  # concept_id -> [engine_name, ...]
+    if concept_ids:
+        for cg in ConceptGenre.objects.filter(concept_id__in=concept_ids).select_related('genre'):
+            genre_lookup[cg.concept_id].append(cg.genre.name)
+        for ct in ConceptTheme.objects.filter(concept_id__in=concept_ids).select_related('theme'):
+            theme_lookup[ct.concept_id].append(ct.theme.name)
+        for ce in ConceptEngine.objects.filter(concept_id__in=concept_ids).select_related('engine'):
+            engine_lookup[ce.concept_id].append(ce.engine.name)
 
     gamification = ProfileGamification.objects.filter(profile=profile).first()
     user_tz = _get_user_timezone(profile)
@@ -244,8 +261,8 @@ def _compute_all_premium_stats(profile, exclude_shovelware=False, exclude_hidden
         'streaks': _compute_streaks(earned_timestamps, user_tz),
         'time_patterns': _compute_time_patterns(earned_timestamps, user_tz),
         'platforms': _compute_platform_breakdown(profile_games),
-        'genres': _compute_genre_breakdown(profile_games, dev_lookup),
-        'library': _compute_game_library(profile_games, igdb_lookup),
+        'genres': _compute_genre_breakdown(profile_games, dev_lookup, genre_lookup, theme_lookup, pub_lookup),
+        'library': _compute_game_library(profile_games, igdb_lookup, engine_lookup),
         'badges': _compute_badge_stats(profile, gamification),
         'challenges': _compute_challenge_progress(profile),
         'community': _compute_community_stats(profile),
@@ -1145,8 +1162,12 @@ def _compute_platform_breakdown(profile_games):
 # Section: Genre Breakdown
 # ---------------------------------------------------------------------------
 
-def _compute_genre_breakdown(profile_games, dev_lookup=None):
+def _compute_genre_breakdown(profile_games, dev_lookup=None, genre_lookup=None, theme_lookup=None, pub_lookup=None):
     from trophies.util_modules.constants import GENRE_DISPLAY_NAMES
+
+    genre_lookup = genre_lookup or {}
+    theme_lookup = theme_lookup or {}
+    pub_lookup = pub_lookup or {}
 
     # Indie threshold: company_size 1-3 (up to 50 employees)
     INDIE_MAX_SIZE = 3
@@ -1165,12 +1186,12 @@ def _compute_genre_breakdown(profile_games, dev_lookup=None):
 
     for pg in profile_games:
         concept = pg.game.concept if pg.game else None
-        # Prefer IGDB genres, fall back to PSN genres
-        igdb_genres = concept.igdb_genres if concept and concept.igdb_genres else []
-        psn_genres = concept.genres if concept and concept.genres else []
-        genre_list = igdb_genres or psn_genres
-        theme_list = concept.igdb_themes if concept and concept.igdb_themes else []
-        publisher = concept.publisher_name if concept and concept.publisher_name else None
+        concept_id = concept.id if concept else None
+        # Use IGDB genres exclusively (normalized M2M)
+        genre_list = genre_lookup.get(concept_id, []) if concept_id else []
+        theme_list = theme_lookup.get(concept_id, []) if concept_id else []
+        # Use IGDB publisher data exclusively (normalized M2M)
+        pub_names = pub_lookup.get(concept_id, []) if concept_id else []
 
         for genre in genre_list:
             genres[genre]['games'] += 1
@@ -1183,10 +1204,10 @@ def _compute_genre_breakdown(profile_games, dev_lookup=None):
             if pg.has_plat:
                 themes[theme]['plats'] += 1
 
-        if publisher:
-            publishers[publisher]['games'] += 1
+        for pub_name in pub_names:
+            publishers[pub_name]['games'] += 1
             if pg.has_plat:
-                publishers[publisher]['plats'] += 1
+                publishers[pub_name]['plats'] += 1
 
         # Developer stats from pre-fetched lookup + indie/AAA classification
         if concept and dev_lookup:
@@ -1304,16 +1325,18 @@ def _compute_genre_breakdown(profile_games, dev_lookup=None):
 # Section: Game Library Analysis
 # ---------------------------------------------------------------------------
 
-def _compute_game_library(profile_games, igdb_lookup=None):
+def _compute_game_library(profile_games, igdb_lookup=None, engine_lookup=None):
     from trophies.models import UserConceptRating
 
     igdb_lookup = igdb_lookup or {}
+    engine_lookup = engine_lookup or {}
 
     almost_there = 0
     one_trophy = 0
     zero_progress = 0
     delisted = 0
     online_trophies = 0
+    buggy_trophies = 0
     has_dlc = 0
     dlc_completed = 0
     family_ids = set()
@@ -1359,6 +1382,8 @@ def _compute_game_library(profile_games, igdb_lookup=None):
             delisted += 1
         if game and game.has_online_trophies:
             online_trophies += 1
+        if game and game.has_buggy_trophies:
+            buggy_trophies += 1
         if game and game.has_trophy_groups:
             has_dlc += 1
             if (pg.progress or 0) == 100:
@@ -1387,12 +1412,15 @@ def _compute_game_library(profile_games, igdb_lookup=None):
             if months_since >= 6:
                 abandoned_trophy_counts.append(pg.earned_trophies_count)
 
+        # Engine data from normalized M2M
+        if concept:
+            for eng_name in engine_lookup.get(concept.id, []):
+                engine_counts[eng_name] += 1
+
         # IGDB enrichment
         if concept:
             igdb = igdb_lookup.get(concept.id)
             if igdb:
-                if igdb.game_engine_name:
-                    engine_counts[igdb.game_engine_name] += 1
                 if igdb.franchise_names:
                     for fname in igdb.franchise_names:
                         franchise_counts[fname] += 1
@@ -1490,6 +1518,7 @@ def _compute_game_library(profile_games, igdb_lookup=None):
         'zero_progress': zero_progress,
         'delisted': delisted,
         'online_trophies': online_trophies,
+        'buggy_trophies': buggy_trophies,
         'has_dlc': has_dlc,
         'game_families': len(family_ids),
         'region_items': region_items,
@@ -1747,7 +1776,7 @@ def _compute_challenge_progress(profile):
 # ---------------------------------------------------------------------------
 
 def _compute_community_stats(profile):
-    from trophies.models import Review, UserConceptRating
+    from trophies.models import Review, UserConceptRating, GameFlag
 
     # Reviews
     review_agg = Review.objects.filter(profile=profile, is_deleted=False).aggregate(
@@ -1805,6 +1834,9 @@ def _compute_community_stats(profile):
         'avg_grindiness': round(rating_agg['avg_grindiness'] or 0, 1),
         'avg_fun': round(rating_agg['avg_fun'] or 0, 1),
         'avg_overall': round(rating_agg['avg_overall'] or 0, 1),
+        # Community flags
+        'flags_submitted': GameFlag.objects.filter(reporter=profile).count(),
+        'flags_approved': GameFlag.objects.filter(reporter=profile, status='approved').count(),
     }
 
 
