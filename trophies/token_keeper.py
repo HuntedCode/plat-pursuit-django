@@ -1154,8 +1154,10 @@ class TokenKeeper:
                 is_full = True
                 has_mismatch = False
                 mismatch_count = 0
+                skipped_mismatch_count = 0
                 pgame_drift_count = 0
                 games_checked = 0
+                MAX_MISMATCH_RETRIES = 3
 
                 # --- Pre-fetch data to avoid N+1 queries in the health check loop ---
                 from django.db.models import Count as _Count, Q as _Q
@@ -1225,9 +1227,23 @@ class TokenKeeper:
 
                         title_total = title.earned_trophies.bronze + title.earned_trophies.silver + title.earned_trophies.gold + title.earned_trophies.platinum
                         if tracked_total != title_total:
-                            has_mismatch = True
-                            mismatch_count += 1
-                            trophy_titles_to_be_updated.append({'title': title, 'game': game})
+                            # Circuit breaker: skip games that have been re-synced
+                            # multiple times without resolving the mismatch.
+                            mismatch_retries_key = f"health_mismatch_retries:{profile_id}"
+                            retries = int(redis_client.hget(mismatch_retries_key, game.np_communication_id) or 0)
+                            if retries >= MAX_MISMATCH_RETRIES:
+                                skipped_mismatch_count += 1
+                                logger.info(
+                                    f"Health check: skipping unresolvable mismatch for "
+                                    f"{game.np_communication_id} (profile {profile_id}): "
+                                    f"DB={tracked_total}, trophy_titles={title_total}"
+                                )
+                            else:
+                                has_mismatch = True
+                                mismatch_count += 1
+                                redis_client.hset(mismatch_retries_key, game.np_communication_id, retries + 1)
+                                redis_client.expire(mismatch_retries_key, 86400)
+                                trophy_titles_to_be_updated.append({'title': title, 'game': game})
                         elif pgame and tracked_total != pgame.earned_trophies_count and pgame.id not in touched_profilegame_ids:
                             pgame_drift_count += 1
                             touched_profilegame_ids.append(pgame.id)
@@ -1243,7 +1259,16 @@ class TokenKeeper:
                     limit += page_size
                     offset += page_size
 
-                logger.info(f"Health check complete for profile {profile_id}: {games_checked} games checked, {mismatch_count} mismatches, {pgame_drift_count} ProfileGame drifts")
+                logger.info(
+                    f"Health check complete for profile {profile_id}: {games_checked} games checked, "
+                    f"{mismatch_count} mismatches, {skipped_mismatch_count} skipped (unresolvable), "
+                    f"{pgame_drift_count} ProfileGame drifts"
+                )
+                if skipped_mismatch_count:
+                    logger.warning(
+                        f"Health check for profile {profile_id}: {skipped_mismatch_count} game(s) "
+                        f"skipped after {MAX_MISMATCH_RETRIES} failed re-sync attempts"
+                    )
 
                 # Unhide games that returned in PSN response but were previously hidden
                 if games_to_unhide:
@@ -1342,9 +1367,14 @@ class TokenKeeper:
                     profile.save(update_fields=['last_profile_health_check'])
                     return
                 else:
-                    profile.total_hiddens = summary_total - total_tracked if summary_total - total_tracked >= 0 else 0
+                    # Calculate total_hiddens directly from PSN total minus visible
+                    # earned in DB. Using (summary_total - total_tracked) would
+                    # create a circular dependency since total_tracked already
+                    # includes the old total_hiddens value, causing oscillation.
+                    new_hiddens = max(summary_total - tracked_trophies['total'], 0)
+                    profile.total_hiddens = new_hiddens
                     profile.save(update_fields=['total_hiddens'])
-                    logger.info(f"New total hiddens for profile {profile.id}: {summary_total - total_tracked}")
+                    logger.info(f"New total hiddens for profile {profile.id}: {new_hiddens}")
 
                 # Check badges
                 profile.last_profile_health_check = timezone.now()
@@ -1368,6 +1398,11 @@ class TokenKeeper:
                         touched_profilegame_ids.append(pg_id)
                 profile.last_profile_health_check = timezone.now()
                 profile.save(update_fields=['last_profile_health_check'])
+
+            # Clear mismatch retry counters: if we reached this point, no
+            # unresolvable mismatches triggered a re-sync early return, so
+            # any previously-tracked retries are resolved or absorbed.
+            redis_client.delete(f"health_mismatch_retries:{profile_id}")
 
             # Trophy/TrophyGroup completeness check: detect games where sync jobs
             # failed, leaving the Game with defined_trophies > 0 but zero Trophy
@@ -1854,6 +1889,20 @@ class TokenKeeper:
                     for trophy_data in batch:
                         trophy, _ = PsnApiService.create_or_update_trophy_from_trophy_data(game, trophy_data)
                         PsnApiService.create_or_update_earned_trophy_from_trophy_data(profile, trophy, trophy_data)
+        # Diagnostic: compare what the trophies API returned vs what the
+        # health check will see in the DB. Helps identify persistent mismatches
+        # where trophy_titles reports a different count than the trophies endpoint.
+        api_earned = sum(1 for t in trophies if t.earned)
+        db_earned = EarnedTrophy.objects.filter(
+            profile=profile, trophy__game=game, earned=True
+        ).count()
+        if api_earned != db_earned:
+            logger.warning(
+                f"Mismatch diagnostic for {np_communication_id} (profile {profile.id}): "
+                f"API returned {api_earned} earned, DB has {db_earned} earned, "
+                f"API total trophies: {len(trophies)}"
+            )
+
         profile.increment_sync_progress(value=2)
 
         # Create any pending platinum notifications for this game
