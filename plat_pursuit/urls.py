@@ -36,7 +36,7 @@ sitemaps = {
     'lists': GameListSitemap,
     'challenges': ChallengeSitemap,
 }
-from trophies.views import GamesListView, TrophiesListView, ProfilesListView, SearchView, GameDetailView, ProfileDetailView, TrophyCaseView, ToggleSelectionView, BadgeListView, BadgeDetailView, ProfileSyncStatusView, TriggerSyncView, SearchSyncProfileView, AddSyncStatusView, LinkPSNView, ProfileVerifyView, TokenMonitoringView, BadgeCreationView, BadgeLeaderboardsView, OverallBadgeLeaderboardsView, MilestoneListView, CommentModerationView, ModerationActionView, ModerationLogView, BrowseListsView, GameListDetailView, GameListEditView, GameListCreateView, MyListsView, ChallengeHubView, MyChallengesView, AZChallengeCreateView, AZChallengeSetupView, AZChallengeDetailView, AZChallengeEditView, CalendarChallengeCreateView, CalendarChallengeDetailView, GenreChallengeCreateView, GenreChallengeSetupView, GenreChallengeDetailView, GenreChallengeEditView, GameFamilyManagementView, ReviewModerationView, ReviewModerationActionView, ReviewModerationLogView, DashboardView, MyTitlesView, ReviewHubLandingView, RateMyGamesView, ReviewHubDetailView, PlatinumGridView, RoadmapEditorView, MyStatsView
+from trophies.views import GamesListView, TrophiesListView, ProfilesListView, SearchView, GameDetailView, ProfileDetailView, TrophyCaseView, ToggleSelectionView, BadgeListView, BadgeDetailView, ProfileSyncStatusView, TriggerSyncView, SearchSyncProfileView, AddSyncStatusView, LinkPSNView, ProfileVerifyView, TokenMonitoringView, BadgeCreationView, BadgeLeaderboardsView, OverallBadgeLeaderboardsView, MilestoneListView, CommentModerationView, ModerationActionView, ModerationLogView, BrowseListsView, GameListDetailView, GameListEditView, GameListCreateView, MyListsView, ChallengeHubView, MyChallengesView, AZChallengeCreateView, AZChallengeSetupView, AZChallengeDetailView, AZChallengeEditView, CalendarChallengeCreateView, CalendarChallengeDetailView, GenreChallengeCreateView, GenreChallengeSetupView, GenreChallengeDetailView, GenreChallengeEditView, GameFamilyManagementView, ReviewModerationView, ReviewModerationActionView, ReviewModerationLogView, DashboardView, MyTitlesView, ReviewHubLandingView, RateMyGamesView, ReviewHubDetailView, PlatinumGridView, RoadmapEditorView, MyStatsView, FlaggedGamesView, CompanyListView, CompanyDetailView, GenreThemeListView, GenreDetailView, ThemeDetailView
 from trophies.recap_views import RecapIndexView, RecapSlideView
 from users.views import CustomConfirmEmailView, stripe_webhook, paypal_webhook
 from users.subscription_admin_views import SubscriptionAdminView
@@ -55,7 +55,17 @@ urlpatterns = [
     path("", IndexView.as_view(), name="home"),
     path('dashboard/', DashboardView.as_view(), name='dashboard'),
     path('games/', GamesListView.as_view(), name='games_list'),
+    path('games/flagged/', FlaggedGamesView.as_view(), name='flagged_games'),
     path('games/<str:np_communication_id>/roadmap/edit/', RoadmapEditorView.as_view(), name='roadmap_edit'),
+
+    # Company pages
+    path('companies/', CompanyListView.as_view(), name='companies_list'),
+    path('companies/<slug:slug>/', CompanyDetailView.as_view(), name='company_detail'),
+
+    # Genre/Theme pages
+    path('genres/', GenreThemeListView.as_view(), name='genres_list'),
+    path('genres/<slug:slug>/', GenreDetailView.as_view(), name='genre_detail'),
+    path('themes/<slug:slug>/', ThemeDetailView.as_view(), name='theme_detail'),
     path('games/<str:np_communication_id>/', GameDetailView.as_view(), name='game_detail'),
     path('games/<str:np_communication_id>/<str:psn_username>/', GameDetailView.as_view(), name='game_detail_with_profile'),
     path('trophies/', TrophiesListView.as_view(), name='trophies_list'),

@@ -3,7 +3,7 @@
 {% if igdb and igdb.is_trusted %}
 
 {# Check if there's any data worth showing #}
-{% if igdb.igdb_summary or game.concept.igdb_genres or game.concept.igdb_themes or igdb.has_time_to_beat or igdb.game_engine_name or igdb.franchise_names or igdb.notable_external_urls %}
+{% if igdb.igdb_summary or game.concept.concept_genres.all or game.concept.concept_themes.all or igdb.has_time_to_beat or igdb.game_engine_name or igdb.franchise_names or igdb.notable_external_urls %}
 
 <div class="card bg-base-200/70 border-2 border-base-300 shadow-md shadow-neutral">
     <div class="card-body p-3 md:p-4">
@@ -27,18 +27,20 @@
         {% endif %}
 
         {# ── Section B: Genres & Themes ── #}
-        {% if game.concept.igdb_genres or game.concept.igdb_themes %}
+        {% with concept_genres=game.concept.concept_genres.all concept_themes=game.concept.concept_themes.all %}
+        {% if concept_genres or concept_themes %}
         <div class="border-t border-base-content/10 pt-2 mt-1">
             <div class="flex flex-wrap gap-1">
-                {% for genre in game.concept.igdb_genres %}
-                    <span class="badge badge-xs md:badge-sm badge-primary badge-outline font-medium">{{ genre }}</span>
+                {% for cg in concept_genres %}
+                    <a href="{% url 'genre_detail' slug=cg.genre.slug %}" class="badge badge-xs md:badge-sm badge-primary badge-outline font-medium hover:bg-primary hover:text-primary-content transition-colors">{{ cg.genre.name }}</a>
                 {% endfor %}
-                {% for theme in game.concept.igdb_themes %}
-                    <span class="badge badge-xs md:badge-sm badge-secondary badge-outline font-medium">{{ theme }}</span>
+                {% for ct in concept_themes %}
+                    <a href="{% url 'theme_detail' slug=ct.theme.slug %}" class="badge badge-xs md:badge-sm badge-secondary badge-outline font-medium hover:bg-secondary hover:text-secondary-content transition-colors">{{ ct.theme.name }}</a>
                 {% endfor %}
             </div>
         </div>
         {% endif %}
+        {% endwith %}
 
         {# ── Section C: Time to Beat ── #}
         {% if igdb.has_time_to_beat %}
@@ -92,13 +94,13 @@
                     {% if cc.is_porting %}
                     <div class="flex items-center gap-1.5 text-xs">
                         <span class="text-base-content/50 shrink-0">Ported by:</span>
-                        <span class="font-medium text-base-content/80 line-clamp-1 pr-1">{{ cc.company.name }}</span>
+                        <a href="{% url 'company_detail' slug=cc.company.slug %}" class="font-medium text-accent hover:underline line-clamp-1 pr-1">{{ cc.company.name }}</a>
                     </div>
                     {% endif %}
                     {% if cc.is_supporting %}
                     <div class="flex items-center gap-1.5 text-xs">
                         <span class="text-base-content/50 shrink-0">Additional Dev:</span>
-                        <span class="font-medium text-base-content/80 line-clamp-1 pr-1">{{ cc.company.name }}</span>
+                        <a href="{% url 'company_detail' slug=cc.company.slug %}" class="font-medium text-accent hover:underline line-clamp-1 pr-1">{{ cc.company.name }}</a>
                     </div>
                     {% endif %}
                 {% endfor %}

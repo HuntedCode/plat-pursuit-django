@@ -16,7 +16,7 @@ from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.generic import ListView, DetailView
 from urllib.parse import urlencode
-from trophies.mixins import ProfileHotbarMixin
+from trophies.mixins import ProfileHotbarMixin, HtmxListMixin
 from ..constants import CACHE_TIMEOUT_IMAGES
 from ..models import Game, Trophy, Profile, EarnedTrophy, ProfileGame, TrophyGroup, Badge, Concept, FeaturedGuide, Stage, UserConceptRating
 from ..forms import GameSearchForm, GameDetailForm, GuideSearchForm
@@ -25,22 +25,42 @@ from trophies.util_modules.constants import MODERN_PLATFORMS, ALL_PLATFORMS
 logger = logging.getLogger("psn_api")
 
 
-class GamesListView(ProfileHotbarMixin, ListView):
+class GamesListView(HtmxListMixin, ProfileHotbarMixin, ListView):
     """
     Display paginated list of games with filtering and sorting options.
 
     Provides comprehensive game browsing functionality with filters for:
     - Platform (PS4, PS5, PS Vita, etc.)
     - Region (NA, EU, JP, global)
-    - Alphabetical letter
-    - Platinum trophy availability
-    - Shovelware exclusion
+    - Alphabetical letter, platinum availability, shovelware exclusion
+    - Community flags (delisted, unobtainable, online trophies, buggy trophies)
+    - Community ratings (min rating, max difficulty, min fun)
+    - Time-to-beat ranges (IGDB estimate and community reported)
+    - Genre, Theme, and Game Engine (normalized IGDB data)
 
     Defaults to modern platforms (PS4/PS5) and user's preferred region if authenticated.
     """
     model = Game
     template_name = 'trophies/game_list.html'
+    partial_template_name = 'trophies/partials/game_list/browse_results.html'
     paginate_by = 30
+
+    # IGDB time-to-beat stored in seconds
+    TIME_BUCKETS = {
+        'under10': (None, 36000),
+        '10to25': (36000, 90000),
+        '25to50': (90000, 180000),
+        '50to100': (180000, 360000),
+        '100plus': (360000, None),
+    }
+    # Community hours_to_platinum stored as integer hours
+    COMMUNITY_TIME_BUCKETS = {
+        'under10': (None, 10),
+        '10to25': (10, 25),
+        '25to50': (25, 50),
+        '50to100': (50, 100),
+        '100plus': (100, None),
+    }
 
     def get_filter_form(self):
         if not hasattr(self, '_filter_form'):
@@ -49,14 +69,16 @@ class GamesListView(ProfileHotbarMixin, ListView):
 
     def dispatch(self, request, *args, **kwargs):
         if not request.GET:
-            default_params = {'platform': MODERN_PLATFORMS}
-            if request.user.is_authenticated and request.user.default_region:
-                default_params['regions'] = ['global', request.user.default_region]
-
-            if default_params:
-                query_string = urlencode(default_params, doseq=True)
-                url = reverse('games_list') + '?' + query_string
-                return HttpResponseRedirect(url)
+            if request.user.is_authenticated:
+                defaults = (request.user.browse_defaults or {}).get('games', {})
+                if defaults:
+                    return HttpResponseRedirect(
+                        reverse('games_list') + '?' + urlencode(defaults, doseq=True)
+                    )
+            # Anonymous or no saved defaults: modern platforms only
+            return HttpResponseRedirect(
+                reverse('games_list') + '?' + urlencode({'platform': MODERN_PLATFORMS}, doseq=True)
+            )
         return super().dispatch(request, *args, **kwargs)
 
     def get_queryset(self):
@@ -86,6 +108,7 @@ class GamesListView(ProfileHotbarMixin, ListView):
             filter_shovelware = form.cleaned_data.get('filter_shovelware')
             sort_val = form.cleaned_data.get('sort')
 
+            # --- Original filters ---
             if query:
                 from trophies.util_modules.roman_numerals import expand_numeral_query
                 query_variants = expand_numeral_query(query)
@@ -106,7 +129,104 @@ class GamesListView(ProfileHotbarMixin, ListView):
                 qs = qs.filter(trophies__trophy_type='platinum').distinct()
             if filter_shovelware:
                 qs = qs.exclude(shovelware_status__in=['auto_flagged', 'manually_flagged'])
+            badge_series = form.cleaned_data.get('badge_series')
+            if badge_series:
+                # Filter to games in a specific live badge series
+                qs = qs.filter(
+                    concept__stages__series_slug=badge_series,
+                    concept__stages__series_slug__in=Badge.objects.filter(
+                        is_live=True,
+                    ).values_list('series_slug', flat=True),
+                ).distinct()
+            elif form.cleaned_data.get('in_badge'):
+                # Filter to games in any live badge series
+                live_slugs = Badge.objects.filter(
+                    is_live=True,
+                ).values_list('series_slug', flat=True)
+                qs = qs.filter(
+                    concept__stages__series_slug__in=live_slugs,
+                ).distinct()
 
+            # --- Community flag filters ---
+            if form.cleaned_data.get('show_delisted'):
+                qs = qs.filter(is_delisted=True)
+            if form.cleaned_data.get('show_unobtainable'):
+                qs = qs.filter(is_obtainable=False)
+            if form.cleaned_data.get('show_online'):
+                qs = qs.filter(has_online_trophies=True)
+            if form.cleaned_data.get('show_buggy'):
+                qs = qs.filter(has_buggy_trophies=True)
+
+            # --- Community rating filters (conditional Subquery) ---
+            min_rating = form.cleaned_data.get('min_rating')
+            difficulty_max = form.cleaned_data.get('difficulty_max')
+            fun_min = form.cleaned_data.get('fun_min')
+            needs_rating_annotation = min_rating or difficulty_max or fun_min or sort_val in ('rating', 'rating_inv', 'difficulty', 'difficulty_inv')
+
+            if needs_rating_annotation:
+                base_ratings = UserConceptRating.objects.filter(
+                    concept_id=OuterRef('concept_id'),
+                    concept_trophy_group__isnull=True,
+                )
+                qs = qs.annotate(
+                    _avg_rating=Subquery(
+                        base_ratings.values('concept_id').annotate(val=Avg('overall_rating')).values('val')[:1],
+                        output_field=FloatField(),
+                    ),
+                    _avg_difficulty=Subquery(
+                        base_ratings.values('concept_id').annotate(val=Avg('difficulty')).values('val')[:1],
+                        output_field=FloatField(),
+                    ),
+                    _avg_fun=Subquery(
+                        base_ratings.values('concept_id').annotate(val=Avg('fun_ranking')).values('val')[:1],
+                        output_field=FloatField(),
+                    ),
+                )
+                if min_rating:
+                    qs = qs.filter(_avg_rating__gte=float(min_rating))
+                if difficulty_max:
+                    qs = qs.filter(_avg_difficulty__lte=float(difficulty_max))
+                if fun_min:
+                    qs = qs.filter(_avg_fun__gte=float(fun_min))
+
+            # --- Time-to-beat filters ---
+            igdb_time = form.cleaned_data.get('igdb_time')
+            if igdb_time and igdb_time in self.TIME_BUCKETS:
+                lo, hi = self.TIME_BUCKETS[igdb_time]
+                time_q = Q(concept__igdb_match__time_to_beat_completely__isnull=False)
+                if lo is not None:
+                    time_q &= Q(concept__igdb_match__time_to_beat_completely__gte=lo)
+                if hi is not None:
+                    time_q &= Q(concept__igdb_match__time_to_beat_completely__lt=hi)
+                qs = qs.filter(time_q)
+
+            community_time = form.cleaned_data.get('community_time')
+            if community_time and community_time in self.COMMUNITY_TIME_BUCKETS:
+                lo, hi = self.COMMUNITY_TIME_BUCKETS[community_time]
+                avg_hours_sq = UserConceptRating.objects.filter(
+                    concept_id=OuterRef('concept_id'),
+                    concept_trophy_group__isnull=True,
+                ).values('concept_id').annotate(val=Avg('hours_to_platinum')).values('val')[:1]
+                qs = qs.annotate(_community_hours=Subquery(avg_hours_sq, output_field=FloatField()))
+                hours_q = Q(_community_hours__isnull=False)
+                if lo is not None:
+                    hours_q &= Q(_community_hours__gte=lo)
+                if hi is not None:
+                    hours_q &= Q(_community_hours__lt=hi)
+                qs = qs.filter(hours_q)
+
+            # --- Genre / Theme / Engine filters ---
+            genres = form.cleaned_data.get('genres')
+            if genres:
+                qs = qs.filter(concept__concept_genres__genre_id__in=genres).distinct()
+            themes = form.cleaned_data.get('themes')
+            if themes:
+                qs = qs.filter(concept__concept_themes__theme_id__in=themes).distinct()
+            engine = form.cleaned_data.get('engine')
+            if engine:
+                qs = qs.filter(concept__concept_engines__engine_id=engine).distinct()
+
+            # --- Sort ---
             if sort_val == 'played':
                 order = ['-played_count', 'is_ascii_name', Lower('title_name')]
             elif sort_val == 'played_inv':
@@ -119,6 +239,22 @@ class GamesListView(ProfileHotbarMixin, ListView):
                 order = ['-platinums_earn_rate', 'is_ascii_name', Lower('title_name')]
             elif sort_val == 'plat_rate_inv':
                 order = ['platinums_earn_rate', 'is_ascii_name', Lower('title_name')]
+            elif sort_val == 'rating' and needs_rating_annotation:
+                qs = qs.filter(_avg_rating__isnull=False)
+                order = ['-_avg_rating', 'is_ascii_name', Lower('title_name')]
+            elif sort_val == 'rating_inv' and needs_rating_annotation:
+                qs = qs.filter(_avg_rating__isnull=False)
+                order = ['_avg_rating', 'is_ascii_name', Lower('title_name')]
+            elif sort_val == 'difficulty' and needs_rating_annotation:
+                qs = qs.filter(_avg_difficulty__isnull=False)
+                order = ['-_avg_difficulty', 'is_ascii_name', Lower('title_name')]
+            elif sort_val == 'difficulty_inv' and needs_rating_annotation:
+                qs = qs.filter(_avg_difficulty__isnull=False)
+                order = ['_avg_difficulty', 'is_ascii_name', Lower('title_name')]
+            elif sort_val == 'newest':
+                order = ['-created_at', 'is_ascii_name', Lower('title_name')]
+            elif sort_val == 'oldest':
+                order = ['created_at', 'is_ascii_name', Lower('title_name')]
 
         qs = qs.prefetch_related(
             Prefetch('trophies', queryset=Trophy.objects.filter(trophy_type='platinum'), to_attr='platinum_trophy')
@@ -132,12 +268,27 @@ class GamesListView(ProfileHotbarMixin, ListView):
             {'text': 'Games'},
         ]
 
-        context['form'] = self.get_filter_form()
+        form = self.get_filter_form()
+        context['form'] = form
         context['selected_platforms'] = self.request.GET.getlist('platform')
         context['selected_regions'] = self.request.GET.getlist('regions')
         context['view_type'] = self.request.GET.get('view', 'grid')
         context['show_only_platinum'] = self.request.GET.get('show_only_platinum', '')
         context['filter_shovelware'] = self.request.GET.get('filter_shovelware', '')
+
+        # New filter state
+        context['show_delisted'] = self.request.GET.get('show_delisted', '')
+        context['show_unobtainable'] = self.request.GET.get('show_unobtainable', '')
+        context['show_online'] = self.request.GET.get('show_online', '')
+        context['show_buggy'] = self.request.GET.get('show_buggy', '')
+        context['selected_genres'] = self.request.GET.getlist('genres')
+        context['selected_themes'] = self.request.GET.getlist('themes')
+
+        # Check if any filters are active (for badge + auto-expanding the drawer)
+        context['has_advanced_filters'] = any(
+            v for k, v in self.request.GET.lists()
+            if k not in ('page', 'view') and any(v)
+        )
 
         context['seo_description'] = (
             "Browse PlayStation games on Platinum Pursuit. "
@@ -191,6 +342,8 @@ class GameDetailView(ProfileHotbarMixin, DetailView):
     def get_queryset(self):
         return super().get_queryset().select_related('concept', 'concept__igdb_match').prefetch_related(
             'concept__concept_companies__company',
+            'concept__concept_genres__genre',
+            'concept__concept_themes__theme',
         )
 
     def _get_target_profile(self):
@@ -934,4 +1087,291 @@ class GuideListView(ProfileHotbarMixin, ListView):
         track_site_event('guide_visit', 'list', self.request)
         track_page_view('guides_list', 'list', self.request)
 
+        return context
+
+
+class FlaggedGamesView(HtmxListMixin, ProfileHotbarMixin, ListView):
+    """Dedicated browse page for games with community-reported flag status.
+
+    Landing state shows category cards with counts. Selecting a category
+    displays a filtered game grid with secondary filters.
+    """
+    model = Game
+    template_name = 'trophies/flagged_games.html'
+    partial_template_name = 'trophies/partials/flagged_games/browse_results.html'
+    paginate_by = 30
+
+    FLAG_CATEGORIES = {
+        'delisted': {
+            'filter': {'is_delisted': True},
+            'label': 'Delisted Games',
+            'description': 'Games removed from the PlayStation Store. Get them while you can.',
+            'color': 'error',
+            'icon': 'store-slash',
+        },
+        'unobtainable': {
+            'filter': {'is_obtainable': False},
+            'label': 'Unobtainable Trophies',
+            'description': 'Games with trophies that can no longer be earned.',
+            'color': 'error',
+            'icon': 'lock',
+        },
+        'online': {
+            'filter': {'has_online_trophies': True},
+            'label': 'Online Trophies',
+            'description': 'Games with trophies requiring online connectivity.',
+            'color': 'warning',
+            'icon': 'wifi',
+        },
+        'buggy': {
+            'filter': {'has_buggy_trophies': True},
+            'label': 'Buggy Trophies',
+            'description': 'Games with trophies affected by known bugs.',
+            'color': 'warning',
+            'icon': 'bug',
+        },
+    }
+
+    # IGDB time-to-beat stored in seconds
+    TIME_BUCKETS = {
+        'under10': (None, 36000),
+        '10to25': (36000, 90000),
+        '25to50': (90000, 180000),
+        '50to100': (180000, 360000),
+        '100plus': (360000, None),
+    }
+    COMMUNITY_TIME_BUCKETS = {
+        'under10': (None, 10),
+        '10to25': (10, 25),
+        '25to50': (25, 50),
+        '50to100': (50, 100),
+        '100plus': (100, None),
+    }
+
+    def get_filter_form(self):
+        if not hasattr(self, '_filter_form'):
+            self._filter_form = GameSearchForm(self.request.GET)
+        return self._filter_form
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        category = self.request.GET.get('category', '')
+
+        if category in self.FLAG_CATEGORIES:
+            qs = qs.filter(**self.FLAG_CATEGORIES[category]['filter'])
+        else:
+            return qs.none()
+
+        form = self.get_filter_form()
+        order = ['is_ascii_name', Lower('title_name')]
+
+        qs = qs.annotate(
+            is_ascii_name=Case(
+                When(title_name__regex=r'^[A-Za-z0-9]', then=Value(0)),
+                default=Value(1),
+                output_field=IntegerField(),
+            ),
+        )
+
+        if form.is_valid():
+            query = form.cleaned_data.get('query')
+            platforms = form.cleaned_data.get('platform')
+            regions = form.cleaned_data.get('regions')
+            letter = form.cleaned_data.get('letter')
+            sort_val = form.cleaned_data.get('sort')
+
+            if query:
+                from trophies.util_modules.roman_numerals import expand_numeral_query
+                query_variants = expand_numeral_query(query)
+                q_filter = Q()
+                for variant in query_variants:
+                    q_filter |= Q(title_name__icontains=variant)
+                qs = qs.filter(q_filter)
+            if platforms:
+                qs = qs.for_platform(platforms)
+            if regions:
+                qs = qs.for_region(regions)
+            if letter:
+                if letter == '0-9':
+                    qs = qs.filter(title_name__regex=r'^[0-9]')
+                else:
+                    qs = qs.filter(title_name__istartswith=letter)
+
+            # Quick filters
+            if form.cleaned_data.get('show_only_platinum'):
+                qs = qs.filter(trophies__trophy_type='platinum').distinct()
+            if form.cleaned_data.get('filter_shovelware'):
+                qs = qs.exclude(shovelware_status__in=['auto_flagged', 'manually_flagged'])
+            badge_series = form.cleaned_data.get('badge_series')
+            if badge_series:
+                qs = qs.filter(
+                    concept__stages__series_slug=badge_series,
+                    concept__stages__series_slug__in=Badge.objects.filter(is_live=True).values_list('series_slug', flat=True),
+                ).distinct()
+            elif form.cleaned_data.get('in_badge'):
+                live_slugs = Badge.objects.filter(is_live=True).values_list('series_slug', flat=True)
+                qs = qs.filter(concept__stages__series_slug__in=live_slugs).distinct()
+
+            # Rating filters
+            min_rating = form.cleaned_data.get('min_rating')
+            difficulty_max = form.cleaned_data.get('difficulty_max')
+            fun_min = form.cleaned_data.get('fun_min')
+            needs_rating_annotation = min_rating or difficulty_max or fun_min or sort_val in ('rating', 'rating_inv', 'difficulty', 'difficulty_inv')
+
+            if needs_rating_annotation:
+                base_ratings = UserConceptRating.objects.filter(
+                    concept_id=OuterRef('concept_id'),
+                    concept_trophy_group__isnull=True,
+                )
+                qs = qs.annotate(
+                    _avg_rating=Subquery(
+                        base_ratings.values('concept_id').annotate(val=Avg('overall_rating')).values('val')[:1],
+                        output_field=FloatField(),
+                    ),
+                    _avg_difficulty=Subquery(
+                        base_ratings.values('concept_id').annotate(val=Avg('difficulty')).values('val')[:1],
+                        output_field=FloatField(),
+                    ),
+                )
+                if min_rating:
+                    qs = qs.filter(_avg_rating__gte=float(min_rating))
+                if difficulty_max:
+                    qs = qs.filter(_avg_difficulty__lte=float(difficulty_max))
+                if fun_min:
+                    fun_sq = Subquery(
+                        base_ratings.values('concept_id').annotate(val=Avg('fun_ranking')).values('val')[:1],
+                        output_field=FloatField(),
+                    )
+                    qs = qs.annotate(_avg_fun=fun_sq).filter(_avg_fun__gte=float(fun_min))
+
+            # Time-to-beat
+            igdb_time = form.cleaned_data.get('igdb_time')
+            if igdb_time and igdb_time in self.TIME_BUCKETS:
+                lo, hi = self.TIME_BUCKETS[igdb_time]
+                time_q = Q(concept__igdb_match__time_to_beat_completely__isnull=False)
+                if lo is not None:
+                    time_q &= Q(concept__igdb_match__time_to_beat_completely__gte=lo)
+                if hi is not None:
+                    time_q &= Q(concept__igdb_match__time_to_beat_completely__lt=hi)
+                qs = qs.filter(time_q)
+
+            community_time = form.cleaned_data.get('community_time')
+            if community_time and community_time in self.COMMUNITY_TIME_BUCKETS:
+                lo, hi = self.COMMUNITY_TIME_BUCKETS[community_time]
+                avg_hours_sq = UserConceptRating.objects.filter(
+                    concept_id=OuterRef('concept_id'),
+                    concept_trophy_group__isnull=True,
+                ).values('concept_id').annotate(val=Avg('hours_to_platinum')).values('val')[:1]
+                qs = qs.annotate(_community_hours=Subquery(avg_hours_sq, output_field=FloatField()))
+                hours_q = Q(_community_hours__isnull=False)
+                if lo is not None:
+                    hours_q &= Q(_community_hours__gte=lo)
+                if hi is not None:
+                    hours_q &= Q(_community_hours__lt=hi)
+                qs = qs.filter(hours_q)
+
+            # Genre / Theme / Engine
+            genres = form.cleaned_data.get('genres')
+            if genres:
+                qs = qs.filter(concept__concept_genres__genre_id__in=genres).distinct()
+            themes = form.cleaned_data.get('themes')
+            if themes:
+                qs = qs.filter(concept__concept_themes__theme_id__in=themes).distinct()
+            engine = form.cleaned_data.get('engine')
+            if engine:
+                qs = qs.filter(concept__concept_engines__engine_id=engine).distinct()
+
+            # Sort
+            if sort_val == 'played':
+                order = ['-played_count', 'is_ascii_name', Lower('title_name')]
+            elif sort_val == 'played_inv':
+                order = ['played_count', 'is_ascii_name', Lower('title_name')]
+            elif sort_val == 'rating' and needs_rating_annotation:
+                qs = qs.filter(_avg_rating__isnull=False)
+                order = ['-_avg_rating', 'is_ascii_name', Lower('title_name')]
+            elif sort_val == 'rating_inv' and needs_rating_annotation:
+                qs = qs.filter(_avg_rating__isnull=False)
+                order = ['_avg_rating', 'is_ascii_name', Lower('title_name')]
+            elif sort_val == 'difficulty' and needs_rating_annotation:
+                qs = qs.filter(_avg_difficulty__isnull=False)
+                order = ['-_avg_difficulty', 'is_ascii_name', Lower('title_name')]
+            elif sort_val == 'difficulty_inv' and needs_rating_annotation:
+                qs = qs.filter(_avg_difficulty__isnull=False)
+                order = ['_avg_difficulty', 'is_ascii_name', Lower('title_name')]
+            elif sort_val == 'newest':
+                order = ['-created_at', 'is_ascii_name', Lower('title_name')]
+            elif sort_val == 'oldest':
+                order = ['created_at', 'is_ascii_name', Lower('title_name')]
+
+        qs = qs.prefetch_related(
+            Prefetch('trophies', queryset=Trophy.objects.filter(trophy_type='platinum'), to_attr='platinum_trophy')
+        )
+        return qs.order_by(*order)
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['breadcrumb'] = [
+            {'text': 'Home', 'url': reverse_lazy('home')},
+            {'text': 'Games', 'url': reverse_lazy('games_list')},
+            {'text': 'Flagged Games'},
+        ]
+
+        category = self.request.GET.get('category', '')
+        context['active_category'] = category
+        context['categories'] = self.FLAG_CATEGORIES
+        context['form'] = self.get_filter_form()
+
+        context['selected_platforms'] = self.request.GET.getlist('platform')
+        context['selected_regions'] = self.request.GET.getlist('regions')
+        context['show_only_platinum'] = self.request.GET.get('show_only_platinum', '')
+        context['filter_shovelware'] = self.request.GET.get('filter_shovelware', '')
+        context['show_delisted'] = self.request.GET.get('show_delisted', '')
+        context['show_unobtainable'] = self.request.GET.get('show_unobtainable', '')
+        context['show_online'] = self.request.GET.get('show_online', '')
+        context['show_buggy'] = self.request.GET.get('show_buggy', '')
+        context['selected_genres'] = self.request.GET.getlist('genres')
+        context['selected_themes'] = self.request.GET.getlist('themes')
+        context['view_type'] = self.request.GET.get('view', 'grid')
+
+        context['has_advanced_filters'] = any(
+            v for k, v in self.request.GET.lists()
+            if k not in ('page', 'view', 'category') and any(v)
+        )
+
+        # Counts for each category (cheap queries on indexed boolean fields)
+        context['category_counts'] = {
+            key: Game.objects.filter(**info['filter']).count()
+            for key, info in self.FLAG_CATEGORIES.items()
+        }
+
+        # Rating map + user game map for page games
+        if category:
+            page_games = context['object_list']
+            concept_ids = [g.concept_id for g in page_games if g.concept_id]
+            if concept_ids:
+                ratings = UserConceptRating.objects.filter(
+                    concept_id__in=concept_ids,
+                    concept_trophy_group__isnull=True,
+                ).values('concept_id').annotate(
+                    avg_difficulty=Avg('difficulty'),
+                    avg_fun=Avg('fun_ranking'),
+                    avg_rating=Avg('overall_rating'),
+                    rating_count=Count('id'),
+                )
+                context['rating_map'] = {r['concept_id']: r for r in ratings}
+
+            if self.request.user.is_authenticated and hasattr(self.request.user, 'profile'):
+                game_ids = [g.id for g in page_games]
+                user_games = ProfileGame.objects.filter(
+                    profile=self.request.user.profile,
+                    game_id__in=game_ids,
+                ).values('game_id', 'progress', 'has_plat', 'earned_trophies_count')
+                context['user_game_map'] = {pg['game_id']: pg for pg in user_games}
+
+        context['seo_description'] = (
+            "Browse PlayStation games flagged by the community: delisted games, "
+            "unobtainable trophies, online-required trophies, and buggy trophies."
+        )
+
+        track_page_view('flagged_games', 'list', self.request)
         return context

@@ -1,0 +1,8 @@
+{# Company browse results partial. Returned on HTMX requests. #}
+{% include 'partials/htmx_pagination.html' with position='top' show_page_jump=True %}
+
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2 md:gap-2.5">
+    {% include 'trophies/partials/company_list/company_cards.html' %}
+</div>
+
+{% include 'partials/htmx_pagination.html' with position='bottom' show_page_jump=False %}

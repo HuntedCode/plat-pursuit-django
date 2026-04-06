@@ -75,6 +75,7 @@ class CustomUser(AbstractUser):
     paypal_cancel_at = models.DateTimeField(blank=True, null=True, help_text="When the PayPal subscription will expire after cancellation.")
     premium_tier = models.CharField(max_length=50, blank=True, null=True, choices=PREMIUM_TIER_CHOICES, help_text="User's subscription tier.")
     email_preferences = models.JSONField(default=dict, blank=True, help_text="User's email notification preferences")
+    browse_defaults = models.JSONField(default=dict, blank=True, help_text="Per-page saved filter defaults. Keys: 'games', 'trophies', 'profiles'.")
 
     USERNAME_FIELD = "email"
     REQUIRED_FIELDS = []

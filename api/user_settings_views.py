@@ -86,7 +86,7 @@ class UpdateQuickSettingsAPIView(APIView):
     POST /api/v1/user/quick-settings/
     Body: {"setting": "hide_hiddens", "value": true}
       or: {"setting": "user_timezone", "value": "America/New_York"}
-      or: {"setting": "default_region", "value": "NA"}
+      or: {"setting": "browse_defaults", "value": {"page": "games", "filters": {"platform": ["PS5"]}}}
 
     Updates a single profile or user setting.
     Used by the dashboard Quick Settings module for auto-save.
@@ -140,13 +140,23 @@ class UpdateQuickSettingsAPIView(APIView):
                     ):
                         backfill_calendar_from_history(cal)
 
-        # Region setting
-        elif setting == 'default_region':
-            from trophies.util_modules.constants import REGIONS
-            if value is not None and value not in REGIONS and value != '':
-                return Response({'error': 'Invalid region.'}, status=http_status.HTTP_400_BAD_REQUEST)
-            request.user.default_region = value if value else None
-            request.user.save(update_fields=['default_region'])
+        # Browse page default filters (save/clear per page)
+        elif setting == 'browse_defaults':
+            if not isinstance(value, dict):
+                return Response({'error': 'Value must be an object with page and filters.'}, status=http_status.HTTP_400_BAD_REQUEST)
+            page = value.get('page', '')
+            filters = value.get('filters', {})
+            if page not in ('games', 'trophies', 'profiles'):
+                return Response({'error': 'Invalid page.'}, status=http_status.HTTP_400_BAD_REQUEST)
+            if not isinstance(filters, dict):
+                return Response({'error': 'Filters must be an object.'}, status=http_status.HTTP_400_BAD_REQUEST)
+            defaults = request.user.browse_defaults or {}
+            if filters:
+                defaults[page] = filters
+            else:
+                defaults.pop(page, None)
+            request.user.browse_defaults = defaults
+            request.user.save(update_fields=['browse_defaults'])
 
         # Premium theme setting
         elif setting == 'selected_theme':

@@ -53,29 +53,11 @@
                     </p>
                 </div>
 
-                {# Toggle buttons #}
-                <div class="flex flex-col md:flex-row items-stretch md:items-center gap-1 md:gap-1.5 shrink-0">
-                    <button id="shovelware-toggle" type="button"
-                            class="btn btn-xs md:btn-sm gap-1 {% if filter_shovelware == 'on' %}btn-warning{% else %}btn-ghost border border-base-300{% endif %}"
-                            data-filter-shovelware="{{ filter_shovelware|default:'' }}"
-                            title="{% if filter_shovelware == 'on' %}Show Shovelware{% else %}Hide Shovelware{% endif %}">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
-                            <path d="m10.06 15.35 7.03-7.03c.98.42 2.16.23 2.95-.57l1.41-1.41c.29-.29.29-.77 0-1.06l-2.74-2.74a.754.754 0 0 0-1.06 0l-1.41 1.41c-.8.8-.98 1.97-.57 2.95l-7.03 7.03-1.77-1.77-3.54 3.54c-1.37 1.37-1.37 3.58 0 4.95s3.58 1.37 4.95 0l3.54-3.54-1.77-1.77Zm7.25-10.34.88-.88 1.68 1.68-.88.88c-.46.46-1.22.46-1.68 0s-.46-1.22 0-1.68M6.88 19.24c-.58.58-1.54.58-2.12 0s-.58-1.54 0-2.12L6.88 15 9 17.12z"/>
-                        </svg>
-                        {% if filter_shovelware == 'on' %}Filtered{% else %}Shovelware{% endif %}
-                    </button>
-
-                    <button id="platinum-toggle" type="button"
-                            class="btn btn-xs md:btn-sm gap-1 {% if show_only_platinum == 'on' %}btn-primary{% else %}btn-ghost border border-base-300{% endif %}"
-                            data-show-only-platinum="{{ show_only_platinum|default:'' }}"
-                            title="{% if show_only_platinum == 'on' %}Show All Games{% else %}Show Only Platinums{% endif %}">
-                        {% include 'partials/icons/trophy_cup.html' with color='currentColor' size='w-3.5 h-3.5' %}
-                        {% if show_only_platinum == 'on' %}Platinums{% else %}All Games{% endif %}
-                    </button>
-
-                    <button id="view-toggle" type="button"
+                {# View toggle (display preference, not a data filter) #}
+                <div class="shrink-0">
+                    <button type="button" id="view-toggle-btn"
+                            data-view-toggle="{% if view_type == 'list' %}grid{% else %}list{% endif %}"
                             class="btn btn-xs md:btn-sm gap-1 btn-ghost border border-base-300"
-                            data-view-type="{{ view_type|default:'grid' }}"
                             title="{% if view_type == 'list' %}Switch To Grid View{% else %}Switch To List View{% endif %}">
                         {% if view_type == 'list' %}
                             <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
@@ -90,33 +72,39 @@
     </div>
 
     {# ── Search + Sort Toolbar Card ── #}
-    <form id="filter-form" method="get">
+    <form data-browse-form
+          hx-get="{% url 'games_list' %}"
+          hx-target="#browse-results"
+          hx-push-url="true"
+          hx-swap="innerHTML"
+          hx-trigger="submit"
+          hx-indicator="#browse-results">
         <div class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral mb-3">
             <div class="card-body p-3 md:p-4">
                 {# Search + Sort row #}
                 <div class="flex flex-col md:flex-row gap-2 md:gap-3">
-                    {# Search input with icon #}
+                    {# Search input #}
                     <div class="relative flex-1">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-base-content/40 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-base-content/60 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                             <circle cx="11" cy="11" r="8"></circle>
                             <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
                         </svg>
-                        <input type="text" name="query" id="id_query" value="{{ request.GET.query }}"
+                        <input type="text" name="query" value="{{ request.GET.query }}"
                                class="input input-bordered input-sm md:input-md w-full pl-9 md:pl-10"
                                placeholder="Search for a game..." />
                     </div>
 
-                    {# Sort dropdown #}
-                    <select name="sort" id="id_sort"
+                    {# Sort dropdown (auto-submits on change via browse-filters.js) #}
+                    <select name="sort"
                             class="select select-bordered select-sm md:select-md w-full md:w-48 lg:w-56">
                         {% for value, display in form.sort.field.choices %}
                             <option value="{{ value }}" {% if request.GET.sort == value %}selected{% endif %}>{{ display }}</option>
                         {% endfor %}
                     </select>
 
-                    {# Submit button #}
-                    <button id="submit-btn" type="submit"
-                            class="btn btn-sm md:btn-md btn-primary w-full md:w-auto gap-1.5" disabled>
+                    {# Submit button (for text search confirmation) #}
+                    <button type="button" data-submit-btn
+                            class="btn btn-sm md:btn-md btn-primary w-full md:w-auto gap-1.5">
                         <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                             <circle cx="11" cy="11" r="8"></circle>
                             <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
@@ -127,15 +115,16 @@
 
                 {# Collapsible filter drawer #}
                 <details class="collapse collapse-arrow bg-white/[0.03] rounded-lg mt-2 border border-base-content/5"
-                         {% if request.GET.letter %}open{% endif %}>
-                    <summary class="collapse-title min-h-0 py-2 px-3 text-sm font-semibold text-base-content/60 flex items-center gap-2">
+>
+                    <summary class="collapse-title min-h-0 py-2 px-3 text-sm font-semibold text-base-content/60 flex items-center gap-2 {% if has_advanced_filters %}text-primary{% endif %}">
                         <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
                         </svg>
                         Filters
+                        {% if has_advanced_filters %}<span class="badge badge-xs badge-primary animate-pulse" data-filter-badge>Active</span>{% endif %}
                     </summary>
                     <div class="collapse-content px-3 pb-3 pt-0">
-                        {# Platforms #}
+                        {# ── Platforms ── #}
                         <div class="mb-3">
                             <h4 class="text-xs font-semibold text-base-content/60 uppercase tracking-wider mb-2 flex items-center gap-1.5">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -160,7 +149,7 @@
                             </div>
                         </div>
 
-                        {# Regions #}
+                        {# ── Regions ── #}
                         <div class="border-t border-base-content/10 pt-3 mb-3">
                             <h4 class="text-xs font-semibold text-base-content/60 uppercase tracking-wider mb-2 flex items-center gap-1.5">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -183,7 +172,257 @@
                             </div>
                         </div>
 
-                        {# Letter filter #}
+                        {# ── Quick Filters ── #}
+                        <div class="border-t border-base-content/10 pt-3 mb-3">
+                            <h4 class="text-xs font-semibold text-base-content/60 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <polyline points="20 6 9 17 4 12"></polyline>
+                                </svg>
+                                Quick Filters
+                            </h4>
+                            <div class="flex flex-wrap gap-1.5">
+                                <label class="cursor-pointer">
+                                    <input type="checkbox" name="show_only_platinum" value="on"
+                                           class="sr-only peer" {% if show_only_platinum == 'on' %}checked{% endif %} />
+                                    <span class="btn btn-xs peer-checked:btn-primary peer-checked:font-bold btn-ghost border border-base-300 transition-all gap-1">
+                                        {% include 'partials/icons/trophy_cup.html' with color='currentColor' size='w-3 h-3' %}
+                                        Platinum Only
+                                    </span>
+                                </label>
+                                <label class="cursor-pointer">
+                                    <input type="checkbox" name="filter_shovelware" value="on"
+                                           class="sr-only peer" {% if filter_shovelware == 'on' %}checked{% endif %} />
+                                    <span class="btn btn-xs peer-checked:btn-warning peer-checked:font-bold btn-ghost border border-base-300 transition-all gap-1">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" viewBox="0 0 24 24" fill="currentColor">
+                                            <path d="m10.06 15.35 7.03-7.03c.98.42 2.16.23 2.95-.57l1.41-1.41c.29-.29.29-.77 0-1.06l-2.74-2.74a.754.754 0 0 0-1.06 0l-1.41 1.41c-.8.8-.98 1.97-.57 2.95l-7.03 7.03-1.77-1.77-3.54 3.54c-1.37 1.37-1.37 3.58 0 4.95s3.58 1.37 4.95 0l3.54-3.54-1.77-1.77Zm7.25-10.34.88-.88 1.68 1.68-.88.88c-.46.46-1.22.46-1.68 0s-.46-1.22 0-1.68M6.88 19.24c-.58.58-1.54.58-2.12 0s-.58-1.54 0-2.12L6.88 15 9 17.12z"/>
+                                        </svg>
+                                        Hide Shovelware
+                                    </span>
+                                </label>
+                                <label class="cursor-pointer">
+                                    <input type="checkbox" name="in_badge" value="on"
+                                           class="sr-only peer" {% if request.GET.in_badge == 'on' %}checked{% endif %} />
+                                    <span class="btn btn-xs peer-checked:btn-secondary peer-checked:font-bold btn-ghost border border-base-300 transition-all gap-1">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                            <circle cx="12" cy="8" r="7"></circle>
+                                            <polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"></polyline>
+                                        </svg>
+                                        In a Badge
+                                    </span>
+                                </label>
+                                {% if form.badge_series.field.choices|length > 1 %}
+                                <select name="badge_series" class="select select-bordered select-xs w-auto max-w-40">
+                                    {% for value, display in form.badge_series.field.choices %}
+                                        <option value="{{ value }}" {% if request.GET.badge_series == value %}selected{% endif %}>{{ display }}</option>
+                                    {% endfor %}
+                                </select>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        {# ── Community Flags ── #}
+                        <div class="border-t border-base-content/10 pt-3 mb-3">
+                            <h4 class="text-xs font-semibold text-base-content/60 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"></path>
+                                    <line x1="4" y1="22" x2="4" y2="15"></line>
+                                </svg>
+                                Community Flags
+                            </h4>
+                            <div class="flex flex-wrap gap-1.5">
+                                <label class="cursor-pointer">
+                                    <input type="checkbox" name="show_delisted" value="on"
+                                           class="sr-only peer" {% if show_delisted == 'on' %}checked{% endif %} />
+                                    <span class="btn btn-xs peer-checked:btn-error peer-checked:font-bold btn-ghost border border-base-300 transition-all">
+                                        Delisted
+                                    </span>
+                                </label>
+                                <label class="cursor-pointer">
+                                    <input type="checkbox" name="show_unobtainable" value="on"
+                                           class="sr-only peer" {% if show_unobtainable == 'on' %}checked{% endif %} />
+                                    <span class="btn btn-xs peer-checked:btn-error peer-checked:font-bold btn-ghost border border-base-300 transition-all">
+                                        Unobtainable
+                                    </span>
+                                </label>
+                                <label class="cursor-pointer">
+                                    <input type="checkbox" name="show_online" value="on"
+                                           class="sr-only peer" {% if show_online == 'on' %}checked{% endif %} />
+                                    <span class="btn btn-xs peer-checked:btn-warning peer-checked:font-bold btn-ghost border border-base-300 transition-all">
+                                        Online Trophies
+                                    </span>
+                                </label>
+                                <label class="cursor-pointer">
+                                    <input type="checkbox" name="show_buggy" value="on"
+                                           class="sr-only peer" {% if show_buggy == 'on' %}checked{% endif %} />
+                                    <span class="btn btn-xs peer-checked:btn-warning peer-checked:font-bold btn-ghost border border-base-300 transition-all">
+                                        Buggy Trophies
+                                    </span>
+                                </label>
+                            </div>
+                        </div>
+
+                        {# ── Ratings ── #}
+                        <div class="border-t border-base-content/10 pt-3 mb-3">
+                            <h4 class="text-xs font-semibold text-base-content/60 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
+                                    <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+                                </svg>
+                                Community Ratings
+                            </h4>
+                            <div class="flex flex-wrap gap-2">
+                                <div class="flex items-center gap-1.5">
+                                    <label class="text-xs text-base-content/50 whitespace-nowrap">Min Rating:</label>
+                                    <select name="min_rating" class="select select-bordered select-xs">
+                                        {% for value, display in form.min_rating.field.choices %}
+                                            <option value="{{ value }}" {% if request.GET.min_rating == value %}selected{% endif %}>{{ display }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                                <div class="flex items-center gap-1.5">
+                                    <label class="text-xs text-base-content/50 whitespace-nowrap">Max Difficulty:</label>
+                                    <select name="difficulty_max" class="select select-bordered select-xs">
+                                        {% for value, display in form.difficulty_max.field.choices %}
+                                            <option value="{{ value }}" {% if request.GET.difficulty_max == value %}selected{% endif %}>{{ display }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                                <div class="flex items-center gap-1.5">
+                                    <label class="text-xs text-base-content/50 whitespace-nowrap">Min Fun:</label>
+                                    <select name="fun_min" class="select select-bordered select-xs">
+                                        {% for value, display in form.fun_min.field.choices %}
+                                            <option value="{{ value }}" {% if request.GET.fun_min == value %}selected{% endif %}>{{ display }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        {# ── Time to Beat ── #}
+                        <div class="border-t border-base-content/10 pt-3 mb-3">
+                            <h4 class="text-xs font-semibold text-base-content/60 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <circle cx="12" cy="12" r="10"></circle>
+                                    <polyline points="12 6 12 12 16 14"></polyline>
+                                </svg>
+                                Time to Beat
+                            </h4>
+                            <div class="space-y-2">
+                                <div>
+                                    <span class="text-xs text-base-content/50 block mb-1">IGDB Estimate (completionist)</span>
+                                    <div class="flex flex-wrap gap-1.5">
+                                        {% for value, display in form.igdb_time.field.choices %}
+                                            {% if value %}
+                                                <label class="cursor-pointer">
+                                                    <input type="radio" name="igdb_time" value="{{ value }}"
+                                                           class="sr-only peer" {% if request.GET.igdb_time == value %}checked{% endif %} />
+                                                    <span class="btn btn-xs peer-checked:btn-accent peer-checked:font-bold btn-ghost border border-base-300 transition-all">
+                                                        {{ display }}
+                                                    </span>
+                                                </label>
+                                            {% endif %}
+                                        {% endfor %}
+                                        <label class="cursor-pointer">
+                                            <input type="radio" name="igdb_time" value=""
+                                                   class="sr-only peer" {% if not request.GET.igdb_time %}checked{% endif %} />
+                                            <span class="btn btn-xs peer-checked:btn-ghost peer-checked:font-bold btn-ghost border border-base-300 transition-all text-base-content/40">
+                                                Any
+                                            </span>
+                                        </label>
+                                    </div>
+                                </div>
+                                <div>
+                                    <span class="text-xs text-base-content/50 block mb-1">Community Reported (hours to platinum)</span>
+                                    <div class="flex flex-wrap gap-1.5">
+                                        {% for value, display in form.community_time.field.choices %}
+                                            {% if value %}
+                                                <label class="cursor-pointer">
+                                                    <input type="radio" name="community_time" value="{{ value }}"
+                                                           class="sr-only peer" {% if request.GET.community_time == value %}checked{% endif %} />
+                                                    <span class="btn btn-xs peer-checked:btn-info peer-checked:font-bold btn-ghost border border-base-300 transition-all">
+                                                        {{ display }}
+                                                    </span>
+                                                </label>
+                                            {% endif %}
+                                        {% endfor %}
+                                        <label class="cursor-pointer">
+                                            <input type="radio" name="community_time" value=""
+                                                   class="sr-only peer" {% if not request.GET.community_time %}checked{% endif %} />
+                                            <span class="btn btn-xs peer-checked:btn-ghost peer-checked:font-bold btn-ghost border border-base-300 transition-all text-base-content/40">
+                                                Any
+                                            </span>
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {# ── Genres ── #}
+                        {% if form.genres.field.choices %}
+                        <div class="border-t border-base-content/10 pt-3 mb-3">
+                            <h4 class="text-xs font-semibold text-base-content/60 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
+                                    <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
+                                </svg>
+                                Genres
+                            </h4>
+                            <div class="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto">
+                                {% for value, display in form.genres.field.choices %}
+                                    <label class="cursor-pointer">
+                                        <input type="checkbox" name="genres" value="{{ value }}"
+                                               class="sr-only peer" {% if value|stringformat:"s" in selected_genres %}checked{% endif %} />
+                                        <span class="btn btn-xs peer-checked:btn-secondary peer-checked:font-bold btn-ghost border border-base-300 transition-all">
+                                            {{ display }}
+                                        </span>
+                                    </label>
+                                {% endfor %}
+                            </div>
+                        </div>
+                        {% endif %}
+
+                        {# ── Themes ── #}
+                        {% if form.themes.field.choices %}
+                        <div class="border-t border-base-content/10 pt-3 mb-3">
+                            <h4 class="text-xs font-semibold text-base-content/60 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <circle cx="13.5" cy="6.5" r="2.5"></circle>
+                                    <path d="M17 2H7a5 5 0 0 0-5 5v10a5 5 0 0 0 5 5h10a5 5 0 0 0 5-5V7a5 5 0 0 0-5-5Z"></path>
+                                </svg>
+                                Themes
+                            </h4>
+                            <div class="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto">
+                                {% for value, display in form.themes.field.choices %}
+                                    <label class="cursor-pointer">
+                                        <input type="checkbox" name="themes" value="{{ value }}"
+                                               class="sr-only peer" {% if value|stringformat:"s" in selected_themes %}checked{% endif %} />
+                                        <span class="btn btn-xs peer-checked:btn-secondary peer-checked:font-bold btn-ghost border border-base-300 transition-all">
+                                            {{ display }}
+                                        </span>
+                                    </label>
+                                {% endfor %}
+                            </div>
+                        </div>
+                        {% endif %}
+
+                        {# ── Game Engine ── #}
+                        {% if form.engine.field.choices|length > 1 %}
+                        <div class="border-t border-base-content/10 pt-3 mb-3">
+                            <h4 class="text-xs font-semibold text-base-content/60 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <circle cx="12" cy="12" r="3"></circle>
+                                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                                </svg>
+                                Game Engine
+                            </h4>
+                            <select name="engine" class="select select-bordered select-xs w-full md:w-64">
+                                {% for value, display in form.engine.field.choices %}
+                                    <option value="{{ value }}" {% if request.GET.engine == value|stringformat:"s" %}selected{% endif %}>{{ display }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        {% endif %}
+
+                        {# ── Letter filter ── #}
                         <div class="border-t border-base-content/10 pt-3">
                             <h4 class="text-xs font-semibold text-base-content/60 uppercase tracking-wider mb-2 flex items-center gap-1.5">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -195,78 +434,79 @@
                             </h4>
                             <div class="flex gap-1 overflow-x-auto md:flex-wrap md:overflow-x-visible pb-1">
                                 {% for value, display in form.fields.letter.choices %}
-                                    <a href="?{% query_transform letter=value page=1 %}"
-                                       class="btn btn-xs flex-shrink-0 transition-all duration-200 {% if request.GET.letter == value %}btn-primary font-bold{% else %}btn-ghost border border-base-300 hover:btn-primary{% endif %}">
-                                        {{ display|default:"All" }}
-                                    </a>
+                                    <label class="cursor-pointer flex-shrink-0">
+                                        <input type="radio" name="letter" value="{{ value }}"
+                                               class="sr-only peer" {% if request.GET.letter == value %}checked{% endif %} />
+                                        <span class="btn btn-xs peer-checked:btn-primary peer-checked:font-bold btn-ghost border border-base-300 transition-all duration-200">
+                                            {{ display|default:"All" }}
+                                        </span>
+                                    </label>
                                 {% endfor %}
                             </div>
+                        </div>
+
+                        {# Filter actions: Reset / Save / Clear defaults #}
+                        <div class="border-t border-base-content/10 pt-3 mb-3">
+                            <div class="flex items-center gap-2 flex-wrap">
+                                <a href="{% url 'games_list' %}"
+                                   class="btn btn-xs btn-ghost border border-base-300 gap-1">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <polyline points="1 4 1 10 7 10"></polyline>
+                                        <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path>
+                                    </svg>
+                                    Reset Filters
+                                </a>
+                                {% if user.is_authenticated %}
+                                <button type="button" data-save-defaults="games"
+                                        class="btn btn-xs btn-accent btn-outline gap-1">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+                                        <polyline points="17 21 17 13 7 13 7 21"></polyline>
+                                        <polyline points="7 3 7 8 15 8"></polyline>
+                                    </svg>
+                                    Save as Defaults
+                                </button>
+                                <button type="button" data-clear-defaults="games"
+                                        class="btn btn-xs btn-ghost border border-base-300 gap-1 text-base-content/40 hover:text-error hover:border-error">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                                    </svg>
+                                    Clear Defaults
+                                </button>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        {# IGDB attribution note #}
+                        <div class="border-t border-base-content/10 pt-3 mt-1">
+                            <p class="text-[10px] text-base-content/30 italic pr-1">
+                                Genre, theme, engine, and time-to-beat data is sourced from
+                                <a href="https://www.igdb.com" target="_blank" rel="noopener noreferrer" class="link link-primary">IGDB</a>
+                                and may not be available for every game. Community flags and ratings are contributed by Platinum Pursuit users.
+                            </p>
                         </div>
                     </div>
                 </details>
             </div>
         </div>
 
-        <input type="hidden" name="view" value="{{ request.GET.view }}" />
-        <input type="hidden" name="letter" value="{{ request.GET.letter }}" />
-        <input type="hidden" name="show_only_platinum" value="{{ request.GET.show_only_platinum }}" />
-        <input type="hidden" name="filter_shovelware" value="{{ request.GET.filter_shovelware }}" />
+        {# Hidden inputs for non-filter state #}
+        <input type="hidden" name="view" value="{{ view_type|default:'grid' }}" />
+        <input type="hidden" name="page" value="{{ page_obj.number|default:'1' }}" />
     </form>
-
-    {# ── Active Filter Summary ── #}
-    <div class="flex flex-wrap items-center gap-1.5 mb-3 text-xs text-base-content/50">
-        <span class="font-semibold">Showing:</span>
-        {% if selected_platforms %}
-            {% for p in selected_platforms %}
-                <span class="badge badge-xs badge-ghost">{{ p }}</span>
-            {% endfor %}
-        {% endif %}
-        {% if selected_regions %}
-            <span class="text-base-content/30">·</span>
-            {% for r in selected_regions %}
-                <span class="badge badge-xs badge-ghost">{{ r|upper }}</span>
-            {% endfor %}
-        {% endif %}
-        {% if request.GET.query %}
-            <span class="text-base-content/30">·</span>
-            <span class="badge badge-xs badge-ghost">"{{ request.GET.query }}"</span>
-        {% endif %}
-        {% if request.GET.letter %}
-            <span class="text-base-content/30">·</span>
-            <span class="badge badge-xs badge-ghost">Letter: {{ request.GET.letter }}</span>
-        {% endif %}
-        {% if show_only_platinum == 'on' %}
-            <span class="text-base-content/30">·</span>
-            <span class="badge badge-xs badge-primary">Platinums only</span>
-        {% endif %}
-        {% if filter_shovelware == 'on' %}
-            <span class="text-base-content/30">·</span>
-            <span class="badge badge-xs badge-warning">No shovelware</span>
-        {% endif %}
-        <a href="{% url 'games_list' %}" class="link link-primary text-xs ml-1">Reset</a>
-    </div>
 
     {% include 'partials/ad_unit.html' with ad_slot="6809027176" %}
 
-    {% include 'partials/pagination.html' with position='top' show_page_jump=True anchor='filter-form' %}
-
-    {% if view_type == 'list' %}
-        <div id="items-grid" class="space-y-1.5 md:space-y-2">
-            {% include 'trophies/partials/game_list/game_list_items.html' %}
-        </div>
-    {% else %}
-        <div id="items-grid" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-2 md:gap-2.5">
-            {% include 'trophies/partials/game_list/game_cards.html' %}
-        </div>
-    {% endif %}
-
-    {% include 'partials/pagination.html' with position='bottom' show_page_jump=False anchor='filter-form' %}
+    {# ── Browse Results (HTMX swap target) ── #}
+    <div id="browse-results">
+        {% include 'trophies/partials/game_list/browse_results.html' %}
+    </div>
 
 {% endblock %}
 
 {% block js_scripts %}
-    <script src="{% static 'js/submit_shimmer.js' %}"></script>
-    <script src="{% static 'js/list_page_filters.js' %}"></script>
+    <script src="{% static 'js/browse-filters.js' %}"></script>
     {% if user.is_authenticated and user.profile %}
     <script src="{% static 'js/game-lists.js' %}"></script>
     <script>document.addEventListener('DOMContentLoaded', () => GameListQuickAdd.init());</script>

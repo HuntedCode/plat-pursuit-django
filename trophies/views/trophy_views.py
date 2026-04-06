@@ -8,7 +8,7 @@ from django.shortcuts import get_object_or_404
 from django.urls import reverse_lazy, reverse
 from django.views.generic import ListView, View
 from urllib.parse import urlencode
-from trophies.mixins import ProfileHotbarMixin
+from trophies.mixins import ProfileHotbarMixin, HtmxListMixin
 from ..models import Trophy, EarnedTrophy, Profile, UserTrophySelection
 from ..forms import TrophySearchForm
 from trophies.util_modules.constants import MODERN_PLATFORMS
@@ -16,7 +16,7 @@ from trophies.util_modules.constants import MODERN_PLATFORMS
 logger = logging.getLogger("psn_api")
 
 
-class TrophiesListView(ProfileHotbarMixin, ListView):
+class TrophiesListView(HtmxListMixin, ProfileHotbarMixin, ListView):
     """
     Display paginated list of trophies with filtering and sorting options.
 
@@ -30,6 +30,7 @@ class TrophiesListView(ProfileHotbarMixin, ListView):
     """
     model = Trophy
     template_name = 'trophies/trophy_list.html'
+    partial_template_name = 'trophies/partials/trophy_list/browse_results.html'
     paginate_by = 30
 
     def get_filter_form(self):
@@ -39,14 +40,16 @@ class TrophiesListView(ProfileHotbarMixin, ListView):
 
     def dispatch(self, request, *args, **kwargs):
         if not request.GET:
-            default_params = {'platform': MODERN_PLATFORMS}
-            if request.user.is_authenticated and request.user.default_region:
-                default_params['region'] = ['global', request.user.default_region]
-
-            if default_params:
-                query_string = urlencode(default_params, doseq=True)
-                url = reverse('trophies_list') + '?' + query_string
-                return HttpResponseRedirect(url)
+            if request.user.is_authenticated:
+                defaults = (request.user.browse_defaults or {}).get('trophies', {})
+                if defaults:
+                    return HttpResponseRedirect(
+                        reverse('trophies_list') + '?' + urlencode(defaults, doseq=True)
+                    )
+            # Anonymous or no saved defaults: modern platforms only
+            return HttpResponseRedirect(
+                reverse('trophies_list') + '?' + urlencode({'platform': MODERN_PLATFORMS}, doseq=True)
+            )
         return super().dispatch(request, *args, **kwargs)
 
     def get_queryset(self):
@@ -154,10 +157,10 @@ class TrophiesListView(ProfileHotbarMixin, ListView):
             )
             context['user_earned_ids'] = earned_ids
 
-        # Auto-open filter drawer when secondary filters active
-        context['has_active_filters'] = bool(
-            self.request.GET.getlist('type') or
-            self.request.GET.getlist('psn_rarity')
+        # Auto-open filter drawer when any filters are active
+        context['has_active_filters'] = any(
+            v for k, v in self.request.GET.lists()
+            if k not in ('page', 'view') and any(v)
         )
 
         track_page_view('trophies_list', 'list', self.request)

@@ -16,6 +16,44 @@ class GameSearchForm(forms.Form):
     )
     show_only_platinum = forms.BooleanField(required=False, label='Show only games with platinum')
     filter_shovelware = forms.BooleanField(required=False, label='Filter out shovelware')
+    in_badge = forms.BooleanField(required=False, label='In a badge series')
+    badge_series = forms.ChoiceField(choices=[('', 'Any Badge')], required=False, label='Badge Series')
+
+    # Community flag filters
+    show_delisted = forms.BooleanField(required=False, label='Delisted')
+    show_unobtainable = forms.BooleanField(required=False, label='Unobtainable')
+    show_online = forms.BooleanField(required=False, label='Online Trophies')
+    show_buggy = forms.BooleanField(required=False, label='Buggy Trophies')
+
+    # Community rating filters
+    min_rating = forms.ChoiceField(
+        choices=[('', 'Any Rating'), ('3', '3+ Stars'), ('3.5', '3.5+ Stars'), ('4', '4+ Stars'), ('4.5', '4.5+ Stars')],
+        required=False, label='Min Rating',
+    )
+    difficulty_max = forms.ChoiceField(
+        choices=[('', 'Any Difficulty'), ('3', 'Easy (1-3)'), ('5', 'Medium (1-5)'), ('7', 'Hard (1-7)')],
+        required=False, label='Max Difficulty',
+    )
+    fun_min = forms.ChoiceField(
+        choices=[('', 'Any Fun'), ('5', '5+ Fun'), ('7', '7+ Fun'), ('9', '9+ Fun')],
+        required=False, label='Min Fun',
+    )
+
+    # Time-to-beat filters
+    igdb_time = forms.ChoiceField(
+        choices=[('', 'Any'), ('under10', 'Under 10h'), ('10to25', '10-25h'), ('25to50', '25-50h'), ('50to100', '50-100h'), ('100plus', '100+ hours')],
+        required=False, label='IGDB Estimate',
+    )
+    community_time = forms.ChoiceField(
+        choices=[('', 'Any'), ('under10', 'Under 10h'), ('10to25', '10-25h'), ('25to50', '25-50h'), ('50to100', '50-100h'), ('100plus', '100+ hours')],
+        required=False, label='Community Reported',
+    )
+
+    # Genre / Theme / Engine filters
+    genres = forms.MultipleChoiceField(required=False, label='Genres')
+    themes = forms.MultipleChoiceField(required=False, label='Themes')
+    engine = forms.ChoiceField(choices=[('', 'Any Engine')], required=False, label='Game Engine')
+
     sort = forms.ChoiceField(
         choices=[
             ('alpha', 'Alphabetical'),
@@ -25,10 +63,62 @@ class GameSearchForm(forms.Form):
             ('plat_earned_inv', 'Least Platinums Earned'),
             ('plat_rate', 'Highest Plat Earn Rate'),
             ('plat_rate_inv', 'Lowest Plat Earn Rate'),
+            ('rating', 'Highest Rated'),
+            ('rating_inv', 'Lowest Rated'),
+            ('difficulty', 'Hardest'),
+            ('difficulty_inv', 'Easiest'),
+            ('newest', 'Newest'),
+            ('oldest', 'Oldest'),
         ],
         required=False,
         label='Sort By'
     )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        from trophies.models import Genre, Theme, GameEngine, Badge
+        try:
+            self.fields['genres'].choices = list(
+                Genre.objects.values_list('id', 'name').order_by('name')
+            )
+            self.fields['themes'].choices = list(
+                Theme.objects.values_list('id', 'name').order_by('name')
+            )
+            self.fields['engine'].choices = [('', 'Any Engine')] + list(
+                GameEngine.objects.values_list('id', 'name').order_by('name')
+            )
+            badge_qs = Badge.objects.filter(
+                is_live=True, tier=1, series_slug__isnull=False,
+            ).exclude(series_slug='').order_by('display_series', 'name')
+            self.fields['badge_series'].choices = [('', 'Any Badge')] + [
+                (b.series_slug, b.display_series or b.name)
+                for b in badge_qs
+            ]
+        except Exception:
+            pass
+
+class CompanySearchForm(forms.Form):
+    query = forms.CharField(required=False, label='Search by name')
+    role = forms.MultipleChoiceField(
+        choices=[
+            ('developer', 'Developer'),
+            ('publisher', 'Publisher'),
+            ('porting', 'Porting'),
+            ('supporting', 'Supporting'),
+        ],
+        required=False, label='Roles',
+    )
+    country = forms.CharField(required=False, label='Country')
+    sort = forms.ChoiceField(
+        choices=[
+            ('alpha', 'Alphabetical'),
+            ('games', 'Most Games'),
+            ('games_inv', 'Fewest Games'),
+        ],
+        required=False,
+        label='Sort By',
+    )
+
 
 class TrophySearchForm(forms.Form):
     query = forms.CharField(required=False, label='Search by name')

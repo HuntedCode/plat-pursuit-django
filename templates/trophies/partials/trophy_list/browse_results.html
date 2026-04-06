@@ -1,0 +1,8 @@
+{# Trophy browse results partial. Returned on HTMX requests. #}
+{% include 'partials/htmx_pagination.html' with position='top' show_page_jump=True %}
+
+<div class="space-y-1.5 md:space-y-2">
+    {% include 'trophies/partials/trophy_list/trophy_list_items.html' %}
+</div>
+
+{% include 'partials/htmx_pagination.html' with position='bottom' show_page_jump=False %}

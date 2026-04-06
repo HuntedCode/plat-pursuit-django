@@ -17,6 +17,10 @@ module.exports = {
     'hover:shadow-trophy-bronze/30', 'hover:shadow-trophy-silver/30', 'hover:shadow-trophy-gold/30', 'hover:shadow-trophy-platinum/30',
     'group-hover:border-trophy-bronze', 'group-hover:border-trophy-silver', 'group-hover:border-trophy-gold', 'group-hover:border-trophy-platinum',
     'group-hover:text-trophy-bronze', 'group-hover:text-trophy-silver', 'group-hover:text-trophy-gold', 'group-hover:text-trophy-platinum',
+    // Flag category cards (dynamically constructed via template variable)
+    'badge-error', 'badge-warning', 'badge-accent', 'badge-info',
+    'ring-error/30', 'ring-warning/30',
+    'hover:border-error', 'hover:border-warning',
   ],
   theme: { extend: {} },
   plugins: [require('daisyui')],

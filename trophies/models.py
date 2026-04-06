@@ -879,6 +879,33 @@ class Concept(models.Model):
                 cc.concept = self
                 cc.save(update_fields=['concept'])
 
+        # ConceptGenre: move to target, skip duplicates
+        existing_genre_ids = set(
+            self.concept_genres.values_list('genre_id', flat=True)
+        )
+        for cg in other.concept_genres.all():
+            if cg.genre_id not in existing_genre_ids:
+                cg.concept = self
+                cg.save(update_fields=['concept'])
+
+        # ConceptTheme: move to target, skip duplicates
+        existing_theme_ids = set(
+            self.concept_themes.values_list('theme_id', flat=True)
+        )
+        for ct in other.concept_themes.all():
+            if ct.theme_id not in existing_theme_ids:
+                ct.concept = self
+                ct.save(update_fields=['concept'])
+
+        # ConceptEngine: move to target, skip duplicates
+        existing_engine_ids = set(
+            self.concept_engines.values_list('engine_id', flat=True)
+        )
+        for ce in other.concept_engines.all():
+            if ce.engine_id not in existing_engine_ids:
+                ce.concept = self
+                ce.save(update_fields=['concept'])
+
         # IGDBMatch: move to target if target lacks one, otherwise discard source's
         if hasattr(other, 'igdb_match'):
             if not hasattr(self, 'igdb_match'):
@@ -3875,6 +3902,107 @@ class ConceptCompany(models.Model):
         if self.is_supporting:
             roles.append('Support')
         return f"{self.company.name} ({', '.join(roles or ['No role'])}) - {self.concept}"
+
+
+class Genre(models.Model):
+    """Normalized IGDB genre (e.g. Shooter, RPG, Puzzle)."""
+    igdb_id = models.IntegerField(unique=True, db_index=True)
+    name = models.CharField(max_length=100)
+    slug = models.SlugField(max_length=100, unique=True)
+
+    class Meta:
+        ordering = ['name']
+
+    def __str__(self):
+        return self.name
+
+
+class Theme(models.Model):
+    """Normalized IGDB theme (e.g. Science fiction, Open world, Horror)."""
+    igdb_id = models.IntegerField(unique=True, db_index=True)
+    name = models.CharField(max_length=100)
+    slug = models.SlugField(max_length=100, unique=True)
+
+    class Meta:
+        ordering = ['name']
+
+    def __str__(self):
+        return self.name
+
+
+class GameEngine(models.Model):
+    """Normalized IGDB game engine (e.g. Unreal Engine 5, Unity, Decima)."""
+    igdb_id = models.IntegerField(unique=True, db_index=True)
+    name = models.CharField(max_length=100)
+    slug = models.SlugField(max_length=100, unique=True)
+
+    class Meta:
+        ordering = ['name']
+        verbose_name = 'game engine'
+        verbose_name_plural = 'game engines'
+
+    def __str__(self):
+        return self.name
+
+
+class ConceptGenre(models.Model):
+    """Links a Concept to a Genre (M2M through model)."""
+    concept = models.ForeignKey(
+        Concept, on_delete=models.CASCADE, related_name='concept_genres'
+    )
+    genre = models.ForeignKey(
+        Genre, on_delete=models.CASCADE, related_name='genre_concepts'
+    )
+
+    class Meta:
+        unique_together = ['concept', 'genre']
+        indexes = [
+            models.Index(fields=['concept'], name='conceptgenre_concept_idx'),
+            models.Index(fields=['genre'], name='conceptgenre_genre_idx'),
+        ]
+
+    def __str__(self):
+        return f"{self.concept} - {self.genre.name}"
+
+
+class ConceptTheme(models.Model):
+    """Links a Concept to a Theme (M2M through model)."""
+    concept = models.ForeignKey(
+        Concept, on_delete=models.CASCADE, related_name='concept_themes'
+    )
+    theme = models.ForeignKey(
+        Theme, on_delete=models.CASCADE, related_name='theme_concepts'
+    )
+
+    class Meta:
+        unique_together = ['concept', 'theme']
+        indexes = [
+            models.Index(fields=['concept'], name='concepttheme_concept_idx'),
+            models.Index(fields=['theme'], name='concepttheme_theme_idx'),
+        ]
+
+    def __str__(self):
+        return f"{self.concept} - {self.theme.name}"
+
+
+class ConceptEngine(models.Model):
+    """Links a Concept to a GameEngine (M2M through model)."""
+    concept = models.ForeignKey(
+        Concept, on_delete=models.CASCADE, related_name='concept_engines'
+    )
+    engine = models.ForeignKey(
+        GameEngine, on_delete=models.CASCADE, related_name='engine_concepts'
+    )
+
+    class Meta:
+        unique_together = ['concept', 'engine']
+        indexes = [
+            models.Index(fields=['concept'], name='conceptengine_concept_idx'),
+            models.Index(fields=['engine'], name='conceptengine_engine_idx'),
+        ]
+
+    def __str__(self):
+        return f"{self.concept} - {self.engine.name}"
 
 
 class IGDBMatch(models.Model):

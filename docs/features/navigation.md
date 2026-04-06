@@ -11,10 +11,10 @@ The design philosophy: **no feature silos**. Every page should link outward to r
 Menus are organized by intent, not by data type:
 
 - **Browse**: Finding content (Games, Profiles, Trophies)
+- **Discover**: Exploring metadata (Companies, Genres & Themes, Flagged Games)
 - **Community**: Social features (Discord, Challenges, Game Lists, Review Hub)
 - **Earn**: Progression features (Badges, Milestones, Leaderboards, Titles)
-- **Guides**: Learning content (Guide Hub)
-- **My Pursuit**: Personal hub (Dashboard, Customization, Recap, My Guides/Challenges/Lists/Profile/Shareables)
+- **My Pursuit**: Personal hub (Dashboard, Customization, Recap, My Challenges/Lists/Profile/Shareables)
 
 ## File Map
 
@@ -35,10 +35,10 @@ Menus are organized by intent, not by data type:
 
 | Menu | Items | Auth-Gated Items |
 |------|-------|------------------|
+| Discover | Companies, Genres & Themes, Flagged Games | None |
 | Community | Discord, Challenges, Game Lists, Review Hub | Fundraiser (when active) |
 | Earn | Badges, Milestones, Leaderboards, Titles | Titles |
-| Guides | Guide Hub, My Guides | My Guides |
-| My Pursuit | Dashboard, Customization, Monthly Recap, My Guides, My Challenges, My Lists, My Profile, My Shareables | All (entire menu auth-gated) |
+| My Pursuit | Dashboard, Customization, Monthly Recap, My Challenges, My Lists, My Profile, My Shareables | All (entire menu auth-gated) |
 
 Dashboard is staff-only within My Pursuit.
 
@@ -58,13 +58,13 @@ Mirrors the navbar exactly. Section headers match mega-menu names. Auth gating i
 
 Six-column grid (`grid-cols-3 lg:grid-cols-6`):
 
-| Browse | Community | Earn | Guides | My Pursuit / Account | Legal + Connect |
-|--------|-----------|------|--------|---------------------|-----------------|
-| Games | Discord | Badges | Guide Hub | My Profile | Privacy |
-| Profiles | Challenges | Milestones | | My Guides | Terms |
-| Trophies | Game Lists | Leaderboards | | My Challenges | About |
-| | Review Hub | Titles* | | My Lists | Contact |
-| | | | | My Shareables | + Social icons |
+| Browse | Discover | Community | Earn | My Pursuit / Account | Legal + Connect |
+|--------|----------|-----------|------|---------------------|-----------------|
+| Games | Companies | Discord | Badges | My Profile | Privacy |
+| Profiles | Genres & Themes | Challenges | Milestones | My Challenges | Terms |
+| Trophies | Flagged Games | Game Lists | Leaderboards | My Lists | About |
+| | | Review Hub | Titles* | My Shareables | Contact |
+| | | | | | + Social icons |
 
 - Titles link: auth-gated (only shown to authenticated users with a profile)
 - My Pursuit column: shown only for authenticated users with a profile. Guests see "Account" with Sign In / Sign Up links instead (ensures 6 grid children always).
@@ -81,6 +81,10 @@ These are the cross-links embedded in feature pages:
 | Challenge Hub | Milestones (challenges category) | Alert in `challenge_hub.html` |
 | Review Hub (multi-game) | Game detail pages (dropdown) | Dropdown in `hub_header.html` |
 | Profile header | Challenges tab, Reviews tab, Leaderboards, Milestones | Quick links in `profile_detail_header.html` |
+| Game detail (about card) | Genre detail, Theme detail, Company detail | Clickable badges/links in `game_about_card.html` |
+| Game detail (header) | Company detail (developer, publisher) | Links in `game_detail_header.html` |
+| Company detail | Game detail (per-role game cards) | Cards in `company_detail/game_section.html` |
+| Genre/Theme detail | Game detail (game cards) | Reuses `game_list/game_cards.html` |
 
 ## Profile Page Tabs
 

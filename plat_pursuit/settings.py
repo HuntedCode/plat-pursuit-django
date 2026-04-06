@@ -161,6 +161,7 @@ CONTENT_SECURITY_POLICY = {
             "https://tpc.googlesyndication.com",       # AdSense
             "https://www.google.com",                  # AdSense
             "https://www.gstatic.com",                 # AdSense
+            "https://images.igdb.com",                 # IGDB company logos & game covers
         ],
         "frame-src": [
             "'self'",
@@ -208,6 +209,7 @@ INSTALLED_APPS = [
     'djstripe',
     'notifications.apps.NotificationsConfig',
     'fundraiser.apps.FundraiserConfig',
+    'django_htmx',
 ]
 
 AUTHENTICATION_BACKENDS = [
@@ -222,6 +224,7 @@ MIDDLEWARE = [
     "corsheaders.middleware.CorsMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
+    "django_htmx.middleware.HtmxMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "core.middleware.AnalyticsSessionMiddleware",  # Analytics session tracking (after auth)

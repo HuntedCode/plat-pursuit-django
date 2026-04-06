@@ -102,6 +102,9 @@ Currently handled by `absorb()`:
 - GameFamilyProposal M2M
 - Genre challenge slots + bonus slots
 - GameFamily (inherit if target has none)
+- ConceptGenre (move to target, skip duplicates by genre_id)
+- ConceptTheme (move to target, skip duplicates by theme_id)
+- ConceptEngine (move to target, skip duplicates by engine_id)
 - Concept.title_ids (merged/deduplicated)
 
 ---

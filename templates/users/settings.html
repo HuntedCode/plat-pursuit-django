@@ -42,12 +42,6 @@
                 </div>
 
                 <div class="form-control">
-                    <label class="text-xs font-semibold text-base-content/60 mb-1" for="{{ user_form.default_region.id_for_label }}">Default Region</label>
-                    {{ user_form.default_region }}
-                    {% if user_form.default_region.errors %}<div class="text-xs text-error mt-1">{{ user_form.default_region.errors }}</div>{% endif %}
-                </div>
-
-                <div class="form-control">
                     <label class="flex items-center gap-2 cursor-pointer">
                         {{ user_form.use_24hr_clock }}
                         <span class="text-sm">Use 24-hour clock</span>

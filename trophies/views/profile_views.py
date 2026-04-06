@@ -36,13 +36,13 @@ from ..models import (
     Challenge,
     Review,
 )
-from trophies.mixins import ProfileHotbarMixin
+from trophies.mixins import ProfileHotbarMixin, HtmxListMixin
 from trophies.psn_manager import PSNManager
 
 logger = logging.getLogger("psn_api")
 
 
-class ProfilesListView(ProfileHotbarMixin, ListView):
+class ProfilesListView(HtmxListMixin, ProfileHotbarMixin, ListView):
     """
     Display paginated list of user profiles with filtering and sorting.
 
@@ -55,7 +55,17 @@ class ProfilesListView(ProfileHotbarMixin, ListView):
     """
     model = Profile
     template_name = 'trophies/profile_list.html'
+    partial_template_name = 'trophies/partials/profile_list/browse_results.html'
     paginate_by = 30
+
+    def dispatch(self, request, *args, **kwargs):
+        if not request.GET and request.user.is_authenticated:
+            defaults = (request.user.browse_defaults or {}).get('profiles', {})
+            if defaults:
+                return HttpResponseRedirect(
+                    reverse('profiles_list') + '?' + urlencode(defaults, doseq=True)
+                )
+        return super().dispatch(request, *args, **kwargs)
 
     def get_filter_form(self):
         if not hasattr(self, '_filter_form'):

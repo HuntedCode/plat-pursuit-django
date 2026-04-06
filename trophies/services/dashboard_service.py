@@ -451,7 +451,6 @@ def provide_quick_settings(profile):
         'hide_hiddens': profile.hide_hiddens,
         'hide_zeros': profile.hide_zeros,
         'user_timezone': user.user_timezone if user else 'UTC',
-        'default_region': user.default_region if user else '',
         'use_24hr_clock': user.use_24hr_clock if user else False,
     }
 
