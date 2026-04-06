@@ -303,19 +303,20 @@
                 <h4 class="text-xs font-semibold text-secondary/70 uppercase tracking-wider mb-2 flex items-center gap-1.5">
                     {% include 'partials/icons/user.html' with size='w-3.5 h-3.5' %}
                     Community Stats
+                    <span class="text-[0.6rem] text-base-content/30 font-normal normal-case tracking-normal ml-auto">Tap to explore</span>
                 </h4>
                 <div class="flex flex-col lg:flex-row gap-2 md:gap-3">
                     {% if other_versions or badges %}
                     <div class="flex flex-row lg:flex-col gap-1.5 lg:w-40 xl:w-48 flex-shrink-0">
                         {% if other_versions %}
-                        <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-2 md:p-3 text-center cursor-pointer hover:bg-white/[0.04] transition-colors flex-1 lg:flex-initial"
+                        <div class="bg-white/[0.03] border border-base-content/5 border-b-2 border-b-error/30 rounded-lg p-2 md:p-3 text-center cursor-pointer hover:bg-white/[0.06] hover:border-error/40 hover:shadow-lg hover:shadow-error/20 transition-all duration-300 flex-1 lg:flex-initial"
                              onclick="document.getElementById('versions-modal').showModal()" role="button" aria-label="View all versions">
                             <div class="text-base md:text-lg font-bold text-error">{{ other_versions|length }}</div>
                             <div class="text-[0.55rem] md:text-xs text-base-content/40 uppercase font-medium">Versions</div>
                         </div>
                         {% endif %}
                         {% if badges %}
-                        <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-2 md:p-3 text-center cursor-pointer hover:bg-white/[0.04] transition-colors flex-1 lg:flex-initial"
+                        <div class="bg-white/[0.03] border border-base-content/5 border-b-2 border-b-warning/30 rounded-lg p-2 md:p-3 text-center cursor-pointer hover:bg-white/[0.06] hover:border-warning/40 hover:shadow-lg hover:shadow-warning/20 transition-all duration-300 flex-1 lg:flex-initial"
                              onclick="document.getElementById('badges-modal').showModal()" role="button" aria-label="View all badges">
                             <div class="text-base md:text-lg font-bold text-warning">{{ badges|length }}</div>
                             <div class="text-[0.55rem] md:text-xs text-base-content/40 uppercase font-medium">Badges</div>
@@ -325,32 +326,32 @@
                     {% endif %}
                     <div class="flex-1 min-w-0">
                         <div class="grid grid-cols-2 md:grid-cols-3 gap-1.5 md:gap-2">
-                            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-2 md:p-3 text-center cursor-pointer hover:bg-white/[0.04] transition-colors"
+                            <div class="bg-white/[0.03] border border-base-content/5 border-b-2 border-b-secondary/30 rounded-lg p-2 md:p-3 text-center cursor-pointer hover:bg-white/[0.06] hover:border-secondary/40 hover:shadow-lg hover:shadow-secondary/20 transition-all duration-300"
                                  role="button" aria-label="View all players" onclick="window.GamePlayersModal && window.GamePlayersModal.open('total')">
                                 <div class="text-base md:text-lg lg:text-xl font-bold text-secondary">{{ game_stats.total_players|intcomma }}</div>
                                 <div class="text-[0.55rem] md:text-xs text-base-content/40 uppercase font-medium">Total Players</div>
                             </div>
-                            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-2 md:p-3 text-center cursor-pointer hover:bg-white/[0.04] transition-colors"
+                            <div class="bg-white/[0.03] border border-base-content/5 border-b-2 border-b-accent/30 rounded-lg p-2 md:p-3 text-center cursor-pointer hover:bg-white/[0.06] hover:border-accent/40 hover:shadow-lg hover:shadow-accent/20 transition-all duration-300"
                                  role="button" aria-label="View monthly players" onclick="window.GamePlayersModal && window.GamePlayersModal.open('monthly')">
                                 <div class="text-base md:text-lg lg:text-xl font-bold text-accent">{{ game_stats.monthly_players|intcomma }}</div>
                                 <div class="text-[0.55rem] md:text-xs text-base-content/40 uppercase font-medium">Monthly Players</div>
                             </div>
-                            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-2 md:p-3 text-center cursor-pointer hover:bg-white/[0.04] transition-colors"
+                            <div class="bg-white/[0.03] border border-base-content/5 border-b-2 border-b-warning/30 rounded-lg p-2 md:p-3 text-center cursor-pointer hover:bg-white/[0.06] hover:border-warning/40 hover:shadow-lg hover:shadow-warning/20 transition-all duration-300"
                                  role="button" aria-label="View trophies earned" onclick="window.GamePlayersModal && window.GamePlayersModal.open('trophies')">
                                 <div class="text-base md:text-lg lg:text-xl font-bold text-warning">{{ game_stats.total_earns|intcomma }}</div>
                                 <div class="text-[0.55rem] md:text-xs text-base-content/40 uppercase font-medium">Trophies Earned</div>
                             </div>
-                            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-2 md:p-3 text-center cursor-pointer hover:bg-white/[0.04] transition-colors"
+                            <div class="bg-white/[0.03] border border-base-content/5 border-b-2 border-b-primary/30 rounded-lg p-2 md:p-3 text-center cursor-pointer hover:bg-white/[0.06] hover:border-primary/40 hover:shadow-lg hover:shadow-primary/20 transition-all duration-300"
                                  role="button" aria-label="View platinum earners" onclick="window.GamePlayersModal && window.GamePlayersModal.open('plats')">
                                 <div class="text-base md:text-lg lg:text-xl font-bold text-primary">{{ game_stats.plats_earned|intcomma }}</div>
                                 <div class="text-[0.55rem] md:text-xs text-base-content/40 uppercase font-medium">Plats Earned</div>
                             </div>
-                            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-2 md:p-3 text-center cursor-pointer hover:bg-white/[0.04] transition-colors"
+                            <div class="bg-white/[0.03] border border-base-content/5 border-b-2 border-b-info/30 rounded-lg p-2 md:p-3 text-center cursor-pointer hover:bg-white/[0.06] hover:border-info/40 hover:shadow-lg hover:shadow-info/20 transition-all duration-300"
                                  role="button" aria-label="View completionists" onclick="window.GamePlayersModal && window.GamePlayersModal.open('completes')">
                                 <div class="text-base md:text-lg lg:text-xl font-bold text-info">{{ game_stats.completes|intcomma }}</div>
                                 <div class="text-[0.55rem] md:text-xs text-base-content/40 uppercase font-medium">100% Earns</div>
                             </div>
-                            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-2 md:p-3 text-center cursor-pointer hover:bg-white/[0.04] transition-colors"
+                            <div class="bg-white/[0.03] border border-base-content/5 border-b-2 border-b-success/30 rounded-lg p-2 md:p-3 text-center cursor-pointer hover:bg-white/[0.06] hover:border-success/40 hover:shadow-lg hover:shadow-success/20 transition-all duration-300"
                                  role="button" aria-label="View average completion" onclick="window.GamePlayersModal && window.GamePlayersModal.open('avg')">
                                 <div class="text-base md:text-lg lg:text-xl font-bold text-success">{{ game_stats.avg_progress|floatformat:1 }}%</div>
                                 <div class="text-[0.55rem] md:text-xs text-base-content/40 uppercase font-medium">Avg. Completion</div>
