@@ -3,8 +3,9 @@ Site Heartbeat: aggregated platform statistics for the dashboard's
 "Built for Hunters" section.
 
 Computed once per hour by refresh_homepage_hourly cron, cached under a
-date+hour key, read by DashboardView at render time. Never computed
-synchronously on a user request.
+date+hour key, read by the home page (HomeView and the dashboard it serves
+for synced users) at render time. Never computed synchronously on a user
+request.
 
 The dict shape is intentionally stable so the template can do simple
 nested lookups (e.g. heartbeat.always.trophies_total.value).

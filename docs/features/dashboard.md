@@ -1,6 +1,8 @@
 # Dashboard System
 
-The dashboard is the personal trophy hunting command center at `/dashboard/`. It will serve as the index page for all logged-in users (currently `StaffRequiredMixin` during dev). Modules are organized into a **tabbed navigation system** with 6 immutable system tabs and support for premium user-created custom tabs. Only the active tab's lazy modules load on page init for performance.
+The dashboard is the personal trophy hunting command center. It is rendered at the site root (`/`) by [HomeView](home-page.md) for any logged-in user whose PSN profile has finished syncing. Users in earlier states (anonymous, no PSN linked, sync in progress) get one of three lighter shells that share the dashboard's design language but skip the heavy module pipeline. Modules are organized into a **tabbed navigation system** with 6 immutable system tabs and support for premium user-created custom tabs. Only the active tab's lazy modules load on page init for performance.
+
+`/dashboard/` is preserved as a permanent redirect to `/` so legacy bookmarks keep working. The standalone `DashboardView` class is now a thin wrapper around `build_dashboard_context()` (in `trophies/views/dashboard_views.py`) which is the single source of truth for dashboard context. `HomeView` calls the same helper directly for synced users without going through view inheritance.
 
 ## Architecture Overview
 
@@ -150,7 +152,8 @@ Each tab is a collapsible section listing its modules. Each module row shows:
 | File | Purpose |
 |------|---------|
 | `trophies/services/dashboard_service.py` | Module registry, providers, tab functions, settings framework, caching |
-| `trophies/views/dashboard_views.py` | `DashboardView` with tab context |
+| `trophies/views/dashboard_views.py` | `build_dashboard_context()` helper + thin `DashboardView` wrapper |
+| `core/views.py` | `HomeView` (smart router at `/`); calls `build_dashboard_context()` for synced users |
 | `api/dashboard_views.py` | 4 API endpoints: module data, config, reorder, preview toggle |
 | `api/user_settings_views.py` | `UpdateQuickSettingsAPIView` for dashboard Quick Settings auto-save |
 | `trophies/models.py` | `DashboardConfig` model with `tab_config` field |

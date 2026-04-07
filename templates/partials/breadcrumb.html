@@ -1,5 +1,9 @@
 {% load humanize %}
 
+{# Top row only renders if there is a view count or breadcrumb items to show. #}
+{# When neither is set (e.g. home page shells), the partial collapses to just  #}
+{# the messages banner below, with no orphan empty wrapper.                    #}
+{% if view_count is not None or items %}
 <div class="flex flex-row items-center justify-between mb-2 md:mb-4 gap-1">
     <!-- Left: View count with eye icon (if provided) -->
     {% if view_count is not None %}
@@ -34,6 +38,7 @@
         </nav>
     {% endif %}
 </div>
+{% endif %}
 
 {% if messages %}
     <div aria-live="polite" aria-atomic="true" class="mb-4">

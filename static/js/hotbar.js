@@ -48,6 +48,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const EXTENSION_THRESHOLD = 60000;
     let activeInterval = INITIAL_POLL_INTERVAL;
 
+    // Tracks the last sync status we observed so we can dispatch a
+    // 'platpursuit:sync-status-changed' CustomEvent only on real transitions.
+    // Pages like home/syncing.html listen for this and reload when the value
+    // becomes 'synced' so the user is automatically advanced to the dashboard.
+    let lastSyncStatus = initialStatus;
+
     // Toggle state
     const STORAGE_KEY = 'hotbar_hidden';
 
@@ -57,6 +63,20 @@ document.addEventListener('DOMContentLoaded', () => {
     function hide(el) { el?.classList.add('hidden'); }
 
     // --- Profile Sync Status ---
+
+    /**
+     * Dispatches the platpursuit:sync-status-changed CustomEvent on real
+     * transitions only (not every successful poll). Pages can listen via
+     * `document.addEventListener('platpursuit:sync-status-changed', ...)`.
+     */
+    function maybeDispatchStatusChange(newStatus) {
+        if (newStatus && newStatus !== lastSyncStatus) {
+            lastSyncStatus = newStatus;
+            document.dispatchEvent(new CustomEvent('platpursuit:sync-status-changed', {
+                detail: { status: newStatus }
+            }));
+        }
+    }
 
     /**
      * Updates the hotbar UI based on sync status data
@@ -138,6 +158,9 @@ document.addEventListener('DOMContentLoaded', () => {
             stopPolling();
             startSyncCountdown(data.seconds_to_next_sync);
         }
+
+        // Notify any listeners (e.g. home/syncing.html) of real transitions.
+        maybeDispatchStatusChange(data.sync_status);
     }
 
     /**

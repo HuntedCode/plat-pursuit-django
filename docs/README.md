@@ -49,6 +49,7 @@ Self-contained feature documentation. Read the relevant doc when working on that
 | [Easter Eggs](features/easter-eggs.md) | Hidden milestones, titles, and the claim API |
 | [Fundraiser](features/fundraiser.md) | Campaign system, donations, badge claims |
 | [Game Family](features/game-family.md) | Cross-generation game matching and unification |
+| [Home Page Router](features/home-page.md) | Smart `/` router: anonymous, no-PSN, syncing, and synced shells |
 | [Monthly Recap](features/monthly-recap.md) | Recap generation, slides, email, share cards |
 | [Navigation & Site Organization](features/navigation.md) | Navbar, footer, cross-links, profile tabs |
 | [Profile Cards](features/profile-cards.md) | Shareable profile cards, forum signatures, badge showcase |
