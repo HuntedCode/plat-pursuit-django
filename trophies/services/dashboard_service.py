@@ -11,9 +11,9 @@ Adding a new module:
 """
 import inspect
 import logging
-from collections import defaultdict
+from collections import Counter, defaultdict
 from django.core.cache import cache
-from django.db.models import F, FloatField, ExpressionWrapper
+from django.db.models import F, FloatField, ExpressionWrapper, Q
 
 logger = logging.getLogger(__name__)
 
@@ -916,6 +916,741 @@ def provide_completion_milestones(profile, settings=None):
     return {'games': games, 'threshold': threshold}
 
 
+def provide_library_health_alerts(profile, settings=None):
+    """Surface games in user's library with community-flagged data quality issues.
+
+    Filters to games the user has actually played (at least 1 trophy earned)
+    and groups flags into severity buckets: blockers, issues, and info.
+    """
+    from trophies.models import ProfileGame
+    from django.db.models import Q
+
+    settings = settings or {}
+    limit = settings.get('limit', 6)
+
+    flag_filter = (
+        Q(game__is_delisted=True)
+        | Q(game__is_obtainable=False)
+        | Q(game__has_buggy_trophies=True)
+        | Q(game__has_online_trophies=True)
+        | Q(game__shovelware_status='manually_flagged')
+    )
+
+    qs = (
+        ProfileGame.objects.filter(
+            profile=profile,
+            user_hidden=False,
+            earned_trophies_count__gt=0,
+        )
+        .filter(flag_filter)
+        .select_related('game', 'game__concept')
+    )
+    if profile.hide_hiddens:
+        qs = qs.exclude(hidden_flag=True)
+
+    blocker_games = 0
+    issue_games = 0
+    info_games = 0
+    games = []
+
+    for pg in qs:
+        game = pg.game
+        flags = []
+        severity_score = 0
+        max_severity = None  # 'blocker' > 'issue' > 'info'
+
+        if not game.is_obtainable:
+            flags.append({'key': 'unobtainable', 'label': 'Unobtainable', 'severity': 'blocker'})
+            severity_score += 100
+            max_severity = 'blocker'
+        if game.is_delisted:
+            flags.append({'key': 'delisted', 'label': 'Delisted', 'severity': 'blocker'})
+            severity_score += 90
+            max_severity = 'blocker'
+        if game.has_buggy_trophies:
+            flags.append({'key': 'buggy', 'label': 'Buggy Trophies', 'severity': 'issue'})
+            severity_score += 50
+            if max_severity is None:
+                max_severity = 'issue'
+        if game.has_online_trophies:
+            flags.append({'key': 'online', 'label': 'Online Required', 'severity': 'issue'})
+            severity_score += 30
+            if max_severity is None:
+                max_severity = 'issue'
+        if game.shovelware_status == 'manually_flagged':
+            flags.append({'key': 'shovelware', 'label': 'Shovelware', 'severity': 'info'})
+            severity_score += 10
+            if max_severity is None:
+                max_severity = 'info'
+
+        if not flags:
+            continue
+
+        # Bucket each game by its highest-severity flag (one count per game)
+        if max_severity == 'blocker':
+            blocker_games += 1
+        elif max_severity == 'issue':
+            issue_games += 1
+        else:
+            info_games += 1
+
+        concept = getattr(game, 'concept', None)
+        games.append({
+            'game_name': concept.unified_title if concept else game.title_name,
+            'icon_url': concept.concept_icon_url if concept else game.title_image,
+            'np_communication_id': game.np_communication_id,
+            'progress': pg.progress,
+            'flags': flags,
+            'severity_score': severity_score,
+            'is_platinumed': pg.progress == 100,
+        })
+
+    games.sort(key=lambda g: (-g['severity_score'], -g['progress']))
+    games = games[:limit]
+
+    return {
+        'games': games,
+        'total_blockers': blocker_games,
+        'total_issues': issue_games,
+        'total_info': info_games,
+        'total_flagged': blocker_games + issue_games + info_games,
+    }
+
+
+def provide_trophy_diversity_score(profile):
+    """Single-stat module: diversity score across IGDB genres + themes.
+
+    Encourages library diversification by showing how many distinct genres
+    and themes the user has any earned trophies in.
+    """
+    from trophies.models import EarnedTrophy, Genre, Theme
+
+    earned_qs = (
+        EarnedTrophy.objects
+        .filter(profile=profile, earned=True, earned_date_time__isnull=False)
+        .select_related('trophy__game__concept')
+        .prefetch_related(
+            'trophy__game__concept__concept_genres__genre',
+            'trophy__game__concept__concept_themes__theme',
+        )
+    )
+
+    seen_genres = set()
+    seen_themes = set()
+    top_genre_counts = defaultdict(int)
+    top_theme_counts = defaultdict(int)
+
+    for et in earned_qs:
+        game = et.trophy.game if et.trophy else None
+        concept = getattr(game, 'concept', None) if game else None
+        if not concept:
+            continue
+        for cg in concept.concept_genres.all():
+            seen_genres.add(cg.genre_id)
+            top_genre_counts[cg.genre.name] += 1
+        for ct in concept.concept_themes.all():
+            seen_themes.add(ct.theme_id)
+            top_theme_counts[ct.theme.name] += 1
+
+    total_genres = Genre.objects.count() or 1
+    total_themes = Theme.objects.count() or 1
+    genre_pct = round(len(seen_genres) / total_genres * 100, 1)
+    theme_pct = round(len(seen_themes) / total_themes * 100, 1)
+    score = round((genre_pct + theme_pct) / 2)
+
+    top_genre = max(top_genre_counts, key=top_genre_counts.get) if top_genre_counts else None
+    top_theme = max(top_theme_counts, key=top_theme_counts.get) if top_theme_counts else None
+
+    if top_genre and top_theme:
+        flavor = f"You favor {top_theme.lower()} {top_genre.lower()} games."
+    elif top_genre:
+        flavor = f"You favor {top_genre.lower()} games."
+    else:
+        flavor = "Earn trophies to build your diversity score."
+
+    return {
+        'has_data': bool(seen_genres or seen_themes),
+        'score': score,
+        'genres_seen': len(seen_genres),
+        'genres_total': total_genres,
+        'themes_seen': len(seen_themes),
+        'themes_total': total_themes,
+        'flavor': flavor,
+    }
+
+
+def provide_profile_badge_showcase_editor(profile):
+    """Premium dedicated editor for the 5-slot ProfileBadgeShowcase.
+
+    Surfaces only the showcase concern (no share-card mode toggle), with
+    drag-reorder support persisted via /api/v1/badges/showcase/reorder/.
+    """
+    from trophies.models import ProfileBadgeShowcase
+
+    showcase_qs = (
+        ProfileBadgeShowcase.objects
+        .filter(profile=profile)
+        .select_related('badge', 'badge__base_badge')
+        .order_by('display_order')
+    )
+
+    slots = []
+    TIER_NAMES = {1: 'Bronze', 2: 'Silver', 3: 'Gold', 4: 'Platinum'}
+    for sc in showcase_qs:
+        badge = sc.badge
+        try:
+            layers = badge.get_badge_layers()
+            image_url = layers.get('main', '')
+        except Exception:
+            image_url = ''
+        slots.append({
+            'badge_id': badge.id,
+            'name': badge.name,
+            'series': getattr(badge, 'series_name', '') or getattr(badge, 'series_slug', ''),
+            'tier': badge.tier,
+            'tier_name': TIER_NAMES.get(badge.tier, ''),
+            'image_url': image_url,
+            'display_order': sc.display_order,
+        })
+
+    return {
+        'slots': slots,
+        'used_count': len(slots),
+        'max_slots': 5,
+        'has_data': True,
+    }
+
+
+def provide_vr_trophy_hunter(profile):
+    """VR-specific progress card. Always renders; empty state encourages VR adoption."""
+    from trophies.models import ProfileGame
+
+    qs = (
+        ProfileGame.objects
+        .filter(
+            profile=profile, user_hidden=False,
+        )
+        .filter(Q(game__title_platform__contains='PSVR') | Q(game__title_platform__contains='PSVR2'))
+        .select_related('game__concept')
+    )
+    if profile.hide_hiddens:
+        qs = qs.exclude(hidden_flag=True)
+
+    profile_games = list(qs)
+
+    total_games = len(profile_games)
+    plats = sum(1 for pg in profile_games if pg.has_plat)
+    earned_trophies = sum(pg.earned_trophies_count or 0 for pg in profile_games)
+    total_trophies_possible = sum(
+        (pg.earned_trophies_count or 0) + (pg.unearned_trophies_count or 0)
+        for pg in profile_games
+    )
+    completion_rate = round(earned_trophies / total_trophies_possible * 100, 1) if total_trophies_possible else 0
+
+    # Top 3 in-progress VR games (not platinumed, has earned trophies)
+    in_progress = sorted(
+        [pg for pg in profile_games if not pg.has_plat and (pg.earned_trophies_count or 0) > 0],
+        key=lambda pg: -pg.progress,
+    )[:3]
+
+    in_progress_list = []
+    for pg in in_progress:
+        game = pg.game
+        concept = getattr(game, 'concept', None)
+        in_progress_list.append({
+            'game_name': concept.unified_title if concept else game.title_name,
+            'icon_url': concept.concept_icon_url if concept else game.title_image,
+            'np_communication_id': game.np_communication_id,
+            'progress': pg.progress,
+            'earned_count': pg.earned_trophies_count,
+            'total_count': (pg.earned_trophies_count or 0) + (pg.unearned_trophies_count or 0),
+        })
+
+    return {
+        'has_data': total_games > 0,
+        'total_games': total_games,
+        'plats': plats,
+        'earned_trophies': earned_trophies,
+        'completion_rate': completion_rate,
+        'in_progress': in_progress_list,
+    }
+
+
+def provide_earned_titles(profile, settings=None):
+    """User's earned titles, grouped by source with currently-equipped hero.
+
+    Surfaces all titles a user has earned, separates badge-sourced from
+    milestone-sourced, marks recently earned titles, and lets the user
+    switch their equipped title via /api/v1/equip-title/.
+    """
+    from trophies.models import UserTitle
+    from django.utils import timezone
+    from datetime import timedelta
+
+    settings = settings or {}
+    limit = settings.get('limit', 16)
+
+    qs = (
+        UserTitle.objects
+        .filter(profile=profile)
+        .select_related('title')
+        .order_by('-earned_at')
+    )
+
+    badge_titles = []
+    milestone_titles = []
+    displayed = None
+    cutoff = timezone.now() - timedelta(days=30)
+
+    for ut in qs:
+        entry = {
+            'id': ut.title_id,
+            'name': ut.title.name,
+            'source_type': ut.source_type,
+            'is_displayed': ut.is_displayed,
+            'is_recent': ut.earned_at >= cutoff if ut.earned_at else False,
+            'earned_at': ut.earned_at,
+        }
+        if ut.is_displayed:
+            displayed = entry
+        if ut.source_type == 'badge':
+            badge_titles.append(entry)
+        else:
+            milestone_titles.append(entry)
+
+    total_count = len(badge_titles) + len(milestone_titles)
+
+    # Apply per-section limit so both groups remain visible
+    half = max(2, limit // 2)
+    badge_visible = badge_titles[:half]
+    milestone_visible = milestone_titles[:half]
+    extra_count = max(0, total_count - len(badge_visible) - len(milestone_visible))
+
+    return {
+        'badge_titles': badge_visible,
+        'milestone_titles': milestone_visible,
+        'badge_total': len(badge_titles),
+        'milestone_total': len(milestone_titles),
+        'extra_count': extra_count,
+        'total_count': total_count,
+        'displayed': displayed,
+        'has_data': bool(total_count),
+    }
+
+
+def provide_time_to_beat_insights(profile):
+    """Premium module: time-to-beat stats from IGDB for user's plats and grinds.
+
+    Surfaces avg/total estimated hours platinumed plus quickest/longest plats
+    and a 'currently grinding' list sorted by estimated hours remaining.
+    """
+    from trophies.models import ProfileGame
+
+    def _fmt_hours(seconds):
+        if not seconds:
+            return None
+        hours = seconds / 3600
+        if hours >= 100:
+            return f'{int(round(hours))}h'
+        if hours >= 10:
+            return f'{hours:.0f}h'
+        return f'{hours:.1f}h'
+
+    # Platinumed games with IGDB time-to-beat data
+    platted_qs = (
+        ProfileGame.objects
+        .filter(profile=profile, has_plat=True, user_hidden=False)
+        .select_related('game__concept__igdb_match')
+        .filter(game__concept__igdb_match__time_to_beat_completely__isnull=False)
+    )
+
+    plat_seconds = []
+    shortest = None
+    longest = None
+    for pg in platted_qs:
+        concept = pg.game.concept
+        match = getattr(concept, 'igdb_match', None)
+        if not match or not match.time_to_beat_completely:
+            continue
+        secs = match.time_to_beat_completely
+        plat_seconds.append(secs)
+        if shortest is None or secs < shortest['seconds']:
+            shortest = {
+                'seconds': secs,
+                'name': concept.unified_title,
+                'icon_url': concept.concept_icon_url or '',
+                'np_communication_id': pg.game.np_communication_id,
+                'display': _fmt_hours(secs),
+            }
+        if longest is None or secs > longest['seconds']:
+            longest = {
+                'seconds': secs,
+                'name': concept.unified_title,
+                'icon_url': concept.concept_icon_url or '',
+                'np_communication_id': pg.game.np_communication_id,
+                'display': _fmt_hours(secs),
+            }
+
+    if not plat_seconds:
+        return {'has_data': False}
+
+    avg_plat_seconds = sum(plat_seconds) / len(plat_seconds)
+    total_plat_seconds = sum(plat_seconds)
+
+    # In-progress games with at least 1 trophy and time-to-beat data
+    grinding_qs = (
+        ProfileGame.objects
+        .filter(
+            profile=profile, has_plat=False, user_hidden=False,
+            earned_trophies_count__gt=0,
+        )
+        .select_related('game__concept__igdb_match')
+        .filter(game__concept__igdb_match__time_to_beat_completely__isnull=False)
+    )
+
+    grinding = []
+    for pg in grinding_qs:
+        concept = pg.game.concept
+        match = getattr(concept, 'igdb_match', None)
+        if not match or not match.time_to_beat_completely:
+            continue
+        secs = match.time_to_beat_completely
+        # Estimate remaining hours by progress percentage
+        remaining_secs = int(secs * (100 - pg.progress) / 100)
+        grinding.append({
+            'name': concept.unified_title,
+            'icon_url': concept.concept_icon_url or '',
+            'np_communication_id': pg.game.np_communication_id,
+            'progress': pg.progress,
+            'total_display': _fmt_hours(secs),
+            'remaining_display': _fmt_hours(remaining_secs) or _fmt_hours(secs),
+            'remaining_seconds': remaining_secs,
+        })
+
+    # Sort grinding by least remaining (closest to plat first)
+    grinding.sort(key=lambda g: g['remaining_seconds'])
+    grinding = grinding[:5]
+
+    return {
+        'has_data': True,
+        'avg_plat_display': _fmt_hours(avg_plat_seconds),
+        'total_plat_display': _fmt_hours(total_plat_seconds),
+        'matched_plats': len(plat_seconds),
+        'shortest': shortest,
+        'longest': longest,
+        'grinding': grinding,
+    }
+
+
+def provide_theme_mastery(profile):
+    """Premium module: combined Genre + Theme mastery view.
+
+    Two side-by-side radars (genre + theme) with a shared stat strip showing
+    diversity coverage. Uses normalized ConceptGenre and ConceptTheme M2Ms
+    (IGDB-sourced). All-time only; year-specific analytics live in
+    trophy_visualizations.
+    """
+    from trophies.models import EarnedTrophy, Theme, Genre
+
+    earned_qs = (
+        EarnedTrophy.objects
+        .filter(profile=profile, earned=True, earned_date_time__isnull=False)
+        .select_related('trophy__game__concept')
+        .prefetch_related(
+            'trophy__game__concept__concept_themes__theme',
+            'trophy__game__concept__concept_genres__genre',
+        )
+    )
+
+    theme_counts = defaultdict(int)
+    genre_counts = defaultdict(int)
+    seen_themes = set()
+    seen_genres = set()
+
+    for et in earned_qs:
+        game = et.trophy.game if et.trophy else None
+        concept = getattr(game, 'concept', None) if game else None
+        if not concept:
+            continue
+        for ct in concept.concept_themes.all():
+            theme_counts[ct.theme.name] += 1
+            seen_themes.add(ct.theme_id)
+        for cg in concept.concept_genres.all():
+            genre_counts[cg.genre.name] += 1
+            seen_genres.add(cg.genre_id)
+
+    if not theme_counts and not genre_counts:
+        return {'has_data': False}
+
+    GENRE_ALIASES = {
+        'role-playing (rpg)': 'RPG',
+        'role playing (rpg)': 'RPG',
+    }
+
+    def _format_genre(name):
+        return GENRE_ALIASES.get(name.lower().strip(), name)
+
+    sorted_themes = sorted(theme_counts.items(), key=lambda x: -x[1])[:10]
+    sorted_genres = sorted(genre_counts.items(), key=lambda x: -x[1])[:8]
+
+    theme_total = sum(theme_counts.values())
+    genre_total = sum(genre_counts.values())
+
+    top_theme = sorted_themes[0][0] if sorted_themes else ''
+    top_theme_pct = round(sorted_themes[0][1] / theme_total * 100) if theme_total else 0
+    top_genre = _format_genre(sorted_genres[0][0]) if sorted_genres else ''
+    top_genre_pct = round(sorted_genres[0][1] / genre_total * 100) if genre_total else 0
+
+    return {
+        'has_data': True,
+        # Theme radar
+        'theme_labels': [t[0] for t in sorted_themes],
+        'theme_counts': [t[1] for t in sorted_themes],
+        'themes_explored': len(seen_themes),
+        'themes_universe': Theme.objects.count(),
+        'top_theme': top_theme,
+        'top_theme_pct': top_theme_pct,
+        # Genre radar
+        'genre_labels': [_format_genre(g[0]) for g in sorted_genres],
+        'genre_counts': [g[1] for g in sorted_genres],
+        'genres_explored': len(seen_genres),
+        'genres_universe': Genre.objects.count(),
+        'top_genre': top_genre,
+        'top_genre_pct': top_genre_pct,
+    }
+
+
+def provide_roadmap_recommendations(profile, settings=None):
+    """Published staff roadmaps for concepts in the user's library that aren't platinumed yet.
+
+    Roadmaps are 1:1 with Concept and have no per-user state. The most useful
+    framing is to surface published roadmaps for unplatinumed concepts in the
+    user's library so they have a path to plat.
+    """
+    from trophies.models import Roadmap, ProfileGame
+
+    settings = settings or {}
+    limit = settings.get('limit', 6)
+
+    # Concept ids the user has at least one unplatinumed game for
+    unplatted_concept_ids = list(
+        ProfileGame.objects.filter(
+            profile=profile, has_plat=False, user_hidden=False,
+        )
+        .exclude(game__concept__isnull=True)
+        .values_list('game__concept_id', flat=True)
+        .distinct()
+    )
+    if not unplatted_concept_ids:
+        return {'roadmaps': [], 'has_data': False}
+
+    qs = (
+        Roadmap.objects
+        .filter(status='published', concept_id__in=unplatted_concept_ids)
+        .select_related('concept')
+        .prefetch_related('tabs__steps')
+        .order_by('-updated_at')[:limit]
+    )
+
+    roadmaps = []
+    for rm in qs:
+        concept = rm.concept
+        # Find a game np_communication_id for this concept (any will do, prefer most recent)
+        np_id = (
+            ProfileGame.objects.filter(profile=profile, game__concept_id=concept.id)
+            .order_by('-last_played_date_time')
+            .values_list('game__np_communication_id', flat=True)
+            .first()
+        )
+        if not np_id:
+            continue
+
+        # Count tabs and steps for the roadmap summary
+        tab_count = 0
+        step_count = 0
+        for tab in rm.tabs.all():
+            tab_count += 1
+            step_count += tab.steps.count()
+
+        roadmaps.append({
+            'game_name': concept.unified_title,
+            'icon_url': concept.concept_icon_url or '',
+            'np_communication_id': np_id,
+            'updated_at': rm.updated_at,
+            'tab_count': tab_count,
+            'step_count': step_count,
+        })
+
+    return {'roadmaps': roadmaps, 'has_data': bool(roadmaps)}
+
+
+def provide_top_developers(profile, settings=None):
+    """Top developers and publishers in the user's library with rich stats.
+
+    For each company we count: total games, platinums earned, games at 100%,
+    and total trophies earned. Sub-tab toggles between developers/publishers.
+    """
+    from trophies.models import EarnedTrophy, ProfileGame, ConceptCompany
+
+    settings = settings or {}
+    limit = settings.get('limit', 8)
+
+    # Per-concept stats from ProfileGame (games, plats, 100%s)
+    pg_qs = (
+        ProfileGame.objects
+        .filter(profile=profile, user_hidden=False)
+        .exclude(game__concept__isnull=True)
+        .values('game__concept_id', 'has_plat', 'progress')
+    )
+
+    concept_games = defaultdict(int)
+    concept_plats = defaultdict(int)
+    concept_completed = defaultdict(int)
+
+    for row in pg_qs:
+        cid = row['game__concept_id']
+        concept_games[cid] += 1
+        if row['has_plat']:
+            concept_plats[cid] += 1
+        if row['progress'] == 100:
+            concept_completed[cid] += 1
+
+    # Per-concept earned trophy counts
+    earned_qs = EarnedTrophy.objects.filter(
+        profile=profile, earned=True, earned_date_time__isnull=False,
+    ).values_list('trophy__game__concept_id', flat=True)
+    concept_trophies = Counter(cid for cid in earned_qs if cid)
+
+    if not concept_games:
+        return {'developers': [], 'publishers': [], 'has_data': False}
+
+    # Look up companies attached to all concepts in user's library
+    cc_qs = (
+        ConceptCompany.objects
+        .filter(concept_id__in=concept_games.keys())
+        .filter(Q(is_developer=True) | Q(is_publisher=True))
+        .select_related('company')
+    )
+
+    # Aggregate per-company per-role
+    def _new_company_stat():
+        return {'games': 0, 'plats': 0, 'completed': 0, 'trophies': 0}
+
+    dev_stats = defaultdict(_new_company_stat)
+    pub_stats = defaultdict(_new_company_stat)
+    company_obj = {}
+
+    for cc in cc_qs:
+        cid = cc.concept_id
+        company = cc.company
+        company_obj[company.id] = company
+        games_n = concept_games.get(cid, 0)
+        plats_n = concept_plats.get(cid, 0)
+        comp_n = concept_completed.get(cid, 0)
+        troph_n = concept_trophies.get(cid, 0)
+        if cc.is_developer:
+            s = dev_stats[company.id]
+            s['games'] += games_n
+            s['plats'] += plats_n
+            s['completed'] += comp_n
+            s['trophies'] += troph_n
+        if cc.is_publisher:
+            s = pub_stats[company.id]
+            s['games'] += games_n
+            s['plats'] += plats_n
+            s['completed'] += comp_n
+            s['trophies'] += troph_n
+
+    def _build_list(stats_map):
+        # Rank by trophies earned (richest signal of investment)
+        sorted_items = sorted(
+            stats_map.items(), key=lambda x: -x[1]['trophies']
+        )[:limit]
+        if not sorted_items:
+            return []
+        max_trophies = sorted_items[0][1]['trophies'] or 1
+        result = []
+        for cid, stats in sorted_items:
+            company = company_obj.get(cid)
+            if not company:
+                continue
+            result.append({
+                'name': company.name,
+                'slug': company.slug,
+                'games': stats['games'],
+                'plats': stats['plats'],
+                'completed': stats['completed'],
+                'trophies': stats['trophies'],
+                'pct': round(stats['trophies'] / max_trophies * 100, 1),
+            })
+        return result
+
+    developers = _build_list(dev_stats)
+    publishers = _build_list(pub_stats)
+
+    return {
+        'developers': developers,
+        'publishers': publishers,
+        'has_data': bool(developers or publishers),
+    }
+
+
+def provide_my_stats_teaser(profile):
+    """Career-snapshot teaser that drives traffic to the full /my-stats/ page.
+
+    Reuses get_career_overview() (denormalized, instant) plus a few hand-picked
+    'wow' callouts. The CTA links to /my-stats/.
+    """
+    from trophies.services.stats_service import get_career_overview
+
+    overview = get_career_overview(profile)
+
+    # Hero stats: pick 4 with the broadest appeal
+    hero_stats = [
+        {
+            'label': 'Career Length',
+            'value': f"{overview['career_years']}",
+            'unit': 'years',
+        },
+        {
+            'label': 'Plats / Month',
+            'value': f"{overview['plats_per_month']}",
+            'unit': 'avg',
+        },
+        {
+            'label': 'Completion Rate',
+            'value': f"{overview['completion_rate']}",
+            'unit': '%',
+        },
+        {
+            'label': 'Trophy Level',
+            'value': f"{overview['trophy_level']}",
+            'unit': '',
+        },
+    ]
+
+    # Wow callouts (compact, high-signal lines)
+    callouts = []
+    if overview['total_trophies']:
+        callouts.append(
+            f"{overview['total_trophies']:,} trophies across {overview['total_games']:,} games"
+        )
+    if overview['total_plats']:
+        callouts.append(
+            f"{overview['total_plats']:,} platinums earned"
+        )
+    if overview['overall_earn_rate']:
+        callouts.append(
+            f"{overview['overall_earn_rate']}% overall earn rate"
+        )
+
+    return {
+        'hero_stats': hero_stats,
+        'callouts': callouts,
+        'has_data': bool(overview['total_trophies']),
+    }
+
+
 def provide_milestone_tracker(profile, settings=None):
     """In-progress milestones sorted by completion %, plus recently earned."""
     from trophies.models import UserMilestoneProgress, UserMilestone
@@ -1612,30 +2347,45 @@ def provide_advanced_stats(profile, settings=None):
 
 
 def provide_premium_settings(profile):
-    """Current theme and background for inline management."""
-    from trophies.themes import GRADIENT_THEMES, get_theme_style
+    """Premium dashboard theme picker.
 
-    # Theme
+    Surfaces the current site theme + a quick-pick row of curated themes
+    drawn one-per-category for variety. The full 105-theme grid is one
+    click away via the existing color grid modal.
+    """
+    from trophies.themes import (
+        GRADIENT_THEMES, get_theme_style, get_available_themes_for_grid,
+    )
+
     theme_key = profile.selected_theme or ''
     theme_data = GRADIENT_THEMES.get(theme_key) if theme_key else None
     theme_name = theme_data['name'] if theme_data else 'Default'
     theme_style = get_theme_style(theme_key) if theme_key else ''
 
-    # Background
-    bg_concept = profile.selected_background
-    bg_info = None
-    if bg_concept:
-        bg_info = {
-            'title': bg_concept.unified_title,
-            'icon_url': bg_concept.concept_icon_url or '',
-            'bg_url': bg_concept.bg_url or '',
-        }
+    # Quick-pick: one representative theme from each category for variety
+    grouped = get_available_themes_for_grid(grouped=True)
+    quick_picks = []
+    for cat_key, cat_label, cat_themes in grouped:
+        if not cat_themes:
+            continue
+        first_key, first_data = cat_themes[0]
+        # Skip the user's currently equipped theme - it's already shown above
+        if first_key == theme_key:
+            continue
+        quick_picks.append({
+            'key': first_key,
+            'name': first_data['name'],
+            'category': cat_label,
+            'background_css': first_data['background_css'],
+        })
+        if len(quick_picks) >= 8:
+            break
 
     return {
         'theme_key': theme_key,
         'theme_name': theme_name,
         'theme_style': theme_style,
-        'background': bg_info,
+        'quick_picks': quick_picks,
     }
 
 
@@ -1757,14 +2507,61 @@ def _build_heatmap_data(profile, year):
     }
 
 
-def _build_genre_radar_data(profile, year):
-    """Genre distribution across all earned trophies for Chart.js radar chart."""
+def _build_engine_radar_data(profile, year):
+    """Game engine distribution across earned trophies for Chart.js radar.
+
+    Uses normalized ConceptEngine M2M (IGDB-sourced). Surfaces what game
+    engines power the user's library (e.g. Unreal Engine, Unity, Decima).
+    Sparse coverage is acceptable: many concepts won't have engine data.
+    """
     from trophies.models import EarnedTrophy
 
-    # Count trophies per genre via game concept genres
     earned_qs = EarnedTrophy.objects.filter(
         profile=profile, earned=True, earned_date_time__isnull=False,
-    ).select_related('trophy__game__concept')
+    ).select_related('trophy__game__concept').prefetch_related(
+        'trophy__game__concept__concept_engines__engine'
+    )
+    if year is not None:
+        earned_qs = earned_qs.filter(earned_date_time__year=year)
+
+    engine_counts = defaultdict(int)
+    for et in earned_qs:
+        game = et.trophy.game if et.trophy else None
+        concept = getattr(game, 'concept', None) if game else None
+        if not concept:
+            continue
+        for ce in concept.concept_engines.all():
+            engine_counts[ce.engine.name] += 1
+
+    if not engine_counts:
+        return {'has_data': False}
+
+    sorted_engines = sorted(engine_counts.items(), key=lambda x: -x[1])[:8]
+    labels = [e[0] for e in sorted_engines]
+    counts = [e[1] for e in sorted_engines]
+    total = sum(counts)
+
+    return {
+        'has_data': True,
+        'labels': labels,
+        'counts': counts,
+        'total': total,
+    }
+
+
+def _build_genre_radar_data(profile, year):
+    """Genre distribution across all earned trophies for Chart.js radar chart.
+
+    Uses normalized ConceptGenre M2M (IGDB-sourced) instead of legacy
+    concept.genres JSONField.
+    """
+    from trophies.models import EarnedTrophy
+
+    earned_qs = EarnedTrophy.objects.filter(
+        profile=profile, earned=True, earned_date_time__isnull=False,
+    ).select_related('trophy__game__concept').prefetch_related(
+        'trophy__game__concept__concept_genres__genre'
+    )
     if year is not None:
         earned_qs = earned_qs.filter(earned_date_time__year=year)
 
@@ -1772,9 +2569,10 @@ def _build_genre_radar_data(profile, year):
     for et in earned_qs:
         game = et.trophy.game if et.trophy else None
         concept = getattr(game, 'concept', None) if game else None
-        if concept and concept.genres:
-            for genre in concept.genres:
-                genre_counts[genre] += 1
+        if not concept:
+            continue
+        for cg in concept.concept_genres.all():
+            genre_counts[cg.genre.name] += 1
 
     if not genre_counts:
         return {'has_data': False}
@@ -1783,6 +2581,8 @@ def _build_genre_radar_data(profile, year):
     sorted_genres = sorted(genre_counts.items(), key=lambda x: -x[1])[:8]
 
     GENRE_ALIASES = {
+        'role-playing (rpg)': 'RPG',
+        'role playing (rpg)': 'RPG',
         'role_playing_games': 'RPG',
         'role playing games': 'RPG',
     }
@@ -1791,7 +2591,7 @@ def _build_genre_radar_data(profile, year):
         key = name.lower().strip()
         if key in GENRE_ALIASES:
             return GENRE_ALIASES[key]
-        return name.replace('_', ' ').title()
+        return name
 
     labels = [_format_genre(g[0]) for g in sorted_genres]
     counts = [g[1] for g in sorted_genres]
@@ -2449,7 +3249,7 @@ def provide_trophy_visualizations(profile, settings=None):
             'year_label': 'All Time',
             'current_year': now.year,
             'heatmap': _build_heatmap_data(profile, now.year),
-            'genre_radar': _build_genre_radar_data(profile, None),
+            'engine_radar': _build_engine_radar_data(profile, None),
             'rarity_radar': _build_rarity_radar_data(profile, None),
             'platform_radar': _build_platform_radar_data(profile, None),
             'year_review': _build_all_time_yearly_totals(profile),
@@ -2463,7 +3263,7 @@ def provide_trophy_visualizations(profile, settings=None):
         'year_label': str(year),
         'current_year': now.year,
         'heatmap': _build_heatmap_data(profile, year),
-        'genre_radar': _build_genre_radar_data(profile, year),
+        'engine_radar': _build_engine_radar_data(profile, year),
         'rarity_radar': _build_rarity_radar_data(profile, year),
         'platform_radar': _build_platform_radar_data(profile, year),
         'year_review': _build_year_review_data(profile, year),
@@ -4245,6 +5045,130 @@ DASHBOARD_MODULES = [
         'allowed_sizes': ['small', 'medium'],
     },
     {
+        'slug': 'library_health_alerts',
+        'name': 'Library Health',
+        'description': 'Games in your library with community-flagged data quality issues. Catch broken trophies, delisted games, and online-only requirements.',
+        'category': 'highlights',
+        'template': 'trophies/partials/dashboard/library_health_alerts.html',
+        'provider': provide_library_health_alerts,
+        'requires_premium': False,
+        'load_strategy': 'lazy',
+        'default_order': 19,
+        'default_settings': {'limit': 6},
+        'configurable_settings': [
+            {'key': 'limit', 'label': 'Items to show', 'type': 'select', 'default': 6,
+             'options': [{'value': 4, 'label': '4'}, {'value': 6, 'label': '6'}, {'value': 10, 'label': '10'}]},
+        ],
+        'cache_ttl': 1800,
+        'default_size': 'medium',
+        'allowed_sizes': ['medium', 'large'],
+    },
+    {
+        'slug': 'my_stats_teaser',
+        'name': 'Your Stats',
+        'description': 'Career snapshot with hero stats and a link to your full stats breakdown.',
+        'category': 'at_a_glance',
+        'template': 'trophies/partials/dashboard/my_stats_teaser.html',
+        'provider': provide_my_stats_teaser,
+        'requires_premium': False,
+        'load_strategy': 'lazy',
+        'default_order': 20,
+        'default_settings': {},
+        'configurable_settings': [],
+        'cache_ttl': 600,
+        'default_size': 'medium',
+        'allowed_sizes': ['small', 'medium', 'large'],
+    },
+    {
+        'slug': 'top_developers',
+        'name': 'Top Studios',
+        'description': 'Your most-trophied developers and publishers. Toggle between them with sub-tabs.',
+        'category': 'highlights',
+        'template': 'trophies/partials/dashboard/top_developers.html',
+        'provider': provide_top_developers,
+        'requires_premium': False,
+        'load_strategy': 'lazy',
+        'default_order': 21,
+        'default_settings': {'limit': 8},
+        'configurable_settings': [
+            {'key': 'limit', 'label': 'Studios per tab', 'type': 'select', 'default': 8,
+             'options': [{'value': 5, 'label': '5'}, {'value': 8, 'label': '8'}, {'value': 12, 'label': '12'}]},
+        ],
+        'cache_ttl': 1800,
+        'default_size': 'medium',
+        'allowed_sizes': ['medium', 'large'],
+    },
+    {
+        'slug': 'roadmap_recommendations',
+        'name': 'Roadmaps for Your Library',
+        'description': 'Staff-written platinum guides for unplatted games in your library. Find a path to plat.',
+        'category': 'progress',
+        'template': 'trophies/partials/dashboard/roadmap_recommendations.html',
+        'provider': provide_roadmap_recommendations,
+        'requires_premium': False,
+        'load_strategy': 'lazy',
+        'default_order': 22,
+        'default_settings': {'limit': 6},
+        'configurable_settings': [
+            {'key': 'limit', 'label': 'Roadmaps to show', 'type': 'select', 'default': 6,
+             'options': [{'value': 4, 'label': '4'}, {'value': 6, 'label': '6'}, {'value': 10, 'label': '10'}]},
+        ],
+        'cache_ttl': 1800,
+        'default_size': 'medium',
+        'allowed_sizes': ['medium', 'large'],
+    },
+    {
+        'slug': 'earned_titles',
+        'name': 'Earned Titles',
+        'description': 'Quick-equip from your collection of earned titles. Switch your displayed title without leaving the dashboard.',
+        'category': 'highlights',
+        'template': 'trophies/partials/dashboard/earned_titles.html',
+        'provider': provide_earned_titles,
+        'requires_premium': False,
+        'load_strategy': 'lazy',
+        'default_order': 23,
+        'default_settings': {'limit': 12},
+        'configurable_settings': [
+            {'key': 'limit', 'label': 'Titles to show', 'type': 'select', 'default': 12,
+             'options': [{'value': 8, 'label': '8'}, {'value': 12, 'label': '12'}, {'value': 20, 'label': '20'}]},
+        ],
+        'cache_ttl': 600,
+        'default_size': 'medium',
+        'allowed_sizes': ['small', 'medium', 'large'],
+    },
+    {
+        'slug': 'vr_trophy_hunter',
+        'name': 'VR Trophy Hunter',
+        'description': 'PSVR and PSVR2 progress at a glance. Stats, in-progress games, and a path back into the headset.',
+        'category': 'progress',
+        'template': 'trophies/partials/dashboard/vr_trophy_hunter.html',
+        'provider': provide_vr_trophy_hunter,
+        'requires_premium': False,
+        'load_strategy': 'lazy',
+        'default_order': 24,
+        'default_settings': {},
+        'configurable_settings': [],
+        'cache_ttl': 1800,
+        'default_size': 'medium',
+        'allowed_sizes': ['medium', 'large'],
+    },
+    {
+        'slug': 'trophy_diversity_score',
+        'name': 'Diversity Score',
+        'description': 'How varied is your library? A 0-100 score across IGDB genres and themes you have trophies in.',
+        'category': 'at_a_glance',
+        'template': 'trophies/partials/dashboard/trophy_diversity_score.html',
+        'provider': provide_trophy_diversity_score,
+        'requires_premium': False,
+        'load_strategy': 'lazy',
+        'default_order': 25,
+        'default_settings': {},
+        'configurable_settings': [],
+        'cache_ttl': 1800,
+        'default_size': 'small',
+        'allowed_sizes': ['small', 'medium'],
+    },
+    {
         'slug': 'badge_showcase',
         'name': 'Badge Showcase',
         'description': 'Choose your featured badge. This badge appears on your profile card and public profile.',
@@ -4368,8 +5292,8 @@ DASHBOARD_MODULES = [
     },
     {
         'slug': 'premium_settings',
-        'name': 'Premium Settings',
-        'description': 'Manage your theme and background art right from the dashboard.',
+        'name': 'Theme Picker',
+        'description': 'Switch your site theme without leaving the dashboard. Quick-pick row plus full 105-theme browser.',
         'category': 'premium',
         'template': 'trophies/partials/dashboard/premium_settings.html',
         'provider': provide_premium_settings,
@@ -4454,6 +5378,54 @@ DASHBOARD_MODULES = [
         'cache_ttl': 1800,
         'default_size': 'large',
         'allowed_sizes': ['large'],
+    },
+    {
+        'slug': 'theme_mastery',
+        'name': 'Genre & Themes',
+        'description': 'Side-by-side genre and theme radars across your earned trophies. Lifetime mastery of what you play and the stories you chase.',
+        'category': 'premium',
+        'template': 'trophies/partials/dashboard/theme_mastery.html',
+        'provider': provide_theme_mastery,
+        'requires_premium': True,
+        'load_strategy': 'lazy',
+        'default_order': 10,
+        'default_settings': {},
+        'configurable_settings': [],
+        'cache_ttl': 1800,
+        'default_size': 'medium',
+        'allowed_sizes': ['medium', 'large'],
+    },
+    {
+        'slug': 'time_to_beat_insights',
+        'name': 'Time-to-Beat',
+        'description': 'IGDB time-to-beat estimates for your platinums and grinds. Average plat duration, longest hunts, time remaining.',
+        'category': 'premium',
+        'template': 'trophies/partials/dashboard/time_to_beat_insights.html',
+        'provider': provide_time_to_beat_insights,
+        'requires_premium': True,
+        'load_strategy': 'lazy',
+        'default_order': 11,
+        'default_settings': {},
+        'configurable_settings': [],
+        'cache_ttl': 1800,
+        'default_size': 'medium',
+        'allowed_sizes': ['medium', 'large'],
+    },
+    {
+        'slug': 'profile_badge_showcase_editor',
+        'name': 'Profile Showcase',
+        'description': 'Drag-reorder your 5-slot profile badge showcase. Manage the badges that appear on your public profile.',
+        'category': 'premium',
+        'template': 'trophies/partials/dashboard/profile_badge_showcase_editor.html',
+        'provider': provide_profile_badge_showcase_editor,
+        'requires_premium': True,
+        'load_strategy': 'lazy',
+        'default_order': 12,
+        'default_settings': {},
+        'configurable_settings': [],
+        'cache_ttl': 0,
+        'default_size': 'medium',
+        'allowed_sizes': ['medium', 'large'],
     },
 ]
 

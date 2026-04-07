@@ -450,6 +450,67 @@ class ToggleShowcaseBadgeView(APIView):
         return Response({'status': 'ok', 'action': action, 'showcase_badge_ids': showcase_ids})
 
 
+class ReorderShowcaseBadgesView(APIView):
+    """
+    POST /api/v1/badges/showcase/reorder/
+
+    Persist a new display order for the user's profile badge showcase.
+    Send {"badge_ids": [<id>, <id>, ...]} with the new order. All ids must
+    already belong to the user's showcase. Premium only.
+    """
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [SessionAuthentication, TokenAuthentication]
+
+    def post(self, request):
+        from trophies.models import ProfileBadgeShowcase
+        from trophies.services.dashboard_service import (
+            invalidate_dashboard_cache, get_effective_premium,
+        )
+        from django.db import transaction
+
+        profile = getattr(request.user, 'profile', None)
+        if not profile:
+            return Response({'error': 'No profile linked.'}, status=http_status.HTTP_400_BAD_REQUEST)
+
+        if not get_effective_premium(request):
+            return Response({'error': 'Premium subscription required.'}, status=http_status.HTTP_403_FORBIDDEN)
+
+        badge_ids = request.data.get('badge_ids')
+        if not isinstance(badge_ids, list) or not all(isinstance(b, int) for b in badge_ids):
+            return Response(
+                {'error': 'badge_ids must be a list of integers.'},
+                status=http_status.HTTP_400_BAD_REQUEST,
+            )
+        if len(badge_ids) > 5:
+            return Response(
+                {'error': 'Cannot reorder more than 5 badges.'},
+                status=http_status.HTTP_400_BAD_REQUEST,
+            )
+
+        with transaction.atomic():
+            existing = list(
+                ProfileBadgeShowcase.objects
+                .select_for_update()
+                .filter(profile=profile)
+            )
+            existing_ids = {sc.badge_id for sc in existing}
+            if set(badge_ids) != existing_ids:
+                return Response(
+                    {'error': 'badge_ids must exactly match your current showcase.'},
+                    status=http_status.HTTP_400_BAD_REQUEST,
+                )
+
+            for i, bid in enumerate(badge_ids, 1):
+                ProfileBadgeShowcase.objects.filter(profile=profile, badge_id=bid).update(display_order=i)
+
+        try:
+            invalidate_dashboard_cache(profile.pk)
+        except Exception:
+            pass
+
+        return Response({'status': 'ok', 'showcase_badge_ids': badge_ids})
+
+
 # ---------------------------------------------------------------------------
 # Public forum signature serving (no auth)
 # ---------------------------------------------------------------------------

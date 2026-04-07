@@ -1,0 +1,60 @@
+{% load custom_filters %}
+{# Dashboard module: My Stats Teaser. Drives traffic to /my-stats/ page. #}
+<div class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral">
+    <div class="card-body p-3 md:p-5 lg:p-7">
+        {# Header #}
+        <div class="flex items-center justify-between mb-3">
+            <h2 class="card-title text-base lg:text-lg font-bold flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-info" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="18" y1="20" x2="18" y2="10"></line>
+                    <line x1="12" y1="20" x2="12" y2="4"></line>
+                    <line x1="6" y1="20" x2="6" y2="14"></line>
+                </svg>
+                Your Stats
+            </h2>
+            <span class="badge badge-ghost badge-sm">120+ stats</span>
+        </div>
+
+        {% if data.has_data %}
+            {# Hero stat cards 2x2 #}
+            <div class="grid grid-cols-2 gap-2 lg:gap-3 mb-3">
+                {% for stat in data.hero_stats %}
+                    <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-2 lg:p-3 text-center">
+                        <div class="text-lg lg:text-2xl font-bold text-info leading-tight">
+                            {{ stat.value }}{% if stat.unit %}<span class="text-xs lg:text-sm text-base-content/50 ml-0.5">{{ stat.unit }}</span>{% endif %}
+                        </div>
+                        <div class="text-[0.6rem] lg:text-xs text-base-content/50 uppercase tracking-wider">{{ stat.label }}</div>
+                    </div>
+                {% endfor %}
+            </div>
+
+            {# Callout chips #}
+            {% if data.callouts %}
+                <div class="space-y-1 mb-3">
+                    {% for line in data.callouts %}
+                        <div class="text-xs text-base-content/60 flex items-center gap-1.5">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3 text-info shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                            {{ line }}
+                        </div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+
+            {# CTA #}
+            <a href="{% url 'my_stats' %}" class="btn btn-info btn-sm w-full gap-1">
+                View All Stats
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
+            </a>
+        {% else %}
+            <div class="text-center py-6">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-10 h-10 text-info/30 mx-auto mb-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="18" y1="20" x2="18" y2="10"></line>
+                    <line x1="12" y1="20" x2="12" y2="4"></line>
+                    <line x1="6" y1="20" x2="6" y2="14"></line>
+                </svg>
+                <p class="text-sm text-base-content/50">No data yet</p>
+                <p class="text-xs text-base-content/40 mt-1">Start earning trophies to see your stats!</p>
+            </div>
+        {% endif %}
+    </div>
+</div>

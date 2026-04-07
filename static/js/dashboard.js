@@ -99,6 +99,18 @@
             this.registerModuleInit('advanced_badge_stats', (el) => this._initAdvancedBadgeStatsRange(el));
             this.registerModuleInit('badge_series_overview', (el) => this._initBadgeSeriesOverview(el));
             this.registerModuleInit('badge_visualizations', (el) => this._initBadgeVisualizations(el));
+
+            // Top Studios sub-tab toggle (developers/publishers)
+            this.registerModuleInit('top_developers', (el) => this._initTopStudiosTabs(el));
+
+            // Theme Mastery (premium): radar chart of IGDB themes
+            this.registerModuleInit('theme_mastery', (el) => this._initThemeMastery(el));
+
+            // Earned Titles: click chip to equip via API
+            this.registerModuleInit('earned_titles', (el) => this._initEarnedTitles(el));
+
+            // Profile Badge Showcase Editor (premium): drag-reorder 5 slots
+            this.registerModuleInit('profile_badge_showcase_editor', (el) => this._initProfileShowcaseEditor(el));
         }
 
         // -----------------------------------------------------------------
@@ -314,6 +326,195 @@
             });
         }
 
+        _initProfileShowcaseEditor(el) {
+            const container = el.querySelector('#profile-showcase-editor-slots');
+            if (!container || !PlatPursuit.DragReorderManager) return;
+
+            new PlatPursuit.DragReorderManager({
+                container: container,
+                itemSelector: '.showcase-editor-slot',
+                handleSelector: '.showcase-editor-slot',
+                onReorder: async (_itemId, _newPosition, allItemIds) => {
+                    const badgeIds = allItemIds.map(Number).filter(Boolean);
+                    try {
+                        await PlatPursuit.API.post('/api/v1/badges/showcase/reorder/', {
+                            badge_ids: badgeIds,
+                        });
+                        // Update slot order numbers in the badges
+                        container.querySelectorAll('.showcase-editor-slot').forEach((slot, idx) => {
+                            const badgeEl = slot.querySelector('.badge');
+                            if (badgeEl) badgeEl.textContent = idx + 1;
+                        });
+                        PlatPursuit.ToastManager.success('Showcase order saved.');
+                    } catch (err) {
+                        let msg = 'Failed to save showcase order.';
+                        try {
+                            const errData = await err.response?.json().catch(() => null);
+                            msg = errData?.error || msg;
+                        } catch {}
+                        PlatPursuit.ToastManager.error(msg);
+                    }
+                },
+            });
+        }
+
+        _initEarnedTitles(el) {
+            // Guard against double-binding: the re-fetch flow can replace the
+            // .card child but `el` itself persists, so the delegated listener
+            // would otherwise stack on every equip and multiply toasts.
+            if (el.dataset.earnedTitlesInited === '1') return;
+            el.dataset.earnedTitlesInited = '1';
+
+            // Click handler delegated at module root so it catches the hero
+            // unequip button AND chips in either source-grouped section.
+            el.addEventListener('click', async (e) => {
+                const chip = e.target.closest('.title-chip');
+                if (!chip) return;
+                e.preventDefault();
+
+                const titleId = parseInt(chip.dataset.titleId, 10);
+                const titleName = chip.dataset.titleName;
+                if (!titleId) return;
+
+                const wasEquipped = chip.dataset.equipped === 'true';
+                const newTitleId = wasEquipped ? null : titleId;
+
+                try {
+                    await PlatPursuit.API.post('/api/v1/equip-title/', { title_id: newTitleId });
+
+                    // Re-fetch the module so the hero and section badges update.
+                    // Only the .card child is replaced; `el` and its delegated
+                    // listener persist (no re-init needed).
+                    try {
+                        const resp = await PlatPursuit.API.get(`${this.moduleDataUrl}earned_titles/`);
+                        const card = el.querySelector('.card');
+                        if (card && resp.html) {
+                            const tmp = document.createElement('div');
+                            tmp.innerHTML = resp.html;
+                            const newCard = tmp.querySelector('.card') || tmp.firstElementChild;
+                            if (newCard) card.replaceWith(newCard);
+                        }
+                    } catch {
+                        // Silent fallback: API succeeded but re-render failed
+                    }
+
+                    PlatPursuit.ToastManager.success(
+                        wasEquipped ? 'Title unequipped' : `Equipped "${titleName}"`
+                    );
+                } catch (err) {
+                    let msg = 'Failed to equip title.';
+                    try {
+                        const errData = await err.response?.json().catch(() => null);
+                        msg = errData?.error || msg;
+                    } catch {}
+                    PlatPursuit.ToastManager.error(msg);
+                }
+            });
+        }
+
+        _initThemeMastery(el) {
+            if (typeof Chart === 'undefined') return;
+
+            const radarOpts = {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: false } },
+                scales: {
+                    r: {
+                        beginAtZero: true,
+                        ticks: { display: false },
+                        grid: { color: 'rgba(150, 150, 150, 0.15)' },
+                        angleLines: { color: 'rgba(150, 150, 150, 0.15)' },
+                        pointLabels: { color: 'rgba(150, 150, 150, 0.6)', font: { size: 10 } },
+                    },
+                },
+            };
+
+            // Genre radar (accent color)
+            const genreCanvas = el.querySelector('.genre-mastery-canvas');
+            if (genreCanvas) {
+                const labels = JSON.parse(genreCanvas.dataset.labels || '[]');
+                const counts = JSON.parse(genreCanvas.dataset.counts || '[]');
+                if (labels.length) {
+                    const accent = this._getChartColor('accent') || '#f59e0b';
+                    const safe = accent.includes('oklch') ? '#f59e0b' : accent;
+                    new Chart(genreCanvas, {
+                        type: 'radar',
+                        data: {
+                            labels: labels,
+                            datasets: [{
+                                label: 'Trophies',
+                                data: counts,
+                                backgroundColor: 'rgba(245, 158, 11, 0.15)',
+                                borderColor: safe,
+                                borderWidth: 2,
+                                pointBackgroundColor: safe,
+                                pointRadius: 4,
+                                pointHoverRadius: 6,
+                            }],
+                        },
+                        options: radarOpts,
+                    });
+                }
+            }
+
+            // Theme radar (info color)
+            const themeCanvas = el.querySelector('.theme-mastery-canvas');
+            if (themeCanvas) {
+                const labels = JSON.parse(themeCanvas.dataset.labels || '[]');
+                const counts = JSON.parse(themeCanvas.dataset.counts || '[]');
+                if (labels.length) {
+                    const info = this._getChartColor('info') || '#06b6d4';
+                    const safe = info.includes('oklch') ? '#06b6d4' : info;
+                    new Chart(themeCanvas, {
+                        type: 'radar',
+                        data: {
+                            labels: labels,
+                            datasets: [{
+                                label: 'Trophies',
+                                data: counts,
+                                backgroundColor: 'rgba(6, 182, 212, 0.15)',
+                                borderColor: safe,
+                                borderWidth: 2,
+                                pointBackgroundColor: safe,
+                                pointRadius: 4,
+                                pointHoverRadius: 6,
+                            }],
+                        },
+                        options: radarOpts,
+                    });
+                }
+            }
+        }
+
+        _initTopStudiosTabs(el) {
+            const tabs = el.querySelectorAll('.top-studios-tab');
+            const panels = el.querySelectorAll('.top-studios-panel');
+            if (!tabs.length || !panels.length) return;
+
+            tabs.forEach(tab => {
+                tab.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    const target = tab.dataset.tab;
+
+                    tabs.forEach(t => {
+                        t.classList.remove('btn-primary');
+                        t.classList.add('btn-ghost');
+                    });
+                    tab.classList.remove('btn-ghost');
+                    tab.classList.add('btn-primary');
+
+                    panels.forEach(p => {
+                        if (p.dataset.panel === target) {
+                            p.classList.remove('hidden');
+                        } else {
+                            p.classList.add('hidden');
+                        }
+                    });
+                });
+            });
+        }
+
         _initCalendarPagination(el) {
             const grid = el.querySelector('[data-calendar-grid]');
             const prevBtn = el.querySelector('[data-calendar-prev]');
@@ -482,8 +683,8 @@
                 });
             }
 
-            // Genre Radar (Chart.js radar)
-            const radarCanvas = el.querySelector('.genre-radar-canvas');
+            // Engine Radar (Chart.js radar)
+            const radarCanvas = el.querySelector('.engine-radar-canvas');
             if (radarCanvas && typeof Chart !== 'undefined') {
                 const labels = JSON.parse(radarCanvas.dataset.labels || '[]');
                 const counts = JSON.parse(radarCanvas.dataset.counts || '[]');
@@ -494,7 +695,7 @@
                         data: {
                             labels: labels,
                             datasets: [{
-                                label: 'Platinums',
+                                label: 'Trophies',
                                 data: counts,
                                 backgroundColor: 'rgba(245, 158, 11, 0.15)',
                                 borderColor: accentColor.includes('oklch') ? '#f59e0b' : accentColor,
@@ -1376,198 +1577,77 @@
         // -----------------------------------------------------------------
 
         _initPremiumSettings(el) {
-            // Theme change button
-            const changeBtn = el.querySelector('.premium-change-theme');
-            if (changeBtn) {
-                changeBtn.addEventListener('click', () => {
+            // Guard against double-binding (re-fetch after equip refreshes the
+            // .card child but `el` itself persists, so the delegated listeners
+            // would otherwise stack on every theme change).
+            if (el.dataset.themePickerInited === '1') return;
+            el.dataset.themePickerInited = '1';
+
+            const applyThemeToBody = (themeKey) => {
+                const themes = window.GRADIENT_THEMES || {};
+                const t = themes[themeKey];
+                document.body.style = t ? `background: ${t.background}; background-attachment: fixed;` : '';
+            };
+
+            const refetchModule = async () => {
+                try {
+                    const resp = await PlatPursuit.API.get(`${this.moduleDataUrl}premium_settings/`);
+                    const card = el.querySelector('.card');
+                    if (card && resp.html) {
+                        const tmp = document.createElement('div');
+                        tmp.innerHTML = resp.html;
+                        const newCard = tmp.querySelector('.card') || tmp.firstElementChild;
+                        if (newCard) card.replaceWith(newCard);
+                    }
+                } catch {
+                    // Silent: API succeeded but re-render failed
+                }
+            };
+
+            const setTheme = async (themeKey) => {
+                try {
+                    await PlatPursuit.API.post('/api/v1/user/quick-settings/', {
+                        setting: 'selected_theme', value: themeKey || '',
+                    });
+                    applyThemeToBody(themeKey);
+                    await refetchModule();
+                    PlatPursuit.ToastManager.success(themeKey ? 'Theme updated!' : 'Theme reset to default.');
+                } catch (err) {
+                    let msg = themeKey ? 'Failed to update theme.' : 'Failed to reset theme.';
+                    try {
+                        const errData = await err.response?.json().catch(() => null);
+                        msg = errData?.error || msg;
+                    } catch {}
+                    PlatPursuit.ToastManager.error(msg);
+                }
+            };
+
+            // Delegated click handler at module root so re-fetched DOM stays wired up
+            el.addEventListener('click', (e) => {
+                // Browse all themes -> open color grid modal
+                if (e.target.closest('.premium-change-theme')) {
                     if (!PlatPursuit.getColorGridModal) {
                         PlatPursuit.ToastManager.error('Theme picker not available.');
                         return;
                     }
                     const cgm = PlatPursuit.getColorGridModal();
                     const currentTheme = el.querySelector('.premium-theme-swatch')?.dataset.themeKey || 'default';
-                    cgm.open(currentTheme, async (themeKey) => {
-                        try {
-                            await PlatPursuit.API.post('/api/v1/user/quick-settings/', {
-                                setting: 'selected_theme', value: themeKey || '',
-                            });
-                            // Update swatch preview
-                            const swatch = el.querySelector('.premium-theme-swatch');
-                            const nameEl = el.querySelector('.premium-theme-name');
-                            const themes = window.GRADIENT_THEMES || {};
-                            const t = themes[themeKey];
-                            if (swatch) {
-                                swatch.style = t ? `background: ${t.background};` : 'background: var(--b2);';
-                                if (t && t.backgroundSize) swatch.style.backgroundSize = t.backgroundSize;
-                                swatch.dataset.themeKey = themeKey || '';
-                            }
-                            if (nameEl) nameEl.textContent = t ? t.name : 'Default';
-                            PlatPursuit.ToastManager.success('Theme updated!');
-                            // Apply to page body
-                            document.body.style = t ? `background: ${t.background}; background-attachment: fixed;` : '';
-                        } catch (err) {
-                            const errData = await err.response?.json().catch(() => null);
-                            PlatPursuit.ToastManager.error(errData?.error || 'Failed to update theme.');
-                        }
-                    });
-                });
-            }
+                    cgm.open(currentTheme, (themeKey) => setTheme(themeKey));
+                    return;
+                }
 
-            // Clear theme button
-            const clearThemeBtn = el.querySelector('.premium-clear-theme');
-            if (clearThemeBtn) {
-                clearThemeBtn.addEventListener('click', async () => {
-                    try {
-                        await PlatPursuit.API.post('/api/v1/user/quick-settings/', {
-                            setting: 'selected_theme', value: '',
-                        });
-                        const swatch = el.querySelector('.premium-theme-swatch');
-                        const nameEl = el.querySelector('.premium-theme-name');
-                        if (swatch) {
-                            swatch.style = 'background: var(--b2);';
-                            swatch.dataset.themeKey = '';
-                        }
-                        if (nameEl) nameEl.textContent = 'Default';
-                        clearThemeBtn.remove();
-                        document.body.style = '';
-                        PlatPursuit.ToastManager.success('Theme reset to default.');
-                    } catch (err) {
-                        const errData = await err.response?.json().catch(() => null);
-                        PlatPursuit.ToastManager.error(errData?.error || 'Failed to reset theme.');
-                    }
-                });
-            }
+                // Reset to default
+                if (e.target.closest('.premium-clear-theme')) {
+                    setTheme('');
+                    return;
+                }
 
-            // Background picker (use event delegation for dynamically replaced buttons)
-            const bgSearch = el.querySelector('.premium-bg-search');
-            const bgInput = el.querySelector('.premium-bg-search-input');
-            const bgResults = el.querySelector('.premium-bg-search-results');
-
-            // Open search (delegated)
-            el.addEventListener('click', (e) => {
-                if (!e.target.closest('.premium-change-bg')) return;
-                const bgDisplay = el.querySelector('.premium-bg-display');
-                if (bgDisplay) bgDisplay.classList.add('hidden');
-                if (bgSearch) bgSearch.classList.remove('hidden');
-                if (bgInput) { bgInput.value = ''; bgInput.focus(); }
-                if (bgResults) bgResults.innerHTML = '<p class="text-xs text-base-content/40 text-center py-2">Type to search your platted games</p>';
-            });
-
-            // Cancel search
-            el.addEventListener('click', (e) => {
-                if (!e.target.closest('.premium-bg-search-cancel')) return;
-                if (bgSearch) bgSearch.classList.add('hidden');
-                const bgDisplay = el.querySelector('.premium-bg-display');
-                if (bgDisplay) bgDisplay.classList.remove('hidden');
-            });
-
-            // Debounced search
-            let bgSearchTimer;
-            if (bgInput) {
-                bgInput.addEventListener('input', () => {
-                    clearTimeout(bgSearchTimer);
-                    const q = bgInput.value.trim();
-                    if (q.length < 2) {
-                        if (bgResults) bgResults.innerHTML = '<p class="text-xs text-base-content/40 text-center py-2">Type to search your platted games</p>';
-                        return;
-                    }
-                    bgSearchTimer = setTimeout(async () => {
-                        try {
-                            const resp = await PlatPursuit.API.get(`/api/v1/game-backgrounds/?q=${encodeURIComponent(q)}`);
-                            if (!resp.results || resp.results.length === 0) {
-                                bgResults.innerHTML = '<p class="text-xs text-base-content/40 text-center py-2">No games found with background art</p>';
-                                return;
-                            }
-                            bgResults.innerHTML = resp.results.map(r => `
-                                <button type="button" class="flex items-center gap-2 w-full p-1.5 rounded-lg hover:bg-base-300/60 transition-colors premium-bg-result" data-concept-id="${r.concept_id}" data-bg-url="${r.bg_url}" data-title="${PlatPursuit.HTMLUtils.escape(r.title_name)}">
-                                    <div class="w-12 h-6 rounded overflow-hidden ring-1 ring-base-300 shrink-0">
-                                        <img src="${r.bg_url}" alt="" class="w-full h-full object-cover" loading="lazy">
-                                    </div>
-                                    <span class="text-xs text-base-content/70 flex-1 text-left line-clamp-1 pr-1">${PlatPursuit.HTMLUtils.escape(r.title_name)}</span>
-                                </button>
-                            `).join('');
-                        } catch {
-                            bgResults.innerHTML = '<p class="text-xs text-error/60 text-center py-2">Search failed</p>';
-                        }
-                    }, 300);
-                });
-            }
-
-            // Select background result
-            if (bgResults) {
-                bgResults.addEventListener('click', async (e) => {
-                    const resultBtn = e.target.closest('.premium-bg-result');
-                    if (!resultBtn) return;
-
-                    const conceptId = resultBtn.dataset.conceptId;
-                    const bgUrl = resultBtn.dataset.bgUrl;
-                    const title = resultBtn.dataset.title;
-
-                    try {
-                        await PlatPursuit.API.post('/api/v1/user/quick-settings/', {
-                            setting: 'selected_background', value: conceptId,
-                        });
-                        const display = el.querySelector('.premium-bg-display');
-                        if (display) {
-                            display.innerHTML = `
-                                <div class="flex items-center gap-3">
-                                    <div class="w-16 h-8 rounded-lg overflow-hidden ring-1 ring-base-300 shrink-0">
-                                        <img src="${bgUrl}" alt="" class="w-full h-full object-cover">
-                                    </div>
-                                    <div class="flex-1 min-w-0">
-                                        <div class="text-sm font-medium line-clamp-1 pr-1 premium-bg-title">${PlatPursuit.HTMLUtils.escape(title)}</div>
-                                        <div class="text-xs text-base-content/40">Background art</div>
-                                    </div>
-                                    <div class="flex gap-1 shrink-0">
-                                        <button type="button" class="btn btn-ghost btn-xs premium-change-bg" title="Change background">
-                                            <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
-                                            Change
-                                        </button>
-                                        <button type="button" class="btn btn-ghost btn-xs text-error premium-clear-bg" title="Remove background">
-                                            <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-                                        </button>
-                                    </div>
-                                </div>
-                            `;
-                            display.classList.remove('hidden');
-                        }
-                        if (bgSearch) bgSearch.classList.add('hidden');
-                        PlatPursuit.ToastManager.success('Background updated!');
-                    } catch (err) {
-                        const errData = await err.response?.json().catch(() => null);
-                        PlatPursuit.ToastManager.error(errData?.error || 'Failed to update background.');
-                    }
-                });
-            }
-
-            // Clear background (delegated)
-            el.addEventListener('click', async (e) => {
-                if (!e.target.closest('.premium-clear-bg')) return;
-                try {
-                    await PlatPursuit.API.post('/api/v1/user/quick-settings/', {
-                        setting: 'selected_background', value: '',
-                    });
-                    const display = el.querySelector('.premium-bg-display');
-                    if (display) {
-                        display.innerHTML = `
-                            <div class="flex items-center gap-3">
-                                <div class="w-16 h-8 rounded-lg bg-base-300/50 flex items-center justify-center shrink-0">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-base-content/20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
-                                </div>
-                                <div class="flex-1 min-w-0">
-                                    <div class="text-sm text-base-content/50">No background set</div>
-                                    <div class="text-xs text-base-content/40">Choose concept art for your profile</div>
-                                </div>
-                                <button type="button" class="btn btn-ghost btn-xs premium-change-bg">Set Up</button>
-                            </div>
-                        `;
-                    }
-                    PlatPursuit.ToastManager.success('Background removed.');
-                } catch {
-                    PlatPursuit.ToastManager.error('Failed to remove background.');
+                // Quick-pick swatch -> set theme directly
+                const quickBtn = e.target.closest('.premium-quickpick-btn');
+                if (quickBtn) {
+                    setTheme(quickBtn.dataset.themeKey);
                 }
             });
-
         }
 
         // -----------------------------------------------------------------

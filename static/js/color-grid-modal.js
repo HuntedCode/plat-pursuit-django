@@ -48,6 +48,26 @@ class ColorGridModal {
             this.selectTheme(themeKey);
         });
 
+        // Category chip quick-jump (scrolls grid to category section)
+        const chips = this.modal.querySelectorAll('.theme-cat-chip');
+        chips.forEach(chip => {
+            chip.addEventListener('click', (e) => {
+                e.preventDefault();
+                const catKey = chip.dataset.catKey;
+                const target = this.grid.querySelector(`.theme-cat-section[data-cat-key="${catKey}"]`);
+                const scrollContainer = document.getElementById('modal-theme-grid-scroll');
+                if (target && scrollContainer) {
+                    const offset = target.offsetTop - scrollContainer.offsetTop;
+                    scrollContainer.scrollTo({ top: offset, behavior: 'smooth' });
+                }
+                // Visual highlight on the active chip
+                chips.forEach(c => c.classList.remove('btn-primary'));
+                chips.forEach(c => c.classList.add('btn-ghost'));
+                chip.classList.remove('btn-ghost');
+                chip.classList.add('btn-primary');
+            });
+        });
+
         // Apply button handler
         this.applyButton?.addEventListener('click', (e) => {
             e.preventDefault();

@@ -1,0 +1,59 @@
+{% load custom_filters %}
+{# Dashboard module: Profile Badge Showcase Editor (premium). 5-slot drag-reorder. #}
+<div class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral">
+    <div class="card-body p-3 md:p-5 lg:p-7">
+        {# Header #}
+        <div class="flex items-center justify-between mb-3">
+            <h2 class="card-title text-base lg:text-lg font-bold flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-warning" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+                </svg>
+                Profile Showcase
+                <span class="badge badge-xs badge-primary shimmer font-bold tracking-wide">PLUS</span>
+            </h2>
+            <span class="badge badge-ghost badge-sm">{{ data.used_count }}/{{ data.max_slots }}</span>
+        </div>
+
+        <p class="text-xs text-base-content/50 mb-3">Drag to reorder. These appear on your public profile in this order.</p>
+
+        {# Slot grid #}
+        <div class="grid grid-cols-5 gap-2 mb-3" id="profile-showcase-editor-slots">
+            {% for slot in data.slots %}
+                <div class="showcase-editor-slot relative aspect-square rounded-xl border-2 border-base-content/10 bg-white/[0.03] p-1.5 cursor-grab active:cursor-grabbing transition-all hover:border-primary/50 hover:shadow-md hover:shadow-primary/20"
+                     data-item-id="{{ slot.badge_id }}"
+                     title="{{ slot.name }}">
+                    {% if slot.image_url %}
+                        <img src="{{ slot.image_url }}" alt="{{ slot.name }}" class="w-full h-full object-contain" loading="lazy">
+                    {% else %}
+                        <div class="w-full h-full bg-base-300 rounded-lg flex items-center justify-center">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 text-base-content/30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="7"></circle><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"></polyline></svg>
+                        </div>
+                    {% endif %}
+                    {# Tier badge in corner #}
+                    <span class="absolute -top-1 -right-1 badge badge-xs
+                        {% if slot.tier == 4 %}badge-primary
+                        {% elif slot.tier == 3 %}badge-warning
+                        {% elif slot.tier == 2 %}badge-ghost
+                        {% else %}text-amber-700 bg-amber-700/10 border-amber-700/30{% endif %}">
+                        {{ slot.display_order }}
+                    </span>
+                </div>
+            {% endfor %}
+
+            {# Empty slots #}
+            {% for i in "12345"|slice:":5" %}
+                {% if forloop.counter > data.used_count %}
+                    <div class="aspect-square rounded-xl border-2 border-dashed border-base-content/10 bg-white/[0.03] flex items-center justify-center">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-base-content/20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                    </div>
+                {% endif %}
+            {% endfor %}
+        </div>
+
+        {# Manage link #}
+        <a href="{% url 'badges_list' %}" class="btn btn-outline btn-sm w-full gap-1">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+            Browse Eligible Badges
+        </a>
+    </div>
+</div>

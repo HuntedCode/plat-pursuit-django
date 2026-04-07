@@ -15,8 +15,22 @@
             Select a gradient theme for your share card background.
         </p>
 
+        {# Category quick-jump chips #}
+        {% if available_themes %}
+            <div class="flex flex-wrap gap-1 mb-2 flex-shrink-0">
+                {% for cat_key, cat_label, cat_themes in available_themes %}
+                    <button type="button"
+                            class="theme-cat-chip btn btn-xs btn-ghost rounded-full text-xs"
+                            data-cat-key="{{ cat_key }}">
+                        {{ cat_label }}
+                        <span class="text-base-content/40 ml-0.5">{{ cat_themes|length }}</span>
+                    </button>
+                {% endfor %}
+            </div>
+        {% endif %}
+
         {# Scrollable grid container - grouped by category #}
-        <div class="overflow-y-auto flex-shrink-0 max-h-72 mb-3 pr-1">
+        <div id="modal-theme-grid-scroll" class="overflow-y-auto flex-shrink-0 max-h-72 mb-3 pr-1 scroll-smooth">
             {% include 'partials/color_grid.html' with grid_id='modal-theme-grid' grouped=True %}
         </div>
 

@@ -90,7 +90,7 @@ from .roadmap_views import (
 from .profile_card_views import (
     ProfileCardHTMLView, ProfileCardPNGView,
     ProfileCardSettingsView, ProfileCardRegenerateTokenView,
-    SetDisplayedBadgeView, ToggleShowcaseBadgeView,
+    SetDisplayedBadgeView, ToggleShowcaseBadgeView, ReorderShowcaseBadgesView,
 )
 
 app_name = 'api'
@@ -298,6 +298,7 @@ urlpatterns = [
     # Badge display selection
     path('badges/displayed/', SetDisplayedBadgeView.as_view(), name='set-displayed-badge'),
     path('badges/showcase/', ToggleShowcaseBadgeView.as_view(), name='toggle-showcase-badge'),
+    path('badges/showcase/reorder/', ReorderShowcaseBadgesView.as_view(), name='reorder-showcase-badges'),
 
     # Review Hub endpoints
     path('reviews/recent/', RecentReviewsView.as_view(), name='review-recent'),

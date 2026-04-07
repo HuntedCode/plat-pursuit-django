@@ -11,7 +11,7 @@ Context variables:
     {% if grouped %}
         {# Grouped display with category headers #}
         {% for cat_key, cat_label, cat_themes in available_themes %}
-            <div class="mb-4">
+            <div class="mb-4 theme-cat-section" data-cat-key="{{ cat_key }}">
                 <h5 class="text-xs font-semibold text-base-content/60 uppercase tracking-wider mb-2">{{ cat_label }}</h5>
                 <div class="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-8 gap-2">
                     {% for theme_key, theme_data in cat_themes %}

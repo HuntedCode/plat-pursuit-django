@@ -177,6 +177,11 @@ class UpdateQuickSettingsAPIView(APIView):
                     return Response({'error': 'Game art themes cannot be used as site theme.'}, status=http_status.HTTP_400_BAD_REQUEST)
             profile.selected_theme = value or None
             profile.save(update_fields=['selected_theme'])
+            try:
+                from trophies.services.dashboard_service import invalidate_dashboard_cache
+                invalidate_dashboard_cache(profile.pk)
+            except Exception:
+                pass
 
         # Premium background setting (concept_id or null to clear)
         elif setting == 'selected_background':

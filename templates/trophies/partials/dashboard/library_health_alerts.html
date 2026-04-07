@@ -1,0 +1,103 @@
+{% load custom_filters %}
+{# Dashboard module: Library Health Alerts. Surfaces flagged games in user's library. #}
+<div class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral">
+    <div class="card-body p-3 md:p-5 lg:p-7">
+        {# Header #}
+        <div class="flex items-center justify-between mb-3">
+            <h2 class="card-title text-base lg:text-lg font-bold flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-warning" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+                    <line x1="12" y1="9" x2="12" y2="13"></line>
+                    <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                </svg>
+                Library Health
+            </h2>
+            {% if data.total_flagged %}
+                <span class="badge badge-ghost badge-sm">{{ data.total_flagged }} flagged</span>
+            {% endif %}
+        </div>
+
+        {% if data.games %}
+            {# Severity summary line #}
+            <div class="flex flex-wrap items-center gap-2 lg:gap-3 mb-3 text-xs">
+                {% if data.total_blockers %}
+                    <span class="flex items-center gap-1 text-error">
+                        <span class="w-1.5 h-1.5 rounded-full bg-error"></span>
+                        <span class="font-semibold">{{ data.total_blockers }}</span>
+                        <span class="text-base-content/60">blocker{{ data.total_blockers|pluralize }}</span>
+                    </span>
+                {% endif %}
+                {% if data.total_issues %}
+                    <span class="flex items-center gap-1 text-warning">
+                        <span class="w-1.5 h-1.5 rounded-full bg-warning"></span>
+                        <span class="font-semibold">{{ data.total_issues }}</span>
+                        <span class="text-base-content/60">issue{{ data.total_issues|pluralize }}</span>
+                    </span>
+                {% endif %}
+                {% if data.total_info %}
+                    <span class="flex items-center gap-1 text-base-content/50">
+                        <span class="w-1.5 h-1.5 rounded-full bg-base-content/40"></span>
+                        <span class="font-semibold">{{ data.total_info }}</span>
+                        <span class="text-base-content/60">info</span>
+                    </span>
+                {% endif %}
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-2 lg:gap-3">
+                {% for game in data.games %}
+                    <a href="{% url 'game_detail' game.np_communication_id %}" class="flex items-center gap-2 md:gap-3 p-2 rounded-lg bg-white/[0.03] border border-base-content/5 hover:bg-white/[0.06] transition-colors group relative">
+                        {# Game icon #}
+                        <div class="w-10 h-10 lg:w-12 lg:h-12 rounded-lg overflow-hidden shrink-0 ring-1 ring-base-300 relative">
+                            {% if game.icon_url %}
+                                <img src="{{ game.icon_url }}" alt="{{ game.game_name }}" class="w-full h-full object-cover" loading="lazy" />
+                            {% else %}
+                                <div class="w-full h-full bg-base-300 flex items-center justify-center">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-base-content/30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="6" width="20" height="12" rx="2"></rect></svg>
+                                </div>
+                            {% endif %}
+                            {% if game.is_platinumed %}
+                                <div class="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-info ring-1 ring-base-200 flex items-center justify-center">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-2.5 h-2.5 text-base-100" viewBox="0 0 24 24" fill="currentColor"><polyline points="20 6 9 17 4 12" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"></polyline></svg>
+                                </div>
+                            {% endif %}
+                        </div>
+
+                        {# Game info + flag chips #}
+                        <div class="flex-1 min-w-0">
+                            <div class="flex items-center justify-between gap-2 mb-1">
+                                <span class="font-semibold text-sm line-clamp-1 pr-1 group-hover:text-primary transition-colors">{{ game.game_name }}</span>
+                                <span class="text-xs text-base-content/40 shrink-0">{{ game.progress }}%</span>
+                            </div>
+                            <div class="flex flex-wrap gap-1">
+                                {% for flag in game.flags %}
+                                    <span class="badge badge-xs
+                                        {% if flag.severity == 'blocker' %}badge-error
+                                        {% elif flag.severity == 'issue' %}badge-warning
+                                        {% else %}badge-ghost{% endif %}">
+                                        {{ flag.label }}
+                                    </span>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </a>
+                {% endfor %}
+            </div>
+
+            <div class="mt-3 text-center">
+                <a href="{% url 'flagged_games' %}" class="text-xs text-base-content/50 hover:text-primary transition-colors inline-flex items-center gap-1">
+                    Browse all flagged games
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
+                </a>
+            </div>
+        {% else %}
+            <div class="text-center py-6">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-10 h-10 text-success/40 mx-auto mb-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                    <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                </svg>
+                <p class="text-sm text-base-content/50">All clear!</p>
+                <p class="text-xs text-base-content/40 mt-1">No flagged games in your library.</p>
+            </div>
+        {% endif %}
+    </div>
+</div>
