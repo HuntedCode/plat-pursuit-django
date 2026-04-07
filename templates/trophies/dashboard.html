@@ -38,9 +38,10 @@
                 </div>
                 {# Inline action buttons #}
                 <div class="flex items-center gap-1.5 shrink-0">
+                    {% if request.user.is_staff %}
                     <button id="preview-toggle-btn"
                             class="btn btn-xs {% if is_premium %}btn-warning{% else %}btn-ghost border-base-300{% endif %} gap-1"
-                            title="Toggle premium/free preview">
+                            title="Toggle premium/free preview (staff)">
                         {% if is_premium %}
                             <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
                                 <path d="M5 16L3 5l5.5 5L12 4l3.5 6L21 5l-2 11H5z"/>
@@ -56,6 +57,7 @@
                     </button>
                     {% if preview_mode %}
                         <span class="badge badge-xs badge-outline badge-warning">Preview</span>
+                    {% endif %}
                     {% endif %}
                     <button id="customize-btn" class="btn btn-ghost btn-xs border border-base-300 gap-1" title="Customize">
                         <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
