@@ -7,6 +7,7 @@ from django.core.cache import cache
 from core.services.stats import compute_community_stats
 from core.services.latest_badges import get_latest_badges
 from core.services.whats_new import get_whats_new
+from core.services.site_heartbeat import compute_site_heartbeat
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +29,12 @@ HOURLY_JOBS = [
         'key': 'whats_new',
         'timeout': 3600,
         'func': get_whats_new,
+    },
+    {
+        'name': 'Site Heartbeat',
+        'key': 'site_heartbeat',
+        'timeout': 3600,
+        'func': compute_site_heartbeat,
     },
 ]
 

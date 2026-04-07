@@ -70,6 +70,9 @@
     </div>
 </section>
 
+{# ─── Built for Hunters (site heartbeat ribbon, always visible) ───────── #}
+{% include 'trophies/partials/dashboard/built_for_hunters.html' %}
+
 {# ─── System Tab Bar (default categories, immutable) ──────────────────── #}
 <div id="dashboard-tabs" class="max-w-4xl mx-auto mt-4 flex gap-1 p-1 bg-base-200/60 rounded-box border-2 border-base-300" role="tablist">
     {% for tab in tabs %}

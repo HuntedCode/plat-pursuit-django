@@ -3,7 +3,11 @@ Dashboard views: the personal trophy hunting command center.
 
 DashboardView serves the main page at /dashboard/ (staff required).
 """
+from datetime import timedelta
+
+from django.core.cache import cache
 from django.urls import reverse_lazy
+from django.utils import timezone
 from django.views.generic import TemplateView
 
 from trophies.mixins import ProfileHotbarMixin, StaffRequiredMixin
@@ -17,6 +21,18 @@ from trophies.services.dashboard_service import (
     VALID_TAB_ICONS,
     MAX_FREE_HIDDEN,
 )
+
+
+def _get_site_heartbeat():
+    """Read the site heartbeat dict from cache, with previous-hour fallback."""
+    now = timezone.now()
+    key = f"site_heartbeat_{now.date().isoformat()}_{now.hour:02d}"
+    data = cache.get(key)
+    if data is None:
+        prev = now - timedelta(hours=1)
+        prev_key = f"site_heartbeat_{prev.date().isoformat()}_{prev.hour:02d}"
+        data = cache.get(prev_key)
+    return data
 
 
 class DashboardView(StaffRequiredMixin, ProfileHotbarMixin, TemplateView):
@@ -84,6 +100,7 @@ class DashboardView(StaffRequiredMixin, ProfileHotbarMixin, TemplateView):
             'displayed_title': profile.displayed_title,
             'preview_mode': self.request.session.get('dashboard_preview_premium') is not None,
             'real_is_premium': profile.user_is_premium,
+            'site_heartbeat': _get_site_heartbeat(),
             'breadcrumb': [
                 {'text': 'Home', 'url': reverse_lazy('home')},
                 {'text': 'My Dashboard'},
