@@ -22,7 +22,7 @@ from django.contrib.auth.views import LogoutView
 from django.contrib.sitemaps.views import sitemap
 from django.urls import path, include
 from django.views.generic import RedirectView, TemplateView
-from core.views import IndexView, AdsTxtView, RobotsTxtView, PrivacyPolicyView, TermsOfServiceView, AboutView, ContactView
+from core.views import AdsTxtView, RobotsTxtView, PrivacyPolicyView, TermsOfServiceView, AboutView, ContactView
 from core.sitemaps import (
     StaticViewSitemap, GameSitemap, ProfileSitemap,
     BadgeSitemap, GameListSitemap, ChallengeSitemap,
@@ -52,8 +52,9 @@ from notifications.views import (
 
 urlpatterns = [
     path("admin/", admin.site.urls),
-    path("", IndexView.as_view(), name="home"),
-    path('dashboard/', DashboardView.as_view(), name='dashboard'),
+    path("", DashboardView.as_view(), name="home"),
+    # Legacy alias - keep old /dashboard/ links working
+    path('dashboard/', RedirectView.as_view(pattern_name='home', permanent=True), name='dashboard'),
     path('games/', GamesListView.as_view(), name='games_list'),
     path('games/flagged/', FlaggedGamesView.as_view(), name='flagged_games'),
     path('games/<str:np_communication_id>/roadmap/edit/', RoadmapEditorView.as_view(), name='roadmap_edit'),

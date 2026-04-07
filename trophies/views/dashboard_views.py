@@ -5,12 +5,13 @@ DashboardView serves the main page at /dashboard/ (staff required).
 """
 from datetime import timedelta
 
+from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.cache import cache
 from django.urls import reverse_lazy
 from django.utils import timezone
 from django.views.generic import TemplateView
 
-from trophies.mixins import ProfileHotbarMixin, StaffRequiredMixin
+from trophies.mixins import ProfileHotbarMixin
 from trophies.models import DashboardConfig
 from trophies.services.dashboard_service import (
     get_dashboard_tabs,
@@ -35,9 +36,12 @@ def _get_site_heartbeat():
     return data
 
 
-class DashboardView(StaffRequiredMixin, ProfileHotbarMixin, TemplateView):
+class DashboardView(LoginRequiredMixin, ProfileHotbarMixin, TemplateView):
     """
     Personal trophy hunting dashboard with tabbed navigation.
+
+    This is the site's home page (`/`). Anonymous visitors are
+    redirected to the login page; logged-in users land here.
 
     Modules are organized into category tabs. Only the active tab's
     lazy modules load on page init. Other tabs load when first activated.
