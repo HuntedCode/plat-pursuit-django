@@ -2247,6 +2247,8 @@ class IGDBMatchAdmin(admin.ModelAdmin):
     concept_title.admin_order_field = 'concept__unified_title'
 
     def confidence_display(self, obj):
+        if obj.match_confidence is None:
+            return '-'
         pct = f'{obj.match_confidence:.0%}'
         if obj.match_confidence >= 0.85:
             return f'{pct}'
@@ -2297,7 +2299,7 @@ class IGDBMatchAdmin(admin.ModelAdmin):
         count = queryset.count()
         for match in queryset:
             IGDBService.reject_match(match)
-        messages.success(request, f'Deleted {count} match(es). Run --missing to re-match them.')
+        messages.success(request, f'Deleted {count} match(es). Run enrich_from_igdb to re-match them.')
 
     @admin.action(description='Re-match selected (delete and re-run)')
     def rematch_selected(self, request, queryset):
