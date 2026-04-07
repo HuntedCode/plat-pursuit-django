@@ -26,9 +26,9 @@
                             {# Duplicate the icons so the loop is seamless #}
                             {% for game in data.preview_games %}
                                 {% if game.slug %}
-                                <a href="{% url 'review_hub' game.slug %}" class="w-16 h-16 lg:w-20 lg:h-20 rounded-xl overflow-hidden ring-1 ring-base-300 shrink-0 shadow-md transition-all duration-150 hover:scale-110 hover:ring-warning hover:shadow-lg hover:shadow-warning/20 hover:z-20 block" title="{{ game.name }}">
+                                <a href="{% url 'review_hub' game.slug %}" class="w-16 h-16 lg:w-20 lg:h-20 rounded-xl overflow-hidden ring-1 ring-base-300 shrink-0 shadow-md transition-all duration-150 hover:ring-warning hover:shadow-lg hover:shadow-warning/30 hover:z-20 block" title="{{ game.name }}">
                                 {% else %}
-                                <div class="w-16 h-16 lg:w-20 lg:h-20 rounded-xl overflow-hidden ring-1 ring-base-300 shrink-0 shadow-md transition-all duration-150 hover:scale-110 hover:ring-warning hover:shadow-lg hover:shadow-warning/20 hover:z-20" title="{{ game.name }}">
+                                <div class="w-16 h-16 lg:w-20 lg:h-20 rounded-xl overflow-hidden ring-1 ring-base-300 shrink-0 shadow-md transition-all duration-150 hover:ring-warning hover:shadow-lg hover:shadow-warning/30 hover:z-20" title="{{ game.name }}">
                                 {% endif %}
                                     {% if game.icon_url %}
                                         <img src="{{ game.icon_url }}" alt="{{ game.name }}" class="w-full h-full object-cover" loading="lazy" />
@@ -42,9 +42,9 @@
                             {# Second copy for seamless loop #}
                             {% for game in data.preview_games %}
                                 {% if game.slug %}
-                                <a href="{% url 'review_hub' game.slug %}" class="w-16 h-16 lg:w-20 lg:h-20 rounded-xl overflow-hidden ring-1 ring-base-300 shrink-0 shadow-md transition-all duration-150 hover:scale-110 hover:ring-warning hover:shadow-lg hover:shadow-warning/20 hover:z-20 block" title="{{ game.name }}" tabindex="-1">
+                                <a href="{% url 'review_hub' game.slug %}" class="w-16 h-16 lg:w-20 lg:h-20 rounded-xl overflow-hidden ring-1 ring-base-300 shrink-0 shadow-md transition-all duration-150 hover:ring-warning hover:shadow-lg hover:shadow-warning/30 hover:z-20 block" title="{{ game.name }}" tabindex="-1">
                                 {% else %}
-                                <div class="w-16 h-16 lg:w-20 lg:h-20 rounded-xl overflow-hidden ring-1 ring-base-300 shrink-0 shadow-md transition-all duration-150 hover:scale-110 hover:ring-warning hover:shadow-lg hover:shadow-warning/20 hover:z-20" title="{{ game.name }}">
+                                <div class="w-16 h-16 lg:w-20 lg:h-20 rounded-xl overflow-hidden ring-1 ring-base-300 shrink-0 shadow-md transition-all duration-150 hover:ring-warning hover:shadow-lg hover:shadow-warning/30 hover:z-20" title="{{ game.name }}">
                                 {% endif %}
                                     {% if game.icon_url %}
                                         <img src="{{ game.icon_url }}" alt="" class="w-full h-full object-cover" loading="lazy" />

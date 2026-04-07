@@ -45,7 +45,7 @@
                             {% if challenge_data.slots %}
                                 <div class="flex flex-wrap gap-1 mb-2 justify-center">
                                     {% for slot in challenge_data.slots %}
-                                        <span class="w-7 h-7 lg:w-8 lg:h-8 rounded-md text-xs lg:text-sm font-bold flex items-center justify-center {% if slot.completed %}bg-success/20 text-success{% elif slot.filled %}bg-accent/20 text-accent{% else %}bg-base-300/50 text-base-content/30{% endif %}">{{ slot.letter }}</span>
+                                        <span class="w-7 h-7 lg:w-8 lg:h-8 rounded-md text-xs lg:text-sm font-bold flex items-center justify-center {% if slot.completed %}bg-success/20 text-success{% elif slot.filled %}bg-accent/20 text-accent{% else %}bg-white/[0.03] border border-base-content/5 text-base-content/30{% endif %}">{{ slot.letter }}</span>
                                     {% endfor %}
                                 </div>
                             {% endif %}

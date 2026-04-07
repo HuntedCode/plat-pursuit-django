@@ -66,7 +66,7 @@
                 {% if data.is_premium %}
                 <div class="grid grid-cols-5 gap-2" id="showcase-slots" data-ordered-ids="{{ data.showcase_badge_ids|join:',' }}">
                     {% for i in "12345" %}
-                    <div class="showcase-slot relative flex flex-col items-center gap-1.5 p-1.5 md:p-2 rounded-xl border-2 border-dashed border-base-content/10 bg-base-300/30 min-h-[60px] md:min-h-[80px] justify-center"
+                    <div class="showcase-slot relative flex flex-col items-center gap-1.5 p-1.5 md:p-2 rounded-xl border-2 border-dashed border-base-content/10 bg-white/[0.03] min-h-[60px] md:min-h-[80px] justify-center"
                          data-slot="{{ forloop.counter }}">
                         <span class="text-base-content/20 text-[0.6rem] font-bold">{{ forloop.counter }}</span>
                     </div>
@@ -74,7 +74,7 @@
                 </div>
                 <p class="text-xs text-base-content/40 mt-2 italic pr-1">Select up to 5 badges to showcase on your profile.</p>
                 {% else %}
-                <div class="flex flex-col items-center text-center py-4 bg-base-300/30 rounded-xl border-2 border-dashed border-base-content/10">
+                <div class="flex flex-col items-center text-center py-4 bg-white/[0.03] rounded-xl border-2 border-dashed border-base-content/10">
                     <svg xmlns="http://www.w3.org/2000/svg" class="w-8 h-8 text-warning/50 mb-2" viewBox="0 0 24 24" fill="currentColor">
                         <path d="M5 16L3 5l5.5 5L12 4l3.5 6L21 5l-2 11H5z"/>
                     </svg>
@@ -91,7 +91,7 @@
             {# Badge Grid (selectable, behavior changes with mode) #}
             <div class="grid grid-cols-4 lg:grid-cols-5 gap-2" id="badge-showcase-grid">
                 {% for badge in data.badges %}
-                <button class="badge-showcase-item group relative aspect-square rounded-lg border-2 transition-all duration-200 hover:scale-105 cursor-pointer {% if badge.is_displayed %}border-secondary bg-secondary/10{% else %}border-base-content/10 bg-white/[0.03] hover:border-primary/40{% endif %}"
+                <button class="badge-showcase-item group relative aspect-square rounded-lg border-2 transition-all duration-200 hover:shadow-md cursor-pointer {% if badge.is_displayed %}border-secondary bg-secondary/10 shadow-secondary/20{% else %}border-base-content/10 bg-white/[0.03] hover:border-primary/40 hover:shadow-primary/20{% endif %}"
                         data-badge-id="{{ badge.id }}"
                         data-badge-name="{{ badge.name }}"
                         data-badge-image="{{ badge.image_url }}"

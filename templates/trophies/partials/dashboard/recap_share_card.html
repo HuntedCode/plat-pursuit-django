@@ -22,7 +22,7 @@
         {% if data.has_recap %}
             {% if data.has_been_viewed %}
                 {# User has viewed the recap: show share card preview #}
-                <div class="share-card-preview relative w-full rounded-lg overflow-hidden border border-base-content/10 bg-base-300/50"
+                <div class="share-card-preview relative w-full rounded-lg overflow-hidden border border-base-content/10 bg-white/[0.03]"
                      data-share-html-url="/api/v1/recap/{{ data.year }}/{{ data.month }}/html/"
                      data-share-png-url="/api/v1/recap/{{ data.year }}/{{ data.month }}/png/"
                      style="aspect-ratio: 1200/630;">
