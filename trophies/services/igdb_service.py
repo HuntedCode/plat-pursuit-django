@@ -1219,42 +1219,52 @@ class IGDBService:
         return cls.process_match(concept, igdb_data, confidence, method)
 
     @classmethod
-    def enrich_batch(cls, concepts, progress_callback=None):
-        """Match and enrich a batch of Concepts from IGDB.
+    def record_no_match(cls, concept):
+        """Persist a 'no_match' IGDBMatch row for a concept where matching found nothing.
 
-        Args:
-            concepts: Queryset or list of Concept objects
-            progress_callback: Optional callable(processed, total, result_type)
+        Lets the enrich command skip these on subsequent runs while still allowing
+        explicit retries via --retry-no-match. Refuses to overwrite an existing
+        accepted/pending/rejected match (those carry real data and should not be
+        clobbered by a re-check that happens to fail).
 
         Returns:
-            dict: Summary counts {auto_accepted, pending_review, not_found, errors}
+            IGDBMatch: The created or updated no_match record, or None if the
+            concept already has a non-no_match record (no overwrite performed).
         """
-        summary = {
-            'auto_accepted': 0,
-            'pending_review': 0,
-            'not_found': 0,
-            'errors': 0,
-        }
-        total = len(concepts) if hasattr(concepts, '__len__') else concepts.count()
+        existing = IGDBMatch.objects.filter(concept=concept).first()
+        if existing and existing.status != 'no_match':
+            logger.debug(
+                f'record_no_match skipped for concept {concept.concept_id}: '
+                f'existing match has status={existing.status}'
+            )
+            return None
 
-        for i, concept in enumerate(concepts):
-            try:
-                igdb_match = cls.enrich_concept(concept)
-                if igdb_match:
-                    summary[igdb_match.status] = summary.get(igdb_match.status, 0) + 1
-                    result_type = igdb_match.status
-                else:
-                    summary['not_found'] += 1
-                    result_type = 'not_found'
-            except Exception:
-                logger.exception(f'IGDB enrichment failed for concept {concept.concept_id}')
-                summary['errors'] += 1
-                result_type = 'error'
-
-            if progress_callback:
-                progress_callback(i + 1, total, result_type)
-
-        return summary
+        igdb_match, _ = IGDBMatch.objects.update_or_create(
+            concept=concept,
+            defaults={
+                'igdb_id': None,
+                'igdb_name': '',
+                'igdb_slug': '',
+                'match_confidence': None,
+                'match_method': '',
+                'status': 'no_match',
+                'raw_response': {},
+                'game_category': None,
+                'igdb_summary': '',
+                'igdb_storyline': '',
+                'time_to_beat_hastily': None,
+                'time_to_beat_normally': None,
+                'time_to_beat_completely': None,
+                'igdb_first_release_date': None,
+                'game_engine_name': '',
+                'igdb_cover_image_id': '',
+                'franchise_names': [],
+                'similar_game_igdb_ids': [],
+                'external_urls': {},
+                'last_synced_at': datetime.now(dt_timezone.utc),
+            },
+        )
+        return igdb_match
 
     @classmethod
     def refresh_match(cls, igdb_match):
@@ -1315,7 +1325,8 @@ class IGDBService:
     def reject_match(cls, igdb_match):
         """Reject an IGDBMatch by deleting it.
 
-        The concept becomes unmatched and eligible for --missing runs.
+        The concept becomes unmatched and eligible for the next default
+        enrich_from_igdb run.
         """
         igdb_match.delete()
 

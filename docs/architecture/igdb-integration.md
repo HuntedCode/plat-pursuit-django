@@ -32,6 +32,13 @@ M2M through table. Links Concept to Company with role flags: `is_developer`, `is
 ### IGDBMatch
 OneToOne to Concept. Stores: matching metadata (`match_confidence`, `match_method`, `status`), parsed Tier 1 data (`game_category`, `igdb_summary`, `igdb_storyline`, `time_to_beat_*`, `igdb_first_release_date`, `game_engine_name`, `franchise_names`, `similar_game_igdb_ids`, `external_urls`), and the full raw IGDB response (`raw_response`) for future Tier 2 parsing.
 
+`status` values:
+- `auto_accepted`: Matched at >= 85% confidence and enrichment applied automatically.
+- `pending_review`: Matched at 50-84% confidence, awaiting staff approval.
+- `accepted`: Match approved manually after pending review.
+- `rejected`: Match rejected manually (rare; usually rematched instead).
+- `no_match`: Matching ran but no IGDB result was found. The row exists as a marker so subsequent default enrichment passes skip the concept and so the unmatched review queue can surface it for manual intervention. `igdb_id`, `igdb_name`, `match_confidence`, and `match_method` are all blank/null on these rows.
+
 ### Concept Additions
 - `igdb_genres` (JSONField): Genre names from IGDB (e.g. ["RPG", "Adventure"])
 - `igdb_themes` (JSONField): Theme names from IGDB (e.g. ["Open world", "Fantasy"])
@@ -50,8 +57,9 @@ OneToOne to Concept. Stores: matching metadata (`match_confidence`, `match_metho
 
 1. Match found with confidence >= 0.85: auto-accepted, enrichment applied immediately
 2. Match found with confidence 0.50-0.84: IGDBMatch created with `pending_review` status, enrichment deferred
-3. Staff approves pending match via admin action: enrichment applied
-4. Enrichment creates Company records, ConceptCompany entries, and updates Concept's `igdb_genres`/`igdb_themes`
+3. No match found: IGDBMatch created with `no_match` status (via `IGDBService.record_no_match`). Default enrichment runs skip these on subsequent passes; use `--retry-no-match` to re-attempt them or `--unmatched` to assign manually. `record_no_match` refuses to overwrite an existing accepted/pending/rejected row.
+4. Staff approves pending match via admin action: enrichment applied
+5. Enrichment creates Company records, ConceptCompany entries, and updates Concept's `igdb_genres`/`igdb_themes`
 
 ### Sync Pipeline Hook
 
@@ -76,16 +84,19 @@ In `token_keeper.py`, after `PsnApiService.create_concept_from_details()` create
 - **External ID matching is not guaranteed**: IGDB may not have PlayStation Store IDs for all games. Name-based matching is the primary fallback.
 - **Fuzzy matching can be wrong for short/common titles**: Games like "Golf" or "Tennis" may match incorrectly. The confidence scoring and pending_review status mitigate this, but staff review is important for the initial backfill.
 - **Raw response storage**: The `raw_response` JSONField stores the full IGDB API response. This can be large (5-20KB per game). Tier 2 data (keywords, game_modes, multiplayer_modes, ratings, etc.) can be parsed from it later without re-querying.
+- **no_match never overwrites real matches**: `IGDBService.record_no_match()` checks for an existing IGDBMatch first and bails if its status is anything other than `no_match`. This means if `--all` is run and a previously-accepted concept temporarily fails to match (transient IGDB hiccup), the accepted row is preserved. The summary still counts it as `no_match` since the matcher returned nothing, but the DB is left untouched.
 - **Company mergers**: IGDB tracks company renames/mergers via `changed_company_id`. The `Company.current_company` property follows the chain. When displaying company names, prefer `current_company` for accuracy.
 
 ## Management Commands
 
 | Command | Purpose | Typical Usage |
 |---------|---------|---------------|
-| `enrich_from_igdb` | Batch-enrich Concepts with IGDB data | `python manage.py enrich_from_igdb --missing` |
+| `enrich_from_igdb` (default) | Enrich concepts without any IGDBMatch row (skips `no_match` markers) | `python manage.py enrich_from_igdb` |
 | `enrich_from_igdb --concept-id X` | Enrich a single concept | `python manage.py enrich_from_igdb --concept-id 12345 --dry-run` |
 | `enrich_from_igdb --force` | Re-match all concepts (overwrites existing) | `python manage.py enrich_from_igdb --all --force` |
 | `enrich_from_igdb --pending` | Re-process pending_review matches | `python manage.py enrich_from_igdb --pending` |
+| `enrich_from_igdb --retry-no-match` | Re-run matching against concepts previously recorded as `no_match` | `python manage.py enrich_from_igdb --retry-no-match` |
+| `enrich_from_igdb --unmatched` | Interactive queue of `no_match` concepts for manual assignment | `python manage.py enrich_from_igdb --unmatched` |
 
 ## Cache Keys
 

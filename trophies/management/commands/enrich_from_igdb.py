@@ -15,12 +15,12 @@ class Command(BaseCommand):
             help='Process all concepts (including those already matched)',
         )
         parser.add_argument(
-            '--missing', action='store_true', default=True,
-            help='Only process concepts without an IGDB match (default)',
-        )
-        parser.add_argument(
             '--pending', action='store_true',
             help='Re-process concepts with pending_review status',
+        )
+        parser.add_argument(
+            '--retry-no-match', action='store_true',
+            help='Re-process concepts previously recorded as no_match',
         )
         parser.add_argument(
             '--refresh', action='store_true',
@@ -329,8 +329,13 @@ class Command(BaseCommand):
     # -------------------------------------------------------------------
 
     def _handle_unmatched(self, options):
-        matched_ids = IGDBMatch.objects.values_list('concept_id', flat=True)
-        qs = Concept.objects.exclude(id__in=matched_ids).prefetch_related('games')
+        # Concepts whose last enrichment attempt produced no result.
+        # These have an IGDBMatch row with status='no_match' as a marker.
+        # Truly untried concepts (no row at all) are surfaced by running the
+        # default enrich pass first; once tried, they land here automatically.
+        qs = Concept.objects.filter(
+            igdb_match__status='no_match'
+        ).prefetch_related('games')
 
         if options.get('badge'):
             badge_concept_ids = self._get_badge_concept_ids()
@@ -675,10 +680,17 @@ class Command(BaseCommand):
                 status='pending_review'
             ).values_list('concept_id', flat=True)
             concepts = Concept.objects.filter(id__in=concept_ids)
+        elif options['retry_no_match']:
+            concept_ids = IGDBMatch.objects.filter(
+                status='no_match'
+            ).values_list('concept_id', flat=True)
+            concepts = Concept.objects.filter(id__in=concept_ids)
         elif options['all'] or force:
             concepts = Concept.objects.all()
         else:
-            # Default: missing (no IGDBMatch)
+            # Default: missing — concepts with no IGDBMatch row at all.
+            # no_match rows count as "tried already" and are excluded; use
+            # --retry-no-match to re-attempt them.
             matched_ids = IGDBMatch.objects.values_list('concept_id', flat=True)
             concepts = Concept.objects.exclude(id__in=matched_ids)
 
@@ -695,7 +707,7 @@ class Command(BaseCommand):
         summary = {
             'auto_accepted': 0,
             'pending_review': 0,
-            'not_found': 0,
+            'no_match': 0,
             'errors': 0,
         }
 
@@ -704,8 +716,10 @@ class Command(BaseCommand):
                 result = IGDBService.match_concept(concept)
 
                 if not result:
-                    summary['not_found'] += 1
-                    self._log_progress(i + 1, total, concept, 'not_found')
+                    if not dry_run:
+                        IGDBService.record_no_match(concept)
+                    summary['no_match'] += 1
+                    self._log_progress(i + 1, total, concept, 'no_match')
                     continue
 
                 igdb_data, confidence, method = result
@@ -749,7 +763,7 @@ class Command(BaseCommand):
             'auto_accepted': self.style.SUCCESS,
             'accepted': self.style.SUCCESS,
             'pending_review': self.style.WARNING,
-            'not_found': lambda x: x,
+            'no_match': lambda x: x,
             'rejected': self.style.ERROR,
         }
         style = style_map.get(status, lambda x: x)
@@ -772,7 +786,7 @@ class Command(BaseCommand):
             f'  Pending review:  {summary["pending_review"]}'
         ))
         self.stdout.write(
-            f'  Not found:       {summary["not_found"]}'
+            f'  No match:        {summary["no_match"]}'
         )
         if summary['errors']:
             self.stdout.write(self.style.ERROR(

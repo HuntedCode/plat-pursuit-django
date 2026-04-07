@@ -3837,6 +3837,7 @@ class IGDBMatch(models.Model):
         ('pending_review', 'Pending Review'),
         ('accepted', 'Accepted'),
         ('rejected', 'Rejected'),
+        ('no_match', 'No Match Found'),
     ]
 
     GAME_CATEGORY_CHOICES = [
@@ -3860,13 +3861,14 @@ class IGDBMatch(models.Model):
     concept = models.OneToOneField(
         Concept, on_delete=models.CASCADE, related_name='igdb_match'
     )
-    igdb_id = models.IntegerField(db_index=True)
-    igdb_name = models.CharField(max_length=500)
+    # Nullable for status='no_match' records, where there is no IGDB game to point at.
+    igdb_id = models.IntegerField(db_index=True, null=True, blank=True)
+    igdb_name = models.CharField(max_length=500, blank=True)
     igdb_slug = models.CharField(max_length=300, blank=True)
 
     # Matching metadata
-    match_confidence = models.FloatField(help_text='0.0 to 1.0')
-    match_method = models.CharField(max_length=20, choices=MATCH_METHOD_CHOICES)
+    match_confidence = models.FloatField(null=True, blank=True, help_text='0.0 to 1.0')
+    match_method = models.CharField(max_length=20, choices=MATCH_METHOD_CHOICES, blank=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, db_index=True)
 
     # Raw IGDB response for Tier 2 parsing later
@@ -3927,6 +3929,8 @@ class IGDBMatch(models.Model):
         return f'{minutes:.0f}m'
 
     def __str__(self):
+        if self.match_confidence is None:
+            return f"{self.concept} -> [{self.get_status_display()}]"
         return f"{self.concept} -> {self.igdb_name} ({self.get_status_display()}, {self.match_confidence:.0%})"
 
 
